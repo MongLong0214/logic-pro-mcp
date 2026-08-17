@@ -109,6 +109,26 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(await cache.getMarkers().first?.name == "Cached Marker")
 }
 
+/// Before the first marker poll, `readable` is still its initial `false` — nobody has looked at
+/// the Marker List yet. Reporting `marker_list_not_open` there states a cause that was never
+/// observed. Measured live on 2026-08-17: a read four seconds into a process said the list was
+/// not open while the window was open and the channel path read it without trouble. The poller
+/// visits markers every fifth tick, so that window is ordinary, not exotic.
+@Test func markerResourceDoesNotBlameAClosedListBeforeTheFirstPoll() async throws {
+    let cache = StateCache()
+
+    let result = try await ResourceHandlers.read(
+        uri: "logic://markers",
+        cache: cache,
+        router: ChannelRouter()
+    )
+    let envelope = try issue254Envelope(result)
+
+    let readable = try #require(envelope["readable"] as? Bool)
+    #expect(!readable)
+    #expect(envelope["reason"] as? String == "markers_not_polled_yet")
+}
+
 /// `nav.delete_marker` must work on a default install.
 ///
 /// It used to route only to `[.midiKeyCommands, .cgEvent]`, so it did nothing at all until the

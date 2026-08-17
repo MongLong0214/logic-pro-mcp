@@ -400,8 +400,8 @@ extension AXLogicProElements {
                 }
                 rows = observedRows
                 rowSource = .axRows
-            case .failure(let error):
-                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
+            case .failure(let failure):
+                return .failure(failure)
             }
         case .failure(let error) where error.isDefinitiveAbsence:
             // `AXRows` unavailable is an answer about that attribute, not evidence that a
@@ -412,8 +412,8 @@ extension AXLogicProElements {
             case .success(let structuralRows):
                 rows = structuralRows
                 rowSource = .structuralChildren
-            case .failure(let error):
-                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
+            case .failure(let failure):
+                return .failure(failure)
             }
         case .success(nil):
             // A successful nil carries the same attribute-absence answer as a definitive
@@ -422,8 +422,8 @@ extension AXLogicProElements {
             case .success(let structuralRows):
                 rows = structuralRows
                 rowSource = .structuralChildren
-            case .failure(let error):
-                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
+            case .failure(let failure):
+                return .failure(failure)
             }
         case .failure(let error):
             return .failure(MarkerListReadFailure(site: .axRows, status: error))
@@ -501,16 +501,30 @@ extension AXLogicProElements {
     /// The table's direct structure corroborates an `AXRows` answer. A non-empty child list
     /// whose children no longer identify as rows is not evidence of an empty Marker List: the
     /// table is rebuilding and no complete row list is observable yet.
+    ///
+    /// That rule stands, but "the child list is empty" cannot be the escape hatch for a genuinely
+    /// empty list. Measured on Logic 12.3, the Marker List table ALWAYS vends four `AXColumn`
+    /// children plus one `AXGroup`, whatever the row count — so on the live tree the child list is
+    /// never empty and the old `children.isEmpty || !rows.isEmpty` guard reduced to *an empty row
+    /// set is always unreadable*. In a project with no markers that refused every marker
+    /// operation, including `create_marker`, which is the only way to obtain the first one. The
+    /// suite missed it because its empty fixture gave the table zero children, a shape Logic does
+    /// not present.
+    ///
+    /// The honest discriminator is Logic's own "Number of Items" rendering, which is not a
+    /// projection of this table: an empty row set is published only when that independent witness
+    /// parses to zero. A witness that reports a non-zero count, or that will not answer, keeps the
+    /// read unreadable — so a rebuilding table still cannot be mistaken for an empty marker list.
     private static func markerListStructuralRows(
         from table: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+    ) -> Result<[AXUIElement], MarkerListReadFailure> {
         let children: [AXUIElement]
         switch AXHelpers.childrenResult(table, runtime: runtime) {
         case .success(let observedChildren):
             children = observedChildren
         case .failure(let error):
-            return .failure(error)
+            return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
         }
         var rows: [AXUIElement] = []
         for child in children {
@@ -520,13 +534,213 @@ extension AXLogicProElements {
             case .success(let role):
                 if role == (kAXRowRole as String) { rows.append(child) }
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         }
-        guard children.isEmpty || !rows.isEmpty else {
-            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        // A table that vends NO children at all keeps its pre-existing answer: that shape was
+        // already accepted as an empty list and is not what this fix is about. The change is
+        // confined to the shape Logic actually presents — children present, none of them rows.
+        guard !rows.isEmpty || !children.isEmpty else { return .success([]) }
+        guard rows.isEmpty else { return .success(rows) }
+        switch markerListZeroItemsWitness(forTableOf: table, runtime: runtime) {
+        case .zero:
+            return .success([])
+        case .nonZero:
+            // The corroboration counts on `MarkerListReadFailure` describe the two ROW collections
+            // this reader compares; the witness count is a third, differently-sourced number and
+            // must not be published in a field that names row collections.
+            return .failure(MarkerListReadFailure(
+                site: .itemCount,
+                status: AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue),
+                origin: .corroboration
+            ))
+        case .unreadable(let error):
+            return .failure(MarkerListReadFailure(site: .itemCount, status: error))
         }
-        return .success(rows)
+    }
+
+    /// What Logic's own Number of Items text says about a Marker List that exposed no rows.
+    enum MarkerListZeroItemsWitness: Equatable {
+        case zero
+        case nonZero(Int)
+        case unreadable(AXHelpers.AXStatusError)
+    }
+
+    /// Reads the Number of Items witness for the window that owns `table`.
+    ///
+    /// The window is resolved through the table's own `AXWindow` attribute (present on the live
+    /// element, measured 2026-08-17) so the post-write reader — which is deliberately handed the
+    /// already-bound table and must never re-discover one from a window — can corroborate an
+    /// empty survivor set without gaining a second table-discovery path.
+    ///
+    /// Anything short of a parsed count is `unreadable`. A missing, ambiguous, or unparseable
+    /// witness is not a zero.
+    static func markerListZeroItemsWitness(
+        forTableOf table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> MarkerListZeroItemsWitness {
+        let window: AXUIElement
+        switch AXHelpers.getAttributeResult(
+            table, kAXWindowAttribute as String, runtime: runtime
+        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(let owner?):
+            window = owner
+        case .success(nil):
+            return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        case .failure(let error):
+            return .unreadable(error)
+        }
+        switch markerListNumberOfItemsNodes(in: window, runtime: runtime) {
+        case .failure(let error):
+            return .unreadable(error)
+        case .success(let nodes) where nodes.count != 1:
+            // Zero matches is a missing witness and more than one is an ambiguous witness; neither
+            // establishes a count, so both leave the empty row set uncorroborated.
+            return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        case .success(let nodes):
+            switch AXHelpers.getAttributeResult(
+                nodes[0], kAXValueAttribute as String, runtime: runtime
+            ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .failure(let error):
+                return .unreadable(error)
+            case .success(let value):
+                let raw: String
+                if let string = value as? String {
+                    raw = string
+                } else if let number = value as? NSNumber {
+                    raw = number.stringValue
+                } else {
+                    return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                }
+                guard let parsed = parseMarkerListItemCount(raw) else {
+                    return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                }
+                return parsed == 0 ? .zero : .nonZero(parsed)
+            }
+        }
+    }
+
+    /// Walks the already-bound Marker List window for AXStaticText nodes matching
+    /// `AXLocalePolicy.markerListNumberOfItemsLabel`, by AXDescription OR AXHelp — the same
+    /// two-attribute precedent `EventListReadbackCollector.readStaticText(help:)` uses for its
+    /// own "Number of Items" node. The table, button, and menu-button subtrees are skipped:
+    /// none of them can contain this witness (it sits under an AXGroup), and descending into
+    /// AXRows/AXChildren or the Edit control's own menu-negotiation subtree would couple this
+    /// witness to failure modes it exists to outvote, or to the unrelated menu route's own
+    /// read/retry discipline.
+    ///
+    /// Uniqueness can only be trusted when the entire searched subtree answered. A node that
+    /// will not answer might have been hiding a second "Number of Items" node — one whose
+    /// parent alone refuses to vend AXChildren, for instance — so finding exactly one match
+    /// elsewhere does NOT prove that match is unique. Any unreadable node anywhere in the
+    /// SEARCHED subtree therefore makes the whole search unreadable, regardless of how many
+    /// matches were already collected; only a walk that saw every candidate in scope can call
+    /// a single match unique.
+    static func markerListNumberOfItemsNodes(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        var matches: [AXUIElement] = []
+        var parents = [window]
+        var unreadable: AXHelpers.AXStatusError?
+        for _ in 0..<12 {
+            var next: [AXUIElement] = []
+            for parent in parents {
+                let children: [AXUIElement]
+                switch AXHelpers.childrenResult(parent, runtime: runtime) {
+                case .success(let observedChildren):
+                    children = observedChildren
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    children = []
+                case .failure(let error):
+                    unreadable = unreadable ?? error
+                    children = []
+                }
+                for child in children {
+                    var childRole: String?
+                    switch AXHelpers.getAttributeResult(
+                        child, kAXRoleAttribute as String, runtime: runtime
+                    ) as Result<String?, AXHelpers.AXStatusError> {
+                    case .success(let role):
+                        childRole = role
+                        if role == (kAXStaticTextRole as String) {
+                            var matched = false
+                            switch AXHelpers.getAttributeResult(
+                                child, kAXDescriptionAttribute as String, runtime: runtime
+                            ) as Result<String?, AXHelpers.AXStatusError> {
+                            case .success(let description):
+                                matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
+                                    description, mode: .exactStrict
+                                )
+                            case .failure(let error) where error.isDefinitiveAbsence:
+                                break
+                            case .failure(let error):
+                                unreadable = unreadable ?? error
+                            }
+                            if !matched {
+                                switch AXHelpers.getAttributeResult(
+                                    child, kAXHelpAttribute as String, runtime: runtime
+                                ) as Result<String?, AXHelpers.AXStatusError> {
+                                case .success(let help):
+                                    matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
+                                        help, mode: .exactStrict
+                                    )
+                                case .failure(let error) where error.isDefinitiveAbsence:
+                                    break
+                                case .failure(let error):
+                                    unreadable = unreadable ?? error
+                                }
+                            }
+                            if matched {
+                                matches.append(child)
+                            }
+                        }
+                    case .failure(let error) where error.isDefinitiveAbsence:
+                        break
+                    case .failure(let error):
+                        unreadable = unreadable ?? error
+                    }
+                    // The independent count is not inside the Marker Table, and not inside a
+                    // button or menu button — Logic's own "Number of Items" text sits under an
+                    // AXGroup, never under a control. Do not descend into a projection we
+                    // already know can omit rows, or into the Edit control's OWN subtree: that
+                    // subtree's read health is coupled to the unrelated menu-route negotiation
+                    // (`AXShowMenu`/`AXCancel` observation), which has its own retry discipline
+                    // and must not be able to poison this witness by proxy.
+                    if childRole != (kAXTableRole as String),
+                       childRole != (kAXMenuButtonRole as String),
+                       childRole != (kAXButtonRole as String) {
+                        next.append(child)
+                    }
+                }
+            }
+            parents = next
+        }
+        // An unreadable node anywhere in this walk means uniqueness was never established,
+        // even when exactly one match was found: the part of the tree that would not answer
+        // could have been hiding a second candidate. Check this BEFORE looking at `matches`.
+        if let unreadable {
+            return .failure(unreadable)
+        }
+        return .success(matches)
+    }
+
+    /// Defensive parse of Logic's Number of Items value, following the same leading-token rule
+    /// as the Event List reader's `parseCount`: the value must OPEN with an ASCII digit run,
+    /// immediately followed by end-of-string or whitespace, with no further digits anywhere
+    /// after. `runs.count == 1` alone is not that rule — it accepts a single digit run
+    /// ANYWHERE in the string, so a value like `"Marker 2"` (a decoy or a differently-labelled
+    /// sibling) parses as `2` even though its single ASCII run is not the item count. That
+    /// manufactured number can look exactly like a genuine drop while the selection merely
+    /// moved. A failed parse is never published as zero.
+    static func parseMarkerListItemCount(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first, first.isASCII, first.isNumber else { return nil }
+        let leadingDigits = trimmed.prefix { $0.isASCII && $0.isNumber }
+        let rest = trimmed[leadingDigits.endIndex...]
+        guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
+        guard !rest.contains(where: { $0.isASCII && $0.isNumber }) else { return nil }
+        return Int(leadingDigits)
     }
 
     private static func sameElementMultiset(_ lhs: [AXUIElement], _ rhs: [AXUIElement]) -> Bool {

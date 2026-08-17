@@ -11,12 +11,28 @@ import Testing
 // real 12.2 install (see issue #8) and verify that
 // `AXLogicProElements.enumerateMarkers` resolves them via the new tier.
 
+/// Builds the tree Logic actually presents, measured on 12.3 (2026-08-17):
+///
+/// - the table's `AXChildren` carry FOUR `AXColumn` nodes and one `AXGroup` at every row count,
+///   so an empty Marker List is a table with children and no rows — not a childless table;
+/// - the window carries Logic's own "Number of Items" static text (`"0 Markers"`, `"3 Markers"`),
+///   which is the independent witness that tells an empty list apart from a rebuilding one;
+/// - the table answers `AXWindow`.
+///
+/// Before this, the empty fixture gave the table zero children. That shape does not occur in
+/// Logic, and building it is what let a reader that refused every empty Marker List pass its
+/// own emptiness test — see `AXLogicProElements.markerListStructuralRows`.
+///
+/// `itemCountText` overrides the witness so a test can present a list whose witness disagrees
+/// with its rows; `omitItemCount` removes the witness node entirely.
 private func makeMarkerListTree(
     builder: FakeAXRuntimeBuilder,
     appElement: AXUIElement,
     arrangeWindow: AXUIElement,
     markerListWindow: AXUIElement,
-    rows: [(position: String, name: String, length: String)]
+    rows: [(position: String, name: String, length: String)],
+    itemCountText: String? = nil,
+    omitItemCount: Bool = false
 ) -> AXUIElement {
     // appRoot exposes both windows via kAXWindowsAttribute
     builder.setAttribute(appElement, kAXWindowsAttribute as String, [arrangeWindow, markerListWindow])
@@ -33,7 +49,21 @@ private func makeMarkerListTree(
     // Table inside marker list window
     let table = builder.element(8000)
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
-    builder.setChildren(markerListWindow, [table])
+    builder.setAttribute(table, kAXWindowAttribute as String, markerListWindow)
+
+    var windowChildren: [AXUIElement] = [table]
+    if !omitItemCount {
+        let itemCount = builder.element(8900)
+        builder.setAttribute(itemCount, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        builder.setAttribute(itemCount, kAXDescriptionAttribute as String, "Number of Items")
+        builder.setAttribute(
+            itemCount,
+            kAXValueAttribute as String,
+            itemCountText ?? (rows.count == 1 ? "1 Marker" : "\(rows.count) Markers")
+        )
+        windowChildren.append(itemCount)
+    }
+    builder.setChildren(markerListWindow, windowChildren)
 
     // Build N rows; each row has 4 cells: [Lock, Position, Name, Length]
     var rowElements: [AXUIElement] = []
@@ -78,7 +108,19 @@ private func makeMarkerListTree(
         _ = rowIdx
     }
     builder.setAttribute(table, "AXRows", rowElements)
-    builder.setChildren(table, rowElements)
+    // Measured: the four column nodes and the trailing group are children of the table at every
+    // row count, so the structural reader always sees a non-empty child list.
+    var tableChildren: [AXUIElement] = []
+    for column in 0..<4 {
+        let columnElement = builder.element(8800 + column)
+        builder.setAttribute(columnElement, kAXRoleAttribute as String, kAXColumnRole as String)
+        tableChildren.append(columnElement)
+    }
+    tableChildren.append(contentsOf: rowElements)
+    let tableGroup = builder.element(8890)
+    builder.setAttribute(tableGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    tableChildren.append(tableGroup)
+    builder.setChildren(table, tableChildren)
 
     return arrangeWindow
 }
@@ -130,12 +172,59 @@ func enumerateMarkers_emptyMarkerListWindow_returnsEmpty() async {
     let runtime = builder.makeLogicRuntime(appElement: app)
     let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
 
+    // This is the shape a project with no markers presents: columns and a group under the table,
+    // no rows, and Logic's own witness reading "0 Markers". Measured live 2026-08-17, reading it
+    // as unreadable made `create_marker` — the only route to a first marker — permanently State C.
     // Source mutation applied once: turn the successful empty `AXRows` result into a failure.
     // This table genuinely exposes zero rows, so the restored reader must preserve its empty answer.
     if case .success(let markers) = result {
         #expect(markers.isEmpty)
     } else {
         #expect(false, "an exposed table with zero rows must be a readable empty list")
+    }
+}
+
+@Test
+func enumerateMarkers_zeroRowsWithANonZeroWitnessStaysUnreadable() async {
+    // A rebuilding table: the rows are gone from the projection while Logic's own count still
+    // says three. Publishing `[]` here is what the corroboration guard exists to prevent — it once
+    // certified the delete of a marker that was still present. Loosening the guard for the empty
+    // list must not reopen that.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_200)
+    let arrange = builder.element(7_201)
+    let listWin = builder.element(7_202)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: [], itemCountText: "3 Markers"
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeLogicRuntime(appElement: app).ax
+    )
+    if case .success(let markers) = result {
+        #expect(Bool(false), "a witness reporting 3 markers cannot yield an empty list, got \(markers.count)")
+    }
+}
+
+@Test
+func enumerateMarkers_zeroRowsWithNoWitnessStaysUnreadable() async {
+    // Absence of the witness is not a zero. Without the independent count there is nothing to
+    // tell an empty Marker List apart from a table that has not finished rebuilding.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_300)
+    let arrange = builder.element(7_301)
+    let listWin = builder.element(7_302)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: [], omitItemCount: true
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeLogicRuntime(appElement: app).ax
+    )
+    if case .success(let markers) = result {
+        #expect(Bool(false), "a missing witness cannot yield an empty list, got \(markers.count)")
     }
 }
 

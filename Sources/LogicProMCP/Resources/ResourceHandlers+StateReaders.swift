@@ -801,7 +801,12 @@ extension ResourceHandlers {
             "positions_canonical": readable && markers.allSatisfy { $0.positionSource == .parser },
         ]
         if !readable {
-            extras["reason"] = "marker_list_not_open"
+            // `readable == false` is the INITIAL value as well as a poll outcome, and the poller
+            // visits markers only every fifth tick — so a read in a process's first seconds sees
+            // a value nobody measured. Naming the closed Marker List window there attributes a
+            // cause that was never observed: measured 2026-08-17, a read at t+4s reported
+            // `marker_list_not_open` while the window was open and the channel path read it.
+            extras["reason"] = fetchedAt == .distantPast ? "markers_not_polled_yet" : "marker_list_not_open"
         }
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,
