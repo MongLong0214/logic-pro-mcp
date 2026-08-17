@@ -74,8 +74,11 @@ struct Issue545DeleteConfirmBareLabelTests {
         // So the absence is asserted deliberately. Outside English these sheets classify as unknown and
         // are left on screen — fail-closed, and the honest state of the gap (tracked in #519). Restoring
         // the variants means changing this test, and changing it should require naming a measurement.
-        #expect(classifiedKind(primaryButtonTitle: "삭제") != .deleteConfirm)
-        #expect(classifiedKind(primaryButtonTitle: "削除") != .deleteConfirm)
+        // Both are now MEASURED off live dialogs on Logic 12.3 — KO `취소, 삭제`, JA `キャンセル, 削除`
+        // (2026-08-17). They classify because they were read, not because they were plausible; an
+        // earlier revision carried these same two strings as hand translations and they were removed.
+        #expect(classifiedKind(primaryButtonTitle: "삭제") == .deleteConfirm)
+        #expect(classifiedKind(primaryButtonTitle: "削除") == .deleteConfirm)
     }
 
     @Test("the channel-strip sheet's full canonical label still classifies (no regression)")
