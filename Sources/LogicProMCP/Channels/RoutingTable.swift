@@ -265,10 +265,15 @@ extension ChannelRouter {
         "note.up_octave":             [.midiKeyCommands, .cgEvent],
         "note.down_octave":           [.midiKeyCommands, .cgEvent],
 
-        // System — no channel needed
+        // System — no channel needed. An empty chain is not a defect here: these are answered by
+        // the dispatcher itself, and the entry exists so the router knows the operation is real.
+        //
+        // `system.cache_state` and `system.refresh` used to sit here too and were removed (#575).
+        // Nothing in Sources/ routed either, and `system.refresh` was shadowed by the registered
+        // `system.refresh_cache` that every caller and every hint string actually names. A routed
+        // operation nobody calls is also absent from `OperationRegistry`, so the exhaustiveness
+        // gates cannot see it — the entry was carrying no contract and no caller.
         "system.health":              [],
-        "system.cache_state":         [],
-        "system.refresh":             [],
         "system.permissions":         [],
     ]
 }

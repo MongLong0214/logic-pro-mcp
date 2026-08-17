@@ -95,7 +95,12 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
     #expect(cached[0].name == "Live Region")
     #expect(cached[0].startPosition == "1 1 1 1")
     #expect(cached[0].endPosition == "2 1 1 1")
-    #expect(!(await cache.getRegionsComplete()))
+    // #576: `complete` was a hardcoded `false`, so this assertion held for every fixture whatever it
+    // contained. It is now measured, and this fixture is genuinely complete — a 1200x400 window with
+    // its single track header at (0,100) and its single region at (240,108), both wholly inside, and
+    // nothing dropped for lying outside. Asserting `true` here pins the flag to the fixture rather
+    // than to a constant.
+    #expect(await cache.getRegionsComplete())
 }
 
 @Test func testTrackRegionsResourceRefreshesLiveScanWhenCacheIsStale() async throws {
@@ -130,5 +135,10 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
     let cached = await cache.getRegions()
     #expect(cached.count == 1)
     #expect(cached[0].name == "Live Region")
-    #expect(!(await cache.getRegionsComplete()))
+    // #576: `complete` was a hardcoded `false`, so this assertion held for every fixture whatever it
+    // contained. It is now measured, and this fixture is genuinely complete — a 1200x400 window with
+    // its single track header at (0,100) and its single region at (240,108), both wholly inside, and
+    // nothing dropped for lying outside. Asserting `true` here pins the flag to the fixture rather
+    // than to a constant.
+    #expect(await cache.getRegionsComplete())
 }

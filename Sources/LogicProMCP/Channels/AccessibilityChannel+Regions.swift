@@ -41,7 +41,12 @@ extension AccessibilityChannel {
             // measured on Logic 12.3, 21 of 21 while the region layer stopped at 13 — so "every
             // header is inside the visible bounds" answers the question directly, and fails closed
             // on a frame it cannot read.
-            let complete = result.coversEveryTrack
+            //
+            // The headers are the VERTICAL axis only. A region at bar 33 lies far to the right of a
+            // window whose every track header is visible, so the count of region items dropped for
+            // being outside the window is required too — the first version of this rule checked only
+            // the headers and would have called that arrangement completely read.
+            let complete = result.coversWholeArrangement
             return encodeResult(RegionInventoryPayload(
                 regions: regions,
                 complete: complete,
@@ -73,13 +78,25 @@ extension AccessibilityChannel {
         /// about the tracks above it.
         let trackHeadersWithinViewport: Int
 
-        /// The enumeration saw every track, so an empty region result for any of them is genuine.
+        /// Region layout items the traversal found and then DROPPED for lying outside the window.
+        ///
+        /// This is the horizontal axis, and it is not implied by the header count: a region at bar 33
+        /// sits far to the right of a window whose every track header is visible. An early version of
+        /// this completeness rule checked only the headers and would have called that arrangement
+        /// completely read — `testAccessibilityChannelAXBackedRegionsMarkViewportSubsetIncomplete`
+        /// models exactly that shape and caught it.
+        let regionItemsOutsideViewport: Int
+
+        /// The enumeration saw the whole arrangement: every track was in view AND no region was
+        /// dropped for being outside it.
         ///
         /// Zero headers is NOT complete: with nothing to bound the claim there is nothing to have
         /// covered, and reporting completeness there would make an unreadable arrangement look
         /// exhaustively read.
-        var coversEveryTrack: Bool {
-            trackHeaderCount > 0 && trackHeadersWithinViewport == trackHeaderCount
+        var coversWholeArrangement: Bool {
+            trackHeaderCount > 0
+                && trackHeadersWithinViewport == trackHeaderCount
+                && regionItemsOutsideViewport == 0
         }
     }
 
@@ -221,11 +238,13 @@ extension AccessibilityChannel {
         )
         var regions: [(item: AXUIElement, info: RegionInfo)] = []
         var nonRegionCount = 0
+        var regionItemsOutsideViewport = 0
         for item in items {
             let help = AXHelpers.getHelp(item, runtime: runtime.ax) ?? ""
             let isRegion = AXLocalePolicy.regionHelpKeyword.containsAny(in: help)
             guard isRegion else { nonRegionCount += 1; continue }
             guard isVisibleArrangeRegion(item, within: window, runtime: runtime.ax) else {
+                regionItemsOutsideViewport += 1
                 continue
             }
 
@@ -261,7 +280,8 @@ extension AccessibilityChannel {
             trackHeaderCount: headers.count,
             trackHeadersWithinViewport: headers.filter {
                 headerIsWithinViewport($0, within: window, runtime: runtime.ax)
-            }.count
+            }.count,
+            regionItemsOutsideViewport: regionItemsOutsideViewport
         ))
     }
 

@@ -21,28 +21,44 @@ import Testing
 /// 20 carried a region.
 @Suite("#576 completeness is measured against the header list")
 struct Issue576MeasuredCompletenessTests {
-    private func result(headers: Int, inViewport: Int) -> AccessibilityChannel.RegionEnumerationResult {
+    private func result(
+        headers: Int,
+        inViewport: Int,
+        droppedRegions: Int = 0
+    ) -> AccessibilityChannel.RegionEnumerationResult {
         AccessibilityChannel.RegionEnumerationResult(
             regions: [],
             layoutItemCount: 0,
             nonRegionCount: 0,
             trackHeaderCount: headers,
-            trackHeadersWithinViewport: inViewport
+            trackHeadersWithinViewport: inViewport,
+            regionItemsOutsideViewport: droppedRegions
         )
     }
 
     @Test("every header inside the viewport means the enumeration saw every track")
     func fullCoverageIsComplete() {
-        #expect(result(headers: 21, inViewport: 21).coversEveryTrack)
-        #expect(result(headers: 1, inViewport: 1).coversEveryTrack)
+        #expect(result(headers: 21, inViewport: 21).coversWholeArrangement)
+        #expect(result(headers: 1, inViewport: 1).coversWholeArrangement)
     }
 
     @Test("a header outside the viewport means it did not")
     func partialCoverageIsNotComplete() {
         // The live 0.6-zoom reading.
-        #expect(!result(headers: 21, inViewport: 6).coversEveryTrack)
+        #expect(!result(headers: 21, inViewport: 6).coversWholeArrangement)
         // One short is still short: the missing track is exactly where an unseen region would be.
-        #expect(!result(headers: 21, inViewport: 20).coversEveryTrack)
+        #expect(!result(headers: 21, inViewport: 20).coversWholeArrangement)
+    }
+
+    /// The headers are the VERTICAL axis only. A region at bar 33 sits far to the right of a window
+    /// whose every track header is visible, so header coverage alone is not completeness — the first
+    /// version of this rule checked only the headers, and
+    /// `testAccessibilityChannelAXBackedRegionsMarkViewportSubsetIncomplete` (which models exactly
+    /// that arrangement) caught it before it shipped.
+    @Test("a region dropped for lying outside the window is incompleteness too")
+    func droppedRegionIsNotComplete() {
+        #expect(!result(headers: 2, inViewport: 2, droppedRegions: 1).coversWholeArrangement)
+        #expect(result(headers: 2, inViewport: 2, droppedRegions: 0).coversWholeArrangement)
     }
 
     /// Zero headers is the case that decides whether this is a completeness claim or a vacuous one.
@@ -51,6 +67,6 @@ struct Issue576MeasuredCompletenessTests {
     /// the defect #576 exists to remove.
     @Test("no headers at all is not completeness")
     func zeroHeadersIsNotComplete() {
-        #expect(!result(headers: 0, inViewport: 0).coversEveryTrack)
+        #expect(!result(headers: 0, inViewport: 0).coversWholeArrangement)
     }
 }
