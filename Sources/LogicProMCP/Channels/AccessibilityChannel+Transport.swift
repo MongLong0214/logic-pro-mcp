@@ -666,26 +666,38 @@ extension AccessibilityChannel {
         ]
     }
 
-    private static func runCycleRangeFallbackScript(startPos: String, endPos: String) -> Bool {
+    /// Kept internal so the #519 menu-locale regression tests can assert the exact generated
+    /// AppleScript without invoking Logic Pro. Pure text generation — no execution.
+    static func cycleRangeLocatorScript(startPos: String, endPos: String) -> String {
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
         // Strategy: use Logic's "Go To > Go To Beginning" (not ideal) — we instead
         // rely on the menu path "Navigate > Set Locators…" which opens a dialog
         // with start/end text fields. Keystroke start, Tab, end, Return.
-        // Menu path (Logic 12, ko): "탐색 > 로케이터 설정…"; (en): "Navigate > Set Locators…"
-        let script = """
+        // #519: bar/item names are resolved from AXLocalePolicy's LabelSets (canonical
+        // "Navigate" / "Set Locators…", KO variants "탐색" / "로케이터 설정…") instead of
+        // hard-coding one locale's literal.
+        let barResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.navigateMenuBar,
+            variableName: "barName",
+            notFoundError: "NAVIGATE_MENU_BAR_NOT_FOUND"
+        )
+        let itemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.setLocatorsMenuItem,
+            under: "menu bar item barName of menu bar 1",
+            variableName: "itemName",
+            notFoundError: "SET_LOCATORS_ITEM_NOT_FOUND"
+        )
+        return """
         tell application "System Events"
             tell \(logicProAppleScript.systemEventsProcessTarget)
                 set frontmost to true
                 delay 0.2
-                -- Attempt Korean menu first
                 try
-                    click menu item "로케이터 설정…" of menu 1 of menu bar item "탐색" of menu bar 1
+                    \(barResolution)
+                    \(itemResolution)
+                    click menu item itemName of menu 1 of menu bar item barName of menu bar 1
                 on error
-                    try
-                        click menu item "Set Locators…" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    on error
-                        return "no-menu"
-                    end try
+                    return "no-menu"
                 end try
                 delay 0.3
                 keystroke "\(startPos)"
@@ -699,6 +711,10 @@ extension AccessibilityChannel {
             end tell
         end tell
         """
+    }
+
+    private static func runCycleRangeFallbackScript(startPos: String, endPos: String) -> Bool {
+        let script = cycleRangeLocatorScript(startPos: startPos, endPos: endPos)
         guard case let .completed(output) = BoundedProcessRunner.run(
             executable: "/usr/bin/osascript",
             arguments: ["-e", script],
@@ -1084,6 +1100,27 @@ extension AccessibilityChannel {
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
         let ledgerPath = issuanceLedgerPath ?? ""
         let snapshotPath = preLeafWindowSnapshotPath ?? ""
+        // #519: bar/item/leaf names for the Navigate > Go To > Position… chain are resolved
+        // from AXLocalePolicy's LabelSets instead of a hard-coded EN/KO literal pair. Each
+        // resolution is read-only (no click) and raises a distinct error identifier the
+        // enclosing `try` block below turns into the existing "MENU_NOT_FOUND: <id>" refusal.
+        let navigateBarResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.navigateMenuBar,
+            variableName: "barName",
+            notFoundError: "NAVIGATE_MENU_BAR_NOT_FOUND"
+        )
+        let goToItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.goToMenuItem,
+            under: "menu bar item barName of menu bar 1",
+            variableName: "goToName",
+            notFoundError: "GO_TO_MENU_ITEM_NOT_FOUND"
+        )
+        let positionItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.goToPositionMenuItem,
+            under: "menu item goToName of menu 1 of menu bar item barName of menu bar 1",
+            variableName: "positionName",
+            notFoundError: "POSITION_MENU_ITEM_NOT_FOUND"
+        )
         return """
         -- A selected menu-bar item is the AX observation that one of Logic's
         -- menus is currently open. Return UNREADABLE rather than treating a
@@ -1493,20 +1530,15 @@ extension AccessibilityChannel {
                 -- Locale selection is a read-only path-resolution step. It
                 -- deliberately performs no click, so an AX error cannot turn a
                 -- Korean attempt into a second English menu actuation.
+                -- #519: bar/item/leaf names are resolved from AXLocalePolicy's LabelSets
+                -- (canonical "Navigate"/"Go To"/"Position…", KO variants
+                -- "탐색"/"이동"/"위치…") instead of a hard-coded EN/KO literal pair — see
+                -- AppleScriptMenuResolution for why, and knownGoToPositionDialogTitle
+                -- above for the separate (already-tracked) dialog-title locale table.
                 try
-                    if exists menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1 then
-                        set selectedLocaleChain to "KOREAN"
-                    else if exists menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1 then
-                        set selectedLocaleChain to "ENGLISH"
-                    else
-                        -- No menu has been opened by this run. If the read is unreadable,
-                        -- `knownOpen:false` must not send Escape into an unrelated focus target.
-                        set cleanupState to my dismissOpenMenu(logicProcess, false)
-                        if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                        end if
-                        return "MENU_NOT_FOUND"
-                    end if
+                    \(navigateBarResolution)
+                    \(goToItemResolution)
+                    \(positionItemResolution)
                 on error errMsg
                     -- Locale discovery is read-only; do not claim an unknown menu belongs to
                     -- this run and do not authorise Escape from an unreadable AX observation.
@@ -1517,11 +1549,7 @@ extension AccessibilityChannel {
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
                 try
-                    if selectedLocaleChain is "KOREAN" then
-                        set menuItemEnabled to enabled of menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
-                    else
-                        set menuItemEnabled to enabled of menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    end if
+                    set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
                 on error
                     -- An unreadable AXEnabled must not authorise the pick.
                     set cleanupState to my dismissOpenMenu(logicProcess, false)
@@ -1576,11 +1604,7 @@ extension AccessibilityChannel {
                     end if
                     set menuActuationAttempted to true
                     set dialogActuationIssued to true
-                    if selectedLocaleChain is "KOREAN" then
-                        click menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
-                    else
-                        click menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    end if
+                    click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
                 on error errMsg
                     set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
