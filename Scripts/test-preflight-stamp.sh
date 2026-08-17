@@ -80,27 +80,41 @@ HOOKTEST=$(mktemp -d) || { echo "CANNOT-TEST(2): mktemp failed"; exit 2; }
   OUT=$(LPM_STAMP_DIR="$HOOKTEST/st" bash ./stamp.sh record HEAD 2>&1)
   case "$OUT" in *"warning: no executable"*) ;; *) exit 12 ;; esac
 
+  # An executable NOOP at the path must NOT count as installed. An earlier revision of this fixture
+  # installed exactly this and treated the resulting silence as proof, so the suite certified that any
+  # executable — including one that permits every push — means "enforced".
   printf '#!/bin/bash\nexit 0\n' > "$H"
+  chmod +x "$H"
+  bash ./stamp.sh hook >/dev/null 2>&1
+  [ $? -eq 1 ] || exit 16
+
   chmod -x "$H"
   OUT=$(bash ./stamp.sh hook 2>&1)
   case "$OUT" in *"not executable"*) ;; *) exit 13 ;; esac
 
+  # The real gate, which does consult the stamp.
+  cp "$OLDPWD/$HOOK" "$H"
   chmod +x "$H"
   bash ./stamp.sh hook >/dev/null 2>&1
-  [ $? -eq 0 ] || exit 14                       # installed and executable must be OK(0)
+  [ $? -eq 0 ] || exit 14
 
-  # ...and the warning must STOP once it is installed, or it is noise rather than a signal.
+  # ...and the warning must STOP once it is installed, or it is noise rather than a signal. Assert the
+  # SUCCESS line too: checking only for the absence of a warning passes when `record` breaks entirely
+  # and prints nothing at all, which is a green for a reason unrelated to what is being measured.
   OUT=$(LPM_STAMP_DIR="$HOOKTEST/st2" bash ./stamp.sh record HEAD 2>&1)
   case "$OUT" in *"warning: no executable"*) exit 15 ;; esac
+  case "$OUT" in *"stamped tree"*) ;; *) exit 17 ;; esac
   exit 0
 )
 case $? in
-  0)  ok "hook reports absent / non-executable / installed, and record warns only when unenforced" ;;
+  0)  ok "hook rejects absent / noop / non-executable and accepts only a stamp-consulting gate" ;;
   11) no "an absent hook did not report NOT-ENFORCED(1)" ;;
   12) no "record stayed silent in a clone with no hook installed — the silent absence is the defect" ;;
   13) no "a non-executable hook was not distinguished from an installed one" ;;
   14) no "an installed executable hook did not report OK(0)" ;;
   15) no "record warned about an absent hook while one was installed" ;;
+  16) no "an executable NOOP counted as an installed gate — any exit-0 script would silence the check" ;;
+  17) no "record printed no success line; the silence-means-installed assertion was vacuous" ;;
   *)  no "hook-state fixture broke before it could measure anything" ;;
 esac
 rm -rf "$HOOKTEST"

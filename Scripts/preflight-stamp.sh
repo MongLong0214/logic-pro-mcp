@@ -30,7 +30,7 @@
 #   Scripts/preflight-stamp.sh record [<tree-ish>]   run nothing; record that the caller verified this tree
 #   Scripts/preflight-stamp.sh check  [<tree-ish>]   exit 0 stamped, 1 not stamped, 2 cannot tell
 #   Scripts/preflight-stamp.sh path                  print the stamp file location
-#   Scripts/preflight-stamp.sh hook                  exit 0 hook installed, 1 not installed, 2 cannot tell
+#   Scripts/preflight-stamp.sh hook                  exit 0 gate installed, 1 not enforced, 2 cannot tell
 #
 # WHY `hook` LIVES HERE. An uninstalled hook is a silent absence — a fresh clone, a second machine, or a
 # reinstall that drops the chained slot leaves no gate and says nothing, which is the very failure shape
@@ -70,8 +70,17 @@ case "$MODE" in
   hook)
     HOOK=$(hook_path) || { echo "CANNOT-CHECK(2): not inside a git repository"; exit 2; }
     if [ -x "$HOOK" ]; then
-        echo "OK: the stamp gate is installed at $HOOK"
-        exit 0
+        # Executable is not the same as "this is the stamp gate". Any `#!/bin/bash\nexit 0` at this path
+        # satisfies `-x` and silently permits every push, while this mode reported the gate installed —
+        # a detector whose message claimed more than its test established, which is the exact class the
+        # stamp exists to catch. Require the file to actually consult the stamp.
+        if grep -q 'preflight-stamp.sh' "$HOOK" 2>/dev/null; then
+            echo "OK: the stamp gate is installed at $HOOK"
+            exit 0
+        fi
+        echo "NOT-ENFORCED(1): $HOOK is executable but never consults the stamp — pushes are unchecked"
+        echo "  fix: cp Scripts/pre-push-require-stamp.sh $HOOK && chmod +x $HOOK"
+        exit 1
     fi
     # Distinguish "present but not executable" from "absent". The execute bit is load-bearing — the
     # CommitLore shim runs the chained hook only when it is `-x` — so a non-executable file is an
@@ -97,7 +106,7 @@ case "$MODE" in
     # Say it on the path that actually runs. A stamp recorded into a clone with no hook installed is a
     # note nobody will ever read: nothing will consult it at push time. Reported, never fatal — recording
     # a result is still correct, and failing here would block a clone for a condition it did not cause.
-    if ! HOOK=$(hook_path) || [ ! -x "$HOOK" ]; then
+    if ! HOOK=$(hook_path) || [ ! -x "$HOOK" ] || ! grep -q 'preflight-stamp.sh' "$HOOK" 2>/dev/null; then
         echo "  warning: no executable stamp gate at ${HOOK:-<unknown>} — this stamp will not be checked"
         echo "  warning: run '$0 hook' for the fix"
     fi >&2

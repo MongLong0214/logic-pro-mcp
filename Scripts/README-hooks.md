@@ -32,8 +32,13 @@ as a reminder with teeth, not as proof.
 
 **An uninstalled hook is a silent absence**, which is the same failure shape the stamp exists to fix: a
 fresh clone, a second machine, or a reinstall that drops the chained slot leaves no gate and says nothing.
-`lpm-ship.sh` therefore checks for the hook and prints `NOT ENFORCED` with the install command when it is
-missing, so the absence is reported rather than assumed away.
+`Scripts/preflight-stamp.sh hook` therefore reports it — 0 installed, 1 not enforced, 2 cannot tell — and
+`record` warns when it stamps into a clone with no gate. That check lives in this repository on purpose:
+it was first written into a personal wrapper script outside the tree, where the detector and the thing it
+detects were missing together on every machine but one.
+
+It checks that the hook consults the stamp, not merely that something executable sits at the path. An
+`exit 0` script there satisfies a bare `-x` test and permits every push.
 
 **Run the install from the main clone**, not a linked worktree: there `.git` is a file, not a directory,
 and the relative symlink will not resolve.
