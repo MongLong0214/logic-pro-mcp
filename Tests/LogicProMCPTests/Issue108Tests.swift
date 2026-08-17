@@ -157,7 +157,26 @@ struct Issue108Tests {
         #expect(o?["imported_region_count"] as? Int == 1)
     }
 
-    @Test("import_file fails closed when a new track appears without a MIDI region")
+    /// #576 changed this outcome's CLASSIFICATION, not its strictness.
+    ///
+    /// It used to be State C `readback_mismatch` — "the import did not create a verifiable MIDI
+    /// region", stated as fact. But the region reader is `enumerateRegionItems`, and
+    /// `defaultGetRegions` publishes `complete: false, scope: "visible_arrange_area",
+    /// reason: "logic_ax_viewport_only"` on every successful read: Logic only exposes regions for
+    /// the part of the arrangement in view. Measured on Logic 12.3, 2026-08-17, an import that
+    /// genuinely worked read back as zero new regions once the project outgrew the viewport —
+    /// `track_count 14 -> 15` with `region_count 13 -> 13`.
+    ///
+    /// So an empty region result is not evidence of absence, and the honest answer is State B: the
+    /// write was attempted, the track-count delta confirms something was created, and the region
+    /// could not be confirmed by an instrument that cannot see the whole arrangement. Nothing here
+    /// is promoted to a verified import — `verified` stays false and no State A is emitted, which is
+    /// what "fails closed" was protecting.
+    ///
+    /// The reader cannot tell "absent because it is not there" from "absent because it is not
+    /// visible", so this is deliberately unconditional rather than gated on a project size that the
+    /// code has no way to measure.
+    @Test("import_file refuses to certify, and does not claim failure it cannot see, when no region reads back")
     func importFailsClosedOnTrackDeltaWithoutRegion() async {
         let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
         let counter = CallCounter([1, 2])
@@ -171,9 +190,17 @@ struct Issue108Tests {
             regionInfos: { regions.next() },
             deltaPoll: {}
         )
-        #expect(!result.isSuccess)
-        #expect(result.message.contains("readback_mismatch"))
-        #expect(result.message.contains("did not create a verifiable MIDI region"))
+        // Not certified, and explicitly not verified — the half that must never regress.
+        #expect(result.message.contains("\"state\":\"B\""))
+        #expect(result.message.contains("\"verified\":false"))
+        #expect(!result.message.contains("\"state\":\"A\""))
+        #expect(result.message.contains("readback_unavailable"))
+        // The limitation is NAMED, so a caller can tell this from a region that was looked for
+        // across the whole arrangement and genuinely was not there.
+        #expect(result.message.contains("\"region_readback_complete\":false"))
+        #expect(result.message.contains("visible_arrange_area"))
+        #expect(result.message.contains("logic_ax_viewport_only"))
+        // And the observation that IS solid stays on the envelope.
         #expect(result.message.contains("\"track_count_after\":2"))
         #expect(result.message.contains("\"region_count_after\":0"))
     }

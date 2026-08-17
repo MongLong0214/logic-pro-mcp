@@ -544,10 +544,40 @@ extension AccessibilityChannel {
                 ))
             }
             guard !importedRegions.isEmpty else {
-                return .error(HonestContract.encodeStateC(
-                    error: .readbackMismatch,
-                    hint: "midi.import_file created a new track but did not create a verifiable MIDI region",
-                    extras: extras
+                // An empty region result is NOT evidence that no region was imported. The reader is
+                // `enumerateRegionItems`, and `defaultGetRegions` publishes what it can see on every
+                // successful read: `complete: false`, `scope: "visible_arrange_area"`,
+                // `reason: "logic_ax_viewport_only"`. Logic only exposes regions for the part of the
+                // arrangement in view, so once a project outgrows the viewport the freshly imported
+                // track is off-screen and its region is unreadable.
+                //
+                // Measured on Logic 12.3, 2026-08-17, same binary and project, repeated calls:
+                //
+                //     track 13   verified: true, region read back
+                //     track 14   track_count 14 -> 15, region_count 13 -> 13, no region found
+                //     track 15   the same
+                //
+                // The import worked — Logic created the track — and the reading did not. Reporting
+                // that as a definite failure sends the caller to retry, which creates a SECOND track
+                // and a second region and fails again, compounding the mess it says did not happen.
+                //
+                // So this is State B: the write was attempted, the track-count delta confirms
+                // something was created, and the region could not be confirmed by an instrument that
+                // cannot see the whole arrangement. It is deliberately not conditional on a project
+                // size — the reader never claims completeness, so an empty answer is never proof.
+                extras["region_readback_complete"] = false
+                extras["region_readback_scope"] = AccessibilityChannel.regionReadbackScope
+                extras["region_readback_limit"] = AccessibilityChannel.regionReadbackLimitReason
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras.merging([
+                        "hint": "midi.import_file created a new track, but no imported MIDI region "
+                            + "was visible to the region readback. That readback only covers the "
+                            + "\(AccessibilityChannel.regionReadbackScope), so this is not evidence "
+                            + "the import produced nothing — a track outside the visible arrangement "
+                            + "reads the same way. Do NOT retry blindly: the track-count delta shows "
+                            + "a track was already created, and a second call would create another.",
+                    ]) { _, new in new }
                 ))
             }
             return .success(HonestContract.encodeStateA(extras: extras))
