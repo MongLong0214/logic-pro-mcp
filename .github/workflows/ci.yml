@@ -28,6 +28,11 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Self-test the preflight stamp gate (#552)
+        # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an
+        # unresolvable tree-ish is 2, and the hook refuses an unstamped commit while allowing a deletion.
+        run: bash Scripts/test-preflight-stamp.sh
+
       - name: Self-test the menu-literal guard (#519)
         # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that
         # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
@@ -73,6 +78,11 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Self-test the preflight stamp gate (#552)
+        # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an
+        # unresolvable tree-ish is 2, and the hook refuses an unstamped commit while allowing a deletion.
+        run: bash Scripts/test-preflight-stamp.sh
 
       - name: Self-test the menu-literal guard (#519)
         # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that

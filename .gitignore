@@ -56,3 +56,6 @@ docs/media/reddit-dudddee-*
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Per-developer MCP client configuration. Not part of the server.
+.mcp.json

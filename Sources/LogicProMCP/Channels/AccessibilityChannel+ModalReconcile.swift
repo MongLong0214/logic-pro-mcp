@@ -1188,6 +1188,19 @@ extension AccessibilityChannel {
         error.raw == AXError.invalidUIElement.rawValue
     }
 
+    /// #549: roles this scan will not treat as a possible sheet host. A failed `AXChildren` read on one
+    /// of these does not withhold the absence answer.
+    ///
+    /// The justification is SEMANTIC, not structural: AppKit attaches a sheet to a window, not to a
+    /// table cell. It is worth being exact about that, because this repository documents Logic's Marker
+    /// List `AXCell` as a container that nests further groups and cells
+    /// (`AXLogicProElements+Markers.swift`), so "an AXCell contains nothing" would simply be false. The
+    /// claim is narrower: nothing a sheet can attach to lives under one. Keyed on role because
+    /// `AXRole` is a non-localized constant, unlike titles and `AXRoleDescription` — a label-based
+    /// exclusion would silently stop working on a non-English Logic, which is the defect class of #519
+    /// and #523. One entry, the one that was measured.
+    private static let rolesThatCannotHostASheet: Set<String> = [kAXCellRole as String]
+
     /// Searches one level before descending through the fallback tree. A sheet
     /// is normally a direct `AXChildren` child of its host, so inspecting the
     /// direct roles first avoids spending the scan inside unrelated siblings
@@ -1205,13 +1218,6 @@ extension AccessibilityChannel {
     ///   - elementRole: `element`'s own role, when already known (nil only
     ///     for the initial window-root call, whose role this scan never
     ///     independently reads).
-    /// #549: roles that cannot be, or contain, an `AXSheet`. A failed `AXChildren` read on one of
-    /// these is not a hole in the sheet search: the node was never a candidate. Keyed on role because
-    /// `AXRole` is a non-localized constant, unlike titles and `AXRoleDescription` — a label-based
-    /// exclusion would silently stop working on a non-English Logic, which is the defect class of #519
-    /// and #523. One entry, the one that was measured.
-    private static let rolesThatCannotHostASheet: Set<String> = [kAXCellRole as String]
-
     private static func findSheetDescendantLookup(
         in element: AXUIElement,
         maxDepth: Int,
