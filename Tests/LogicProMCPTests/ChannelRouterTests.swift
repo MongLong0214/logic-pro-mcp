@@ -308,7 +308,10 @@ private func waitUntil(
 
 @Test func testRouterAllOperationsHaveChannel() async {
     let table = ChannelRouter.v2RoutingTable
-    let systemOps = ["system.health", "system.cache_state", "system.refresh", "system.permissions", "project.is_running"]
+    // `system.cache_state` and `system.refresh` were removed from the table in #575: nothing routed
+    // either, and `system.refresh` was shadowed by the registered `system.refresh_cache`. Leaving
+    // them in this exclusion list would let them be reintroduced without anyone noticing.
+    let systemOps = ["system.health", "system.permissions", "project.is_running"]
     for (op, channels) in table {
         if systemOps.contains(op) {
             continue // System ops intentionally have no channel
