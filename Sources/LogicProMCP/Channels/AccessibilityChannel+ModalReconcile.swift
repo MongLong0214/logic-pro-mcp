@@ -796,6 +796,8 @@ extension AccessibilityChannel {
             return seenUnknownBlockerSignals()
         case .mandatoryNewTrack(let read):
             return read
+        case .deleteConfirm(let read):
+            return read
         case .informational(let target):
             return noSheetModalSignals(
                 strayMenuOpen: false,
@@ -898,6 +900,10 @@ extension AccessibilityChannel {
         /// `AXSheet`. Container shape is not a safety discriminator here: the
         /// classifier receives the controls and description it actually read.
         case mandatoryNewTrack(ModalSignalRead)
+        /// #545: a track-delete confirmation Logic presents as a top-level modal WINDOW rather than a
+        /// sheet. Same treatment as `mandatoryNewTrack` above and for the same reason — its contents are
+        /// classifiable, so reducing it to the generic fail-closed blocker throws away what was read.
+        case deleteConfirm(ModalSignalRead)
         case informational(AXLogicProElements.BlockingDialogTarget)
         case blocking
         case unreadable(ModalReadFailure)
@@ -987,8 +993,20 @@ extension AccessibilityChannel {
                 // generic fail-closed blocker. Non-matching modals still take
                 // that blocker path below.
                 let modalRead = readModalSignals(from: window, runtime: runtime)
-                if ModalReconciliation.classify(modalRead.signals) == .mandatoryNewTrack {
+                switch ModalReconciliation.classify(modalRead.signals) {
+                case .mandatoryNewTrack:
                     return .mandatoryNewTrack(modalRead)
+                case .deleteConfirm:
+                    // #545: Logic raises "Delete Track and Regions?" / "Delete Track and Cells?" as a
+                    // top-level AXDialog, not a sheet. Without this it fell through to the generic
+                    // blocker, was classified `unknownSheet`, and — the part that actually hurt — was
+                    // LEFT ON SCREEN, after which every later operation in any surface returned State C
+                    // until a human clicked it. Acting on it is still gated downstream: `decide` confirms
+                    // only when `isDeleteContext` is true, and preflight never acts on `.deleteConfirm`,
+                    // so this cannot press Delete on a dialog this server did not ask for.
+                    return .deleteConfirm(modalRead)
+                default:
+                    break
                 }
                 if firstBlockingDialog == nil {
                     firstBlockingDialog = (window, knownSubrole)
@@ -1875,7 +1893,11 @@ extension AccessibilityChannel {
             current = observed
         case .none:
             return (false, false, .targetGone, nil)
-        case .mandatoryNewTrack, .blocking, .unreadable(_):
+        case .mandatoryNewTrack, .deleteConfirm, .blocking, .unreadable(_):
+            // A delete-confirm dialog is not an informational alert and must never be acknowledged by
+            // this path: acknowledging means pressing the single button, and this dialog's buttons are a
+            // CHOICE. Grouped with the other non-informational outcomes so the alert acknowledger
+            // refuses rather than guessing.
             return (false, false, .targetChanged, nil)
         }
         guard CFEqual(current.element, target.element) else {
