@@ -218,16 +218,21 @@ struct Issue529MenuValidationTests {
         // the three read-only candidate loops below (bar, then "Go To", then "Position…") replace
         // the old koreanDecision/englishDecision two-branch check.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        // Candidate lists are derived from the LabelSets rather than spelled out: a measured label
+        // added to AXLocalePolicy must not break an ordering test that is about ordering.
+        func candidateList(_ set: AXLocalePolicy.LabelSet) -> String {
+            "repeat with candidate in {" + set.labels.map { "\"\($0)\"" }.joined(separator: ", ") + "}"
+        }
         let barResolution = try issue529Position(
-            of: "repeat with candidate in {\"Navigate\", \"탐색\"}",
+            of: candidateList(AXLocalePolicy.navigateMenuBar),
             in: script
         )
         let itemResolution = try issue529Position(
-            of: "repeat with candidate in {\"Go To\", \"이동\"}",
+            of: candidateList(AXLocalePolicy.goToMenuItem),
             in: script
         )
         let leafResolution = try issue529Position(
-            of: "repeat with candidate in {\"Position…\", \"위치…\"}",
+            of: candidateList(AXLocalePolicy.goToPositionMenuItem),
             in: script
         )
         let enabledRead = try issue529Position(
@@ -303,7 +308,12 @@ struct Issue529MenuValidationTests {
             in: script
         )
         let firstOperationalDelay = try issue529Position(of: "delay 0.2", in: script)
-        let localeDecision = try issue529Position(of: "repeat with candidate in {\"Navigate\", \"탐색\"}", in: script)
+        let localeDecision = try issue529Position(
+            of: "repeat with candidate in {"
+                + AXLocalePolicy.navigateMenuBar.labels.map { "\"\($0)\"" }.joined(separator: ", ")
+                + "}",
+            in: script
+        )
         let leafClick = try issue529Position(
             of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
@@ -323,7 +333,12 @@ struct Issue529MenuValidationTests {
             of: "if entryMenuCleanup is not \"CLOSED\" then",
             in: script
         )
-        let localeDecision = try issue529Position(of: "repeat with candidate in {\"Navigate\", \"탐색\"}", in: script)
+        let localeDecision = try issue529Position(
+            of: "repeat with candidate in {"
+                + AXLocalePolicy.navigateMenuBar.labels.map { "\"\($0)\"" }.joined(separator: ", ")
+                + "}",
+            in: script
+        )
 
         #expect(entryGuard < localeDecision)
         #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))

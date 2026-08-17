@@ -26,10 +26,21 @@ struct AppleScriptMenuResolutionGeneratorTests {
             variableName: "barName",
             notFoundError: "NAVIGATE_MENU_BAR_NOT_FOUND"
         )
-        let canonical = try #require(generated.range(of: "\"Navigate\""))
-        let variant = try #require(generated.range(of: "\"탐색\""))
-        #expect(canonical.lowerBound < variant.lowerBound)
-        #expect(generated.contains("repeat with candidate in {\"Navigate\", \"탐색\"}"))
+        // Derived from the LabelSet, not hardcoded. A test that spells out the whole candidate list
+        // fails whenever a measured label is added — which would make adding a language a test-breaking
+        // change, penalising the one thing this design exists to make cheap. Asserting the PROPERTY still
+        // fails if a label is dropped or the order is wrong.
+        let labels = AXLocalePolicy.navigateMenuBar.labels
+        let canonical = try #require(generated.range(of: "\"\(labels[0])\""))
+        for variant in labels.dropFirst() {
+            let found = try #require(
+                generated.range(of: "\"\(variant)\""),
+                "every label in the set must reach the generated candidate list: \(variant)"
+            )
+            #expect(canonical.lowerBound < found.lowerBound)
+        }
+        let expectedList = labels.map { "\"\($0)\"" }.joined(separator: ", ")
+        #expect(generated.contains("repeat with candidate in {\(expectedList)}"))
         #expect(generated.contains("if exists menu bar item candidate of menu bar 1 then"))
         #expect(generated.contains("set barName to candidate as text"))
         #expect(generated.contains("if barName is missing value then error \"NAVIGATE_MENU_BAR_NOT_FOUND\""))
@@ -43,7 +54,8 @@ struct AppleScriptMenuResolutionGeneratorTests {
             variableName: "goToName",
             notFoundError: "GO_TO_MENU_ITEM_NOT_FOUND"
         )
-        #expect(generated.contains("repeat with candidate in {\"Go To\", \"이동\"}"))
+        let goToLabels = AXLocalePolicy.goToMenuItem.labels.map { "\"\($0)\"" }.joined(separator: ", ")
+        #expect(generated.contains("repeat with candidate in {\(goToLabels)}"))
         #expect(generated.contains(
             "if exists menu item candidate of menu 1 of menu bar item barName of menu bar 1 then"
         ))
