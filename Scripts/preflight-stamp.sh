@@ -22,10 +22,21 @@
 # something the preflight read. That costs a re-run on a reword, and that cost is correct — the previous
 # saving was purchased with a hole.
 #
+# SCOPE. This makes the preflight hard to walk past ACCIDENTALLY. It does not make it impossible: the
+# push-side enforcement is a pre-push hook, and `git push --no-verify` bypasses every one of them. Real
+# unbypassability lives server-side, in a required status check. See `Scripts/pre-push-require-stamp.sh`.
+#
 # Usage:
 #   Scripts/preflight-stamp.sh record [<tree-ish>]   run nothing; record that the caller verified this tree
 #   Scripts/preflight-stamp.sh check  [<tree-ish>]   exit 0 stamped, 1 not stamped, 2 cannot tell
 #   Scripts/preflight-stamp.sh path                  print the stamp file location
+#   Scripts/preflight-stamp.sh hook                  exit 0 gate installed, 1 not enforced, 2 cannot tell
+#
+# WHY `hook` LIVES HERE. An uninstalled hook is a silent absence — a fresh clone, a second machine, or a
+# reinstall that drops the chained slot leaves no gate and says nothing, which is the very failure shape
+# this stamp exists to fix. That detector was first written into the personal ship script, and review
+# caught the mistake: that script lives OUTSIDE the repository, so the detector and the thing it detects
+# were missing together on every machine but one. It belongs in the file a clone actually receives.
 #
 # `record` deliberately does NOT run the preflight itself. A recorder that also verifies would be trusted
 # to do both and could then certify its own work; this only writes down a result someone else produced.
@@ -46,7 +57,43 @@ stamp_key () {
     printf '%s %s %s' "$tree" "$commit" "$base" | shasum -a 256 | cut -d" " -f1
 }
 
+# Where the chained pre-push hook must be installed. `--git-common-dir` (not `--git-dir`) so this answers
+# the same path from a linked worktree, where `.git` is a file and hooks live in the main clone.
+hook_path () {
+    local common
+    common=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+    [ -n "$common" ] || return 1
+    printf '%s/hooks/pre-push.commitlore-chained' "$common"
+}
+
 case "$MODE" in
+  hook)
+    HOOK=$(hook_path) || { echo "CANNOT-CHECK(2): not inside a git repository"; exit 2; }
+    if [ -x "$HOOK" ]; then
+        # Executable is not the same as "this is the stamp gate". Any `#!/bin/bash\nexit 0` at this path
+        # satisfies `-x` and silently permits every push, while this mode reported the gate installed —
+        # a detector whose message claimed more than its test established, which is the exact class the
+        # stamp exists to catch. Require the file to actually consult the stamp.
+        if grep -q 'preflight-stamp.sh' "$HOOK" 2>/dev/null; then
+            echo "OK: the stamp gate is installed at $HOOK"
+            exit 0
+        fi
+        echo "NOT-ENFORCED(1): $HOOK is executable but never consults the stamp — pushes are unchecked"
+        echo "  fix: cp Scripts/pre-push-require-stamp.sh $HOOK && chmod +x $HOOK"
+        exit 1
+    fi
+    # Distinguish "present but not executable" from "absent". The execute bit is load-bearing — the
+    # CommitLore shim runs the chained hook only when it is `-x` — so a non-executable file is an
+    # installed-looking gate that never runs, which is worse than an obviously missing one.
+    if [ -e "$HOOK" ]; then
+        echo "NOT-ENFORCED(1): $HOOK exists but is not executable, so the shim will not run it"
+        echo "  fix: chmod +x $HOOK"
+        exit 1
+    fi
+    echo "NOT-ENFORCED(1): no stamp gate installed — pushes from this clone are not checked"
+    echo "  fix: cp Scripts/pre-push-require-stamp.sh $HOOK && chmod +x $HOOK"
+    exit 1
+    ;;
   path)
     echo "$STAMP_DIR"
     ;;
@@ -56,6 +103,13 @@ case "$MODE" in
     mkdir -p "$STAMP_DIR" || { echo "CANNOT-STAMP(2): cannot create $STAMP_DIR"; exit 2; }
     printf 'tree %s\n' "$TREE" > "$STAMP_DIR/$TREE"
     echo "stamped tree $TREE"
+    # Say it on the path that actually runs. A stamp recorded into a clone with no hook installed is a
+    # note nobody will ever read: nothing will consult it at push time. Reported, never fatal — recording
+    # a result is still correct, and failing here would block a clone for a condition it did not cause.
+    if ! HOOK=$(hook_path) || [ ! -x "$HOOK" ] || ! grep -q 'preflight-stamp.sh' "$HOOK" 2>/dev/null; then
+        echo "  warning: no executable stamp gate at ${HOOK:-<unknown>} — this stamp will not be checked"
+        echo "  warning: run '$0 hook' for the fix"
+    fi >&2
     ;;
   check)
     TREE=$(stamp_key) || { echo "CANNOT-CHECK(2): cannot resolve a stamp key for $TREEISH"; exit 2; }
@@ -77,6 +131,6 @@ case "$MODE" in
     exit 1
     ;;
   *)
-    echo "usage: $0 {record|check|path} [tree-ish]"; exit 2
+    echo "usage: $0 {record|check|hook|path} [tree-ish]"; exit 2
     ;;
 esac
