@@ -137,12 +137,16 @@ if present is not True:
 
 rec = ev.record_screen(seconds=100)
 win = E.logic_window()
-# NOT the track rail: the Marker List window floats over the left of the arrange window, and it has to
-# stay open because it carries the trigger. A crop there shows the Marker List, which does not change when
-# tracks are added, so the assertion compared two identical wrong pictures and read as "nothing happened"
-# on a run that plainly worked. Sample the arrange lanes to the right of it instead.
-RAIL = (int(win["w"] * 0.45), int(win["h"] * 0.15),
-        int(win["w"] * 0.45), int(win["h"] * 0.60)) if win else None
+# Move the Marker List OFF the track rail rather than photographing somewhere else. It has to stay OPEN —
+# it carries the trigger — but it does not have to sit on top of the subject. Two earlier region choices
+# failed for opposite reasons: cropping the rail while it was covered compared two identical pictures of
+# the Marker List, and cropping the arrange lanes instead never SETTLED, because Logic animates indicators
+# there and `shot()` requires two identical frames before it will record one. The track name band changes
+# when a track is added and does not animate.
+osa('tell application "System Events" to tell process "Logic Pro" to '
+    'set position of (first window whose name contains "Marker List") to {1200, 640}')
+time.sleep(1.2)
+RAIL = (0, int(win["h"] * 0.12), int(win["w"] * 0.19), int(win["h"] * 0.45)) if win else None
 pre = ev.shot("before-create", settle_region=RAIL)
 
 # ---- the defect: create must certify with the failing node present ----
@@ -154,6 +158,14 @@ def bring_logic_forward():
     posting.
     """
     subprocess.run(["osascript", "-e", 'tell application "Logic Pro" to activate'],
+                   capture_output=True, text=True)
+    # Activating the APP is not enough: the menu drive needs the arrange window to be the front WINDOW,
+    # and the Marker List — which this harness has to keep open, because it carries the trigger — takes
+    # that position. Without this raise the creates fail for an environment reason and the run reads as a
+    # product regression; that happened repeatedly today while manual runs seconds earlier certified.
+    subprocess.run(["osascript", "-e",
+                    'tell application "System Events" to tell process "Logic Pro" to '
+                    'perform action "AXRaise" of (first window whose name contains "Tracks")'],
                    capture_output=True, text=True)
     time.sleep(1.0)
 
@@ -189,8 +201,8 @@ ev.check("549/the-writes-actually-landed",
 
 post = ev.shot("after-create", settle_region=RAIL)
 if RAIL:
-    ev.visual("549/new-track-lanes-appear", pre["file"], post["file"], RAIL, expect_change=True,
-              why="three tracks were added, so their lanes must appear in the arrange area")
+    ev.visual("549/new-track-name-bands-appear", pre["file"], post["file"], RAIL, expect_change=True,
+              why="three tracks were added, so their name bands must appear in the header rail")
 
 # ---- the dangerous direction: the scan must still see a REAL sheet ----
 t = tracks()
