@@ -229,6 +229,64 @@ func enumerateMarkers_zeroRowsWithNoWitnessStaysUnreadable() async {
 }
 
 @Test
+func enumerateMarkers_witnessComesFromTheWindowTheCallerBoundNotTheTablesAXWindow() async {
+    // The window-scoped reader already holds the Marker List window. Resolving the witness again
+    // through the table's `AXWindow` would let a mis-bound attribute decide: an attribute pointing
+    // at some OTHER window whose own count reads zero would certify an empty list for a table whose
+    // rows are merely missing. Absent is a safe wrong answer; wrong-and-zero is not.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_400)
+    let arrange = builder.element(7_401)
+    let listWin = builder.element(7_402)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: [], itemCountText: "4 Markers"
+    )
+
+    // A decoy window that says zero, wired into the table's AXWindow.
+    let decoy = builder.element(7_410)
+    builder.setAttribute(decoy, kAXRoleAttribute as String, kAXWindowRole as String)
+    let decoyCount = builder.element(7_411)
+    builder.setAttribute(decoyCount, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(decoyCount, kAXDescriptionAttribute as String, "Number of Items")
+    builder.setAttribute(decoyCount, kAXValueAttribute as String, "0 Markers")
+    builder.setChildren(decoy, [decoyCount])
+    builder.setAttribute(builder.element(8000), kAXWindowAttribute as String, decoy)
+
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeLogicRuntime(appElement: app).ax
+    )
+    if case .success(let markers) = result {
+        #expect(Bool(false),
+                "the decoy window's zero must not certify an empty list, got \(markers.count)")
+    }
+}
+
+@Test
+func enumerateMarkers_tableWithNoChildrenAtAllStillNeedsTheWitness() async {
+    // A table that answers `AXChildren` with nothing is not self-evidently an empty Marker List —
+    // "the table returned nothing" is also what a rebuild returns, and publishing it uncorroborated
+    // is the original path that once certified the delete of a marker that was still present.
+    let builder = FakeAXRuntimeBuilder()
+    let listWin = builder.element(7_500)
+    let table = builder.element(7_501)
+    builder.setAttribute(listWin, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
+    builder.setAttribute(table, "AXRows", [AXUIElement]())
+    builder.setChildren(table, [])
+    builder.setChildren(listWin, [table])
+
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeAXRuntime()
+    )
+    if case .success(let markers) = result {
+        #expect(Bool(false),
+                "a childless table with no witness cannot certify an empty list, got \(markers.count)")
+    }
+}
+
+@Test
 func enumerateMarkers_missingTableIsUnavailableRatherThanEmpty() async {
     // Source mutation applied once: restore `.success([])` when markerListTable finds no table.
     // This window has no table, so that mutation fails the unavailable-read assertion.
@@ -742,4 +800,46 @@ func updateMarkers_sameNonEmpty_advancesFetchedAt() async {
     await cache.updateMarkers([m1])
     let after2 = await cache.getMarkersFetchedAt()
     #expect(after2 > after1, "fetchedAt must advance for any successful poll, not just diffs")
+}
+
+@Suite("the marker-create script resolves its window by locale, not by two literals")
+struct MarkerCreateArrangeWindowResolutionTests {
+    /// Measured live on 2026-08-17: on a Japanese Logic 12.3 with the Marker List open and zero
+    /// markers, `create_marker` returned State C `element_not_found` with the hint
+    /// "Navigate > Create Marker was not found or could not be pressed". The menu names were fine —
+    /// `移動` and `マーカーを作成` are both in their LabelSets. The script's own focus block hard-coded
+    /// `Tracks` and `트랙` as a try/on-error pair, so the window lookup failed and took the whole
+    /// script with it, reporting a locale gap as a missing menu item.
+    @Test("every measured arrange-window suffix appears in the generated script")
+    func scriptCarriesEveryArrangeWindowSuffix() {
+        let script = AccessibilityChannel.markerMenuActuationScript(.create)
+        for suffix in AXLocalePolicy.arrangeWindowTitleSuffix.labels {
+            #expect(script.contains(suffix),
+                    "the create script must be able to find an arrange window titled ...\(suffix)")
+        }
+        #expect(AXLocalePolicy.arrangeWindowTitleSuffix.labels.contains("トラック"))
+    }
+
+    /// A candidate loop only helps if a non-matching suffix does not abort the script. Logic raises
+    /// -1719 from `first window whose name ends with ...` when nothing matches, so each attempt has
+    /// to be guarded — without that the loop dies on its first miss, which is every locale but the
+    /// one listed first.
+    @Test("each suffix attempt is individually guarded so a miss continues the loop")
+    func eachSuffixAttemptIsGuarded() throws {
+        let script = AccessibilityChannel.markerMenuActuationScript(.create)
+        #expect(script.contains("ARRANGE_WINDOW_NOT_FOUND"))
+        let arrangeLoop = try #require(
+            script
+                .components(separatedBy: "repeat with candidate in")
+                .dropFirst()
+                .first { $0.contains("ends with candidate") },
+            "the script must resolve the arrange window through a candidate loop"
+        )
+        let attempt = try #require(
+            arrangeLoop.range(of: "ends with candidate"),
+            "the loop body must contain the suffix attempt"
+        )
+        let beforeAttempt = arrangeLoop[arrangeLoop.startIndex..<attempt.lowerBound]
+        #expect(beforeAttempt.contains("try"))
+    }
 }

@@ -782,6 +782,7 @@ extension ResourceHandlers {
         let fetchedAt = await cache.getMarkersFetchedAt()
         let axOccluded = await cache.getAXOccluded()
         let readable = await cache.getMarkersReadable()
+        let attempted = await cache.getMarkersPollAttempted()
         let body = encodeMarkersWire(markers)
         let source = readable ? "ax_live" : (markers.isEmpty ? "unreadable" : "cache")
         // A stable, length-prefixed projection lets mutation oracles bind a reported survivor set
@@ -806,7 +807,12 @@ extension ResourceHandlers {
             // a value nobody measured. Naming the closed Marker List window there attributes a
             // cause that was never observed: measured 2026-08-17, a read at t+4s reported
             // `marker_list_not_open` while the window was open and the channel path read it.
-            extras["reason"] = fetchedAt == .distantPast ? "markers_not_polled_yet" : "marker_list_not_open"
+            //
+            // The question is whether anything has TRIED, which `fetchedAt` cannot answer — it
+            // advances only on a successful read, so a poll that ran and failed leaves it at
+            // `.distantPast` exactly like a poll that never ran. Keying on that would have moved
+            // the false attribution rather than removed it.
+            extras["reason"] = attempted ? "marker_list_not_open" : "markers_not_polled_yet"
         }
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,

@@ -279,7 +279,12 @@ extension AccessibilityChannel {
         for _ in 0..<6 {
             let reading: [MarkerState]
             switch AXLogicProElements.enumerateMarkersFromListTableWithReadFailure(
-                inventory.table, runtime: runtime.ax
+                inventory.table,
+                // The witness is read from the window this flow already bound, never from the
+                // table's own `AXWindow`: a mis-bound attribute pointing at another window whose
+                // count reads zero is the one wrong-window answer that is not safe.
+                ownerWindow: window,
+                runtime: runtime.ax
             ) {
             case .success(let observedMarkers):
                 reading = observedMarkers
