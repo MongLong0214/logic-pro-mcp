@@ -397,7 +397,7 @@ enum AXLocalePolicy {
     /// (a wrong-title guess or keyboard fallback is never fabricated).
     static let deleteTracksPrimaryButton = LabelSet(
         canonical: "Delete Tracks and Content",
-        variants: ["Delete", "삭제"],
+        variants: ["Delete", "삭제", "削除"],
         rationale: """
         Primary destructive button on a track-delete confirm sheet; the reconciler presses only the \
         classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a \

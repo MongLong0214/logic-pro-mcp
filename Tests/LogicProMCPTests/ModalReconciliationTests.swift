@@ -401,7 +401,7 @@ private func makeSignals(
     // forms are actually measured, this test is what will have to be changed, and
     // changing it should require saying where the measurement came from.
     #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("삭제"))
-    #expect(!AXLocalePolicy.deleteTracksPrimaryButton.matches("削除"))
+    #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("削除"))
 }
 
 @Test func testDeleteTracksPrimaryButtonLabelSetDoesNotOvermatchUnrelatedLabels() {

@@ -1637,7 +1637,11 @@ extension AccessibilityChannel {
             beforeCount = nil
         }
         let click = clickTrackMenu(
-            ["Delete Track", "트랙 삭제"],
+            // `トラックを削除` measured 2026-08-17 (Logic 12.3, AppleLanguages=ja). EXACT matching is
+            // load-bearing here: the same menu also carries `使用されていないトラックを削除`
+            // (Delete Unused Tracks), which ENDS WITH the same string — a suffix or containment match
+            // would reach a different destructive command that deletes tracks the caller never named.
+            ["Delete Track", "트랙 삭제", "トラックを削除"],
             menuName: "트랙",
             englishMenuName: "Track",
             runtime: runtime
@@ -1867,7 +1871,10 @@ extension AccessibilityChannel {
         englishMenuName: String = "Track",
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
-        for menuTitle in [menuName, englishMenuName] {
+        // #519: the Japanese menu bar is a third spelling, not a variant of either of the other two.
+        // Measured 2026-08-17 on Logic 12.3 with AppleLanguages=ja: the menu is `トラック`. Without it
+        // every menu-driven track operation returned `element_not_found` on a Japanese Logic.
+        for menuTitle in [menuName, englishMenuName, "トラック"] {
             for itemTitle in menuItemTitles {
                 guard let item = AXLogicProElements.menuItem(path: [menuTitle, itemTitle], runtime: runtime) else {
                     continue
