@@ -155,6 +155,14 @@ def bring_logic_forward():
     """
     subprocess.run(["osascript", "-e", 'tell application "Logic Pro" to activate'],
                    capture_output=True, text=True)
+    # Activating the APP is not enough: the menu drive needs the arrange window to be the front WINDOW,
+    # and the Marker List — which this harness has to keep open, because it carries the trigger — takes
+    # that position. Without this raise the creates fail for an environment reason and the run reads as a
+    # product regression; that happened repeatedly today while manual runs seconds earlier certified.
+    subprocess.run(["osascript", "-e",
+                    'tell application "System Events" to tell process "Logic Pro" to '
+                    'perform action "AXRaise" of (first window whose name contains "Tracks")'],
+                   capture_output=True, text=True)
     time.sleep(1.0)
 
 
