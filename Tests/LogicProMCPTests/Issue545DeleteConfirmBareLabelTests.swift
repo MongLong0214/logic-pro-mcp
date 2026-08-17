@@ -74,7 +74,9 @@ struct Issue545DeleteConfirmBareLabelTests {
         // So the absence is asserted deliberately. Outside English these sheets classify as unknown and
         // are left on screen — fail-closed, and the honest state of the gap (tracked in #519). Restoring
         // the variants means changing this test, and changing it should require naming a measurement.
-        #expect(classifiedKind(primaryButtonTitle: "삭제") != .deleteConfirm)
+        // 삭제 is now MEASURED (Logic 12.3, AppleLanguages=ko, 2026-08-17: buttons `취소, 삭제`), so it
+        // classifies. 削除 has not been read off a live Japanese dialog and therefore must not.
+        #expect(classifiedKind(primaryButtonTitle: "삭제") == .deleteConfirm)
         #expect(classifiedKind(primaryButtonTitle: "削除") != .deleteConfirm)
     }
 
