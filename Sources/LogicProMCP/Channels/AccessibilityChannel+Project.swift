@@ -823,7 +823,15 @@ extension AccessibilityChannel {
                         end try
                     end if
                 end repeat
-                if menuClicked is false then return "BOUNCE_MENU_ITEM_NOT_FOUND"
+                -- #519 review: every failure path after a menu is OPEN must close it. The click above
+                -- walks File > Bounce, so both menus are on screen by the time the leaf can fail; the
+                -- bare `try` swallows that and returning here left Logic sitting with the File menu
+                -- open, and a wedged menu turns every later operation into a refusal. Escape first.
+                if menuClicked is false then
+                    key code 53
+                    delay 0.1
+                    return "BOUNCE_MENU_ITEM_NOT_FOUND"
+                end if
                 repeat 10 times
                     set bounceName to ""
                     try

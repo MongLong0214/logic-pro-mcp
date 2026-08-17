@@ -9,9 +9,15 @@
 # The Japanese variant was already IN the table and UNREACHABLE from any call site: the data
 # claimed support the code could not deliver, and the failure was silent (the operation just
 # refused on a non-EN/KO Logic; nothing else signalled that the two were out of sync). That is
-# the property this scanner enforces — not merely "these ten sites", but "a literal menu-bar
-# name can no longer be written at all", so the same silent gap cannot reopen at an eleventh
-# site next week.
+# the property this scanner aims at: not merely "these ten sites", but making a literal menu-bar name
+# hard to reintroduce, so the same silent gap does not reopen at an eleventh site next week.
+#
+# It is a text scanner, not a parser, and the difference matters — an adversarial review defeated the
+# first version three ways: an extra space after the keyword, a line continuation between keyword and
+# literal, and (worst) a Swift SINGLE-LINE string, where the inner quotes are escaped so the bytes read
+# `menu bar item \"File\"` and a fixed-string grep never matches. The pattern below covers all three.
+# It still cannot see a name built by concatenation or held in a variable. Treat it as a tripwire that
+# catches the shapes people actually write, not as a proof that none exists.
 #
 # The fix is `AppleScriptMenuResolution` (Sources/LogicProMCP/Utilities/AppleScriptMenuResolution.swift):
 # every menu-drive site resolves its bar name from an `AXLocalePolicy.LabelSet` at AppleScript-
@@ -44,10 +50,38 @@ set -uo pipefail
 ROOT="${1:-.}"
 cd "$ROOT" || { echo "FATAL: bad root $ROOT"; exit 2; }
 
+# Positive control. Without this the script prints OK from any directory that has no Sources/ — grep
+# fails, the error is swallowed, zero hits look like a clean tree. "Clean" and "never looked" have to be
+# distinguishable, which is the whole discipline this guard exists to serve.
+# Exit codes are deliberately DISTINCT for the two ways this can fail to scan. If both returned the same
+# code, a future CI rule that tolerates one ("this repo has no Sources, skip") would silently tolerate the
+# other ("Sources vanished, something is broken") — and the second is exactly the state this guard exists
+# to never pass over.
+#   2 = misinvoked: no Sources/ at this root
+#   3 = unexpected: Sources/ exists but nothing readable in it
+if [ ! -d Sources ]; then
+    echo "CANNOT-SCAN(2): no Sources/ under $ROOT — refusing to report a clean result for a tree this did not scan"
+    exit 2
+fi
+SCANNED=$(grep -rlE '' Sources 2>/dev/null | wc -l | tr -d ' ')
+if [ "${SCANNED:-0}" -eq 0 ]; then
+    echo "CANNOT-SCAN(3): Sources/ under $ROOT exists but contains no readable files — nothing was scanned"
+    exit 3
+fi
+
 hits=()
 while IFS= read -r line; do
     [ -n "$line" ] && hits+=("$line")
-done < <(grep -rn 'menu bar item "' Sources 2>/dev/null || true)
+# -E: `menu bar item` then optional whitespace/line-continuation, then either a bare `"` or an escaped
+# `\"` (Swift single-line string). Also matches across a `¬` continuation by allowing it before the quote.
+# Two patterns, because one cannot cover both shapes:
+#   A  the keyword, at least one separator, then a bare or backslash-escaped quote. The separator is
+#      REQUIRED so `elementKeyword: "menu bar item"` — the generator naming the keyword itself — is not
+#      a hit; there the quote closes the string with no space before it.
+#   B  a line ending in the keyword with an AppleScript continuation, where the literal sits on the next
+#      line and a line-oriented scanner cannot see it. Flag the continuation itself.
+done < <( { grep -rnE 'menu bar item[[:space:]]+(¬[[:space:]]*)?\\?"' Sources 2>/dev/null;
+            grep -rnE 'menu bar item[[:space:]]*¬[[:space:]]*$' Sources 2>/dev/null; } | sort -u || true)
 
 if [ "${#hits[@]}" -gt 0 ]; then
     echo "::error::Hard-coded literal menu-bar item name(s) found under Sources/ (#519)."
@@ -61,4 +95,4 @@ if [ "${#hits[@]}" -gt 0 ]; then
     echo "COUNT: ${#hits[@]}"
     exit 1
 fi
-echo "OK: no hard-coded literal menu-bar item names in Sources/ (#519 locale-routing guard)"
+echo "OK: no hard-coded literal menu-bar item names in $SCANNED scanned file(s) under Sources/ (#519)"

@@ -218,9 +218,13 @@ enum AXLocalePolicy {
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
-    /// #519: the Navigate menu bar item. Only EN/KO have been observed in the AppleScript
-    /// call sites this backs; no Japanese form has been measured, so `variants` stays KO-only
-    /// rather than guessing a translation.
+    /// #519: the Navigate menu bar item. All three labels are MEASURED, none translated.
+    ///
+    /// `移動` was read off a live Logic 12.3 running `AppleLanguages=ja` on 2026-08-17. It is worth
+    /// naming explicitly because a plausible translation gives `ナビゲート`, and Logic does not use that
+    /// — so a reader who "corrects" this to the obvious word breaks Japanese silently. (An earlier
+    /// revision of this comment said no Japanese form had been measured, which was stale and pointed
+    /// a future editor straight at deleting the measured label.)
     static let navigateMenuBar = LabelSet(
         canonical: "Navigate",
         variants: ["탐색", "移動"],

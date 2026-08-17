@@ -28,6 +28,12 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Self-test the menu-literal guard (#519)
+        # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that
+        # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
+        # clean — the failure the guard itself had before review.
+        run: bash Scripts/test-menu-literal-guard.sh
+
       - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
         # A literal `menu bar item "..."` cannot reach the extra locale variants
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
@@ -67,6 +73,12 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Self-test the menu-literal guard (#519)
+        # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that
+        # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
+        # clean — the failure the guard itself had before review.
+        run: bash Scripts/test-menu-literal-guard.sh
 
       - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
         # A literal `menu bar item "..."` cannot reach the extra locale variants
