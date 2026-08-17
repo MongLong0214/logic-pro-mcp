@@ -97,14 +97,44 @@ extension AccessibilityChannel {
         case .pan:    slider = AXLogicProElements.findTrackHeaderPanControl(at: index, runtime: runtime)
         }
         guard let slider else {
+            // #543: this refusal used to say only "cannot locate", which cannot be acted on by the
+            // person who hit it and cannot be diagnosed by anyone who cannot reproduce it. Three steps
+            // can fail here and they need different fixes: the track-header LIST was not found at all,
+            // the header at this INDEX was not found (a count mismatch — the enumerator keeps only
+            // `AXLayoutItem` children when any exist, so a header of another role shifts every index
+            // after it), or the header was found and contains no `AXSlider` within the search depth.
+            // Report which, with the counts that distinguish them. Structural facts only — roles,
+            // counts, an index — no track name or other user content.
+            let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+            let headerAtIndex = AXLogicProElements.findTrackHeader(at: index, runtime: runtime)
+            let sliderCount = headerAtIndex.map {
+                AXHelpers.findAllDescendants(of: $0, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax).count
+            }
+            let failedStep: String
+            if headers.isEmpty {
+                failedStep = "track_header_list_not_found"
+            } else if headerAtIndex == nil {
+                failedStep = "no_header_at_index"
+            } else if (sliderCount ?? 0) == 0 {
+                failedStep = "header_has_no_slider_within_depth_4"
+            } else {
+                failedStep = "sliders_present_but_none_selected"
+            }
+            var lookup: [String: Any] = [
+                "failed_step": failedStep,
+                "header_count": headers.count,
+                "requested_index": index,
+            ]
+            if let sliderCount { lookup["sliders_in_header"] = sliderCount }
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "Cannot locate \(label) control for track \(index)",
+                hint: "Cannot locate \(label) control for track \(index) — \(failedStep)",
                 extras: [
                     "operation": operation,
                     "track": index,
                     "requested": value,
                     "target_identity": targetIdentity,
+                    "control_lookup": lookup,
                     "recovery_hint": "Ensure track \(index) exists and the Tracks area is shown.",
                 ]
             ))
