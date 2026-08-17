@@ -381,14 +381,27 @@ private func makeSignals(
 
 @Test func testDeleteTracksPrimaryButtonLabelSetAcceptsBareDeleteVariants() {
     // "Delete Track and Regions?" and "Delete Track and Cells?" (Live Loops)
-    // both carry a bare "Delete" / "삭제" / "削除" primary button — NOT the
-    // channel-strip sheet's "Delete Tracks and Content". Before #545 these
-    // widened variants did not exist and the structural `hasPrefix("Delete ")`
-    // fallback (which requires a trailing space) did not match a bare "Delete"
-    // either, so the sheet was left on screen unclassified.
+    // both carry a bare "Delete" primary button — NOT the channel-strip sheet's
+    // "Delete Tracks and Content". Before #545 this variant did not exist and the
+    // structural `hasPrefix("Delete ")` fallback (which requires a trailing space)
+    // did not match a bare "Delete" either, so the sheet was left on screen
+    // unclassified. Live-measured on Logic 12.3.
     #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("Delete"))
-    #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("삭제"))
-    #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("削除"))
+}
+
+@Test func testDeleteTracksPrimaryButtonHasNoUnmeasuredLocaleVariants() {
+    // A revision of this set carried 삭제 and 削除. They were translated by hand,
+    // not read from the live sheet — the one thing this file's header forbids, and
+    // forbids because a hand translation was already wrong here once (New is 신규,
+    // not the 새로 만들기 a translator reaches for). Pressing a destructive button
+    // matched by a guessed label is the worst version of that mistake.
+    //
+    // This asserts the ABSENCE deliberately: outside English these sheets classify
+    // as unknown and are left on screen, which is fail-closed and honest. When the
+    // forms are actually measured, this test is what will have to be changed, and
+    // changing it should require saying where the measurement came from.
+    #expect(!AXLocalePolicy.deleteTracksPrimaryButton.matches("삭제"))
+    #expect(!AXLocalePolicy.deleteTracksPrimaryButton.matches("削除"))
 }
 
 @Test func testDeleteTracksPrimaryButtonLabelSetDoesNotOvermatchUnrelatedLabels() {
