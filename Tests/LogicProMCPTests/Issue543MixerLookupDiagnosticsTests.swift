@@ -108,7 +108,9 @@ private func attachOneSliderlessTrackHeader(
     #expect(try #require(body["error"] as? String) == "element_not_found")
     let lookup = try #require(body["control_lookup"] as? [String: Any])
     #expect(try #require(lookup["failed_step"] as? String) == "track_header_list_not_found")
-    #expect(try #require(lookup["header_count"] as? Int) == 0)
+    // No rail was read, so there is no count to report. Publishing `header_count: 0` here
+    // would assert "this project has zero tracks" from a read that never happened.
+    #expect(lookup["header_count"] == nil)
     #expect(try #require(lookup["requested_index"] as? Int) == 0)
     // No header was found, so there is nothing to have counted sliders in.
     #expect(lookup["sliders_in_header"] == nil)
@@ -218,4 +220,94 @@ private func attachOneSliderlessTrackHeader(
     let lookup = try #require(body["control_lookup"] as? [String: Any])
     #expect(try #require(lookup["failed_step"] as? String) == "header_has_no_slider_within_depth_4")
     #expect(!result.message.contains(sentinel))
+}
+
+// MARK: - 6. The rail was found but could not be enumerated
+
+/// A correctly identified `Track Headers` rail whose children read FAILS. The
+/// old code called `allTrackHeaders`, which flattens this into `[]`, and then
+/// reported `track_header_list_not_found` with `header_count: 0` — sending the
+/// reader to look for a Tracks area that is on screen and populated.
+@Test func testIssue543UnreadableRailIsNotReportedAsMissingOrEmpty() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(543_500)
+    let window = builder.element(543_501)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    let (rail, _) = attachOneWorkingTrackHeader(builder, window: window, baseID: 543_510)
+    let railID = builder.elementID(rail)
+    // Fail the children read for the rail ONLY, so the rail is still discovered as a
+    // candidate and the failure lands in enumeration, where it belongs. BOTH readers must
+    // fail: a real `kAXErrorCannotComplete` from the window server is seen as an empty
+    // array by the legacy `children` accessor and as `.failure` by the status-preserving
+    // one. Failing only the latter left the actual fader lookup succeeding, so the
+    // diagnostic branch was never entered and this test passed on the wrong path.
+    let isRail: @Sendable (AXUIElement) -> Bool = { element in
+        Int(bitPattern: Unmanaged.passUnretained(element).toOpaque()) == railID
+    }
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { isRail($0) ? [] : nil },
+        childrenResultHandler: {
+            isRail($0) ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    let result = AccessibilityChannel.defaultSetMixerValue(
+        params: ["index": "0", "value": "0.5"], target: .volume, runtime: runtime
+    )
+    #expect(!result.isSuccess)
+    let lookup = try #require(decodeIssue543JSON(result.message)["control_lookup"] as? [String: Any])
+    #expect(try #require(lookup["failed_step"] as? String) == "track_header_list_unreadable")
+    // The two claims this receipt must never make about an unreadable rail.
+    #expect(lookup["header_count"] == nil)
+    #expect(try #require(lookup["failed_step"] as? String) != "track_header_list_not_found")
+}
+
+/// Control for the test above: the SAME fixture without the induced failure
+/// must resolve the header. Without this, `track_header_list_unreadable` could
+/// be produced by a fixture that never built a rail at all, and the test would
+/// pass for a reason unrelated to the mutation it claims to detect.
+@Test func testIssue543UnreadableRailControlResolvesWhenChildrenReadSucceeds() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(543_600)
+    let window = builder.element(543_601)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    attachOneWorkingTrackHeader(builder, window: window, baseID: 543_610)
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    // Index 0 resolves a real slider here, so the op gets past the lookup guard
+    // entirely — proving the fixture's rail is well-formed and readable.
+    let result = AccessibilityChannel.defaultSetMixerValue(
+        params: ["index": "0", "value": "0.5"], target: .volume, runtime: runtime
+    )
+    let body = decodeIssue543JSON(result.message)
+    #expect(body["control_lookup"] == nil)
+}
+
+// MARK: - 7. The rail was read and is genuinely empty
+
+/// A readable `Track Headers` rail with no rows. This IS the case where zero is
+/// evidence, and it must be distinguishable from both of the above.
+@Test func testIssue543EmptyButReadableRailReportsEmptyWithACount() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(543_700)
+    let window = builder.element(543_701)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    let rail = builder.element(543_710)
+    builder.setAttribute(rail, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(rail, [])
+    builder.setChildren(window, [rail])
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    let result = AccessibilityChannel.defaultSetMixerValue(
+        params: ["index": "0", "value": "0.5"], target: .volume, runtime: runtime
+    )
+    #expect(!result.isSuccess)
+    let lookup = try #require(decodeIssue543JSON(result.message)["control_lookup"] as? [String: Any])
+    #expect(try #require(lookup["failed_step"] as? String) == "track_header_list_empty")
+    // Here the read succeeded, so the count is an observation and may be stated.
+    #expect(try #require(lookup["header_count"] as? Int) == 0)
 }

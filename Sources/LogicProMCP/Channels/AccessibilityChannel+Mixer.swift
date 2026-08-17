@@ -105,30 +105,58 @@ extension AccessibilityChannel {
             // after it), or the header was found and contains no `AXSlider` within the search depth.
             // Report which, with the counts that distinguish them. Structural facts only — roles,
             // counts, an index — no track name or other user content.
-            let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
-            let headerAtIndex = AXLogicProElements.findTrackHeader(at: index, runtime: runtime)
+            // Read the rail ONCE, status-preserving. `allTrackHeaders` flattens three
+            // different answers into one empty array, and this receipt's entire job is to
+            // name which of them happened — reporting "list not found, header_count 0" for
+            // a rail that WAS found but could not be traversed sends the reader hunting for
+            // a missing Tracks area that is on screen. Zero is evidence only in `.read([])`.
+            let headersRead: AXLogicProElements.TrackHeaderRead = AXLogicProElements
+                .mainWindow(runtime: runtime)
+                .map { AXLogicProElements.allTrackHeadersRead(in: $0, runtime: runtime) }
+                ?? .unavailable
+
+            // nil = the header at `index` WAS resolved; the slider search decides the step.
+            var stepBeforeHeader: String?
+            var headerCount: Int?
+            var headerAtIndex: AXUIElement?
+            switch headersRead {
+            case .unavailable:
+                stepBeforeHeader = "track_header_list_not_found"
+            case .unreadable:
+                // The rail exists; AX refused to enumerate it. Not an empty project.
+                stepBeforeHeader = "track_header_list_unreadable"
+            case .read(let headers):
+                headerCount = headers.count
+                // Index into the array we just read. Re-resolving via `findTrackHeader`
+                // walks the tree a second time, so a track added or removed between the
+                // two reads produced a receipt that contradicted itself — a header_count
+                // of 3 next to "no_header_at_index" for index 1 — and named a wrong root
+                // cause with full confidence.
+                if headers.isEmpty {
+                    stepBeforeHeader = "track_header_list_empty"
+                } else if index >= 0 && index < headers.count {
+                    headerAtIndex = headers[index]
+                } else {
+                    stepBeforeHeader = "no_header_at_index"
+                }
+            }
             let sliderCount = headerAtIndex.map {
                 AXHelpers.findAllDescendants(of: $0, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax).count
             }
-            let failedStep: String
-            if headers.isEmpty {
-                failedStep = "track_header_list_not_found"
-            } else if headerAtIndex == nil {
-                failedStep = "no_header_at_index"
-            } else if (sliderCount ?? 0) == 0 {
-                failedStep = "header_has_no_slider_within_depth_4"
-            } else {
-                failedStep = "sliders_present_but_none_selected"
-            }
+            let resolvedStep = stepBeforeHeader ?? ((sliderCount ?? 0) == 0
+                ? "header_has_no_slider_within_depth_4"
+                : "sliders_present_but_none_selected")
             var lookup: [String: Any] = [
-                "failed_step": failedStep,
-                "header_count": headers.count,
+                "failed_step": resolvedStep,
                 "requested_index": index,
             ]
+            // Only a successful read may state a count. Publishing 0 for an unreadable or
+            // absent rail asserts "this project has no tracks", which we did not observe.
+            if let headerCount { lookup["header_count"] = headerCount }
             if let sliderCount { lookup["sliders_in_header"] = sliderCount }
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "Cannot locate \(label) control for track \(index) — \(failedStep)",
+                hint: "Cannot locate \(label) control for track \(index) — \(resolvedStep)",
                 extras: [
                     "operation": operation,
                     "track": index,
