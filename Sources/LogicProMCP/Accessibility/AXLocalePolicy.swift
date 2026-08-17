@@ -303,8 +303,18 @@ enum AXLocalePolicy {
     /// keyboard fallback is never fabricated).
     static let deleteTracksPrimaryButton = LabelSet(
         canonical: "Delete Tracks and Content",
-        variants: [],
-        rationale: "Primary destructive button on the delete-channel-strips confirm sheet; reconciler presses only the classifier-bound AX element. KO UNVERIFIED → variants empty (fail-closed structural matching; no keyboard fallback)."
+        variants: ["Delete", "삭제", "削除"],
+        rationale: """
+        Primary destructive button on a track-delete confirm sheet; the reconciler presses only the \
+        classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a \
+        button label: "Delete Tracks and Content" on the channel-strip sheet, and a bare "Delete" on \
+        "Delete Track and Regions?" (track carries regions) and "Delete Track and Cells?" (Live Loops \
+        cells) — both measured live on 12.3. The bare label is why #545 happened: the structural \
+        fallback tested `hasPrefix("Delete ")`, with a trailing space, which "Delete" does not satisfy, \
+        so those sheets classified as unknown and were left on screen. Accepting the bare label is safe \
+        because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts \
+        on `.deleteConfirm` at all. 삭제/削除 are the KO/JA equivalents.
+        """
     )
 
     static let saveConfirmationButton = LabelSet(
