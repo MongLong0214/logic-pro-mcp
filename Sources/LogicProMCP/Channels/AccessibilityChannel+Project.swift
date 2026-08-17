@@ -18,13 +18,54 @@ extension AccessibilityChannel {
         }
 
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
-            return .error("Logic Pro AX application root is unavailable")
+            return .error(HonestContract.encodeStateC(
+                error: .logicNotRunning,
+                hint: "Logic Pro's accessibility root is unavailable, so no project could be created.",
+                extras: ["operation": "project.new", "write_attempted": false]
+            ))
         }
         let windows: [AXUIElement]? = AXHelpers.getAttribute(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
         )
         guard blankApplicationCanRevealChooser(windowCount: windows?.count) else {
-            return .error("Creator Studio has a non-chooser window; refusing project.new")
+            // A DESIGNED precondition, not a failure to try: with a document already open, a second
+            // project's window cannot be told apart from the ones already on screen, so this route
+            // refuses rather than certify an ambiguous creation
+            // (`Issue516DirectProjectCreationTests.onlyFromZeroWindows`).
+            //
+            // What it used to say was "Creator Studio has a non-chooser window" — a claim about a
+            // product the operator is probably not running (measured on desktop Logic Pro 12.3,
+            // 2026-08-17), delivered as bare prose that the router could not recognise as a State C
+            // envelope and therefore relabelled `channels_exhausted`. That code means "every channel
+            // in the chain reported itself unavailable"; here the one channel ran and declined on
+            // purpose. Two false statements about the caller's situation, in one refusal.
+            let count = windows?.count
+            var extras: [String: Any] = [
+                "operation": "project.new",
+                "write_attempted": false,
+                "safe_to_retry": true,
+                "failure_stage": "precondition_open_document",
+                // Driven end to end on 2026-08-17 before being written down. `project.close` alone
+                // answers `confirmation_required` (it is L3-gated), so a recovery action naming the
+                // bare command would send the operator into a second refusal. With the confirmation
+                // supplied the chain does work: close -> zero windows -> project.new creates
+                // `Untitled 56 - Tracks`.
+                "recovery_action": "Close the open project with "
+                    + "logic_project(\"close\", {confirmed: true}) — the bare close is refused as "
+                    + "confirmation_required — so Logic has no document window, then retry "
+                    + "project.new.",
+            ]
+            if let count { extras["observed_window_count"] = count }
+            return .error(HonestContract.encodeStateC(
+                error: .unsupportedState,
+                hint: count.map {
+                    "project.new requires Logic to have no open document; \($0) window(s) are open. "
+                        + "With a document already open a newly created project cannot be told apart "
+                        + "from the windows already on screen, so nothing was attempted."
+                } ?? "project.new could not read Logic's window list, so it cannot establish that no "
+                    + "document is open; nothing was attempted.",
+                extras: extras
+            ))
         }
 
         // Drive the menu through AX with locale-resolved titles instead of an AppleScript that
@@ -38,12 +79,36 @@ extension AccessibilityChannel {
                   in: menuBarAny, matching: AXLocalePolicy.fileMenuBar, runtime: runtime.ax
               )
         else {
-            return .error("Could not resolve the File menu in this Logic's language")
+            // A locale gap is a missing target, not an exhausted channel chain. As bare prose these
+            // two were relabelled `channels_exhausted`, which tells the operator to look at channel
+            // health when what is actually missing is a measured label for their language.
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "The File menu could not be resolved in this Logic's language. Measured names: "
+                    + AXLocalePolicy.fileMenuBar.labels.joined(separator: ", ") + ".",
+                extras: [
+                    "operation": "project.new",
+                    "write_attempted": false,
+                    "failure_stage": "file_menu_resolution",
+                    "known_labels": AXLocalePolicy.fileMenuBar.labels,
+                ]
+            ))
         }
         guard let newItem = AXLocalePolicy.findMenuItem(
             under: fileItem, matching: AXLocalePolicy.newProjectMenuItem, runtime: runtime.ax
         ) else {
-            return .error("Could not resolve the New entry under the File menu in this Logic's language")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "The New entry under the File menu could not be resolved in this Logic's "
+                    + "language. Measured names: "
+                    + AXLocalePolicy.newProjectMenuItem.labels.joined(separator: ", ") + ".",
+                extras: [
+                    "operation": "project.new",
+                    "write_attempted": false,
+                    "failure_stage": "new_menu_item_resolution",
+                    "known_labels": AXLocalePolicy.newProjectMenuItem.labels,
+                ]
+            ))
         }
         // Press the bar item first so the menu materialises, then the entry. The return codes are
         // not consulted: on Logic 12.3 a press that works can still report failure, so the observed
