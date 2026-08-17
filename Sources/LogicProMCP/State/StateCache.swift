@@ -18,6 +18,13 @@ actor StateCache {
     private(set) var regionsComplete = false
     private(set) var markers: [MarkerState] = []
     private(set) var markersReadable: Bool = false
+    /// Whether anything has yet TRIED to read the Marker List in this process.
+    ///
+    /// `markersFetchedAt` advances only on a successful read, so it cannot answer this: a poll that
+    /// ran and failed leaves it at `.distantPast`, exactly like a poll that never ran. A resource
+    /// that wants to say why markers are unreadable needs the two told apart, or it names a cause
+    /// nobody looked for.
+    private(set) var markersPollAttempted: Bool = false
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
@@ -114,6 +121,7 @@ actor StateCache {
     func getRegionsComplete() -> Bool { regionsComplete }
     func getMarkers() -> [MarkerState] { markers }
     func getMarkersReadable() -> Bool { markersReadable }
+    func getMarkersPollAttempted() -> Bool { markersPollAttempted }
     func getProject() -> ProjectInfo { project }
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
     func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
@@ -428,6 +436,7 @@ actor StateCache {
         // `cache.markers` directly don't see redundant publishes.
         markersFetchedAt = Date()
         markersReadable = true
+        markersPollAttempted = true
         if markers != newMarkers {
             markers = newMarkers
         }
@@ -435,6 +444,7 @@ actor StateCache {
 
     func markMarkersUnreadable() {
         markersReadable = false
+        markersPollAttempted = true
     }
 
     func updateProject(_ info: ProjectInfo) {

@@ -2237,6 +2237,18 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // Last-marker variant: both projections successfully answer [] and the selection is a
     // fresh non-matching element. An empty expected survivor set plus "target no longer
     // selected" is the same rebuild lie, just with one row.
+    //
+    // This used to be refused one step later than its two siblings above, and for a different
+    // reason. The reader had an escape hatch: a table whose CHILD list was also empty was accepted
+    // as an empty marker list with no corroboration at all, so the empty survivor set reached the
+    // receipt and the count comparison caught it ("did not drop by one"). The two sibling tests,
+    // whose tables still vend non-row children, were refused by the reader itself.
+    //
+    // That split was an artifact of the hatch, not a distinction worth keeping — "the table
+    // answered with nothing" is exactly what a rebuild answers, and Logic's live table always
+    // carries its columns, so the hatch covered no shape the application presents. With every
+    // empty row set now corroborated against Logic's own Number of Items, all three refuse at the
+    // same place for the same reason, and the receipt names the site.
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Delete",
         pickDeletesSelectedRow: false,
@@ -2249,15 +2261,17 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
-    let reasonDetail = try #require(envelope["reason_detail"] as? String)
 
     // `!= "A"` also accepts State C; pin the exact refusal (see the mutation-demonstration
     // test above for why that distinction matters).
     #expect(try #require(envelope["state"] as? String) == "B")
-    #expect(reasonDetail.contains("did not drop by one"))
+    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(envelope["readback_failure_site"] as? String == "item_count")
     #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
-    #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
+    // The fresh-selection observation is deliberately NOT asserted any more: the poll now refuses
+    // at the inventory read, before it ever looks at the selection, so requiring that read to have
+    // happened would assert something this path no longer does.
     #expect(fixture.markerCount == 1)
 }
 
@@ -2564,17 +2578,23 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 }
 
 @Test func testIssue523NonLeadingDigitItemCountStringsAreUnreadableNotACount() async throws {
-    // Defensive regression table for the leading-token parse rule. None of these are
-    // asserted to be real Logic strings in any locale — measuring KO/JA Number-of-Items
-    // text on a live Logic is future work — they only prove the parser fails closed on
-    // digits that are not the leading count token, in shapes a translated or differently
-    // punctuated label could plausibly take.
+    // Defensive regression table for the leading-token parse rule: the parser must fail closed on
+    // digits that are not the leading count token.
+    //
+    // `2개` and `2個` used to be listed here, on the reasoning — stated in this comment — that no
+    // KO/JA Number-of-Items text had been measured and a translated label could plausibly take that
+    // shape. Both locales were measured on a live Logic 12.3 on 2026-08-17 and render
+    // `2개의 마커` / `0個のマーカー`: the counter word abuts the digits, so a leading digit followed
+    // by a CJK counter is the REAL shape and must parse. Those two entries were guesses about a
+    // shape Logic does not produce, and the measurement retires them rather than the rule.
+    //
+    // What stays is every shape that does not OPEN with the count, including the Korean
+    // `마커 2개` — a relaxation that let that through would be the dangerous one.
     let nonCountStrings = [
         "Marker 2",
         "Selected Item: 2",
-        "2개",
         "마커 2개",
-        "2個",
+        "マーカー 2個",
         "no count here",
     ]
     for text in nonCountStrings {
@@ -2635,17 +2655,46 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.markerCount == 2)
 }
 
-@Test func testIssue523UnmeasuredLocalizedItemCountDescriptionStaysUnreadableUntilMeasured() async throws {
-    // MAJOR repro: a Marker List whose Number of Items node is described in Korean
-    // ("항목 수") or Japanese ("項目数") must not silently match — no live Logic has been
-    // measured in either locale for this label, and `AXLocalePolicy.markerListNumberOfItemsLabel`
-    // deliberately carries no invented translation. This proves the label-matching policy
-    // itself fails closed on an unmeasured locale description, independent of the rest of
-    // the delete plumbing.
-    for description in ["항목 수", "項目数"] {
+@Test func testIssue523LocalizedItemCountDescriptionsMatchTheMeasuredStrings() async throws {
+    // This test used to pin the OPPOSITE: `항목 수` and `項目数` had to stay unmatched, because no
+    // live Logic had been read in either locale and a translated guess must never silently match.
+    // Both were measured on a live Logic 12.3 on 2026-08-17 — the app was switched with
+    // `defaults write com.apple.logic10 AppleLanguages`, restarted, and the node's AXDescription and
+    // AXHelp read directly; both attributes answer the same string. The absence pin did its job: it
+    // required a measurement rather than a translation, and this is that measurement arriving.
+    for description in ["Number of Items", "항목 수", "項目数"] {
+        #expect(
+            AXLocalePolicy.markerListNumberOfItemsLabel.matches(description, mode: .exactStrict),
+            "\"\(description)\" was measured on a live Logic and must match"
+        )
+    }
+    // Still fails closed on anything not measured, including a plausible near-miss.
+    for description in ["항목수", "項目 数", "Items", "Number of Item"] {
         #expect(
             !AXLocalePolicy.markerListNumberOfItemsLabel.matches(description, mode: .exactStrict),
-            "\"\(description)\" must not match until measured on a live Logic"
+            "\"\(description)\" was never measured and must not match"
         )
+    }
+}
+
+@Test func testIssue523ItemCountParsesTheMeasuredLocalizedRenderings() async throws {
+    // The values these nodes render, measured in the same pass. Korean and Japanese put the counter
+    // word straight against the digits, so a parser that demanded whitespace after them read the
+    // witness as unparseable — and that count is what State A needs, so `nav.delete_marker` could
+    // not certify on either locale.
+    let measured: [(String, Int)] = [
+        ("0 Markers", 0), ("1 Marker", 1), ("15 Markers", 15),
+        ("0개의 마커", 0), ("1개의 마커", 1), ("2개의 마커", 2),
+        ("0個のマーカー", 0), ("1個のマーカー", 1),
+    ]
+    for (raw, expected) in measured {
+        #expect(AXLogicProElements.parseMarkerListItemCount(raw) == expected,
+                "\"\(raw)\" is a measured live rendering and must parse as \(expected)")
+    }
+    // The rules the relaxation had to preserve: the value must OPEN with the digit run, no digit may
+    // follow it, and an ASCII letter abutting the digits is still a refusal.
+    for raw in ["Marker 2", "2 of 15", "1st", "0x1F", "1.1.1.1", "", "Markers"] {
+        #expect(AXLogicProElements.parseMarkerListItemCount(raw) == nil,
+                "\"\(raw)\" must not parse as a marker count")
     }
 }

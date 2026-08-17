@@ -321,16 +321,19 @@ enum AXLocalePolicy {
     )
 
     /// The Marker List's own "Number of Items" static text — Logic's independent rendering of
-    /// the marker count, used as a second witness alongside the table's row projections. Only
-    /// the English form has been measured on a live Logic 12.3; no Korean or Japanese variant
-    /// has been read from a live Logic. Do NOT add a translated guess here — an unmeasured
-    /// locale must stay unreadable (State B) rather than silently matching on an invented
-    /// label. Matched against both AXDescription and AXHelp, mirroring the Event List reader's
-    /// `readStaticText(help:)` precedent for the same "Number of Items" node.
+    /// the marker count, used as a second witness alongside the table's row projections. Matched
+    /// against both AXDescription and AXHelp, mirroring the Event List reader's
+    /// `readStaticText(help:)` precedent for the same node.
+    ///
+    /// All three forms are read off a live Logic 12.3, never translated: the app was switched with
+    /// `defaults write com.apple.logic10 AppleLanguages`, restarted, and the node's AXDescription
+    /// read directly. Both localized forms answer the SAME string on AXDescription and AXHelp, and
+    /// the Korean one carries a space (`항목 수`) while the Japanese one does not (`項目数`) — which
+    /// is why they are pinned as measured strings and not derived from one another.
     static let markerListNumberOfItemsLabel = LabelSet(
         canonical: "Number of Items",
-        variants: [],
-        rationale: "Live-confirmed on Logic 12.3 (English) via AXDescription. Korean/Japanese not yet measured; an unmeasured locale must fail closed rather than match a guessed translation."
+        variants: ["항목 수", "項目数"],
+        rationale: "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule."
     )
 
     /// The destructive Marker List Edit-menu command. This must always be whole-string matched.
