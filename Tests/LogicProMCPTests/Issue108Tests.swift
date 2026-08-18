@@ -119,7 +119,7 @@ struct Issue108Tests {
         func next() -> AccessibilityChannel.MIDIImportRegionReadback {
             lock.lock()
             defer { lock.unlock() }
-            guard !values.isEmpty else { return .success([]) }
+            guard !values.isEmpty else { return .success([], complete: false) }
             if values.count == 1 { return values[0] }
             return values.removeFirst()
         }
@@ -140,7 +140,7 @@ struct Issue108Tests {
     func importVerifiedOnTrackAndRegionDelta() async {
         let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
         let counter = CallCounter([1, 2]) // before=1, after=2
-        let regions = RegionSnapshotBox([.success([]), .success([importedRegion()])])
+        let regions = RegionSnapshotBox([.success([], complete: false), .success([importedRegion()], complete: false)])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
             systemEventsAuthorized: { true },
             path: path,
@@ -176,11 +176,45 @@ struct Issue108Tests {
     /// The reader cannot tell "absent because it is not there" from "absent because it is not
     /// visible", so this is deliberately unconditional rather than gated on a project size that the
     /// code has no way to measure.
+    /// The other half of the same contract, once completeness became measurable.
+    ///
+    /// #576 made the empty-region branch State B unconditionally, because `complete` was a hardcoded
+    /// `false` and an absence could never be told from something out of view. With it measured, a
+    /// readback that covered the WHOLE arrangement and still found no imported region IS evidence
+    /// that none was created — so the sharper verdict comes back exactly where it is earned.
+    ///
+    /// Same fixture as the test below, one flag apart. That is the point: the verdict follows the
+    /// readback's reach, not the shape of the result.
+    @Test("a complete readback that finds no region is a real miss, and says so")
+    func completeReadbackWithoutRegionIsAMiss() async {
+        let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
+        let counter = CallCounter([1, 2])
+        let regions = RegionSnapshotBox([.success([], complete: true), .success([], complete: true)])
+        let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
+            path: path,
+            executeScript: { _ in .success("OK") },
+            trackCount: { counter.next() },
+            trackNames: { ["Studio Grand", "Imported"] },
+            regionInfos: { regions.next() },
+            deltaPoll: {}
+        )
+        #expect(!result.isSuccess)
+        #expect(result.message.contains("\"state\":\"C\""))
+        #expect(result.message.contains("readback_mismatch"))
+        #expect(result.message.contains("\"region_readback_complete\":true"))
+        #expect(result.message.contains("whole_arrangement"))
+        // The hint has to say WHY this one is a miss and the other is not.
+        #expect(result.message.contains("an absence that was looked for"))
+        // And the track delta still stands, whichever verdict is reached.
+        #expect(result.message.contains("\"track_count_after\":2"))
+    }
+
     @Test("import_file refuses to certify, and does not claim failure it cannot see, when no region reads back")
     func importFailsClosedOnTrackDeltaWithoutRegion() async {
         let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
         let counter = CallCounter([1, 2])
-        let regions = RegionSnapshotBox([.success([]), .success([])])
+        let regions = RegionSnapshotBox([.success([], complete: false), .success([], complete: false)])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
             systemEventsAuthorized: { true },
             path: path,
@@ -209,7 +243,7 @@ struct Issue108Tests {
     func importFailsClosedOnNoDelta() async {
         let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
         let counter = CallCounter([3, 3]) // before==after → no import landed
-        let regions = RegionSnapshotBox([.success([]), .success([])])
+        let regions = RegionSnapshotBox([.success([], complete: false), .success([], complete: false)])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
             systemEventsAuthorized: { true },
             path: path,
@@ -235,7 +269,7 @@ struct Issue108Tests {
             executeScript: { _ in .success(#"{"result":"MENU_ERROR: not found"}"#) },
             trackCount: { 1 },
             trackNames: { [] },
-            regionInfos: { .success([]) },
+            regionInfos: { .success([], complete: false) },
             deltaPoll: {}
         )
         #expect(!result.isSuccess)
@@ -250,7 +284,7 @@ struct Issue108Tests {
             executeScript: { _ in .success("OK") },
             trackCount: { 1 },
             trackNames: { [] },
-            regionInfos: { .success([]) },
+            regionInfos: { .success([], complete: false) },
             deltaPoll: {}
         )
         #expect(!result.isSuccess)
