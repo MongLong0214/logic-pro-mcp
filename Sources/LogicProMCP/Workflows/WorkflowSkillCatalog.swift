@@ -533,7 +533,7 @@ enum WorkflowSkillCatalog {
         "logic_edit": [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all",
             "split", "join", "quantize", "bounce_in_place", "normalize",
-            "duplicate", "toggle_step_input",
+            "duplicate", "toggle_step_input", "move_to_playhead",
         ],
         "logic_navigate": [
             "goto_bar", "goto_marker", "create_marker", "delete_marker",

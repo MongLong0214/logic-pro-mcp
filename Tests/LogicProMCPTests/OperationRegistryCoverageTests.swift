@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 110)
+        #expect(OperationRegistry.specs.count == 111)   // #575 registered edit.move_to_playhead
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -85,10 +85,10 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 87)
+        #expect(mutating.count == 88)   // #575: move_to_playhead is a mutating edit verb
         #expect(readOnly.count == 23)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 73)
+        #expect(targetless.count == 74)   // #575: it acts on the selection, so it bears no target
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.allSatisfy { $0.target == .none })
     }

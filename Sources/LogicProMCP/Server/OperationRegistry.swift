@@ -58,6 +58,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case editNormalize = "edit.normalize"
     case editDuplicate = "edit.duplicate"
     case editToggleStepInput = "edit.toggle_step_input"
+    case editMoveToPlayhead = "edit.move_to_playhead"
     case projectNew = "project.new"
     case projectOpen = "project.open"
     case projectSave = "project.save"
@@ -314,6 +315,7 @@ enum OperationRegistry {
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
             "edit.select_all", "edit.split", "edit.join", "edit.quantize",
             "edit.bounce_in_place", "edit.normalize", "edit.duplicate", "edit.toggle_step_input",
+            "edit.move_to_playhead",
         ],
         ToolID.logicProject.rawValue: [
             "project.new", "project.open", "project.save", "project.save_as", "project.close",
@@ -369,6 +371,7 @@ enum OperationRegistry {
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
             "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
+            "move_to_playhead",
         ],
         ToolID.logicProject.rawValue: [
             "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch",
@@ -741,6 +744,11 @@ enum OperationRegistry {
         (.editNormalize, "normalize", .requiresKeyBinding, .none, []),
         (.editDuplicate, "duplicate", .requiresKeyBinding, .none, []),
         (.editToggleStepInput, "toggle_step_input", .requiresKeyBinding, .none, []),
+        // #575: implemented since v3.1.3 and reachable from nothing until now. Verification is
+        // required because the channel actually performs it — it re-reads the selected region and
+        // the playhead after the menu click and refuses State A unless the SAME region landed
+        // there.
+        (.editMoveToPlayhead, "move_to_playhead", .defaultInstall, .readbackRequired, []),
     ] as [(OperationID, String, AvailabilityPolicy, VerificationPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

@@ -496,6 +496,10 @@ struct OperationRegistryTests {
         ("edit.normalize", "normalize", .requiresKeyBinding, .none),
         ("edit.duplicate", "duplicate", .requiresKeyBinding, .none),
         ("edit.toggle_step_input", "toggle_step_input", .requiresKeyBinding, .none),
+        // #575: the one edit command that verifies. It re-reads the selected region and the
+        // playhead after the menu click, so `.readbackRequired` here is a claim the channel has to
+        // keep — the rest of this family cannot read back what they did.
+        ("edit.move_to_playhead", "move_to_playhead", .defaultInstall, .readbackRequired),
     ]
 
     @Test("edit registry is exact, unique, and isolated")

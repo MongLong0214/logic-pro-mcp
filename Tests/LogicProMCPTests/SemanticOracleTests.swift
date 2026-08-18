@@ -468,7 +468,8 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 49)
+        // 49 through B4, plus the one registered after the inventory closed (#575).
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 50)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
@@ -1378,6 +1379,10 @@ struct SemanticOracleB0CensusTests {
                 + SemanticOracleTable.phaseB2MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB3MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB4MutatingOperationIDs.count
+                // #575: B4 closed the inventory as it stood, and registering a new mutating
+                // operation reopens it. The sum stays exact because the new entry joins a NAMED
+                // set of its own rather than being back-dated into a phase that never contained it.
+                + SemanticOracleTable.postClosureMutatingOperationIDs.count
         )
     }
 }

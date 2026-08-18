@@ -284,6 +284,10 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_edit", command: "split", params: [:], operation: "edit.split", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_edit", command: "join", params: [:], operation: "edit.join", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_edit", command: "quantize", params: ["value": .string("1/16")], operation: "edit.quantize", destinations: [], invariant: .minimumV1),
+            // #575: routes to the REGION channel rather than to an `edit.*` operation — the command
+            // is an edit-family verb on the current selection, the implementation lives with the
+            // other region readbacks.
+            RouteCase(tool: "logic_edit", command: "move_to_playhead", params: [:], operation: "region.move_to_playhead", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_edit", command: "bounce_in_place", params: [:], operation: "edit.bounce_in_place", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_edit", command: "normalize", params: [:], operation: "edit.normalize", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_edit", command: "duplicate", params: [:], operation: "edit.duplicate", destinations: [], invariant: .minimumV1),
