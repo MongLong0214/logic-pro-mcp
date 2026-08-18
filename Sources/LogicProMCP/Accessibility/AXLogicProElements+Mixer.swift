@@ -252,23 +252,51 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> String? {
+        slotDescription(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
+    }
+
+    /// The description of the first slot button whose help matches, or nil.
+    ///
+    /// Shared by the input and output readers so the two cannot drift apart — a second copy of this
+    /// walk is a second place for the "found it but it named nothing" case to be decided differently.
+    private static func slotDescription(
+        in strip: AXUIElement,
+        matching keyword: AXLocalePolicy.LabelSet,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
         let buttons = AXHelpers.findAllDescendants(
             of: strip, role: kAXButtonRole, maxDepth: 4, runtime: runtime
         )
         for button in buttons {
             let help = AXHelpers.getHelp(button, runtime: runtime) ?? ""
-            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: help.lowercased()) else {
-                continue
-            }
+            guard keyword.containsAny(in: help.lowercased()) else { continue }
             guard let description = AXHelpers.getDescription(button, runtime: runtime),
                   !description.isEmpty else {
-                // The slot was found and did not name a destination. That is a gap, not an empty
-                // route, so it reads the same as not finding the slot at all.
+                // The slot was found and did not name anything. That is a gap, not an empty route,
+                // so it reads the same as not finding the slot at all.
                 return nil
             }
             return description
         }
         return nil
+    }
+
+    /// What a channel strip's input slot says its source is (#291).
+    ///
+    /// Same shape as `outputSlotDestination`, and the same refusals: `nil` when no input slot was
+    /// identified, when the slot named nothing, or on a locale whose help string this project has
+    /// not measured. A software-instrument strip has no input slot at all, so `nil` there is the
+    /// truth — but the reader cannot tell that case from the others, and callers are expected to
+    /// treat an absent input as unknown rather than as "no input".
+    ///
+    /// The keyword is the full phrase. Measured on the same strip: an `AXButton` whose help begins
+    /// "Input Monitoring button. Hear incoming signal…" sits beside the input slot, and a match on
+    /// the word "input" alone would publish that toggle as a source.
+    static func inputSlotSource(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> String? {
+        slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
     static func findVolumeFader(

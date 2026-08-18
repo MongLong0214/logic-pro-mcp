@@ -32,6 +32,7 @@ extension AccessibilityChannel {
             // `logic://mixer` published a field that was always null. It is read now; `nil` still
             // means "not identified", never "routed nowhere".
             state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
+            state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
             channelStrips.append(state)
         }
         return encodeResult(channelStrips)
@@ -63,6 +64,7 @@ extension AccessibilityChannel {
         state.plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax)
         state.pluginsSource = "ax"
         state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
+        state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
         return encodeResult(state)
     }
 
