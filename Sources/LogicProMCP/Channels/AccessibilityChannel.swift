@@ -677,8 +677,10 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(runtime: runtime.logicRuntime)
         case "region.select_last":
             return await AccessibilityChannel.defaultSelectLastRegion(runtime: runtime.logicRuntime)
-        case "region.select", "region.loop", "region.set_name", "region.move", "region.resize":
-            return .error("Region operations not yet implemented via AX")
+        // #575: the five unimplemented region operations were removed from the routing table along
+        // with this arm. They now fall through to the unsupported-operation default, which is what
+        // an operation nothing implements should say — "not yet implemented via AX" reads as a
+        // promise, and the router no longer offers a path to it either way.
 
         // MARK: - Plugins
         case "plugin.insert":

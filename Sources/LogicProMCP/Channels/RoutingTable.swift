@@ -236,18 +236,20 @@ extension ChannelRouter {
         "view.toggle_plugin_windows": [.midiKeyCommands, .cgEvent],
 
         // Regions
+        //
+        // #575: `region.select`, `.loop`, `.set_name`, `.move` and `.resize` used to sit here. They
+        // were never implemented — the channel answered all five with "Region operations not yet
+        // implemented via AX" — so the rows claimed a channel order for a refusal. A routing entry
+        // is a statement that an operation is real and says which surfaces may carry it; for these
+        // it advertised a contract to a caller who could only ever be told no. The rows come back
+        // when there is something behind them.
         "region.get_regions":         [.accessibility],
-        "region.select":              [.accessibility],
         // Reserved for a future region-editor tool that picks up the freshly
         // imported region and aligns it to the playhead. Currently unused by
         // any dispatcher (record_sequence handles positioning via SMFWriter
         // + transport.goto_position bar=1 before import).
         "region.select_last":         [.accessibility],
         "region.move_to_playhead":    [.accessibility],
-        "region.loop":                [.accessibility, .cgEvent],
-        "region.set_name":            [.accessibility],
-        "region.move":                [.accessibility],
-        "region.resize":              [.accessibility],
 
         // Plugins — bypass/remove intentionally omitted from the routing
         // table: no channel has a deterministic implementation. insert is
