@@ -418,7 +418,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                         pan: track.pan,
                         automationMode: track.automationMode,
                         color: track.color,
-                        placeholder: track.placeholder
+                        placeholder: track.placeholder,
+                        isStackHeader: track.isStackHeader,
+                        stackCollapsed: track.stackCollapsed
                     )
                     await cache.updateTracks(tracks)
                 }

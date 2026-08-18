@@ -55,6 +55,30 @@ struct StateModelsCodableTests {
         )
     }
 
+    /// #448's two fields, carried as VALUES rather than as absences.
+    ///
+    /// The round-trip above leaves both `nil`, and `nil` is omitted on both sides — so it would pass
+    /// unchanged if the keys were misspelled or dropped from `CodingKeys`. Only a row that sets them
+    /// tests the wire. Found by blind review of the commit that added them.
+    @Test func trackStackFieldsSurviveTheWire() throws {
+        let stackRow = TrackState(
+            id: 0, name: "Absolute Zero", type: .softwareInstrument,
+            isStackHeader: true, stackCollapsed: true
+        )
+        try assertRoundTrips(stackRow, "TrackState (stack header row)")
+        let wire = string(try encoder().encode(stackRow))
+        #expect(wire.contains("\"is_stack_header\":true"))
+        #expect(wire.contains("\"stack_collapsed\":true"))
+        #expect(!wire.contains("\"isStackHeader\""))
+        #expect(!wire.contains("\"stackCollapsed\""))
+
+        // A plain row must not emit the keys at all: an omitted key is how a consumer tells "not
+        // examined" from `false`, and an always-present `false` would erase that difference.
+        let plain = string(try encoder().encode(TrackState(id: 1, name: "Studio Grand", type: .audio)))
+        #expect(!plain.contains("is_stack_header"))
+        #expect(!plain.contains("stack_collapsed"))
+    }
+
     @Test func channelStripStateUsesSnakeCaseCodingKeys() throws {
         let strip = ChannelStripState(
             trackIndex: 2,
