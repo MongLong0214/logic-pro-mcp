@@ -19,10 +19,18 @@ So the run drives the failing operation on purpose and checks two things about h
 refusal names the shape it actually saw, and that the next operation is not blocked by a leftover
 panel.
 
-The classifier is untouched. Its filename-field clause is what fails, and two readers disagree about
-that panel — AppleScript's `entire contents` finds 156 text fields described "text field" while this
-code's own reader finds zero at the same depth. Until that is explained, any replacement rule is a
-guess, and the honest deliverable is a failure that can be read.
+The two readers that disagreed about this panel are now explained, and the explanation is not about
+depth. AppleScript's `entire contents` found 156 text fields because I had activated Logic before
+probing; the product's reader found zero because it never does. Measured 2026-08-19, four trials:
+with Logic backgrounded the same menu press opens NO panel at all (0/2 "Save" windows), and with
+Logic frontmost it opens one (2/2) carrying 157 text fields described "text field", exactly one of
+which is focused — and that focused one is the filename field, value "Untitled".
+
+So the classifier's filename-field clause is wrong twice over: it demands exactly one such field
+when the panel exposes 157, and it was being asked about a panel that, in production conditions, was
+never on screen. Neither is fixed here — this change is about the refusal, and a working save_as is
+its own change with its own proof. What this run adds is that the refusal now says which of those
+two worlds it was in, so the next reader is not sent to the classifier for a missing panel.
 """
 
 import json
