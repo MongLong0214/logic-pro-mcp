@@ -596,14 +596,10 @@ actor AccessibilityChannel: Channel {
             return runtime.setMixerValue(params, .volume)
         case "mixer.set_pan":
             return runtime.setMixerValue(params, .pan)
-        case "mixer.set_send":
-            return .error("Send adjustment not yet implemented via AX")
-        case "mixer.set_input", "mixer.set_output":
-            return .error("I/O routing not yet implemented via AX")
-        case "mixer.toggle_eq":
-            return .error("EQ toggle not yet implemented via AX")
-        case "mixer.reset_strip":
-            return .error("Strip reset not yet implemented via AX")
+        // #592: four unimplemented mixer operations lost their table rows along with the arms that
+        // refused them here, and `mixer.set_send`'s arm went with them — its chain is `[.mcu]`, so
+        // this branch was unreachable and a reader grepping for the operation found a refusal that
+        // is not what it does.
 
         // MARK: - MIDI file import (AX menu navigation)
         case "midi.import_file":
@@ -687,8 +683,6 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultInsertPlugin(params: params, runtime: runtime.logicRuntime)
         // plugin.bypass / plugin.remove are still intentionally absent from
         // the public contract; no verified AX readback path exists for them.
-        case "plugin.list":
-            return .error("Plugin list reading not yet implemented via AX")
 
         // MARK: - Verified plugin surface (logic_plugins.*)
         // Drift-safe inventory and verified live plugin writes. These route
@@ -702,10 +696,8 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultInsertVerified(params: params, runtime: runtime.logicRuntime)
 
         // MARK: - Automation
-        case "automation.get_mode":
-            return .error("Automation mode reading not yet implemented via AX")
-        case "automation.set_mode":
-            return .error("Automation mode setting not yet implemented via AX")
+        // #592: `automation.get_mode` was retired; `set_mode`'s arm went too — its chain is
+        // `[.mcu, .midiKeyCommands, .cgEvent]`, so accessibility was never asked.
 
         default:
             return .error("Unsupported AX operation: \(operation)")

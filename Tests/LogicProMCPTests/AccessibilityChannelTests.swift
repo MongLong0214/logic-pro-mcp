@@ -902,11 +902,14 @@ private func makeSetInstrumentFixture() -> (
         // v3.1.2 P2-1: track.set_color now returns a State C envelope with
         // `error:"not_implemented"` instead of a plain free-form string.
         ("track.set_color", "\"error\":\"not_implemented\""),
-        ("mixer.set_send", "Send adjustment not yet implemented via AX"),
-        ("mixer.set_input", "I/O routing not yet implemented via AX"),
-        ("mixer.set_output", "I/O routing not yet implemented via AX"),
-        ("mixer.toggle_eq", "EQ toggle not yet implemented via AX"),
-        ("mixer.reset_strip", "Strip reset not yet implemented via AX"),
+        // #592: four unimplemented mixer operations lost their table rows and their refusal arms,
+        // and `mixer.set_send`'s arm went with them — its chain is `[.mcu]`, where it IS
+        // implemented, so the accessibility refusal was unreachable and misleading to read.
+        ("mixer.set_send", "Unsupported AX operation"),
+        ("mixer.set_input", "Unsupported AX operation"),
+        ("mixer.set_output", "Unsupported AX operation"),
+        ("mixer.toggle_eq", "Unsupported AX operation"),
+        ("mixer.reset_strip", "Unsupported AX operation"),
         // #575: the five unimplemented region operations lost both their routing rows and their
         // channel arm. An operation nothing implements now answers the same way any unknown one
         // does, instead of a sentence that reads as a promise.
@@ -915,9 +918,11 @@ private func makeSetInstrumentFixture() -> (
         ("region.set_name", "Unsupported AX operation"),
         ("region.move", "Unsupported AX operation"),
         ("region.resize", "Unsupported AX operation"),
-        ("plugin.list", "Plugin list reading not yet implemented via AX"),
-        ("automation.get_mode", "Automation mode reading not yet implemented via AX"),
-        ("automation.set_mode", "Automation mode setting not yet implemented via AX"),
+        ("plugin.list", "Unsupported AX operation"),
+        ("automation.get_mode", "Unsupported AX operation"),
+        // `set_mode` is implemented on the key-command channel and accessibility is not in its
+        // chain, so this arm was unreachable too (#592).
+        ("automation.set_mode", "Unsupported AX operation"),
         ("unknown.operation", "Unsupported AX operation"),
     ]
 

@@ -73,6 +73,15 @@ struct Issue575RetiredUnimplementedRoutesTests {
             "mixer.set_output_volume",
             "mixer.get_bus_routing",
             "automation.get_parameter",
+            // #592 retired six more of the same shape: no implementation on any channel, and for
+            // toggle_eq / reset_strip the `.mcu` they named first had no arm either, so the table
+            // promised a fallback that did not exist.
+            "mixer.set_input",
+            "mixer.set_output",
+            "mixer.toggle_eq",
+            "mixer.reset_strip",
+            "plugin.list",
+            "automation.get_mode",
         ] {
             #expect(ChannelRouter.v2RoutingTable[operation] == nil)
         }
@@ -86,8 +95,11 @@ struct Issue575RetiredUnimplementedRoutesTests {
             "mixer.set_master_volume",
             "mixer.set_send",
             "mixer.get_state",
+            // #592 retired `automation.get_mode`, which used to stand here. It was never a
+            // neighbour in the sense this test means — it had no implementation on any channel,
+            // and it is now in the retired list above. `set_mode` carries the prefix's survival:
+            // the key-command channel implements it.
             "automation.set_mode",
-            "automation.get_mode",
         ] {
             let chain = try #require(ChannelRouter.v2RoutingTable[operation])
             #expect(!chain.isEmpty)

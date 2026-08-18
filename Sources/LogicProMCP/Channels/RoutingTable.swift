@@ -91,13 +91,16 @@ extension ChannelRouter {
         // named answers `Unsupported AX operation` / `Unknown MCU operation` for them, so a caller
         // who found one would have reached an exhausted chain. That is a stronger case than the two
         // system entries retired earlier, which at least had a channel that would have answered.
+        // #592: `mixer.set_output`, `mixer.set_input`, `mixer.toggle_eq` and `mixer.reset_strip`
+        // were removed. None was implemented anywhere — the accessibility channel answered all four
+        // with a "not yet implemented via AX" string, and for the two that named `.mcu` first the
+        // MCU channel had no arm either, so the table promised a fallback that did not exist.
+        //
+        // `mixer.set_send` stays: it is implemented in `MCUChannel`, which is the only channel its
+        // chain names.
         "mixer.set_send":             [.mcu],
-        "mixer.set_output":           [.accessibility],
-        "mixer.set_input":            [.accessibility],
         "mixer.get_channel_strip":    [.mcu, .accessibility],
         "mixer.set_master_volume":    [.mcu],
-        "mixer.toggle_eq":            [.mcu, .accessibility],
-        "mixer.reset_strip":          [.mcu, .accessibility],
         "mixer.set_plugin_param":     [.scripter],  // public path narrowed to deterministic Scripter flow
         "plugin.insert":              [.accessibility],
 
@@ -254,12 +257,14 @@ extension ChannelRouter {
         // Plugins — bypass/remove intentionally omitted from the routing
         // table: no channel has a deterministic implementation. insert is
         // reintroduced only through an allowlisted AX mixer-slot path.
-        "plugin.list":                [.accessibility],
+        // #592: `plugin.list` was removed — reachable from no tool and implemented by no channel.
         "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
         "plugin.scan_presets":        [.accessibility],  // F2 — AX-only ladder (AXShowMenu→AXPress); ADR-001 removed the CGEvent popup last-resort
 
         // Automation
-        "automation.get_mode":        [.accessibility],
+        //
+        // #592: `automation.get_mode` was removed — no implementation on any channel. `set_mode`
+        // stays: the key-command channel carries it, and accessibility is not in its chain.
         "automation.set_mode":        [.mcu, .midiKeyCommands, .cgEvent],
         "automation.toggle_view":     [.midiKeyCommands, .cgEvent],
 
