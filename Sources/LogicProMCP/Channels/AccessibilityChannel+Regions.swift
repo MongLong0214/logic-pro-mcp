@@ -457,12 +457,35 @@ extension AccessibilityChannel {
             let extrasBase: [String: Any] = [
                 "via": "applescript_menu",
                 "region_name": pre.name,
+                "post_region_name": post.name,
+                "pre_track_index": pre.trackIndex,
+                "post_track_index": post.trackIndex,
                 "pre_start_bar": pre.startBar,
                 "post_start_bar": post.startBar,
                 "playhead_bar": playheadBar ?? NSNull()
             ]
 
-            // Verified: post.startBar landed on the playhead bar (±1 tolerance
+            // The pre- and post-reads both ask Logic for "the selected region", and nothing forces
+            // that to be the SAME region across the menu click. Without this, a selection that
+            // drifted mid-click could certify State A on a region the caller never asked about,
+            // purely because it happens to sit on the playhead. `startBar` cannot serve as the
+            // identity here — it is the property this operation exists to change.
+            //
+            // A `trackIndex` of -1 is the enumeration saying it could not place the region against
+            // a track header, so it is a readback gap and not a match.
+            let sameRegion = post.name == pre.name
+                && pre.trackIndex >= 0
+                && post.trackIndex == pre.trackIndex
+            guard sameRegion else {
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch,
+                    extras: extrasBase.merging([
+                        "note": "the region selected after the move is not the one selected before it"
+                    ]) { _, new in new }
+                ))
+            }
+
+            // Verified: the SAME region's startBar landed on the playhead bar (±1 tolerance
             // for snap rounding). State A.
             if let head = playheadBar, abs(post.startBar - head) <= 1 {
                 var extras = extrasBase
