@@ -172,3 +172,91 @@ struct Issue291OutputSlotReadTests {
         #expect(wire.contains("\"output\":\"Bus 3\""))
     }
 }
+
+// MARK: - #291 — the input slot, and the neighbour that would be mistaken for it
+
+@Suite("#291 the input slot is read, and the monitoring toggle is not")
+struct Issue291InputSlotReadTests {
+    private func audioStrip(
+        _ builder: FakeAXRuntimeBuilder,
+        id: Int,
+        inputHelp: String?,
+        inputDescription: String?
+    ) -> AXUIElement {
+        let strip = builder.element(id)
+        builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        var children: [AXUIElement] = []
+        // Measured on the same strip and deliberately included: its help BEGINS with "Input", so a
+        // prefix match on the word alone publishes this toggle as an input source.
+        let monitoring = builder.element(id + 1)
+        builder.setAttribute(monitoring, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(monitoring, kAXHelpAttribute as String,
+                             "Input Monitoring button. Hear incoming signal while recording.")
+        builder.setAttribute(monitoring, kAXDescriptionAttribute as String, "monitoring")
+        children.append(monitoring)
+        if let inputHelp {
+            let slot = builder.element(id + 2)
+            builder.setAttribute(slot, kAXRoleAttribute as String, kAXButtonRole as String)
+            builder.setAttribute(slot, kAXHelpAttribute as String, inputHelp)
+            if let inputDescription {
+                builder.setAttribute(slot, kAXDescriptionAttribute as String, inputDescription)
+            }
+            children.append(slot)
+        }
+        builder.setChildren(strip, children)
+        return strip
+    }
+
+    @Test("the source comes from the input slot's description")
+    func readsTheSource() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = audioStrip(
+            builder, id: 29_800,
+            inputHelp: "Input slot. Choose the channel strip input source.",
+            inputDescription: "Input 1"
+        )
+        let read = AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime())
+        #expect(try #require(read) == "Input 1")
+    }
+
+    /// The monitoring button is listed FIRST on purpose: a prefix match on "input" would return
+    /// "monitoring" here, and a caller would read a toggle as a signal source.
+    @Test("the input monitoring button is never mistaken for a source")
+    func monitoringIsNotASource() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = audioStrip(builder, id: 29_900, inputHelp: nil, inputDescription: nil)
+        let read = AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime())
+        #expect(read == nil)
+    }
+
+    /// A software-instrument strip has no input slot at all. `nil` is the truth there — and it is the
+    /// same `nil` the reader gives when it could not look, which the doc comment states rather than
+    /// papering over.
+    @Test("a strip with no input slot reports nothing")
+    func noInputSlotReportsNothing() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = builder.element(30_000)
+        builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setChildren(strip, [])
+        #expect(AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime()) == nil)
+    }
+
+    @Test("the mixer readback carries the input it read")
+    func mixerStateCarriesInput() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = makeLiveDumpStrip(builder, id: 30_100)
+        let slot = builder.element(30_190)
+        builder.setAttribute(slot, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(slot, kAXHelpAttribute as String,
+                             "Input slot. Choose the channel strip input source.")
+        builder.setAttribute(slot, kAXDescriptionAttribute as String, "Input 2")
+        builder.setChildren(strip, AXHelpers.getChildren(strip, runtime: builder.makeAXRuntime()) + [slot])
+
+        let fixture = make123MixerFixture(stripCount: 2, firstStrip: strip, builder: builder)
+        let result = AccessibilityChannel.defaultGetMixerState(runtime: fixture.runtime)
+        let strips = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [[String: Any]]
+        )
+        #expect(try #require(strips.first?["input"] as? String) == "Input 2")
+    }
+}

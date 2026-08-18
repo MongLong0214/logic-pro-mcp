@@ -969,6 +969,25 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's output slot by its AXHelp string; read-only classifier."
     )
 
+    /// Identifies a channel strip's INPUT slot by its AXHelp string (#291).
+    ///
+    /// Measured on Logic Pro 12.3, English, on an audio track: the slot is an `AXButton` whose help
+    /// reads "Input slot. Choose the channel strip input source…" and whose DESCRIPTION carries the
+    /// current source ("Input 1"). A software-instrument strip has no such button at all, so an
+    /// absent input there is the truth rather than a gap.
+    ///
+    /// The keyword is the full phrase "input slot" and not "input", because the same strip carries an
+    /// `AXButton` whose help begins "Input Monitoring button. Hear incoming signal…" — a prefix match
+    /// on the word alone would publish the monitoring toggle as an input source.
+    ///
+    /// Only the English rendering is measured; the empty variants list is the same fail-closed choice
+    /// as `outputSlotHelpKeyword`.
+    static let inputSlotHelpKeyword = LabelSet(
+        canonical: "input slot",
+        variants: [],
+        rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
+    )
+
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
         variants: ["리전"],
