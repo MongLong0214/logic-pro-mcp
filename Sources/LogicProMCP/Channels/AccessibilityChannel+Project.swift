@@ -10,6 +10,55 @@ extension AccessibilityChannel {
         windowCount == 0
     }
 
+    /// How many of Logic's windows are DOCUMENTS, which is what the open-document precondition is
+    /// really asking about (#590).
+    ///
+    /// A freshly launched Logic shows "Choose a Project". Counting raw windows made that chooser an
+    /// open document, so `project.new` refused from the exact state Logic lands in at launch — the
+    /// state every first-time caller is in, needing no unusual configuration at all. The classifier
+    /// this needs already existed and is already used by `getTrackHeaders` for the same reason.
+    ///
+    /// The precondition's own reasoning is untouched and still sound: with a real document open, a
+    /// newly created project's window cannot be told apart from the ones already on screen. A
+    /// chooser does not create that ambiguity — it is titled, it is not a project, and driving
+    /// File > New with it still on screen was measured to create the project anyway.
+    static func documentWindowCount(
+        _ windows: [AXUIElement]?,
+        runtime: AXLogicProElements.Runtime
+    ) -> Int? {
+        guard let windows else { return nil }
+        return windows.filter { !isPositivelyTheProjectChooser($0, runtime: runtime) }.count
+    }
+
+    /// A window is excluded from the document count only when BOTH signals say chooser.
+    ///
+    /// The title alone is not safe in the direction that matters. `isProjectPickerWindow` matches
+    /// the title by CONTAINMENT, so a real project the user named "Choose a Project" produces the
+    /// arrange window "Choose a Project - Tracks" and would stop being counted — and then
+    /// `project.new` would proceed with a genuine document open, which is the ambiguity the
+    /// precondition exists to prevent. The old defect refused too often; a fix that accepts too
+    /// often is worse.
+    ///
+    /// So the title is paired with a structural signal. Measured on Logic Pro 12.3:
+    ///
+    ///     [Untitled 56 - Tracks]  AXDocument = file:///…/Untitled%2056.logicx/
+    ///     [Choose a Project]      AXDocument = missing value
+    ///
+    /// A document window carries `AXDocument`; the chooser does not. Every uncertain case falls to
+    /// "this is a document": an unreadable title, an unreadable `AXDocument`, or a title that does
+    /// not match all count as documents, so a failure to identify the chooser costs a refusal rather
+    /// than an ambiguous creation.
+    static func isPositivelyTheProjectChooser(
+        _ window: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard AXLogicProElements.isProjectPickerWindow(window, runtime: runtime) else { return false }
+        let document: String? = AXHelpers.getAttribute(
+            window, kAXDocumentAttribute as String, runtime: runtime.ax
+        )
+        return document == nil
+    }
+
     static func createEmptyProjectFromQualifiedState(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
@@ -27,7 +76,8 @@ extension AccessibilityChannel {
         let windows: [AXUIElement]? = AXHelpers.getAttribute(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
         )
-        guard blankApplicationCanRevealChooser(windowCount: windows?.count) else {
+        let documentWindows = documentWindowCount(windows, runtime: runtime)
+        guard blankApplicationCanRevealChooser(windowCount: documentWindows) else {
             // A DESIGNED precondition, not a failure to try: with a document already open, a second
             // project's window cannot be told apart from the ones already on screen, so this route
             // refuses rather than certify an ambiguous creation
@@ -39,12 +89,15 @@ extension AccessibilityChannel {
             // envelope and therefore relabelled `channels_exhausted`. That code means "every channel
             // in the chain reported itself unavailable"; here the one channel ran and declined on
             // purpose. Two false statements about the caller's situation, in one refusal.
-            let count = windows?.count
+            let count = documentWindows
             var extras: [String: Any] = [
                 "operation": "project.new",
                 "write_attempted": false,
                 "safe_to_retry": true,
                 "failure_stage": "precondition_open_document",
+                // Both numbers, so a reader can see that a chooser on screen was NOT the reason
+                // (#590). When they differ, the difference is chooser windows.
+                "observed_all_window_count": windows?.count ?? NSNull(),
                 // Driven end to end on 2026-08-17 before being written down. `project.close` alone
                 // answers `confirmation_required` (it is L3-gated), so a recovery action naming the
                 // bare command would send the operator into a second refusal. With the confirmation

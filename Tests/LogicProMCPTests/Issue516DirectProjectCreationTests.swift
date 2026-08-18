@@ -50,6 +50,75 @@ struct Issue516DirectProjectCreationTests {
         #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 1))
         #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: nil))
     }
+
+    /// #590 — "blank" means no DOCUMENT, not no window.
+    ///
+    /// A freshly launched Logic shows "Choose a Project". Counting raw windows made that chooser an
+    /// open document, so this route refused from the exact state Logic lands in at launch. Measured
+    /// on 12.3 in English and Korean alike; and File > New driven with the chooser still on screen
+    /// creates the project anyway, so the ambiguity the precondition guards against is not present.
+    @Test("the project chooser is not a document")
+    func chooserDoesNotCountAsAnOpenDocument() {
+        let builder = FakeAXRuntimeBuilder()
+        let chooser = builder.element(59_000)
+        builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+        let koreanChooser = builder.element(59_001)
+        builder.setAttribute(koreanChooser, kAXTitleAttribute as String, "프로젝트 선택")
+        let document = builder.element(59_002)
+        builder.setAttribute(document, kAXTitleAttribute as String, "Untitled 56 - Tracks")
+        let runtime = builder.makeLogicRuntime()
+
+        let choosersOnly = AccessibilityChannel.documentWindowCount(
+            [chooser, koreanChooser], runtime: runtime
+        )
+        #expect(choosersOnly == 0)
+        #expect(AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: choosersOnly))
+
+        let withDocument = AccessibilityChannel.documentWindowCount(
+            [chooser, document], runtime: runtime
+        )
+        #expect(withDocument == 1)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: withDocument))
+
+        // An unreadable window list is still not a blank application: "we could not look" must not
+        // read as "there is nothing there".
+        #expect(AccessibilityChannel.documentWindowCount(nil, runtime: runtime) == nil)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(
+            windowCount: AccessibilityChannel.documentWindowCount(nil, runtime: runtime)
+        ))
+    }
+
+    /// #590 — the title alone must not be able to hide a real document.
+    ///
+    /// `isProjectPickerWindow` matches by CONTAINMENT, so a project the user named "Choose a
+    /// Project" produces the arrange window "Choose a Project - Tracks". On a title-only rule that
+    /// window stops being counted and `project.new` proceeds with a genuine document open — the
+    /// exact ambiguity the precondition exists to prevent, and a worse failure than the refusal it
+    /// replaced.
+    ///
+    /// Measured on Logic Pro 12.3: a document window carries `AXDocument`
+    /// (`file:///…/Untitled%2056.logicx/`) and the chooser does not, so the two signals together
+    /// separate them regardless of what the user called the project.
+    @Test("a project named like the chooser is still a document")
+    func aDocumentNamedLikeTheChooserIsStillCounted() {
+        let builder = FakeAXRuntimeBuilder()
+        let chooser = builder.element(59_100)
+        builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+
+        let trap = builder.element(59_101)
+        builder.setAttribute(trap, kAXTitleAttribute as String, "Choose a Project - Tracks")
+        builder.setAttribute(
+            trap, kAXDocumentAttribute as String, "file:///Users/x/Music/Logic/Choose a Project.logicx/"
+        )
+        let runtime = builder.makeLogicRuntime()
+
+        #expect(AccessibilityChannel.isPositivelyTheProjectChooser(chooser, runtime: runtime))
+        #expect(!AccessibilityChannel.isPositivelyTheProjectChooser(trap, runtime: runtime))
+        #expect(AccessibilityChannel.documentWindowCount([chooser, trap], runtime: runtime) == 1)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(
+            windowCount: AccessibilityChannel.documentWindowCount([chooser, trap], runtime: runtime)
+        ))
+    }
 }
 
 /// The refusal `project.new` gives when a document is already open.
