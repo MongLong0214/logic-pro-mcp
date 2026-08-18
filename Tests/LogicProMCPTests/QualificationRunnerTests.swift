@@ -58,10 +58,10 @@ struct QualificationRunnerTests {
         // real payload qualifies: passed == 23 (22 oracles + health's bespoke
         // validator), protocolSmoke == 0. The 87 mutating ops are unchanged —
         // they still defer to ADR-001-c for live mutation.
-        #expect(operationCases.count == 110)
+        #expect(operationCases.count == 111)
         #expect(operationCases.filter { $0.status == .passed }.count == 23)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 88)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
         #expect(operationCases.filter { $0.status == .passed }.allSatisfy {
             $0.verificationKind == .semanticReadback
@@ -249,7 +249,7 @@ struct QualificationRunnerTests {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 0)
         #expect(driveResult.operationResults.values.filter { $0.status == .passed }.isEmpty)
-        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 110)
+        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 111)
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
@@ -1184,7 +1184,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 110)
+        #expect(result.catalog?.operationCount == 111)   // #575 registered edit.move_to_playhead
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1196,7 +1196,7 @@ struct QualificationRunnerTests {
         let smoke = operationResults.filter { $0.status == .protocolSmoke }
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 87)
+        #expect(mutating.count == 88)
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
@@ -1694,7 +1694,7 @@ struct QualificationRunnerTests {
         // #373 Phase A: the read-only surface now qualifies semantically.
         #expect(operationCases.filter { $0.status == .passed }.count == 23)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 88)
         // #373 Phase A: 22 oracled read-only ops + system.health's bespoke
         // validator. The aggregate axes contribute no passes here.
         #expect(attestation.passed == 23)

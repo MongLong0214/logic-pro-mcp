@@ -213,19 +213,39 @@ enum SemanticOracleTable {
         .editToggleStepInput,
     ]
 
+    /// Mutating operations registered AFTER B4 closed the inventory.
+    ///
+    /// B4 closed the surface as it stood. It could not close it forever: the closure is a property
+    /// of the registry, and registering a new mutating operation reopens it. That is not a defect in
+    /// B4 — it is what `everyMutatingSpecIsCoveredOrAuditedExcluded` exists to catch, and it did:
+    /// registering `edit.move_to_playhead` (#575) failed that invariant until this entry existed.
+    ///
+    /// So the rule the phases encode is not "B4 was last" but "a mutating operation joins the
+    /// covered set or the audited-exclusion set IN THE SAME CHANGE THAT REGISTERS IT". Entries here
+    /// are kept separate from B1..B4 because those sets record what was pinned when, and back-dating
+    /// a later operation into them would falsify that record.
+    ///
+    /// `edit.move_to_playhead` belongs on the covered side: the handler re-reads the selected region
+    /// and the playhead after the menu click and reaches a genuine State A.
+    static let postClosureMutatingOperationIDs: Set<OperationID> = [
+        .editMoveToPlayhead,
+    ]
+
     /// Every mutating operation the table covers: the B1 verified-write increment
     /// UNION the B2 transport/navigate increment UNION the B3
     /// project/tracks/system/midi increment UNION the B4 plugin-insert / export /
-    /// cleanup / edit increment. B4 is the FINAL increment: with it, the covered set
-    /// plus `structurallyUnverifiedMutatingOperationIDs` account for the ENTIRE
-    /// mutating surface (`everyMutatingSpecIsCoveredOrAuditedExcluded`), so the
-    /// pure-code mutating oracle inventory is closed — no mutating spec is left
-    /// implicitly uncovered.
+    /// cleanup / edit increment, UNION anything registered after B4 closed the
+    /// inventory. Together with `structurallyUnverifiedMutatingOperationIDs` these
+    /// account for the ENTIRE mutating surface
+    /// (`everyMutatingSpecIsCoveredOrAuditedExcluded`), so no mutating spec is left
+    /// implicitly uncovered — an invariant that is maintained on every change, not
+    /// established once.
     static var coveredMutatingOperationIDs: Set<OperationID> {
         phaseB1MutatingOperationIDs
             .union(phaseB2MutatingOperationIDs)
             .union(phaseB3MutatingOperationIDs)
             .union(phaseB4MutatingOperationIDs)
+            .union(postClosureMutatingOperationIDs)
     }
 
     /// The mutating surface (non-`.unsupported`), from the registry. Coverage is
@@ -493,6 +513,9 @@ enum SemanticOracleTable {
         projectExportResume,
         projectCleanupApply,
         editToggleStepInput,
+        // #575 — registered after B4 closed the inventory; see
+        // `postClosureMutatingOperationIDs` for why it is kept out of the phase sets.
+        editMoveToPlayhead,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -2198,6 +2221,37 @@ enum SemanticOracleTable {
             .valueEquals(key: "operation", expected: .string("edit.toggle_step_input")),
             .valueEquals(key: "via", expected: .string("window-menu")),
             .booleanFlipped(keyA: "observed_open", keyB: "previous_open"),
+        ]
+    )
+
+    // AccessibilityChannel+Regions `defaultMoveSelectedRegionToPlayhead` → encodeStateA
+    // (EditDispatcher routes the command to `region.move_to_playhead`, whose only channel is
+    // .accessibility). Derived by reading the handler, and every predicate below relates two
+    // INDEPENDENT reads rather than echoing an input back:
+    //
+    //   region_name / post_track_index   the selected region read BEFORE the menu click and the one
+    //                                    read AFTER it. State A is reached only when they are the
+    //                                    same region, which is what stops a selection that drifted
+    //                                    mid-click from certifying a region the caller never asked
+    //                                    about (#575). `startBar` cannot serve as that identity —
+    //                                    it is the property the operation changes.
+    //   observed / post_start_bar        `observed` IS the post-click start bar; pinned so a future
+    //                                    edit cannot quietly report the requested value there.
+    //   requested / playhead_bar         `requested` IS the playhead read from the transport, not a
+    //                                    caller-supplied number — this operation takes no params.
+    //   post_start_bar ~ playhead_bar    the landing rule, with the ±1 the handler allows for snap
+    //                                    rounding. NOT `.fieldsEqual`: State A does not promise an
+    //                                    exact match, and pinning one would describe a contract the
+    //                                    handler never made.
+    static let editMoveToPlayhead = SafeMutationOracle.oracle(
+        .editMoveToPlayhead,
+        semantics: [
+            .fieldsEqual(keyA: "region_name", keyB: "post_region_name"),
+            .fieldsEqual(keyA: "pre_track_index", keyB: "post_track_index"),
+            .fieldsEqual(keyA: "observed", keyB: "post_start_bar"),
+            .fieldsEqual(keyA: "requested", keyB: "playhead_bar"),
+            .numericNear(keyA: "post_start_bar", keyB: "playhead_bar", within: .absolute(1)),
+            .typedField(key: "via", type: .string),
         ]
     )
 }

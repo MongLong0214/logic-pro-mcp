@@ -24,6 +24,12 @@ struct EditDispatcher: OperationTraceDispatching {
         "normalize": .regular("edit.normalize"),
         "duplicate": .regular("edit.duplicate"),
         "toggle_step_input": .regular("edit.toggle_step_input"),
+        // #575: the only region verb this tool carries. It is a SELECTION-relative edit, exactly
+        // like cut/split/join above — the caller does not name a region, Logic's selection does —
+        // and it routes to the region channel rather than to an `edit.*` operation. Unverified is
+        // an error to the caller: the channel returns State A only when the same region it started
+        // with landed on the playhead, and anything short of that is not a move to build on.
+        "move_to_playhead": .unverifiedIsError("region.move_to_playhead"),
     ]
 
     private static let validQuantizeGrids = [
@@ -35,9 +41,15 @@ struct EditDispatcher: OperationTraceDispatching {
         description: """
             Editing actions in Logic Pro. \
             Commands: undo, redo, cut, copy, paste, delete, select_all, \
-            split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input. \
+            split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input, \
+            move_to_playhead. \
             Params by command: \
             quantize -> { value: String } ("1/4", "1/8", "1/16", etc.); \
+            move_to_playhead -> {} moves the SELECTED region to the playhead and verifies it: \
+            State A only when the same region (same name, same track) is selected after the move \
+            and its start bar landed on the playhead within one bar; State B when the readback is \
+            unavailable, when the region did not move, or when the selection changed underneath \
+            the operation; \
             Most others -> {} (operate on current selection)
             """,
         inputSchema: .object([
@@ -64,7 +76,7 @@ struct EditDispatcher: OperationTraceDispatching {
     ) async -> CallTool.Result {
         switch command {
         case "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
-             "bounce_in_place", "normalize", "duplicate", "toggle_step_input":
+             "bounce_in_place", "normalize", "duplicate", "toggle_step_input", "move_to_playhead":
             guard let route = routedCommands[command] else {
                 return toolTextResult("Internal edit route missing for \(command)", isError: true)
             }

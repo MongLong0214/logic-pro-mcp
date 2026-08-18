@@ -1096,5 +1096,20 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+        // AccessibilityChannel+Regions.defaultMoveSelectedRegionToPlayhead State A: the SAME region
+        // (same name, same track index) is selected before and after the Edit > Move > To Playhead
+        // click, and its start bar landed on the playhead. The one-bar gap between post_start_bar
+        // and playhead_bar is deliberate — it is inside the snap-rounding tolerance the handler
+        // allows, so a fixture that used an exact match would not exercise the tolerance at all.
+        .editMoveToPlayhead: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "via":"applescript_menu","region_name":"MIDI Region",\
+                "post_region_name":"MIDI Region","pre_track_index":3,"post_track_index":3,\
+                "pre_start_bar":1,"post_start_bar":9,"playhead_bar":9,\
+                "requested":9,"observed":9}
+                """,
+            readback: "{}"
+        ),
     ]
 }
