@@ -87,7 +87,10 @@ struct Issue575RetiredUnimplementedRoutesTests {
             "mixer.set_send",
             "mixer.get_state",
             "automation.set_mode",
-            "automation.get_mode",
+            // #592 removed `automation.get_mode` from the table: it had no implementation on any
+            // channel, only an accessibility arm that refused. `automation.set_mode` stays here
+            // because it IS implemented — the key-command channel carries it — which is exactly the
+            // distinction this check exists to hold.
         ] {
             let chain = try #require(ChannelRouter.v2RoutingTable[operation])
             #expect(!chain.isEmpty)

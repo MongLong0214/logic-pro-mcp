@@ -596,14 +596,8 @@ actor AccessibilityChannel: Channel {
             return runtime.setMixerValue(params, .volume)
         case "mixer.set_pan":
             return runtime.setMixerValue(params, .pan)
-        case "mixer.set_send":
-            return .error("Send adjustment not yet implemented via AX")
-        case "mixer.set_input", "mixer.set_output":
-            return .error("I/O routing not yet implemented via AX")
-        case "mixer.toggle_eq":
-            return .error("EQ toggle not yet implemented via AX")
-        case "mixer.reset_strip":
-            return .error("Strip reset not yet implemented via AX")
+        // #592: `mixer.set_send` routes `[.mcu]` and MCUChannel implements it, so this arm was
+        // unreachable — a reader who grepped the operation found a refusal that is not what it does.
 
         // MARK: - MIDI file import (AX menu navigation)
         case "midi.import_file":
@@ -687,8 +681,6 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultInsertPlugin(params: params, runtime: runtime.logicRuntime)
         // plugin.bypass / plugin.remove are still intentionally absent from
         // the public contract; no verified AX readback path exists for them.
-        case "plugin.list":
-            return .error("Plugin list reading not yet implemented via AX")
 
         // MARK: - Verified plugin surface (logic_plugins.*)
         // Drift-safe inventory and verified live plugin writes. These route
@@ -702,10 +694,8 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultInsertVerified(params: params, runtime: runtime.logicRuntime)
 
         // MARK: - Automation
-        case "automation.get_mode":
-            return .error("Automation mode reading not yet implemented via AX")
-        case "automation.set_mode":
-            return .error("Automation mode setting not yet implemented via AX")
+        // #592: `automation.set_mode` routes `[.mcu, .midiKeyCommands, .cgEvent]` — accessibility is
+        // not in its chain and the key-command channel carries it, so this arm was unreachable too.
 
         default:
             return .error("Unsupported AX operation: \(operation)")
