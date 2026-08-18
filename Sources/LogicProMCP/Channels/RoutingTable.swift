@@ -83,6 +83,13 @@ extension ChannelRouter {
         // visible-strip identity plus same-surface readback. MCU echo remains
         // useful internally, but it cannot prove the targeted strip when the
         // visible mixer path is unavailable.
+        // #592: `mixer.set_input`, `mixer.set_output`, `mixer.toggle_eq`, `mixer.reset_strip`,
+        // `plugin.list` and `automation.get_mode` used to sit in this table. None of them had an
+        // implementation — the accessibility channel answered every one with a refusal string, and
+        // for `toggle_eq` and `reset_strip` the `.mcu` they named first had no arm either, so the
+        // table was promising a fallback that did not exist. A row states that an operation is real
+        // and declares which surfaces may carry it; for these it declared a channel order for a
+        // refusal. They come back when there is something behind them.
         "mixer.get_state":            [.mcu, .accessibility],
         "mixer.set_volume":           [.accessibility],
         "mixer.set_pan":              [.accessibility],
@@ -92,12 +99,8 @@ extension ChannelRouter {
         // who found one would have reached an exhausted chain. That is a stronger case than the two
         // system entries retired earlier, which at least had a channel that would have answered.
         "mixer.set_send":             [.mcu],
-        "mixer.set_output":           [.accessibility],
-        "mixer.set_input":            [.accessibility],
         "mixer.get_channel_strip":    [.mcu, .accessibility],
         "mixer.set_master_volume":    [.mcu],
-        "mixer.toggle_eq":            [.mcu, .accessibility],
-        "mixer.reset_strip":          [.mcu, .accessibility],
         "mixer.set_plugin_param":     [.scripter],  // public path narrowed to deterministic Scripter flow
         "plugin.insert":              [.accessibility],
 
@@ -254,12 +257,10 @@ extension ChannelRouter {
         // Plugins — bypass/remove intentionally omitted from the routing
         // table: no channel has a deterministic implementation. insert is
         // reintroduced only through an allowlisted AX mixer-slot path.
-        "plugin.list":                [.accessibility],
         "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
         "plugin.scan_presets":        [.accessibility],  // F2 — AX-only ladder (AXShowMenu→AXPress); ADR-001 removed the CGEvent popup last-resort
 
         // Automation
-        "automation.get_mode":        [.accessibility],
         "automation.set_mode":        [.mcu, .midiKeyCommands, .cgEvent],
         "automation.toggle_view":     [.midiKeyCommands, .cgEvent],
 

@@ -167,6 +167,22 @@ if not document_titles():
     d.close(); ev.stop_recording(rec)
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
+# The band is derived from the window rather than measured once: the arrange window has moved
+# display during this program, and a rectangle measured against one is not inside the other — which
+# records as an unsettled capture straddling displays rather than as an honest result.
+arrange_title = document_titles()[0]
+win = E.logic_window(arrange_title)
+band = (0, 0, win["w"], min(500, win["h"])) if win else None
+ev.check("594/precondition-the-window-frame-is-known",
+         band is not None,
+         "the arrange window's own frame read, so the capture band is inside it",
+         f"window={win!r} band={band!r}", None)
+if band is None:
+    d.close(); ev.stop_recording(rec)
+    print(json.dumps(ev.write(), indent=1)); sys.exit(1)
+
+before_shot = ev.shot("594/empty-project", settle_region=band, window_title=arrange_title)
+
 # No warm-up call. The whole point is the first one.
 first = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"})
 body = inner(first) or (first if isinstance(first, dict) else {})
@@ -213,6 +229,13 @@ ev.check("594/the-region-it-made-is-real",
          f"verify_source={(first or {}).get('verify_source')!r}",
          "return State A without the readback: `verify_source` stops being `ax_region_delta` and the "
          "bars stop being present, which is what separates a verified import from a quiet one")
+
+after_shot = ev.shot("594/after-first-import", settle_region=band, window_title=arrange_title)
+ev.visual("594/the-import-put-something-on-screen",
+          before_shot["file"], after_shot["file"], band, expect_change=True,
+          why="the project was empty a moment ago and the import creates a track carrying a region, "
+              "so the arrangement must look different — an envelope reporting a verified import "
+              "that left the screen untouched would be describing something the user cannot see")
 
 d.close()
 ev.restored("594/the-created-project-is-left-open",
