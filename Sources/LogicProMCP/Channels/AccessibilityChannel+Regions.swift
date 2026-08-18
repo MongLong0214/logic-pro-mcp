@@ -31,15 +31,33 @@ extension AccessibilityChannel {
             return .error(err.message)
         case .success(let result):
             let regions = result.regions.map { $0.info }
+            // `complete` was hardcoded `false` on every successful read. Safe, but uninformative —
+            // and it made every consumer fail closed forever, which is why `midi.import_file` could
+            // not tell "no region" from "no region visible" (#576).
+            //
+            // It is now measured, and measured from the HEADERS rather than the regions: a track
+            // carrying no regions produces no entry, so the highest observed `trackIndex` says
+            // nothing about the tracks above it. `allTrackHeaders` is not viewport-limited —
+            // measured on Logic 12.3, 21 of 21 while the region layer stopped at 13 — so "every
+            // header is inside the visible bounds" answers the question directly, and fails closed
+            // on a frame it cannot read.
+            //
+            // The headers are the VERTICAL axis only. A region at bar 33 lies far to the right of a
+            // window whose every track header is visible, so the count of region items dropped for
+            // being outside the window is required too — the first version of this rule checked only
+            // the headers and would have called that arrangement completely read.
+            let complete = result.coversWholeArrangement
             return encodeResult(RegionInventoryPayload(
                 regions: regions,
-                complete: false,
-                scope: regionReadbackScope,
-                reason: regionReadbackLimitReason,
+                complete: complete,
+                scope: complete ? "whole_arrangement" : regionReadbackScope,
+                reason: complete ? nil : regionReadbackLimitReason,
                 returnedCount: regions.count,
                 debug: RegionInventoryPayload.Debug(
                     layoutItems: result.layoutItemCount,
-                    nonRegion: result.nonRegionCount
+                    nonRegion: result.nonRegionCount,
+                    trackHeaders: result.trackHeaderCount,
+                    trackHeadersInViewport: result.trackHeadersWithinViewport
                 )
             ))
         }
@@ -51,6 +69,35 @@ extension AccessibilityChannel {
         let regions: [(item: AXUIElement, info: RegionInfo)]
         let layoutItemCount: Int
         let nonRegionCount: Int
+        /// Every track in the project, viewport or not. `allTrackHeaders` is NOT viewport-limited —
+        /// measured on Logic 12.3, 2026-08-17: 21 headers while the region layer stopped at 13.
+        let trackHeaderCount: Int
+        /// How many of those headers lie inside the window's visible bounds. This is the honest
+        /// denominator for a completeness claim, and it is decidable WITHOUT the regions: a track
+        /// carrying no regions produces no entry, so the highest observed `trackIndex` says nothing
+        /// about the tracks above it.
+        let trackHeadersWithinViewport: Int
+
+        /// Region layout items the traversal found and then DROPPED for lying outside the window.
+        ///
+        /// This is the horizontal axis, and it is not implied by the header count: a region at bar 33
+        /// sits far to the right of a window whose every track header is visible. An early version of
+        /// this completeness rule checked only the headers and would have called that arrangement
+        /// completely read — `testAccessibilityChannelAXBackedRegionsMarkViewportSubsetIncomplete`
+        /// models exactly that shape and caught it.
+        let regionItemsOutsideViewport: Int
+
+        /// The enumeration saw the whole arrangement: every track was in view AND no region was
+        /// dropped for being outside it.
+        ///
+        /// Zero headers is NOT complete: with nothing to bound the claim there is nothing to have
+        /// covered, and reporting completeness there would make an unreadable arrangement look
+        /// exhaustively read.
+        var coversWholeArrangement: Bool {
+            trackHeaderCount > 0
+                && trackHeadersWithinViewport == trackHeaderCount
+                && regionItemsOutsideViewport == 0
+        }
     }
 
     /// Lightweight error wrapper so `enumerateRegionItems` can carry the
@@ -103,6 +150,26 @@ extension AccessibilityChannel {
             return true
         }
         return itemFrame.intersects(windowFrame)
+    }
+
+    /// Whether a track header is inside the window's visible bounds.
+    ///
+    /// Deliberately NOT `isVisibleArrangeRegion`, which returns `true` when either frame is
+    /// unreadable. That fail-OPEN is right when deciding whether to include a region it can see, and
+    /// wrong here: an unreadable header would inflate a completeness claim, which is the direction
+    /// that lets an absence be published as proof (#576).
+    private static func headerIsWithinViewport(
+        _ header: AXUIElement,
+        within window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard let windowFrame = frame(of: window, runtime: runtime),
+              let headerFrame = frame(of: header, runtime: runtime),
+              !windowFrame.isEmpty,
+              !headerFrame.isEmpty else {
+            return false
+        }
+        return headerFrame.intersects(windowFrame)
     }
 
     private static func classifyRegionKind(name: String, help: String) -> String {
@@ -171,11 +238,13 @@ extension AccessibilityChannel {
         )
         var regions: [(item: AXUIElement, info: RegionInfo)] = []
         var nonRegionCount = 0
+        var regionItemsOutsideViewport = 0
         for item in items {
             let help = AXHelpers.getHelp(item, runtime: runtime.ax) ?? ""
             let isRegion = AXLocalePolicy.regionHelpKeyword.containsAny(in: help)
             guard isRegion else { nonRegionCount += 1; continue }
             guard isVisibleArrangeRegion(item, within: window, runtime: runtime.ax) else {
+                regionItemsOutsideViewport += 1
                 continue
             }
 
@@ -207,7 +276,12 @@ extension AccessibilityChannel {
         return .success(RegionEnumerationResult(
             regions: regions,
             layoutItemCount: items.count,
-            nonRegionCount: nonRegionCount
+            nonRegionCount: nonRegionCount,
+            trackHeaderCount: headers.count,
+            trackHeadersWithinViewport: headers.filter {
+                headerIsWithinViewport($0, within: window, runtime: runtime.ax)
+            }.count,
+            regionItemsOutsideViewport: regionItemsOutsideViewport
         ))
     }
 
