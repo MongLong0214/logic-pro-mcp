@@ -70,3 +70,74 @@ struct Issue576MeasuredCompletenessTests {
         #expect(!result(headers: 0, inViewport: 0).coversWholeArrangement)
     }
 }
+
+/// `RegionInventoryPayload.isComplete` decides what the CACHE records, and it used to default to
+/// `true` when the payload said nothing about its own coverage.
+///
+/// That was harmless while `complete` was a hardcoded `false` every producer set. It stopped being
+/// harmless the moment completeness began deciding whether an absent region is evidence: a payload
+/// from a producer that has not been taught to report coverage — legacy, malformed, decoded from an
+/// older wire — would mark the cache exhaustively read. Found by an adversarial review of the design
+/// that would have consumed it.
+@Suite("#576 an absent completeness claim is not a completeness claim")
+struct Issue576AbsentCompletenessTests {
+    private func payload(complete: Bool?) -> RegionInventoryPayload {
+        RegionInventoryPayload(
+            regions: [],
+            complete: complete,
+            scope: nil,
+            reason: nil,
+            returnedCount: 0,
+            debug: nil
+        )
+    }
+
+    @Test("silence is not coverage")
+    func absentIsNotComplete() {
+        #expect(!payload(complete: nil).isComplete)
+    }
+
+    @Test("an explicit claim is still honoured in both directions")
+    func explicitClaimsSurvive() {
+        #expect(payload(complete: true).isComplete)
+        #expect(!payload(complete: false).isComplete)
+    }
+}
+
+/// The legacy wire shape — a bare JSON array of regions, with no envelope around it.
+///
+/// `decodeInventoryPayload` synthesised `complete: true, scope: "project"` for it. That is the same
+/// fail-open as the `isComplete` default, one layer down and hardcoded, so closing the default alone
+/// left this path still asserting a whole-project inventory for input that claimed nothing.
+///
+/// An adversarial review found it by asking the question the commit could not answer both ways: if
+/// legacy input is unreachable the default flip is dead code, and if it is reachable the flip missed
+/// the path that still fail-opens. It was the second.
+@Suite("#576 the legacy array shape claims no coverage")
+struct Issue576LegacyArrayPayloadTests {
+    @Test("a bare array is not a complete inventory")
+    func bareArrayIsNotComplete() throws {
+        let payload = try RegionInfo.decodeInventoryPayload("""
+        [{"name":"MIDI Region","trackIndex":0,"startBar":1,"endBar":2,"kind":"midi"}]
+        """)
+        #expect(payload.regions.count == 1)
+        #expect(!payload.isComplete)
+        // And it does not invent a scope it was never told.
+        #expect(payload.scope == nil)
+        #expect(payload.reason == "legacy_array_payload_declares_no_scope")
+    }
+
+    @Test("an enveloped payload still carries its own claim")
+    func envelopedPayloadKeepsItsClaim() throws {
+        let complete = try RegionInfo.decodeInventoryPayload("""
+        {"regions":[],"complete":true,"scope":"whole_arrangement","returned_count":0}
+        """)
+        #expect(complete.isComplete)
+        #expect(complete.scope == "whole_arrangement")
+
+        let partial = try RegionInfo.decodeInventoryPayload("""
+        {"regions":[],"complete":false,"scope":"visible_arrange_area","returned_count":0}
+        """)
+        #expect(!partial.isComplete)
+    }
+}
