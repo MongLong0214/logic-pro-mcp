@@ -28,6 +28,10 @@ extension AccessibilityChannel {
             )
             state.plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax)
             state.pluginsSource = "ax"
+            // #291: `output` has been on this model since it was written and nothing ever set it, so
+            // `logic://mixer` published a field that was always null. It is read now; `nil` still
+            // means "not identified", never "routed nowhere".
+            state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
             channelStrips.append(state)
         }
         return encodeResult(channelStrips)
@@ -58,6 +62,7 @@ extension AccessibilityChannel {
         var state = ChannelStripState(trackIndex: index, volume: volume, pan: pan)
         state.plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax)
         state.pluginsSource = "ax"
+        state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
         return encodeResult(state)
     }
 

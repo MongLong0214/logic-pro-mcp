@@ -121,7 +121,17 @@ struct ChannelStripState: Sendable, Codable {
     var trackIndex: Int
     var volume: Double = 0.0
     var pan: Double = 0.0
-    var sends: [SendState] = []
+    /// The strip's sends, when they have been READ (#291).
+    ///
+    /// This was `[SendState] = []`, so every strip of every project serialised `"sends": []` — and
+    /// nothing has ever populated it. A consumer reading that saw "this strip has no sends" when the
+    /// truth was "nobody looked", which is the same absence-as-claim the rest of this model refuses.
+    ///
+    /// It stays absent for now on purpose. Measured on Logic Pro 12.3, an empty send slot is an
+    /// `AXButton` described only as "send button" with no `AXValue`, no `AXValueDescription` and no
+    /// `AXTitle`, so there is nothing to read a destination from — and a send list cannot be
+    /// published until there is.
+    var sends: [SendState]?
     var input: String?
     var output: String?
     var eqEnabled: Bool = false
