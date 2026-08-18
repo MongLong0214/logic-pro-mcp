@@ -2,13 +2,13 @@
 
 **Issue**: #369
 **Size**: M
-**Current Phase**: measured, ticket written, blocked on one contract decision
+**Current Phase**: measured, ticket written, ready to implement
 
 ## Tickets
 
 | Ticket | Title | Status | Review | Notes |
 |--------|-------|--------|--------|-------|
-| T1 | Drive Logic's per-track audio export from the export panel | Not started | — | mechanism measured live 2026-08-19; blocked on the partial-success State question in T1 §5 |
+| T1 | Drive Logic's per-track audio export from the export panel | Not started | — | mechanism measured live 2026-08-19; not blocked — the per-artifact State shape already exists in ProjectExportExecutor |
 
 ## What changed the plan
 
@@ -26,3 +26,14 @@ and the measurements are written into T1 as the mechanism.
 | 2026-08-19 | typing a destination path dismisses the panel — select the folder as a browser element |
 | 2026-08-19 | the post-Export `Logic Pro` window is the progress dialog; its disappearance is completion |
 | 2026-08-19 | a real export completes and the output verifies through `logic_audio.analyze_file` |
+
+## Correction
+
+The first revision of T1 declared the ticket blocked on "what State does a partially successful run
+report", claiming this project's contract had no shape for it. It does: `ProjectExportExecutor`
+already runs Honest Contract **per artifact** — State A on verified-on-disk, State B when the artifact
+cannot be verified, State C on a hard failure — and it is the executor `export_run artifacts:[stem]`
+flows through.
+
+The claim was an absence asserted without reading the file the answer was in. Corrected in place
+rather than left standing, because a ticket that says "blocked" is read as a reason not to start.

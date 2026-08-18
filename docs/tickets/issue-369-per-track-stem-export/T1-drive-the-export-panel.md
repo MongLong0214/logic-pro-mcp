@@ -4,7 +4,7 @@
 **Priority**: P1
 **Size**: M
 **Status**: Not started
-**Depends On**: a contract decision, named in §5
+**Depends On**: None
 
 ---
 
@@ -98,15 +98,36 @@ Live, in `Scripts/livekit/`:
   regions rather than against the number of tracks
 - the run deletes what it produced and says so in the restoration record
 
-## 5. The decision this ticket is blocked on
+## 5. Partial success — the contract already has this shape
 
-**What State does a partially successful stem run report?** Logic writes one file per populated
-track. If three of four verify and one is silence, the run has produced something real and something
-useless.
+An earlier revision of this ticket said the project's contract had no shape for "mostly worked" and
+declared the ticket blocked on a decision. **That was wrong, and it was wrong the way this repository
+spends most of its guards on**: an absence asserted without aiming the instrument at the place the
+answer lives.
 
-The two coherent answers are: State C for the whole run with every file named and the good ones left
-on disk, or State A per file with a run-level summary that is not a State at all. This project's
-contract does not currently have a shape for "mostly worked", and inventing one inside this ticket
-would be deciding a contract question in an implementation.
+`ProjectExportExecutor` already carries it, and it is the executor `export_run artifacts:[stem]`
+flows through:
 
-Everything else here is measured and mechanical.
+```
+Honest Contract per artifact:
+  State A — bounce fired AND on-disk verification PASSED
+  State B — bounce fired but the artifact could not be verified (never appeared / analyzer
+            warn/fail) — success uncertain
+  State C — a hard failure (open/identity/route error, or the plan was degraded for this artifact)
+```
+
+So a stem run is a list of artifacts — one per populated track — each getting its own State, each
+verified on disk with `AudioAnalyzer`. That is what AC-5 already asks for, and it needs no new
+contract shape.
+
+Two things the existing machine does that a stem run should inherit rather than reinvent:
+
+- **`fail_if_exists` is never overwritten.** An artifact the plan flagged `would_overwrite` fails
+  closed rather than bouncing over a file that is already there.
+- **Already-present-and-verified artifacts are skipped**, which is what makes `export_resume`
+  idempotent. A stem run gets resume for free if it produces its file list the same way.
+
+The one thing genuinely new is that the file names come from Logic, not from the plan: the panel
+writes `<track name>_1.aif`, so the executor cannot pre-compute the paths it will poll for. It has to
+enumerate the destination after the progress window closes and bind each file to a track by name.
+That is implementation, not a contract question.
