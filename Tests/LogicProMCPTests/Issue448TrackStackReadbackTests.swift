@@ -164,6 +164,35 @@ struct Issue448TrackStackReadbackTests {
         #expect(!collapsedWasReported(state))
     }
 
+    /// The other way a child stays unidentified: the read SUCCEEDS and hands back something that is
+    /// not a role string. `getAttributeResult` reports that as `.success(nil)` rather than as a
+    /// failure, so a reader that only guards the failure case would call this header "not a stack".
+    @Test("a child whose role reads as a non-string is also not ruled out")
+    func childWithAnUnusableRoleValueBlocksTheNegativeClaim() {
+        let builder = FakeAXRuntimeBuilder()
+        let head = builder.element(44_800)
+        builder.setAttribute(head, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        let mute = builder.element(44_801)
+        builder.setAttribute(mute, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        let mystery = builder.element(44_802)
+        builder.setChildren(head, [mute, mystery])
+        let mysteryID = builder.elementID(mystery)
+
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard builder.elementID(element) == mysteryID,
+                      attribute == (kAXRoleAttribute as String) else { return nil }
+                // Present, readable, and not a role: the AX call succeeded and told us nothing.
+                return .success(NSNumber(value: 7))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let state = AXValueExtractors.extractTrackStackState(from: head, runtime: runtime)
+        #expect(!stackHeaderWasReported(state))
+        #expect(!collapsedWasReported(state))
+    }
+
     /// The same unreadable child must NOT suppress a positive finding. An arrow that was seen is
     /// seen regardless of what else on the header would not answer — a guard that fired here too
     /// would trade one false claim for a different one.
