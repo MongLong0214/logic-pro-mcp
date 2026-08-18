@@ -81,6 +81,16 @@ def witness():
         return {"error": (r.stdout or r.stderr or "")[:200]}
 
 
+def logic_ui_language():
+    """What language Logic's own menu bar is in, read from Logic rather than from `defaults`.
+
+    `defaults read com.apple.logic10 AppleLanguages` says what the NEXT launch will use. This says
+    what the running one actually did, which is the only thing a locale claim may rest on.
+    """
+    return osa('tell application "System Events" to tell process "Logic Pro" to '
+               'return name of menu bar item 4 of menu bar 1')
+
+
 def undo_title():
     """What Logic says its Edit > Undo entry would undo, verbatim."""
     return osa('tell application "System Events" to tell process "Logic Pro" to '
@@ -88,9 +98,27 @@ def undo_title():
 
 
 def start_bar(help_text):
-    """The bar Logic's own help string says a region starts at."""
-    match = re.search(r"(?:starts at|시작)\D*(\d+)", help_text or "")
-    return int(match.group(1)) if match else None
+    """The bar Logic's own help string says a region starts at.
+
+    The two languages put the number on OPPOSITE SIDES of the verb, and an earlier version of this
+    took the first digits after it in both:
+
+        en   "Region starts at 1 bar  and ends at 2 bars"      1 follows "starts at"
+        ko   "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다"    1 PRECEDES "시작", 2 follows it
+
+    So on Korean it read the END bar and called it the start. That is not a crash — it is a check
+    passing for the wrong reason: after a move to bar 9 the Korean help reads "9 마디 … 시작하여 10
+    마디", the reader returned 10, and `abs(10 - 9) <= 1` still let the assertion through. A witness
+    that agrees by accident is worse than none, because the run reports it as corroboration.
+
+    Found by a blind review of this file, not by a red run.
+    """
+    text = help_text or ""
+    korean = re.search(r"(\d+)\s*마디[^0-9]*시작", text)
+    if korean:
+        return int(korean.group(1))
+    english = re.search(r"starts at\D*(\d+)", text)
+    return int(english.group(1)) if english else None
 
 
 def selected_region(state):
@@ -106,14 +134,31 @@ ev.check("575/precondition-the-independent-region-witness-builds",
          "that is not the code under test",
          f"swiftc rc={build.returncode} {build.stderr.strip()[:200]}", None)
 
+# The arrange window's title SUFFIX is localized — "… - Tracks" in English, "… - 트랙" in Korean
+# (#519). Matching on the English word would find no window on a Korean Logic, and every capture in
+# the run would record `window: null` while Logic was plainly on screen. So the run reads the live
+# window list and carries the full title forward instead of assuming a word.
 titles = osa('tell application "System Events" to tell process "Logic Pro" to '
              'return name of every window')
-ev.check("575/precondition-an-arrange-window-is-open", "Tracks" in titles,
-         "Logic is up with an arrange window to move a region inside",
-         f"titles={titles!r}", None)
+window_titles = [t.strip() for t in titles.split(",") if t.strip()]
+# Logic's project chooser can sit alongside an open project — since #590 it no longer blocks
+# `project.new`, so a session that created its project from a cold launch legitimately has both on
+# screen. It is not a document and it is not what this run captures, so it is set aside by name.
+CHOOSER_TITLES = ("Choose a Project", "프로젝트 선택")
+document_titles = [t for t in window_titles
+                   if not any(c in t for c in CHOOSER_TITLES)]
+arrange_title = document_titles[0] if len(document_titles) == 1 else ""
+ev.check("575/precondition-exactly-one-project-window-is-open",
+         bool(arrange_title),
+         "exactly one Logic window is a project window, so the arrange window is unambiguous and "
+         "its full title — whatever language it is in — can be used to find it on screen; the "
+         "project chooser is set aside because it may legitimately be on screen beside a project",
+         f"all={window_titles!r} project windows={document_titles!r}", None)
 
-if build.returncode != 0 or "Tracks" not in titles:
+if build.returncode != 0 or not arrange_title:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
+
+ev.note("575/locale", {"windows": window_titles, "edit_menu_bar_item": logic_ui_language()})
 
 rec = ev.record_screen(seconds=240)
 d = E.Driver()
@@ -150,10 +195,13 @@ if target is None or pre_bar is None or pre_bar == TARGET_BAR:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 undo_before = undo_title()
-before_shot = ev.shot("575/before-move", settle_region=CONTENT_BAND)
 seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
 time.sleep(2)
 ev.note("575/seek", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
+# Captured AFTER the seek, deliberately. The playhead line moving from bar 1 to bar 9 changes this
+# band on its own, so a "before" taken ahead of the seek would let the visual assertion pass on the
+# playhead alone — it would be claiming the region moved while measuring that the cursor did.
+before_shot = ev.shot("575/before-move", settle_region=CONTENT_BAND, window_title=arrange_title)
 
 # ---- the operation ------------------------------------------------------------------------------
 
@@ -162,7 +210,7 @@ time.sleep(2)
 after_state = witness()
 after_target = selected_region(after_state)
 post_bar = start_bar((after_target or {}).get("help", ""))
-after_shot = ev.shot("575/after-move", settle_region=CONTENT_BAND)
+after_shot = ev.shot("575/after-move", settle_region=CONTENT_BAND, window_title=arrange_title)
 ev.note("575/move", moved if isinstance(moved, dict) else {"raw": str(moved)[:300]})
 
 body = moved if isinstance(moved, dict) else {}
