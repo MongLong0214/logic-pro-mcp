@@ -37,3 +37,20 @@ flows through.
 
 The claim was an absence asserted without reading the file the answer was in. Corrected in place
 rather than left standing, because a ticket that says "blocked" is read as a reason not to start.
+
+## Second correction
+
+The first correction removed the "blocked" flag on the strength of `ProjectExportExecutor` carrying
+per-artifact State. That finding is right and it stands.
+
+It was also incomplete. `ProjectExportPlanner` computes one artifact as one known path
+(`<project>-<kind>.wav`) with `exists`, the collision policy and containment all resolved at plan
+time — and a stem run produces N files whose names Logic assigns after the fact. So `export_plan`,
+which is a dry run whose job is to say what will be written, cannot enumerate a stem run.
+
+T1 is therefore unblocked as an AX drive and can be built and proven on its own. Wiring it into
+`export_run artifacts:[stem]` waits on one question that is a property of the published dry-run
+contract: what an artifact plan promises when the names arrive late.
+
+Two corrections in two revisions, both from the same habit — answering about a file without opening
+it. Recorded rather than tidied away, because the shape of the mistake is the useful part.

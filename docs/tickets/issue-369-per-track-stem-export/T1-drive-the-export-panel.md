@@ -127,7 +127,41 @@ Two things the existing machine does that a stem run should inherit rather than 
 - **Already-present-and-verified artifacts are skipped**, which is what makes `export_resume`
   idempotent. A stem run gets resume for free if it produces its file list the same way.
 
-The one thing genuinely new is that the file names come from Logic, not from the plan: the panel
-writes `<track name>_1.aif`, so the executor cannot pre-compute the paths it will poll for. It has to
-enumerate the destination after the progress window closes and bind each file to a track by name.
-That is implementation, not a contract question.
+### But the PLAN-time model does not accommodate stems, and that part is a contract question
+
+A second reading — of `ProjectExportPlanner` this time, which the first two revisions of this ticket
+did not open — shows the per-artifact State shape is only half the story.
+
+```swift
+let url = outputRoot.appendingPathComponent("\(safeProject)-\(kind).wav").standardizedFileURL
+let existingPath = ProjectExportArtifactPathPolicy.preferredExistingVariant(for: url.path, …)
+let exists = existingPath != nil
+```
+
+One artifact is **one known path**, computed at plan time as `<project>-<kind>.wav`, with `exists`,
+the collision policy and the containment check all resolved before anything runs. A stem run breaks
+every one of those:
+
+- it produces N files, not one
+- Logic names them, not the plan — `<track name>_1.aif`
+- the extension is `.aif`, not the `.wav` the path model assumes
+- `would_overwrite` cannot be evaluated for names that are not known until after the export
+- `export_plan` is a DRY RUN whose job is to tell the caller what will be written, and for stems it
+  cannot
+
+So the question this ticket must not answer by itself is: **what does `export_plan` promise for a
+stem artifact?** A destination plus a track count is honest and is not a file list. Whether that is
+allowed to be called an artifact plan — and what `fail_if_exists` means when the names arrive late —
+decides how `export_resume` can stay idempotent.
+
+That is a property of a published dry-run contract, not an implementation detail.
+
+### Scope note
+
+T1 as written is the AX drive only, and it stands on its own: open the panel, choose a destination as
+an element, confirm the popup changed, set `One File per Track`, press Export, wait for the progress
+window to go, enumerate what appeared, verify each file. It can be built and live-proven without
+touching the planner.
+
+Wiring it into `export_run artifacts:[stem]` needs the plan-time question above answered first, and
+that is a separate ticket rather than the tail of this one.
