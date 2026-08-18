@@ -27,7 +27,36 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> Int? {
         guard let windows else { return nil }
-        return windows.filter { !AXLogicProElements.isProjectPickerWindow($0, runtime: runtime) }.count
+        return windows.filter { !isPositivelyTheProjectChooser($0, runtime: runtime) }.count
+    }
+
+    /// A window is excluded from the document count only when BOTH signals say chooser.
+    ///
+    /// The title alone is not safe in the direction that matters. `isProjectPickerWindow` matches
+    /// the title by CONTAINMENT, so a real project the user named "Choose a Project" produces the
+    /// arrange window "Choose a Project - Tracks" and would stop being counted — and then
+    /// `project.new` would proceed with a genuine document open, which is the ambiguity the
+    /// precondition exists to prevent. The old defect refused too often; a fix that accepts too
+    /// often is worse.
+    ///
+    /// So the title is paired with a structural signal. Measured on Logic Pro 12.3:
+    ///
+    ///     [Untitled 56 - Tracks]  AXDocument = file:///…/Untitled%2056.logicx/
+    ///     [Choose a Project]      AXDocument = missing value
+    ///
+    /// A document window carries `AXDocument`; the chooser does not. Every uncertain case falls to
+    /// "this is a document": an unreadable title, an unreadable `AXDocument`, or a title that does
+    /// not match all count as documents, so a failure to identify the chooser costs a refusal rather
+    /// than an ambiguous creation.
+    static func isPositivelyTheProjectChooser(
+        _ window: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard AXLogicProElements.isProjectPickerWindow(window, runtime: runtime) else { return false }
+        let document: String? = AXHelpers.getAttribute(
+            window, kAXDocumentAttribute as String, runtime: runtime.ax
+        )
+        return document == nil
     }
 
     static func createEmptyProjectFromQualifiedState(

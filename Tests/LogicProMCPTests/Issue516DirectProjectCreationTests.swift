@@ -87,6 +87,38 @@ struct Issue516DirectProjectCreationTests {
             windowCount: AccessibilityChannel.documentWindowCount(nil, runtime: runtime)
         ))
     }
+
+    /// #590 — the title alone must not be able to hide a real document.
+    ///
+    /// `isProjectPickerWindow` matches by CONTAINMENT, so a project the user named "Choose a
+    /// Project" produces the arrange window "Choose a Project - Tracks". On a title-only rule that
+    /// window stops being counted and `project.new` proceeds with a genuine document open — the
+    /// exact ambiguity the precondition exists to prevent, and a worse failure than the refusal it
+    /// replaced.
+    ///
+    /// Measured on Logic Pro 12.3: a document window carries `AXDocument`
+    /// (`file:///…/Untitled%2056.logicx/`) and the chooser does not, so the two signals together
+    /// separate them regardless of what the user called the project.
+    @Test("a project named like the chooser is still a document")
+    func aDocumentNamedLikeTheChooserIsStillCounted() {
+        let builder = FakeAXRuntimeBuilder()
+        let chooser = builder.element(59_100)
+        builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+
+        let trap = builder.element(59_101)
+        builder.setAttribute(trap, kAXTitleAttribute as String, "Choose a Project - Tracks")
+        builder.setAttribute(
+            trap, kAXDocumentAttribute as String, "file:///Users/x/Music/Logic/Choose a Project.logicx/"
+        )
+        let runtime = builder.makeLogicRuntime()
+
+        #expect(AccessibilityChannel.isPositivelyTheProjectChooser(chooser, runtime: runtime))
+        #expect(!AccessibilityChannel.isPositivelyTheProjectChooser(trap, runtime: runtime))
+        #expect(AccessibilityChannel.documentWindowCount([chooser, trap], runtime: runtime) == 1)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(
+            windowCount: AccessibilityChannel.documentWindowCount([chooser, trap], runtime: runtime)
+        ))
+    }
 }
 
 /// The refusal `project.new` gives when a document is already open.

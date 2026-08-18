@@ -118,11 +118,57 @@ def dismiss_single_button_alert():
 
 # ---- reach a cold launch -------------------------------------------------------------------------
 
+def close_open_documents():
+    """Close document windows before quitting, so the next launch lands on the chooser.
+
+    The run cannot ASSUME a cold launch shows "Choose a Project": Logic reopens the document that was
+    open when it quit. Measured — a relaunch after quitting with a project open came back straight to
+    `Untitled 56 - Tracks`, and the branch under test was never reached. The state has to be
+    established, not hoped for.
+
+    Only an UNTITLED document is discarded at the save prompt. A named project is the operator's, and
+    this run has no business deciding not to save it: it stops instead, and the precondition below
+    reports why.
+    """
+    closed, refused = [], []
+    for _ in range(6):
+        titles = [t for t in window_titles()
+                  if t and not any(c in t for c in CHOOSER_TITLES)]
+        if not titles:
+            break
+        target = titles[0]
+        osa(f'tell application "System Events" to tell process "Logic Pro" to click '
+            f'(first button of (first window whose name is "{target}") whose description is "close button")')
+        time.sleep(2)
+        # A save prompt is three buttons — a real choice — so it is answered only for a scratch
+        # document this run can identify as untitled.
+        buttons = osa('tell application "System Events" to tell process "Logic Pro" to '
+                      'return name of every button of window 1')
+        if "Save" in buttons or "저장" in buttons:
+            if target.startswith("Untitled") or target.startswith("무제"):
+                discard = "Don’t Save" if "Don’t Save" in buttons else (
+                    "Don't Save" if "Don't Save" in buttons else "저장 안 함")
+                osa('tell application "System Events" to tell process "Logic Pro" to '
+                    f'click button "{discard}" of window 1')
+                time.sleep(2)
+                closed.append(f"{target} (discarded)")
+            else:
+                refused.append(target)
+                osa('tell application "System Events" to tell process "Logic Pro" to '
+                    'click button "Cancel" of window 1')
+                break
+        else:
+            closed.append(target)
+    return {"closed": closed, "refused_named_projects": refused}
+
+
 # Quitting can be refused by a sheet Logic has open — measured, a freshly created project leaves its
 # "New Track" chooser up, and `quit` then does nothing while the process stays alive. So the shutdown
 # escapes any sheet once and asks again, and the precondition below judges the OUTCOME rather than
 # the fact that a quit was sent.
+closed_documents = {"closed": [], "refused_named_projects": []}
 if logic_running():
+    closed_documents = close_open_documents()
     for attempt in range(3):
         osa('tell application "Logic Pro" to quit')
         deadline = time.time() + 20
@@ -153,13 +199,15 @@ while time.time() < deadline:
 alert = dismiss_single_button_alert()
 time.sleep(2)
 titles = window_titles()
-ev.note("590/launch", {"titles": titles, "dismissed_alert": alert})
+ev.note("590/launch", {"titles": titles, "dismissed_alert": alert,
+                       "documents_closed_before_quit": closed_documents})
 
 ev.check("590/precondition-the-launch-lands-on-the-project-chooser",
          any(any(c in t for c in CHOOSER_TITLES) for t in titles),
          "Logic came up showing its project chooser and no document — the exact state this defect "
          "is about, and the one a first-time caller is in",
-         f"titles={titles!r} · alert={json.dumps(alert)[:200]}", None)
+         f"titles={titles!r} · alert={json.dumps(alert)[:120]} · "
+         f"closed before quit={json.dumps(closed_documents, ensure_ascii=False)[:160]}", None)
 
 ev.check("590/precondition-no-document-window-is-open",
          not any("Tracks" in t or "트랙" in t for t in titles),
