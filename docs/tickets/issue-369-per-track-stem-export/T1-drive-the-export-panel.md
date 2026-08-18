@@ -156,12 +156,22 @@ decides how `export_resume` can stay idempotent.
 
 That is a property of a published dry-run contract, not an implementation detail.
 
-### Scope note
+### Scope note — and do NOT build this as a standalone operation
 
-T1 as written is the AX drive only, and it stands on its own: open the panel, choose a destination as
-an element, confirm the popup changed, set `One File per Track`, press Export, wait for the progress
-window to go, enumerate what appeared, verify each file. It can be built and live-proven without
-touching the planner.
+T1 is the AX drive: open the panel, choose a destination as an element, confirm the popup changed,
+set `One File per Track`, press Export, wait for the progress window to go, enumerate what appeared,
+verify each file. As CODE that stands on its own and can be live-proven without touching the planner.
 
-Wiring it into `export_run artifacts:[stem]` needs the plan-time question above answered first, and
-that is a separate ticket rather than the tail of this one.
+**As a shipped operation it does not.** The public export surface is two operations —
+`project.export_plan` and `project.export_run` (`ConfirmationPolicy.l2`, params `artifacts`,
+`collision_policy`, `confirmed`, `naming_policy`, …). There is no third place a stem drive can land
+without adding a new public operation, and that is a surface decision, not a free choice inside this
+ticket.
+
+Building T1 and leaving it unrouted reproduces the exact shape this repository retired eleven table
+rows for on 2026-08-18 — five `region.*` rows in #587 and six more in #592 — implementation standing
+behind a row no caller can reach, with a refusal string that reads as a promise.
+
+So the order is fixed: the plan-time question above is answered first, `export_run artifacts:[stem]`
+gains its path, and T1's drive lands inside it. T1 is not a starting point that can be shipped on its
+own; it is the mechanism the wiring will use, written down while the measurements are fresh.

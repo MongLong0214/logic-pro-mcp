@@ -54,3 +54,16 @@ contract: what an artifact plan promises when the names arrive late.
 
 Two corrections in two revisions, both from the same habit — answering about a file without opening
 it. Recorded rather than tidied away, because the shape of the mistake is the useful part.
+
+## Third correction, and the last one
+
+"T1 stands alone and is buildable" was true of the code and false of shipping it. The public export
+surface is `project.export_plan` and `project.export_run` and nothing else, so a standalone stem drive
+would have to be a new public operation — a surface decision — or it would sit unrouted, which is the
+shape #587 and #592 retired eleven rows for on the same day this ticket was written.
+
+The order is therefore fixed rather than parallel: answer what an artifact plan promises when the
+names arrive late, wire `export_run artifacts:[stem]`, and let T1's drive land inside it.
+
+Three corrections in three revisions. The first two came from answering about a file without opening
+it. This one came from treating "buildable" and "shippable" as the same word.
