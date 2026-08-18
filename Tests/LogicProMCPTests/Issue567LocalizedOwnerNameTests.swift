@@ -54,3 +54,43 @@ struct Issue567LocalizedOwnerNameTests {
         #expect(try #require(pid) == 4242)
     }
 }
+
+/// #575: three table entries named a channel that does not implement them.
+///
+/// `mixer.set_output_volume` routed to `.mcu`, `mixer.get_bus_routing` and
+/// `automation.get_parameter` to `.accessibility`. Neither channel has a case for any of them, so
+/// each falls to its `default` arm — `Unknown MCU operation` / `Unsupported AX operation` — and a
+/// caller who found one would have reached an exhausted chain.
+///
+/// That is a stronger case for removal than the two system entries retired earlier, which at least
+/// named a channel that would have answered. Verified live before removal: every one answers
+/// `invalid_params` under each plausible tool spelling.
+@Suite("#575 the table names no operation its channels refuse")
+struct Issue575RetiredUnimplementedRoutesTests {
+    @Test("the three unimplemented entries are gone")
+    func retiredEntriesAreAbsent() {
+        for operation in [
+            "mixer.set_output_volume",
+            "mixer.get_bus_routing",
+            "automation.get_parameter",
+        ] {
+            #expect(ChannelRouter.v2RoutingTable[operation] == nil)
+        }
+    }
+
+    /// The neighbours that share their prefixes must be untouched — the removal was of three named
+    /// entries, not of a family.
+    @Test("their neighbours still route")
+    func neighboursSurvive() throws {
+        for operation in [
+            "mixer.set_master_volume",
+            "mixer.set_send",
+            "mixer.get_state",
+            "automation.set_mode",
+            "automation.get_mode",
+        ] {
+            let chain = try #require(ChannelRouter.v2RoutingTable[operation])
+            #expect(!chain.isEmpty)
+        }
+    }
+}

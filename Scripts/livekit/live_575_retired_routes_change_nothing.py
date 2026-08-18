@@ -71,6 +71,26 @@ survivors = {
     "logic_system.refresh_cache": d.tool("logic_system", "refresh_cache", {}),
     "logic_project.is_running": d.tool("logic_project", "is_running", {}),
 }
+
+# A prefix neighbour of the three retired mixer rows. The removal was of three NAMED rows, not of a
+# family, and this checks that against the running server rather than against the table.
+#
+# Deliberately not driven with valid parameters: proving the neighbour survives does not require
+# moving the user's master volume. It is called with a parameter it rejects, and the discriminator is
+# the HINT, not the error code — both a live command and a retired one answer `invalid_params`:
+#
+#   live command    "Unknown parameters: …  Allowed parameters: value, volume"   <- it validated input
+#   retired command "Command '…' is not registered for …"                         <- it never existed
+neighbour = d.tool("logic_mixer", "set_master_volume", {"definitely_not_a_param": "1"})
+neighbour_hint = (neighbour.get("hint") or "") if isinstance(neighbour, dict) else ""
+ev.note("575/prefix-neighbour", neighbour)
+ev.check("575/a-prefix-neighbour-of-the-retired-rows-still-exists",
+         "not registered" not in neighbour_hint and "Allowed parameters" in neighbour_hint,
+         "mixer.set_master_volume still reaches its dispatcher and validates its input, so the "
+         "removal took three named rows and not the family that shares their prefix",
+         f"hint={neighbour_hint!r}",
+         "remove `mixer.set_master_volume` alongside them: the hint becomes "
+         "\"Command 'set_master_volume' is not registered\" and this check goes red")
 ev.note("575/survivors", {k: str(v)[:300] for k, v in survivors.items()})
 
 broken = {k: v for k, v in survivors.items()
@@ -97,6 +117,11 @@ ev.check("575/refresh_cache-still-refreshes",
 removed = {
     "logic_system.cache_state": d.tool("logic_system", "cache_state", {}),
     "logic_system.refresh": d.tool("logic_system", "refresh", {}),
+    # The three whose CHANNEL had no case for them either — a stronger case for removal than the
+    # two above, which at least named a channel that would have answered.
+    "logic_mixer.set_output_volume": d.tool("logic_mixer", "set_output_volume", {}),
+    "logic_mixer.get_bus_routing": d.tool("logic_mixer", "get_bus_routing", {}),
+    "logic_tracks.get_parameter": d.tool("logic_tracks", "get_parameter", {}),
 }
 ev.note("575/removed", {k: str(v)[:200] for k, v in removed.items()})
 ev.check("575/the-removed-names-are-still-unreachable",
