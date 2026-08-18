@@ -4365,3 +4365,35 @@ private final class AXPressLog: @unchecked Sendable {
     // and it still reaches a control that could legitimately select
     #expect(recorder.ids.contains(builder.elementID(name)))
 }
+
+/// #604: the dismissal must report what it observed, never assert an outcome it did not look at.
+///
+/// The first cut said "The panel, if one opened, has been dismissed." unconditionally — the
+/// keystroke goes out through System Events while the panel was opened through AX, so a denied
+/// Automation permission leaves the panel up and the sentence still claimed it was gone.
+@Test("issue604_dismissal_summary_reports_the_observation_not_the_hope")
+func issue604DismissalSummaryReportsTheObservation() {
+    let denied = AccessibilityChannel.PanelDismissal(
+        panelsBefore: 1, panelsAfter: 1, escapeDelivered: false
+    )
+    #expect(denied.summary.contains("Escape could not be delivered"))
+    #expect(!denied.summary.contains("cleared"))
+
+    let cleared = AccessibilityChannel.PanelDismissal(
+        panelsBefore: 1, panelsAfter: 0, escapeDelivered: true
+    )
+    #expect(cleared.summary.contains("Escape cleared the 1 panel-shaped window(s)"))
+
+    let stubborn = AccessibilityChannel.PanelDismissal(
+        panelsBefore: 2, panelsAfter: 1, escapeDelivered: true
+    )
+    #expect(stubborn.summary.contains("still open"))
+    #expect(!stubborn.summary.contains("cleared"))
+
+    let nothingThere = AccessibilityChannel.PanelDismissal(
+        panelsBefore: 0, panelsAfter: 0, escapeDelivered: true
+    )
+    #expect(nothingThere.summary.contains("No panel-shaped window was open"))
+    // The one thing it must never say when nothing was there: that it cleared something.
+    #expect(!nothingThere.summary.contains("cleared"))
+}
