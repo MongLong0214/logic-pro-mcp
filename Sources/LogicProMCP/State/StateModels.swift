@@ -310,7 +310,16 @@ struct RegionInventoryPayload: Codable, Sendable {
     let returnedCount: Int?
     let debug: Debug?
 
-    var isComplete: Bool { complete ?? true }
+    /// An ABSENT completeness claim is not a completeness claim.
+    ///
+    /// This defaulted to `true`, which was harmless while `complete` was a hardcoded `false` that
+    /// every producer set. It stopped being harmless the moment completeness began deciding whether
+    /// an absent region is evidence (#576): a payload that says nothing about its own coverage —
+    /// legacy, malformed, or from a producer that has not been taught to report it — would mark the
+    /// cache exhaustively read. Two callers feed this straight into `cache.updateRegions(complete:)`.
+    ///
+    /// Fail closed instead. Silence is not coverage.
+    var isComplete: Bool { complete ?? false }
 
     enum CodingKeys: String, CodingKey {
         case regions
@@ -325,11 +334,18 @@ struct RegionInventoryPayload: Codable, Sendable {
 extension RegionInfo {
     static func decodeInventoryPayload(_ text: String) throws -> RegionInventoryPayload {
         if let direct: [RegionInfo] = try? decodeJSON(text) {
+            // A bare array is the legacy wire shape: a list of regions and nothing else. It makes no
+            // statement about its own coverage, so this decoder must not make one on its behalf.
+            //
+            // It used to synthesise `complete: true, scope: "project"` here — the same fail-open the
+            // `isComplete` default had, one layer down and hardcoded, so flipping that default alone
+            // left this path still asserting a whole-project inventory for input that claimed
+            // nothing. Both callers feed the result into `cache.updateRegions(complete:)`.
             return RegionInventoryPayload(
                 regions: direct,
-                complete: true,
-                scope: "project",
-                reason: nil,
+                complete: false,
+                scope: nil,
+                reason: "legacy_array_payload_declares_no_scope",
                 returnedCount: direct.count,
                 debug: nil
             )

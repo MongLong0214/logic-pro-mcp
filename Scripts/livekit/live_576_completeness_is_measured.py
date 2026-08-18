@@ -114,13 +114,21 @@ ev.check("576/precondition-the-vertical-zoom-slider-is-readable",
          f"value={original_zoom!r}",
          None)
 
-tracks = d.resource("logic://tracks")
-track_count = len(tracks.get("data") or []) if isinstance(tracks, dict) else 0
+# The track count comes from a LIVE AX read, not from `logic://tracks`.
+#
+# That resource is served from the poller's cache, and a run that reads it seconds after the server
+# starts sees whatever has been polled by then — measured on this branch: `track_count=0` on a
+# project with 21 tracks, which failed the precondition and stopped a run that had nothing wrong with
+# it. `get_regions` reports `_debug.track_headers` from `allTrackHeaders()` at call time, which is the
+# same number the completeness rule itself uses.
+probe = d.tool("logic_project", "get_regions", {})
+track_count = ((probe.get("_debug") or {}).get("track_headers") or 0) if isinstance(probe, dict) else 0
 ev.check("576/precondition-enough-tracks-to-overflow-the-viewport",
          track_count >= MIN_TRACKS,
-         f"the project has at least {MIN_TRACKS} tracks, so a loose zoom can push some out of view "
-         "and the two answers are genuinely different situations",
-         f"track_count={track_count}",
+         f"the project has at least {MIN_TRACKS} tracks, read live rather than from the poller's "
+         "cache, so a loose zoom can push some out of view and the two answers are genuinely "
+         "different situations",
+         f"track_headers={track_count}",
          None)
 
 if original_zoom is None or track_count < MIN_TRACKS:
