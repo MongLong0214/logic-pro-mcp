@@ -336,13 +336,28 @@ extension AccessibilityChannel {
                 -- Navigating to + selecting the file can take >1s, so poll the
                 -- Import button into an ENABLED state before clicking rather than
                 -- racing a fixed delay (clicking too early imports nothing and
-                -- leaves the panel open). ~4s (20 x 200ms).
+                -- leaves the panel open).
+                --
+                -- #594: this was 20 x 200ms, and four seconds is enough for a WARM Open panel and
+                -- not for the first one in a freshly created document. Measured five times across
+                -- two locales: every failure was the first import after `project.new`, and every
+                -- retry seconds later reached State A. That is the opening move an agent makes, so
+                -- the operation was failing at first contact and succeeding for anyone who ignored
+                -- its error.
+                --
+                -- 60 x 200ms, and the loop now records WHAT IT SAW rather than only whether it
+                -- clicked, so a timeout can say which of "no panel", "panel but no button" and
+                -- "button never enabled" actually happened.
                 set importClicked to false
-                repeat 20 times
+                set sawPanel to false
+                set sawButton to false
+                repeat 60 times
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
                             set importDlg to first window whose name is "가져오기"
+                            set sawPanel to true
                             set ib to button "가져오기" of UI element 1 of importDlg
+                            set sawButton to true
                             if (enabled of ib) then
                                 click ib
                                 set importClicked to true
@@ -351,7 +366,9 @@ extension AccessibilityChannel {
                         if importClicked is false then
                             try
                                 set importDlg to first window whose name is "Import"
+                                set sawPanel to true
                                 set ib to button "Import" of UI element 1 of importDlg
+                                set sawButton to true
                                 if (enabled of ib) then
                                     click ib
                                     set importClicked to true
@@ -373,7 +390,18 @@ extension AccessibilityChannel {
                             end if
                         end repeat
                     end tell
-                    return "IMPORT_BTN_ERROR: Import button never became enabled (file not selected)"
+                    -- #594: report the observation, not an inference. The old message asserted
+                    -- "(file not selected)" — a cause this code never checked, inferred from the
+                    -- button not enabling. A caller told a cause that was never measured cannot tell
+                    -- a slow panel from a wrong path, and this operation's whole contract is that it
+                    -- does not state what it did not observe.
+                    if sawPanel is false then
+                        return "IMPORT_BTN_ERROR: the Import panel never appeared after the path was accepted"
+                    else if sawButton is false then
+                        return "IMPORT_BTN_ERROR: the Import panel appeared but exposed no Import button"
+                    else
+                        return "IMPORT_BTN_ERROR: the Import button stayed disabled for the whole wait after the path was accepted"
+                    end if
                 end if
                 -- Poll for the tempo dialog (subrole AXDialog) before dismissing
                 -- rather than a fixed delay. ~3s (15 x 200ms).
