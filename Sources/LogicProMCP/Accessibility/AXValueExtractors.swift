@@ -271,6 +271,7 @@ enum AXValueExtractors {
         let armed = extractTrackButtonState(from: header, prefix: "Record", runtime: runtime) ?? false
         let selected = extractSelectedState(header, runtime: runtime) ?? false
         let trackType = inferTrackType(from: header, runtime: runtime)
+        let stack = extractTrackStackState(from: header, runtime: runtime)
 
         return TrackState(
             id: index,
@@ -284,8 +285,83 @@ enum AXValueExtractors {
             pan: extractTrackHeaderPan(from: header, runtime: runtime),
             automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
             color: extractTrackColor(from: header, runtime: runtime),
-            liveIdentityBacked: extractedName.liveIdentityBacked
+            liveIdentityBacked: extractedName.liveIdentityBacked,
+            isStackHeader: stack.isStackHeader,
+            stackCollapsed: stack.collapsed
         )
+    }
+
+    /// What a track header's stack disclosure arrow says about it (#448).
+    ///
+    /// Logic draws an `AXDisclosureTriangle` on the main track of a track stack and nowhere else —
+    /// its own help text on the element reads "Track stack disclosure arrow. Show or hide
+    /// subtracks." Measured on Logic 12.3: exactly one of 46 layout items in the arrange window
+    /// carried one, and disclosing that stack moved the arrangement 21 -> 44 -> 21 headers with
+    /// `AXValue` tracking 0 -> 1 -> 0.
+    ///
+    /// The arrow is READ here and never driven. Its `AXPress` is inert: measured through System
+    /// Events and through a direct in-process `AXUIElementPerformAction` alike, the call answers
+    /// `.success` and the value does not move. Writing `AXValue` does nothing either — the
+    /// attribute reports `settable: false`. Logic's own Edit menu entry is what actuates it.
+    ///
+    /// A header whose children cannot be read returns `(nil, nil)` rather than `false`: "this header
+    /// did not answer" is not "this is not a stack", and publishing the second for the first is how
+    /// an absence becomes a claim.
+    static func extractTrackStackState(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> (isStackHeader: Bool?, collapsed: Bool?) {
+        switch AXHelpers.childrenResult(header, runtime: runtime) {
+        case .failure:
+            return (nil, nil)
+        case .success(let children):
+            var triangle: AXUIElement?
+            // A child whose ROLE will not read is a child we cannot rule out. `getRole` collapses
+            // every failure into `nil`, so using it here would let "this child did not answer" pass
+            // as "this child is not a disclosure arrow" and publish `is_stack_header: false` for a
+            // header nobody actually inspected — the same absence-into-claim this function exists to
+            // refuse one level up.
+            var aChildsRoleWouldNotRead = false
+            for child in children {
+                switch AXHelpers.getAttributeResult(
+                    child, kAXRoleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .success(let role):
+                    guard let role else {
+                        aChildsRoleWouldNotRead = true
+                        continue
+                    }
+                    if role == (kAXDisclosureTriangleRole as String) {
+                        triangle = child
+                    }
+                case .failure:
+                    aChildsRoleWouldNotRead = true
+                }
+                if triangle != nil { break }
+            }
+            guard let triangle else {
+                // No arrow among the children we could identify. That is only "not a stack main
+                // track" if we could identify all of them.
+                return aChildsRoleWouldNotRead ? (nil, nil) : (false, nil)
+            }
+            // `AXValue` reads exactly 0 collapsed / 1 expanded. Any other number is a value this
+            // reader has no interpretation for, and reporting it as expanded — which is what a
+            // truncating `intValue == 0` does to 2, to -1 and to 0.9 — would be an invention, not a
+            // reading.
+            switch AXHelpers.getAttributeResult(
+                triangle, kAXValueAttribute as String, runtime: runtime
+            ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .success(let value):
+                guard let number = value as? NSNumber else { return (true, nil) }
+                switch number.doubleValue {
+                case 0: return (true, true)
+                case 1: return (true, false)
+                default: return (true, nil)
+                }
+            case .failure:
+                return (true, nil)
+            }
+        }
     }
 
     /// Real track-header volume as the public mixer contract (WS3 AC2). Reads

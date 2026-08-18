@@ -72,10 +72,26 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// compat: pre-v3.1.8 JSON snapshots lacking the field decode cleanly).
     var placeholder: Bool?
     var liveIdentityBacked: Bool = true
+    /// Whether this row is the main track of a track stack (#448).
+    ///
+    /// Read from the presence of the header's `AXDisclosureTriangle`, which Logic describes as
+    /// "Track stack disclosure arrow. Show or hide subtracks." — measured on Logic 12.3, where
+    /// exactly one of 21 headers carried it. `nil` means the header could not be examined, which is
+    /// not the same as "not a stack".
+    var isStackHeader: Bool?
+    /// Whether that stack is collapsed, from the disclosure triangle's `AXValue` (#448).
+    ///
+    /// `nil` on any row that is not a stack header, and on one that could not be read. Measured
+    /// live: disclosing the stack through Logic's own menu moved the arrangement 21 -> 44 -> 21
+    /// headers with the arrow's value tracking 0 -> 1 -> 0 and this field following it, so this is
+    /// a readback, not an inference.
+    var stackCollapsed: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, name, type, isMuted, isSoloed, isArmed, isSelected
         case volume, pan, automationMode, color, placeholder
+        case isStackHeader = "is_stack_header"
+        case stackCollapsed = "stack_collapsed"
     }
 }
 
@@ -93,6 +109,8 @@ extension TrackState {
         pan = try container.decode(Double.self, forKey: .pan)
         automationMode = try container.decode(AutomationMode.self, forKey: .automationMode)
         color = try container.decodeIfPresent(String.self, forKey: .color)
+        isStackHeader = try container.decodeIfPresent(Bool.self, forKey: .isStackHeader)
+        stackCollapsed = try container.decodeIfPresent(Bool.self, forKey: .stackCollapsed)
         placeholder = try container.decodeIfPresent(Bool.self, forKey: .placeholder)
         liveIdentityBacked = false
     }
