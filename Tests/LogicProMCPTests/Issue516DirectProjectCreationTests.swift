@@ -50,6 +50,43 @@ struct Issue516DirectProjectCreationTests {
         #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 1))
         #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: nil))
     }
+
+    /// #590 — "blank" means no DOCUMENT, not no window.
+    ///
+    /// A freshly launched Logic shows "Choose a Project". Counting raw windows made that chooser an
+    /// open document, so this route refused from the exact state Logic lands in at launch. Measured
+    /// on 12.3 in English and Korean alike; and File > New driven with the chooser still on screen
+    /// creates the project anyway, so the ambiguity the precondition guards against is not present.
+    @Test("the project chooser is not a document")
+    func chooserDoesNotCountAsAnOpenDocument() {
+        let builder = FakeAXRuntimeBuilder()
+        let chooser = builder.element(59_000)
+        builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+        let koreanChooser = builder.element(59_001)
+        builder.setAttribute(koreanChooser, kAXTitleAttribute as String, "프로젝트 선택")
+        let document = builder.element(59_002)
+        builder.setAttribute(document, kAXTitleAttribute as String, "Untitled 56 - Tracks")
+        let runtime = builder.makeLogicRuntime()
+
+        let choosersOnly = AccessibilityChannel.documentWindowCount(
+            [chooser, koreanChooser], runtime: runtime
+        )
+        #expect(choosersOnly == 0)
+        #expect(AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: choosersOnly))
+
+        let withDocument = AccessibilityChannel.documentWindowCount(
+            [chooser, document], runtime: runtime
+        )
+        #expect(withDocument == 1)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: withDocument))
+
+        // An unreadable window list is still not a blank application: "we could not look" must not
+        // read as "there is nothing there".
+        #expect(AccessibilityChannel.documentWindowCount(nil, runtime: runtime) == nil)
+        #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(
+            windowCount: AccessibilityChannel.documentWindowCount(nil, runtime: runtime)
+        ))
+    }
 }
 
 /// The refusal `project.new` gives when a document is already open.
