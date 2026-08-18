@@ -907,7 +907,14 @@ private func makeSetInstrumentFixture() -> (
         ("mixer.set_output", "I/O routing not yet implemented via AX"),
         ("mixer.toggle_eq", "EQ toggle not yet implemented via AX"),
         ("mixer.reset_strip", "Strip reset not yet implemented via AX"),
-        ("region.select", "Region operations not yet implemented via AX"),
+        // #575: the five unimplemented region operations lost both their routing rows and their
+        // channel arm. An operation nothing implements now answers the same way any unknown one
+        // does, instead of a sentence that reads as a promise.
+        ("region.select", "Unsupported AX operation"),
+        ("region.loop", "Unsupported AX operation"),
+        ("region.set_name", "Unsupported AX operation"),
+        ("region.move", "Unsupported AX operation"),
+        ("region.resize", "Unsupported AX operation"),
         ("plugin.list", "Plugin list reading not yet implemented via AX"),
         ("automation.get_mode", "Automation mode reading not yet implemented via AX"),
         ("automation.set_mode", "Automation mode setting not yet implemented via AX"),
