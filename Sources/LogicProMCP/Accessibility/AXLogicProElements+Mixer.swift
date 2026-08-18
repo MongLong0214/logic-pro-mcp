@@ -191,6 +191,26 @@ extension AXLogicProElements {
         stripEnumeration(in: mixer, runtime: runtime).strips
     }
 
+    /// The strips, but only when the enumeration read EVERY child (#290).
+    ///
+    /// `stripEnumeration` has always counted the children whose role would not read, and every
+    /// caller threw that count away. The comment on it says what the count is for: a dropped child
+    /// moves every later strip down one, and callers address strips by ORDINAL — so a request for
+    /// track 0 acts on physical strip 1, and no readback catches it, because the readback reads the
+    /// same shifted list.
+    ///
+    /// This is ADR-007's rule applied to the one place it is already measurable: resolve exactly, or
+    /// refuse. A caller that indexes the result of this function is indexing a list that was read
+    /// whole.
+    static func mixerChannelStripsIfCompletelyRead(
+        in mixer: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> (strips: [AXUIElement], unreadableChildren: Int)? {
+        let enumeration = stripEnumeration(in: mixer, runtime: runtime)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        return enumeration
+    }
+
     /// The strips, plus whether any child's role could not be read.
     ///
     /// A child whose role is unreadable is dropped by the filter, and every later strip then moves
@@ -232,23 +252,51 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> String? {
+        slotDescription(in: strip, matching: AXLocalePolicy.outputSlotHelpKeyword, runtime: runtime)
+    }
+
+    /// The description of the first slot button whose help matches, or nil.
+    ///
+    /// Shared by the input and output readers so the two cannot drift apart — a second copy of this
+    /// walk is a second place for the "found it but it named nothing" case to be decided differently.
+    private static func slotDescription(
+        in strip: AXUIElement,
+        matching keyword: AXLocalePolicy.LabelSet,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
         let buttons = AXHelpers.findAllDescendants(
             of: strip, role: kAXButtonRole, maxDepth: 4, runtime: runtime
         )
         for button in buttons {
             let help = AXHelpers.getHelp(button, runtime: runtime) ?? ""
-            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: help.lowercased()) else {
-                continue
-            }
+            guard keyword.containsAny(in: help.lowercased()) else { continue }
             guard let description = AXHelpers.getDescription(button, runtime: runtime),
                   !description.isEmpty else {
-                // The slot was found and did not name a destination. That is a gap, not an empty
-                // route, so it reads the same as not finding the slot at all.
+                // The slot was found and did not name anything. That is a gap, not an empty route,
+                // so it reads the same as not finding the slot at all.
                 return nil
             }
             return description
         }
         return nil
+    }
+
+    /// What a channel strip's input slot says its source is (#291).
+    ///
+    /// Same shape as `outputSlotDestination`, and the same refusals: `nil` when no input slot was
+    /// identified, when the slot named nothing, or on a locale whose help string this project has
+    /// not measured. A software-instrument strip has no input slot at all, so `nil` there is the
+    /// truth — but the reader cannot tell that case from the others, and callers are expected to
+    /// treat an absent input as unknown rather than as "no input".
+    ///
+    /// The keyword is the full phrase. Measured on the same strip: an `AXButton` whose help begins
+    /// "Input Monitoring button. Hear incoming signal…" sits beside the input slot, and a match on
+    /// the word "input" alone would publish that toggle as a source.
+    static func inputSlotSource(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> String? {
+        slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
     static func findVolumeFader(

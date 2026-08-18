@@ -87,7 +87,28 @@ extension AccessibilityChannel {
                 hint: "Cannot locate visible mixer for insert_plugin"
             ))
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // #290: this operation indexes the strip list by ORDINAL, so it may only do so when that
+        // list was read whole. A child whose role would not read is dropped by the filter and every
+        // later strip moves down one — a request for track 0 then inserts into physical strip 1, and
+        // no readback catches it because the readback reads the same shifted list. Resolve exactly,
+        // or refuse.
+        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        guard enumeration.unreadableChildren == 0 else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "refusing insert_plugin: \(enumeration.unreadableChildren) mixer child(ren) "
+                    + "would not report a role, so the strip at index \(track) cannot be trusted to "
+                    + "be the strip for that track — a dropped child shifts every later ordinal and "
+                    + "no readback can catch the wrong target.",
+                extras: [
+                    "track": track,
+                    "visible_strips": enumeration.strips.count,
+                    "unreadable_mixer_children": enumeration.unreadableChildren,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        let strips = enumeration.strips
         guard track < strips.count else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
