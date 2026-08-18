@@ -52,15 +52,73 @@ if missing:
     sys.exit(f"cannot run: missing {missing}")
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
-# Measured band over the track-header rail: the arrange window sits at 0,30 and the rail's own AX
-# frame is 603,192 325x406. Every call in this run is a read or a rejected write.
-HEADER_BAND = (603, 162, 325, 406)
 CHOOSER_TITLES = ("Choose a Project", "프로젝트 선택")
 
 
 def osa(script):
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     return (r.stdout or "").strip()
+
+
+_RAIL_FRAME = '''
+tell application "System Events" to tell process "Logic Pro"
+  -- The window is chosen by ELIMINATION rather than by matching its title. `first window whose
+  -- name is …` was measured to answer "invalid index" against a window that `name of every window`
+  -- had just listed, and a lookup that intermittently cannot find what is plainly there is not
+  -- something to build a capture region on.
+  set w to missing value
+  repeat with cand in (every window)
+    set nm to (name of cand as text)
+    if nm does not contain "Choose a Project" and nm does not contain "프로젝트 선택" then
+      set w to contents of cand
+      exit repeat
+    end if
+  end repeat
+  if w is missing value then return "none"
+  set wp to position of w
+  set ec to entire contents of w
+  set out to "none"
+  repeat with e in ec
+    set el to contents of e
+    try
+      if (role of el as text) is equal to "AXLayoutItem" then
+        set t to (first UI element of el whose role is "AXTextField")
+        set p1 to (value of attribute "AXParent" of el)
+        set rail to (value of attribute "AXParent" of p1)
+        set rp to position of rail
+        set rs to size of rail
+        -- `by` is a reserved word in AppleScript; naming a variable that fails to parse.
+        set relX to ((item 1 of rp) - (item 1 of wp)) as integer
+        set relY to ((item 2 of rp) - (item 2 of wp)) as integer
+        set railW to (item 1 of rs) as integer
+        set railH to (item 2 of rs) as integer
+        set out to (relX as text) & "," & (relY as text) & "," & (railW as text) & "," & (railH as text)
+        exit repeat
+      end if
+    end try
+  end repeat
+  return out
+end tell
+'''
+
+
+def header_rail_band():
+    """The track-header rail's own AX frame, in window coordinates, read at run time.
+
+    NOT a constant. A previous version of this file carried `(603, 162, 325, 406)`, measured once on
+    a 1920x1050 window with the Library closed. The window later changed shape and that rectangle
+    landed on the Step Sequencer, which animates on its own — so a NEGATIVE visual assertion over it
+    reported a change and failed a run in which nothing had been written. A band that is a constant
+    is a band that is right until the user resizes something.
+
+    Returns None when the rail cannot be located, which fails a precondition rather than guessing.
+    """
+    raw = osa(_RAIL_FRAME)
+    parts = [p.strip() for p in raw.split(",")]
+    if len(parts) != 4 or not all(p.lstrip("-").isdigit() for p in parts):
+        return None
+    x, y, w, h = (int(p) for p in parts)
+    return (x, y, w, h) if w > 0 and h > 0 else None
 
 
 def windows():
@@ -81,8 +139,19 @@ if not project_windows:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 arrange_title = project_windows[0]
+band = header_rail_band()
+ev.check("592/precondition-the-track-header-rail-can-be-located",
+         band is not None,
+         "the rail's own AX frame is readable, so the visual assertion below watches the track "
+         "headers rather than a rectangle measured on some earlier window shape",
+         f"band={band!r} window={arrange_title!r}", None)
+
+if band is None:
+    d = None
+    print(json.dumps(ev.write(), indent=1)); sys.exit(1)
+
 rec = ev.record_screen(seconds=150)
-before = ev.shot("592/before", settle_region=HEADER_BAND, window_title=arrange_title)
+before = ev.shot("592/before", settle_region=band, window_title=arrange_title)
 
 d = E.Driver()
 time.sleep(4)
@@ -180,9 +249,9 @@ ev.check("592/the-removed-names-did-not-become-reachable",
          # the removal did not BIND them to something rather than free them.
          None)
 
-after = ev.shot("592/after", settle_region=HEADER_BAND, window_title=arrange_title)
+after = ev.shot("592/after", settle_region=band, window_title=arrange_title)
 ev.visual("592/no-project-state-was-touched",
-          before["file"], after["file"], HEADER_BAND, expect_change=False,
+          before["file"], after["file"], band, expect_change=False,
           why="every call in this run is a read or a write rejected before it was attempted, so the "
               "track-header rail must be byte-identical across it — a change here would mean one of "
               "those rejected writes was not rejected")
