@@ -33,6 +33,15 @@ entry, "Undo/Redo Close/Disclose Track Stack", which names the operation it perf
 that name before clicking, so the actuator states its own effect. No coordinates are involved
 anywhere: menu items and AX elements only.
 
+That name is not enough on its own. "Undo Create Track Stack" also contains the words "Track Stack",
+and clicking it DELETES the stack this run exists to read — which is a live possibility, because the
+first run after someone creates the probe stack finds exactly that at the top of the undo history.
+So a candidate is rejected if its action name matches one of Logic's own structural stack commands,
+read from the live Track menu at run time rather than listed here, which keeps the guard working on
+a Logic in any language. And the click is judged on the arrow still EXISTING and its value having
+flipped: a vanished arrow also "differs" from its old value, which is precisely what a mis-aimed
+undo would produce.
+
 The actuator is deliberately NOT the code under test, and it is not the reader either: the arrow is
 read by a separate `swiftc`-built tool (`ax_stack_arrow.swift`) that binds the arrow to the name of
 the track whose header carries it, so "the arrow" and "the row" are the same track by identity
@@ -111,42 +120,91 @@ def press_arrow_and_watch():
         return {"error": (r.stdout or r.stderr or "")[:200]}
 
 
-_MENU_ITEM = '''
+_MENU_NAMES = '''
 tell application "System Events" to tell process "Logic Pro"
-  set mi to (first menu item of menu 1 of menu bar item "Edit" of menu bar 1 ¬
-             whose name starts with "%s" and name contains "Track Stack")
-  set nm to (name of mi as text)
-  %s
-  return nm
+  set out to ""
+  repeat with mi in (every menu item of menu 1 of menu bar item "%s" of menu bar 1)
+    try
+      set out to out & (name of mi as text) & linefeed
+    end try
+  end repeat
+  return out
+end tell
+'''
+
+_CLICK_EXACT = '''
+tell application "System Events" to tell process "Logic Pro"
+  click (first menu item of menu 1 of menu bar item "Edit" of menu bar 1 whose name is "%s")
+  delay 2.5
+  return "clicked"
 end tell
 '''
 
 
-def disclosure_menu_titles():
-    """What Logic says its Undo and Redo entries would do, so the actuator names its own effect."""
-    titles = {}
+def menu_item_names(bar):
+    out, _ = osa(_MENU_NAMES % bar)
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def structural_stack_commands():
+    """Logic's OWN stack commands, read from the Track menu at run time.
+
+    These are the entries whose undo must never be mistaken for a disclosure: undoing
+    "Create Track Stack" DELETES the stack this run exists to read. Reading them from the live menu
+    rather than listing them here keeps the guard working on a Logic in any language, because both
+    sides of the comparison come from the same localized menu bar.
+    """
+    return [name.rstrip("\u2026.").strip() for name in menu_item_names("Track")]
+
+
+def disclosure_candidates():
+    """Edit-menu Undo/Redo entries that are safe to click, with the reason any rejected one failed.
+
+    An entry qualifies only if it names a track-stack action AND is not the undo of one of Logic's
+    structural stack commands. The earlier version of this harness filtered on `name contains "Track
+    Stack"` alone; `Undo Create Track Stack` satisfies that, and clicking it destroys the stack. The
+    predicate now says what the check claims.
+    """
+    banned = [name for name in structural_stack_commands() if name]
+    out = {"accepted": {}, "rejected": {}}
     for verb in ("Undo", "Redo"):
-        out, _ = osa(_MENU_ITEM % (verb, ""))
-        if out:
-            titles[verb] = out
-    return titles
+        for title in menu_item_names("Edit"):
+            if not title.startswith(verb) or "Track Stack" not in title:
+                continue
+            action = title[len(verb):].strip().rstrip("\u2026.").strip()
+            hit = next((b for b in banned if action == b or action.endswith(b)), None)
+            if hit:
+                out["rejected"][title] = f"names Logic's own {hit!r} command, not a disclosure"
+            else:
+                out["accepted"][verb] = title
+            break
+    return out
 
 
 def toggle_disclosure():
     """Flip the stack open or closed through Logic's own menu, and say which entry did it.
 
-    Tries Undo first, then Redo. Success is judged on the arrow MOVING, never on the click
-    returning: this whole harness exists because an actuation that reports success and changes
-    nothing is the failure mode in play.
+    Success is judged on the arrow still EXISTING and its value having flipped — never on the click
+    returning, and never on the value merely differing. A vanished arrow also "differs" from its old
+    value, and that is exactly what a mis-aimed undo would produce.
     """
-    before = arrow_state().get("value")
+    before = arrow_state()
+    candidates = disclosure_candidates()
     for verb in ("Undo", "Redo"):
-        out, _ = osa(_MENU_ITEM % (verb, "click mi\n  delay 2.5"))
-        if not out:
+        title = candidates["accepted"].get(verb)
+        if not title:
             continue
-        if arrow_state().get("value") != before:
-            return {"verb": verb, "title": out, "moved": True}
-    return {"verb": None, "title": None, "moved": False}
+        osa(_CLICK_EXACT % title.replace('"', '\\"'))
+        after = arrow_state()
+        if after.get("arrows") != 1:
+            return {"verb": verb, "title": title, "moved": False,
+                    "catastrophic": f"the arrow is gone after this click (arrows="
+                                    f"{after.get('arrows')!r}) — the stack itself may have been "
+                                    f"changed, not disclosed",
+                    "candidates": candidates}
+        if isinstance(after.get("value"), int) and after["value"] != before.get("value"):
+            return {"verb": verb, "title": title, "moved": True, "candidates": candidates}
+    return {"verb": None, "title": None, "moved": False, "candidates": candidates}
 
 
 def read_tracks_after(driver, floor_ts, tag):
@@ -230,14 +288,24 @@ ev.check("448/precondition-the-project-has-exactly-one-track-stack",
          "cannot create or remove one without a write this change does not expose",
          f"{start!r}", None)
 
-menu_titles = disclosure_menu_titles()
-ev.check("448/precondition-logic-offers-its-own-disclosure-command",
-         any("Track Stack" in t for t in menu_titles.values()),
-         "Logic's Edit menu offers an entry that names the track-stack disclosure, which is the "
-         "only coordinate-free actuator for it — the arrow's own AXPress is inert",
-         f"{menu_titles!r}", None)
+ev.check("448/precondition-the-stack-starts-closed",
+         start.get("value") == 0,
+         "the run begins with the stack collapsed, which is what makes 'headers went up' and "
+         "'collapsed went false' the expected directions below — a leftover open stack from an "
+         "earlier run would invert both and is refused here rather than misread there",
+         f"arrow value={start.get('value')!r}", None)
 
-if not (start.get("arrows") == 1 and any("Track Stack" in t for t in menu_titles.values())):
+candidates = disclosure_candidates()
+ev.check("448/precondition-logic-offers-a-disclosure-command-that-is-not-a-structural-one",
+         bool(candidates["accepted"]),
+         "at least one Edit-menu Undo/Redo entry names a track-stack action that is NOT the undo of "
+         "one of Logic's own structural stack commands, read from the live Track menu. Undoing "
+         "'Create Track Stack' also contains the words 'Track Stack' and would DELETE the stack "
+         "this run reads, so accepting it would destroy the subject rather than actuate it",
+         f"accepted={candidates['accepted']!r} rejected={candidates['rejected']!r} "
+         f"structural={structural_stack_commands()!r}", None)
+
+if not (start.get("arrows") == 1 and start.get("value") == 0 and candidates["accepted"]):
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 inert = press_arrow_and_watch()
@@ -325,12 +393,14 @@ try:
     after_arrow = arrow_state()
     after_shot = ev.shot("448/open", settle_region=QUIET_BAND)
     ev.note("448/actuation", {"menu": toggle, "arrow": [start.get("value"), after_arrow.get("value")],
+                              "arrows": [start.get("arrows"), after_arrow.get("arrows")],
                               "rows": [first_total, after_total], "fresh": after_fresh})
 
     ev.check("448/logic-itself-disclosed-the-stack",
              toggle.get("moved") is True
-             and after_arrow.get("value") is not None
+             and isinstance(after_arrow.get("value"), int)
              and after_arrow.get("value") != start.get("value")
+             and after_arrow.get("arrows") == 1
              and after_total > first_total,
              "the menu entry Logic named actually ran: the arrow's value flipped and the "
              "arrangement now has more track headers, because the subtracks appeared. Without this "

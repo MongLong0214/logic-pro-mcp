@@ -72,6 +72,15 @@ struct StateModelsCodableTests {
         #expect(!wire.contains("\"isStackHeader\""))
         #expect(!wire.contains("\"stackCollapsed\""))
 
+        // `false` has to reach the wire as `false`. Pinning only `true` would pass an encoder that
+        // dropped `false` the way it drops `nil` — and a consumer reading an absent key cannot tell
+        // "this stack is open" from "this row was never examined", which is the whole distinction.
+        let openStack = string(try encoder().encode(TrackState(
+            id: 0, name: "Absolute Zero", type: .softwareInstrument,
+            isStackHeader: true, stackCollapsed: false)))
+        #expect(openStack.contains("\"is_stack_header\":true"))
+        #expect(openStack.contains("\"stack_collapsed\":false"))
+
         // A plain row must not emit the keys at all: an omitted key is how a consumer tells "not
         // examined" from `false`, and an always-present `false` would erase that difference.
         let plain = string(try encoder().encode(TrackState(id: 1, name: "Studio Grand", type: .audio)))
