@@ -134,6 +134,92 @@ private func makeRegionFixture(
     #expect(obj["observed"] as? Int == 9)
 }
 
+/// The pre- and post-reads both ask for "the selected region". Nothing in Logic guarantees that is
+/// the SAME region across the menu click, and `startBar` cannot be the identity that decides it —
+/// it is the property this operation exists to change.
+///
+/// Without a same-region gate, a selection that drifted mid-click certifies State A on a region the
+/// caller never asked about, purely because it happens to sit on the playhead. That is a false
+/// State A: performed, and "verified" against the wrong subject.
+@Test func testMoveToPlayheadRefusesStateAWhenTheSelectionDrifted() async {
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    // Already sitting on the playhead, on a different track. If the gate only compared startBar to
+    // the playhead, this region would satisfy it.
+    let regionBHelp = "리전은 9 마디 에서 시작하여 11 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40)), (axPoint(0, 200), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp, pos: axPoint(240, 108),
+             size: axSize(320, 24), selected: true),
+            (name: "RegionB", help: regionBHelp, pos: axPoint(900, 208),
+             size: axSize(320, 24), selected: false),
+        ],
+        playheadPosition: "9.1.1.1"
+    )
+
+    let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
+        runtime: fixture.runtime,
+        executeScript: { _ in
+            // Logic's selection moves to RegionB during the click. RegionA never moves.
+            fixture.builder.setAttribute(
+                fixture.builder.element(3_000), kAXSelectedAttribute as String, false
+            )
+            fixture.builder.setAttribute(
+                fixture.builder.element(3_001), kAXSelectedAttribute as String, true
+            )
+            return .success("OK")
+        },
+        settle: { /* skip in tests */ }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    let verified = obj["verified"] as? Bool ?? true
+    #expect(!verified)
+    #expect(obj["state"] as? String == "B")
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    // The envelope has to say WHICH region it ended up looking at, or the caller cannot tell this
+    // from a region that simply failed to move.
+    #expect(obj["region_name"] as? String == "RegionA")
+    #expect(obj["post_region_name"] as? String == "RegionB")
+}
+
+/// A region the enumeration could not place against any track header reports `trackIndex == -1`.
+/// That is a readback gap, and a gap is not a match — pairing it with an equal name would let two
+/// different unplaced regions certify each other.
+@Test func testMoveToPlayheadRefusesStateAWhenTheTrackCannotBePlaced() async {
+    let preHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let postHelp = "리전은 9 마디 에서 시작하여 11 마디 에서 끝납니다., MIDI 리전."
+
+    // No track headers at all, so every region's trackIndex resolves to -1.
+    let fixture = makeRegionFixture(
+        headers: [],
+        regions: [(
+            name: "RegionA", help: preHelp, pos: axPoint(240, 108),
+            size: axSize(320, 24), selected: true
+        )],
+        playheadPosition: "9.1.1.1"
+    )
+
+    let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
+        runtime: fixture.runtime,
+        executeScript: { _ in
+            fixture.builder.setAttribute(
+                fixture.builder.element(3_000), kAXHelpAttribute as String, postHelp
+            )
+            return .success("OK")
+        },
+        settle: { /* skip in tests */ }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    let verified = obj["verified"] as? Bool ?? true
+    #expect(!verified)
+    #expect(obj["pre_track_index"] as? Int == -1)
+}
+
 @Test func testMoveToPlayheadReturnsStateBOnMismatch() async {
     // Pre: bar 1. Action moves region to bar 5 but playhead is at bar 9 →
     // post.startBar(5) ≠ playhead(9) → State B readback_mismatch.
