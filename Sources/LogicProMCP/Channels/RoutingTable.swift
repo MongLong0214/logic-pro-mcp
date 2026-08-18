@@ -86,13 +86,16 @@ extension ChannelRouter {
         "mixer.get_state":            [.mcu, .accessibility],
         "mixer.set_volume":           [.accessibility],
         "mixer.set_pan":              [.accessibility],
+        // #575: `mixer.set_output_volume`, `mixer.get_bus_routing` and `automation.get_parameter`
+        // were removed from this table. Each had no caller AND no implementation — the channel they
+        // named answers `Unsupported AX operation` / `Unknown MCU operation` for them, so a caller
+        // who found one would have reached an exhausted chain. That is a stronger case than the two
+        // system entries retired earlier, which at least had a channel that would have answered.
         "mixer.set_send":             [.mcu],
         "mixer.set_output":           [.accessibility],
         "mixer.set_input":            [.accessibility],
         "mixer.get_channel_strip":    [.mcu, .accessibility],
         "mixer.set_master_volume":    [.mcu],
-        "mixer.set_output_volume":    [.mcu],
-        "mixer.get_bus_routing":      [.accessibility],
         "mixer.toggle_eq":            [.mcu, .accessibility],
         "mixer.reset_strip":          [.mcu, .accessibility],
         "mixer.set_plugin_param":     [.scripter],  // public path narrowed to deterministic Scripter flow
@@ -257,7 +260,6 @@ extension ChannelRouter {
         "automation.get_mode":        [.accessibility],
         "automation.set_mode":        [.mcu, .midiKeyCommands, .cgEvent],
         "automation.toggle_view":     [.midiKeyCommands, .cgEvent],
-        "automation.get_parameter":   [.accessibility],
 
         // Note manipulation
         "note.up_semitone":           [.midiKeyCommands, .cgEvent],
