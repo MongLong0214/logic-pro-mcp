@@ -721,6 +721,79 @@ extension AccessibilityChannel {
             && folderRadioCount == 1
     }
 
+    /// Press Escape so a refusal does not leave a modal behind (#604).
+    ///
+    /// Logic's Save panel exposes no buttons a caller can reach — `dialog_buttons: []` — so there is
+    /// nothing to click and nothing to cancel by name. Escape is what clears it.
+    private static func escapeAnyOpenPanel(runtime: AXLogicProElements.Runtime) async {
+        _ = await AppleScriptChannel.executeAppleScript("""
+        tell application "System Events"
+            tell \(LogicProTarget.appleScriptTarget().systemEventsProcessTarget)
+                set frontmost to true
+            end tell
+            delay 0.2
+            key code 53
+        end tell
+        return "escaped"
+        """)
+    }
+
+    /// What each candidate window looked like to the classifier (#604).
+    ///
+    /// The refusal used to say only that no panel appeared. A rule with seven conjuncts reporting one
+    /// bit cannot be diagnosed from its own output — it sent me to look at timing, and the timing was
+    /// fine: the panel was on screen in 0.75s and failed a single clause.
+    static func saveAsDialogCandidateShapes(
+        runtime: AXLogicProElements.Runtime
+    ) -> [[String: Any]] {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
+        var candidates: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) ?? []
+        if let main = AXLogicProElements.mainWindow(runtime: runtime) {
+            for child in AXHelpers.getChildren(main, runtime: runtime.ax) {
+                let role = AXHelpers.getRole(child, runtime: runtime.ax)
+                guard role == (kAXSheetRole as String) || role == (kAXWindowRole as String) else {
+                    continue
+                }
+                if !candidates.contains(where: { CFEqual($0, child) }) { candidates.append(child) }
+            }
+        }
+        return candidates.map { candidate in
+            let filenameFields = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
+            ).filter { AXHelpers.getDescription($0, runtime: runtime.ax) == "text field" }
+            let buttons = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+            )
+            let saveButtons = buttons.filter {
+                AXLocalePolicy.elementMatches($0, AXLocalePolicy.saveConfirmationButton, runtime: runtime.ax)
+            }
+            let radios = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXRadioButtonRole as String, maxDepth: 12, runtime: runtime.ax
+            )
+            let enabled: Bool? = saveButtons.first.flatMap {
+                AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
+            }
+            return [
+                "title": AXHelpers.getTitle(candidate, runtime: runtime.ax) ?? "",
+                "role": AXHelpers.getRole(candidate, runtime: runtime.ax) ?? "",
+                "filename_fields": filenameFields.count,
+                "save_buttons": saveButtons.count,
+                "save_enabled": enabled ?? false,
+                "cancel_buttons": buttons.filter {
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.cancelButton, runtime: runtime.ax)
+                }.count,
+                "package_radios": radios.filter {
+                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Package"
+                }.count,
+                "folder_radios": radios.filter {
+                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Folder"
+                }.count,
+            ]
+        }
+    }
+
     private static func exactSaveAsDialog(
         runtime: AXLogicProElements.Runtime
     ) -> AXUIElement? {
@@ -809,7 +882,21 @@ extension AccessibilityChannel {
         }
 
         guard let saveDialog = dialog else {
-            return .error("Exact Save As dialog did not appear within 3 seconds")
+            // #604: a refusal must not leave the panel up. The old code returned here — before
+            // `dismissDialog` is even defined — and every later operation then refused with
+            // `preflight_blocking_dialog` on a "Save" window that exposes no buttons a caller could
+            // answer with. Escape is the only thing that clears it.
+            let shapes = saveAsDialogCandidateShapes(runtime: runtime)
+            await escapeAnyOpenPanel(runtime: runtime)
+            let described = shapes
+                .filter { !(($0["title"] as? String) ?? "").isEmpty }
+                .map { "\($0)" }
+                .joined(separator: " | ")
+            return .error(
+                "Save As panel was not recognised. Candidates seen: "
+                + (described.isEmpty ? "none" : described)
+                + ". The panel, if one opened, has been dismissed."
+            )
         }
 
         // Helper: dismiss dialog on failure (press Escape to avoid blocking UI)
