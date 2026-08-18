@@ -191,6 +191,26 @@ extension AXLogicProElements {
         stripEnumeration(in: mixer, runtime: runtime).strips
     }
 
+    /// The strips, but only when the enumeration read EVERY child (#290).
+    ///
+    /// `stripEnumeration` has always counted the children whose role would not read, and every
+    /// caller threw that count away. The comment on it says what the count is for: a dropped child
+    /// moves every later strip down one, and callers address strips by ORDINAL — so a request for
+    /// track 0 acts on physical strip 1, and no readback catches it, because the readback reads the
+    /// same shifted list.
+    ///
+    /// This is ADR-007's rule applied to the one place it is already measurable: resolve exactly, or
+    /// refuse. A caller that indexes the result of this function is indexing a list that was read
+    /// whole.
+    static func mixerChannelStripsIfCompletelyRead(
+        in mixer: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> (strips: [AXUIElement], unreadableChildren: Int)? {
+        let enumeration = stripEnumeration(in: mixer, runtime: runtime)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        return enumeration
+    }
+
     /// The strips, plus whether any child's role could not be read.
     ///
     /// A child whose role is unreadable is dropped by the filter, and every later strip then moves
