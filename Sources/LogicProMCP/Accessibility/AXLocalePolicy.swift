@@ -951,6 +951,24 @@ enum AXLocalePolicy {
     )
 
     /// Region detection by AXHelp keyword.
+    /// Identifies a channel strip's OUTPUT slot by its AXHelp string (#291).
+    ///
+    /// Measured on Logic Pro 12.3, English: the slot is an `AXButton` whose help reads "Output slot.
+    /// Click and hold to choose the channel strip output…" and whose DESCRIPTION carries the current
+    /// destination ("Stereo Output"). The send slot beside it is described only as "send button" and,
+    /// when empty, exposes no `AXValue`, `AXValueDescription` or `AXTitle` at all — so an output can
+    /// be read and a send destination cannot.
+    ///
+    /// Only the English rendering is measured. A Logic in another language yields no match, which
+    /// makes the reader report nothing rather than guess — and the caller sees an absent output
+    /// rather than a wrong one. The variants list grows when a locale is actually observed, not when
+    /// one is translated.
+    static let outputSlotHelpKeyword = LabelSet(
+        canonical: "output slot",
+        variants: [],
+        rationale: "Detects a channel strip's output slot by its AXHelp string; read-only classifier."
+    )
+
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
         variants: ["리전"],

@@ -217,6 +217,40 @@ extension AXLogicProElements {
             : (layoutItems, unreadable)
     }
 
+    /// What a channel strip's output slot says it is routed to (#291).
+    ///
+    /// Returns the slot button's `AXDescription` — measured on Logic Pro 12.3 as "Stereo Output" for
+    /// a track going to the main output. `nil` means no output slot was identified, which is the
+    /// honest answer on a Logic whose help strings this project has not measured, or on a strip whose
+    /// buttons did not read. An absent output is not the same as a track routed nowhere, and callers
+    /// are expected to treat it as unknown.
+    ///
+    /// Sends deliberately have no counterpart here. The send slot is an `AXButton` described only as
+    /// "send button", and an empty one exposes no `AXValue`, `AXValueDescription` or `AXTitle` — so
+    /// there is nothing to read a destination from, and this file does not pretend otherwise.
+    static func outputSlotDestination(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> String? {
+        let buttons = AXHelpers.findAllDescendants(
+            of: strip, role: kAXButtonRole, maxDepth: 4, runtime: runtime
+        )
+        for button in buttons {
+            let help = AXHelpers.getHelp(button, runtime: runtime) ?? ""
+            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: help.lowercased()) else {
+                continue
+            }
+            guard let description = AXHelpers.getDescription(button, runtime: runtime),
+                  !description.isEmpty else {
+                // The slot was found and did not name a destination. That is a gap, not an empty
+                // route, so it reads the same as not finding the slot at all.
+                return nil
+            }
+            return description
+        }
+        return nil
+    }
+
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
