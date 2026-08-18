@@ -35,8 +35,23 @@ extension AccessibilityChannel {
     }
 
     enum MIDIImportRegionReadback {
-        case success([RegionInfo])
+        /// The regions read, and whether that read covered the WHOLE arrangement.
+        ///
+        /// The completeness travelled with the enumeration all along and was dropped at this call
+        /// site — which is why an import that worked, on a project larger than the viewport, was
+        /// reported as a definite failure (#576). It is carried now.
+        case success([RegionInfo], complete: Bool)
         case failure(String)
+
+        var regions: [RegionInfo]? {
+            if case .success(let regions, _) = self { return regions }
+            return nil
+        }
+
+        var isComplete: Bool {
+            if case .success(_, let complete) = self { return complete }
+            return false
+        }
     }
 
     private static func defaultMIDIImportRegionInfos(
@@ -44,7 +59,7 @@ extension AccessibilityChannel {
     ) -> MIDIImportRegionReadback {
         switch enumerateRegionItems(runtime: runtime) {
         case .success(let result):
-            return .success(result.regions.map { $0.info })
+            return .success(result.regions.map { $0.info }, complete: result.coversWholeArrangement)
         case .failure(let error):
             return .failure(error.message)
         }
@@ -177,7 +192,7 @@ extension AccessibilityChannel {
         let beforeRegions: [RegionInfo]?
         let beforeRegionError: String?
         switch beforeRegionRead {
-        case .success(let regions):
+        case .success(let regions, _):
             beforeRegions = regions
             beforeRegionError = nil
         case .failure(let error):
@@ -480,11 +495,16 @@ extension AccessibilityChannel {
             var afterRegionError: String?
             var addedRegions: [RegionInfo] = []
             var importedRegions: [RegionInfo] = []
+            // Whether the LAST successful post-write read covered the whole arrangement. Only that
+            // reading decides the verdict below, so a stale completeness from an earlier attempt
+            // must not survive into it.
+            var afterReadbackComplete = false
             for attempt in 0..<10 {
                 switch readRegionInfos() {
-                case .success(let regions):
+                case .success(let regions, let complete):
                     afterRegions = regions
                     afterRegionError = nil
+                    afterReadbackComplete = complete
                     addedRegions = addedMIDIRegionsForImport(
                         afterRegions: regions,
                         beforeRegionKeys: beforeRegionKeys
@@ -565,6 +585,22 @@ extension AccessibilityChannel {
                 // something was created, and the region could not be confirmed by an instrument that
                 // cannot see the whole arrangement. It is deliberately not conditional on a project
                 // size — the reader never claims completeness, so an empty answer is never proof.
+                // #576 made this branch State B unconditionally, because completeness was a hardcoded
+                // `false` and an absent region could never be told from an unseen one. It is measured
+                // now, so the sharper verdict comes back for the case where it is knowable: a readback
+                // that covered the WHOLE arrangement and still found no imported region is evidence
+                // that none was created.
+                guard !afterReadbackComplete else {
+                    extras["region_readback_complete"] = true
+                    extras["region_readback_scope"] = "whole_arrangement"
+                    return .error(HonestContract.encodeStateC(
+                        error: .readbackMismatch,
+                        hint: "midi.import_file created a new track but did not create a verifiable "
+                            + "MIDI region. The region readback covered the whole arrangement, so "
+                            + "this is an absence that was looked for, not one that was out of view.",
+                        extras: extras
+                    ))
+                }
                 extras["region_readback_complete"] = false
                 extras["region_readback_scope"] = AccessibilityChannel.regionReadbackScope
                 extras["region_readback_limit"] = AccessibilityChannel.regionReadbackLimitReason

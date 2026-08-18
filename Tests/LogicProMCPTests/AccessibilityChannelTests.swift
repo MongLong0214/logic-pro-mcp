@@ -272,7 +272,7 @@ private final class MIDIRegionReadbackSequence: @unchecked Sendable {
     func next() -> AccessibilityChannel.MIDIImportRegionReadback {
         lock.lock()
         defer { lock.unlock() }
-        guard !values.isEmpty else { return .success([]) }
+        guard !values.isEmpty else { return .success([], complete: false) }
         if values.count == 1 { return values[0] }
         return values.removeFirst()
     }
@@ -2207,7 +2207,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
             return .error("should not run")
         },
         trackCount: { 1 },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
 
@@ -2242,7 +2242,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
         path: tempFile.path,
         executeScript: { _ in .error(denied) },
         trackCount: { 1 },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
 
@@ -2388,7 +2388,7 @@ private func makeTempoSliderFixture(
         path: tempFile.path,
         executeScript: { _ in .success("OK") },
         trackCount: { 3 },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
 
@@ -2412,8 +2412,8 @@ private func makeTempoSliderFixture(
     }
     let counter = Counter()
     let regions = MIDIRegionReadbackSequence([
-        .success([]),
-        .success([midiRegionForImport(trackIndex: 2)]),
+        .success([], complete: false),
+        .success([midiRegionForImport(trackIndex: 2)], complete: false),
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
@@ -2477,8 +2477,8 @@ private func makeTempoSliderFixture(
     }
     let counter = Counter()
     let regions = MIDIRegionReadbackSequence([
-        .success([]),
-        .success([midiRegionForImport(trackIndex: 1)]),
+        .success([], complete: false),
+        .success([midiRegionForImport(trackIndex: 1)], complete: false),
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
@@ -2525,8 +2525,8 @@ private func makeTempoSliderFixture(
     }
     let counter = Counter()
     let regions = MIDIRegionReadbackSequence([
-        .success([]),
-        .success([midiRegionForImport(trackIndex: 1)]),
+        .success([], complete: false),
+        .success([midiRegionForImport(trackIndex: 1)], complete: false),
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
@@ -2568,7 +2568,7 @@ private func makeTempoSliderFixture(
         executeScript: { _ in .success(#"{"result":"DIALOG_NOT_FOUND: file-open sheet did not appear"}"#) },
         trackCount: { spy.read() },
         trackNames: { [] },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
 
@@ -2593,7 +2593,7 @@ private func makeTempoSliderFixture(
         executeScript: { _ in .success("OK") },
         trackCount: { 0 },
         trackNames: { [] },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
     #expect(!result.isSuccess)

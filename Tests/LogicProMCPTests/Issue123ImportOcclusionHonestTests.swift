@@ -37,7 +37,7 @@ private final class Issue123MIDIRegionReadbackSequence: @unchecked Sendable {
     func next() -> AccessibilityChannel.MIDIImportRegionReadback {
         lock.lock()
         defer { lock.unlock() }
-        guard !values.isEmpty else { return .success([]) }
+        guard !values.isEmpty else { return .success([], complete: false) }
         if values.count == 1 { return values[0] }
         return values.removeFirst()
     }
@@ -103,7 +103,7 @@ func testOccludedSessionFailsClosedWithDialogNotFound(sentinel: String) async th
         executeScript: { _ in .success(sentinel) },
         trackCount: { spy.read() },
         trackNames: { [] },
-        regionInfos: { .success([]) },
+        regionInfos: { .success([], complete: false) },
         deltaPoll: {}
     )
 
@@ -152,8 +152,8 @@ func testOccludedSessionFailsClosedWithDialogNotFound(sentinel: String) async th
     }
     let counter = Counter()
     let regions = Issue123MIDIRegionReadbackSequence([
-        .success([]),
-        .success([issue123MIDIRegion(trackIndex: 4)]),
+        .success([], complete: false),
+        .success([issue123MIDIRegion(trackIndex: 4)], complete: false),
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(

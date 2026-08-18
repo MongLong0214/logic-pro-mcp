@@ -213,7 +213,7 @@ struct Issue519FileMenuDriveSiteTests {
             },
             trackCount: { 0 },
             trackNames: { [] },
-            regionInfos: { .success([]) },
+            regionInfos: { .success([], complete: false) },
             deltaPoll: {}
         )
         for label in AXLocalePolicy.fileMenuBar.labels {
