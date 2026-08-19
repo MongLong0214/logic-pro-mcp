@@ -28,6 +28,11 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: AX lookups that keep one candidate must not increase
+        # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
+        # nothing about the rest, and they cannot convert at once. The bar only moves down.
+        run: python3 Scripts/check-ax-locator-census.py
+
       - name: Public docs may not claim an unqualified Logic variant
         # shipVariants is [.desktop]; the README said "Same MCP server controls both". The variant
         # list is read from the attestation rather than repeated, so the check cannot go stale in
@@ -98,6 +103,11 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: AX lookups that keep one candidate must not increase
+        # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
+        # nothing about the rest, and they cannot convert at once. The bar only moves down.
+        run: python3 Scripts/check-ax-locator-census.py
 
       - name: Public docs may not claim an unqualified Logic variant
         # shipVariants is [.desktop]; the README said "Same MCP server controls both". The variant
