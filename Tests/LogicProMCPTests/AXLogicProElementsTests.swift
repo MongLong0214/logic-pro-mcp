@@ -294,6 +294,67 @@ import Testing
     #expect(AXLogicProElements.findControlBarBeatSlider(runtime: runtime) == beatSlider)
 }
 
+/// #628: two groups labelled "Control Bar" must not resolve by tree order either.
+///
+/// Measured on one arrange window: (10, 54, 1900, 58) with twenty direct checkboxes and
+/// (828, 58, 264, 48) with none. The walk reaches the real one first today, which is why nothing
+/// ever went wrong and why nothing ever recorded that it was luck. The discriminator is the
+/// property callers depend on — this is the bar you can find a transport control in.
+@Test func testControlBarPrefersTheLabelledGroupThatHoldsControls() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(910)
+    let window = builder.element(911)
+    let decoyBar = builder.element(912)
+    let realBar = builder.element(913)
+    let cycle = builder.element(914)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    // The empty one FIRST, so passing by traversal order is not enough.
+    builder.setChildren(window, [decoyBar, realBar])
+    for bar in [decoyBar, realBar] {
+        builder.setAttribute(bar, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(bar, kAXDescriptionAttribute as String, "Control Bar")
+    }
+    builder.setChildren(realBar, [cycle])
+    builder.setAttribute(cycle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(cycle, kAXTitleAttribute as String, "Cycle")
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.getControlBar(runtime: runtime) == realBar)
+    #expect(AXLogicProElements.findControlBarCheckbox(
+        matching: AXLocalePolicy.transportCycleControl,
+        runtime: runtime
+    ) == cycle)
+}
+
+/// Two labelled bars that BOTH hold controls is a tree this code has never seen. It refuses rather
+/// than guessing, and every caller fails closed on nil.
+@Test func testControlBarRefusesTwoBarsThatBothHoldControls() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(920)
+    let window = builder.element(921)
+    let firstBar = builder.element(922)
+    let secondBar = builder.element(923)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setChildren(window, [firstBar, secondBar])
+    for (index, bar) in [firstBar, secondBar].enumerated() {
+        builder.setAttribute(bar, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(bar, kAXDescriptionAttribute as String, "Control Bar")
+        let box = builder.element(930 + index)
+        builder.setAttribute(box, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(box, kAXTitleAttribute as String, "Cycle")
+        builder.setChildren(bar, [box])
+    }
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.getControlBar(runtime: runtime) == nil)
+}
+
 /// #628: two checkboxes in the Control Bar carrying the same label must not resolve by tree order.
 ///
 /// Measured on one arrange window, "Solo" matches TWENTY checkboxes — one in the Control Bar and
