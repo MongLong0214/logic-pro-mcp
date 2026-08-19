@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Prove `is_clean` against the runs it is supposed to refuse.
+"""Prove `is_clean` and `_safe_name` against the things they are supposed to refuse.
 
 `is_clean` decides whether a live run may be reported as passing, and nothing exercised it. Its
 whole failure mode is the quiet one: a clause that looks strict and is satisfied by a run that
 never did the thing. So the cases below are mostly runs that DID NOTHING, in the several shapes
 that used to come back clean.
 
-    python3 test_evidence_is_clean.py
+    python3 test_evidence.py
 """
 import os
 import sys
@@ -79,6 +79,47 @@ for value, should_count in [("the control bar strip", 0), ("", 1), ("   ", 1),
     ok = n == should_count
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} subject={value!r:<24} counted-as-missing={n} expected {should_count}")
+
+# --- #619: the document name is a PATH COMPONENT -----------------------------------------------
+#
+# `name` used to live only inside the JSON. Once it became part of a filename, an unconstrained
+# value escaped the head directory: Evidence(..., name="../escaped") wrote into the evidence ROOT,
+# where the gate never looks and nothing notices. The reason is in `_safe_name`'s docstring; this is
+# the part that fails when someone simplifies it away.
+#
+# What this DOES and DOES NOT demonstrate, measured by mutating evidence.py and re-running:
+#
+#   remove `os.path.basename`          NOT caught — the regex already rewrites "/" to "_"
+#   let the regex keep "/"             NOT caught — basename already strips the directory
+#   remove BOTH                        caught, six cases: "../escaped" lands outside the head dir
+#
+# So neither sanitiser is individually load-bearing; they cover each other completely, and no test
+# can show either one earning its place. That is worth saying rather than leaving as an implied
+# "both are guarded". What is asserted below is the PROPERTY — whatever a caller passes, the
+# document is a single component inside the head directory — which is the thing #619 is about.
+HEAD_DIR = "/evidence/abc123"
+for raw, why in [
+    ("../escaped", "parent traversal"),
+    ("../../../../etc/passwd", "deep traversal"),
+    ("/etc/passwd", "absolute path"),
+    ("a/b/c", "nested path"),
+    ("..", "bare parent"),
+    ("...", "leading dots only"),
+    (".hidden", "leading dot"),
+    ("", "empty"),
+    ("   ", "whitespace only"),
+    (None, "not a string"),
+    ("x" * 500, "absurdly long"),
+    ("na/me;rm -rf$(x)`y`", "shell metacharacters"),
+]:
+    stem = E._safe_name(raw)
+    landed = os.path.normpath(os.path.join(HEAD_DIR, f"{stem}.evidence.json"))
+    inside = os.path.dirname(landed) == HEAD_DIR
+    single = stem and os.path.basename(stem) == stem and stem not in (".", "..")
+    bounded = len(stem) <= 80
+    ok = bool(inside and single and bounded)
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} name={str(raw)[:28]!r:<32} -> {stem[:28]!r:<30} {why}")
 
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)
