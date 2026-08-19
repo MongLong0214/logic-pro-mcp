@@ -57,6 +57,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import time
 
 # Set by the harness before use.
@@ -70,6 +71,18 @@ _SETTLE_GAP = 0.35
 # ---------------------------------------------------------------------------
 # Window geometry
 # ---------------------------------------------------------------------------
+
+def _running_harness_name():
+    """The stem of the script that is running, e.g. `live_608_first_call_is_not_refused`.
+
+    Falls back to the worktree name only when the entry point cannot be determined, which is the old
+    behaviour and is ambiguous by construction.
+    """
+    path = getattr(sys.modules.get("__main__"), "__file__", None)
+    if path:
+        return os.path.splitext(os.path.basename(path))[0]
+    return os.path.basename(REPO or "livekit")
+
 
 def logic_window(title_contains="Tracks"):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
@@ -246,7 +259,11 @@ class Evidence:
         self.head = head
         self.dir = os.path.join(root, head)
         os.makedirs(self.dir, exist_ok=True)
-        self.name = name or os.path.basename(REPO or "livekit")
+        # #612: the document used to be named after the WORKTREE, so two harnesses run at the same
+        # head both called themselves `lpm-wt-608` and there was no field saying which script wrote
+        # it. Name it after the running script instead, and key the file by that name too — see
+        # `write()`.
+        self.name = name or _running_harness_name()
         self.records = []
         self._window_points = None
 
@@ -412,8 +429,34 @@ class Evidence:
             },
             "records": self.records,
         }
-        out = os.path.join(self.dir, "evidence.json")
+        # #612: one file per HARNESS per head, not one per head. `evidence.json` was keyed by the
+        # head SHA alone, so the last harness to run at a given head silently replaced every earlier
+        # one's document — measured: running #606's harness on the #608 branch to check for a
+        # regression overwrote #608's own evidence, and the gate then validated #608 against #606's
+        # proof and reported ok. A check whose subject can be swapped without the check noticing is
+        # not a check.
+        out = os.path.join(self.dir, f"{self.name}.evidence.json")
+        # A re-run against the SAME binary is a re-measurement of the same thing. Replacing the
+        # earlier document silently would hide a flake — two runs disagreeing is exactly what you
+        # want to see — so the previous one is kept beside it rather than dropped.
+        if os.path.exists(out):
+            try:
+                with open(out) as fh:
+                    previous = json.load(fh)
+            except (OSError, ValueError):
+                previous = None
+            if previous and previous.get("artifact", {}).get("sha256") == doc["artifact"]["sha256"]:
+                n = 1
+                while os.path.exists(os.path.join(self.dir, f"{self.name}.evidence.{n}.json")):
+                    n += 1
+                os.replace(out, os.path.join(self.dir, f"{self.name}.evidence.{n}.json"))
         with open(out, "w") as fh:
+            json.dump(doc, fh, indent=1)
+        # The old single-file name is still written, because the gate reads it. It is the LAST run at
+        # this head whatever produced it, which is the very ambiguity #612 is about — the per-harness
+        # file above is the one to trust, and the gate should move to requiring one per harness.
+        legacy = os.path.join(self.dir, "evidence.json")
+        with open(legacy, "w") as fh:
             json.dump(doc, fh, indent=1)
         return self._summary(out)
 
