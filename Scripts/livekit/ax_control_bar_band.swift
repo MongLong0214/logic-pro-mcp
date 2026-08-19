@@ -1,9 +1,14 @@
 // A NAMED region of the arrange window, in window coordinates, emitted as JSON with the name it
 // matched — so a caller can state what the band IS, not only where it is.
 //
-//   ./ax_control_bar_band                 -> the Control Bar (the default; #614 depends on it)
-//   ./ax_control_bar_band "Control Bar"   -> the same, named explicitly
-//   ./ax_control_bar_band "<AXDescription>" -> any region Logic describes by that exact string
+//   ./ax_control_bar_band "<AXDescription>" [--role R] [--min-width N] [--min-height N]
+//
+// An AXDescription is NOT unique. Measured on this window: "Control Bar" matches two elements,
+// "Library" four, "Event" three. The first version walked depth-first and returned whichever it
+// reached first, which is first-match dressed as identity — the same defect this file exists to
+// remove from the harnesses. It now REFUSES when more than one element survives the filters and
+// prints all of them, so the caller adds a discriminator it can state out loud rather than
+// inheriting one from tree order.
 //
 // A band written as coordinates is not defined by its content: the top-left 240x28 of the arrange
 // window is the track-name column with the Mixer closed and a column of mixer strips with it open,
@@ -64,8 +69,15 @@ func emit(_ o: [String: Any]) -> Never {
 // The claim a refusal that writes nothing CAN keep is that it did not touch the transport. The
 // control bar is chrome rather than document, so it does not scroll with the arrange, and its clock
 // only advances while the transport is running — which the quiet probe checks before this is used.
-let wanted = CommandLine.arguments.count > 1 && !CommandLine.arguments[1].isEmpty
-    ? CommandLine.arguments[1] : "Control Bar"
+let argv = CommandLine.arguments
+let wanted = argv.count > 1 && !argv[1].isEmpty ? argv[1] : "Control Bar"
+func flag(_ name: String) -> String? {
+    guard let i = argv.firstIndex(of: name), argv.count > i + 1 else { return nil }
+    return argv[i + 1]
+}
+let wantRole = flag("--role")
+let minWidth = Int(flag("--min-width") ?? "0") ?? 0
+let minHeight = Int(flag("--min-height") ?? "0") ?? 0
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")
@@ -75,18 +87,32 @@ guard let win = ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? 
     str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
 }), let wf = frame(win) else { emit(["error": "no standard window"]) }
 
-var rail: AXUIElement?
+var hits: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ d: Int) {
-    guard d <= 18, rail == nil else { return }
+    guard d <= 18 else { return }
     for c in kids(e) {
-        if str(c, kAXDescriptionAttribute as String) == wanted { rail = c; return }
+        if str(c, kAXDescriptionAttribute as String) == wanted,
+           let f = frame(c),
+           f.2 >= minWidth, f.3 >= minHeight,
+           wantRole == nil || str(c, kAXRoleAttribute as String) == wantRole {
+            hits.append(c)
+        }
         walk(c, d + 1)
-        if rail != nil { return }
     }
 }
 walk(win, 0)
 
-guard let r = rail, let rf = frame(r) else {
+func describeHit(_ e: AXUIElement) -> [String: Any] {
+    let f = frame(e) ?? (0, 0, 0, 0)
+    return ["role": str(e, kAXRoleAttribute as String),
+            "band": [f.0 - wf.0, f.1 - wf.1, f.2, f.3]]
+}
+if hits.count > 1 {
+    emit(["error": "AXDescription is ambiguous — add --role / --min-width / --min-height",
+          "wanted": wanted, "matches": hits.map(describeHit),
+          "window": str(win, kAXTitleAttribute as String)])
+}
+guard let r = hits.first, let rf = frame(r) else {
     emit(["error": "no element with that exact AXDescription",
           "wanted": wanted,
           "window": str(win, kAXTitleAttribute as String)])
@@ -94,5 +120,6 @@ guard let r = rail, let rf = frame(r) else {
 emit([
     "window": str(win, kAXTitleAttribute as String),
     "description": str(r, kAXDescriptionAttribute as String),
+    "role": str(r, kAXRoleAttribute as String),
     "band": [rf.0 - wf.0, rf.1 - wf.1, rf.2, rf.3],
 ])

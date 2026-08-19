@@ -84,7 +84,7 @@ def document_titles():
 
 
 def _control_bar_band():
-    """The window's control bar, in window coordinates, or None.
+    """(band, subject) for the control bar in window coordinates, or (None, None).
 
     Located by AXDescription through a raw-AX witness rather than System Events: twice this week a
     rule prototyped through System Events failed to hold through the API the product uses.
@@ -93,14 +93,19 @@ def _control_bar_band():
     out = os.path.join(os.path.dirname(src), ".ax_control_bar_band.bin")
     if subprocess.run(["swiftc", "-O", src, "-o", out],
                       capture_output=True, text=True).returncode != 0:
-        return None
-    r = subprocess.run([out], capture_output=True, text=True)
+        return None, None
+    # "Control Bar" is not a unique AXDescription in this window; the tool refuses ambiguity, so
+    # the width discriminator is passed explicitly rather than relying on tree order.
+    r = subprocess.run([out, "Control Bar", "--min-width", "1000"], capture_output=True, text=True)
     try:
         payload = json.loads(r.stdout or "{}")
     except ValueError:
-        return None
+        return None, None
     b = payload.get("band")
-    return tuple(b) if isinstance(b, list) and len(b) == 4 else None
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    # The name comes back off the element that answered, so `subject` cannot drift from the band.
+    return tuple(b), payload.get("description")
 
 
 def save_panels():
@@ -152,9 +157,9 @@ arrange_title, win = located[0] if located else (titles[0], None)
 #
 # The locator emits nothing when the description is not found, which is a failed precondition rather
 # than a licence to fall back to a rectangle.
-band = _control_bar_band()
+band, band_subject = _control_bar_band()
 ev.check("614/precondition-the-control-bar-was-located",
-         band is not None,
+         band is not None and bool(band_subject),
          "the visual band is the control bar found by its AXDescription, so it watches the same thing "
          "whatever pane is open and wherever the arrange has scrolled to",
          f"band={band!r}", None)
@@ -313,7 +318,7 @@ after = ev.shot("604/after", settle_region=band, window_title=after_title)
 # `expect_change` to match whatever happened would make the check pass by agreeing with the result,
 # which is the defect this whole directory exists to refuse.
 ev.visual("614/the-transport-is-undisturbed",
-          before["file"], after["file"], band, expect_change=False,
+          before["file"], after["file"], band, expect_change=False, subject=band_subject,
           why="a refusal that writes nothing must leave the transport exactly as it found it. Aimed "
               "at the control bar on purpose: no region of the DOCUMENT is invariant across a "
               "refusal — the arrange scrolls when a modal takes and returns focus — and a control "
