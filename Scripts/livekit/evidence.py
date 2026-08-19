@@ -692,6 +692,15 @@ def _region_hash(png, region, window_points=None):
     Returns None rather than falling back to a whole-file hash: an unusable comparison must be visible
     as unusable, not disguised as a difference.
     """
+    # A falsy region hashes the WHOLE FILE, which is how a region-less visual passes. The docstring
+    # above has always said otherwise, and the #620 review said so again; it stayed true anyway.
+    # Measured today: a band lookup returned None, `visual()` compared two whole images, found them
+    # equal, and reported a passing negative assertion about a rectangle it never looked at.
+    #
+    # A comparison with no region is not a weak comparison, it is a different one — "did anything on
+    # screen change" instead of "did this change" — and the run has no way to know it was answered.
+    if not region:
+        return None
     if not os.path.isfile(png):
         return None
     try:

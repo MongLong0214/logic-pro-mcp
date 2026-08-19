@@ -197,6 +197,11 @@ a, b = os.path.join(tmp, "a.png"), os.path.join(tmp, "b.png")
 _png(a, (1, 2, 3))
 _png(b, (1, 2, 3))
 ev.visual("v", a, b, (0, 0, 4, 4), expect_change=False, why="w", subject="a synthetic square")
+# A visual with no region must NOT pass. It used to: `_region_hash` fell back to hashing the whole
+# file, so the comparison silently became "did anything on screen change" and answered yes-or-no
+# about a rectangle it never looked at. Measured in the wild when a band lookup returned None.
+shapes.append(("a region-less visual does not pass",
+               ev.visual("no-region", a, b, None, expect_change=False, why="w", subject="x") is False))
 out = ev.write()
 shapes.append(("write() returns a dict", isinstance(out, dict)))
 shapes.append(("summary carries every required key",
