@@ -194,6 +194,49 @@ enum MainEntrypoint {
             }
         }
 
+        // #616: a release-constructible probe of the Event List note table.
+        //
+        // The ship gate binds live evidence to sha256 of THIS binary. `EventListReadbackCollector`
+        // lives in it, but `collect` needs a `RegistryResolvedIdentityProof` whose only mint is
+        // compiled under a debug condition — so the shipped artifact contained the code under test
+        // and could not enter it, and every live check written about that code scored zero mutations.
+        //
+        // This flag is observation only. It mints no identity, calls no `assessReadback`, completes
+        // no qualification, and adds no MCP surface: the dark provider stays dark and
+        // `publicProvider()` stays nil. What it does is run the same `readHeaders`/`readRows`/`readRow`
+        // path the collector runs, against live Logic, from the artifact the gate hashes — so a
+        // harness can watch that path change when the product changes, which is what the gate has
+        // always asked for and what no route I tried before could give it.
+        if arguments.contains("--probe-event-list") {
+            do {
+                let rows = try EventListReadbackCollector.observeNoteTable()
+                let payload: [String: Any] = [
+                    "ok": true,
+                    "rows": rows.count,
+                    "columns": rows.first.map { $0.keys.map(\.id).sorted() } ?? [],
+                    "first_row": rows.first.map { row in
+                        row.reduce(into: [String: Any]()) { out, pair in
+                            out[pair.key.id] = [
+                                "sliderValue": pair.value.sliderValue as Any,
+                                "valueDescription": pair.value.valueDescription as Any,
+                            ]
+                        }
+                    } ?? [:],
+                ]
+                let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+                writeStdout(String(data: data, encoding: .utf8)! + "\n")
+                return 0
+            } catch {
+                // The failure is the interesting half: `cellChildCountMismatch(row:column:actual:)` is
+                // what the guard under test throws, and a harness has to be able to read it.
+                let data = try? JSONSerialization.data(
+                    withJSONObject: ["ok": false, "error": "\(error)"], options: [.sortedKeys]
+                )
+                writeStdout(String(data: data ?? Data(), encoding: .utf8) ?? "{\"ok\":false}" + "\n")
+                return 1
+            }
+        }
+
         if arguments.contains("--check-permissions") {
             let status = permissionCheck()
             writeStderr(status.summary + "\n")

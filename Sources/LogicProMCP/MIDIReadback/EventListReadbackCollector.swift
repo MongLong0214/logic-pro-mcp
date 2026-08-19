@@ -7,6 +7,47 @@ import Foundation
 /// `assessReadback` remain unproven in a release build, so collecting a live
 /// table cannot make the default-off readback path complete or public.
 enum EventListReadbackCollector {
+    /// What `readRow` sees on the live Event List, with no identity and no assessment (#616).
+    ///
+    /// `collect` requires a `RegistryResolvedIdentityProof`, and the only mint for one is compiled
+    /// solely under `QUALIFICATION_FAULT_SEAM` — a debug condition. So the RELEASE binary contains
+    /// this collector and cannot construct the argument it needs, which is why a live run driving the
+    /// shipped artifact could never reach the code under test and every live check about it scored
+    /// zero mutations.
+    ///
+    /// This entry exists to close exactly that gap and nothing else:
+    ///
+    ///   * it takes no identity, so it is constructible in release;
+    ///   * it does NOT call `assessReadback`, so `EventListMIDINoteReadbackProvider` remains the sole
+    ///     adapter the call-site lint permits and the dark provider stays dark;
+    ///   * it mints no `CompleteProof` and completes no qualification;
+    ///   * it goes through the SAME `readHeaders` / `readRows` / `readRow` the collector uses, which
+    ///     is the point — the guard under test is on that path.
+    ///
+    /// It observes. `selectEventTabIfNeeded` and the row-selection restore below are the collector's
+    /// own, so the pane is left as it was found.
+    static func observeNoteTable(
+        runtime: AXLogicProElements.Runtime = .production
+    ) throws -> [RawEventRow] {
+        guard let mainWindow = AXLogicProElements.mainWindow(runtime: runtime) else {
+            throw EventListReadbackCollectorError.mainWindowUnavailable
+        }
+        let eventTab = try findEventTab(in: mainWindow, runtime: runtime.ax)
+        let eventTabWasSelected = try checkedState(of: eventTab, runtime: runtime.ax)
+        defer { restoreEventTab(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax) }
+
+        let paneAndTable = try findEventPaneAndTable(
+            for: eventTab, in: mainWindow, runtime: runtime.ax
+        )
+        try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
+
+        let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
+        let rows: [AXUIElement] = AXHelpers.getAttribute(
+            paneAndTable.table, "AXRows", runtime: runtime.ax
+        ) ?? []
+        return try readRows(rows, headers: headers, runtime: runtime.ax)
+    }
+
     static func collect(
         requestedRegion: MIDIRegionReference,
         resolvedIdentity: RegistryResolvedIdentityProof,
@@ -155,6 +196,22 @@ enum EventListReadbackCollector {
         return tab
     }
 
+    /// Whether a table's header is one of the two schemas this pane shows.
+    ///
+    /// Identity, not position: the note level's eight columns or the region level's six. A table that
+    /// carries neither is some other pane's, however close it sits in the tree.
+    private static func headerBinds(_ table: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        guard let header: AXUIElement = AXHelpers.getAttribute(
+            table, kAXHeaderAttribute, runtime: runtime
+        ) else { return false }
+        let titles = AXHelpers.getChildren(header, runtime: runtime)
+            .filter { (AXHelpers.getAttribute($0, kAXSubroleAttribute, runtime: runtime) as String?) == "AXSortButton" }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
+        guard !titles.isEmpty else { return false }
+        return titles.count == expectedHeaderTitles.count
+            || titles.count == regionLevelHeaderTitles.count
+    }
+
     private static func findEventPaneAndTable(
         for eventTab: AXUIElement,
         in mainWindow: AXUIElement,
@@ -182,6 +239,18 @@ enum EventListReadbackCollector {
             ancestors = Array(path.dropLast().reversed())
         }
 
+        // #616: pick the table by WHAT IT IS, and fall back to "the only one here" rather than
+        // leading with it.
+        //
+        // This used to take the first ancestor containing any table and demand there be exactly one.
+        // Run for the first time against live Logic — from the release binary, through the probe
+        // added for this — it threw `eventTableAmbiguous(count: 2)` before reaching any of the code
+        // it exists to run, because a sibling pane in that ancestor also has a table. The Event
+        // pane's table was right there; the rule just could not say which one it was.
+        //
+        // A table that carries this pane's header is identifiable. Ambiguity is now reserved for the
+        // case where TWO tables both look like the Event pane, which is a real ambiguity rather than
+        // an accident of which panes happen to be open.
         for parent in ancestors {
             let tables = AXHelpers.findAllDescendants(
                 of: parent,
@@ -190,6 +259,17 @@ enum EventListReadbackCollector {
                 runtime: runtime
             )
             guard !tables.isEmpty else { continue }
+
+            let identifiable = tables.filter { headerBinds($0, runtime: runtime) }
+            if identifiable.count == 1, let table = identifiable.first {
+                return (parent, table)
+            }
+            if identifiable.count > 1 {
+                throw EventListReadbackCollectorError.eventTableAmbiguous(count: identifiable.count)
+            }
+            // No table here carries an Event-pane header. Keep the historical behaviour for the
+            // single-table case so existing fixtures — which model a bare table with no header —
+            // still resolve.
             guard tables.count == 1, let table = tables.first else {
                 throw EventListReadbackCollectorError.eventTableAmbiguous(count: tables.count)
             }
