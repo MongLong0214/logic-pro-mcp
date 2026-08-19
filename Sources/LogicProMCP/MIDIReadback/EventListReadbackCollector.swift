@@ -262,11 +262,19 @@ enum EventListReadbackCollector {
             || titlesMatch(titles, regionLevelHeaderColumns)
     }
 
-    /// Positional locale-aware comparison against a column schema. Counting the columns was the
+    /// Positional locale-aware comparison against a column schema, shared by `headerBinds` (which
+    /// decides WHICH table is the Event pane's) and `readHeaders` (which decides whether that
+    /// table is at region level). They had separate definitions of the same question and drifted
+    /// apart — one counted, the other compared — which is exactly the defect below.
+    ///
+    /// Counting the columns was the
     /// earlier form and it was arity-only matching under a comment that claimed identity — the very
     /// thing `HeaderIdentityProof` refuses to represent. Any other pane whose header happens to carry
     /// six or eight sort buttons satisfied a count; it does not satisfy these labels.
-    private static func titlesMatch(_ titles: [String], _ columns: [AXLocalePolicy.LabelSet]) -> Bool {
+    // [String?] rather than [String]: readHeaders keeps the nil for a title AX would not give,
+    // and `matches` refuses nil. Compacting them away here would silently shorten the list and let
+    // a header with a missing title match a shorter schema.
+    private static func titlesMatch(_ titles: [String?], _ columns: [AXLocalePolicy.LabelSet]) -> Bool {
         guard titles.count == columns.count else { return false }
         return zip(titles, columns).allSatisfy { title, column in column.matches(title) }
     }
@@ -407,15 +415,7 @@ enum EventListReadbackCollector {
         }
         let titles = sortButtons.map { AXHelpers.getTitle($0, runtime: runtime) }
 
-        func matchesAll(_ columns: [AXLocalePolicy.LabelSet]) -> Bool {
-            guard titles.count == columns.count else { return false }
-            for (index, column) in columns.enumerated() where !column.matches(titles[index]) {
-                return false
-            }
-            return true
-        }
-
-        if matchesAll(regionLevelHeaderColumns) {
+        if titlesMatch(titles, regionLevelHeaderColumns) {
             throw EventListReadbackCollectorError.paneAtRegionLevel
         }
 

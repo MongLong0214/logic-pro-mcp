@@ -237,7 +237,8 @@ enum MainEntrypoint {
                 let data = try? JSONSerialization.data(
                     withJSONObject: ["ok": false, "error": "\(error)"], options: [.sortedKeys]
                 )
-                writeStdout(String(data: data ?? Data(), encoding: .utf8) ?? "{\"ok\":false}" + "\n")
+                let text = String(data: data ?? Data(), encoding: .utf8) ?? "{\"ok\":false}"
+                writeStdout(text + "\n")
                 return 1
             }
         }
