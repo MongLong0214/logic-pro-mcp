@@ -41,9 +41,32 @@ if missing:
     sys.exit(f"cannot run: missing {missing}")
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
-# Band over the arrange window's track headers. Every call below is a read or a cache refresh, so
-# the assertion over it is a NEGATIVE one.
-TRACK_BAND = (10, 120, 260, 220)
+# #622: this said "band over the arrange window's track headers" and the rectangle was
+# (10, 120, 260, 220) — which is inside the LIBRARY, on the other side of the window. A read path
+# that wrote to a track header could not have shown up there, so the negative assertion below has
+# never been able to fail for the reason it exists.
+#
+# `Tracks header` is what AX calls the rail the claim is about, and it is unique in this window.
+# Located rather than written down, with the name read back off the element that answered.
+BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
+subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
+
+
+def located_band(*selector):
+    """(band, subject) for a named region, or (None, None) — never a fallback rectangle."""
+    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None, None
+    b = payload.get("band")
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    return tuple(b), payload.get("description")
+
+
+TRACK_BAND, TRACK_SUBJECT = located_band("Tracks header")
 
 
 def osa(script):
@@ -53,6 +76,12 @@ def osa(script):
 
 titles = osa('tell application "System Events" to tell process "Logic Pro" to '
              'return name of every window')
+ev.check("575/precondition-the-track-header-rail-was-located",
+         TRACK_BAND is not None and bool(TRACK_SUBJECT),
+         "the rail this run asserts about, located by AXDescription rather than written down. A "
+         "failed lookup is a red precondition, not a fallback rectangle",
+         f"band={TRACK_BAND!r} subject={TRACK_SUBJECT!r}", None)
+
 ev.check("575/precondition-an-arrange-window-is-open", "Tracks" in titles,
          "Logic is up with a project, so the surviving operations have something to answer about",
          f"titles={titles!r}",
@@ -136,7 +165,7 @@ ev.check("575/the-removed-names-are-still-unreachable",
 
 after = ev.shot("575/after", settle_region=TRACK_BAND)
 ev.visual("575/no-project-state-was-touched",
-          before["file"], after["file"], TRACK_BAND, expect_change=False,
+          before["file"], after["file"], TRACK_BAND, expect_change=False, subject=TRACK_SUBJECT,
           why="every call in this run is a read or a cache refresh, so the arrange window's track "
               "headers must be byte-identical across it")
 
