@@ -72,8 +72,11 @@ if not win:
     d.close(); ev.stop_recording(rec)
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-# The track header rail: the name band of the surviving track lives here.
-RAIL = (0, int(win["h"] * 0.10), int(win["w"] * 0.20), int(win["h"] * 0.80))
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("538/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 
 # ---- precondition: exactly one track, distinctively named ----
 #
@@ -174,7 +177,7 @@ ev.check("538/logic-agrees-the-sheet-is-gone",
          "left the sheet up by skipping the Create press; this independent read still said 1")
 
 ev.visual("538/the-track-rail-changes",
-          pre["file"], post["file"], RAIL, expect_change=True,
+          pre["file"], post["file"], RAIL, expect_change=True, subject=RAIL_SUBJECT,
           why=f"the distinctively named track {WITNESS_NAME!r} was deleted and replaced")
 
 ev.restored("538/project-has-a-track-again", True,

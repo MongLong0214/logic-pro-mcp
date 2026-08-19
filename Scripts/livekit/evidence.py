@@ -323,6 +323,43 @@ class Evidence:
         self._window_points = None
         Evidence.current = self
 
+    # -- locating a band ----------------------------------------------------
+
+    def located_band(self, *selector):
+        """`(band, subject)` for a region named by AXDescription, or `(None, None)`.
+
+        A rectangle written as four numbers is not defined by its content. The five harnesses that
+        shared `(0, 0.10h, 0.20w, 0.80h)` were all claiming something about the track-header rail,
+        and measured on 2026-08-20 with the Library pane open that rectangle lies 94% inside the
+        LIBRARY: the rail sits at x=603. The band was right in the layout it was written in and
+        wrong in the next one, and nothing in the run could say which.
+
+        So the band is resolved from the live tree and the `subject` comes back off the element
+        that was found, not off the request — which is what makes it evidence rather than a label.
+
+        `(None, None)` on any failure, INCLUDING an ambiguous description, which the tool reports
+        as an error with all its candidates. Callers must treat that as a red precondition; before
+        #634 a `None` band silently became a whole-image comparison that passed.
+        """
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+        tool = os.path.join(self.dir, "ax_control_bar_band")
+        if not os.path.exists(tool):
+            built = subprocess.run(["swiftc", "-O", source, "-o", tool], capture_output=True)
+            if built.returncode != 0:
+                return None, None
+        r = subprocess.run([tool, *selector], capture_output=True, text=True)
+        try:
+            payload = json.loads(r.stdout or "{}")
+        except ValueError:
+            return None, None
+        band = payload.get("band")
+        if not (isinstance(band, list) and len(band) == 4):
+            return None, None
+        subject = payload.get("description")
+        if not isinstance(subject, str) or not subject.strip():
+            return None, None
+        return tuple(band), subject
+
     # -- observations -------------------------------------------------------
 
     def note(self, tag, payload):
