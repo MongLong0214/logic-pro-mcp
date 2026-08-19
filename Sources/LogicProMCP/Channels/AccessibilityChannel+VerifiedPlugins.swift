@@ -3072,13 +3072,21 @@ extension AccessibilityChannel {
                 continue
             }
             found = true
-            if let cancel = AXLocalePolicy.findDescendant(
+            // #628: identified, not merely found. `findDescendant` returns the first match in
+            // traversal order, so with two Cancel-labelled buttons it presses one and nothing
+            // records that there was a choice. Measured on the real dialog there is exactly one
+            // (its children are Cancel and OK), so the census returns that one and the behaviour is
+            // unchanged — the difference is that the single candidate is now a checked fact rather
+            // than an assumption. A second one falls through to the close-button and Escape paths
+            // below, which is the existing fail-open-to-a-safer-route behaviour, not a new refusal.
+            let cancelCensus = AXLocalePolicy.censusDescendant(
                 of: window,
                 role: kAXButtonRole as String,
                 matching: AXLocalePolicy.cancelButton,
                 maxDepth: 4,
                 runtime: runtime.ax
-            ) {
+            )
+            if let cancel = cancelCensus.element {
                 // ADR-001 coordinate ban: dismiss via AXPress only (Escape remains
                 // the terminal non-coordinate fallback below).
                 if AXHelpers.performAction(cancel, kAXPressAction as String, runtime: runtime.ax) {
