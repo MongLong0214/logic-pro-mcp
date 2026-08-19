@@ -183,21 +183,56 @@ func toolTextResultTreatingUnverifiedAsError(_ result: ChannelResult) -> CallToo
 
 func blockingLogicDialogResult(
     operation: String,
-    info: AXLogicProElements.BlockingDialogInfo? = AXLogicProElements.blockingDialogInfo()
+    info: AXLogicProElements.BlockingDialogInfo? = AXLogicProElements.blockingDialogInfo(),
+    // #608: the decision the caller REFUSED on, passed in rather than re-read here.
+    //
+    // Re-reading asks the same question a second time, and between the two the screen can change —
+    // so a call that was refused could be annotated `no_blocking_window`, a reason that contradicts
+    // the refusal it explains. That is the same defect as the process-global this file already
+    // removed, arriving by a different route: state carried across a gap instead of handed across it.
+    //
+    // Defaulting to a fresh read keeps every existing call site compiling and behaving as before;
+    // callers that have the decision should pass it.
+    decision: (reason: AXLogicProElements.DialogPresenceReason, windowsReadError: Int32?)? = nil
 ) -> CallTool.Result {
+    // #608: the guard has four ways to answer "blocked" and only one of them is a dialog. Measured,
+    // the first call in a fresh process was refused because the windows read answered
+    // kAXErrorCannotComplete — not because anything was on screen. That is now re-read once so it no
+    // longer refuses, and when a refusal DOES happen the reason travels with it.
+    //
+    // `blocking_dialog_present` and `failure_stage` keep their existing meanings. Repurposing them
+    // would change what every existing caller reads off the wire, and two dispatcher tests assert
+    // those exact values — that question deserves its own decision, not a side effect of a bug fix.
+    // The distinction is carried by new fields and by the hint.
+    let resolved = decision ?? AXLogicProElements.dialogPresenceDecision()
+    let reason = resolved.reason
+    let sawADialog = info != nil || reason.namesAnActualDialog
     var extras: [String: Any] = [
         "operation": operation,
         "failure_stage": "preflight_blocking_dialog",
         "blocking_dialog_present": true,
+        "dialog_presence_reason": reason.rawValue,
+        "refusal_names_an_actual_dialog": sawADialog,
+        // #608: WHICH AX status, not just which category. -25204 (cannotComplete) is the transient
+        // this issue is about; anything else is a different problem wearing the same label.
+        "windows_read_ax_error": resolved.windowsReadError.map { Int($0) } ?? NSNull(),
+        // Whether the reason was handed over by the caller that refused, or re-read here. A caller
+        // that does not pass it gets an honest "this was measured later", not a silent substitution.
+        "dialog_presence_reason_source": decision == nil ? "re_read_at_refusal" : "decision_at_refusal_time",
         "write_attempted": false,
         "safe_to_retry": true,
     ]
-    var hint = "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+    var hint = sawADialog
+        ? "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+        : "Refusing \(operation): the blocking-dialog preflight could not establish whether a dialog "
+            + "is present (\(reason.rawValue)), so it fails closed. Nothing was touched. No modal was "
+            + "identified — do not go looking for one to dismiss; retry in a moment, and if it "
+            + "persists check that Logic is running and that this process has Accessibility access."
     // #190: identify the dialog so the demo/product workflow can recover
     // deterministically instead of guessing at a generic blocking-dialog refusal.
     if info == nil {
         // #606: refusing without an identity is refusing on something nobody can name. Say what the
-        // guard actually saw so the caller is not sent hunting for a dialog that is not there.
+        // guard saw so the caller is not sent hunting for a dialog that is not there.
         extras["dialog_presence_census"] = AXLogicProElements.dialogPresenceCensus()
     }
     if let info {
