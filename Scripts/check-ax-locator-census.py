@@ -46,7 +46,7 @@ import sys
 # had been blind to. Raising a ratchet for that reason is legitimate and has to be visible, which is
 # why the reason lives here rather than in a commit nobody re-reads. Raising it because something
 # went red is not.
-BLIND_SITE_BUDGET = 39
+BLIND_SITE_BUDGET = 38
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
