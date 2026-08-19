@@ -93,10 +93,35 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
-band = (0, 0, win["w"], 28) if win else None
-ev.check("608/precondition-the-window-frame-is-known", band is not None,
-         "the arrange window's own frame read, so the capture band is inside it",
-         f"window={win!r} band={band!r}", None)
+# #622: the claim below is that the DOCUMENT is unchanged, and this band used to be a 28px strip
+# at the very top of the window — chrome, above the Control Bar, and not the document at all. It
+# also named nothing: of the described elements in this window, none sits at those coordinates.
+# `Tracks contents` is the arrange document area, located by AXDescription, so the band watches what
+# the claim is about and can say what it watched.
+BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
+subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
+
+
+def located_band(description):
+    """(band, subject) for a named region, or (None, None). No fallback rectangle: falling back to
+    coordinates would silently restore what this replaces, on the runs where AX is least reliable."""
+    r = subprocess.run([BAND_TOOL, description], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None, None
+    b = payload.get("band")
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    return tuple(b), payload.get("description")
+
+
+band, band_subject = located_band("Tracks contents")
+ev.check("608/precondition-the-window-frame-is-known", band is not None and bool(band_subject),
+         "the arrange document area located by AXDescription, so the band watches the thing the "
+         "visual below claims about. A failed lookup is a red precondition, not a guess",
+         f"window={win!r} band={band!r} subject={band_subject!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -169,7 +194,7 @@ time.sleep(2)
 
 after = ev.shot("608/after", settle_region=band, window_title=arrange_title)
 ev.visual("608/the-guard-changed-nothing-on-screen",
-          before["file"], after["file"], band, expect_change=False,
+          before["file"], after["file"], band, expect_change=False, subject=band_subject,
           why="this whole change is to a read-only preflight, so the document window must look "
               "exactly as it did — a difference would mean something in the run wrote to the project")
 
