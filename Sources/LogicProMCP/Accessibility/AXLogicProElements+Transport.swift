@@ -105,13 +105,20 @@ extension AXLogicProElements {
         runtime: Runtime = .production
     ) -> AXUIElement? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }
-        return AXLocalePolicy.findDescendant(
+        // #628: the scope is the discriminator, and until now nothing said so. Measured on one
+        // arrange window, "Solo" matches TWENTY checkboxes — one in the Control Bar and nineteen
+        // track buttons. Scoping to the bar makes it unique, so `findDescendant` returned the right
+        // element; it also would have returned SOME element, silently, had the scope ever widened.
+        // Toggling a random track's solo instead of the transport's is the failure that hides
+        // behind first-match.
+        let census = AXLocalePolicy.censusDescendant(
             of: controlBar,
             role: kAXCheckBoxRole,
             matching: labels,
             maxDepth: 4,
             runtime: runtime.ax
         )
+        return census.element
     }
 
     /// Find the `bar` component of Logic Pro's Control Bar playhead-position

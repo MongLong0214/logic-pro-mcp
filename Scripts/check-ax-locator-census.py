@@ -14,8 +14,17 @@ two elements, "Library" four, "Event" three.
 WHAT IS AND IS NOT COUNTED
 --------------------------
 Finding many and USING many is not this defect — `findAllDescendants` has 89 call sites and most of
-them are fine. Only sites that narrow to a single element are counted. Getting this distinction
-wrong is how the first census of this issue reported 110 instead of 27, in the flattering direction.
+them are fine. Only sites that narrow to a single element are counted. Getting this distinction wrong is how the
+first census reported 110 instead of 27, in the flattering direction.
+
+The count has since been wrong in the OTHER direction too. `findAllDescendants` followed by a
+hand-written `for … { return candidate }` is the same first-match, and the detector could not see
+that spelling — thirteen sites, while it reported a confident 27. A detector blind to a spelling is
+a census of the spelling, not of the defect.
+
+It is still a heuristic over text, not a parse. It can miss a spelling nobody has thought of, and it
+can count a loop that returns for some other reason. The printed list is the evidence; the number
+alone is not.
 
 A RATCHET, NOT A GATE ON ZERO
 -----------------------------
@@ -31,8 +40,13 @@ import os
 import re
 import sys
 
-# Lower this when sites convert. It may never rise: that is the whole mechanism.
-BLIND_SITE_BUDGET = 27
+# Lower this when sites convert. It may never rise for a NEW site — that is the mechanism.
+#
+# It rose once, from 27 to 39, and not because sites were added: the detector learned a spelling it
+# had been blind to. Raising a ratchet for that reason is legitimate and has to be visible, which is
+# why the reason lives here rather than in a commit nobody re-reads. Raising it because something
+# went red is not.
+BLIND_SITE_BUDGET = 39
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
@@ -52,9 +66,15 @@ def blind_sites(root):
                 if re.search(r"\bfindDescendant\(", line):
                     out.append((path, i + 1, "findDescendant"))
                 elif re.search(r"\bfindAllDescendants\(", line):
-                    # narrowed to one within the call's own expression
-                    if re.search(r"\)\s*\.first\b", "\n".join(lines[i:i + 8])):
+                    window = "\n".join(lines[i:i + 14])
+                    if re.search(r"\)\s*\.first\b", window):
                         out.append((path, i + 1, "findAllDescendants(...).first"))
+                    elif re.search(r"\bfor\b[^\n]*\{", window) and re.search(r"\breturn\b", window):
+                        # `for candidate in … { if matches { return candidate } }` is the same
+                        # first-match, written long-hand. The census missed thirteen of these while
+                        # reporting a confident 27 — a detector that cannot see a spelling is not a
+                        # census of the defect, it is a census of one spelling of it.
+                        out.append((path, i + 1, "findAllDescendants + return-in-loop"))
     return out
 
 
