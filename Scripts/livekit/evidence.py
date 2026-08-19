@@ -421,7 +421,8 @@ class Evidence:
         for _ in range(_SETTLE_TRIES):
             _capture_window(win["id"], path)
             frames += 1
-            h = _region_hash(path, settle_region, (win["w"], win["h"]))
+            h = _region_hash(path, _clip_to_window(settle_region, (win["w"], win["h"])),
+                             (win["w"], win["h"]))
             if prev is not None and h == prev:
                 settled = True
                 break
@@ -466,14 +467,17 @@ class Evidence:
         # as absent and `is_clean` refuses the run: each harness's next run tells its owner that this
         # assertion does not say what it watches, and the fix arrives with a measurement attached.
         wp = window_points or self._window_points
-        b = _region_hash(before_file, region, wp)
-        a = _region_hash(after_file, region, wp)
+        # What was HASHED, which is not always what was asked for — see `_clip_to_window`. The
+        # record carries the clipped rectangle, and says so when the two differ.
+        effective = _clip_to_window(region, wp)
+        b = _region_hash(before_file, effective, wp)
+        a = _region_hash(after_file, effective, wp)
         readable = b is not None and a is not None
         changed = readable and b != a
         # An unreadable comparison is not a passing one, whichever way the expectation points.
         passed = readable and (changed == bool(expect_change))
         self.records.append({
-            "kind": "visual", "tag": tag, "region": list(region) if region else None,
+            "kind": "visual", "tag": tag, "region": list(effective) if effective else None,
             "subject": subject,   # None until the harness measures what the region is
 
             "before": before_file, "after": after_file,
@@ -481,6 +485,8 @@ class Evidence:
             "observed": f"before {(b or '?')[:16]} after {(a or '?')[:16]} changed={changed}",
             "passed": passed,
         })
+        if effective is not None and region is not None and tuple(effective) != tuple(region):
+            self.records[-1]["region_requested"] = list(region)
         return passed
 
     # -- recording ----------------------------------------------------------
@@ -716,6 +722,32 @@ def _file_hash(path):
 # visual(), or write(). Each branch was green and the breakage existed only in their merge.
 #
 # The import smoke test beside this file is the part that would have caught it.
+
+def _clip_to_window(region, window_points):
+    """The part of `region` a capture of that window can actually contain, or None if none of it.
+
+    A band can legitimately be larger than the window it is measured in: `Tracks contents` is 6162
+    points wide on a 1920-point window, because the arrange canvas extends past the viewport it is
+    drawn into. `CGImageCreateWithImageInRect` intersects an oversized crop against the image and
+    says nothing, so the record claimed the whole canvas while the hash covered the visible part.
+
+    Clipping here rather than there keeps the two honest: what is recorded as the region is what
+    was hashed. A band lying entirely outside the window returns None, which reads as unreadable
+    rather than as a comparison of two empty crops — those would be equal, and equal is a PASS for
+    every negative assertion.
+    """
+    if not region or not window_points:
+        return tuple(region) if region else None
+    wpts, hpts = window_points
+    if not wpts or not hpts:
+        return tuple(region)
+    x, y, w, h = region
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(x + w, wpts), min(y + h, hpts)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return (x0, y0, x1 - x0, y1 - y0)
+
 
 def _region_hash(png, region, window_points=None):
     """Hash one rectangle of a PNG.
