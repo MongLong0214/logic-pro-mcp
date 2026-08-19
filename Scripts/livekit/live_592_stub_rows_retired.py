@@ -54,11 +54,35 @@ if missing:
     sys.exit(f"cannot run: missing {missing}")
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
-# The band is derived from the window at run time rather than measured once. The arrange window has
-# moved display during this program — 1920x1050 landscape on one run, 1080x1890 portrait on another —
-# and a rectangle measured against the first is not inside the second, which records as an unsettled
+# Derived at run time rather than measured once, and the reason is good: the arrange window has moved
+# display during this program — 1920x1050 landscape on one run, 1080x1890 portrait on another — and a
+# rectangle measured against the first is not inside the second, which records as an unsettled
 # capture straddling displays rather than as an honest failure.
-HEADER_BAND = None   # resolved below, once the window's own frame is known
+#
+# #622: deriving it from the WINDOW solved portability and lost aim. `(0, 0, w, 400)` is a
+# full-width strip across the top; the rail this run asserts about sits at x=603 and is 325 wide, so
+# the band was mostly not looking at it. Asking AX for `Tracks header` gives both — a frame that is
+# current on whichever display the window is on, and the region the claim is actually about.
+BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
+subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
+
+
+def located_band(*selector):
+    """(band, subject) for a named region, or (None, None) — never a fallback rectangle."""
+    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None, None
+    b = payload.get("band")
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    return tuple(b), payload.get("description")
+
+
+HEADER_BAND = None
+HEADER_SUBJECT = None
 
 
 def osa(script):
@@ -74,9 +98,9 @@ ev.check("592/precondition-an-arrange-window-is-open", "Tracks" in titles,
          f"titles={titles!r}", None)
 
 win = E.logic_window("Tracks") or E.logic_window(None)
-HEADER_BAND = (0, 0, win["w"], min(400, win["h"])) if win else None
+HEADER_BAND, HEADER_SUBJECT = located_band("Tracks header")
 ev.check("592/precondition-the-window-frame-is-known",
-         HEADER_BAND is not None,
+         HEADER_BAND is not None and bool(HEADER_SUBJECT),
          "the arrange window's own frame read, so the capture band below is inside it — a band "
          "measured against a different display records as an unsettled straddling capture rather "
          "than as an honest result",
@@ -173,7 +197,7 @@ ev.check("592/the-removed-names-did-not-become-reachable",
 
 after = ev.shot("592/after", settle_region=HEADER_BAND)
 ev.visual("592/no-project-state-was-touched",
-          before["file"], after["file"], HEADER_BAND, expect_change=False,
+          before["file"], after["file"], HEADER_BAND, expect_change=False, subject=HEADER_SUBJECT,
           why="every call in this run is a read, so the track-header rail must be byte-identical "
               "across it — a change here would mean a read path wrote something")
 
