@@ -127,6 +127,7 @@ def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     known = local_modules(root)
     loaded, offenders, checked, unimportable = {}, [], 0, []
+    pulled_names = {}
     # DERIVED, not listed. The first version of this was a dict with one entry, which is the same
     # staleness this file exists to prevent: it would have kept saying "evidence only" after a
     # second module gained a drive. A module counts as driven when some `test_*.py` imports it AND
@@ -168,6 +169,8 @@ def main():
                     unimportable.append(f"{mod}: {type(exc).__name__}: {exc}")
                 finally:
                     sys.path.pop(0)
+        for mod, name in pulled:
+            pulled_names.setdefault(mod, set()).add(name)
         for mod, name in pulled:
             if loaded.get(mod) is not None:
                 checked += 1
@@ -244,10 +247,42 @@ def main():
                 offenders.append(f"{rel}: {label}(...) does not bind — {why}")
 
     print(f"modules with consumers: {len(consumed)}   references checked: {checked}")
+    # A module whose consumed surface is unittest.TestCase subclasses cannot have a "return-shape
+    # drive" — there are no returns to shape. It is covered by being RUN. Counting those three as
+    # gaps overstated the remaining work, the same way counting every locator call overstated #628.
+    def consumed_surface_is_test_cases(mod):
+        """Every name importers actually take from this module is a TestCase subclass.
+
+        Not "every class in the file is a TestCase" — that was the first rule and it missed a
+        module carrying one test-helper class beside its cases. What matters is the CONSUMED
+        surface: if importers only take test classes, there are no returns to shape.
+        """
+        names = pulled_names.get(mod, set())
+        if not names:
+            return False
+        try:
+            tree = ast.parse(open(known[mod]).read())
+        except SyntaxError:
+            return False
+        cases = {
+            n.name for n in tree.body
+            if isinstance(n, ast.ClassDef)
+            and any(getattr(b, "attr", getattr(b, "id", "")) == "TestCase" for b in n.bases)
+        }
+        return bool(cases) and names <= cases
+
+    gaps = 0
     for mod in sorted(consumed):
         drive = covered_by_a_drive.get(mod)
-        note = f"return shapes driven by {drive}" if drive else "NO return-shape drive"
+        if drive:
+            note = f"return shapes driven by {drive}"
+        elif consumed_surface_is_test_cases(mod):
+            note = "test-case module — covered by running it, not by a shape drive"
+        else:
+            note = "NO return-shape drive"
+            gaps += 1
         print(f"  {mod:30} {len(consumed[mod]):3} consumers   {note}")
+    print(f"  {'':30}     modules still without a drive: {gaps}")
     for u in unimportable:
         print(f"  could not import {u}")
     if unimportable:
