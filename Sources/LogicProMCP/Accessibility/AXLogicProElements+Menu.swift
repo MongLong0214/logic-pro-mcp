@@ -31,6 +31,38 @@ extension AXLogicProElements {
     }
 
     /// Navigate menu: e.g. menuItem(path: ["File", "New..."]).
+    /// Locale-resolved menu lookup (#519): each step matches ANY measured label for that item.
+    ///
+    /// The literal-string overload below is fine when the caller already knows the exact title, and
+    /// wrong the moment Logic is running in another language. `save_as` used to work around that by
+    /// trying a Korean literal and then an English one, which covers exactly two of the languages
+    /// Logic ships and fails silently in the rest — the shape #519 is about.
+    static func menuItem(
+        labelPath: [AXLocalePolicy.LabelSet],
+        runtime: Runtime = .production
+    ) -> AXUIElement? {
+        guard var current = getMenuBar(runtime: runtime) else { return nil }
+        for labels in labelPath {
+            var found = false
+            for child in AXHelpers.getChildren(current, runtime: runtime.ax) {
+                if labels.matches(AXHelpers.getTitle(child, runtime: runtime.ax)) {
+                    current = child
+                    found = true
+                    break
+                }
+                for sub in AXHelpers.getChildren(child, runtime: runtime.ax)
+                where labels.matches(AXHelpers.getTitle(sub, runtime: runtime.ax)) {
+                    current = sub
+                    found = true
+                    break
+                }
+                if found { break }
+            }
+            guard found else { return nil }
+        }
+        return current
+    }
+
     static func menuItem(path: [String], runtime: Runtime = .production) -> AXUIElement? {
         guard var current = getMenuBar(runtime: runtime) else { return nil }
         for title in path {
