@@ -161,3 +161,90 @@ struct Issue608FirstReadTransientTests {
         #expect(reader.reads == 1)
     }
 }
+
+/// #608 follow-up: a window whose children will not read blocks — but nobody saw a dialog.
+///
+/// `windowHostsBlockingModal` returned a bare Bool, so the fail-closed default for an unreadable
+/// child was indistinguishable from an actual modal, and the refusal reported
+/// `refusal_names_an_actual_dialog: true` for a read that did not happen. That is this issue's own
+/// defect wearing a different hat.
+@Suite(.serialized)
+struct Issue608UnreadableIsNotADialogTests {
+    private final class Reader: @unchecked Sendable {
+        private let windows: [AXUIElement]
+        init(windows: [AXUIElement]) { self.windows = windows }
+        func read() -> Result<AnyObject?, AXHelpers.AXStatusError> { .success(windows as AnyObject) }
+    }
+
+    @Test("issue608_a_window_whose_children_will_not_read_blocks_without_claiming_a_dialog")
+    func unreadableChildrenBlockWithoutClaimingADialog() {
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(0)
+        let window = b.element(1)
+        b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+
+        let reader = Reader(windows: [window])
+        let runtime = b.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { _, attribute in
+                guard attribute == (kAXWindowsAttribute as String) else { return nil }
+                return reader.read()
+            },
+            // The children read fails with a status that is NOT "unsupported" or "no value", which is
+            // the fail-closed branch.
+            childrenResultHandler: { _ in
+                // Only one window exists in this fixture, so an unconditional failure IS that
+                // window's children read.
+                .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let reason = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        // Fail-closed is preserved.
+        #expect(reason.isBlocked)
+        // But it does not claim anyone saw a dialog.
+        #expect(!reason.namesAnActualDialog)
+        #expect(reason == .windowChildrenUnreadable)
+    }
+
+    /// A real dialog alongside an unreadable window is still reported as a dialog — the observed
+    /// thing is the more actionable one to name.
+    @Test("issue608_a_real_dialog_wins_over_an_unreadable_window")
+    func realDialogWinsOverUnreadable() {
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(0)
+        let dialog = b.element(1)
+        b.setAttribute(dialog, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        b.setAttribute(dialog, kAXTitleAttribute as String, "Save")
+        b.setChildren(dialog, [])
+        let broken = b.element(2)
+        b.setAttribute(broken, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(broken, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+
+        let reader = Reader(windows: [broken, dialog])
+        let runtime = b.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { _, attribute in
+                guard attribute == (kAXWindowsAttribute as String) else { return nil }
+                return reader.read()
+            },
+            childrenResultHandler: { element in
+                // The dialog is recognised by its SUBROLE before children are ever read, so failing
+                // every children read still leaves the dialog observable and only breaks the other
+                // window — which is the mix this test is about.
+                _ = element
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let reason = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        #expect(reason == .blockingWindowFound)
+        #expect(reason.namesAnActualDialog)
+    }
+}

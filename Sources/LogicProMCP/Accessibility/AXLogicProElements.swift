@@ -188,6 +188,8 @@ enum AXLogicProElements {
         /// The windows read answered `kAXErrorCannotComplete` twice: the AX messaging to Logic did
         /// not go through. Fail-closed like the rest, but it is a different thing to be told.
         case appNotYetAddressable = "logic_not_yet_addressable"
+        /// A window blocked because its children would not read — fail-closed, but nobody saw a dialog.
+        case windowChildrenUnreadable = "window_children_unreadable"
         case blockingWindowFound = "blocking_window_found"
         case noBlockingWindow = "no_blocking_window"
 
@@ -201,6 +203,15 @@ enum AXLogicProElements {
     /// `dialogPresenceReason` throws the status away. A refusal that says `windows_read_failed`
     /// without saying WHICH failure sends the next reader to guess between "Logic is not running",
     /// "no Accessibility permission" and the -25204 that this issue is about.
+    /// A window whose children would not read blocks, but it is NOT a dialog anyone saw.
+    /// Seeing a real modal wins over a failed read, because a modal that was observed is the more
+    /// actionable thing to tell the caller.
+    private static func summarise(_ findings: [BlockingModalFinding]) -> DialogPresenceReason {
+        if findings.contains(where: { $0.isAnActualModal }) { return .blockingWindowFound }
+        if findings.contains(where: { $0.isBlocking }) { return .windowChildrenUnreadable }
+        return .noBlockingWindow
+    }
+
     static func dialogPresenceDecision(
         runtime: Runtime = .production
     ) -> (reason: DialogPresenceReason, windowsReadError: Int32?) {
@@ -225,9 +236,7 @@ enum AXLogicProElements {
                 app, kAXWindowsAttribute as String, runtime: runtime.ax
             ) {
             case .success(.elements(let windows)):
-                reason = windows.contains { windowHostsBlockingModal($0, runtime: runtime.ax) }
-                    ? .blockingWindowFound
-                    : .noBlockingWindow
+                reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
             case .success(.absent):
                 reason = .windowsAttributeAbsent
             case .success(.malformed):
@@ -249,9 +258,7 @@ enum AXLogicProElements {
                         app, kAXWindowsAttribute as String, runtime: runtime.ax
                     ) {
                     case .success(.elements(let windows)):
-                        reason = windows.contains { windowHostsBlockingModal($0, runtime: runtime.ax) }
-                            ? .blockingWindowFound
-                            : .noBlockingWindow
+                        reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
                         axError = nil
                     case .success(.absent):
                         reason = .windowsAttributeAbsent
@@ -276,36 +283,59 @@ enum AXLogicProElements {
         dialogPresenceReason(runtime: runtime).isBlocked
     }
 
+    /// Why a window counted as blocking — a modal that was SEEN, or a read that did not happen.
+    ///
+    /// #608: this used to return a bare Bool, so the fail-closed default for an unreadable child was
+    /// indistinguishable from an actual dialog. The refusal then reported
+    /// `refusal_names_an_actual_dialog: true` for a window whose children would not read, which is
+    /// the defect this whole issue is about wearing a different hat: an absence published as an
+    /// observation.
+    enum BlockingModalFinding {
+        case none
+        case sawModal
+        case readFailed
+
+        var isBlocking: Bool { self != .none }
+        var isAnActualModal: Bool { self == .sawModal }
+    }
+
     private static func windowHostsBlockingModal(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        if isBlockingDialogWindow(window, runtime: runtime) { return true }
+        blockingModalFinding(window, runtime: runtime).isBlocking
+    }
+
+    private static func blockingModalFinding(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> BlockingModalFinding {
+        if isBlockingDialogWindow(window, runtime: runtime) { return .sawModal }
         switch AXHelpers.childrenResult(window, runtime: runtime) {
         case .failure(let error)
             where error.raw == AXError.attributeUnsupported.rawValue
                 || error.raw == AXError.noValue.rawValue:
-            return false
+            return .none
         case .failure:
-            return true
+            return .readFailed
         case .success(let children):
             for child in children {
                 switch AXHelpers.getAttributeResult(
                     child, kAXRoleAttribute as String, runtime: runtime
                 ) as Result<String?, AXHelpers.AXStatusError> {
                 case .success(.some(let role)) where role == (kAXSheetRole as String):
-                    return true
+                    return .sawModal
                 case .failure(let error)
                     where error.raw == AXError.attributeUnsupported.rawValue
                         || error.raw == AXError.noValue.rawValue:
                     continue
                 case .failure:
-                    return true
+                    return .readFailed
                 case .success:
                     continue
                 }
             }
-            return false
+            return .none
         }
     }
 
