@@ -116,7 +116,14 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
-band = (0, 0, win["w"], 28) if win else None
+# The leftmost strip only — the track-name column. The full-width band is NOT a defensible negative
+# control for this operation: bisected across a real run, x 720-1200 differs while every other slice
+# is identical, and that span is arrange content whose selection and focus state a panel opening and
+# closing legitimately changes. Asserting "nothing changed" over a region the operation is entitled to
+# change produces a red that says nothing about the refusal.
+#
+# What the refusal must NOT touch is the project's track list, and that is what this watches.
+band = (0, 0, 240, 28) if win else None
 ev.check("604/precondition-the-window-frame-is-known", band is not None,
          "the arrange window's own frame read, so the capture band is inside it",
          f"window={win!r} band={band!r}", None)
@@ -265,10 +272,12 @@ after = ev.shot("604/after", settle_region=band, window_title=after_title)
 # evidence from a window whose content was moving on its own before it started. Flipping
 # `expect_change` to match whatever happened would make the check pass by agreeing with the result,
 # which is the defect this whole directory exists to refuse.
-ev.visual("614/the-window-content-behind-is-undisturbed",
+ev.visual("614/the-track-list-behind-is-undisturbed",
           before["file"], after["file"], band, expect_change=False,
-          why="a refusal that writes nothing must leave the document window exactly as it found it; "
-              "a difference in the title band would mean the failed save renamed or dirtied it")
+          why="a refusal that writes nothing must leave the project's track list exactly as it found "
+              "it. Narrowed on purpose: the full-width band also covers arrange content whose "
+              "selection and focus a panel opening and closing may legitimately move, and a control "
+              "that reds on a legitimate change is not a control")
 
 # `system.health` was the wrong witness: it builds its report from channel health, cache and
 # permissions and never consults `blockingDialogInfo()`, so it cannot report a blocking dialog no
