@@ -57,6 +57,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import time
 
 # Set by the harness before use.
@@ -70,6 +71,36 @@ _SETTLE_GAP = 0.35
 # ---------------------------------------------------------------------------
 # Window geometry
 # ---------------------------------------------------------------------------
+
+_NAME_SAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _safe_name(raw):
+    """A document name that can only ever be a single file inside the head directory.
+
+    `name` used to live only inside the JSON. It is now a PATH COMPONENT, so an unconstrained value
+    escapes: `Evidence(..., name="../escaped")` wrote `escaped.evidence.json` in the evidence ROOT,
+    outside the head directory, where the gate would never look for it and nothing would notice.
+    """
+    stem = os.path.basename(str(raw)).strip() or "livekit"
+    stem = _NAME_SAFE.sub("_", stem).lstrip(".") or "livekit"
+    return stem[:80]
+
+
+def _running_harness_name():
+    """The stem of the script that is running, e.g. `live_608_first_call_is_not_refused`.
+
+    When the entry point cannot be determined — `python3 -c`, a REPL, a wrapper that execs without
+    setting `__file__` — this used to fall back to the WORKTREE basename, which is exactly the
+    ambiguity #612 is about: two harnesses under one worktree share it and overwrite each other
+    again. The fallback now carries the pid, so two such runs cannot collide, and it says in the name
+    that it could not identify itself.
+    """
+    path = getattr(sys.modules.get("__main__"), "__file__", None)
+    if path:
+        return _safe_name(os.path.splitext(os.path.basename(path))[0])
+    return _safe_name(f"unidentified-harness-pid{os.getpid()}")
+
 
 def logic_window(title_contains="Tracks"):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
@@ -246,7 +277,11 @@ class Evidence:
         self.head = head
         self.dir = os.path.join(root, head)
         os.makedirs(self.dir, exist_ok=True)
-        self.name = name or os.path.basename(REPO or "livekit")
+        # #612: the document used to be named after the WORKTREE, so two harnesses run at the same
+        # head both called themselves `lpm-wt-608` and there was no field saying which script wrote
+        # it. Name it after the running script instead, and key the file by that name too — see
+        # `write()`.
+        self.name = _safe_name(name) if name else _running_harness_name()
         self.records = []
         self._window_points = None
 
@@ -294,7 +329,11 @@ class Evidence:
         region alone: Logic repaints level meters and clocks continuously, so a whole-window settle
         never converges and would silently record `settled: false` on a perfectly good run.
         """
-        path = os.path.join(self.dir, f"{tag.replace('/', '_')}.png")
+        # Keyed by harness as well as tag (#612 follow-up). Tags collide across harnesses —
+        # `575/before` is used by three different files, `before-create` by two — so a document
+        # rotated aside for later comparison used to name PNGs a later run had already replaced.
+        # Archiving a document whose pixels are gone is the opposite of keeping a flake visible.
+        path = os.path.join(self.dir, f"{self.name}__{tag.replace('/', '_')}.png")
         win = logic_window(window_title)
         if not win:
             self.records.append({"kind": "capture", "tag": tag, "file": path,
@@ -360,7 +399,7 @@ class Evidence:
         The file name never begins with a dot: `screencapture` rejects dotfiles while still exiting 0,
         which produces a silent absence rather than an error.
         """
-        path = os.path.join(self.dir, "run.mov")
+        path = os.path.join(self.dir, f"{self.name}__run.mov")
         proc = subprocess.Popen(
             ["/usr/sbin/screencapture", "-v", "-V", str(seconds), path],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -412,8 +451,38 @@ class Evidence:
             },
             "records": self.records,
         }
-        out = os.path.join(self.dir, "evidence.json")
+        # #612: one file per HARNESS per head, not one per head. `evidence.json` was keyed by the
+        # head SHA alone, so the last harness to run at a given head silently replaced every earlier
+        # one's document — measured: running #606's harness on the #608 branch to check for a
+        # regression overwrote #608's own evidence, and the gate then validated #608 against #606's
+        # proof and reported ok. A check whose subject can be swapped without the check noticing is
+        # not a check.
+        out = os.path.join(self.dir, f"{self.name}.evidence.json")
+        # A re-run against the SAME binary is a re-measurement of the same thing. Replacing the
+        # earlier document silently would hide a flake — two runs disagreeing is exactly what you
+        # want to see — so the previous one is kept beside it rather than dropped.
+        # Rotate ANY existing document, not only one from the same binary.
+        #
+        # The first cut rotated only when the artifact sha256 matched, on the theory that a different
+        # binary is a new measurement and may replace cleanly. That erases the case the rotation
+        # exists for: the normal loop is edit → rebuild → re-run, so the second run almost always has
+        # a DIFFERENT hash, and the flake it was meant to preserve was the thing overwritten.
+        # Unreadable or pre-schema JSON took the same overwrite path for the same reason.
+        #
+        # Keeping every document costs a few kilobytes and is the only way "two runs disagreeing" is
+        # something anyone can see afterwards.
+        if os.path.exists(out):
+            n = 1
+            while os.path.exists(os.path.join(self.dir, f"{self.name}.evidence.{n}.json")):
+                n += 1
+            os.replace(out, os.path.join(self.dir, f"{self.name}.evidence.{n}.json"))
         with open(out, "w") as fh:
+            json.dump(doc, fh, indent=1)
+        # The old single-file name is still written, because the gate reads it. It is the LAST run at
+        # this head whatever produced it, which is the very ambiguity #612 is about — the per-harness
+        # file above is the one to trust, and the gate should move to requiring one per harness.
+        legacy = os.path.join(self.dir, "evidence.json")
+        with open(legacy, "w") as fh:
             json.dump(doc, fh, indent=1)
         return self._summary(out)
 
