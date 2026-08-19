@@ -109,6 +109,11 @@ enum EventListReadbackCollector {
         AXLocalePolicy.eventListColumnValue, AXLocalePolicy.eventListColumnLengthInfo,
     ]
     private static let expectedHeaderTitles = expectedHeaderColumns.map(\.canonical)
+    /// The two columns whose cell may legitimately be EMPTY: an unset Lock or Mute flag.
+    private static let flagColumnTitles: Set<String> = [
+        AXLocalePolicy.eventListColumnL.canonical,
+        AXLocalePolicy.eventListColumnM.canonical,
+    ]
     /// Logic uses this distinct schema while the Event List is showing regions
     /// instead of the selected region's events. It is a recoverable navigation
     /// failure, not a column-layout drift.
@@ -444,15 +449,32 @@ enum EventListReadbackCollector {
 
         var result: RawEventRow = [:]
         for (columnIndex, cell) in cells.enumerated() {
+            let title = expectedHeaderTitles[columnIndex]
             let children = AXHelpers.getChildren(cell, runtime: runtime)
+            // #293: L and M are the Lock and Mute FLAGS, and an unset flag is an EMPTY cell — measured
+            // live on a three-note region, every row reads cell child counts [0, 0, 1, 1, 1, 1, 1, 1].
+            // Requiring exactly one child everywhere therefore threw
+            // `cellChildCountMismatch(row: 0, column: "L", actual: 0)` on the first cell of the first
+            // row of any ordinary note, so this collector could not read a single real row.
+            //
+            // The absence is not ambiguous: those two cells expose no value-bearing attribute at all
+            // (19 attribute names, all structural, `AXDescription` nil, no `AXValue`), so there is
+            // nowhere else for a set flag to live and an empty cell means "off".
+            //
+            // Deliberately narrow: only the two flag columns may be empty. A missing child in a DATA
+            // column is still a mismatch, because there the absence would be a datum that failed to
+            // read rather than a state.
+            if flagColumnTitles.contains(title), children.isEmpty {
+                result[headers.orderedIDs[columnIndex]] = RawCell()
+                continue
+            }
             guard children.count == 1, let child = children.first else {
                 throw EventListReadbackCollectorError.cellChildCountMismatch(
                     row: index,
-                    column: expectedHeaderTitles[columnIndex],
+                    column: title,
                     actual: children.count
                 )
             }
-            let title = expectedHeaderTitles[columnIndex]
             result[headers.orderedIDs[columnIndex]] = rawCell(
                 title: title,
                 child: child,

@@ -85,6 +85,18 @@ import Testing
             var cells: [AXUIElement] = []
             for title in Self.headerTitles {
                 let cell = element()
+                // #293: L and M are the Lock and Mute FLAGS, and an unset flag is an EMPTY cell.
+                // Measured live on a three-note region, every row reads cell child counts
+                // [0, 0, 1, 1, 1, 1, 1, 1] — and those two cells expose no value-bearing attribute
+                // either (19 attribute names, all structural). This fixture used to give them a child
+                // like every other column, which is a shape Logic does not produce, and the collector
+                // was written against the fixture: run against a real note it threw
+                // `cellChildCountMismatch(row: 0, column: "L", actual: 0)` on the very first cell.
+                if title == "L" || title == "M" {
+                    builder.setChildren(cell, [])
+                    cells.append(cell)
+                    continue
+                }
                 let child = element()
                 builder.setChildren(cell, [child])
                 switch title {
