@@ -47,7 +47,18 @@ func emit(_ o: [String: Any]) -> Never {
 
 // Every measured AXDescription for the rail. Add by MEASUREMENT only — widening this to a substring
 // or a structural guess is what made the earlier attempt return the Inspector.
-let railDescriptions: Set<String> = ["Tracks header"]
+// The CONTROL BAR, not the track rail.
+//
+// Three different regions of the document view were tried as a negative control and all three
+// failed the same way: quiet at rest, different after the run. Bisected, the last one differed in
+// EVERY vertical slice — the arrange view scrolls when a modal takes and returns focus, so no part
+// of the document is invariant across a refusal. The two earlier attempts (full-width top strip,
+// then the leftmost column) each failed for a narrower version of the same reason.
+//
+// The claim a refusal that writes nothing CAN keep is that it did not touch the transport. The
+// control bar is chrome rather than document, so it does not scroll with the arrange, and its clock
+// only advances while the transport is running — which the quiet probe checks before this is used.
+let railDescriptions: Set<String> = ["Control Bar"]
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")

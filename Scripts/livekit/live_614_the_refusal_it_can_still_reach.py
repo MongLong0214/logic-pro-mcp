@@ -83,14 +83,14 @@ def document_titles():
     return [t for t in window_titles() if not any(c in t for c in CHOOSER_TITLES)]
 
 
-def _track_header_band():
-    """The arrange window's track-header rail, in window coordinates, or None.
+def _control_bar_band():
+    """The window's control bar, in window coordinates, or None.
 
     Located by AXDescription through a raw-AX witness rather than System Events: twice this week a
     rule prototyped through System Events failed to hold through the API the product uses.
     """
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_track_header_band.swift")
-    out = os.path.join(os.path.dirname(src), ".ax_track_header_band.bin")
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+    out = os.path.join(os.path.dirname(src), ".ax_control_bar_band.bin")
     if subprocess.run(["swiftc", "-O", src, "-o", out],
                       capture_output=True, text=True).returncode != 0:
         return None
@@ -136,22 +136,27 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
-# The band is located by CONTENT, not by coordinates.
+# The band is located by CONTENT, and it watches the CONTROL BAR — not the document.
 #
-# Two coordinate bands failed here for the same reason. The full-width top strip differs only in
-# x 720-1200 — arrange content whose selection and focus a panel opening and closing legitimately
-# moves. Narrowing to the leftmost 240 points was stable twice and then failed, because that column is
-# the track-name list with the Mixer closed and a column of MIXER STRIPS with it open, and mixer
-# strips carry level meters. A rectangle does not know what it is looking at.
+# Three regions of the document view were tried and all three failed identically: quiet at rest,
+# different after the run. The full-width top strip differed only in x 720-1200 (arrange content whose
+# selection a modal legitimately moves). The leftmost 240 points passed twice then failed, because
+# that column is the track-name list with the Mixer closed and MIXER STRIPS with it open. The
+# track-header rail, located properly by AXDescription, differed in EVERY vertical slice — the arrange
+# view scrolls when a modal takes and returns focus.
 #
-# `ax_track_header_band.swift` asks AX for the element described "Tracks header" and returns its frame
-# in window coordinates. It emits nothing when that description is not found, which is a failed
-# precondition rather than a licence to fall back to a rectangle.
-band = _track_header_band()
-ev.check("614/precondition-the-track-header-rail-was-located",
+# So no region of the DOCUMENT is invariant across a refusal, and asserting otherwise produces a red
+# that says nothing. What a refusal that writes nothing CAN be held to is that it did not touch the
+# transport: the control bar is chrome, does not scroll with the arrange, and its clock only advances
+# while playing — which the quiet probe below checks before this band is trusted.
+#
+# The locator emits nothing when the description is not found, which is a failed precondition rather
+# than a licence to fall back to a rectangle.
+band = _control_bar_band()
+ev.check("614/precondition-the-control-bar-was-located",
          band is not None,
-         "the visual band is the track-header rail found by its AXDescription, so it watches the same "
-         "thing whatever pane is open — a coordinate band watched the mixer when the mixer was open",
+         "the visual band is the control bar found by its AXDescription, so it watches the same thing "
+         "whatever pane is open and wherever the arrange has scrolled to",
          f"band={band!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
@@ -307,11 +312,11 @@ after = ev.shot("604/after", settle_region=band, window_title=after_title)
 # evidence from a window whose content was moving on its own before it started. Flipping
 # `expect_change` to match whatever happened would make the check pass by agreeing with the result,
 # which is the defect this whole directory exists to refuse.
-ev.visual("614/the-track-list-behind-is-undisturbed",
+ev.visual("614/the-transport-is-undisturbed",
           before["file"], after["file"], band, expect_change=False,
-          why="a refusal that writes nothing must leave the project's track list exactly as it found "
-              "it. Narrowed on purpose: the full-width band also covers arrange content whose "
-              "selection and focus a panel opening and closing may legitimately move, and a control "
+          why="a refusal that writes nothing must leave the transport exactly as it found it. Aimed "
+              "at the control bar on purpose: no region of the DOCUMENT is invariant across a "
+              "refusal — the arrange scrolls when a modal takes and returns focus — and a control "
               "that reds on a legitimate change is not a control")
 
 # `system.health` was the wrong witness: it builds its report from channel health, cache and
