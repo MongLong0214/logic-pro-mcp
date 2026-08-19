@@ -1021,8 +1021,14 @@ extension AccessibilityChannel {
         //
         // #519: this used to try a Korean literal and then an English one, which covers exactly two
         // of the languages Logic ships and fails silently in every other. Resolved through
-        // AXLocalePolicy instead, so the Japanese `ファイル` already measured for this menu bar works
-        // without a third literal, and a new measured label is added in one place.
+        // AXLocalePolicy instead, so a newly measured label is added in one place rather than as
+        // another literal here.
+        //
+        // It does NOT yet reach Japanese. The File menu bar has a measured `ファイル`, but the ITEM's
+        // Japanese label has never been read off a live Japanese Logic, so `saveAsMenuItem` has no
+        // Japanese variant and this refusal is what a Japanese user gets. An earlier draft of this
+        // comment claimed otherwise on the strength of the bar alone, which is the same over-claim
+        // this change deliberately refused to make about `logicUILocaleIdentifier`.
         let trigger = clickMenuItem(
             AXLocalePolicy.saveAsMenuItem, in: AXLocalePolicy.fileMenuBar, runtime: runtime
         )

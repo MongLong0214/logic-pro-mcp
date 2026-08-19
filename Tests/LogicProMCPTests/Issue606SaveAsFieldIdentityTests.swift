@@ -160,14 +160,30 @@ struct Issue519SaveAsMenuLocaleTests {
         #expect(!item.matches("Save"))
     }
 
-    /// The bar it hangs off already carries a Japanese form that the old literal pair could not reach.
-    @Test("issue519_the_file_menu_bar_reaches_beyond_the_two_old_literals")
-    func fileMenuBarReachesFurther() {
+    /// The bar it hangs off already carries a Japanese form. The ITEM does not — and that gap is
+    /// asserted here rather than left to be assumed away.
+    ///
+    /// A review caught an earlier draft claiming `save_as` "works on Japanese without a third
+    /// literal" because the BAR has `ファイル`. A resolved bar is worthless if the item under it does
+    /// not resolve, and the item's Japanese label has never been measured on a live Japanese Logic.
+    /// If someone measures it, they add it to `saveAsMenuItem.variants` and this test's last
+    /// expectation is what tells them to.
+    @Test("issue519_the_bar_reaches_japanese_and_the_item_does_not_yet")
+    func fileMenuBarReachesFurtherThanTheItem() {
         let bar = AXLocalePolicy.fileMenuBar.labels
         #expect(bar.contains("File"))
         #expect(bar.contains("파일"))
-        // The label the replaced pair could never have matched.
         #expect(bar.contains("ファイル"))
+
+        // The honest state of the item: two measured labels, no Japanese. Flip this the day someone
+        // reads the real label off a Japanese Logic — not before.
+        let item = AXLocalePolicy.saveAsMenuItem.labels
+        #expect(item.contains("Save As…"))
+        #expect(item.contains("다른 이름으로 저장…"))
+        let itemHasAnyJapanese = item.contains { label in
+            label.unicodeScalars.contains { (0x3040...0x30FF).contains(Int($0.value)) }
+        }
+        #expect(!itemHasAnyJapanese)
     }
 
     /// The shipped call site must not have drifted back to literals — the defect #519 is about is a

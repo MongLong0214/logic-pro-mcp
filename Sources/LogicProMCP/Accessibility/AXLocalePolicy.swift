@@ -255,6 +255,16 @@ enum AXLocalePolicy {
     /// `AccessibilityChannel+Project.swift`, where it shipped as one half of a Korean-then-English
     /// pair. I did not re-measure it on a Korean Logic, so its provenance is "already trusted in
     /// shipped code", not "measured by me" — recorded here so nobody reads it as a fresh observation.
+    ///
+    /// **There is NO Japanese variant, and `save_as` therefore does not resolve on a Japanese Logic.**
+    /// The File menu BAR has a measured `ファイル`, and an early draft of this change let that fact
+    /// stand in for the item — "Japanese works without a third literal" — which it does not: the bar
+    /// resolving is worthless if the item does not. The item's Japanese label has never been read off
+    /// a live Japanese Logic, and this repository does not translate labels into a LabelSet. So the
+    /// gap is recorded rather than papered over, and `Issue519SaveAsMenuLocaleTests` asserts the
+    /// absence so it cannot quietly become an assumption.
+    ///
+    /// This is not a regression: the two hard-coded literals it replaces had exactly the same gap.
     static let saveAsMenuItem = LabelSet(
         canonical: "Save As…",
         variants: ["다른 이름으로 저장…"],
