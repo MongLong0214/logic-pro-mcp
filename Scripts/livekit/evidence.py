@@ -701,6 +701,16 @@ def _region_hash(png, region, window_points=None):
     # screen change" instead of "did this change" — and the run has no way to know it was answered.
     if not region:
         return None
+    # The whole-image fallback that used to live further down is DELETED, not merely bypassed. It
+    # said the opposite of this guard, in the same function, and this guard won only by running
+    # first — so deleting it would have restored the defect silently, and anyone reading that
+    # branch had every reason to think whole-image hashing was supported.
+    #
+    # With the fallback gone this guard is no longer individually load-bearing: `x, y, w, h = region`
+    # raises on None and the broad `except` below returns None anyway. Measured — removing this line
+    # leaves the shape test green. It stays because being correct by way of an exception handler is
+    # not the same as being correct on purpose, and that handler also swallows real failures. Said
+    # plainly so nobody reads a passing suite as proof this line is doing the work.
     if not os.path.isfile(png):
         return None
     try:
@@ -715,9 +725,6 @@ def _region_hash(png, region, window_points=None):
         img = CGImageSourceCreateImageAtIndex(src, 0, None)
         if img is None:
             return None
-        if not region:
-            data = CGDataProviderCopyData(CGImageGetDataProvider(img))
-            return hashlib.sha256(bytes(data)).hexdigest()
         pw, ph = CGImageGetWidth(img), CGImageGetHeight(img)
         sx = sy = 1.0
         if window_points:
