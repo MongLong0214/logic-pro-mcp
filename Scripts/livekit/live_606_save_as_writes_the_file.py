@@ -178,7 +178,20 @@ ev.check("606/no-panel-was-left-behind",
          "refusal may",
          f"save_panels={save_panels()!r}", None)
 
-after = ev.shot("606/after", settle_region=band, window_title=arrange_title)
+# The operation RENAMES the window, so capturing "after" by the title captured "before" can only
+# ever miss — the first cut of this file did exactly that and recorded "no Logic window on screen",
+# which then made the visual compare a real image against nothing and call it unchanged. Re-resolve
+# the arrange window by area, the same way the "before" side chose it.
+relocated = [(t, E.logic_window(t)) for t in window_titles()]
+relocated = [(t, w) for t, w in relocated if w]
+relocated.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
+after_title = relocated[0][0] if relocated else arrange_title
+ev.check("606/the-arrange-window-is-still-locatable-after-the-save",
+         bool(relocated),
+         "the document window can still be found by frame after the save, so the visual below "
+         "compares two real captures rather than one capture against a failed lookup",
+         f"before_title={arrange_title!r} after_title={after_title!r}", None)
+after = ev.shot("606/after", settle_region=band, window_title=after_title)
 ev.visual("606/the-window-title-changed-to-the-new-project",
           before["file"], after["file"], band, expect_change=True,
           why="saving under a new name renames the document window, so the title band must differ; "
