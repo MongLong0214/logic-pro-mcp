@@ -109,13 +109,13 @@ BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
 subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
 
 
-def located_band(description="Control Bar"):
+def located_band(*selector):
     """(band, subject) for a named region, or (None, None) — never a fallback rectangle.
 
     Falling back to coordinates when the lookup fails would put the run back on the footing this
     replaces, and it would do it silently, on the runs where AX is least trustworthy.
     """
-    r = subprocess.run([BAND_TOOL, description], capture_output=True, text=True)
+    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
     try:
         payload = json.loads(r.stdout or "{}")
     except ValueError:
@@ -126,7 +126,10 @@ def located_band(description="Control Bar"):
     return tuple(b), payload.get("description")
 
 
-band, band_subject = located_band()
+# "Control Bar" matches TWO elements in this window — the strip and a smaller group inside it — so
+# the lookup refuses without a discriminator rather than returning whichever the tree walk reached
+# first. The width is the discriminator, stated here instead of inherited from walk order.
+band, band_subject = located_band("Control Bar", "--min-width", "1000")
 ev.check("293/precondition-the-window-frame-is-known", band is not None and bool(band_subject),
          "the arrange window's frame read AND the Control Bar located by AXDescription, so the "
          "capture band is inside the window and can say what it watches. No fallback rectangle: a "
