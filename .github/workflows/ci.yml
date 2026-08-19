@@ -28,36 +28,6 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
-      - name: AX lookups that keep one candidate must not increase
-        # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
-        # nothing about the rest, and they cannot convert at once. The bar only moves down.
-        run: python3 Scripts/check-ax-locator-census.py
-
-      - name: Drive the injected Logic modules and assert their return shapes (#625)
-        # classify/detect take their System Events runner as an argument and select_input_source
-        # takes the TIS runtime, so both run with no Logic and no display.
-        run: python3 Scripts/test_pure_logic_modules.py
-
-      - name: Drive logic_variants and assert its return shapes (#625)
-        # The static contract check cannot see a function that keeps its name and signature and
-        # returns something else. All ten consumed functions drive with no Logic and no display —
-        # resolve_bundle_id takes its is_running/is_installed as callables.
-        run: python3 Scripts/test_logic_variants.py
-
-      - name: Every module with consumers must still satisfy them
-        # The module list is derived, not written down: a `.py` is in scope exactly when another
-        # file imports it. Checks every referenced name exists and every call binds against the real
-        # signature. Return SHAPE is not static — the evidence self-test below drives that.
-        run: python3 Scripts/check-python-contracts.py
-
-      - name: Self-test the live-evidence library (#622 harness API)
-        # is_clean, the document-name constraint, and — the reason this is here — that every
-        # `E.<name>` / `ev.<name>` a harness references still exists. Two individually-green
-        # branches once merged into a main where three functions had been deleted and every call
-        # site remained, and nothing in this file could see it: the Swift suite does not import
-        # evidence.py. Pure Python, no Xcode, no Logic.
-        run: python3 Scripts/livekit/test_evidence.py
-
       - name: Self-test the preflight stamp gate (#552)
         # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an
         # unresolvable tree-ish is 2, and the hook refuses an unstamped commit while allowing a deletion.
@@ -74,6 +44,13 @@ jobs:
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
+      - name: Guards and headless drives (discovered, not listed)
+        # Each of these used to be its own step, duplicated across compile and test, and the file
+        # conflicted on three consecutive PRs — every one appending at the same point. The runner
+        # discovers Scripts/check-*.py and the test_*.py drives, so adding a guard no longer edits
+        # this workflow. It prints each one and its result, and runs them all before reporting.
+        run: python3 Scripts/run-repo-guards.py
 
       - name: Cache SwiftPM and build products
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
@@ -109,36 +86,6 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
-      - name: AX lookups that keep one candidate must not increase
-        # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
-        # nothing about the rest, and they cannot convert at once. The bar only moves down.
-        run: python3 Scripts/check-ax-locator-census.py
-
-      - name: Drive the injected Logic modules and assert their return shapes (#625)
-        # classify/detect take their System Events runner as an argument and select_input_source
-        # takes the TIS runtime, so both run with no Logic and no display.
-        run: python3 Scripts/test_pure_logic_modules.py
-
-      - name: Drive logic_variants and assert its return shapes (#625)
-        # The static contract check cannot see a function that keeps its name and signature and
-        # returns something else. All ten consumed functions drive with no Logic and no display —
-        # resolve_bundle_id takes its is_running/is_installed as callables.
-        run: python3 Scripts/test_logic_variants.py
-
-      - name: Every module with consumers must still satisfy them
-        # The module list is derived, not written down: a `.py` is in scope exactly when another
-        # file imports it. Checks every referenced name exists and every call binds against the real
-        # signature. Return SHAPE is not static — the evidence self-test below drives that.
-        run: python3 Scripts/check-python-contracts.py
-
-      - name: Self-test the live-evidence library (#622 harness API)
-        # is_clean, the document-name constraint, and — the reason this is here — that every
-        # `E.<name>` / `ev.<name>` a harness references still exists. Two individually-green
-        # branches once merged into a main where three functions had been deleted and every call
-        # site remained, and nothing in this file could see it: the Swift suite does not import
-        # evidence.py. Pure Python, no Xcode, no Logic.
-        run: python3 Scripts/livekit/test_evidence.py
-
       - name: Self-test the preflight stamp gate (#552)
         # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an
         # unresolvable tree-ish is 2, and the hook refuses an unstamped commit while allowing a deletion.
@@ -155,6 +102,13 @@ jobs:
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
+      - name: Guards and headless drives (discovered, not listed)
+        # Each of these used to be its own step, duplicated across compile and test, and the file
+        # conflicted on three consecutive PRs — every one appending at the same point. The runner
+        # discovers Scripts/check-*.py and the test_*.py drives, so adding a guard no longer edits
+        # this workflow. It prints each one and its result, and runs them all before reporting.
+        run: python3 Scripts/run-repo-guards.py
 
       - name: Cache SwiftPM and build products
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
