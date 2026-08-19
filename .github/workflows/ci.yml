@@ -28,6 +28,12 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Drive logic_variants and assert its return shapes (#625)
+        # The static contract check cannot see a function that keeps its name and signature and
+        # returns something else. All ten consumed functions drive with no Logic and no display —
+        # resolve_bundle_id takes its is_running/is_installed as callables.
+        run: python3 Scripts/test_logic_variants.py
+
       - name: Every module with consumers must still satisfy them
         # The module list is derived, not written down: a `.py` is in scope exactly when another
         # file imports it. Checks every referenced name exists and every call binds against the real
@@ -92,6 +98,12 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Drive logic_variants and assert its return shapes (#625)
+        # The static contract check cannot see a function that keeps its name and signature and
+        # returns something else. All ten consumed functions drive with no Logic and no display —
+        # resolve_bundle_id takes its is_running/is_installed as callables.
+        run: python3 Scripts/test_logic_variants.py
 
       - name: Every module with consumers must still satisfy them
         # The module list is derived, not written down: a `.py` is in scope exactly when another

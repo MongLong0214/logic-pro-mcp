@@ -127,7 +127,23 @@ def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     known = local_modules(root)
     loaded, offenders, checked, unimportable = {}, [], 0, []
-    covered_by_a_drive = {"evidence": "Scripts/livekit/test_evidence.py"}
+    # DERIVED, not listed. The first version of this was a dict with one entry, which is the same
+    # staleness this file exists to prevent: it would have kept saying "evidence only" after a
+    # second module gained a drive. A module counts as driven when some `test_*.py` imports it AND
+    # asserts something about what its calls return — importing alone is not a drive.
+    covered_by_a_drive = {}
+    for cand, cpath in known.items():
+        if not os.path.basename(cpath).startswith("test_"):
+            continue
+        try:
+            ctree = ast.parse(open(cpath).read())
+        except SyntaxError:
+            continue
+        imported = set(aliases(ctree, known, cand).values()) | {m for m, _ in from_imports(ctree, known, cand)}
+        asserts_shapes = "isinstance" in open(cpath).read()
+        for mod in imported:
+            if asserts_shapes:
+                covered_by_a_drive[mod] = os.path.relpath(cpath, root)
     consumed = {}
 
     for path in sorted(known.values()):
