@@ -53,13 +53,33 @@ extension AXLogicProElements {
     static func getControlBar(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
 
-        let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax)
-        for group in groups {
-            let desc = AXHelpers.getDescription(group, runtime: runtime.ax) ?? ""
-            if AXLocalePolicy.controlBarGroupLabel.matches(desc, mode: .exactStrict) {
-                return group
+        // #628: "Control Bar" is not a unique AXDescription. Measured on one arrange window, two
+        // groups carry it — (10, 54, 1900, 58) with twenty direct checkboxes, and
+        // (828, 58, 264, 48) with none. The loop that used to be here returned whichever the walk
+        // reached first, which is the right one today and says nothing about why.
+        //
+        // The discriminator is the property callers actually depend on: this is the bar you can
+        // find a transport control in. `findControlBarCheckbox` and its siblings all immediately
+        // search it for a checkbox, so a candidate holding none cannot be what they meant, whatever
+        // it is called.
+        let labelled = AXHelpers.findAllDescendants(
+            of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax
+        ).filter { group in
+            AXLocalePolicy.controlBarGroupLabel.matches(
+                AXHelpers.getDescription(group, runtime: runtime.ax) ?? "", mode: .exactStrict
+            )
+        }
+        let withControls = labelled.filter { group in
+            AXHelpers.getChildren(group, runtime: runtime.ax).contains { child in
+                AXHelpers.getRole(child, runtime: runtime.ax) == kAXCheckBoxRole as String
             }
         }
+        // Exactly one, or nothing. Two bars that both hold transport controls is a tree this code
+        // has never seen and must not guess about; the callers all fail closed on nil.
+        if withControls.count == 1 { return withControls[0] }
+        // No labelled candidate holds a control: fall back to a lone labelled group rather than
+        // regressing to first-of-many, so a Logic that renders the bar differently still resolves.
+        if withControls.isEmpty, labelled.count == 1 { return labelled[0] }
         return nil
     }
 
