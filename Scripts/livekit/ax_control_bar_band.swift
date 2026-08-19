@@ -1,4 +1,9 @@
-// The arrange window's track-header rail, in window coordinates, emitted as JSON.
+// A NAMED region of the arrange window, in window coordinates, emitted as JSON with the name it
+// matched — so a caller can state what the band IS, not only where it is.
+//
+//   ./ax_control_bar_band                 -> the Control Bar (the default; #614 depends on it)
+//   ./ax_control_bar_band "Control Bar"   -> the same, named explicitly
+//   ./ax_control_bar_band "<AXDescription>" -> any region Logic describes by that exact string
 //
 // A band written as coordinates is not defined by its content: the top-left 240x28 of the arrange
 // window is the track-name column with the Mixer closed and a column of mixer strips with it open,
@@ -45,9 +50,10 @@ func emit(_ o: [String: Any]) -> Never {
     exit(0)
 }
 
-// Every measured AXDescription for the rail. Add by MEASUREMENT only — widening this to a substring
-// or a structural guess is what made the earlier attempt return the Inspector.
-// The CONTROL BAR, not the track rail.
+// The default region. An argument overrides it, and the match is always the EXACT AXDescription —
+// widening to a substring or a structural guess is what made the earlier attempt return the
+// Inspector. Whatever is passed, the emitted `description` is read back off the element that was
+// found, so the caller names what was measured rather than what was requested.
 //
 // Three different regions of the document view were tried as a negative control and all three
 // failed the same way: quiet at rest, different after the run. Bisected, the last one differed in
@@ -58,7 +64,8 @@ func emit(_ o: [String: Any]) -> Never {
 // The claim a refusal that writes nothing CAN keep is that it did not touch the transport. The
 // control bar is chrome rather than document, so it does not scroll with the arrange, and its clock
 // only advances while the transport is running — which the quiet probe checks before this is used.
-let railDescriptions: Set<String> = ["Control Bar"]
+let wanted = CommandLine.arguments.count > 1 && !CommandLine.arguments[1].isEmpty
+    ? CommandLine.arguments[1] : "Control Bar"
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")
@@ -72,7 +79,7 @@ var rail: AXUIElement?
 func walk(_ e: AXUIElement, _ d: Int) {
     guard d <= 18, rail == nil else { return }
     for c in kids(e) {
-        if railDescriptions.contains(str(c, kAXDescriptionAttribute as String)) { rail = c; return }
+        if str(c, kAXDescriptionAttribute as String) == wanted { rail = c; return }
         walk(c, d + 1)
         if rail != nil { return }
     }
@@ -80,7 +87,8 @@ func walk(_ e: AXUIElement, _ d: Int) {
 walk(win, 0)
 
 guard let r = rail, let rf = frame(r) else {
-    emit(["error": "no element described as the track-header rail",
+    emit(["error": "no element with that exact AXDescription",
+          "wanted": wanted,
           "window": str(win, kAXTitleAttribute as String)])
 }
 emit([
