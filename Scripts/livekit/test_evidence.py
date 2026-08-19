@@ -157,5 +157,58 @@ for name in sorted(instance_calls):
         print(f"FAIL Evidence.{name} is called by a harness and does not exist")
 print(f"ok   harness API present: {len(module_calls)} module + {len(instance_calls)} instance names")
 
+# --- the return SHAPES, driven ------------------------------------------------------------------
+#
+# The static contract check beside this (Scripts/check-python-contracts.py) proves every name a
+# consumer references exists and every call binds. It cannot see a function that keeps its name and
+# its signature and starts returning something else — nothing static can, in untyped Python. This
+# drives the whole non-capture surface headlessly and asserts what comes back.
+#
+# Everything except shot() and record_screen() runs without Logic and without a display; visual()
+# is fed two synthetic PNGs. That is what makes this runnable in CI, which is the only place it
+# stops a merge.
+import struct
+import tempfile
+import zlib
+
+
+def _png(path, colour):
+    raw = b"".join(b"\x00" + bytes(colour) * 4 for _ in range(4))
+
+    def chunk(tag, data):
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    open(path, "wb").write(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b""))
+
+
+tmp = tempfile.mkdtemp()
+ev = E.Evidence(head="0" * 40, root=tmp, name="contract-drive")
+shapes = []
+shapes.append(("Evidence.dir is a str", isinstance(ev.dir, str)))
+ev.check("t", True, "expected", "observed", "a mutation")
+ev.note("n", {"a": 1})
+ev.restored("r", True, "why")
+a, b = os.path.join(tmp, "a.png"), os.path.join(tmp, "b.png")
+_png(a, (1, 2, 3))
+_png(b, (1, 2, 3))
+ev.visual("v", a, b, (0, 0, 4, 4), expect_change=False, why="w", subject="a synthetic square")
+out = ev.write()
+shapes.append(("write() returns a dict", isinstance(out, dict)))
+shapes.append(("summary carries every required key",
+               all(k in out for k in E._REQUIRED_SUMMARY_KEYS)))
+shapes.append(("counters are ints", all(isinstance(out[k], int) for k in E._REQUIRED_SUMMARY_KEYS)))
+shapes.append(("is_clean() returns a bool", isinstance(E.is_clean(out), bool)))
+shapes.append(("the driven visual named a subject", out["visual_assertions_without_a_subject"] == 0))
+shapes.append(("have_tools() returns a list", isinstance(E.have_tools(), list)))
+shapes.append(("_safe_name() returns a str", isinstance(E._safe_name("x"), str)))
+for why, ok in shapes:
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
+
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)
