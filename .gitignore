@@ -59,3 +59,8 @@ __pycache__/
 
 # Per-developer MCP client configuration. Not part of the server.
 .mcp.json
+
+# Witness binaries: the livekit harnesses compile their AX witnesses beside the source at run time.
+# One was committed by `git add -A` before this line existed — a build artifact in the tree is a
+# claim the repository did not mean to make.
+Scripts/livekit/.*.bin
