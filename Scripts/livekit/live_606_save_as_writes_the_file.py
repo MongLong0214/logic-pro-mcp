@@ -63,10 +63,28 @@ if missing:
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 DIRECTORY = "/Users/isaac/Music/Logic"
-NAME = "lpm-606-live-proof"
+# Unique per run. The first cut used a fixed name and left Logic open under it, so on the SECOND run
+# the window title already matched before save_as was called and `logic-says-it-is-now-that-project`
+# was satisfied by the previous run rather than by this one. A check a prior run can satisfy is not
+# a check.
+NAME = f"lpm-606-live-proof-{HEAD[:8]}-{os.getpid()}"
 TARGET = f"{DIRECTORY}/{NAME}.logicx"
 # What the OLD code produced instead: the path itself as a filename, with "/" shown as ":".
 PATH_AS_NAME = f"{DIRECTORY}/{TARGET.replace('/', ':')}"
+
+
+def colon_named_bundles():
+    """Every project in the target folder whose name is a mangled path.
+
+    Probing one guessed path was not enough: the old failure wrote into whatever folder the panel
+    happened to have open, so a single `os.path.exists` on a name built from DIRECTORY could be
+    green while the artifact sat elsewhere. This at least sees the whole target folder, and the
+    check below compares BEFORE against AFTER so absence-by-default cannot pass for evidence.
+    """
+    try:
+        return sorted(n for n in os.listdir(DIRECTORY) if ":" in n)
+    except OSError:
+        return []
 
 
 def osa(script):
@@ -78,6 +96,12 @@ def window_titles():
     raw = osa('tell application "System Events" to tell process "Logic Pro" to '
               'return name of every window')
     return [t.strip() for t in raw.split(",") if t.strip()] if raw else []
+
+
+def any_sheets():
+    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
+              'return (count of sheets of every window)')
+    return [n for n in raw.split(",") if n.strip() not in ("", "0")]
 
 
 def save_panels():
@@ -98,6 +122,7 @@ if not titles:
     ev.write()
     sys.exit("no project open")
 
+colon_before = colon_named_bundles()
 ev.check("606/precondition-target-path-is-clear",
          not os.path.exists(TARGET) and not os.path.exists(PATH_AS_NAME),
          "neither the requested path nor the path-as-a-name variant exists before the run, so "
@@ -132,6 +157,7 @@ ev.note("606/warmup-first-call-is-refused-see-608", {
     "blocking_dialog_present": (warm or {}).get("blocking_dialog_present"),
 })
 
+titles_before_save = window_titles()
 saved = d.tool("logic_project", "save_as", {"path": TARGET, "confirmed": True})
 ev.note("606/save-as", {k: saved.get(k) for k in
                         ("state", "success", "error", "hint", "requested", "observed", "via")
@@ -147,13 +173,15 @@ ev.check("606/a-project-exists-at-the-exact-requested-path",
          "remove the Go-to-Folder step from `saveAsViaAXDialog`: the panel stays in whatever folder "
          "it opened in, nothing is written here, and this goes red")
 
+colon_after = colon_named_bundles()
 ev.check("606/no-project-was-created-with-the-path-as-its-name",
-         not os.path.exists(PATH_AS_NAME),
-         "the old failure produced a project literally NAMED after the requested path, in the wrong "
-         "folder, while reporting success — so its absence is the specific thing being proven",
-         f"path_as_name_exists={os.path.exists(PATH_AS_NAME)} probe={PATH_AS_NAME!r}",
-         "revert step 3b to setting the full path into the filename field: this folder appears and "
-         "this goes red")
+         colon_after == colon_before and not os.path.exists(PATH_AS_NAME),
+         "the old failure produced a project literally NAMED after the requested path — so what is "
+         "proven is that the set of path-named projects in the target folder is UNCHANGED across "
+         "the run, not merely that one guessed name is absent",
+         f"before={colon_before!r} after={colon_after!r} probe_exists={os.path.exists(PATH_AS_NAME)}",
+         "revert step 3b to setting the full path into the filename field: a ':Users:…' bundle "
+         "appears in this folder, the two censuses differ, and this goes red")
 
 ev.check("606/the-operation-reported-state-A",
          isinstance(saved, dict) and saved.get("state") == "A" and saved.get("success") is True,
@@ -165,18 +193,26 @@ ev.check("606/the-operation-reported-state-A",
          "reports success, no panel opens, and this reports element_not_found instead")
 
 title_after = window_titles()
-ev.check("606/logic-says-it-is-now-that-project",
-         any(t.startswith(NAME) for t in title_after),
-         "Logic's own window title names the saved project — a readback through the UI rather than "
-         "through the file system, so a stale directory listing cannot carry this check",
-         f"windows={title_after!r}",
-         "revert the Go-to-Folder step: the title becomes the colon-mangled path and this goes red")
+ev.check("606/logic-changed-its-title-to-this-runs-project",
+         any(t.startswith(NAME) for t in title_after)
+         and not any(t.startswith(NAME) for t in titles_before_save),
+         "Logic's own window title now names this run's project and did NOT before the call — a "
+         "readback through the UI, and one that a previous run cannot pre-satisfy because the name "
+         "carries this run's head and pid",
+         f"before={titles_before_save!r} after={title_after!r} name={NAME!r}",
+         "revert the Go-to-Folder step: the title becomes the colon-mangled path, so the 'after' "
+         "half fails and this goes red")
 
-ev.check("606/no-panel-was-left-behind",
-         not save_panels(),
-         "the Save panel is gone — a successful save must not leave its own modal up any more than a "
-         "refusal may",
-         f"save_panels={save_panels()!r}", None)
+# `save_panels()` only asked for windows named "Save", so a leftover Go-to-Folder SHEET — which the
+# new step 3a can open — would not have tripped it. And on a run where no panel ever opened this is
+# green for the wrong reason, so it is recorded as a guard rather than as proof of the dismissal.
+ev.check("606/no-panel-or-sheet-was-left-behind",
+         not save_panels() and not any_sheets(),
+         "neither the Save panel nor its Go-to-Folder sheet is on screen — a successful save must "
+         "not leave a modal up any more than a refusal may. This is a guard, not a proof of the "
+         "dismissal code: on a run where the panel never opened it is green for the wrong reason, "
+         "and the run that exercises the dismissal is the refusal harness for #604",
+         f"save_panels={save_panels()!r} sheets={any_sheets()!r}", None)
 
 # The operation RENAMES the window, so capturing "after" by the title captured "before" can only
 # ever miss — the first cut of this file did exactly that and recorded "no Logic window on screen",
