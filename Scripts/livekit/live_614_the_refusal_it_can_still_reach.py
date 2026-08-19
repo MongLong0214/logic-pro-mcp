@@ -93,19 +93,20 @@ def _control_bar_band():
     out = os.path.join(os.path.dirname(src), ".ax_control_bar_band.bin")
     if subprocess.run(["swiftc", "-O", src, "-o", out],
                       capture_output=True, text=True).returncode != 0:
-        return None, None
+        return None, None, None
     # "Control Bar" is not a unique AXDescription in this window; the tool refuses ambiguity, so
     # the width discriminator is passed explicitly rather than relying on tree order.
     r = subprocess.run([out, "Control Bar", "--min-width", "1000"], capture_output=True, text=True)
     try:
         payload = json.loads(r.stdout or "{}")
     except ValueError:
-        return None, None
+        return None, None, None
     b = payload.get("band")
     if not (isinstance(b, list) and len(b) == 4):
-        return None, None
-    # The name comes back off the element that answered, so `subject` cannot drift from the band.
-    return tuple(b), payload.get("description")
+        return None, None, None
+    # The name comes back off the element that answered, so `subject` cannot drift from the band,
+    # and the candidate count comes with it so "there was one" is recorded rather than assumed.
+    return tuple(b), payload.get("description"), payload.get("candidates")
 
 
 def save_panels():
@@ -157,9 +158,9 @@ arrange_title, win = located[0] if located else (titles[0], None)
 #
 # The locator emits nothing when the description is not found, which is a failed precondition rather
 # than a licence to fall back to a rectangle.
-band, band_subject = _control_bar_band()
+band, band_subject, band_candidates = _control_bar_band()
 ev.check("614/precondition-the-control-bar-was-located",
-         band is not None and bool(band_subject),
+         band is not None and bool(band_subject) and band_candidates == 1,
          "the visual band is the control bar found by its AXDescription, so it watches the same thing "
          "whatever pane is open and wherever the arrange has scrolled to",
          f"band={band!r}", None)

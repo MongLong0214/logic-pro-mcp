@@ -119,22 +119,25 @@ def located_band(*selector):
     try:
         payload = json.loads(r.stdout or "{}")
     except ValueError:
-        return None, None
+        return None, None, None
     b = payload.get("band")
     if not (isinstance(b, list) and len(b) == 4):
-        return None, None
-    return tuple(b), payload.get("description")
+        return None, None, None
+    return tuple(b), payload.get("description"), payload.get("candidates")
 
 
 # "Control Bar" matches TWO elements in this window — the strip and a smaller group inside it — so
 # the lookup refuses without a discriminator rather than returning whichever the tree walk reached
 # first. The width is the discriminator, stated here instead of inherited from walk order.
-band, band_subject = located_band("Control Bar", "--min-width", "1000")
-ev.check("293/precondition-the-window-frame-is-known", band is not None and bool(band_subject),
-         "the arrange window's frame read AND the Control Bar located by AXDescription, so the "
-         "capture band is inside the window and can say what it watches. No fallback rectangle: a "
-         "failed lookup is a red precondition, not a guess",
-         f"window={win!r} band={band!r} subject={band_subject!r}", None)
+band, band_subject, band_candidates = located_band("Control Bar", "--min-width", "1000")
+ev.check("293/precondition-the-window-frame-is-known",
+         band is not None and bool(band_subject) and band_candidates == 1,
+         "the arrange window's frame read AND the Control Bar located by AXDescription with "
+         "EXACTLY ONE candidate. The count is the point: refusing two is half of it, and the other "
+         "half is that 'there was one' reaches this document — otherwise a later reader cannot tell "
+         "a discriminator from tree order. No fallback rectangle: a failed lookup is a red "
+         "precondition, not a guess",
+         f"window={win!r} band={band!r} subject={band_subject!r} candidates={band_candidates!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 

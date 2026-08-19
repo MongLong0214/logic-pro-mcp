@@ -117,9 +117,13 @@ guard let r = hits.first, let rf = frame(r) else {
           "wanted": wanted,
           "window": str(win, kAXTitleAttribute as String)])
 }
+// `candidates` on the SUCCESS path, not only in the ambiguity error. Refusing when there are two
+// is half the job; the other half is that "there was exactly one" reaches the record. Otherwise a
+// later reader still cannot tell a discriminator from tree order — which is the whole defect.
 emit([
     "window": str(win, kAXTitleAttribute as String),
     "description": str(r, kAXDescriptionAttribute as String),
     "role": str(r, kAXRoleAttribute as String),
+    "candidates": hits.count,
     "band": [rf.0 - wf.0, rf.1 - wf.1, rf.2, rf.3],
 ])

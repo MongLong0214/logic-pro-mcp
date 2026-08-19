@@ -103,25 +103,28 @@ BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
 subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
 
 
-def located_band(description):
+def located_band(*selector):
     """(band, subject) for a named region, or (None, None). No fallback rectangle: falling back to
     coordinates would silently restore what this replaces, on the runs where AX is least reliable."""
-    r = subprocess.run([BAND_TOOL, description], capture_output=True, text=True)
+    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
     try:
         payload = json.loads(r.stdout or "{}")
     except ValueError:
-        return None, None
+        return None, None, None
     b = payload.get("band")
     if not (isinstance(b, list) and len(b) == 4):
-        return None, None
-    return tuple(b), payload.get("description")
+        return None, None, None
+    return tuple(b), payload.get("description"), payload.get("candidates")
 
 
-band, band_subject = located_band("Tracks contents")
-ev.check("608/precondition-the-window-frame-is-known", band is not None and bool(band_subject),
-         "the arrange document area located by AXDescription, so the band watches the thing the "
-         "visual below claims about. A failed lookup is a red precondition, not a guess",
-         f"window={win!r} band={band!r} subject={band_subject!r}", None)
+band, band_subject, band_candidates = located_band("Tracks contents")
+ev.check("608/precondition-the-window-frame-is-known",
+         band is not None and bool(band_subject) and band_candidates == 1,
+         "the arrange document area located by AXDescription, with EXACTLY ONE candidate. Refusing "
+         "two is half of it; the other half is that 'there was one' reaches this document, so a "
+         "later reader can tell a discriminator from tree order. A failed lookup is a red "
+         "precondition, not a guess",
+         f"window={win!r} band={band!r} subject={band_subject!r} candidates={band_candidates!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
