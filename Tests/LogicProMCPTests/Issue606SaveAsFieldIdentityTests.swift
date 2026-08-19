@@ -93,3 +93,42 @@ struct Issue606SaveAsFieldIdentityTests {
         #expect(AccessibilityChannel.filenameFieldCandidates(in: panel, runtime: runtime).count == 2)
     }
 }
+
+/// #606 follow-up: the menu gate must refuse an UNREADABLE `AXEnabled`, not only a false one.
+///
+/// The first cut used `enabled != false`, so a missing read was treated as permission to press. That
+/// is the opposite of this tree's other actuation gate (`menuItemEnabledForActuation` is
+/// `enabled == true`), and it leaves open exactly the hole the gate exists to close: `AXPress` on a
+/// disabled item returns true, so an unreadable answer followed by a press is indistinguishable from
+/// success on a disabled item.
+@Suite(.serialized)
+struct Issue606MenuEnabledGateTests {
+    private func gateAccepts(enabled: Bool?) -> Bool {
+        // The predicate under test, stated the way the call site states it.
+        enabled == true
+    }
+
+    @Test("issue606_menu_gate_accepts_only_a_read_true")
+    func gateAcceptsOnlyReadTrue() {
+        #expect(gateAccepts(enabled: true))
+        #expect(!gateAccepts(enabled: false))
+        // The case the first cut got wrong.
+        #expect(!gateAccepts(enabled: nil))
+    }
+
+    /// The same predicate, read out of the shipped source, so this test fails if the call site drifts
+    /// back to the lenient form while the helper above stays strict.
+    @Test("issue606_the_shipped_call_site_uses_the_strict_form")
+    func shippedCallSiteIsStrict() throws {
+        let source = try String(
+            contentsOfFile: #filePath
+                .replacingOccurrences(
+                    of: "Tests/LogicProMCPTests/Issue606SaveAsFieldIdentityTests.swift",
+                    with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift"
+                ),
+            encoding: .utf8
+        )
+        #expect(source.contains("guard enabled == true else {"))
+        #expect(!source.contains("guard enabled != false else {"))
+    }
+}
