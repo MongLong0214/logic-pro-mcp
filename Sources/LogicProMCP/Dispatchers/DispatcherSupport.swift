@@ -185,20 +185,50 @@ func blockingLogicDialogResult(
     operation: String,
     info: AXLogicProElements.BlockingDialogInfo? = AXLogicProElements.blockingDialogInfo()
 ) -> CallTool.Result {
+    // #608: the guard has four ways to answer "blocked" and only one of them is a dialog. Saying
+    // `blocking_dialog_present: true` for all four sends an operator to dismiss a modal that is not
+    // on screen — measured, that is exactly what happened to every first call in a fresh process,
+    // where the windows read answered kAXErrorCannotComplete. The refusal now says which world it is
+    // in, and only claims a dialog when one was found.
+    let reason = AXLogicProElements.lastDialogPresenceReason()
+    let sawADialog = info != nil || reason?.namesAnActualDialog == true
     var extras: [String: Any] = [
         "operation": operation,
-        "failure_stage": "preflight_blocking_dialog",
-        "blocking_dialog_present": true,
+        "failure_stage": sawADialog ? "preflight_blocking_dialog" : "preflight_logic_not_addressable",
+        "blocking_dialog_present": sawADialog,
         "write_attempted": false,
         "safe_to_retry": true,
     ]
-    var hint = "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+    var hint = sawADialog
+        ? "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+        : "Refusing \(operation): Logic's accessibility interface did not answer, so whether a "
+            + "blocking dialog is present could not be established and the operation fails closed. "
+            + "Nothing was touched. This is not a dialog to dismiss — retry in a moment, and if it "
+            + "persists check that Logic is running and that this process has Accessibility access."
     // #190: identify the dialog so the demo/product workflow can recover
     // deterministically instead of guessing at a generic blocking-dialog refusal.
     if info == nil {
         // #606: refusing without an identity is refusing on something nobody can name. Say what the
         // guard actually saw so the caller is not sent hunting for a dialog that is not there.
+        // #608: read the recorded reason BEFORE taking the census — the census re-asks the same
+        // question to show whether the condition still holds, and re-asking OVERWRITES the record.
+        // The first cut of this did it the other way round and reported `no_blocking_window` as the
+        // reason a refusal fired, which is not a reason at all. An instrument that disturbs what it
+        // measures reads as a measurement.
+        if let reason {
+            extras["last_dialog_presence_reason"] = reason.rawValue
+            extras["refusal_names_an_actual_dialog"] = reason.namesAnActualDialog
+            if let axError = AXLogicProElements.lastDialogPresenceWindowsReadError() {
+                extras["windows_read_ax_error"] = Int(axError)
+            }
+        }
         extras["dialog_presence_census"] = AXLogicProElements.dialogPresenceCensus()
+        // Which of the guard's four "blocked" conditions actually fired. Three of them are not
+        // dialogs — they are fail-closed defaults for a read that did not happen — and reporting all
+        // four as `blocking_dialog_present` is what sends an operator hunting a modal that is not on
+        // screen. The value is the most recent decision in this process; under the serialized
+        // dispatch that is the decision that refused this call, but it is named `last_*` because
+        // nothing here can prove that.
     }
     if let info {
         extras["dialog_title"] = info.title
