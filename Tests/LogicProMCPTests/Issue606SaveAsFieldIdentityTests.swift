@@ -134,3 +134,60 @@ struct Issue606MenuEnabledGateTests {
         #expect(!usesLenientForm)
     }
 }
+
+/// #519: the Save As menu drive must resolve through AXLocalePolicy, not through two hard-coded
+/// literals. The pair it replaced covered exactly two of the languages Logic ships.
+@Suite(.serialized)
+struct Issue519SaveAsMenuLocaleTests {
+    @Test("issue519_save_as_labels_cover_the_measured_forms")
+    func labelsCoverMeasuredForms() {
+        let labels = AXLocalePolicy.saveAsMenuItem.labels
+        #expect(labels.contains("Save As…"))
+        #expect(labels.contains("다른 이름으로 저장…"))
+        // The trailing character is a real ellipsis. Three dots is a different string and would not
+        // match the live menu.
+        #expect(!labels.contains("Save As..."))
+    }
+
+    /// The item is picked by exact label, so the two neighbours in the same File menu — measured on a
+    /// live Logic 12.3 two rows away — must not match.
+    @Test("issue519_save_as_does_not_match_its_neighbours_in_the_same_menu")
+    func doesNotMatchNeighbours() {
+        let item = AXLocalePolicy.saveAsMenuItem
+        #expect(item.matches("Save As…"))
+        #expect(!item.matches("Save A Copy As…"))
+        #expect(!item.matches("Save as Template…"))
+        #expect(!item.matches("Save"))
+    }
+
+    /// The bar it hangs off already carries a Japanese form that the old literal pair could not reach.
+    @Test("issue519_the_file_menu_bar_reaches_beyond_the_two_old_literals")
+    func fileMenuBarReachesFurther() {
+        let bar = AXLocalePolicy.fileMenuBar.labels
+        #expect(bar.contains("File"))
+        #expect(bar.contains("파일"))
+        // The label the replaced pair could never have matched.
+        #expect(bar.contains("ファイル"))
+    }
+
+    /// The shipped call site must not have drifted back to literals — the defect #519 is about is a
+    /// literal in a call site, not a missing label set.
+    @Test("issue519_the_shipped_call_site_uses_the_label_sets")
+    func shippedCallSiteIsLocaleResolved() throws {
+        let source = try String(
+            contentsOfFile: #filePath.replacingOccurrences(
+                of: "Tests/LogicProMCPTests/Issue606SaveAsFieldIdentityTests.swift",
+                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift"
+            ),
+            encoding: .utf8
+        )
+        let usesLabelSets = source.contains(
+            "clickMenuItem(\n            AXLocalePolicy.saveAsMenuItem, in: AXLocalePolicy.fileMenuBar"
+        )
+        let usesKoreanLiteral = source.contains("menuName: \"파일\"")
+        let usesEnglishLiteral = source.contains("menuName: \"File\"")
+        #expect(usesLabelSets)
+        #expect(!usesKoreanLiteral)
+        #expect(!usesEnglishLiteral)
+    }
+}

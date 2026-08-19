@@ -1017,13 +1017,28 @@ extension AccessibilityChannel {
             ))
         }
 
-        // Step 1: Trigger Save As via menu click
-        let koreanResult = clickMenuItem("다른 이름으로 저장…", menuName: "파일", runtime: runtime)
-        let triggered = koreanResult.isSuccess
-            || clickMenuItem("Save As…", menuName: "File", runtime: runtime).isSuccess
-
-        guard triggered else {
-            return .error("Failed to open Save As dialog via menu")
+        // Step 1: Trigger Save As via menu click.
+        //
+        // #519: this used to try a Korean literal and then an English one, which covers exactly two
+        // of the languages Logic ships and fails silently in every other. Resolved through
+        // AXLocalePolicy instead, so the Japanese `ファイル` already measured for this menu bar works
+        // without a third literal, and a new measured label is added in one place.
+        let trigger = clickMenuItem(
+            AXLocalePolicy.saveAsMenuItem, in: AXLocalePolicy.fileMenuBar, runtime: runtime
+        )
+        guard trigger.isSuccess else {
+            let ownedKeyboard = ProcessUtils.logicOwnsTheKeyboard()
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Could not open the Save As panel: \(trigger.message)",
+                extras: [
+                    "write_attempted": false,
+                    "frontmost_preparation": preparation.rawValue,
+                    "logic_owned_the_keyboard": ownedKeyboard,
+                    "menu_labels_tried": AXLocalePolicy.saveAsMenuItem.labels,
+                    "menu_bar_labels_tried": AXLocalePolicy.fileMenuBar.labels,
+                ]
+            ))
         }
 
         // Creator Studio 12.3 exposes this panel as a top-level AXDialog rather
@@ -1387,6 +1402,39 @@ extension AccessibilityChannel {
                 "safe_to_retry": true,
             ]
         ))
+    }
+
+    /// Locale-resolved menu click (#519). Same gate as the literal overload: an item whose
+    /// `AXEnabled` does not read `true` is refused rather than pressed, because a press on a disabled
+    /// item reports success.
+    private static func clickMenuItem(
+        _ item: AXLocalePolicy.LabelSet,
+        in menuBar: AXLocalePolicy.LabelSet,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        guard let element = AXLogicProElements.menuItem(
+            labelPath: [menuBar, item], runtime: runtime
+        ) else {
+            return .error(
+                "Cannot find menu item: any of \(menuBar.labels) > any of \(item.labels)"
+            )
+        }
+        let enabled: Bool? = AXHelpers.getAttribute(
+            element, kAXEnabledAttribute as String, runtime: runtime.ax
+        )
+        guard enabled == true else {
+            let observed = enabled.map(String.init) ?? "unreadable"
+            return .error(
+                "Refusing to press menu item \(item.canonical): AXEnabled is \(observed). "
+                + "Logic disables its document-modifying File items while it is a background "
+                + "application, and pressing a disabled item reports success without doing anything, "
+                + "so an unreadable answer is refused for the same reason a false one is."
+            )
+        }
+        guard AXHelpers.performAction(element, kAXPressAction, runtime: runtime.ax) else {
+            return .error("Failed to click: \(item.canonical)")
+        }
+        return .success("{\"menu_clicked\":\"\(item.canonical)\"}")
     }
 
     private static func clickMenuItem(

@@ -231,6 +231,23 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// #519: File > Save As…
+    ///
+    /// The English label was MEASURED on 2026-08-19 by enumerating the File menu on a live Logic
+    /// 12.3 — the trailing character is a real ellipsis, not three dots, and matching on "Save As"
+    /// alone would also hit "Save A Copy As…" and "Save as Template…", both of which sit two rows
+    /// away in the same menu.
+    ///
+    /// The Korean variant is carried over from the literal it replaces in
+    /// `AccessibilityChannel+Project.swift`, where it shipped as one half of a Korean-then-English
+    /// pair. I did not re-measure it on a Korean Logic, so its provenance is "already trusted in
+    /// shipped code", not "measured by me" — recorded here so nobody reads it as a fresh observation.
+    static let saveAsMenuItem = LabelSet(
+        canonical: "Save As…",
+        variants: ["다른 이름으로 저장…"],
+        rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as."
+    )
+
     /// #519: File > Bounce.
     static let bounceMenuItem = LabelSet(
         canonical: "Bounce",
