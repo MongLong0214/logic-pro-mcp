@@ -83,9 +83,14 @@ guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")
 }) else { emit(["error": "logic not running"]) }
 let ax = AXUIElementCreateApplication(app.processIdentifier)
-guard let win = ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).first(where: {
+// Every standard window, not the first. This tool exists to stop a lookup resolving by tree order,
+// and it was choosing its WINDOW that way. Measured: a harness that had just started an MCP driver
+// got `band: null` while the identical call standing alone resolved fine, because the first
+// standard window was no longer the one holding the content.
+let standardWindows = ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
     str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
-}), let wf = frame(win) else { emit(["error": "no standard window"]) }
+}
+guard !standardWindows.isEmpty else { emit(["error": "no standard window"]) }
 
 var hits: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ d: Int) {
@@ -100,7 +105,17 @@ func walk(_ e: AXUIElement, _ d: Int) {
         walk(c, d + 1)
     }
 }
-walk(win, 0)
+// Search each standard window; the match must still be unique across all of them.
+var hitWindow: AXUIElement?
+for window in standardWindows {
+    let before = hits.count
+    walk(window, 0)
+    if hits.count > before, hitWindow == nil { hitWindow = window }
+}
+let win = hitWindow ?? standardWindows[0]
+guard let wf = frame(win) else {
+    emit(["error": "no standard window with a readable frame"])
+}
 
 func describeHit(_ e: AXUIElement) -> [String: Any] {
     let f = frame(e) ?? (0, 0, 0, 0)
