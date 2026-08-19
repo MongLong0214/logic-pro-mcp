@@ -33,6 +33,12 @@ jobs:
         # nothing about the rest, and they cannot convert at once. The bar only moves down.
         run: python3 Scripts/check-ax-locator-census.py
 
+      - name: Public docs may not claim an unqualified Logic variant
+        # shipVariants is [.desktop]; the README said "Same MCP server controls both". The variant
+        # list is read from the attestation rather than repeated, so the check cannot go stale in
+        # the dangerous direction.
+        run: python3 Scripts/check-shipped-variant-claims.py
+
       - name: Every module with consumers must still satisfy them
         # The module list is derived, not written down: a `.py` is in scope exactly when another
         # file imports it. Checks every referenced name exists and every call binds against the real
@@ -102,6 +108,12 @@ jobs:
         # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
         # nothing about the rest, and they cannot convert at once. The bar only moves down.
         run: python3 Scripts/check-ax-locator-census.py
+
+      - name: Public docs may not claim an unqualified Logic variant
+        # shipVariants is [.desktop]; the README said "Same MCP server controls both". The variant
+        # list is read from the attestation rather than repeated, so the check cannot go stale in
+        # the dangerous direction.
+        run: python3 Scripts/check-shipped-variant-claims.py
 
       - name: Every module with consumers must still satisfy them
         # The module list is derived, not written down: a `.py` is in scope exactly when another
