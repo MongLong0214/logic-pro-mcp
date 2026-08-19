@@ -209,21 +209,53 @@ class Driver:
     def _notify(self, method, params=None):
         self._write({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
+    def _record_operation(self, name, command, params, body):
+        """Put a driven operation in the document, however it was sent.
+
+        `tool()` is not the only path: a harness that needs the full JSON-RPC envelope calls `_send`
+        directly, and the very first run under this recording showed why that matters — the harness
+        drove ONE operation through `tool()` and the operation it was actually about through `_send`,
+        so `operations_driven` read 1 and the subject of the run was absent from its own receipt.
+        """
+        if Evidence.current is None:
+            return
+        Evidence.current.records.append({
+            "kind": "operation",
+            "tool": name,
+            "command": command,
+            "params": params or {},
+            "response": {k: body.get(k) for k in
+                         ("state", "success", "error", "hint", "verified", "write_attempted")}
+            if isinstance(body, dict) else {"raw": str(body)[:400]},
+        })
+
     def _send(self, method, params=None):
         self._id += 1
         self._write({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params or {}})
-        return self._read()
+        raw = self._read()
+        # Record here as well as in `tool()`, because a harness that needs the full envelope calls
+        # this directly — and the first run under this recording proved it: the operation the harness
+        # was ABOUT went through `_send` and was absent from the document, while a warm-up call made
+        # through `tool()` was the only thing `operations_driven` counted.
+        if method == "tools/call" and isinstance(params, dict):
+            args = params.get("arguments") or {}
+            self._record_operation(params.get("name"), args.get("command"),
+                                   args.get("params"), _body(raw))
+        return raw
 
     def tool(self, name, command, params=None):
         """Call a tool and return its parsed body.
 
         Arguments nest under `params`, matching the wire shape the server actually accepts.
+
+        The call is recorded in the evidence document by `_send`, not here — a harness that needs the
+        full JSON-RPC envelope bypasses this wrapper, and recording in both places would double-count
+        everything that does come through it.
         """
         args = {"command": command}
         if params is not None:
             args["params"] = params
-        raw = self._send("tools/call", {"name": name, "arguments": args})
-        return _body(raw)
+        return _body(self._send("tools/call", {"name": name, "arguments": args}))
 
     def resource(self, uri):
         raw = self._send("resources/read", {"uri": uri})
@@ -270,6 +302,11 @@ class Evidence:
     short SHA fails it with a message that reads like missing evidence rather than a misfiled path.
     """
 
+    # The Evidence in play, so `Driver` can record what it drove without every harness threading it
+    # through. Set on construction; a harness that builds two Evidences gets the later one, which is
+    # the only sensible reading of "the run".
+    current = None
+
     def __init__(self, head, root, name=None):
         if not re.fullmatch(r"[0-9a-f]{40}", head or ""):
             # Not fatal: exploratory runs use a label. The gate will simply not find it, which is correct.
@@ -284,6 +321,7 @@ class Evidence:
         self.name = _safe_name(name) if name else _running_harness_name()
         self.records = []
         self._window_points = None
+        Evidence.current = self
 
     # -- observations -------------------------------------------------------
 
@@ -363,12 +401,33 @@ class Evidence:
         return {"file": path, "settled": settled, "window": win, "region_hash": prev}
 
     def visual(self, tag, before_file, after_file, region, expect_change, why,
-               window_points=None):
+               window_points=None, subject=None):
         """Compare one named region across two captures and state what was expected there.
 
         A region is mandatory. A full-window diff answers "did anything at all change", which is true
         whenever the transport clock advances, and proves nothing about the feature.
+
+        `subject` is mandatory too, and it is the harder requirement: state what the region IS, as the
+        UI itself describes it — not where it is. Measured this week, three different rectangles over
+        one window each produced a confident wrong answer, and every one of them looked identical in
+        the receipt because a receipt that records only `(x, y, w, h)` cannot show that the band moved
+        onto something else:
+
+            (0, 0, 1920, 28)    named "the title band"; `screencapture -l` excludes the title bar, so
+                                it was window CONTENT — track names and the Inspector
+            (0, 0, 240, 28)     the track-name column with the Mixer closed, a column of MIXER STRIPS
+                                with it open, and mixer strips carry level meters
+            the rail by AXDescription   correct, and still wrong for the claim: the arrange SCROLLS
+                                when a modal takes and returns focus
+
+        So pass what AX says the element is — its description, and ideally its parent's. A run that
+        aimed at the wrong thing then says so in its own document instead of reading as a clean pass.
         """
+        # NOT raised. Twenty-nine harnesses predate this parameter, and filling their `subject` in
+        # bulk would mean writing down what I believe each band is without measuring it — which is the
+        # defect this parameter exists to catch, committed at scale. So an absent subject is RECORDED
+        # as absent and `is_clean` refuses the run: each harness's next run tells its owner that this
+        # assertion does not say what it watches, and the fix arrives with a measurement attached.
         wp = window_points or self._window_points
         b = _region_hash(before_file, region, wp)
         a = _region_hash(after_file, region, wp)
@@ -378,6 +437,8 @@ class Evidence:
         passed = readable and (changed == bool(expect_change))
         self.records.append({
             "kind": "visual", "tag": tag, "region": list(region) if region else None,
+            "subject": subject,   # None until the harness measures what the region is
+
             "before": before_file, "after": after_file,
             "expected": ("region changes" if expect_change else "region does not change") + f" — {why}",
             "observed": f"before {(b or '?')[:16]} after {(a or '?')[:16]} changed={changed}",
@@ -506,6 +567,8 @@ class Evidence:
             "visual_assertions": len(vis),
             "visual_failed": sum(1 for v in vis if not v["passed"]),
             "recordings": sum(1 for r in recs if r["kind"] == "recording"),
+            "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
+            "visual_assertions_without_a_subject": sum(1 for v in vis if not v.get("subject")),
         }
 
 
@@ -529,6 +592,19 @@ def is_clean(summary):
         and summary.get("captures_straddling_displays", 0) == 0
         and summary.get("restorations_failed", 0) == 0
         and summary.get("cached_reads_used_as_live", 0) == 0
+        # At least one check must name a mutation. A run made entirely of preconditions and
+        # observations records what the screen looked like; it does not show that anything here can
+        # fail. The ship gate already refuses this — "no check has a demonstrated mutation" — and it
+        # belongs in the library so every harness inherits it, gated or not.
+        and summary.get("mutation_backed", 0) > 0
+        # And the run must have DRIVEN something. A harness that never called the product measures
+        # Logic, not the change: every green check would be a statement about the machine.
+        and summary.get("operations_driven", 0) > 0
+        # Every visual assertion must say WHAT it watches, not only where. A band recorded by
+        # coordinates alone cannot show that it moved onto something else — measured this week, three
+        # rectangles over one window each produced a confident wrong answer and all three receipts
+        # looked identical.
+        and summary.get("visual_assertions_without_a_subject", 0) == 0
     )
 
 
