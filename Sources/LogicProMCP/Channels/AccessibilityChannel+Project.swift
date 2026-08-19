@@ -836,7 +836,13 @@ extension AccessibilityChannel {
                 "subrole": AXHelpers.getAttribute(
                     candidate, kAXSubroleAttribute as String, runtime: runtime.ax
                 ) as String? ?? "",
-                "filename_fields": filenameFields.count,
+                // #606: this dump used the retired `AXDescription == "text field"` rule, which the
+                // unit tests prove matches nothing on the measured panel — so a refusal kept telling
+                // its reader the panel had no filename field while the classifier had already moved
+                // to focus. Report BOTH: the count the classifier judges by, and the old one, which
+                // is now only useful as evidence of the attribute gap.
+                "filename_fields": filenameFieldCandidates(in: candidate, runtime: runtime).count,
+                "text_fields_matching_retired_description_rule": filenameFields.count,
                 "save_buttons": saveButtons.count,
                 "save_enabled": enabled.map { $0 as Any } ?? "unread",
                 "cancel_buttons": buttons.filter {
@@ -1070,14 +1076,52 @@ extension AccessibilityChannel {
         }
 
         // Helper: dismiss dialog on failure (press Escape to avoid blocking UI)
-        func dismissDialog() {
-            let cancelButtons = AXHelpers.findAllDescendants(of: saveDialog, role: "AXButton", runtime: runtime.ax)
-            for btn in cancelButtons {
-                if AXLocalePolicy.elementMatches(btn, AXLocalePolicy.cancelButton, runtime: runtime.ax) {
-                    AXHelpers.performAction(btn, kAXPressAction, runtime: runtime.ax)
-                    return
+        // One dismissal for every failure path, and it must actually clear what is on screen.
+        //
+        // The previous helper pressed the FIRST Cancel-matching button it found at the default depth
+        // and returned, ignoring the result. Once step 3a can open a Go-to-Folder sheet there are two
+        // surfaces and two Cancels, so one press closes at most one of them — and a Save panel left
+        // behind is what `dialogPresent()` then reports as `blocking_dialog_present` for every later
+        // operation. So: press Cancel, then Escape, then look, and repeat while anything remains.
+        func dismissEverything() async -> PanelDismissal {
+            let before = panelShapedCandidateCount(runtime: runtime)
+            var delivered = true
+            for _ in 0..<3 {
+                let buttons = AXHelpers.findAllDescendants(
+                    of: saveDialog, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+                )
+                if let cancel = buttons.first(where: {
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.cancelButton, runtime: runtime.ax)
+                }) {
+                    _ = AXHelpers.performAction(cancel, kAXPressAction, runtime: runtime.ax)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
                 }
+                let escaped = await escapeAnyOpenPanel(runtime: runtime)
+                delivered = delivered && escaped.escapeDelivered
+                if escaped.panelsAfter == 0 { break }
             }
+            return PanelDismissal(
+                panelsBefore: before,
+                panelsAfter: panelShapedCandidateCount(runtime: runtime),
+                escapeDelivered: delivered
+            )
+        }
+
+        /// Every failure after the panel is up returns through here, so no path can forget to clean up.
+        func refuse(
+            _ error: HonestContract.FailureError,
+            _ hint: String,
+            _ extras: [String: Any] = [:]
+        ) async -> ChannelResult {
+            let dismissal = await dismissEverything()
+            var all = extras
+            all["write_attempted"] = extras["write_attempted"] ?? false
+            all["panels_before_dismissal"] = dismissal.panelsBefore
+            all["panels_after_dismissal"] = dismissal.panelsAfter
+            all["escape_delivered"] = dismissal.escapeDelivered
+            return .error(HonestContract.encodeStateC(
+                error: error, hint: hint + " " + dismissal.summary, extras: all
+            ))
         }
 
         // Step 3a: put the panel in the target DIRECTORY (#606).
@@ -1093,27 +1137,45 @@ extension AccessibilityChannel {
         // AX attribute on the panel that sets its directory.
         let directory = (path as NSString).deletingLastPathComponent
         guard let goToFolder = await openGoToFolderSheet(in: saveDialog, runtime: runtime) else {
-            dismissDialog()
-            return .error(HonestContract.encodeStateC(
-                error: .elementNotFound,
-                hint: "The Save panel's \"Go to Folder\" sheet did not appear, so the panel could not "
-                    + "be moved to \(directory). Nothing was saved: this panel writes a project NAMED "
+            return await refuse(
+                .elementNotFound,
+                "The Save panel's \"Go to Folder\" sheet did not appear, so the panel could not be "
+                    + "moved to \(directory). Nothing was saved: this panel writes a project NAMED "
                     + "after the path if the path is typed into the filename field instead.",
-                extras: ["write_attempted": false, "directory": directory]
-            ))
+                ["directory": directory]
+            )
         }
         guard AXHelpers.setAttribute(
             goToFolder, kAXValueAttribute, (directory + "/") as CFTypeRef, runtime: runtime.ax
         ) else {
-            dismissDialog()
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "Could not type \(directory) into the Save panel's \"Go to Folder\" sheet.",
-                extras: ["write_attempted": false, "directory": directory]
-            ))
+            return await refuse(
+                .axWriteFailed,
+                "Could not type \(directory) into the Save panel's \"Go to Folder\" sheet.",
+                ["directory": directory]
+            )
         }
         await pressReturn()
-        try? await Task.sleep(nanoseconds: 800_000_000)
+
+        // The sheet must be GONE before the filename field is resolved. `filenameFieldCandidates`
+        // searches the panel's descendants, and a still-open sheet has a focused text field of its
+        // own — so without this wait the base name can be typed into the Go-to-Folder box.
+        var sheetCleared = false
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            let sheets = AXHelpers.getChildren(saveDialog, runtime: runtime.ax).filter {
+                AXHelpers.getRole($0, runtime: runtime.ax) == (kAXSheetRole as String)
+            }
+            if sheets.isEmpty { sheetCleared = true; break }
+        }
+        guard sheetCleared else {
+            return await refuse(
+                .axWriteFailed,
+                "The Save panel's \"Go to Folder\" sheet stayed open after \(directory) was entered, "
+                    + "so the panel's directory is unknown and the filename field cannot be told "
+                    + "apart from the sheet's own field.",
+                ["directory": directory]
+            )
+        }
 
         // Step 3b: the filename field takes the BASE NAME only. Logic appends the extension itself.
         let baseName: String = {
@@ -1124,20 +1186,22 @@ extension AccessibilityChannel {
         // than reused from the classification pass.
         let filenameFields = filenameFieldCandidates(in: saveDialog, runtime: runtime)
         guard filenameFields.count == 1, let filenameField = filenameFields.first else {
-            dismissDialog()
-            return .error(HonestContract.encodeStateC(
-                error: .elementNotFound,
-                hint: "Cannot resolve the filename field in the Save As panel: expected exactly one "
-                    + "focused text field, found \(filenameFields.count).",
-                extras: ["write_attempted": false, "focused_text_fields": filenameFields.count]
-            ))
+            return await refuse(
+                .elementNotFound,
+                "Cannot resolve the filename field in the Save As panel: expected exactly one focused "
+                    + "text field, found \(filenameFields.count).",
+                ["focused_text_fields": filenameFields.count]
+            )
         }
 
         guard AXHelpers.setAttribute(
             filenameField, kAXValueAttribute, baseName as CFTypeRef, runtime: runtime.ax
         ) else {
-            dismissDialog()
-            return .error("Cannot set the exact Save As filename field")
+            return await refuse(
+                .axWriteFailed,
+                "Could not type the base name \(baseName) into the Save As filename field.",
+                ["base_name": baseName]
+            )
         }
         // Confirm the text entry so the save panel updates its internal path state
         AXHelpers.performAction(filenameField, kAXConfirmAction, runtime: runtime.ax)
@@ -1152,8 +1216,11 @@ extension AccessibilityChannel {
         guard saveButtons.count == 1,
               let saveButton = saveButtons.first,
               AXHelpers.performAction(saveButton, kAXPressAction, runtime: runtime.ax) else {
-            dismissDialog()
-            return .error("Cannot press the exact Save button in Save As dialog")
+            return await refuse(
+                .axWriteFailed,
+                "Could not press the Save button: expected exactly one, found \(saveButtons.count).",
+                ["save_buttons": saveButtons.count]
+            )
         }
 
         // Step 5: Verify file exists (up to 5s)
@@ -1173,11 +1240,14 @@ extension AccessibilityChannel {
             ))
         }
 
-        return .error(HonestContract.encodeStateC(
-            error: .axWriteFailed,
-            hint: "Save As dialog completed but no file appeared at requested path within 5s",
-            extras: ["requested": path]
-        ))
+        // This used to dismiss nothing, so a panel that never accepted the save stayed on screen and
+        // refused every later operation. It also blamed a timeout for what was, every time it was
+        // investigated, a panel still waiting on something.
+        return await refuse(
+            .axWriteFailed,
+            "The Save panel was driven to completion but no project appeared at \(path) within 5s.",
+            ["requested": path, "base_name": baseName, "directory": directory]
+        )
     }
 
     static func openBounceDialogViaMenu(
@@ -1333,14 +1403,20 @@ extension AccessibilityChannel {
         // property of the item, not of AX menu presses in general. The press then returned true, the
         // caller inferred the panel was coming, and fifteen polls later reported a panel it had never
         // caused. An AX return code is not evidence of an effect; `AXEnabled` is the pre-gate.
+        // Strict, matching this tree's other actuation gate (`menuItemEnabledForActuation`):
+        // ENABLED means the attribute read and said true. An unreadable attribute is not evidence
+        // that the item is pressable — treating it as permission would leave exactly the hole this
+        // gate exists to close, since the press then reports success either way.
         let enabled: Bool? = AXHelpers.getAttribute(
             item, kAXEnabledAttribute as String, runtime: runtime.ax
         )
-        guard enabled != false else {
+        guard enabled == true else {
+            let observed = enabled.map(String.init) ?? "unreadable"
             return .error(
-                "Refusing to press disabled menu item: \(menuName) > \(itemTitle). "
+                "Refusing to press menu item \(menuName) > \(itemTitle): AXEnabled is \(observed). "
                 + "Logic disables its document-modifying File items while it is a background "
-                + "application, and pressing one reports success without doing anything."
+                + "application, and pressing a disabled item reports success without doing anything, "
+                + "so an unreadable answer is refused for the same reason a false one is."
             )
         }
         guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
