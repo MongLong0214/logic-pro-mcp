@@ -131,6 +131,6 @@ struct Issue606MenuEnabledGateTests {
         let usesStrictForm = source.contains("guard enabled == true else {")
         let usesLenientForm = source.contains("guard enabled != false else {")
         #expect(usesStrictForm)
-        #expect(usesLenientForm == false)
+        #expect(!usesLenientForm)
     }
 }
