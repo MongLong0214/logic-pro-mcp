@@ -191,3 +191,33 @@ struct Issue519SaveAsMenuLocaleTests {
         #expect(!usesEnglishLiteral)
     }
 }
+
+/// #519: the Track menu bar's three measured spellings moved out of a literal array in
+/// `clickTrackMenu` and into `AXLocalePolicy`. The move must not lose any of them — the Japanese form
+/// in particular was measured on a Japanese Logic and its absence made every menu-driven track
+/// operation return `element_not_found` there.
+extension Issue519SaveAsMenuLocaleTests {
+    @Test("issue519_the_track_menu_bar_keeps_all_three_measured_spellings")
+    func trackMenuBarKeepsAllSpellings() {
+        let labels = AXLocalePolicy.trackMenuBar.labels
+        #expect(labels.contains("Track"))
+        #expect(labels.contains("트랙"))
+        #expect(labels.contains("トラック"))
+    }
+
+    /// The literal array must not have grown back. A fourth language belongs in the label set.
+    @Test("issue519_the_track_menu_drive_does_not_hard_code_a_spelling")
+    func trackMenuDriveHasNoLiteralSpelling() throws {
+        let source = try String(
+            contentsOfFile: #filePath.replacingOccurrences(
+                of: "Tests/LogicProMCPTests/Issue606SaveAsFieldIdentityTests.swift",
+                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift"
+            ),
+            encoding: .utf8
+        )
+        let usesPolicy = source.contains("AXLocalePolicy.trackMenuBar.labels")
+        let hardCodesJapanese = source.contains("[menuName, englishMenuName, \"トラック\"]")
+        #expect(usesPolicy)
+        #expect(!hardCodesJapanese)
+    }
+}

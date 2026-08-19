@@ -231,6 +231,19 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// #519: the Track menu bar item.
+    ///
+    /// All three labels were already in the tree, as three hard-coded strings inside
+    /// `clickTrackMenu` — `"트랙"`, `"Track"` and `"トラック"`, the last carrying its own comment that it
+    /// was measured on Logic 12.3 with `AppleLanguages=ja` and is a third spelling rather than a
+    /// variant. Moving them here does not add a measurement; it puts them where the next measured
+    /// language can join them instead of becoming a fourth element in a literal array.
+    static let trackMenuBar = LabelSet(
+        canonical: "Track",
+        variants: ["트랙", "トラック"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+    )
+
     /// #519: File > Save As…
     ///
     /// The English label was MEASURED on 2026-08-19 by enumerating the File menu on a live Logic

@@ -1871,10 +1871,20 @@ extension AccessibilityChannel {
         englishMenuName: String = "Track",
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
-        // #519: the Japanese menu bar is a third spelling, not a variant of either of the other two.
-        // Measured 2026-08-17 on Logic 12.3 with AppleLanguages=ja: the menu is `トラック`. Without it
-        // every menu-driven track operation returned `element_not_found` on a Japanese Logic.
-        for menuTitle in [menuName, englishMenuName, "トラック"] {
+        // #519: the menu-bar spellings live in AXLocalePolicy now rather than in this array. The
+        // Japanese `トラック` was measured on Logic 12.3 with `AppleLanguages=ja` and is a third
+        // spelling, not a variant of either of the others; without it every menu-driven track
+        // operation returned `element_not_found` on a Japanese Logic. That measurement is preserved
+        // in `AXLocalePolicy.trackMenuBar`, where a fourth measured language can join it instead of
+        // becoming a fourth element in a literal here.
+        //
+        // The caller-supplied names still come first so an explicit override wins, and the policy's
+        // labels are appended rather than replacing them.
+        var barCandidates = [menuName, englishMenuName]
+        for label in AXLocalePolicy.trackMenuBar.labels where !barCandidates.contains(label) {
+            barCandidates.append(label)
+        }
+        for menuTitle in barCandidates {
             for itemTitle in menuItemTitles {
                 guard let item = AXLogicProElements.menuItem(path: [menuTitle, itemTitle], runtime: runtime) else {
                     continue
