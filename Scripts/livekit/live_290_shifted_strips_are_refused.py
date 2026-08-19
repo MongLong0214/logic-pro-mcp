@@ -84,10 +84,15 @@ if not titles:
 
 arrange_title = titles[0]
 win = E.logic_window(arrange_title)
+# The window's own title bar, and the subject says so. The band is derived from a frame this run
+# measured — `logic_window` reads it from CoreGraphics — rather than from a layout somebody
+# remembered, and 28 points is the strip that holds the document name.
 band = (0, 0, win["w"], 28) if win else None
-ev.check("290/precondition-the-window-frame-is-known", band is not None,
-         "the arrange window's own frame read, so the capture band is inside it",
-         f"window={win!r} band={band!r}", None)
+band_subject = f"the title bar of the {arrange_title!r} window" if win else None
+ev.check("290/precondition-the-window-frame-is-known",
+         band is not None and bool(band_subject),
+         "the arrange window's own frame read, so the capture band is inside it and can be named",
+         f"window={win!r} band={band!r} subject={band_subject!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -162,7 +167,8 @@ ev.check("290/the-write-path-still-validates-its-input",
 
 after = ev.shot("290/after", settle_region=band, window_title=arrange_title)
 ev.visual("290/no-project-state-was-touched",
-          before["file"], after["file"], band, expect_change=False,
+          before["file"], after["file"], band, subject=band_subject,
+          expect_change=False,
           why="every call in this run is a read or a rejected parameter, so the window must be "
               "byte-identical across it — a change here would mean something wrote")
 

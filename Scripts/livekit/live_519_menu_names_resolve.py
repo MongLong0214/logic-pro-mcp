@@ -104,8 +104,15 @@ win = E.logic_window()
 # one-pixel line; the arrange lanes are FLAT GREY because this project has one track and no regions, so
 # zoom redraws nothing visible; and a track create does not land on this branch, which still carries #549.
 # The LCD changes whenever the position does, with no dependence on project content.
-LANES = (int(win["w"] * 0.43), int(win["h"] * 0.03),
-         int(win["w"] * 0.15), int(win["h"] * 0.05)) if win else None
+# So it is located rather than estimated. `0.43-0.58 of the width` gives (825, 31, 288, 52) on this
+# window — the readout is 120 wide, so two thirds of that band is the tempo and time-signature
+# fields beside it, and the variable was still called LANES from an earlier subject that did not
+# work. Both are fixed here: the band is the readout, and the name says so.
+LANES, LANES_SUBJECT = ev.located_band("Playhead Position")
+ev.check("519/precondition-the-position-readout-was-located",
+         LANES is not None and bool(LANES_SUBJECT),
+         "the transport's playhead-position readout, located by AXDescription",
+         f"band={LANES!r} subject={LANES_SUBJECT!r}", None)
 # Park the playhead first. Asserting that a move is visible only works if a move happens: a goto to
 # wherever the playhead already sits is a no-op, and the capture would correctly show nothing changing.
 forward()
@@ -158,7 +165,8 @@ ev.check("519/the-guard-passes-this-tree",
          "put one literal back; the guard exited 1 and named the file and line")
 
 ev.visual("519/the-position-readout-changes",
-          pre["file"], post["file"], LANES, expect_change=True,
+          pre["file"], post["file"], LANES, subject=LANES_SUBJECT,
+          expect_change=True,
           why="goto_bar moved the playhead from bar 1 to bar 33, so the transport LCD must read differently")
 
 ev.restored("519/logic-still-usable", True, f"menu_bar={ui_language[:60]}")

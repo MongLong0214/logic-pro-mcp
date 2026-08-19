@@ -44,10 +44,10 @@ CASES = [
     (False, {**GOOD, "captures_straddling_displays": 1}, "a capture across two displays"),
     (False, {**GOOD, "restorations_failed": 1}, "a restoration that did not happen"),
     (False, {**GOOD, "cached_reads_used_as_live": 1}, "a cached read presented as live"),
-    # Counted, not gated — see is_clean's docstring. This case asserts the CURRENT contract, so it
-    # is the one to flip when the harnesses have adopted `subject=`.
-    (True, {**GOOD, "visual_assertions_without_a_subject": 1},
-     "a visual that names no subject: counted, not yet refused"),
+    # Gated as of #622, once all thirty-one call sites named a subject. Flipped from the deferred
+    # contract this case used to assert.
+    (False, {**GOOD, "visual_assertions_without_a_subject": 1},
+     "a visual that names no subject"),
     (False, None, "not a summary at all"),
 ]
 

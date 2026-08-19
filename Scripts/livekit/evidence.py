@@ -664,13 +664,16 @@ def is_clean(summary):
       * a subject is any non-empty string. That it truthfully names what the rectangle contains is
         not checkable here.
 
-    `visual_assertions_without_a_subject` is COUNTED and deliberately NOT gated on yet. Measured
-    when this was written: thirty harnesses call `visual()` and zero pass `subject=`, so enforcing
-    it here turns the entire live suite red in one step, and the predictable next move is that
-    somebody deletes the clause. Writing truthful subjects means measuring what each band actually
-    contains — thirty times — and inventing them to make a gate go green is the failure this
-    parameter exists to prevent. The counter lands now so adoption is visible; the clause lands
-    when the count reaches zero honestly.
+    `visual_assertions_without_a_subject` is GATED as of #622. It was counted and not enforced for
+    one release, because enforcing it while thirty harnesses passed no subject would have turned
+    the whole live suite red in a step and the predictable next move is that somebody deletes the
+    clause. All thirty-one call sites name a subject now, and the count reached zero by measuring
+    what each band contains rather than by writing a string that would satisfy the counter.
+
+    What the clause still cannot do is check that the name is TRUE. Most bands are resolved from
+    the live tree by `located_band`, so their subject is read back off the element that was found
+    and cannot drift from it; the few that are authored — a window's title bar, a slice offset into
+    a located rail — are the ones a reviewer has to read.
     """
     if not isinstance(summary, dict):
         return False
@@ -691,6 +694,7 @@ def is_clean(summary):
         and summary["captures_straddling_displays"] == 0
         and summary["restorations_failed"] == 0
         and summary["cached_reads_used_as_live"] == 0
+        and summary["visual_assertions_without_a_subject"] == 0
     )
 
 
