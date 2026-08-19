@@ -58,12 +58,16 @@ def logic_item_count():
 
 
 def count_band(win):
-    """The witness element's own rectangle, in window points, measured rather than guessed.
+    """`(band, subject)` for the witness element, in window points, measured rather than guessed.
 
     A region picked by eye is a guess about layout that silently stops being true — this one was
     guessed at the top of the window and the node is actually near the bottom, so the assertion
     compared two identical wrong crops and read as "nothing changed" on a run that plainly worked.
     Ask the element where it is.
+
+    The subject comes back off the element that was found, not off the string this walk searched
+    for. The two are the same today; they stop being the same the moment the walk matches
+    something else, and only the read-back one would say so.
     """
     script = ('tell application "System Events" to tell process "Logic Pro"\n'
               'set w to (first window whose name ends with "Marker List")\n'
@@ -74,23 +78,32 @@ def count_band(win):
               'if (description of contents of k) is "Number of Items" then\n'
               'set p to position of contents of k\n'
               'set sz to size of contents of k\n'
-              'return ((item 1 of p) - (item 1 of wp)) & "," & ((item 2 of p) - (item 2 of wp)) '
-              '& "," & (item 1 of sz) & "," & (item 2 of sz)\n'
+              'return (((item 1 of p) - (item 1 of wp)) as text) & "," '
+              '& (((item 2 of p) - (item 2 of wp)) as text) & "," '
+              '& ((item 1 of sz) as text) & "," & ((item 2 of sz) as text) & "," '
+              '& (description of contents of k)\n'
               'end if\n'
               'end try\n'
               'end repeat\n'
               'return "ABSENT"\n'
               'end tell')
+    # `as text` on every number, because `integer & ","` in AppleScript builds a LIST rather than a
+    # string: osascript rendered `298, ,, 716, ,, 146, ,, 25` and the parser below saw ten fields,
+    # not four. It returned None on every run and the caller quietly used its guessed rectangle —
+    # a measurement that never once ran, wearing the shape of one that did.
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    parts = (r.stdout or "").strip().replace(", ", ",").split(",")
-    if len(parts) != 4:
-        return None
+    parts = (r.stdout or "").strip().split(",")
+    if len(parts) != 5:
+        return None, None
     try:
-        x, y, w, h = (int(v) for v in parts)
+        x, y, w, h = (int(v) for v in parts[:4])
     except ValueError:
-        return None
+        return None, None
+    subject = parts[4].strip()
+    if not subject:
+        return None, None
     # A little margin so anti-aliasing at the edges cannot decide the verdict.
-    return (max(0, x - 4), max(0, y - 4), w + 8, h + 8)
+    return (max(0, x - 4), max(0, y - 4), w + 8, h + 8), subject
 
 
 def count_of(text):
@@ -110,7 +123,17 @@ if not win:
 
 # The witness element's own rectangle, so the visual assertion is about the thing the verdict rests on
 # rather than about the window in general.
-COUNT_BAND = count_band(win) or (0, int(win["h"] * 0.90), win["w"], int(win["h"] * 0.10))
+#
+# The fallback that stood here — the bottom tenth of the window — was the failure mode this
+# function exists to remove, reinstated for the case where the function fails. A rectangle nobody
+# located cannot be named, and an unnamed band is what #622 is about. A failed lookup is red.
+COUNT_BAND, COUNT_SUBJECT = count_band(win)
+ev.check("523/precondition-the-count-readout-was-located",
+         COUNT_BAND is not None and bool(COUNT_SUBJECT),
+         "the Number of Items readout, located by asking the element where it is",
+         f"band={COUNT_BAND!r} subject={COUNT_SUBJECT!r}", None)
+if COUNT_BAND is None:
+    d.close(); print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 # ---- precondition: at least two markers, so a delete leaves something behind ----
 while (count_of(logic_item_count()) or 0) < 2:
@@ -162,7 +185,7 @@ ev.check("523/the-product-and-an-independent-read-agree",
          "reported the expected count instead of the observed one; the two reads diverged")
 
 ev.visual("523/the-count-readout-changes",
-          pre["file"], post["file"], COUNT_BAND, expect_change=True,
+          pre["file"], post["file"], COUNT_BAND, subject=COUNT_SUBJECT, expect_change=True,
           why=f"the marker count went {before_text!r} to {after_text!r}, so the readout must repaint")
 
 ev.restored("523/markers-remain-for-the-next-run", (after_n or 0) >= 1,

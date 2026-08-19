@@ -1,7 +1,8 @@
 // A NAMED region of the arrange window, in window coordinates, emitted as JSON with the name it
 // matched — so a caller can state what the band IS, not only where it is.
 //
-//   ./ax_control_bar_band "<AXDescription>" [--role R] [--min-width N] [--min-height N]
+//   ./ax_control_bar_band "<AXDescription>" [--role R]
+//                           [--min-width N] [--min-height N] [--max-width N] [--max-height N]
 //
 // An AXDescription is NOT unique. Measured on this window: "Control Bar" matches two elements,
 // "Library" four, "Event" three. The first version walked depth-first and returned whichever it
@@ -78,6 +79,12 @@ func flag(_ name: String) -> String? {
 let wantRole = flag("--role")
 let minWidth = Int(flag("--min-width") ?? "0") ?? 0
 let minHeight = Int(flag("--min-height") ?? "0") ?? 0
+// Upper bounds too, because nesting is the common shape of an ambiguous description: the Marker
+// List window carries "Marker" twice, the outer one the whole pane and the inner one the table
+// alone. A lower bound cannot separate them — every bound that admits the inner admits the outer.
+// Without these the caller's only options are the wrong subject or no subject at all.
+let maxWidth = Int(flag("--max-width") ?? "") ?? Int.max
+let maxHeight = Int(flag("--max-height") ?? "") ?? Int.max
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")
@@ -98,7 +105,7 @@ func walk(_ e: AXUIElement, _ d: Int) {
     for c in kids(e) {
         if str(c, kAXDescriptionAttribute as String) == wanted,
            let f = frame(c),
-           f.2 >= minWidth, f.3 >= minHeight,
+           f.2 >= minWidth, f.3 >= minHeight, f.2 <= maxWidth, f.3 <= maxHeight,
            wantRole == nil || str(c, kAXRoleAttribute as String) == wantRole {
             hits.append(c)
         }
@@ -123,7 +130,7 @@ func describeHit(_ e: AXUIElement) -> [String: Any] {
             "band": [f.0 - wf.0, f.1 - wf.1, f.2, f.3]]
 }
 if hits.count > 1 {
-    emit(["error": "AXDescription is ambiguous — add --role / --min-width / --min-height",
+    emit(["error": "AXDescription is ambiguous — add --role / --min-width / --min-height / --max-width / --max-height",
           "wanted": wanted, "matches": hits.map(describeHit),
           "window": str(win, kAXTitleAttribute as String)])
 }
