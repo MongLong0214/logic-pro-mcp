@@ -1087,6 +1087,10 @@ struct TargetRefResolutionTests {
             #expect(errorCode(result) == "ambiguous_target_name")
             let hint = try #require(body(result)["hint"] as? String)
             #expect(hint.contains("more than one live track"))
+            // #497: the hint used to stop at "address the track by an unambiguous name", and a
+            // caller following that literally was refused twice — `rename {name, target_ref}` hits
+            // this same guard. It must name the one form that is not blocked.
+            #expect(hint.contains("rename {name, index}"))
             let v1 = try #require(body(result)["write_attempted"] as? Bool)
             #expect(!v1)
             #expect(body(result)["expected_track_name"] as? String == "Bass")
@@ -1094,6 +1098,34 @@ struct TargetRefResolutionTests {
             #expect(v2)
             #expect(body(result)["ambiguous_track_indices"] as? [Int] == [1, 2])
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
+        }
+    }
+
+    /// #497: the remedy the ambiguity hint names must not be refused by the guard that printed it.
+    ///
+    /// Asserting that the hint mentions `rename {name, index}` only proves the sentence changed. The
+    /// defect was a hint recommending a form the same guard rejected, so the remedy is exercised
+    /// here under exactly the ambiguity that produces the hint: three live tracks share a name.
+    @Test
+    func testAmbiguousNameDoesNotBlockTheRenameByIndexTheHintRecommends() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Drums", type: .audio),
+                TrackState(id: 1, name: "Bass", type: .audio),
+                TrackState(id: 2, name: "Bass", type: .audio),
+            ])
+            let (router, _) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "rename",
+                params: ["index": .int(2), "name": .string("Bass Alt")],
+                router: router,
+                cache: cache,
+                liveTrackName: { idx in [0: "Drums", 1: "Bass", 2: "Bass"][idx] },
+                liveTrackNames: { [0: "Drums", 1: "Bass", 2: "Bass"] }
+            )
+            #expect(errorCode(result) != "ambiguous_target_name",
+                    "the hint recommends this exact form; the guard must not refuse it")
         }
     }
 
