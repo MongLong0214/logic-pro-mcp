@@ -194,7 +194,8 @@ func blockingLogicDialogResult(
     // would change what every existing caller reads off the wire, and two dispatcher tests assert
     // those exact values — that question deserves its own decision, not a side effect of a bug fix.
     // The distinction is carried by new fields and by the hint.
-    let reason = AXLogicProElements.dialogPresenceReason()
+    let decision = AXLogicProElements.dialogPresenceDecision()
+    let reason = decision.reason
     let sawADialog = info != nil || reason.namesAnActualDialog
     var extras: [String: Any] = [
         "operation": operation,
@@ -202,6 +203,9 @@ func blockingLogicDialogResult(
         "blocking_dialog_present": true,
         "dialog_presence_reason": reason.rawValue,
         "refusal_names_an_actual_dialog": sawADialog,
+        // #608: WHICH AX status, not just which category. -25204 (cannotComplete) is the transient
+        // this issue is about; anything else is a different problem wearing the same label.
+        "windows_read_ax_error": decision.windowsReadError.map { Int($0) } ?? NSNull(),
         "write_attempted": false,
         "safe_to_retry": true,
     ]

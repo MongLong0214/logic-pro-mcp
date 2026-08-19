@@ -157,8 +157,12 @@ ev.check("608/a-real-dialog-still-refuses-and-is-named",
          "refusal, and this is what proves it did not remove the true one",
          f"error={blocked.get('error')!r} blocking={blocked.get('blocking_dialog_present')!r} "
          f"title={blocked.get('dialog_title')!r} stage={blocked.get('failure_stage')!r}",
-         "make `dialogPresent` return false unconditionally: this goes red while the four checks "
-         "above stay green, which is exactly the trade this check exists to catch")
+         "make `dialogPresent` return false unconditionally: this goes red while the checks above "
+         "stay green, which is exactly the trade it exists to catch. NOTE what it does NOT catch: "
+         "reverting the re-read leaves this green, because the first read then fails with "
+         "cannotComplete, the guard still fail-closes, and `blockingDialogInfo()` is a LATER read "
+         "that can still name the panel. This check locks fail-closed, not the fix — the two "
+         "first-call checks above are what lock the fix")
 
 osa('tell application "System Events" to key code 53')
 time.sleep(2)
@@ -177,3 +181,7 @@ ev.restored("608/the-panel-opened-by-the-negative-control-is-gone",
 ev.stop_recording(rec)
 out = ev.write()
 print(json.dumps(out, indent=1))
+# Exit non-zero when the run is not clean. Without this the script always exits 0 and a mixed run
+# reads as a pass to anything that looks at the status rather than at the document — every other
+# harness in this directory does this and this one did not.
+sys.exit(0 if E.is_clean(out) else 1)

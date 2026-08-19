@@ -196,7 +196,28 @@ enum AXLogicProElements {
         var namesAnActualDialog: Bool { self == .blockingWindowFound }
     }
 
+    /// The reason AND the AX status behind it, for callers that publish a refusal.
+    ///
+    /// `dialogPresenceReason` throws the status away. A refusal that says `windows_read_failed`
+    /// without saying WHICH failure sends the next reader to guess between "Logic is not running",
+    /// "no Accessibility permission" and the -25204 that this issue is about.
+    static func dialogPresenceDecision(
+        runtime: Runtime = .production
+    ) -> (reason: DialogPresenceReason, windowsReadError: Int32?) {
+        var carried: Int32?
+        let reason = dialogPresenceReason(runtime: runtime, windowsReadError: &carried)
+        return (reason, carried)
+    }
+
     static func dialogPresenceReason(runtime: Runtime = .production) -> DialogPresenceReason {
+        var ignored: Int32?
+        return dialogPresenceReason(runtime: runtime, windowsReadError: &ignored)
+    }
+
+    private static func dialogPresenceReason(
+        runtime: Runtime,
+        windowsReadError: inout Int32?
+    ) -> DialogPresenceReason {
         let reason: DialogPresenceReason
         var axError: Int32?
         if let app = appRoot(runtime: runtime) {
@@ -247,6 +268,7 @@ enum AXLogicProElements {
         } else {
             reason = .appRootUnresolvable
         }
+        windowsReadError = axError
         return reason
     }
 

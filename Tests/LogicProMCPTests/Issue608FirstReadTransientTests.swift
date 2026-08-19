@@ -115,6 +115,32 @@ struct Issue608FirstReadTransientTests {
         #expect(reader.reads == 1)
     }
 
+    /// The hole a reviewer found: nothing covered the retry's SUCCESS path finding a dialog. Every
+    /// other test either feeds a plain window on retry or never enters the retry at all, so a
+    /// one-line `case .success(.elements): reason = .noBlockingWindow` on the re-read would have left
+    /// them all green — and that mutation is precisely "the retry swallowed a modal".
+    @Test("issue608_a_dialog_seen_only_on_the_re_read_still_blocks")
+    func dialogSeenOnlyOnTheReReadStillBlocks() {
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(0)
+        let dialog = b.element(1)
+        b.setAttribute(dialog, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        b.setAttribute(dialog, kAXTitleAttribute as String, "Save")
+        b.setChildren(dialog, [])
+        // First read fails with the transient; the SECOND read is the one that sees the modal.
+        let reader = WindowsReader(
+            failures: 1, status: AXError.cannotComplete.rawValue, windows: [dialog]
+        )
+        let runtime = makeRuntime(reader: reader, builder: b, app: app)
+
+        let reason = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        #expect(reason == .blockingWindowFound)
+        #expect(reason.isBlocked)
+        #expect(reason.namesAnActualDialog)
+        #expect(reader.reads == 2)
+    }
+
     /// The distinction that keeps this from being "retry until you like the answer": a read that
     /// SUCCEEDS and finds a dialog is never re-read, however inconvenient its answer.
     @Test("issue608_a_successful_read_that_finds_a_dialog_is_never_re_read")
