@@ -128,7 +128,9 @@ struct Issue606MenuEnabledGateTests {
                 ),
             encoding: .utf8
         )
-        #expect(source.contains("guard enabled == true else {"))
-        #expect(!source.contains("guard enabled != false else {"))
+        let usesStrictForm = source.contains("guard enabled == true else {")
+        let usesLenientForm = source.contains("guard enabled != false else {")
+        #expect(usesStrictForm)
+        #expect(usesLenientForm == false)
     }
 }
