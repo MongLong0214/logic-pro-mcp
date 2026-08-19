@@ -294,6 +294,42 @@ import Testing
     #expect(AXLogicProElements.findControlBarBeatSlider(runtime: runtime) == beatSlider)
 }
 
+/// #628: two checkboxes in the Control Bar carrying the same label must not resolve by tree order.
+///
+/// Measured on one arrange window, "Solo" matches TWENTY checkboxes — one in the Control Bar and
+/// nineteen track buttons. Scoping to the bar is what makes it unique, and nothing recorded that.
+/// The lookup returned the right element while it also would have returned SOME element, silently,
+/// had the scope ever widened — toggling a random track's solo instead of the transport's.
+@Test func testControlBarCheckboxRefusesTwoSameLabelledCandidates() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(900)
+    let window = builder.element(901)
+    let controlBar = builder.element(902)
+    let firstSolo = builder.element(903)
+    let secondSolo = builder.element(904)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [firstSolo, secondSolo])
+    for element in [firstSolo, secondSolo] {
+        builder.setAttribute(element, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(element, kAXTitleAttribute as String, "Cycle")
+    }
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.getControlBar(runtime: runtime) == controlBar)
+    // Neither is identified, so neither is returned. Before the census this was `firstSolo`,
+    // chosen by traversal order and indistinguishable from a correct answer.
+    #expect(AXLogicProElements.findControlBarCheckbox(
+        matching: AXLocalePolicy.transportCycleControl,
+        runtime: runtime
+    ) == nil)
+}
+
 @Test func testAXLogicProElementsFindsLogic12MixerLayoutAreaAndSkipsInspectorMixer() {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(160)
