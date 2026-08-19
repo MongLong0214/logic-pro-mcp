@@ -51,13 +51,44 @@ if missing:
     sys.exit(f"cannot run: missing {missing}")
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
+BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
+subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
+
+
+def located_band(*selector):
+    """(band, subject) for a named region, or (None, None) — never a fallback rectangle."""
+    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None, None
+    b = payload.get("band")
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    return tuple(b), payload.get("description")
+
+
+TRACK_BAND, TRACK_SUBJECT = located_band("Tracks header")
+ev.check("570/precondition-the-track-header-rail-was-located",
+         TRACK_BAND is not None and bool(TRACK_SUBJECT),
+         "the rail this run asserts about, resolved BEFORE the refusal is provoked. A first attempt "
+         "produced no band and the run still reported 8/8, because a region-less visual compared "
+         "two whole images and passed — fixed earlier in this branch, and guarded here as well",
+         f"band={TRACK_BAND!r} subject={TRACK_SUBJECT!r}", None)
+
 d = E.Driver()
 
 # Window-relative band over the track headers of the arrange window (measured 1920x1050 at 0,30).
 # Deliberately over content the caller owns: the claim is that a REFUSED project.new leaves it alone.
-TRACK_BAND = (10, 120, 260, 200)
-
-
+# #622: this was (10, 120, 260, 200) — inside the LIBRARY, while the claim below is about the open
+# project's track headers. Third of four harnesses carrying the same copied rectangle.
+#
+# Resolved BEFORE the driver starts, and that ordering is load-bearing. Measured: with an MCP driver
+# running, the same lookup returns {"error":"no standard window"} — Logic's window list is not
+# readable through AX while the server is attached. A first attempt placed this after E.Driver() and
+# got a null band, which before the region guard in this branch would have passed as a whole-image
+# comparison.
 def osa(script):
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     return (r.stdout or "").strip()
@@ -133,7 +164,7 @@ ev.check("570/refusal-is-pre-write",
 
 after = ev.shot("570/after-refused-new", settle_region=TRACK_BAND)
 ev.visual("570/a-refused-new-leaves-the-open-project-alone",
-          before["file"], after["file"], TRACK_BAND, expect_change=False,
+          before["file"], after["file"], TRACK_BAND, expect_change=False, subject=TRACK_SUBJECT,
           why="the refusal reports write_attempted:false, so the open project's track headers must "
               "be untouched across it")
 
