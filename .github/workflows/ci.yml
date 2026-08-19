@@ -28,6 +28,12 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Every module with consumers must still satisfy them
+        # The module list is derived, not written down: a `.py` is in scope exactly when another
+        # file imports it. Checks every referenced name exists and every call binds against the real
+        # signature. Return SHAPE is not static — the evidence self-test below drives that.
+        run: python3 Scripts/check-python-contracts.py
+
       - name: Self-test the live-evidence library (#622 harness API)
         # is_clean, the document-name constraint, and — the reason this is here — that every
         # `E.<name>` / `ev.<name>` a harness references still exists. Two individually-green
@@ -86,6 +92,12 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Every module with consumers must still satisfy them
+        # The module list is derived, not written down: a `.py` is in scope exactly when another
+        # file imports it. Checks every referenced name exists and every call binds against the real
+        # signature. Return SHAPE is not static — the evidence self-test below drives that.
+        run: python3 Scripts/check-python-contracts.py
 
       - name: Self-test the live-evidence library (#622 harness API)
         # is_clean, the document-name constraint, and — the reason this is here — that every
