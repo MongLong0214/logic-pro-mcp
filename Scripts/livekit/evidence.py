@@ -209,21 +209,53 @@ class Driver:
     def _notify(self, method, params=None):
         self._write({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
+    def _record_operation(self, name, command, params, body):
+        """Put a driven operation in the document, however it was sent.
+
+        `tool()` is not the only path: a harness that needs the full JSON-RPC envelope calls `_send`
+        directly, and the very first run under this recording showed why that matters — the harness
+        drove ONE operation through `tool()` and the operation it was actually about through `_send`,
+        so `operations_driven` read 1 and the subject of the run was absent from its own receipt.
+        """
+        if Evidence.current is None:
+            return
+        Evidence.current.records.append({
+            "kind": "operation",
+            "tool": name,
+            "command": command,
+            "params": params or {},
+            "response": {k: body.get(k) for k in
+                         ("state", "success", "error", "hint", "verified", "write_attempted")}
+            if isinstance(body, dict) else {"raw": str(body)[:400]},
+        })
+
     def _send(self, method, params=None):
         self._id += 1
         self._write({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params or {}})
-        return self._read()
+        raw = self._read()
+        # Record here as well as in `tool()`, because a harness that needs the full envelope calls
+        # this directly — and the first run under this recording proved it: the operation the harness
+        # was ABOUT went through `_send` and was absent from the document, while a warm-up call made
+        # through `tool()` was the only thing `operations_driven` counted.
+        if method == "tools/call" and isinstance(params, dict):
+            args = params.get("arguments") or {}
+            self._record_operation(params.get("name"), args.get("command"),
+                                   args.get("params"), _body(raw))
+        return raw
 
     def tool(self, name, command, params=None):
         """Call a tool and return its parsed body.
 
         Arguments nest under `params`, matching the wire shape the server actually accepts.
+
+        The call is recorded in the evidence document by `_send`, not here — a harness that needs the
+        full JSON-RPC envelope bypasses this wrapper, and recording in both places would double-count
+        everything that does come through it.
         """
         args = {"command": command}
         if params is not None:
             args["params"] = params
-        raw = self._send("tools/call", {"name": name, "arguments": args})
-        return _body(raw)
+        return _body(self._send("tools/call", {"name": name, "arguments": args}))
 
     def resource(self, uri):
         raw = self._send("resources/read", {"uri": uri})
@@ -270,6 +302,11 @@ class Evidence:
     short SHA fails it with a message that reads like missing evidence rather than a misfiled path.
     """
 
+    # The Evidence in play, so `Driver` can record what it drove without every harness threading it
+    # through. Set on construction; a harness that builds two Evidences gets the later one, which is
+    # the only sensible reading of "the run".
+    current = None
+
     def __init__(self, head, root, name=None):
         if not re.fullmatch(r"[0-9a-f]{40}", head or ""):
             # Not fatal: exploratory runs use a label. The gate will simply not find it, which is correct.
@@ -284,6 +321,7 @@ class Evidence:
         self.name = _safe_name(name) if name else _running_harness_name()
         self.records = []
         self._window_points = None
+        Evidence.current = self
 
     # -- observations -------------------------------------------------------
 
@@ -363,12 +401,33 @@ class Evidence:
         return {"file": path, "settled": settled, "window": win, "region_hash": prev}
 
     def visual(self, tag, before_file, after_file, region, expect_change, why,
-               window_points=None):
+               window_points=None, subject=None):
         """Compare one named region across two captures and state what was expected there.
 
         A region is mandatory. A full-window diff answers "did anything at all change", which is true
         whenever the transport clock advances, and proves nothing about the feature.
+
+        `subject` is mandatory too, and it is the harder requirement: state what the region IS, as the
+        UI itself describes it — not where it is. Measured this week, three different rectangles over
+        one window each produced a confident wrong answer, and every one of them looked identical in
+        the receipt because a receipt that records only `(x, y, w, h)` cannot show that the band moved
+        onto something else:
+
+            (0, 0, 1920, 28)    named "the title band"; `screencapture -l` excludes the title bar, so
+                                it was window CONTENT — track names and the Inspector
+            (0, 0, 240, 28)     the track-name column with the Mixer closed, a column of MIXER STRIPS
+                                with it open, and mixer strips carry level meters
+            the rail by AXDescription   correct, and still wrong for the claim: the arrange SCROLLS
+                                when a modal takes and returns focus
+
+        So pass what AX says the element is — its description, and ideally its parent's. A run that
+        aimed at the wrong thing then says so in its own document instead of reading as a clean pass.
         """
+        # NOT raised. Twenty-nine harnesses predate this parameter, and filling their `subject` in
+        # bulk would mean writing down what I believe each band is without measuring it — which is the
+        # defect this parameter exists to catch, committed at scale. So an absent subject is RECORDED
+        # as absent and `is_clean` refuses the run: each harness's next run tells its owner that this
+        # assertion does not say what it watches, and the fix arrives with a measurement attached.
         wp = window_points or self._window_points
         b = _region_hash(before_file, region, wp)
         a = _region_hash(after_file, region, wp)
@@ -378,6 +437,8 @@ class Evidence:
         passed = readable and (changed == bool(expect_change))
         self.records.append({
             "kind": "visual", "tag": tag, "region": list(region) if region else None,
+            "subject": subject,   # None until the harness measures what the region is
+
             "before": before_file, "after": after_file,
             "expected": ("region changes" if expect_change else "region does not change") + f" — {why}",
             "observed": f"before {(b or '?')[:16]} after {(a or '?')[:16]} changed={changed}",
@@ -503,10 +564,33 @@ class Evidence:
                 sum(1 for r in recs if r["kind"] == "restoration" and not r["restored"]),
             "cached_reads_used_as_live":
                 sum(1 for r in recs if r["kind"] == "provenance" and not r["usable_as_live_evidence"]),
+            "captures": len(caps),
             "visual_assertions": len(vis),
             "visual_failed": sum(1 for v in vis if not v["passed"]),
             "recordings": sum(1 for r in recs if r["kind"] == "recording"),
+            "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
+            # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
+            # dict, or any other truthy object as a name.
+            "visual_assertions_without_a_subject":
+                sum(1 for v in vis
+                    if not isinstance(v.get("subject"), str) or not v["subject"].strip()),
         }
+
+
+# Every counter `is_clean` reads. A summary missing any of them is not clean.
+#
+# The polarity used to depend on which key it was: `summary.get("visual_assertions_without_a_subject", 0) == 0`
+# passed when the key was ABSENT, while `summary.get("mutation_backed", 0) > 0` failed when absent.
+# So a summary carrying the new counters but not that one — an older _summary, a hand-built dict —
+# was clean, and the newest condition was the one that vanished quietly. Listing the keys fixes the
+# shape of the bug rather than the one clause where it was noticed.
+_REQUIRED_SUMMARY_KEYS = (
+    "checks", "passed", "mutation_backed", "operations_driven",
+    "captures", "captures_unsettled", "captures_straddling_displays",
+    "restorations_failed", "cached_reads_used_as_live",
+    "visual_assertions", "visual_failed", "visual_assertions_without_a_subject",
+    "recordings",
+)
 
 
 def is_clean(summary):
@@ -520,15 +604,50 @@ def is_clean(summary):
     Every dimension the evidence document tracks has to be clean, not just the check count: an unsettled
     capture, a failed visual assertion, a restoration that did not happen, or a cached read presented as
     live each invalidate the run on their own.
+
+    THE ZEROS HAVE TO BE EARNED. Every `== 0` clause below is satisfied by a run that never did the
+    thing at all: no visual assertion means no visual can lack a subject, and no capture means none
+    was unsettled. So the counts that make those zeros meaningful are required to be positive. The
+    cheapest way to satisfy "every visual names a subject" must not be to assert nothing.
+
+    What these clauses do NOT establish, stated so nobody reads them as more:
+
+      * `operations_driven` counts tool calls, not successful ones. A warm-up call, a read, or a
+        call that came back a transport error each increment it. It rules out a harness that never
+        touched the product; it does not show the run drove its own subject.
+      * `mutation_backed` counts checks that NAME a mutation. Naming is not demonstrating — the
+        string is prose, and nothing here reruns the build with the mutation applied. Whether the
+        named mutation would actually flip that check is the author's claim and a reviewer's job.
+      * a subject is any non-empty string. That it truthfully names what the rectangle contains is
+        not checkable here.
+
+    `visual_assertions_without_a_subject` is COUNTED and deliberately NOT gated on yet. Measured
+    when this was written: thirty harnesses call `visual()` and zero pass `subject=`, so enforcing
+    it here turns the entire live suite red in one step, and the predictable next move is that
+    somebody deletes the clause. Writing truthful subjects means measuring what each band actually
+    contains — thirty times — and inventing them to make a gate go green is the failure this
+    parameter exists to prevent. The counter lands now so adoption is visible; the clause lands
+    when the count reaches zero honestly.
     """
+    if not isinstance(summary, dict):
+        return False
+    if any(key not in summary for key in _REQUIRED_SUMMARY_KEYS):
+        return False
     return (
-        summary.get("checks", 0) > 0
-        and summary.get("passed") == summary.get("checks")
-        and summary.get("visual_failed", 0) == 0
-        and summary.get("captures_unsettled", 0) == 0
-        and summary.get("captures_straddling_displays", 0) == 0
-        and summary.get("restorations_failed", 0) == 0
-        and summary.get("cached_reads_used_as_live", 0) == 0
+        summary["checks"] > 0
+        and summary["passed"] == summary["checks"]
+        # Non-vacuity: the run has to have looked, driven, and recorded.
+        and summary["captures"] > 0
+        and summary["visual_assertions"] > 0
+        and summary["recordings"] > 0
+        and summary["mutation_backed"] > 0
+        and summary["operations_driven"] > 0
+        # ... and nothing it did may have gone wrong.
+        and summary["visual_failed"] == 0
+        and summary["captures_unsettled"] == 0
+        and summary["captures_straddling_displays"] == 0
+        and summary["restorations_failed"] == 0
+        and summary["cached_reads_used_as_live"] == 0
     )
 
 
@@ -549,82 +668,3 @@ def _file_hash(path):
         return None
 
 
-def _region_hash(png, region, window_points=None):
-    """Hash one rectangle of a PNG.
-
-    `region` is in WINDOW POINTS, the same units `logic_window()` reports. The capture is in backing
-    PIXELS — measured 3840x2100 for a 1920x1050 window on this hardware — so the rectangle is scaled by
-    the ratio the image itself reveals. Without that scaling the crop lands somewhere else entirely and
-    the assertion compares two identical wrong regions, which reads as "nothing changed" on a run where
-    the feature plainly worked.
-
-    Returns None rather than falling back to a whole-file hash: an unusable comparison must be visible
-    as unusable, not disguised as a difference.
-    """
-    if not os.path.isfile(png):
-        return None
-    try:
-        from Quartz import (CGImageSourceCreateWithURL, CGImageSourceCreateImageAtIndex,
-                            CGImageCreateWithImageInRect, CGRectMake, CGDataProviderCopyData,
-                            CGImageGetDataProvider, CGImageGetWidth, CGImageGetHeight)
-        from Foundation import NSURL
-        url = NSURL.fileURLWithPath_(png)
-        src = CGImageSourceCreateWithURL(url, None)
-        if src is None:
-            return None
-        img = CGImageSourceCreateImageAtIndex(src, 0, None)
-        if img is None:
-            return None
-        if not region:
-            data = CGDataProviderCopyData(CGImageGetDataProvider(img))
-            return hashlib.sha256(bytes(data)).hexdigest()
-        pw, ph = CGImageGetWidth(img), CGImageGetHeight(img)
-        sx = sy = 1.0
-        if window_points:
-            wpts, hpts = window_points
-            if wpts:
-                sx = pw / float(wpts)
-            if hpts:
-                sy = ph / float(hpts)
-        x, y, w, h = region
-        sub = CGImageCreateWithImageInRect(
-            img, CGRectMake(x * sx, y * sy, w * sx, h * sy))
-        if sub is None:
-            return None
-        data = CGDataProviderCopyData(CGImageGetDataProvider(sub))
-        return hashlib.sha256(bytes(data)).hexdigest()
-    except Exception:
-        return None
-
-
-def have_tools():
-    """Everything the recorder needs, checked before a run rather than mid-run."""
-    missing = []
-    if not shutil.which("screencapture") and not os.path.exists("/usr/sbin/screencapture"):
-        missing.append("screencapture")
-    try:
-        import Quartz  # noqa: F401
-    except ImportError:
-        missing.append("pyobjc (Quartz)")
-    if BIN and not os.access(BIN, os.X_OK):
-        missing.append(f"built binary at {BIN}")
-    return missing
-
-
-def _worktree_head(repo):
-    """(HEAD sha, dirty) for the worktree the binary was built in.
-
-    `dirty` counts tracked-file modifications under Sources/ and Tests/ only: an untracked scratch file
-    does not change what was compiled, but an edited source does, and a binary built from an edited tree
-    is not evidence about the commit it is filed under.
-    """
-    if not repo:
-        return None, False
-    try:
-        head = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"],
-                              capture_output=True, text=True, check=False).stdout.strip()
-        st = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", "Sources", "Tests"],
-                            capture_output=True, text=True, check=False).stdout.strip()
-        return (head or None), bool(st)
-    except Exception:
-        return None, False

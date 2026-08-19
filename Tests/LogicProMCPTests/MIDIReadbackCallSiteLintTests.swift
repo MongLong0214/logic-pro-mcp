@@ -19,6 +19,12 @@ import Testing
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
     private static let providerFile = "EventListMIDINoteReadbackProvider.swift"
+    // `observeNoteTable` is the one release-constructible way into the collector's read path.
+    // Its containment was previously just today's call graph: it is `internal`, so any file in
+    // the module could have grown a second caller silently. These two are its whole census —
+    // the file that declares it and the CLI branch that calls it.
+    private static let collectorFile = "EventListReadbackCollector.swift"
+    private static let probeEntryFile = "MainEntrypoint.swift"
     // The only permitted `CompleteProof()` mint sites, both in the assessment
     // file: the production return of `assessReadback` and the debug-only seam.
     private static let expectedProofMintSites = 2
@@ -72,6 +78,7 @@ import Testing
         var offenders: [String] = []
         var proofMintInAssessment = 0
         var assessmentReferencesInProvider = 0
+        var probeReferencesInEntrypoint = 0
         let enumerator = fm.enumerator(at: sources, includingPropertiesForKeys: nil)
         while let url = enumerator?.nextObject() as? URL {
             guard url.pathExtension == "swift" else { continue }
@@ -97,6 +104,12 @@ import Testing
             } else if assessmentReferences > 0 {
                 offenders.append("\(url.lastPathComponent): references assessReadback")
             }
+            let probeReferences = Self.identifierCount(text, "observeNoteTable")
+            if url.lastPathComponent == Self.probeEntryFile {
+                probeReferencesInEntrypoint = probeReferences
+            } else if probeReferences > 0, url.lastPathComponent != Self.collectorFile {
+                offenders.append("\(url.lastPathComponent): references observeNoteTable")
+            }
             if proofMints > 0 {
                 offenders.append("\(url.lastPathComponent): mints CompleteProof outside its file")
             }
@@ -107,6 +120,8 @@ import Testing
         #expect(offenders.isEmpty, "dark-core call-site lint offenders: \(offenders)")
         #expect(assessmentReferencesInProvider == 1,
                 "\(Self.providerFile) must be the sole adapter call site for assessReadback")
+        #expect(probeReferencesInEntrypoint == 1,
+                "\(Self.probeEntryFile) must be the sole caller of observeNoteTable")
         #expect(proofMintInAssessment == Self.expectedProofMintSites,
                 "CompleteProof mint sites in \(Self.assessmentFile) = \(proofMintInAssessment), expected \(Self.expectedProofMintSites)")
     }

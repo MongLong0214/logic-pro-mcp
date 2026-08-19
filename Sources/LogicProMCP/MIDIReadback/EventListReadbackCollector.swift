@@ -7,6 +7,97 @@ import Foundation
 /// `assessReadback` remain unproven in a release build, so collecting a live
 /// table cannot make the default-off readback path complete or public.
 enum EventListReadbackCollector {
+    /// What `readRow` sees on the live Event List, with no identity and no assessment (#616).
+    ///
+    /// `collect` requires a `RegistryResolvedIdentityProof`, and the only mint for one is compiled
+    /// solely under `QUALIFICATION_FAULT_SEAM` — a debug condition. So the RELEASE binary contains
+    /// this collector and cannot construct the argument it needs, which is why a live run driving the
+    /// shipped artifact could never reach the code under test and every live check about it scored
+    /// zero mutations.
+    ///
+    /// This entry exists to close exactly that gap and nothing else:
+    ///
+    ///   * it takes no identity, so it is constructible in release;
+    ///   * it does NOT call `assessReadback`, so `EventListMIDINoteReadbackProvider` remains the sole
+    ///     adapter the call-site lint permits and the dark provider stays dark;
+    ///   * it mints no `CompleteProof` and completes no qualification;
+    ///   * it goes through the SAME `readHeaders` / `readRows` / `readRow` the collector uses, which
+    ///     is the point — the guard under test is on that path.
+    ///
+    /// It performs NO AX action. `collect` presses the Event tab when the pane is showing something
+    /// else; this entry refuses instead, because "it only observes" is the whole reason a release
+    /// binary is allowed to reach it. A press is small, but it is still actuation the shipped
+    /// artifact could not previously perform on this path, and a claim of observation that quietly
+    /// actuates is the defect this collector exists to make impossible. Selecting the Event tab is
+    /// the driver's job, before the probe runs.
+    /// What one probe run actually saw. `rows` alone was not enough to prove anything about the
+    /// header: `RawEventRow` is keyed by `AXColumnID`s minted from `expectedHeaderTitles`, so a
+    /// harness reading those keys compares the canonical English constants against themselves and
+    /// gets a check that cannot fail. `liveHeaderTitles` is what Logic rendered. `firstRowCellChildren`
+    /// is the count this collector's guard is ABOUT — the empty Lock/Mute cells — measured rather
+    /// than inferred from a null slider.
+    struct ProbeObservation: Sendable {
+        let liveHeaderTitles: [String]
+        let rows: [RawEventRow]
+        let firstRowCellChildren: [String: Int]
+    }
+
+    static func observeNoteTable(
+        runtime: AXLogicProElements.Runtime = .production
+    ) throws -> ProbeObservation {
+        guard let mainWindow = AXLogicProElements.mainWindow(runtime: runtime) else {
+            throw EventListReadbackCollectorError.mainWindowUnavailable
+        }
+        let eventTab = try findEventTab(in: mainWindow, runtime: runtime.ax)
+        guard try checkedState(of: eventTab, runtime: runtime.ax) else {
+            throw EventListProbeRefusal.eventTabNotSelected
+        }
+
+        let paneAndTable = try findEventPaneAndTable(
+            for: eventTab, in: mainWindow, runtime: runtime.ax
+        )
+
+        let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
+        let rowElements: [AXUIElement] = AXHelpers.getAttribute(
+            paneAndTable.table, "AXRows", runtime: runtime.ax
+        ) ?? []
+        return ProbeObservation(
+            liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax),
+            rows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
+            firstRowCellChildren: rowElements.first.map {
+                cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
+            } ?? [:]
+        )
+    }
+
+    /// The header's sort-button titles, verbatim. A separate read from `readHeaders`, on purpose:
+    /// that function CONSUMES the titles to decide whether they match and then reports canonical
+    /// names either way, so it cannot witness what was rendered.
+    private static func sortButtonTitles(
+        of table: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> [String] {
+        guard let header: AXUIElement = AXHelpers.getAttribute(
+            table, kAXHeaderAttribute, runtime: runtime
+        ) else { return [] }
+        return AXHelpers.getChildren(header, runtime: runtime)
+            .filter { (AXHelpers.getAttribute($0, kAXSubroleAttribute, runtime: runtime) as String?) == "AXSortButton" }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
+    }
+
+    /// How many children each cell of one row has. This is the observable the `readRow` guard is
+    /// about: Logic gives an unset Lock or Mute flag a cell with ZERO children, and demanding one
+    /// child everywhere is what made every real note row throw.
+    private static func cellChildCounts(
+        of row: AXUIElement, headers: HeaderBinding, runtime: AXHelpers.Runtime
+    ) -> [String: Int] {
+        let cells = AXHelpers.getChildren(row, runtime: runtime)
+        var counts: [String: Int] = [:]
+        for (index, id) in headers.orderedIDs.enumerated() where cells.indices.contains(index) {
+            counts[id.id] = AXHelpers.getChildren(cells[index], runtime: runtime).count
+        }
+        return counts
+    }
+
     static func collect(
         requestedRegion: MIDIRegionReference,
         resolvedIdentity: RegistryResolvedIdentityProof,
@@ -109,6 +200,11 @@ enum EventListReadbackCollector {
         AXLocalePolicy.eventListColumnValue, AXLocalePolicy.eventListColumnLengthInfo,
     ]
     private static let expectedHeaderTitles = expectedHeaderColumns.map(\.canonical)
+    /// The two columns whose cell may legitimately be EMPTY: an unset Lock or Mute flag.
+    private static let flagColumnTitles: Set<String> = [
+        AXLocalePolicy.eventListColumnL.canonical,
+        AXLocalePolicy.eventListColumnM.canonical,
+    ]
     /// Logic uses this distinct schema while the Event List is showing regions
     /// instead of the selected region's events. It is a recoverable navigation
     /// failure, not a column-layout drift.
@@ -150,6 +246,39 @@ enum EventListReadbackCollector {
         return tab
     }
 
+    /// Whether a table's header is one of the two schemas this pane shows.
+    ///
+    /// Identity, not position: the note level's eight columns or the region level's six. A table that
+    /// carries neither is some other pane's, however close it sits in the tree.
+    private static func headerBinds(_ table: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        guard let header: AXUIElement = AXHelpers.getAttribute(
+            table, kAXHeaderAttribute, runtime: runtime
+        ) else { return false }
+        let titles = AXHelpers.getChildren(header, runtime: runtime)
+            .filter { (AXHelpers.getAttribute($0, kAXSubroleAttribute, runtime: runtime) as String?) == "AXSortButton" }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
+        guard !titles.isEmpty else { return false }
+        return titlesMatch(titles, expectedHeaderColumns)
+            || titlesMatch(titles, regionLevelHeaderColumns)
+    }
+
+    /// Positional locale-aware comparison against a column schema, shared by `headerBinds` (which
+    /// decides WHICH table is the Event pane's) and `readHeaders` (which decides whether that
+    /// table is at region level). They had separate definitions of the same question and drifted
+    /// apart — one counted, the other compared — which is exactly the defect below.
+    ///
+    /// Counting the columns was the
+    /// earlier form and it was arity-only matching under a comment that claimed identity — the very
+    /// thing `HeaderIdentityProof` refuses to represent. Any other pane whose header happens to carry
+    /// six or eight sort buttons satisfied a count; it does not satisfy these labels.
+    // [String?] rather than [String]: readHeaders keeps the nil for a title AX would not give,
+    // and `matches` refuses nil. Compacting them away here would silently shorten the list and let
+    // a header with a missing title match a shorter schema.
+    private static func titlesMatch(_ titles: [String?], _ columns: [AXLocalePolicy.LabelSet]) -> Bool {
+        guard titles.count == columns.count else { return false }
+        return zip(titles, columns).allSatisfy { title, column in column.matches(title) }
+    }
+
     private static func findEventPaneAndTable(
         for eventTab: AXUIElement,
         in mainWindow: AXUIElement,
@@ -177,6 +306,18 @@ enum EventListReadbackCollector {
             ancestors = Array(path.dropLast().reversed())
         }
 
+        // #616: pick the table by WHAT IT IS, and fall back to "the only one here" rather than
+        // leading with it.
+        //
+        // This used to take the first ancestor containing any table and demand there be exactly one.
+        // Run for the first time against live Logic — from the release binary, through the probe
+        // added for this — it threw `eventTableAmbiguous(count: 2)` before reaching any of the code
+        // it exists to run, because a sibling pane in that ancestor also has a table. The Event
+        // pane's table was right there; the rule just could not say which one it was.
+        //
+        // A table that carries this pane's header is identifiable. Ambiguity is now reserved for the
+        // case where TWO tables both look like the Event pane, which is a real ambiguity rather than
+        // an accident of which panes happen to be open.
         for parent in ancestors {
             let tables = AXHelpers.findAllDescendants(
                 of: parent,
@@ -185,6 +326,17 @@ enum EventListReadbackCollector {
                 runtime: runtime
             )
             guard !tables.isEmpty else { continue }
+
+            let identifiable = tables.filter { headerBinds($0, runtime: runtime) }
+            if identifiable.count == 1, let table = identifiable.first {
+                return (parent, table)
+            }
+            if identifiable.count > 1 {
+                throw EventListReadbackCollectorError.eventTableAmbiguous(count: identifiable.count)
+            }
+            // No table here carries an Event-pane header. Keep the historical behaviour for the
+            // single-table case so existing fixtures — which model a bare table with no header —
+            // still resolve.
             guard tables.count == 1, let table = tables.first else {
                 throw EventListReadbackCollectorError.eventTableAmbiguous(count: tables.count)
             }
@@ -263,15 +415,7 @@ enum EventListReadbackCollector {
         }
         let titles = sortButtons.map { AXHelpers.getTitle($0, runtime: runtime) }
 
-        func matchesAll(_ columns: [AXLocalePolicy.LabelSet]) -> Bool {
-            guard titles.count == columns.count else { return false }
-            for (index, column) in columns.enumerated() where !column.matches(titles[index]) {
-                return false
-            }
-            return true
-        }
-
-        if matchesAll(regionLevelHeaderColumns) {
+        if titlesMatch(titles, regionLevelHeaderColumns) {
             throw EventListReadbackCollectorError.paneAtRegionLevel
         }
 
@@ -444,15 +588,32 @@ enum EventListReadbackCollector {
 
         var result: RawEventRow = [:]
         for (columnIndex, cell) in cells.enumerated() {
+            let title = expectedHeaderTitles[columnIndex]
             let children = AXHelpers.getChildren(cell, runtime: runtime)
+            // #293: L and M are the Lock and Mute FLAGS, and an unset flag is an EMPTY cell — measured
+            // live on a three-note region, every row reads cell child counts [0, 0, 1, 1, 1, 1, 1, 1].
+            // Requiring exactly one child everywhere therefore threw
+            // `cellChildCountMismatch(row: 0, column: "L", actual: 0)` on the first cell of the first
+            // row of any ordinary note, so this collector could not read a single real row.
+            //
+            // The absence is not ambiguous: those two cells expose no value-bearing attribute at all
+            // (19 attribute names, all structural, `AXDescription` nil, no `AXValue`), so there is
+            // nowhere else for a set flag to live and an empty cell means "off".
+            //
+            // Deliberately narrow: only the two flag columns may be empty. A missing child in a DATA
+            // column is still a mismatch, because there the absence would be a datum that failed to
+            // read rather than a state.
+            if flagColumnTitles.contains(title), children.isEmpty {
+                result[headers.orderedIDs[columnIndex]] = RawCell()
+                continue
+            }
             guard children.count == 1, let child = children.first else {
                 throw EventListReadbackCollectorError.cellChildCountMismatch(
                     row: index,
-                    column: expectedHeaderTitles[columnIndex],
+                    column: title,
                     actual: children.count
                 )
             }
-            let title = expectedHeaderTitles[columnIndex]
             result[headers.orderedIDs[columnIndex]] = rawCell(
                 title: title,
                 child: child,
@@ -585,6 +746,21 @@ enum EventListReadbackCollector {
                 markedAsTime: markedAsTime,
                 positionsAreBBT: allPositionsAreBBT
             )
+        }
+    }
+}
+
+/// The probe's own refusal, deliberately NOT a case of `EventListReadbackCollectorError`. That
+/// enum is mirrored case-for-case by the provider's public error, and `collect` can never fail
+/// this way — a case there would be an absence dressed as a possibility.
+enum EventListProbeRefusal: Error, Equatable, Sendable, CustomStringConvertible {
+    case eventTabNotSelected
+
+    var description: String {
+        switch self {
+        case .eventTabNotSelected:
+            return "Event List tab is not selected. This entry observes and will not select it; "
+                + "open the Event List and choose the Event tab first."
         }
     }
 }
