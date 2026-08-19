@@ -9,8 +9,13 @@
 // was open and the probe was reading its rows.
 //
 //   swiftc -O ax_event_tab.swift -o ax_event_tab
-//   ./ax_event_tab                 -> {"tabs":[{"description":"Event","selected":true}, …]}
-//   ./ax_event_tab select Event    -> the same, plus "pressed", AFTER re-reading
+//   ./ax_event_tab                      -> {"tabs":[{"description":"Event","selected":true}, …]}
+//   ./ax_event_tab select Event         -> the same, plus "pressed", AFTER re-reading
+//   ./ax_event_tab press <Role> <Desc>  -> press any control by role + AXDescription
+//
+// The `press` form exists because System Events cannot see these controls either. Opening the
+// Mixer through `click checkbox "Mixer" of window 1` returns -1728 while raw AX finds that exact
+// checkbox in the Control Bar. Same wall as the tabs, same way through it.
 //
 // The reported `selected` is always a fresh read taken after any press, never the press's return
 // code. `ax_region_select.swift` records why: on this build an AXSelected write returned .success
@@ -47,6 +52,20 @@ func isSelected(_ element: AXUIElement) -> Bool {
 /// Every radio button under `root`, by AXDescription. Depth-bounded rather than unbounded: the
 /// tabs sit several groups deep and an unbounded walk of Logic's arrange window is slow enough
 /// to change what it is measuring.
+/// Every element of `role` carrying `description`, depth-bounded. Reports ALL matches so the caller
+/// can refuse ambiguity rather than inherit tree order — an AXDescription is not unique.
+func matching(_ root: AXUIElement, role wantRole: String, description wantDesc: String,
+              depth: Int = 0) -> [AXUIElement] {
+    guard depth < 16 else { return [] }
+    var found: [AXUIElement] = []
+    for child in children(root) {
+        if role(child) == wantRole, describe(child) == wantDesc { found.append(child) }
+        found.append(contentsOf: matching(child, role: wantRole, description: wantDesc,
+                                          depth: depth + 1))
+    }
+    return found
+}
+
 func radioButtons(_ root: AXUIElement, depth: Int = 0) -> [AXUIElement] {
     guard depth < 16 else { return [] }
     var found: [AXUIElement] = []
@@ -78,6 +97,25 @@ let mainWindow = window as! AXUIElement
 
 var tabs = radioButtons(mainWindow)
 var pressed: String? = nil
+
+if CommandLine.arguments.count >= 4, CommandLine.arguments[1] == "press" {
+    let wantRole = CommandLine.arguments[2]
+    let wantDesc = CommandLine.arguments[3]
+    let hits = matching(mainWindow, role: wantRole, description: wantDesc)
+    if hits.count != 1 {
+        emit(["error": hits.isEmpty ? "no such control" : "ambiguous", "role": wantRole,
+              "description": wantDesc, "candidates": hits.count])
+    }
+    let before = isSelected(hits[0])
+    _ = AXUIElementPerformAction(hits[0], kAXPressAction as CFString)
+    Thread.sleep(forTimeInterval: 1.5)
+    // Re-read rather than trust the return code: a press that reports success and changes nothing
+    // is the norm on this surface, not the exception.
+    let after = matching(mainWindow, role: wantRole, description: wantDesc)
+    emit(["pressed": wantDesc, "candidates": hits.count, "valueBefore": before,
+          "valueAfter": after.first.map { isSelected($0) } ?? false,
+          "changed": after.first.map { isSelected($0) != before } ?? false])
+}
 
 if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "select" {
     let wanted = CommandLine.arguments[2]
