@@ -83,6 +83,26 @@ def document_titles():
     return [t for t in window_titles() if not any(c in t for c in CHOOSER_TITLES)]
 
 
+def _track_header_band():
+    """The arrange window's track-header rail, in window coordinates, or None.
+
+    Located by AXDescription through a raw-AX witness rather than System Events: twice this week a
+    rule prototyped through System Events failed to hold through the API the product uses.
+    """
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_track_header_band.swift")
+    out = os.path.join(os.path.dirname(src), ".ax_track_header_band.bin")
+    if subprocess.run(["swiftc", "-O", src, "-o", out],
+                      capture_output=True, text=True).returncode != 0:
+        return None
+    r = subprocess.run([out], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None
+    b = payload.get("band")
+    return tuple(b) if isinstance(b, list) and len(b) == 4 else None
+
+
 def save_panels():
     """Windows AND sheets that are the modal surface a failed Save As leaves behind.
 
@@ -116,18 +136,29 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
-# The leftmost strip only — the track-name column. The full-width band is NOT a defensible negative
-# control for this operation: bisected across a real run, x 720-1200 differs while every other slice
-# is identical, and that span is arrange content whose selection and focus state a panel opening and
-# closing legitimately changes. Asserting "nothing changed" over a region the operation is entitled to
-# change produces a red that says nothing about the refusal.
+# The band is located by CONTENT, not by coordinates.
 #
-# What the refusal must NOT touch is the project's track list, and that is what this watches.
-band = (0, 0, 240, 28) if win else None
-ev.check("604/precondition-the-window-frame-is-known", band is not None,
-         "the arrange window's own frame read, so the capture band is inside it",
-         f"window={win!r} band={band!r}", None)
+# Two coordinate bands failed here for the same reason. The full-width top strip differs only in
+# x 720-1200 — arrange content whose selection and focus a panel opening and closing legitimately
+# moves. Narrowing to the leftmost 240 points was stable twice and then failed, because that column is
+# the track-name list with the Mixer closed and a column of MIXER STRIPS with it open, and mixer
+# strips carry level meters. A rectangle does not know what it is looking at.
+#
+# `ax_track_header_band.swift` asks AX for the element described "Tracks header" and returns its frame
+# in window coordinates. It emits nothing when that description is not found, which is a failed
+# precondition rather than a licence to fall back to a rectangle.
+band = _track_header_band()
+ev.check("614/precondition-the-track-header-rail-was-located",
+         band is not None,
+         "the visual band is the track-header rail found by its AXDescription, so it watches the same "
+         "thing whatever pane is open — a coordinate band watched the mixer when the mixer was open",
+         f"band={band!r}", None)
 if band is None:
+    print(json.dumps(ev.write(), indent=1)); sys.exit(1)
+ev.check("604/precondition-the-window-frame-is-known", win is not None,
+         "the arrange window's own frame read, so a capture can be taken of it",
+         f"window={win!r}", None)
+if win is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 # This used `len(window_titles()) == len(document_titles())`, which `save_panels()` below already
