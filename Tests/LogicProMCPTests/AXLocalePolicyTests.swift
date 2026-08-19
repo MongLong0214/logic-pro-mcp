@@ -466,6 +466,59 @@ struct AXLocalePolicyTests {
         #expect(shallow == nil)
     }
 
+    // MARK: - censusDescendant (#628: identity from a discriminator, not tree order)
+
+    /// `findDescendant` returns the first match in traversal order and says nothing about the rest.
+    /// When it is right, nothing records that it was right for a reason — and that silence is the
+    /// defect, not the choosing. These two pin BOTH halves: a second candidate must be refused, and
+    /// a single candidate must be REPORTED as single. The second is the one easy to leave out.
+    @Test("censusDescendant refuses two candidates and names how many there were")
+    func censusRefusesAmbiguity() {
+        let builder = FakeAXRuntimeBuilder()
+        let first = addPolicyElement(builder, 90, role: kAXButtonRole as String, title: "취소")
+        let second = addPolicyElement(builder, 91, role: kAXButtonRole as String, title: "취소")
+        let window = addPolicyElement(
+            builder, 92, role: kAXWindowRole as String, children: [first, second]
+        )
+        let runtime = builder.makeAXRuntime()
+
+        let census = AXLocalePolicy.censusDescendant(
+            of: window, role: kAXButtonRole as String,
+            matching: AXLocalePolicy.cancelButton, maxDepth: 4, runtime: runtime
+        )
+        #expect(census.candidates == 2)
+        #expect(census.element == nil)
+        #expect(!census.isUnambiguous)
+
+        // What the old helper does with the same tree: returns one, silently.
+        let blind = AXLocalePolicy.findDescendant(
+            of: window, role: kAXButtonRole as String,
+            matching: AXLocalePolicy.cancelButton, maxDepth: 4, runtime: runtime
+        )
+        #expect(blind == first, "the defect this exists to expose: a plausible answer, chosen by order")
+    }
+
+    @Test("censusDescendant records that a single candidate WAS single")
+    func censusRecordsUniqueness() {
+        let builder = FakeAXRuntimeBuilder()
+        let decoy = addPolicyElement(builder, 93, role: kAXStaticTextRole as String, title: "취소")
+        let only = addPolicyElement(builder, 94, role: kAXButtonRole as String, title: "취소")
+        let window = addPolicyElement(
+            builder, 95, role: kAXWindowRole as String, children: [decoy, only]
+        )
+        let runtime = builder.makeAXRuntime()
+
+        let census = AXLocalePolicy.censusDescendant(
+            of: window, role: kAXButtonRole as String,
+            matching: AXLocalePolicy.cancelButton, maxDepth: 4, runtime: runtime
+        )
+        // `element == only` alone would pass just as well against the blind helper. The count is
+        // what makes this an identification rather than a find.
+        #expect(census.candidates == 1)
+        #expect(census.element == only)
+        #expect(census.isUnambiguous)
+    }
+
     // MARK: - Phase 2 (#60) read-only locator label sets
 
     /// `.exactStrict` mode preserves verbatim (no-trim) equality used by the
