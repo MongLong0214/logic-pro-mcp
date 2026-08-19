@@ -130,11 +130,15 @@ ev.check("604/precondition-the-window-frame-is-known", band is not None,
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-ev.check("604/precondition-nothing-is-blocking-before-the-run",
-         len(window_titles()) == len(document_titles()),
-         "no modal is up when the run starts, so a blocking dialog afterwards is one this operation "
-         "left behind rather than one it inherited",
-         f"windows={window_titles()!r}", None)
+# This used `len(window_titles()) == len(document_titles())`, which `save_panels()` below already
+# documents as saying only "no project chooser is visible" — a leftover window named Save sits in
+# BOTH lists. The explanation moved into this file when the harness was repointed and the comparison
+# it condemns did not. Ask the question directly.
+ev.check("614/precondition-no-save-panel-is-up-before-the-run",
+         not save_panels(),
+         "no Save panel is up when the run starts, so one afterwards is this operation's doing rather "
+         "than something it inherited",
+         f"save_panels={save_panels()!r} windows={window_titles()!r}", None)
 
 rec = ev.record_screen(seconds=150)
 
