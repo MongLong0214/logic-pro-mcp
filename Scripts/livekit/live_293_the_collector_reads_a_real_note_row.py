@@ -56,7 +56,7 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 
 GUARD_MUTATION = (
     "restore `guard children.count == 1` in EventListReadbackCollector.readRow and rebuild the "
-    "release binary: the probe stops returning a harvest and returns "
+    "release binary: the probe stops returning rows and returns "
     "`Event List row 0, column L has 0 cell children; expected 1.` — observed both ways on this "
     "machine"
 )
@@ -155,12 +155,33 @@ ev.check("293/precondition-the-list-editors-pane-is-open",
          "checks first went red for a reason that had nothing to do with the product",
          f"pane_was_open_before={pane_was_open!r}", None)
 
+def event_tab_selected():
+    """AXValue of the Event radio: 1 when the pane is showing events."""
+    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
+              'return (value of (first radio button of window 1 whose description is "Event"))')
+    return raw.strip() in ("1", "true")
+
+
+# The probe refuses when this tab is not already selected — it observes and will not press. That
+# is the driver's job, and doing it HERE rather than inside the binary is the point: the shipped
+# artifact performs no AX action on this path. Selected by description, never by position.
+tab_was_selected = event_tab_selected()
+if not tab_was_selected:
+    osa('tell application "System Events" to tell process "Logic Pro" to '
+        'click (first radio button of window 1 whose description is "Event")')
+    time.sleep(2)
+ev.check("293/precondition-the-driver-selected-the-event-tab",
+         event_tab_selected(),
+         "the Event tab is selected BEFORE the binary runs. The probe refuses instead of pressing "
+         "it, so a red here means the driver could not reach the tab — not that the readback broke",
+         f"tab_was_selected_before={tab_was_selected!r}", None)
+
 result = probe()
 ev.note("293/probe", result)
 
 ev.check("293/the-collector-reads-the-note-table-from-the-shipped-binary",
          result.get("ok") is True and result.get("rows", 0) >= 2,
-         "the SAME readHeaders/readRows/readRow path the collector uses returns a harvest when run "
+         "the SAME readHeaders/readRows/readRow path the collector uses returns rows when run "
          "against live Logic from the artifact the gate hashes — before this fix it threw on the "
          "first cell of the first row of every real note",
          f"ok={result.get('ok')!r} rows={result.get('rows')!r} error={result.get('error')!r}",
@@ -170,7 +191,7 @@ cols = result.get("columns") or []
 ev.check("293/the-note-schema-binds",
          sorted(cols) == sorted(["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"]),
          "all eight note columns bound by name through the collector's own header binding, so the "
-         "harvest is of the note level and not of the six-column region view",
+         "the rows are of the note level and not of the six-column region view",
          f"columns={cols!r}",
          GUARD_MUTATION)
 

@@ -31,6 +31,7 @@ import Testing
 
     private static func fixture(
         headerTitles: [String] = Self.headerTitles,
+        decoyHeaderTitles: [String]? = nil,
         rowCount: Int = 2,
         hollowRows: Set<Int> = [],
         omittedFilterTitle: String? = nil,
@@ -75,6 +76,26 @@ import Testing
             return button
         }
         builder.setChildren(header, headerButtons)
+
+        // A sibling list in the same pane. Live Logic really does have one — resolving the table by
+        // "first ancestor containing a table" threw `eventTableAmbiguous(count: 2)` against real
+        // Logic (see findEventPaneAndTable). Every fixture here modelled a lone table, so nothing
+        // made the collector say WHICH table was the Event pane's.
+        if let decoyHeaderTitles {
+            let decoy = element()
+            let decoyHeader = element()
+            builder.setAttribute(decoy, kAXParentAttribute as String, pane)
+            builder.setRole(decoy, kAXTableRole as String)
+            builder.setAttribute(decoy, kAXHeaderAttribute as String, decoyHeader)
+            builder.setChildren(decoyHeader, decoyHeaderTitles.map { title -> AXUIElement in
+                let button = element()
+                builder.setRole(button, kAXButtonRole as String)
+                builder.setAttribute(button, kAXSubroleAttribute as String, "AXSortButton")
+                builder.setAttribute(button, kAXTitleAttribute as String, title)
+                return button
+            })
+            builder.setChildren(pane, [eventTab, table, decoy])
+        }
 
         var rows: [AXUIElement] = []
         var rowFields: [RowFields] = []
@@ -233,6 +254,32 @@ import Testing
                 return true
             }
         )
+    }
+
+    /// A six-column list that is NOT the region level. Arity-only matching accepted it — the note
+    /// schema has eight columns and the region schema six, so "8 or 6" bound this too and the
+    /// resolve went ambiguous. The labels are what separate them.
+    private static let decoyHeaderTitles = ["L", "M", "Position", "Marker", "Color", "Note"]
+
+    @Test func aSiblingListWithSixColumnsIsNotTheEventTable() throws {
+        let fixture = Self.fixture(decoyHeaderTitles: Self.decoyHeaderTitles)
+        let runtime = fixture.builder.makeLogicRuntime(appElement: fixture.app)
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+
+        // Binding by column COUNT throws `eventTableAmbiguous(count: 2)` here.
+        let rows = try EventListReadbackCollector.observeNoteTable(runtime: runtime)
+        #expect(rows.count == 2)
+    }
+
+    @Test func theProbeRefusesRatherThanSelectingTheEventTab() throws {
+        let fixture = Self.fixture()
+        let runtime = fixture.builder.makeLogicRuntime(appElement: fixture.app)
+        // AXValue 0: the pane is open on some other tab.
+        #expect(throws: EventListProbeRefusal.eventTabNotSelected) {
+            _ = try EventListReadbackCollector.observeNoteTable(runtime: runtime)
+        }
+        // ... and it did not press its way there.
+        #expect((AXHelpers.getAttribute(fixture.eventTab, kAXValueAttribute as String, runtime: runtime.ax) as Int?) == 0)
     }
 
     @Test func headerMismatchIsRefused() throws {

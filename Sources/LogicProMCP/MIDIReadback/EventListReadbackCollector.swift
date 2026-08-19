@@ -24,8 +24,12 @@ enum EventListReadbackCollector {
     ///   * it goes through the SAME `readHeaders` / `readRows` / `readRow` the collector uses, which
     ///     is the point — the guard under test is on that path.
     ///
-    /// It observes. `selectEventTabIfNeeded` and the row-selection restore below are the collector's
-    /// own, so the pane is left as it was found.
+    /// It performs NO AX action. `collect` presses the Event tab when the pane is showing something
+    /// else; this entry refuses instead, because "it only observes" is the whole reason a release
+    /// binary is allowed to reach it. A press is small, but it is still actuation the shipped
+    /// artifact could not previously perform on this path, and a claim of observation that quietly
+    /// actuates is the defect this collector exists to make impossible. Selecting the Event tab is
+    /// the driver's job, before the probe runs.
     static func observeNoteTable(
         runtime: AXLogicProElements.Runtime = .production
     ) throws -> [RawEventRow] {
@@ -33,13 +37,13 @@ enum EventListReadbackCollector {
             throw EventListReadbackCollectorError.mainWindowUnavailable
         }
         let eventTab = try findEventTab(in: mainWindow, runtime: runtime.ax)
-        let eventTabWasSelected = try checkedState(of: eventTab, runtime: runtime.ax)
-        defer { restoreEventTab(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax) }
+        guard try checkedState(of: eventTab, runtime: runtime.ax) else {
+            throw EventListProbeRefusal.eventTabNotSelected
+        }
 
         let paneAndTable = try findEventPaneAndTable(
             for: eventTab, in: mainWindow, runtime: runtime.ax
         )
-        try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
 
         let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
         let rows: [AXUIElement] = AXHelpers.getAttribute(
@@ -208,8 +212,17 @@ enum EventListReadbackCollector {
             .filter { (AXHelpers.getAttribute($0, kAXSubroleAttribute, runtime: runtime) as String?) == "AXSortButton" }
             .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
         guard !titles.isEmpty else { return false }
-        return titles.count == expectedHeaderTitles.count
-            || titles.count == regionLevelHeaderTitles.count
+        return titlesMatch(titles, expectedHeaderColumns)
+            || titlesMatch(titles, regionLevelHeaderColumns)
+    }
+
+    /// Positional locale-aware comparison against a column schema. Counting the columns was the
+    /// earlier form and it was arity-only matching under a comment that claimed identity — the very
+    /// thing `HeaderIdentityProof` refuses to represent. Any other pane whose header happens to carry
+    /// six or eight sort buttons satisfied a count; it does not satisfy these labels.
+    private static func titlesMatch(_ titles: [String], _ columns: [AXLocalePolicy.LabelSet]) -> Bool {
+        guard titles.count == columns.count else { return false }
+        return zip(titles, columns).allSatisfy { title, column in column.matches(title) }
     }
 
     private static func findEventPaneAndTable(
@@ -687,6 +700,21 @@ enum EventListReadbackCollector {
                 markedAsTime: markedAsTime,
                 positionsAreBBT: allPositionsAreBBT
             )
+        }
+    }
+}
+
+/// The probe's own refusal, deliberately NOT a case of `EventListReadbackCollectorError`. That
+/// enum is mirrored case-for-case by the provider's public error, and `collect` can never fail
+/// this way — a case there would be an absence dressed as a possibility.
+enum EventListProbeRefusal: Error, Equatable, Sendable, CustomStringConvertible {
+    case eventTabNotSelected
+
+    var description: String {
+        switch self {
+        case .eventTabNotSelected:
+            return "Event List tab is not selected. This entry observes and will not select it; "
+                + "open the Event List and choose the Event tab first."
         }
     }
 }

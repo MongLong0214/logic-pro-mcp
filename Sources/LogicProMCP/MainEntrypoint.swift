@@ -307,6 +307,8 @@ enum MainEntrypoint {
           LogicProMCP                          Start the MCP server over stdio (default; used by an MCP client)
           LogicProMCP --help, -h               Print this help and exit
           LogicProMCP --version, -V            Print the version and exit
+          LogicProMCP --probe-event-list       Read the open Event List note table once and print JSON; exit
+                                               Observation only: it selects nothing and writes nothing.
           LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates] [--strict] [--profile <core|mixer|keycmd|legacy-scripter|full>] [--client <claude-code|claude-desktop|cursor|vscode|terminal|custom>]
                                                Print a diagnostic report and exit
           LogicProMCP lifecycle <install|update|uninstall> [--json]
