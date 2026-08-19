@@ -9,7 +9,7 @@ Every mutating operation consults a fail-closed blocking-dialog guard. In a FRES
 refused the first call, on a screen holding one ordinary window and nothing else. Measured before the
 fix, four trials out of four, with the refusal's own instrumentation:
 
-    last_dialog_presence_reason   windows_read_failed
+    dialog_presence_reason   windows_read_failed
     windows_read_ax_error         -25204   (kAXErrorCannotComplete)
     dialog_present_recheck        false    (the same read, milliseconds later)
 
@@ -108,7 +108,7 @@ bodies = [first_call_in_a_fresh_process() for _ in range(4)]
 ev.note("608/fresh-process-first-calls", [
     {"error": b.get("error"),
      "blocking_dialog_present": b.get("blocking_dialog_present"),
-     "reason": b.get("last_dialog_presence_reason"),
+     "reason": b.get("dialog_presence_reason"),
      "ax_error": b.get("windows_read_ax_error")}
     for b in bodies
 ])
@@ -119,7 +119,7 @@ ev.check("608/no-fresh-process-is-refused-on-its-first-call",
          "four separate server processes each make one read-only call as their FIRST call and none "
          "is refused — before the fix this was refused 4 times out of 4 with "
          "windows_read_ax_error -25204 on the same screen",
-         f"refused={len(refused)}/4 details={[b.get('last_dialog_presence_reason') for b in bodies]!r}",
+         f"refused={len(refused)}/4 details={[b.get('dialog_presence_reason') for b in bodies]!r}",
          "change the `error.raw == AXError.cannotComplete.rawValue` re-read condition to `false`: "
          "every one of these four is refused again and this goes red")
 

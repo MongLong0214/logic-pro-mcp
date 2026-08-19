@@ -196,30 +196,6 @@ enum AXLogicProElements {
         var namesAnActualDialog: Bool { self == .blockingWindowFound }
     }
 
-    /// The reason the most recent `dialogPresent` call gave.
-    ///
-    /// A refusal is assembled by its caller after the guard has already answered, so the condition is
-    /// gone by the time anyone asks. This carries it across that gap. It describes the LAST decision
-    /// in this process, not necessarily the one a particular caller saw — say so wherever it is
-    /// published rather than presenting it as that call's own reason.
-    private static let reasonLock = NSLock()
-    nonisolated(unsafe) private static var lastReason: DialogPresenceReason?
-    nonisolated(unsafe) private static var lastWindowsReadError: Int32?
-
-    static func lastDialogPresenceReason() -> DialogPresenceReason? {
-        reasonLock.lock()
-        defer { reasonLock.unlock() }
-        return lastReason
-    }
-
-    /// The AXError behind a `windows_read_failed`, so the refusal names the status rather than the
-    /// category. Fail-closed guards are only readable if they say what the platform actually said.
-    static func lastDialogPresenceWindowsReadError() -> Int32? {
-        reasonLock.lock()
-        defer { reasonLock.unlock() }
-        return lastWindowsReadError
-    }
-
     static func dialogPresenceReason(runtime: Runtime = .production) -> DialogPresenceReason {
         let reason: DialogPresenceReason
         var axError: Int32?
@@ -271,10 +247,6 @@ enum AXLogicProElements {
         } else {
             reason = .appRootUnresolvable
         }
-        reasonLock.lock()
-        lastReason = reason
-        lastWindowsReadError = axError
-        reasonLock.unlock()
         return reason
     }
 
