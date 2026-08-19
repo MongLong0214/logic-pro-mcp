@@ -267,8 +267,11 @@ import Testing
         fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
 
         // Binding by column COUNT throws `eventTableAmbiguous(count: 2)` here.
-        let rows = try EventListReadbackCollector.observeNoteTable(runtime: runtime)
-        #expect(rows.count == 2)
+        let seen = try EventListReadbackCollector.observeNoteTable(runtime: runtime)
+        #expect(seen.rows.count == 2)
+        // The titles it REPORTS are the ones the header carried, not the canonical constants the
+        // row keys are minted from — otherwise a harness reading them compares English to English.
+        #expect(seen.liveHeaderTitles == Self.headerTitles)
     }
 
     @Test func theProbeRefusesRatherThanSelectingTheEventTab() throws {

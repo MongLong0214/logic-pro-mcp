@@ -30,9 +30,21 @@ enum EventListReadbackCollector {
     /// artifact could not previously perform on this path, and a claim of observation that quietly
     /// actuates is the defect this collector exists to make impossible. Selecting the Event tab is
     /// the driver's job, before the probe runs.
+    /// What one probe run actually saw. `rows` alone was not enough to prove anything about the
+    /// header: `RawEventRow` is keyed by `AXColumnID`s minted from `expectedHeaderTitles`, so a
+    /// harness reading those keys compares the canonical English constants against themselves and
+    /// gets a check that cannot fail. `liveHeaderTitles` is what Logic rendered. `firstRowCellChildren`
+    /// is the count this collector's guard is ABOUT — the empty Lock/Mute cells — measured rather
+    /// than inferred from a null slider.
+    struct ProbeObservation: Sendable {
+        let liveHeaderTitles: [String]
+        let rows: [RawEventRow]
+        let firstRowCellChildren: [String: Int]
+    }
+
     static func observeNoteTable(
         runtime: AXLogicProElements.Runtime = .production
-    ) throws -> [RawEventRow] {
+    ) throws -> ProbeObservation {
         guard let mainWindow = AXLogicProElements.mainWindow(runtime: runtime) else {
             throw EventListReadbackCollectorError.mainWindowUnavailable
         }
@@ -46,10 +58,44 @@ enum EventListReadbackCollector {
         )
 
         let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
-        let rows: [AXUIElement] = AXHelpers.getAttribute(
+        let rowElements: [AXUIElement] = AXHelpers.getAttribute(
             paneAndTable.table, "AXRows", runtime: runtime.ax
         ) ?? []
-        return try readRows(rows, headers: headers, runtime: runtime.ax)
+        return ProbeObservation(
+            liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax),
+            rows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
+            firstRowCellChildren: rowElements.first.map {
+                cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
+            } ?? [:]
+        )
+    }
+
+    /// The header's sort-button titles, verbatim. A separate read from `readHeaders`, on purpose:
+    /// that function CONSUMES the titles to decide whether they match and then reports canonical
+    /// names either way, so it cannot witness what was rendered.
+    private static func sortButtonTitles(
+        of table: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> [String] {
+        guard let header: AXUIElement = AXHelpers.getAttribute(
+            table, kAXHeaderAttribute, runtime: runtime
+        ) else { return [] }
+        return AXHelpers.getChildren(header, runtime: runtime)
+            .filter { (AXHelpers.getAttribute($0, kAXSubroleAttribute, runtime: runtime) as String?) == "AXSortButton" }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
+    }
+
+    /// How many children each cell of one row has. This is the observable the `readRow` guard is
+    /// about: Logic gives an unset Lock or Mute flag a cell with ZERO children, and demanding one
+    /// child everywhere is what made every real note row throw.
+    private static func cellChildCounts(
+        of row: AXUIElement, headers: HeaderBinding, runtime: AXHelpers.Runtime
+    ) -> [String: Int] {
+        let cells = AXHelpers.getChildren(row, runtime: runtime)
+        var counts: [String: Int] = [:]
+        for (index, id) in headers.orderedIDs.enumerated() where cells.indices.contains(index) {
+            counts[id.id] = AXHelpers.getChildren(cells[index], runtime: runtime).count
+        }
+        return counts
     }
 
     static func collect(

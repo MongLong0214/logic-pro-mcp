@@ -113,101 +113,166 @@ time.sleep(3)
 d.tool("logic_tracks", "list_library", {})   # absorbs the first-call refusal (#608)
 made = d.tool("logic_tracks", "record_sequence",
               {"bar": 1, "notes": "60,0,500,100,1;64,500,500,100,1", "tempo": 120})
-ev.check("293/a-region-with-two-notes-was-created-and-left-selected",
-         isinstance(made, dict) and made.get("success") is True,
-         "the product created a region and left exactly one selected — that selection is what makes "
-         "the Event pane show NOTES rather than regions, and without it the collector correctly "
-         "refuses with `paneAtRegionLevel`",
-         f"success={(made or {}).get('success')!r} error={(made or {}).get('error')!r}",
-         None)
+def track_delta(payload):
+    """`observed_delta` out of record_sequence's detail, which arrives as a JSON string."""
+    try:
+        return json.loads((payload or {}).get("detail") or "{}").get("observed_delta")
+    except (ValueError, AttributeError):
+        return None
+
+
+ev.check("293/setup-a-track-was-created",
+         isinstance(made, dict) and (made.get("success") is True or track_delta(made) == 1),
+         "the setup call created a track. `success` is allowed to be false here and this is NOT the "
+         "check going soft: `record_sequence` confirms its own work through a readback that only "
+         "covers the VISIBLE arrange area, and this project grows by one track per run, so a new "
+         "track eventually lands outside it and the operation reports State B — attempted, "
+         "unverifiable — which is the honest answer rather than a claim. What it cannot see, the "
+         "Event List checks below do: two notes at the pitches this run asked for. If nothing was "
+         "created, the delta is 0 here AND those checks go red",
+         f"success={(made or {}).get('success')!r} observed_delta={track_delta(made)!r} "
+         f"reason={json.loads((made or {}).get('detail') or '{}').get('reason')!r}", None)
 d.close()
 
 osa('tell application "Logic Pro" to activate')
 time.sleep(1)
 
 
-def event_tab_present():
-    """Whether the Event tab exists — i.e. the List Editors pane is OPEN.
-
-    `View > List Editors` is a TOGGLE. The first cut of this file pressed it unconditionally and, on
-    a run where the pane was already open, CLOSED it — the probe then failed with
-    `Event List tab (AXDescription Event) was not found` and three checks went red for a reason that
-    had nothing to do with the product. Establish the state; do not assume it.
-    """
-    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
-              'return (count of (every radio button of window 1 whose description is "Event"))')
-    if raw.strip().isdigit() and int(raw) > 0:
-        return True
-    # The tabs are nested, so a shallow count can miss them; fall back to asking the probe itself,
-    # which reports this exact condition by name.
-    return "was not found" not in json.dumps(probe())
+# --- The list tabs, read and driven by a tool that is NOT the product ------------------------
+#
+# System Events cannot see these tabs at all: a shallow `whose description is "Event"` count
+# returns 0, a `whose` filter over `entire contents` is not a valid specifier (-1700), and an
+# explicit walk of `entire contents` finds none — measured while the pane was open and the probe
+# was reading its rows. The earlier precondition here therefore fell back to asking the SHIPPED
+# BINARY whether the tab existed, which made `eventTabNotFound` — a product failure — indis-
+# tinguishable from "the pane is closed", and fired the artifact before the measurement run.
+TAB_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_event_tab.swift")
+TAB = os.path.join(ev.dir, "ax_event_tab")
+subprocess.run(["swiftc", "-O", TAB_SOURCE, "-o", TAB], check=True, capture_output=True)
 
 
-pane_was_open = event_tab_present()
+def tabs(select=None):
+    r = subprocess.run([TAB] + (["select", select] if select else []),
+                       capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout or "{}")
+    except ValueError:
+        return {"error": (r.stdout or r.stderr or "")[:200]}
+
+
+def tab_state(payload):
+    """{description: selected} for the four list tabs, ignoring the eleven "Has Focus" radios."""
+    return {t["description"]: t["selected"] for t in payload.get("tabs", [])
+            if t["description"] in ("Event", "Marker", "Tempo", "Signature")}
+
+
+pane_was_open = bool(tab_state(tabs()))
 if not pane_was_open:
     osa('tell application "System Events" to tell process "Logic Pro" to '
         'click menu item "List Editors" of menu 1 of menu bar item 9 of menu bar 1')
     time.sleep(3)
+state_before = tab_state(tabs())
 ev.check("293/precondition-the-list-editors-pane-is-open",
-         event_tab_present(),
-         "the Event tab exists, so the collector's own `findEventTab` has something to find. The pane "
-         "is a TOGGLE: pressing it blind closes it when it was already open, which is how three "
-         "checks first went red for a reason that had nothing to do with the product",
-         f"pane_was_open_before={pane_was_open!r}", None)
+         bool(state_before),
+         "the list tabs exist, read by a driver-side AX tool rather than by the product. The pane is "
+         "a TOGGLE: pressing it blind closes it when it was already open, which is how three checks "
+         "first went red for a reason that had nothing to do with the product",
+         f"pane_was_open_before={pane_was_open!r} tabs={state_before!r}", None)
+if not state_before:
+    print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-def event_tab_selected():
-    """AXValue of the Event radio: 1 when the pane is showing events."""
-    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
-              'return (value of (first radio button of window 1 whose description is "Event"))')
-    return raw.strip() in ("1", "true")
+selected_before = next((k for k, v in state_before.items() if v), None)
 
+# --- The refusal, driven live -----------------------------------------------------------------
+#
+# `observeNoteTable` observes and will not press. Proving that needs the pane pointed somewhere
+# else, which only a driver can do.
+marker_state = tab_state(tabs(select="Marker"))
+refused = probe()
+ev.check("293/the-probe-refuses-instead-of-selecting-the-tab",
+         marker_state.get("Marker") is True
+         and refused.get("ok") is False
+         and "not selected" in str(refused.get("error", ""))
+         and tab_state(tabs()).get("Marker") is True,
+         "with the pane showing the Marker list, the shipped binary refuses and — read again "
+         "afterwards — the Marker tab is STILL selected, so it did not press its way to the Event "
+         "tab. This is the whole reason a release binary may reach this path at all",
+         f"marker={marker_state!r} error={refused.get('error')!r} after={tab_state(tabs())!r}",
+         "delete the `guard try checkedState(of: eventTab)` refusal in observeNoteTable and rebuild "
+         "the release binary: the probe presses the tab and returns rows instead of refusing, and "
+         "the Marker tab is no longer selected when this check reads it back")
 
-# The probe refuses when this tab is not already selected — it observes and will not press. That
-# is the driver's job, and doing it HERE rather than inside the binary is the point: the shipped
-# artifact performs no AX action on this path. Selected by description, never by position.
-tab_was_selected = event_tab_selected()
-if not tab_was_selected:
-    osa('tell application "System Events" to tell process "Logic Pro" to '
-        'click (first radio button of window 1 whose description is "Event")')
-    time.sleep(2)
+event_state = tab_state(tabs(select="Event"))
 ev.check("293/precondition-the-driver-selected-the-event-tab",
-         event_tab_selected(),
-         "the Event tab is selected BEFORE the binary runs. The probe refuses instead of pressing "
-         "it, so a red here means the driver could not reach the tab — not that the readback broke",
-         f"tab_was_selected_before={tab_was_selected!r}", None)
+         event_state.get("Event") is True,
+         "the Event tab is selected BEFORE the binary runs, by the driver. A red here means the "
+         "driver could not reach the tab — not that the readback broke",
+         f"tabs={event_state!r} selected_before_run={selected_before!r}", None)
+
+# The playhead frame the visual is about. `before` was taken before `record_sequence`, which hard-
+# resets the playhead to bar 1 — so before/after spans a known playhead move and could not isolate
+# the probe. This one brackets the probe alone.
+before_probe = ev.shot("293/before-probe", settle_region=band, window_title=arrange_title)
 
 result = probe()
 ev.note("293/probe", result)
 
 ev.check("293/the-collector-reads-the-note-table-from-the-shipped-binary",
-         result.get("ok") is True and result.get("rows", 0) >= 2,
-         "the SAME readHeaders/readRows/readRow path the collector uses returns rows when run "
-         "against live Logic from the artifact the gate hashes — before this fix it threw on the "
-         "first cell of the first row of every real note",
+         result.get("ok") is True and result.get("rows") == 2,
+         "the same readHeaders/readRows/readRow path the collector uses returns BOTH rows this run "
+         "recorded, against live Logic, from the artifact the gate hashes — before this fix it threw "
+         "on the first cell of the first row of every real note. This is NOT a run of `collect()`: "
+         "harvestRows, the filter proof, the region path and the time-display refusal are not on "
+         "this path and nothing here speaks for them",
          f"ok={result.get('ok')!r} rows={result.get('rows')!r} error={result.get('error')!r}",
          GUARD_MUTATION)
 
-cols = result.get("columns") or []
+live_cols = result.get("live_columns") or []
 ev.check("293/the-note-schema-binds",
-         sorted(cols) == sorted(["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"]),
-         "all eight note columns bound by name through the collector's own header binding, so the "
-         "the rows are of the note level and not of the six-column region view",
-         f"columns={cols!r}",
+         live_cols == ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+         "the eight column titles LOGIC rendered, in order — read from the header's sort buttons, "
+         "not the canonical constants the row keys are minted from. The earlier form of this check "
+         "compared those minted keys against the same English constants and so could not fail. "
+         "Eight of them, not six, is also what says the pane is at note level and not region level",
+         f"live_columns={live_cols!r}",
+         # Deliberately NOT mutation-backed. There is no product mutation that makes these titles
+         # wrong while the read still succeeds: if Logic rendered anything else, readHeaders throws
+         # and every check here goes red together. Naming a mutation would be claiming an
+         # independent demonstration that this check cannot give. It earns its place by putting the
+         # titles Logic actually rendered into the record, where a reader can see them.
+         None)
+
+rows_out = result.get("all_rows") or []
+first = rows_out[0] if rows_out else {}
+second = rows_out[1] if len(rows_out) > 1 else {}
+ev.check("293/both-recorded-notes-come-back",
+         (first.get("Num", {}).get("sliderValue") == 60
+          and first.get("Val", {}).get("valueDescription") == "100"
+          and second.get("Num", {}).get("sliderValue") == 64
+          and second.get("Val", {}).get("valueDescription") == "100"),
+         "the two pitches this run recorded — 60 then 64 — both read back with their velocity. "
+         "Asserting the SECOND note is what binds the table to the region this run created; a check "
+         "on the first row alone passes against any leftover note table whose first row happens to "
+         "be 60",
+         f"first={first.get('Num')!r}/{first.get('Val')!r} second={second.get('Num')!r}/{second.get('Val')!r}",
          GUARD_MUTATION)
 
-row = result.get("first_row") or {}
-ev.check("293/the-flag-cells-are-empty-and-the-data-cells-are-not",
-         (row.get("L", {}).get("sliderValue") is None
-          and row.get("M", {}).get("sliderValue") is None
-          and row.get("Num", {}).get("sliderValue") == 60
-          and row.get("Val", {}).get("valueDescription") == "100"),
-         "Lock and Mute come back empty while Num carries the MIDI note number this run recorded "
-         "(60) and Val its velocity (100) — the empty cells are a STATE the collector now reads, "
-         "which is the whole change, and the populated ones prove it did not simply give up",
-         f"L={row.get('L')!r} M={row.get('M')!r} Num={row.get('Num')!r} Val={row.get('Val')!r}",
+children = result.get("first_row_cell_children") or {}
+ev.check("293/the-flag-cells-really-are-childless",
+         (children.get("L") == 0 and children.get("M") == 0
+          and children.get("Num") == 1 and children.get("Val") == 1
+          and first.get("L", {}).get("sliderValue") is None
+          and first.get("M", {}).get("sliderValue") is None),
+         "Lock and Mute have ZERO cell children while Num and Val have one — the child counts "
+         "measured off the row, not inferred from a null slider. A null could also mean the key was "
+         "dropped or the child carried no slider; a zero here is the state `guard children.count "
+         "== 1` used to reject on every real note row",
+         f"children={children!r} L={first.get('L')!r} M={first.get('M')!r}",
          GUARD_MUTATION)
 
-# Restore the pane to however it was found, not to closed.
+# Put the pane back the way it was found: the tab first, then the pane itself.
+if selected_before and selected_before != "Event":
+    tabs(select=selected_before)
 if not pane_was_open:
     osa('tell application "System Events" to tell process "Logic Pro" to '
         'click menu item "List Editors" of menu 1 of menu bar item 9 of menu bar 1')
@@ -223,16 +288,21 @@ after = ev.shot("293/after", settle_region=band, window_title=after_title)
 # because no region of the DOCUMENT is invariant across this run — recording a region changes it on
 # purpose. The parameter does not exist on this branch's evidence.py yet, and passing it would break
 # the run rather than document it.
-ev.visual("293/the-transport-is-undisturbed",
-          before["file"], after["file"], band, expect_change=False,
-          why="this run records a region and then only READS; the transport must be where it was, "
-              "and a difference here would mean the probe moved the playhead")
+ev.visual("293/the-transport-is-undisturbed-by-the-probe",
+          before_probe["file"], after["file"], band, expect_change=False,
+          why="bracketed around the PROBE, not around the whole run: `record_sequence` resets the "
+              "playhead to bar 1, so a before/after spanning it could not tell a still transport "
+              "from one that moved and came back. Between these two frames the only product call is "
+              "the probe, which must only read")
 
+final_state = tab_state(tabs())
 ev.restored("293/the-list-editors-pane-is-as-it-was-found",
-            event_tab_present() == pane_was_open,
-            f"the List Editors pane is back to how the run found it (open={pane_was_open!r}). The region it recorded is NOT undone: "
-            "`record_sequence` creates a track and a region and nothing reverses it, so the project "
-            "is one track larger than it was. Stated rather than claimed away.")
+            bool(final_state) == pane_was_open
+            and (not selected_before or final_state.get(selected_before) is True),
+            f"the pane is back to open={pane_was_open!r} with {selected_before!r} selected again. "
+            "The region it recorded is NOT undone: `record_sequence` creates a track and a region "
+            "and nothing reverses it, so the project is one track larger than it was. Stated rather "
+            "than claimed away.")
 
 ev.stop_recording(rec)
 out = ev.write()

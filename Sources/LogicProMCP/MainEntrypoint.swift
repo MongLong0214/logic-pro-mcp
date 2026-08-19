@@ -209,19 +209,24 @@ enum MainEntrypoint {
         // always asked for and what no route I tried before could give it.
         if arguments.contains("--probe-event-list") {
             do {
-                let rows = try EventListReadbackCollector.observeNoteTable()
+                let seen = try EventListReadbackCollector.observeNoteTable()
+                func cells(_ row: RawEventRow) -> [String: Any] {
+                    row.reduce(into: [String: Any]()) { out, pair in
+                        out[pair.key.id] = [
+                            "sliderValue": pair.value.sliderValue as Any,
+                            "valueDescription": pair.value.valueDescription as Any,
+                        ]
+                    }
+                }
                 let payload: [String: Any] = [
                     "ok": true,
-                    "rows": rows.count,
-                    "columns": rows.first.map { $0.keys.map(\.id).sorted() } ?? [],
-                    "first_row": rows.first.map { row in
-                        row.reduce(into: [String: Any]()) { out, pair in
-                            out[pair.key.id] = [
-                                "sliderValue": pair.value.sliderValue as Any,
-                                "valueDescription": pair.value.valueDescription as Any,
-                            ]
-                        }
-                    } ?? [:],
+                    "rows": seen.rows.count,
+                    // What LOGIC rendered. `columns` used to be the row keys, which are minted from
+                    // the canonical constants on every success — a harness comparing those to the
+                    // same constants was comparing English to English and could not fail.
+                    "live_columns": seen.liveHeaderTitles,
+                    "first_row_cell_children": seen.firstRowCellChildren,
+                    "all_rows": seen.rows.map(cells),
                 ]
                 let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
                 writeStdout(String(data: data, encoding: .utf8)! + "\n")
