@@ -852,6 +852,34 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The Save panel's filename field, identified by focus (#606).
+    ///
+    /// The old rule asked for `AXDescription == "text field"` and matched **nothing**, which read as
+    /// "the panel has no filename field" and sent three separate investigations at the wrong target.
+    /// The rule had been written from an AppleScript probe, and System Events *synthesises*
+    /// `description` from `AXRoleDescription` when `AXDescription` is nil. Measured through the API
+    /// this code actually uses:
+    ///
+    /// ```
+    ///                   System Events `description`   raw AXDescription   AXRoleDescription   AXFocused
+    ///   search field    "search text field"           nil                 "search text field" false
+    ///   FILENAME field  "text field"                  nil                 "text field"        true
+    ///   tag editor      "tag editor"                  "tag editor"        "text field"        false
+    /// ```
+    ///
+    /// `AXRoleDescription` picks two of the three and is localised, which #519 makes expensive.
+    /// Focus picks exactly one, is not localised, and is the field a person would type into.
+    static func filenameFieldCandidates(
+        in container: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> [AXUIElement] {
+        AXHelpers.findAllDescendants(
+            of: container, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter {
+            (AXHelpers.getAttribute($0, kAXFocusedAttribute as String, runtime: runtime.ax) as Bool?) == true
+        }
+    }
+
     private static func exactSaveAsDialog(
         runtime: AXLogicProElements.Runtime
     ) -> AXUIElement? {
@@ -872,9 +900,7 @@ extension AccessibilityChannel {
         }
 
         let matches = candidates.filter { candidate in
-            let filenameFields = AXHelpers.findAllDescendants(
-                of: candidate, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
-            ).filter { AXHelpers.getDescription($0, runtime: runtime.ax) == "text field" }
+            let filenameFields = filenameFieldCandidates(in: candidate, runtime: runtime)
             let buttons = AXHelpers.findAllDescendants(
                 of: candidate, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
             )
@@ -911,13 +937,78 @@ extension AccessibilityChannel {
         return matches.count == 1 ? matches[0] : nil
     }
 
+    /// Open the Save panel's "Go to Folder" sheet and return its one text field (#606).
+    ///
+    /// There is no AX attribute on this panel that sets its directory, and typing a POSIX path into
+    /// the filename field does not navigate — it becomes the file's name. This sheet is the only
+    /// coordinate-free way in, and reaching it is a keystroke.
+    private static func openGoToFolderSheet(
+        in panel: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) async -> AXUIElement? {
+        _ = await AppleScriptChannel.executeAppleScript("""
+        tell application "System Events"
+            keystroke "g" using {command down, shift down}
+        end tell
+        return "sent"
+        """)
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            let sheets = AXHelpers.getChildren(panel, runtime: runtime.ax).filter {
+                AXHelpers.getRole($0, runtime: runtime.ax) == (kAXSheetRole as String)
+            }
+            for sheet in sheets {
+                let fields = AXHelpers.findAllDescendants(
+                    of: sheet, role: kAXTextFieldRole as String, maxDepth: 8, runtime: runtime.ax
+                )
+                if fields.count == 1 { return fields[0] }
+            }
+        }
+        return nil
+    }
+
+    private static func pressReturn() async {
+        _ = await AppleScriptChannel.executeAppleScript("""
+        tell application "System Events"
+            key code 36
+        end tell
+        return "sent"
+        """)
+    }
+
     static func saveAsViaAXDialog(
         path: String,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
+        activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
+        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) }
     ) async -> ChannelResult {
         // Validate path before setting it into the AX dialog
         guard AppleScriptSafety.isValidProjectPath(path, requireExisting: false) else {
             return .error("save_as requires an absolute .logicx project path")
+        }
+
+        // #606: Logic disables its document-modifying File items while it is a background
+        // application, so from an MCP client — which IS the frontmost app when it calls this — the
+        // `Save As…` item is `AXEnabled=false` and pressing it does nothing while reporting success.
+        // Refuse before touching anything if Logic cannot be brought forward: a non-ready result here
+        // means no menu was pressed and no panel was opened.
+        let preparation = FrontmostGate.prepare(
+            isFrontmost: isFrontmost, activate: activateLogic, sleepMicros: sleepMicros
+        )
+        guard preparation.isReady else {
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "save_as drives Logic's own File menu, and Logic disables Save As while it is "
+                    + "in the background — the press would report success and open nothing. Nothing "
+                    + "was touched. Bring Logic Pro to the front and retry.",
+                extras: [
+                    "operation": "project.save_as",
+                    "frontmost_preparation": preparation.rawValue,
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                ]
+            ))
         }
 
         // Step 1: Trigger Save As via menu click
@@ -967,6 +1058,7 @@ extension AccessibilityChannel {
                     + dismissal.summary,
                 extras: [
                     "write_attempted": false,
+                    "frontmost_preparation": preparation.rawValue,
                     "logic_owned_the_keyboard": ownedKeyboard,
                     "candidates_enumerated": shapes.count,
                     "candidate_shapes": shapes,
@@ -988,17 +1080,61 @@ extension AccessibilityChannel {
             }
         }
 
-        // Step 3: Find filename text field and set full path
-        let filenameFields = AXHelpers.findAllDescendants(
-            of: saveDialog, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
-        ).filter { AXHelpers.getDescription($0, runtime: runtime.ax) == "text field" }
+        // Step 3a: put the panel in the target DIRECTORY (#606).
+        //
+        // This panel does not navigate on a POSIX path typed into its filename field. Measured twice:
+        // set the field to "/Users/isaac/Music/Logic/x.logicx" and confirm — by `AXConfirm` and by a
+        // real Return — and both times Logic saved a project literally NAMED
+        // ":Users:isaac:Music:Logic:x" into whatever folder the panel already had open. It reported
+        // success, so the old code's "no file appeared at the requested path" was true and told you
+        // nothing: the file existed, under a name made from the path.
+        //
+        // The panel's own "Go to Folder" sheet is what moves it, and that is a keystroke — there is no
+        // AX attribute on the panel that sets its directory.
+        let directory = (path as NSString).deletingLastPathComponent
+        guard let goToFolder = await openGoToFolderSheet(in: saveDialog, runtime: runtime) else {
+            dismissDialog()
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "The Save panel's \"Go to Folder\" sheet did not appear, so the panel could not "
+                    + "be moved to \(directory). Nothing was saved: this panel writes a project NAMED "
+                    + "after the path if the path is typed into the filename field instead.",
+                extras: ["write_attempted": false, "directory": directory]
+            ))
+        }
+        guard AXHelpers.setAttribute(
+            goToFolder, kAXValueAttribute, (directory + "/") as CFTypeRef, runtime: runtime.ax
+        ) else {
+            dismissDialog()
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Could not type \(directory) into the Save panel's \"Go to Folder\" sheet.",
+                extras: ["write_attempted": false, "directory": directory]
+            ))
+        }
+        await pressReturn()
+        try? await Task.sleep(nanoseconds: 800_000_000)
+
+        // Step 3b: the filename field takes the BASE NAME only. Logic appends the extension itself.
+        let baseName: String = {
+            let last = (path as NSString).lastPathComponent
+            return last.hasSuffix(".logicx") ? String(last.dropLast(".logicx".count)) : last
+        }()
+        // Focus can move while the sheet comes and goes, so the field is resolved again here rather
+        // than reused from the classification pass.
+        let filenameFields = filenameFieldCandidates(in: saveDialog, runtime: runtime)
         guard filenameFields.count == 1, let filenameField = filenameFields.first else {
             dismissDialog()
-            return .error("Cannot resolve the exact filename field in Save As dialog")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Cannot resolve the filename field in the Save As panel: expected exactly one "
+                    + "focused text field, found \(filenameFields.count).",
+                extras: ["write_attempted": false, "focused_text_fields": filenameFields.count]
+            ))
         }
 
         guard AXHelpers.setAttribute(
-            filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax
+            filenameField, kAXValueAttribute, baseName as CFTypeRef, runtime: runtime.ax
         ) else {
             dismissDialog()
             return .error("Cannot set the exact Save As filename field")
@@ -1190,6 +1326,22 @@ extension AccessibilityChannel {
     ) -> ChannelResult {
         guard let item = AXLogicProElements.menuItem(path: [menuName, itemTitle], runtime: runtime) else {
             return .error("Cannot find menu item: \(menuName) > \(itemTitle)")
+        }
+        // #606: pressing a DISABLED menu item reports success and does nothing. Logic disables its
+        // document-modifying File items while it is a background application — measured: with another
+        // app frontmost `Save As…` is `AXEnabled=false` (2/2) while `Open…` stays true, so this is a
+        // property of the item, not of AX menu presses in general. The press then returned true, the
+        // caller inferred the panel was coming, and fifteen polls later reported a panel it had never
+        // caused. An AX return code is not evidence of an effect; `AXEnabled` is the pre-gate.
+        let enabled: Bool? = AXHelpers.getAttribute(
+            item, kAXEnabledAttribute as String, runtime: runtime.ax
+        )
+        guard enabled != false else {
+            return .error(
+                "Refusing to press disabled menu item: \(menuName) > \(itemTitle). "
+                + "Logic disables its document-modifying File items while it is a background "
+                + "application, and pressing one reports success without doing anything."
+            )
         }
         guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
             return .error("Failed to click: \(menuName) > \(itemTitle)")

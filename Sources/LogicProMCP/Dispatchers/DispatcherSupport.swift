@@ -195,6 +195,11 @@ func blockingLogicDialogResult(
     var hint = "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
     // #190: identify the dialog so the demo/product workflow can recover
     // deterministically instead of guessing at a generic blocking-dialog refusal.
+    if info == nil {
+        // #606: refusing without an identity is refusing on something nobody can name. Say what the
+        // guard actually saw so the caller is not sent hunting for a dialog that is not there.
+        extras["dialog_presence_census"] = AXLogicProElements.dialogPresenceCensus()
+    }
     if let info {
         extras["dialog_title"] = info.title
         extras["dialog_role"] = info.role

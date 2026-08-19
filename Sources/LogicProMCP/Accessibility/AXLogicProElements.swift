@@ -402,6 +402,62 @@ enum AXLogicProElements {
         return .buttons(buttons)
     }
 
+    /// Why `dialogPresent()` answered the way it did (#606).
+    ///
+    /// This guard is fail-closed: an unreadable windows array, an unreadable child role, or a missing
+    /// app root all answer "blocked". That is the right default and a terrible thing to report on its
+    /// own — a caller told only `blocking_dialog_present: true` when `blockingDialogInfo()` returns
+    /// nil has been refused on the strength of something nobody can name, and is sent looking for a
+    /// dialog that may not exist. Measured on 2026-08-19: `project.save_as` refused this way with a
+    /// single `AXStandardWindow` on screen and every attribute reading cleanly.
+    static func dialogPresenceCensus(runtime: Runtime = .production) -> [String: Any] {
+        guard let app = appRoot(runtime: runtime) else {
+            return ["reason": "no_app_root", "windows": []]
+        }
+        switch AXHelpers.getAXUIElementArrayRead(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) {
+        case .success(.elements(let windows)):
+            var rows: [[String: Any]] = []
+            for window in windows {
+                let subrole: String? = AXHelpers.getAttribute(
+                    window, kAXSubroleAttribute as String, runtime: runtime.ax
+                )
+                var row: [String: Any] = [
+                    "title": AXHelpers.getTitle(window, runtime: runtime.ax) ?? "",
+                    "subrole": subrole ?? "<unread>",
+                    "is_blocking_dialog": isBlockingDialogWindow(window, runtime: runtime.ax),
+                ]
+                switch AXHelpers.childrenResult(window, runtime: runtime.ax) {
+                case .success(let children):
+                    row["children"] = children.count
+                    row["sheet_children"] = children.filter {
+                        AXHelpers.getRole($0, runtime: runtime.ax) == (kAXSheetRole as String)
+                    }.count
+                    row["children_with_unreadable_role"] = children.filter {
+                        AXHelpers.getRole($0, runtime: runtime.ax) == nil
+                    }.count
+                case .failure(let error):
+                    row["children"] = "<unread: \(error.raw)>"
+                }
+                rows.append(row)
+            }
+            return [
+                "reason": "windows_read",
+                "windows": rows,
+                // Re-ask the very question that refused, at census time. If this disagrees with the
+                // refusal the guard is not reading what it thinks it is.
+                "dialog_present_recheck": dialogPresent(runtime: runtime),
+            ]
+        case .success(.absent):
+            return ["reason": "windows_attribute_absent", "windows": []]
+        case .success(.malformed):
+            return ["reason": "windows_attribute_malformed", "windows": []]
+        case .failure(let error):
+            return ["reason": "windows_read_failed", "ax_error": error.raw, "windows": []]
+        }
+    }
+
     static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {
         blockingDialogTarget(runtime: runtime)?.info
     }
