@@ -1091,4 +1091,39 @@ enum AXLocalePolicy {
             elementMatches($0, labels, mode: mode, runtime: runtime)
         }
     }
+
+    /// What a lookup found AND how many candidates it had to choose between.
+    ///
+    /// `findDescendant` above returns the first match in traversal order and says nothing about the
+    /// rest. When it is right, nothing records that it was right for a reason rather than by luck —
+    /// and that silence is the defect, not the choosing. Measured on one arrange window,
+    /// `AXDescription` "Control Bar" matches two elements, "Library" four, "Event" three; a lookup
+    /// for any of them returns something plausible either way.
+    ///
+    /// `candidates` is the whole point. `1` is a fact a later reader can weigh. Absence is not.
+    struct Census {
+        let element: AXUIElement?
+        let candidates: Int
+
+        /// Exactly one match: the only case where the result is identified rather than merely found.
+        var isUnambiguous: Bool { candidates == 1 }
+    }
+
+    /// Every match, with the count, so a caller can refuse ambiguity instead of inheriting
+    /// traversal order. Deliberately additive: `findDescendant` keeps its behaviour, and adoption is
+    /// counted rather than forced, because flipping every call site at once would turn a census into
+    /// a wall of red and the next move after that is somebody deleting the check.
+    static func censusDescendant(
+        of element: AXUIElement,
+        role: String,
+        matching labels: LabelSet,
+        mode: MatchMode = .exact,
+        maxDepth: Int = 5,
+        runtime: AXHelpers.Runtime
+    ) -> Census {
+        let hits = AXHelpers.findAllDescendants(
+            of: element, role: role, maxDepth: maxDepth, runtime: runtime
+        ).filter { elementMatches($0, labels, mode: mode, runtime: runtime) }
+        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count)
+    }
 }

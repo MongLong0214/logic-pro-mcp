@@ -5,7 +5,8 @@ import Testing
 private func makeIssue498Fixture(
     title: String,
     subrole: String,
-    isModal: Bool
+    isModal: Bool,
+    secondCancel: Bool = false
 ) -> (
     builder: FakeAXRuntimeBuilder,
     runtime: AXLogicProElements.Runtime,
@@ -25,7 +26,16 @@ private func makeIssue498Fixture(
     builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
     builder.setAttribute(ok, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(ok, kAXTitleAttribute as String, "OK")
-    builder.setChildren(window, [cancel, ok])
+    // #628: a second button carrying the same label. The real dialog has exactly one — measured,
+    // its children are Cancel and OK — so this is the case the census exists to notice.
+    if secondCancel {
+        let decoy = builder.element(498_005)
+        builder.setAttribute(decoy, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(decoy, kAXTitleAttribute as String, "Cancel")
+        builder.setChildren(window, [cancel, decoy, ok])
+    } else {
+        builder.setChildren(window, [cancel, ok])
+    }
 
     return (builder, builder.makeLogicRuntime(appElement: app), cancel)
 }
@@ -42,6 +52,26 @@ func issue498DismissesExactFloatingModalDialog() {
     #expect(fixture.builder.actionCalls.count == 1)
     #expect(fixture.builder.actionCalls.first?.elementID == fixture.builder.elementID(fixture.cancel))
     #expect(fixture.builder.actionCalls.first?.action == kAXPressAction as String)
+}
+
+@Test("Issue628: two same-labelled Cancels are not pressed on a guess")
+func issue628AmbiguousCancelIsNotPressedByTreeOrder() {
+    let fixture = makeIssue498Fixture(
+        title: "Go To Position",
+        subrole: kAXFloatingWindowSubrole as String,
+        isModal: true,
+        secondCancel: true
+    )
+    // Still dismissed — the close-button and Escape routes are unchanged. What must NOT happen is
+    // pressing whichever Cancel the traversal reached first, which is what the old lookup did
+    // while recording nothing about there having been a choice.
+    _ = AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime)
+    let pressedTheFirstCancel = fixture.builder.actionCalls.contains {
+        $0.elementID == fixture.builder.elementID(fixture.cancel)
+            && $0.action == kAXPressAction as String
+    }
+    #expect(!pressedTheFirstCancel,
+            "identity came from tree order: with two candidates neither is identified")
 }
 
 @Test("Issue498: standard non-modal project window is not touched")
