@@ -98,10 +98,40 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
-band = (10, 24, min(1900, win["w"] - 20), 58) if win else None
-ev.check("293/precondition-the-window-frame-is-known", band is not None,
-         "the arrange window's own frame read, so the capture band is inside it",
-         f"window={win!r} band={band!r}", None)
+# The band is LOCATED, not written down. `#622`: a rectangle chosen by coordinates cannot show that
+# it drifted onto different content — three bands did exactly that this week, keeping their numbers
+# while the pane beneath them changed. This asks Logic where the Control Bar is and takes the name
+# back off the element that answered, so `subject=` names what was measured rather than what was
+# hoped for. (The hand-picked numbers here were in fact right — AX reports the same
+# [10, 24, 1900, 58] — but they were right by luck and could not have said so.)
+BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
+subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
+
+
+def located_band(description="Control Bar"):
+    """(band, subject) for a named region, or (None, None) — never a fallback rectangle.
+
+    Falling back to coordinates when the lookup fails would put the run back on the footing this
+    replaces, and it would do it silently, on the runs where AX is least trustworthy.
+    """
+    r = subprocess.run([BAND_TOOL, description], capture_output=True, text=True)
+    try:
+        payload = json.loads(r.stdout or "{}")
+    except ValueError:
+        return None, None
+    b = payload.get("band")
+    if not (isinstance(b, list) and len(b) == 4):
+        return None, None
+    return tuple(b), payload.get("description")
+
+
+band, band_subject = located_band()
+ev.check("293/precondition-the-window-frame-is-known", band is not None and bool(band_subject),
+         "the arrange window's frame read AND the Control Bar located by AXDescription, so the "
+         "capture band is inside the window and can say what it watches. No fallback rectangle: a "
+         "failed lookup is a red precondition, not a guess",
+         f"window={win!r} band={band!r} subject={band_subject!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -283,13 +313,11 @@ relocated = [(t, w) for t, w in relocated if w]
 relocated.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 after_title = relocated[0][0] if relocated else arrange_title
 after = ev.shot("293/after", settle_region=band, window_title=after_title)
-# OWED once #620 lands: `subject=` — what this band IS, not only where. It is the control bar strip
-# at the top of the arrange window: chrome, so it does not scroll with the document. That matters
+# `subject` is the Control Bar: chrome, so it does not scroll with the document. That matters
 # because no region of the DOCUMENT is invariant across this run — recording a region changes it on
-# purpose. The parameter does not exist on this branch's evidence.py yet, and passing it would break
-# the run rather than document it.
+# purpose. The string comes from the element AX matched, not from this file.
 ev.visual("293/the-transport-is-undisturbed-by-the-probe",
-          before_probe["file"], after["file"], band, expect_change=False,
+          before_probe["file"], after["file"], band, expect_change=False, subject=band_subject,
           why="bracketed around the PROBE, not around the whole run: `record_sequence` resets the "
               "playhead to bar 1, so a before/after spanning it could not tell a still transport "
               "from one that moved and came back. Between these two frames the only product call is "

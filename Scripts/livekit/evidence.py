@@ -668,3 +668,94 @@ def _file_hash(path):
         return None
 
 
+# --- Restored after a merge dropped them -------------------------------------------------------
+#
+# #620 rewrote this file from a base that predated these three, so merging it deleted them while
+# every CALL SITE stayed: `_region_hash` at shot()/visual(), `_worktree_head` at write(), and
+# `have_tools` in thirty-two harnesses. Main could not run a single live harness.
+#
+# Neither gate could see it. The ship gate runs the Swift suite, and #620 changed no Sources/ so it
+# needed no live evidence; #620's own test exercises is_clean and _safe_name and never calls shot(),
+# visual(), or write(). Each branch was green and the breakage existed only in their merge.
+#
+# The import smoke test beside this file is the part that would have caught it.
+
+def _region_hash(png, region, window_points=None):
+    """Hash one rectangle of a PNG.
+
+    `region` is in WINDOW POINTS, the same units `logic_window()` reports. The capture is in backing
+    PIXELS — measured 3840x2100 for a 1920x1050 window on this hardware — so the rectangle is scaled by
+    the ratio the image itself reveals. Without that scaling the crop lands somewhere else entirely and
+    the assertion compares two identical wrong regions, which reads as "nothing changed" on a run where
+    the feature plainly worked.
+
+    Returns None rather than falling back to a whole-file hash: an unusable comparison must be visible
+    as unusable, not disguised as a difference.
+    """
+    if not os.path.isfile(png):
+        return None
+    try:
+        from Quartz import (CGImageSourceCreateWithURL, CGImageSourceCreateImageAtIndex,
+                            CGImageCreateWithImageInRect, CGRectMake, CGDataProviderCopyData,
+                            CGImageGetDataProvider, CGImageGetWidth, CGImageGetHeight)
+        from Foundation import NSURL
+        url = NSURL.fileURLWithPath_(png)
+        src = CGImageSourceCreateWithURL(url, None)
+        if src is None:
+            return None
+        img = CGImageSourceCreateImageAtIndex(src, 0, None)
+        if img is None:
+            return None
+        if not region:
+            data = CGDataProviderCopyData(CGImageGetDataProvider(img))
+            return hashlib.sha256(bytes(data)).hexdigest()
+        pw, ph = CGImageGetWidth(img), CGImageGetHeight(img)
+        sx = sy = 1.0
+        if window_points:
+            wpts, hpts = window_points
+            if wpts:
+                sx = pw / float(wpts)
+            if hpts:
+                sy = ph / float(hpts)
+        x, y, w, h = region
+        sub = CGImageCreateWithImageInRect(
+            img, CGRectMake(x * sx, y * sy, w * sx, h * sy))
+        if sub is None:
+            return None
+        data = CGDataProviderCopyData(CGImageGetDataProvider(sub))
+        return hashlib.sha256(bytes(data)).hexdigest()
+    except Exception:
+        return None
+
+
+def _worktree_head(repo):
+    """(HEAD sha, dirty) for the worktree the binary was built in.
+
+    `dirty` counts tracked-file modifications under Sources/ and Tests/ only: an untracked scratch file
+    does not change what was compiled, but an edited source does, and a binary built from an edited tree
+    is not evidence about the commit it is filed under.
+    """
+    if not repo:
+        return None, False
+    try:
+        head = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=False).stdout.strip()
+        st = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", "Sources", "Tests"],
+                            capture_output=True, text=True, check=False).stdout.strip()
+        return (head or None), bool(st)
+    except Exception:
+        return None, False
+
+
+def have_tools():
+    """Everything the recorder needs, checked before a run rather than mid-run."""
+    missing = []
+    if not shutil.which("screencapture") and not os.path.exists("/usr/sbin/screencapture"):
+        missing.append("screencapture")
+    try:
+        import Quartz  # noqa: F401
+    except ImportError:
+        missing.append("pyobjc (Quartz)")
+    if BIN and not os.access(BIN, os.X_OK):
+        missing.append(f"built binary at {BIN}")
+    return missing

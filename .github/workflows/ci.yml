@@ -28,6 +28,14 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Self-test the live-evidence library (#622 harness API)
+        # is_clean, the document-name constraint, and — the reason this is here — that every
+        # `E.<name>` / `ev.<name>` a harness references still exists. Two individually-green
+        # branches once merged into a main where three functions had been deleted and every call
+        # site remained, and nothing in this file could see it: the Swift suite does not import
+        # evidence.py. Pure Python, no Xcode, no Logic.
+        run: python3 Scripts/livekit/test_evidence.py
+
       - name: Self-test the preflight stamp gate (#552)
         # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an
         # unresolvable tree-ish is 2, and the hook refuses an unstamped commit while allowing a deletion.
@@ -78,6 +86,14 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Self-test the live-evidence library (#622 harness API)
+        # is_clean, the document-name constraint, and — the reason this is here — that every
+        # `E.<name>` / `ev.<name>` a harness references still exists. Two individually-green
+        # branches once merged into a main where three functions had been deleted and every call
+        # site remained, and nothing in this file could see it: the Swift suite does not import
+        # evidence.py. Pure Python, no Xcode, no Logic.
+        run: python3 Scripts/livekit/test_evidence.py
 
       - name: Self-test the preflight stamp gate (#552)
         # The stamp only helps if it actually refuses. This asserts NOT-STAMPED is 1, stamped is 0, an

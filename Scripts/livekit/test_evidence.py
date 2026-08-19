@@ -121,5 +121,41 @@ for raw, why in [
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} name={str(raw)[:28]!r:<32} -> {stem[:28]!r:<30} {why}")
 
+# --- the API the harnesses actually call must exist -------------------------------------------
+#
+# #620 rewrote evidence.py from a base that predated three functions, and merging it deleted them
+# while every call site stayed. Main could not run a single live harness. Both branches were green:
+# the ship gate runs the Swift suite, #620 touched no Sources/ so it needed no live evidence, and
+# the tests above never call shot(), visual(), or write().
+#
+# The required names are SCANNED from the harnesses rather than listed here. A hand-written list is
+# a second copy that goes stale exactly when a harness starts using something new.
+import glob
+import inspect
+import re
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+module_calls, instance_calls = set(), set()
+for path in sorted(glob.glob(os.path.join(HERE, "live_*.py")) + glob.glob(os.path.join(HERE, "session_*.py"))):
+    src = open(path).read()
+    module_calls |= set(re.findall(r"\bE\.([A-Za-z_]\w*)", src))
+    instance_calls |= set(re.findall(r"\bev\.([A-Za-z_]\w*)", src))
+
+for name in sorted(module_calls):
+    ok = hasattr(E, name)
+    failed += 0 if ok else 1
+    if not ok:
+        print(f"FAIL evidence.{name} is called by a harness and does not exist")
+# Attributes assigned in __init__ are not class attributes, so `hasattr(Evidence, "dir")` is False
+# for a name that plainly exists. Read those statically rather than constructing an Evidence, which
+# would create directories as a side effect of a unit test.
+init_attrs = set(re.findall(r"self\.([A-Za-z_]\w*)\s*=", inspect.getsource(E.Evidence)))
+for name in sorted(instance_calls):
+    ok = hasattr(E.Evidence, name) or name in init_attrs
+    failed += 0 if ok else 1
+    if not ok:
+        print(f"FAIL Evidence.{name} is called by a harness and does not exist")
+print(f"ok   harness API present: {len(module_calls)} module + {len(instance_calls)} instance names")
+
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)
