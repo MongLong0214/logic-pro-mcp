@@ -721,12 +721,57 @@ extension AccessibilityChannel {
             && folderRadioCount == 1
     }
 
-    /// Press Escape so a refusal does not leave a modal behind (#604).
+    /// What the dismissal attempt actually observed (#604).
+    ///
+    /// The first cut of this asserted "the panel, if one opened, has been dismissed" without ever
+    /// looking. That is the defect class this repository cares most about: an absence published as a
+    /// claim. The keystroke can be swallowed — the click that opened the panel is AX, the Escape is
+    /// System Events, and if Automation is denied the panel simply stays — so the caller is told what
+    /// was counted before and after, not what was hoped for.
+    struct PanelDismissal {
+        let panelsBefore: Int
+        let panelsAfter: Int
+        let escapeDelivered: Bool
+
+        var summary: String {
+            guard escapeDelivered else {
+                return "Escape could not be delivered (System Events refused), so \(panelsBefore) "
+                    + "panel-shaped window(s) were left as they were."
+            }
+            if panelsBefore == 0 {
+                return "No panel-shaped window was open before Escape, and none after."
+            }
+            if panelsAfter == 0 {
+                return "Escape cleared the \(panelsBefore) panel-shaped window(s) that were open."
+            }
+            return "Escape was delivered but \(panelsAfter) of \(panelsBefore) panel-shaped "
+                + "window(s) are still open."
+        }
+    }
+
+    /// A window/sheet is "panel-shaped" if it is the modal surface a Save As leaves behind: the
+    /// container role the classifier accepts, carrying the title Logic gives the panel. Deliberately
+    /// looser than `saveAsDialogSelectionIsUnambiguous` — the point is to notice a panel that is
+    /// still up, including the malformed one that could not be driven.
+    static func panelShapedCandidateCount(runtime: AXLogicProElements.Runtime) -> Int {
+        saveAsDialogCandidateShapes(runtime: runtime).filter { shape in
+            let role = (shape["role"] as? String) ?? ""
+            let subrole = (shape["subrole"] as? String) ?? ""
+            let isContainer = role == (kAXSheetRole as String)
+                || (role == (kAXWindowRole as String) && subrole == (kAXDialogSubrole as String))
+            return isContainer && ((shape["title"] as? String) ?? "") == "Save"
+        }.count
+    }
+
+    /// Press Escape so a refusal does not leave a modal behind (#604), and report what that did.
     ///
     /// Logic's Save panel exposes no buttons a caller can reach — `dialog_buttons: []` — so there is
     /// nothing to click and nothing to cancel by name. Escape is what clears it.
-    private static func escapeAnyOpenPanel(runtime: AXLogicProElements.Runtime) async {
-        _ = await AppleScriptChannel.executeAppleScript("""
+    private static func escapeAnyOpenPanel(
+        runtime: AXLogicProElements.Runtime
+    ) async -> PanelDismissal {
+        let before = panelShapedCandidateCount(runtime: runtime)
+        let result = await AppleScriptChannel.executeAppleScript("""
         tell application "System Events"
             tell \(LogicProTarget.appleScriptTarget().systemEventsProcessTarget)
                 set frontmost to true
@@ -736,6 +781,13 @@ extension AccessibilityChannel {
         end tell
         return "escaped"
         """)
+        let delivered = result.isSuccess
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        return PanelDismissal(
+            panelsBefore: before,
+            panelsAfter: panelShapedCandidateCount(runtime: runtime),
+            escapeDelivered: delivered
+        )
     }
 
     /// What each candidate window looked like to the classifier (#604).
@@ -775,12 +827,18 @@ extension AccessibilityChannel {
             let enabled: Bool? = saveButtons.first.flatMap {
                 AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
             }
+            // #604 follow-up: `subrole` is one of the classifier's seven conjuncts, so omitting it
+            // hides a failing clause from the very message meant to diagnose it. And `enabled ?? false`
+            // reported an unread button as a *disabled* one — two different facts, one of them made up.
             return [
                 "title": AXHelpers.getTitle(candidate, runtime: runtime.ax) ?? "",
                 "role": AXHelpers.getRole(candidate, runtime: runtime.ax) ?? "",
+                "subrole": AXHelpers.getAttribute(
+                    candidate, kAXSubroleAttribute as String, runtime: runtime.ax
+                ) as String? ?? "",
                 "filename_fields": filenameFields.count,
                 "save_buttons": saveButtons.count,
-                "save_enabled": enabled ?? false,
+                "save_enabled": enabled.map { $0 as Any } ?? "unread",
                 "cancel_buttons": buttons.filter {
                     AXLocalePolicy.elementMatches($0, AXLocalePolicy.cancelButton, runtime: runtime.ax)
                 }.count,
@@ -887,16 +945,36 @@ extension AccessibilityChannel {
             // `preflight_blocking_dialog` on a "Save" window that exposes no buttons a caller could
             // answer with. Escape is the only thing that clears it.
             let shapes = saveAsDialogCandidateShapes(runtime: runtime)
-            await escapeAnyOpenPanel(runtime: runtime)
-            let described = shapes
-                .filter { !(($0["title"] as? String) ?? "").isEmpty }
-                .map { "\($0)" }
-                .joined(separator: " | ")
-            return .error(
-                "Save As panel was not recognised. Candidates seen: "
-                + (described.isEmpty ? "none" : described)
-                + ". The panel, if one opened, has been dismissed."
-            )
+            let dismissal = await escapeAnyOpenPanel(runtime: runtime)
+            // Every candidate is described, including one whose title would not read. Dropping those
+            // and then printing "none" was the same defect the message exists to cure: an absence
+            // published as an observation.
+            let described = shapes.map { "\($0)" }.joined(separator: " | ")
+            // A bare sentence is not a State C envelope, so `ChannelRouter` could not surface it and
+            // relabelled this deliberate refusal `channels_exhausted` — the one channel ran and
+            // declined on purpose. Say that in the code the wire actually reads.
+            // Measured 2026-08-19, four trials: with Logic backgrounded the very same menu press
+            // opens NO panel at all (0 "Save" windows, 2/2), and with Logic frontmost it opens one
+            // carrying 157 text fields (2/2). A refusal that omits which of those two worlds it was
+            // in sends the next reader to the classifier when the panel was never there.
+            let ownedKeyboard = ProcessUtils.logicOwnsTheKeyboard()
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Save As panel was not recognised by the structural classifier. "
+                    + "Candidates enumerated: \(shapes.count). "
+                    + (shapes.isEmpty ? "" : "Shapes: \(described). ")
+                    + "Logic owned the keyboard when the menu was pressed: \(ownedKeyboard). "
+                    + dismissal.summary,
+                extras: [
+                    "write_attempted": false,
+                    "logic_owned_the_keyboard": ownedKeyboard,
+                    "candidates_enumerated": shapes.count,
+                    "candidate_shapes": shapes,
+                    "panels_before_dismissal": dismissal.panelsBefore,
+                    "panels_after_dismissal": dismissal.panelsAfter,
+                    "escape_delivered": dismissal.escapeDelivered,
+                ]
+            ))
         }
 
         // Helper: dismiss dialog on failure (press Escape to avoid blocking UI)

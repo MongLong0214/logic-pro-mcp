@@ -19,10 +19,18 @@ So the run drives the failing operation on purpose and checks two things about h
 refusal names the shape it actually saw, and that the next operation is not blocked by a leftover
 panel.
 
-The classifier is untouched. Its filename-field clause is what fails, and two readers disagree about
-that panel — AppleScript's `entire contents` finds 156 text fields described "text field" while this
-code's own reader finds zero at the same depth. Until that is explained, any replacement rule is a
-guess, and the honest deliverable is a failure that can be read.
+The two readers that disagreed about this panel are now explained, and the explanation is not about
+depth. AppleScript's `entire contents` found 156 text fields because I had activated Logic before
+probing; the product's reader found zero because it never does. Measured 2026-08-19, four trials:
+with Logic backgrounded the same menu press opens NO panel at all (0/2 "Save" windows), and with
+Logic frontmost it opens one (2/2) carrying 157 text fields described "text field", exactly one of
+which is focused — and that focused one is the filename field, value "Untitled".
+
+So the classifier's filename-field clause is wrong twice over: it demands exactly one such field
+when the panel exposes 157, and it was being asked about a panel that, in production conditions, was
+never on screen. Neither is fixed here — this change is about the refusal, and a working save_as is
+its own change with its own proof. What this run adds is that the refusal now says which of those
+two worlds it was in, so the next reader is not sent to the classifier for a missing panel.
 """
 
 import json
@@ -65,6 +73,20 @@ def document_titles():
     return [t for t in window_titles() if not any(c in t for c in CHOOSER_TITLES)]
 
 
+def save_panels():
+    """Windows AND sheets that are the modal surface a failed Save As leaves behind.
+
+    The first cut of this file compared `len(window_titles())` against `len(document_titles())`,
+    which only ever says "no project chooser is visible" — a leftover window named Save sits in
+    BOTH lists, so the mutation those checks named could not turn them red. This asks the
+    question the checks were written to ask.
+    """
+    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
+              'return (name of every window whose name is "Save") & '
+              '(name of every sheet of every window)')
+    return [t.strip() for t in raw.split(",") if t.strip() == "Save"]
+
+
 def inner(result):
     return result if isinstance(result, dict) else {}
 
@@ -103,6 +125,20 @@ before = ev.shot("604/before", settle_region=band, window_title=arrange_title)
 d = E.Driver()
 time.sleep(5)
 
+# Logic must own the keyboard or the menu press opens NO panel at all — measured four times on
+# 2026-08-19: backgrounded 0/2 panels, frontmost 2/2. Without this the refusal under test would be
+# refusing an absent panel, the dismissal would never run, and the checks below could not tell a
+# working dismissal from a missing one.
+osa('tell application "Logic Pro" to activate')
+time.sleep(2)
+front = osa('tell application "System Events" to return name of first process whose frontmost is true')
+ev.check("604/precondition-logic-owns-the-keyboard",
+         front == "Logic Pro",
+         "the menu press lands in Logic, so a Save panel actually opens and there is something for "
+         "the refusal to describe and the dismissal to clear",
+         f"frontmost={front!r}",
+         None)
+
 saved = inner(d._send("tools/call", {"name": "logic_project", "arguments": {
     "command": "save_as", "params": {"path": TARGET, "confirmed": True}}}))
 text = ((saved.get("result") or {}).get("content") or [{}])[0].get("text", "")
@@ -114,12 +150,21 @@ hint = str(body.get("hint") or body.get("raw") or "")
 ev.note("604/save-as", {"error": body.get("error"), "hint": hint[:400]})
 
 ev.check("604/the-refusal-names-the-shape-it-saw",
-         "filename_fields" in hint and "save_buttons" in hint and "Save" in hint,
-         "the refusal reports each candidate window's observed counts, so the failing clause of a "
-         "seven-conjunct rule is visible in its own output instead of being guessed at",
-         f"hint={hint[:260]!r}",
+         all(k in hint for k in ("filename_fields", "save_buttons", "subrole", "Candidates enumerated:")),
+         "the refusal reports each candidate window's observed counts INCLUDING subrole — one of the "
+         "seven conjuncts — so the failing clause is visible in its own output instead of guessed at",
+         f"hint={hint[:300]!r}",
          "restore the old message: it says only that the panel did not appear within three seconds, "
          "which is a cause that was never measured — the panel is on screen in 0.75s")
+
+ev.check("604/the-refusal-says-whether-logic-owned-the-keyboard",
+         "Logic owned the keyboard when the menu was pressed: true" in hint,
+         "the refusal distinguishes the two worlds it can fail in — panel-absent-because-backgrounded "
+         "versus panel-present-but-unclassified. Measured 2026-08-19: the same menu press opens no "
+         "panel at all when Logic is backgrounded (0/2) and one panel when it is frontmost (2/2), so "
+         "a message that omits this fact points the reader at the classifier for a missing panel",
+         f"hint={hint[:300]!r}",
+         "drop the `logic_owned_the_keyboard` observation from the refusal: this goes red")
 
 ev.check("604/the-refusal-does-not-claim-a-timing-cause-it-never-measured",
          "within 3 seconds" not in hint,
@@ -133,38 +178,50 @@ time.sleep(2)
 after_titles = window_titles()
 ev.note("604/windows-after", after_titles)
 
+panels_left = save_panels()
 ev.check("604/no-panel-is-left-blocking-the-next-operation",
-         len(after_titles) == len(document_titles()),
-         "no modal remains after the refusal — the old timeout path returned before its dismissal "
-         "helper was even defined, and the panel it left up refused every later operation",
-         f"windows={after_titles!r}",
-         "remove the `escapeAnyOpenPanel` call from the timeout path: a 'Save' window stays on "
-         "screen and this check goes red")
+         len(panels_left) == 0,
+         "no Save panel remains after the refusal — the old timeout path returned before its "
+         "dismissal helper was even defined, and the panel it left up refused every later operation",
+         f"save_panels={panels_left!r} all_windows={after_titles!r}",
+         "remove the `escapeAnyOpenPanel` call from the timeout path: the 'Save' window stays on "
+         "screen, `save_panels()` returns it, and this check goes red")
 
 # The decisive one: the NEXT operation must not be refused by something this run left behind.
-follow = d.tool("logic_system", "health", {})
+
+
+after = ev.shot("604/after", settle_region=band, window_title=arrange_title)
+# This capture is `screencapture -l <arrange window id>`, so a top-level Save dialog is not in
+# frame and its presence could never move this band. The assertion is therefore the narrower true
+# one — the refusal disturbed nothing behind it. "The panel is gone" is claimed by
+# `604/no-panel-is-left-blocking-the-next-operation`, which can see the panel.
+ev.visual("604/the-arrange-window-behind-is-undisturbed",
+          before["file"], after["file"], band, expect_change=False,
+          why="a refusal that writes nothing must leave the document window exactly as it found it; "
+              "a difference in the title band would mean the failed save renamed or dirtied it")
+
+# `system.health` was the wrong witness: it builds its report from channel health, cache and
+# permissions and never consults `blockingDialogInfo()`, so it cannot report a blocking dialog no
+# matter what is on screen. `list_library` (which routes `library.list`) is read-only AND runs the same preflight the mutating
+# operations do (TrackDispatcher: `blockingLogicDialogResult(operation: "library.list")`), so a
+# leftover panel actually turns this red. It runs AFTER the visual comparison because listing
+# the Library can open Logic's Library panel, which would move the very window the visual guards.
+follow = d.tool("logic_tracks", "list_library", {})
 follow_hint = str((follow or {}).get("hint") or "")
 ev.check("604/the-next-operation-is-not-blocked-by-what-this-one-left",
          isinstance(follow, dict) and "preflight_blocking_dialog" not in str(follow),
-         "an unrelated operation immediately afterwards runs instead of refusing on a blocking "
-         "dialog — which is what a leftover panel does to everything that follows it",
+         "a later operation that fails closed on blocking modals runs instead of refusing — which "
+         "is what a leftover panel does to everything that follows it",
          f"error={(follow or {}).get('error')!r} hint={follow_hint[:160]!r}",
-         "remove the dismissal: this check reports `preflight_blocking_dialog` for `system.health`, "
-         "and would for every later call too")
-
-after = ev.shot("604/after", settle_region=band, window_title=arrange_title)
-ev.visual("604/the-panel-is-gone-from-the-screen",
-          before["file"], after["file"], band, expect_change=False,
-          why="the run opens a Save panel and the refusal dismisses it, so the window behind must "
-              "look exactly as it did before — a difference here would mean the panel is still up or "
-              "something else changed")
+         "remove the dismissal: `list_library` refuses with `preflight_blocking_dialog`, and so "
+         "would every mutating call after it")
 
 d.close()
 ev.restored("604/no-file-was-written-and-no-panel-remains",
-            not os.path.exists(TARGET) and len(window_titles()) == len(document_titles()),
+            not os.path.exists(TARGET) and not save_panels(),
             f"the save did not complete, so no project was written to {TARGET!r} — that is the "
             f"failure under study, not a side effect — and no modal is left on screen. "
-            f"Windows: {window_titles()!r}")
+            f"Save panels: {save_panels()!r} Windows: {window_titles()!r}")
 
 ev.stop_recording(rec)
 out = ev.write()
