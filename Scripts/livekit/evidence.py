@@ -14,6 +14,10 @@ What it refuses to let you record:
   resulting image is not what the user sees. Every capture records which display it fell wholly within.
 - **A whole-window diff as a visual assertion.** A full-window comparison changes when the clock ticks.
   `visual()` requires an explicit region and states what it expected to happen there.
+- **A region measured once and carried as a constant.** A rectangle taken on one window shape silently
+  watches something else after a resize — measured, a stale band landed on the Step Sequencer and made
+  a negative assertion report movement in a part of the screen the run never touched. Derive the band
+  at run time; `track_header_band()` does it for the arrange rail.
 - **A check that cannot fail.** `check()` requires you to name the mutation you applied to the product
   that flipped it. A check nobody has seen fail is not evidence.
 - **A cached read presented as live.** `provenance()` records the source and age of any value that did
@@ -100,6 +104,77 @@ def logic_window(title_contains="Tracks"):
                 "x": int(b["X"]), "y": int(b["Y"]),
                 "w": int(b["Width"]), "h": int(b["Height"])}
     return None
+
+
+
+def track_header_band():
+    """The arrange window's track-header rail, in window coordinates, read from AX at run time.
+
+    Use this instead of writing a rectangle into a harness. Every band in this directory started as a
+    number measured once, and a number measured once is right until someone resizes a window: the
+    #592 harness carried `(603, 162, 325, 406)`, taken on a 1920x1050 window with the Library closed,
+    and after the window changed shape that rectangle landed on the Step Sequencer — which animates
+    on its own. A NEGATIVE visual assertion over it then reported movement in a part of the screen
+    the run had never touched, and failed a run in which nothing was written.
+
+    Measured here on 2026-08-19 against a 1920x1050 arrange window: 366,527 235x522 — the rail, not
+    the top-left block of the window that a hand-written band tends to become. The number moves with
+    the window and the track count, which is the entire point; do not write down whatever it prints.
+
+    Returns None when the rail cannot be located, which a caller should treat as a failed
+    precondition rather than a reason to fall back to a guess.
+
+    Two AppleScript hazards are handled here so a caller does not rediscover them:
+
+    - `by` is a reserved word, so a variable named that fails to PARSE rather than to run.
+    - `first window whose name is "…"` has been measured answering "invalid index" for a window that
+      `name of every window` listed a moment earlier, with a plain-ASCII title that matched exactly.
+      So the window is not chosen by name at all: every window is tried until one yields a rail.
+      Excluding the chooser by title was not enough either — a run that overlapped an "Import" dialog
+      picked that dialog and got nothing.
+    """
+    script = """
+    tell application "System Events" to tell process "Logic Pro"
+      -- Chosen by WHAT IT CONTAINS, not by its name. Excluding the project chooser by title was not
+      -- enough: a run that overlapped an "Import" dialog picked that dialog as the project window
+      -- and the lookup returned nothing. The window this wants is the one that has a track rail, so
+      -- every window is tried until one yields it.
+      set out to "none"
+      repeat with cand in (every window)
+        set w to contents of cand
+        try
+          set wp to position of w
+          set ec to entire contents of w
+          repeat with e in ec
+            set el to contents of e
+            try
+              if (role of el as text) is equal to "AXLayoutItem" then
+                set t to (first UI element of el whose role is "AXTextField")
+                set p1 to (value of attribute "AXParent" of el)
+                set rail to (value of attribute "AXParent" of p1)
+                set rp to position of rail
+                set rs to size of rail
+                set relX to ((item 1 of rp) - (item 1 of wp)) as integer
+                set relY to ((item 2 of rp) - (item 2 of wp)) as integer
+                set railW to (item 1 of rs) as integer
+                set railH to (item 2 of rs) as integer
+                set out to (relX as text) & "," & (relY as text) & "," & (railW as text) & "," & (railH as text)
+                exit repeat
+              end if
+            end try
+          end repeat
+        end try
+        if out is not "none" then exit repeat
+      end repeat
+      return out
+    end tell
+    """
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    parts = [p.strip() for p in (r.stdout or "").strip().split(",")]
+    if len(parts) != 4 or not all(p.lstrip("-").isdigit() for p in parts):
+        return None
+    x, y, w, h = (int(p) for p in parts)
+    return (x, y, w, h) if w > 0 and h > 0 else None
 
 
 def _displays():
