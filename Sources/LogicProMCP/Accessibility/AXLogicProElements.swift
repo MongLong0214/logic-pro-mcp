@@ -174,48 +174,168 @@ enum AXLogicProElements {
     /// `AXWindows` list are not "no dialog". Subrole-only top-level windows
     /// miss Logic's New Track sheet, which is an `AXChildren` member with
     /// role `AXSheet` on a host whose own `AXModal` is false.
-    static func dialogPresent(runtime: Runtime = .production) -> Bool {
-        guard let app = appRoot(runtime: runtime) else { return true }
-        switch AXHelpers.getAXUIElementArrayRead(
-            app, kAXWindowsAttribute as String, runtime: runtime.ax
-        ) {
-        case .success(.elements(let windows)):
-            return windows.contains { windowHostsBlockingModal($0, runtime: runtime.ax) }
-        case .success(.absent), .success(.malformed), .failure:
-            return true
+    /// Why the blocking-dialog guard answered as it did (#608).
+    ///
+    /// Four different conditions all mean "blocked", and three of them are not dialogs at all — they
+    /// are the fail-closed defaults for an app root that would not resolve or a windows array that
+    /// would not read. Reporting them all as `blocking_dialog_present` sends an operator looking for
+    /// a modal that is not on screen, which is how a first-call refusal cost an afternoon.
+    enum DialogPresenceReason: String, Sendable {
+        case appRootUnresolvable = "app_root_unresolvable"
+        case windowsAttributeAbsent = "windows_attribute_absent"
+        case windowsAttributeMalformed = "windows_attribute_malformed"
+        case windowsReadFailed = "windows_read_failed"
+        /// The windows read answered `kAXErrorCannotComplete` twice: the AX messaging to Logic did
+        /// not go through. Fail-closed like the rest, but it is a different thing to be told.
+        case appNotYetAddressable = "logic_not_yet_addressable"
+        /// A window blocked because its children would not read — fail-closed, but nobody saw a dialog.
+        case windowChildrenUnreadable = "window_children_unreadable"
+        case blockingWindowFound = "blocking_window_found"
+        case noBlockingWindow = "no_blocking_window"
+
+        var isBlocked: Bool { self != .noBlockingWindow }
+        /// True when this answer is about a dialog, rather than about a read that did not happen.
+        var namesAnActualDialog: Bool { self == .blockingWindowFound }
+    }
+
+    /// The reason AND the AX status behind it, for callers that publish a refusal.
+    ///
+    /// `dialogPresenceReason` throws the status away. A refusal that says `windows_read_failed`
+    /// without saying WHICH failure sends the next reader to guess between "Logic is not running",
+    /// "no Accessibility permission" and the -25204 that this issue is about.
+    /// A window whose children would not read blocks, but it is NOT a dialog anyone saw.
+    /// Seeing a real modal wins over a failed read, because a modal that was observed is the more
+    /// actionable thing to tell the caller.
+    private static func summarise(_ findings: [BlockingModalFinding]) -> DialogPresenceReason {
+        if findings.contains(where: { $0.isAnActualModal }) { return .blockingWindowFound }
+        if findings.contains(where: { $0.isBlocking }) { return .windowChildrenUnreadable }
+        return .noBlockingWindow
+    }
+
+    static func dialogPresenceDecision(
+        runtime: Runtime = .production
+    ) -> (reason: DialogPresenceReason, windowsReadError: Int32?) {
+        var carried: Int32?
+        let reason = dialogPresenceReason(runtime: runtime, windowsReadError: &carried)
+        return (reason, carried)
+    }
+
+    static func dialogPresenceReason(runtime: Runtime = .production) -> DialogPresenceReason {
+        var ignored: Int32?
+        return dialogPresenceReason(runtime: runtime, windowsReadError: &ignored)
+    }
+
+    private static func dialogPresenceReason(
+        runtime: Runtime,
+        windowsReadError: inout Int32?
+    ) -> DialogPresenceReason {
+        let reason: DialogPresenceReason
+        var axError: Int32?
+        if let app = appRoot(runtime: runtime) {
+            switch AXHelpers.getAXUIElementArrayRead(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax
+            ) {
+            case .success(.elements(let windows)):
+                reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
+            case .success(.absent):
+                reason = .windowsAttributeAbsent
+            case .success(.malformed):
+                reason = .windowsAttributeMalformed
+            case .failure(let error):
+                // #608 measured: the FIRST windows read in a fresh process answers
+                // `kAXErrorCannotComplete` (-25204) — the AX messaging to Logic did not go through —
+                // and the same read succeeds milliseconds later. Every mutating operation was being
+                // refused as `blocking_dialog_present` on a screen holding one ordinary window,
+                // 4 trials out of 4.
+                //
+                // A failed read is not an observation, so re-reading it is not the same as retrying
+                // until the answer is convenient: a read that SUCCEEDS is never retried here, whatever
+                // it says. Once, and only for this status.
+                axError = error.raw
+                if error.raw == AXError.cannotComplete.rawValue {
+                    usleep(200_000)
+                    switch AXHelpers.getAXUIElementArrayRead(
+                        app, kAXWindowsAttribute as String, runtime: runtime.ax
+                    ) {
+                    case .success(.elements(let windows)):
+                        reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
+                        axError = nil
+                    case .success(.absent):
+                        reason = .windowsAttributeAbsent
+                    case .success(.malformed):
+                        reason = .windowsAttributeMalformed
+                    case .failure(let retryError):
+                        reason = .appNotYetAddressable
+                        axError = retryError.raw
+                    }
+                } else {
+                    reason = .windowsReadFailed
+                }
+            }
+        } else {
+            reason = .appRootUnresolvable
         }
+        windowsReadError = axError
+        return reason
+    }
+
+    static func dialogPresent(runtime: Runtime = .production) -> Bool {
+        dialogPresenceReason(runtime: runtime).isBlocked
+    }
+
+    /// Why a window counted as blocking — a modal that was SEEN, or a read that did not happen.
+    ///
+    /// #608: this used to return a bare Bool, so the fail-closed default for an unreadable child was
+    /// indistinguishable from an actual dialog. The refusal then reported
+    /// `refusal_names_an_actual_dialog: true` for a window whose children would not read, which is
+    /// the defect this whole issue is about wearing a different hat: an absence published as an
+    /// observation.
+    enum BlockingModalFinding {
+        case none
+        case sawModal
+        case readFailed
+
+        var isBlocking: Bool { self != .none }
+        var isAnActualModal: Bool { self == .sawModal }
     }
 
     private static func windowHostsBlockingModal(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        if isBlockingDialogWindow(window, runtime: runtime) { return true }
+        blockingModalFinding(window, runtime: runtime).isBlocking
+    }
+
+    private static func blockingModalFinding(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> BlockingModalFinding {
+        if isBlockingDialogWindow(window, runtime: runtime) { return .sawModal }
         switch AXHelpers.childrenResult(window, runtime: runtime) {
         case .failure(let error)
             where error.raw == AXError.attributeUnsupported.rawValue
                 || error.raw == AXError.noValue.rawValue:
-            return false
+            return .none
         case .failure:
-            return true
+            return .readFailed
         case .success(let children):
             for child in children {
                 switch AXHelpers.getAttributeResult(
                     child, kAXRoleAttribute as String, runtime: runtime
                 ) as Result<String?, AXHelpers.AXStatusError> {
                 case .success(.some(let role)) where role == (kAXSheetRole as String):
-                    return true
+                    return .sawModal
                 case .failure(let error)
                     where error.raw == AXError.attributeUnsupported.rawValue
                         || error.raw == AXError.noValue.rawValue:
                     continue
                 case .failure:
-                    return true
+                    return .readFailed
                 case .success:
                     continue
                 }
             }
-            return false
+            return .none
         }
     }
 
@@ -448,6 +568,7 @@ enum AXLogicProElements {
                 // Re-ask the very question that refused, at census time. If this disagrees with the
                 // refusal the guard is not reading what it thinks it is.
                 "dialog_present_recheck": dialogPresent(runtime: runtime),
+                "recheck_reason": dialogPresenceReason(runtime: runtime).rawValue,
             ]
         case .success(.absent):
             return ["reason": "windows_attribute_absent", "windows": []]

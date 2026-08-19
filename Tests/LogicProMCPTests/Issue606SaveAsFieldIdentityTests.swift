@@ -134,3 +134,106 @@ struct Issue606MenuEnabledGateTests {
         #expect(!usesLenientForm)
     }
 }
+
+/// #519: the Save As menu drive must resolve through AXLocalePolicy, not through two hard-coded
+/// literals. The pair it replaced covered exactly two of the languages Logic ships.
+@Suite(.serialized)
+struct Issue519SaveAsMenuLocaleTests {
+    @Test("issue519_save_as_labels_cover_the_measured_forms")
+    func labelsCoverMeasuredForms() {
+        let labels = AXLocalePolicy.saveAsMenuItem.labels
+        #expect(labels.contains("Save As…"))
+        #expect(labels.contains("다른 이름으로 저장…"))
+        // The trailing character is a real ellipsis. Three dots is a different string and would not
+        // match the live menu.
+        #expect(!labels.contains("Save As..."))
+    }
+
+    /// The item is picked by exact label, so the two neighbours in the same File menu — measured on a
+    /// live Logic 12.3 two rows away — must not match.
+    @Test("issue519_save_as_does_not_match_its_neighbours_in_the_same_menu")
+    func doesNotMatchNeighbours() {
+        let item = AXLocalePolicy.saveAsMenuItem
+        #expect(item.matches("Save As…"))
+        #expect(!item.matches("Save A Copy As…"))
+        #expect(!item.matches("Save as Template…"))
+        #expect(!item.matches("Save"))
+    }
+
+    /// The bar it hangs off already carries a Japanese form. The ITEM does not — and that gap is
+    /// asserted here rather than left to be assumed away.
+    ///
+    /// A review caught an earlier draft claiming `save_as` "works on Japanese without a third
+    /// literal" because the BAR has `ファイル`. A resolved bar is worthless if the item under it does
+    /// not resolve, and the item's Japanese label has never been measured on a live Japanese Logic.
+    /// If someone measures it, they add it to `saveAsMenuItem.variants` and this test's last
+    /// expectation is what tells them to.
+    @Test("issue519_the_bar_reaches_japanese_and_the_item_does_not_yet")
+    func fileMenuBarReachesFurtherThanTheItem() {
+        let bar = AXLocalePolicy.fileMenuBar.labels
+        #expect(bar.contains("File"))
+        #expect(bar.contains("파일"))
+        #expect(bar.contains("ファイル"))
+
+        // The honest state of the item: two measured labels, no Japanese. Flip this the day someone
+        // reads the real label off a Japanese Logic — not before.
+        let item = AXLocalePolicy.saveAsMenuItem.labels
+        #expect(item.contains("Save As…"))
+        #expect(item.contains("다른 이름으로 저장…"))
+        let itemHasAnyJapanese = item.contains { label in
+            label.unicodeScalars.contains { (0x3040...0x30FF).contains(Int($0.value)) }
+        }
+        #expect(!itemHasAnyJapanese)
+    }
+
+    /// The shipped call site must not have drifted back to literals — the defect #519 is about is a
+    /// literal in a call site, not a missing label set.
+    @Test("issue519_the_shipped_call_site_uses_the_label_sets")
+    func shippedCallSiteIsLocaleResolved() throws {
+        let source = try String(
+            contentsOfFile: #filePath.replacingOccurrences(
+                of: "Tests/LogicProMCPTests/Issue606SaveAsFieldIdentityTests.swift",
+                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift"
+            ),
+            encoding: .utf8
+        )
+        let usesLabelSets = source.contains(
+            "clickMenuItem(\n            AXLocalePolicy.saveAsMenuItem, in: AXLocalePolicy.fileMenuBar"
+        )
+        let usesKoreanLiteral = source.contains("menuName: \"파일\"")
+        let usesEnglishLiteral = source.contains("menuName: \"File\"")
+        #expect(usesLabelSets)
+        #expect(!usesKoreanLiteral)
+        #expect(!usesEnglishLiteral)
+    }
+}
+
+/// #519: the Track menu bar's three measured spellings moved out of a literal array in
+/// `clickTrackMenu` and into `AXLocalePolicy`. The move must not lose any of them — the Japanese form
+/// in particular was measured on a Japanese Logic and its absence made every menu-driven track
+/// operation return `element_not_found` there.
+extension Issue519SaveAsMenuLocaleTests {
+    @Test("issue519_the_track_menu_bar_keeps_all_three_measured_spellings")
+    func trackMenuBarKeepsAllSpellings() {
+        let labels = AXLocalePolicy.trackMenuBar.labels
+        #expect(labels.contains("Track"))
+        #expect(labels.contains("트랙"))
+        #expect(labels.contains("トラック"))
+    }
+
+    /// The literal array must not have grown back. A fourth language belongs in the label set.
+    @Test("issue519_the_track_menu_drive_does_not_hard_code_a_spelling")
+    func trackMenuDriveHasNoLiteralSpelling() throws {
+        let source = try String(
+            contentsOfFile: #filePath.replacingOccurrences(
+                of: "Tests/LogicProMCPTests/Issue606SaveAsFieldIdentityTests.swift",
+                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift"
+            ),
+            encoding: .utf8
+        )
+        let usesPolicy = source.contains("AXLocalePolicy.trackMenuBar.labels")
+        let hardCodesJapanese = source.contains("[menuName, englishMenuName, \"トラック\"]")
+        #expect(usesPolicy)
+        #expect(!hardCodesJapanese)
+    }
+}
