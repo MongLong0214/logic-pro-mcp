@@ -33,6 +33,11 @@ jobs:
         # nothing about the rest, and they cannot convert at once. The bar only moves down.
         run: python3 Scripts/check-ax-locator-census.py
 
+      - name: Drive the injected Logic modules and assert their return shapes (#625)
+        # classify/detect take their System Events runner as an argument and select_input_source
+        # takes the TIS runtime, so both run with no Logic and no display.
+        run: python3 Scripts/test_pure_logic_modules.py
+
       - name: Drive logic_variants and assert its return shapes (#625)
         # The static contract check cannot see a function that keeps its name and signature and
         # returns something else. All ten consumed functions drive with no Logic and no display —
@@ -108,6 +113,11 @@ jobs:
         # A ratchet, not a gate on zero: 27 sites still pick one element from many and record
         # nothing about the rest, and they cannot convert at once. The bar only moves down.
         run: python3 Scripts/check-ax-locator-census.py
+
+      - name: Drive the injected Logic modules and assert their return shapes (#625)
+        # classify/detect take their System Events runner as an argument and select_input_source
+        # takes the TIS runtime, so both run with no Logic and no display.
+        run: python3 Scripts/test_pure_logic_modules.py
 
       - name: Drive logic_variants and assert its return shapes (#625)
         # The static contract check cannot see a function that keeps its name and signature and
