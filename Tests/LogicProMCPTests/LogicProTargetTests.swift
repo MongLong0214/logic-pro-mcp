@@ -168,7 +168,15 @@ import Testing
     #expect(supported[0].bundleID == "com.apple.mobilelogic")
 }
 
-@Test func setupDoctorInstallationCheckReportsCreatorStudioVariant() {
+/// This test used to assert the opposite: a Creator-Studio-only machine reported `.pass` with
+/// `variant: creator_studio`, which is how the runtime came to select a variant this release does
+/// not ship for. `shipVariants` is `[.desktop]`, so a pass there was the doctor certifying a
+/// configuration the release matrix does not cover.
+///
+/// The distinction the evidence must keep is between "nothing shipped is installed" and "a bundle
+/// would not read" — they used to report identically, and the reader went looking for a
+/// permissions problem that was not there.
+@Test func setupDoctorInstallationCheckFailsWhenOnlyCreatorStudioIsInstalled() {
     let apps = [
         SetupDoctor.LogicAppInfo(
             path: "/Applications/Logic Pro Creator Studio.app",
@@ -178,9 +186,10 @@ import Testing
         ),
     ]
     let check = SetupDoctor.logicInstallationCheck(logicApps: apps)
-    #expect(check.status == SetupDoctor.CheckStatus.pass)
-    #expect(check.evidence["variant"] == "creator_studio")
-    #expect(check.evidence["bundle_id"] == "com.apple.mobilelogic")
+    #expect(check.status == SetupDoctor.CheckStatus.fail)
+    #expect(check.evidence["reason"] == "unshipped_variant_only")
+    #expect(check.evidence["path"] == "/Applications/Logic Pro Creator Studio.app")
+    #expect(check.evidence["variant"] == nil)
 }
 
 @Test func setupDoctorTCCRedactsMobileLogicAppleEvents() {

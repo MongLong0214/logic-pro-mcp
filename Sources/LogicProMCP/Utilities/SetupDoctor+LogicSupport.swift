@@ -30,6 +30,17 @@ extension SetupDoctor {
     }
 
 
+    /// The app this server will drive, or nil when none of the shipped variants is installed.
+    ///
+    /// The last two fallbacks used to be `creatorStudio` and then ANY app. `shipVariants` is
+    /// `[.desktop]` and the ADR records Creator Studio as permanently out of scope — so returning
+    /// it here made the runtime select a variant the release matrix does not cover, and the
+    /// catch-all could return something that is not Logic at all. Recognising a bundle id is not
+    /// claiming support for it, which is the same correction the README needed.
+    ///
+    /// Callers must distinguish "nothing shipped is installed" from "a bundle would not read":
+    /// `unshippedVariantOnly` answers that, so the doctor does not report an out-of-scope install
+    /// as an unreadable one.
     static func preferredLogicApp(_ apps: [LogicAppInfo]) -> LogicAppInfo? {
         apps.first {
             $0.path == LogicProVariant.desktop.defaultInstallPath
@@ -37,8 +48,13 @@ extension SetupDoctor {
         }
             ?? apps.first { $0.bundleID == LogicProVariant.desktop.bundleID }
             ?? apps.first { $0.path == LogicProVariant.desktop.defaultInstallPath }
-            ?? apps.first { $0.bundleID == LogicProVariant.creatorStudio.bundleID }
-            ?? apps.first
+    }
+
+    /// Whether the only Logic present is one this release does not ship for. Distinguishes an
+    /// out-of-scope install from an unreadable bundle, which otherwise report identically.
+    static func unshippedVariantOnly(_ apps: [LogicAppInfo]) -> Bool {
+        preferredLogicApp(apps) == nil
+            && apps.contains { $0.bundleID == LogicProVariant.creatorStudio.bundleID }
     }
 
 
