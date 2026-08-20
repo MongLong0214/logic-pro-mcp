@@ -255,5 +255,10 @@ ev.restored("606/the-project-this-run-created-was-removed",
             f"undo without closing the project, and it is stated rather than papered over.")
 
 ev.stop_recording(rec)
+
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
 out = ev.write()
 print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)
