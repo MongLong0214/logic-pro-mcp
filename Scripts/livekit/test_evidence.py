@@ -146,6 +146,53 @@ for region, expected, why in [
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} {str(region):<26} -> {str(got):<22} {why}")
 
+# --- what `located_band` puts in the DOCUMENT --------------------------------------------------
+#
+# #628: refusing an ambiguous name is half the job; the other half is that "there was exactly one"
+# survives into the record. A lookup silent on success leaves a result with no way to tell a
+# discriminator from tree order.
+#
+# Driven through the REAL `located_band` against a STUB tool placed where it would compile one.
+# Nothing here calls swiftc, and nothing reimplements the parsing — a test that rewrites the rule
+# agrees with itself no matter what the code does.
+import json as _json
+import stat
+import tempfile as _tempfile
+
+def _with_stub_tool(stdout, selector=("Tracks header",)):
+    """Run `located_band` with a tool that prints `stdout`. Returns (result, records)."""
+    root = _tempfile.mkdtemp()
+    ev = E.Evidence("b" * 40, root)
+    tool = os.path.join(ev.dir, "ax_control_bar_band")
+    with open(tool, "w") as fh:
+        fh.write("#!/bin/sh\ncat <<'JSON'\n" + stdout + "\nJSON\n")
+    os.chmod(tool, os.stat(tool).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return ev.located_band(*selector), ev.records
+
+BAND = '{"band":[603,162,325,873],"description":"Tracks header","candidates":1}'
+NO_COUNT = '{"band":[603,162,325,873],"description":"Tracks header"}'
+AMBIGUOUS = '{"error":"AXDescription is ambiguous","matches":[{"role":"AXGroup"},{"role":"AXGroup"}]}'
+
+for stdout, want_result, want_tag, want_payload, why in [
+    (BAND, ((603, 162, 325, 873), "Tracks header"), "located_band/candidates",
+     {"candidates": 1, "counted": True}, "one candidate is RECORDED as one"),
+    (NO_COUNT, ((603, 162, 325, 873), "Tracks header"), "located_band/candidates",
+     {"candidates": None, "counted": False},
+     "an older tool that never counted is not silence — it says so"),
+    (AMBIGUOUS, (None, None), "located_band/refused",
+     {"why": "AXDescription is ambiguous"}, "ambiguity is refused and the reason recorded"),
+    ("not json at all", (None, None), "located_band/refused",
+     {"why": "the tool printed something that is not JSON"}, "unparseable output is a refusal"),
+]:
+    (result, records) = _with_stub_tool(stdout)
+    notes = [r for r in records if r.get("kind") == "observation" and r.get("tag") == want_tag]
+    payload = notes[0]["payload"] if notes else {}
+    ok = (result == want_result
+          and len(notes) == 1
+          and all(payload.get(k) == v for k, v in want_payload.items()))
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {why:<52} -> {result} {payload if not ok else ''}")
+
 # --- the API the harnesses actually call must exist -------------------------------------------
 #
 # #620 rewrote evidence.py from a base that predated three functions, and merging it deleted them
