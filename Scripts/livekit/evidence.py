@@ -379,6 +379,20 @@ class Evidence:
             # tree to see a window at all.
             self.note("located_band/window-list-was-empty-at-first",
                       {"selector": list(selector), "attempts": attempts})
+        # #628, item 3: the candidate count reaches the DOCUMENT, not just the tool's stdout.
+        #
+        # Refusing when a name is ambiguous is half the job. The other half is that "there was
+        # exactly one" survives into the record — a lookup that stays silent on success leaves a
+        # result with no way to tell a discriminator from tree order, which is the whole issue.
+        #
+        # Recorded on EVERY success, including `candidates: 1`, and including the case where the
+        # tool did not report a count at all. A note written only when the number is interesting
+        # cannot be distinguished from a run of an older tool that never counted: both are silence,
+        # and one of them is a lookup nobody has checked.
+        self.note("located_band/candidates",
+                  {"selector": list(selector), "subject": subject,
+                   "candidates": payload.get("candidates"),
+                   "counted": isinstance(payload.get("candidates"), int)})
         return tuple(band), subject
 
     # -- observations -------------------------------------------------------
@@ -612,33 +626,51 @@ class Evidence:
         return self._summary(out)
 
     def _summary(self, out):
-        recs = self.records
-        checks = [r for r in recs if r["kind"] == "check"]
-        caps = [r for r in recs if r["kind"] == "capture"]
-        vis = [r for r in recs if r["kind"] == "visual"]
-        return {
-            "file": out,
-            "checks": len(checks),
-            "passed": sum(1 for c in checks if c["passed"]),
-            "mutation_backed": sum(1 for c in checks if c["mutation_flips"]),
-            "captures_unsettled": sum(1 for c in caps if not c["settled"]),
-            "captures_straddling_displays":
-                sum(1 for c in caps if not c.get("display", {}).get("wholly_within")),
-            "restorations_failed":
-                sum(1 for r in recs if r["kind"] == "restoration" and not r["restored"]),
-            "cached_reads_used_as_live":
-                sum(1 for r in recs if r["kind"] == "provenance" and not r["usable_as_live_evidence"]),
-            "captures": len(caps),
-            "visual_assertions": len(vis),
-            "visual_failed": sum(1 for v in vis if not v["passed"]),
-            "recordings": sum(1 for r in recs if r["kind"] == "recording"),
-            "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
-            # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
-            # dict, or any other truthy object as a name.
-            "visual_assertions_without_a_subject":
-                sum(1 for v in vis
-                    if not isinstance(v.get("subject"), str) or not v["subject"].strip()),
-        }
+        return summarize(self.records, out)
+
+
+def summarize(recs, out=None):
+    """The counters `is_clean` reads, from a list of records.
+
+    Module-level rather than a method because the records are the whole input: a document read back
+    off disk has records and no Evidence around them, and the alternative — building a throwaway
+    object with a `.records` attribute so a method can be called on it — is a shim standing where an
+    argument belongs. The test file already had to write that shim once.
+
+    Indexed with `.get` rather than `[...]` throughout: a document read back off disk may predate a
+    field or have been truncated, and every missing key here reads as the FAILING value — an absent
+    `passed` is not a pass, an absent `settled` is unsettled. Crashing on a malformed document would
+    turn "this evidence is unreadable" into a stack trace at the gate.
+    """
+    if not isinstance(recs, list):
+        return None
+    recs = [r for r in recs if isinstance(r, dict) and "kind" in r]
+    checks = [r for r in recs if r["kind"] == "check"]
+    caps = [r for r in recs if r["kind"] == "capture"]
+    vis = [r for r in recs if r["kind"] == "visual"]
+    return {
+        "file": out,
+        "checks": len(checks),
+        "passed": sum(1 for c in checks if c.get("passed")),
+        "mutation_backed": sum(1 for c in checks if c.get("mutation_flips")),
+        "captures_unsettled": sum(1 for c in caps if not c.get("settled")),
+        "captures_straddling_displays":
+            sum(1 for c in caps if not c.get("display", {}).get("wholly_within")),
+        "restorations_failed":
+            sum(1 for r in recs if r["kind"] == "restoration" and not r.get("restored")),
+        "cached_reads_used_as_live":
+            sum(1 for r in recs if r["kind"] == "provenance" and not r.get("usable_as_live_evidence")),
+        "captures": len(caps),
+        "visual_assertions": len(vis),
+        "visual_failed": sum(1 for v in vis if not v.get("passed")),
+        "recordings": sum(1 for r in recs if r["kind"] == "recording"),
+        "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
+        # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
+        # dict, or any other truthy object as a name.
+        "visual_assertions_without_a_subject":
+            sum(1 for v in vis
+                if not isinstance(v.get("subject"), str) or not v["subject"].strip()),
+    }
 
 
 # Every counter `is_clean` reads. A summary missing any of them is not clean.
