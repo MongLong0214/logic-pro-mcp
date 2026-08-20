@@ -94,10 +94,31 @@ let ax = AXUIElementCreateApplication(app.processIdentifier)
 // and it was choosing its WINDOW that way. Measured: a harness that had just started an MCP driver
 // got `band: null` while the identical call standing alone resolved fine, because the first
 // standard window was no longer the one holding the content.
-let standardWindows = ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
-    str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
+//
+// Retried, because a single failed AX read is not an answer. Measured 2026-08-20: run from a
+// harness that had just started a screen recording and an MCP driver, `kAXWindowsAttribute` came
+// back EMPTY while Logic was plainly on screen with its window in front — and the identical call
+// a second later returned it. Emitting "no standard window" on the first empty read made a
+// transient look like a fact about the machine, and the caller recorded a refusal for it.
+//
+// The loop only retries EMPTINESS. A window list that comes back populated but without the wanted
+// element is a real answer and is reported as one; retrying that would only make a genuine
+// refusal slow.
+func standardWindowsNow() -> [AXUIElement] {
+    ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
+        str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
+    }
 }
-guard !standardWindows.isEmpty else { emit(["error": "no standard window"]) }
+var standardWindows = standardWindowsNow()
+var windowAttempts = 1
+while standardWindows.isEmpty && windowAttempts < 12 {
+    usleep(300_000)
+    standardWindows = standardWindowsNow()
+    windowAttempts += 1
+}
+guard !standardWindows.isEmpty else {
+    emit(["error": "no standard window", "attempts": windowAttempts])
+}
 
 var hits: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ d: Int) {
@@ -147,5 +168,9 @@ emit([
     "description": str(r, kAXDescriptionAttribute as String),
     "role": str(r, kAXRoleAttribute as String),
     "candidates": hits.count,
+     // How many reads it took to see a window at all. Anything above 1 means the AX tree was
+     // momentarily empty, which is worth surfacing rather than absorbing: a run that needed six
+     // attempts is telling you something about the machine it ran on.
+     "windowAttempts": windowAttempts,
     "band": [rf.0 - wf.0, rf.1 - wf.1, rf.2, rf.3],
 ])

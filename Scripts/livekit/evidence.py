@@ -346,18 +346,39 @@ class Evidence:
         if not os.path.exists(tool):
             built = subprocess.run(["swiftc", "-O", source, "-o", tool], capture_output=True)
             if built.returncode != 0:
+                self.note("located_band/build-failed",
+                          {"selector": list(selector),
+                           "stderr": (built.stderr or b"").decode("utf-8", "replace")[:400]})
                 return None, None
+
+        def refuse(why, r=None):
+            # A refusal that says nothing is a wall. Every one of these has been mistaken for a
+            # different failure at least once: an ambiguous description reads exactly like a
+            # missing element, and both read like the tool not having run at all.
+            self.note("located_band/refused",
+                      {"selector": list(selector), "why": why,
+                       "rc": None if r is None else r.returncode,
+                       "stdout": "" if r is None else (r.stdout or "")[:400],
+                       "stderr": "" if r is None else (r.stderr or "")[:400]})
+            return None, None
+
         r = subprocess.run([tool, *selector], capture_output=True, text=True)
         try:
             payload = json.loads(r.stdout or "{}")
         except ValueError:
-            return None, None
+            return refuse("the tool printed something that is not JSON", r)
         band = payload.get("band")
         if not (isinstance(band, list) and len(band) == 4):
-            return None, None
+            return refuse(payload.get("error") or "no band in the tool's answer", r)
         subject = payload.get("description")
         if not isinstance(subject, str) or not subject.strip():
-            return None, None
+            return refuse("a band with no description cannot be named", r)
+        attempts = payload.get("windowAttempts")
+        if isinstance(attempts, int) and attempts > 1:
+            # Absorbed, not hidden: the lookup succeeded, and it took more than one read of the AX
+            # tree to see a window at all.
+            self.note("located_band/window-list-was-empty-at-first",
+                      {"selector": list(selector), "attempts": attempts})
         return tuple(band), subject
 
     # -- observations -------------------------------------------------------
