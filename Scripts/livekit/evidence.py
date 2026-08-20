@@ -379,6 +379,20 @@ class Evidence:
             # tree to see a window at all.
             self.note("located_band/window-list-was-empty-at-first",
                       {"selector": list(selector), "attempts": attempts})
+        # #628, item 3: the candidate count reaches the DOCUMENT, not just the tool's stdout.
+        #
+        # Refusing when a name is ambiguous is half the job. The other half is that "there was
+        # exactly one" survives into the record — a lookup that stays silent on success leaves a
+        # result with no way to tell a discriminator from tree order, which is the whole issue.
+        #
+        # Recorded on EVERY success, including `candidates: 1`, and including the case where the
+        # tool did not report a count at all. A note written only when the number is interesting
+        # cannot be distinguished from a run of an older tool that never counted: both are silence,
+        # and one of them is a lookup nobody has checked.
+        self.note("located_band/candidates",
+                  {"selector": list(selector), "subject": subject,
+                   "candidates": payload.get("candidates"),
+                   "counted": isinstance(payload.get("candidates"), int)})
         return tuple(band), subject
 
     # -- observations -------------------------------------------------------
