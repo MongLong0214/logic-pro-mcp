@@ -62,7 +62,17 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # Measured band over the arrange CONTENT area (right of the track-header rail, which ends at
 # x=928): the window sits at 0,30 and the content group starts just past the headers. This is where
 # a region that moved has to leave a mark.
-CONTENT_BAND = (940, 162, 500, 300)
+# The arrange canvas, located by AXDescription. This rectangle was right — measured 2026-08-20
+# the canvas sits at 928,162 and the band began twelve points inside it. It is anchored anyway:
+# the canvas moves whenever the Library or Inspector is opened, and a run had no way to say
+# whether it still watched the canvas or the pane that had slid under it.
+_CONTENTS, _CONTENTS_SUBJECT = ev.located_band("Tracks contents")
+CONTENT_BAND = (_CONTENTS[0] + 12, _CONTENTS[1], 500, 300) if _CONTENTS else None
+CONTENT_BAND_SUBJECT = f"{_CONTENTS_SUBJECT} — the first bars of the top lanes" if _CONTENTS else None
+ev.check("575/precondition-the-arrange-canvas-was-located",
+         CONTENT_BAND is not None and bool(CONTENT_BAND_SUBJECT),
+         "a slice of the arrange canvas, offset into a region located by AXDescription",
+         f"contents={_CONTENTS!r} band={CONTENT_BAND!r} subject={CONTENT_BAND_SUBJECT!r}", None)
 TARGET_BAR = 9
 WITNESS_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_region_select.swift")
 WITNESS = os.path.join(ev.dir, "ax_region_select")
@@ -266,7 +276,8 @@ ev.check("575/an-independent-reader-agrees-the-region-is-there-now",
          "claims the move, and this check — which never reads the envelope — goes red")
 
 ev.visual("575/the-region-visibly-moved",
-          before_shot["file"], after_shot["file"], CONTENT_BAND, expect_change=True,
+          before_shot["file"], after_shot["file"], CONTENT_BAND, subject=CONTENT_BAND_SUBJECT,
+          expect_change=True,
           why="a region that moved from one bar to another is drawn somewhere else in the arrange "
               "content, so the band must differ — an envelope that claimed a move the screen did "
               "not show would be describing something other than what the user sees")

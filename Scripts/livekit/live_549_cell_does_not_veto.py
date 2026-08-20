@@ -146,7 +146,14 @@ win = E.logic_window()
 osa('tell application "System Events" to tell process "Logic Pro" to '
     'set position of (first window whose name contains "Marker List") to {1200, 640}')
 time.sleep(1.2)
-RAIL = (0, int(win["h"] * 0.12), int(win["w"] * 0.19), int(win["h"] * 0.45)) if win else None
+# The rail itself, located by AXDescription. Those fractions give (0, 126, 364, 472) on this
+# window, which is the LIBRARY browser — the rail begins at x=603 whenever the Library is open. The
+# band was measured with it closed, and nothing in the run could report that it had reopened.
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("549/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 pre = ev.shot("before-create", settle_region=RAIL)
 
 # ---- the defect: create must certify with the failing node present ----
@@ -201,7 +208,8 @@ ev.check("549/the-writes-actually-landed",
 
 post = ev.shot("after-create", settle_region=RAIL)
 if RAIL:
-    ev.visual("549/new-track-name-bands-appear", pre["file"], post["file"], RAIL, expect_change=True,
+    ev.visual("549/new-track-name-bands-appear", pre["file"], post["file"], RAIL,
+              subject=RAIL_SUBJECT, expect_change=True,
               why="three tracks were added, so their name bands must appear in the header rail")
 
 # ---- the dangerous direction: the scan must still see a REAL sheet ----
@@ -272,4 +280,9 @@ ev.restored("549/project-has-tracks-again", len(tracks()) >= 1, f"tracks={len(tr
 
 d.close()
 ev.stop_recording(rec)
-print(json.dumps(ev.write(), indent=1))
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
+out = ev.write()
+print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

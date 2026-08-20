@@ -86,11 +86,7 @@ if LOCALE not in LOCALES:
     sys.exit(f"unknown locale {LOCALE!r}; measured locales are {sorted(LOCALES)}")
 L = LOCALES[LOCALE]
 MARKER_WINDOW = L["window"]
-# Window-relative rectangle over the first rows of the Marker List table, derived from a live
-# measurement (window at 452x746, table origin 142 points below the window's own origin). The band
-# stops well short of the table's full height so the assertion is about ROWS appearing, not about
-# the window being repainted.
-ROW_BAND = (4, 145, 420, 60)
+
 
 
 def osa(script):
@@ -176,6 +172,23 @@ if MARKER_WINDOW not in titles:
     open_marker_list()
     titles = osa('tell application "System Events" to tell process "Logic Pro" to '
                  'return name of every window')
+# The table alone, located by the AXDescription it carries rather than written as coordinates.
+# Measured 2026-08-20: the fixed rectangle that stood here did land on the first table rows, so
+# this is not a correction of where it pointed — it is a correction of what could be SAID about
+# it. The window is user-resizable and the rows move with it, and a run had no way to report that
+# it had watched the right thing.
+#
+# "Marker" is ambiguous in this window: the outer group is the whole pane, the inner one the table.
+# The upper bound picks the table, which matters — the outer pane also holds the Number of Items
+# readout, and that repaints for its own reasons, so an assertion over it could go green while the
+# table stayed empty.
+ROW_BAND, ROW_SUBJECT = ev.located_band("Marker", "--role", "AXGroup",
+                                        "--min-height", "300", "--max-height", "650")
+ev.check("565/precondition-the-marker-table-was-located",
+         ROW_BAND is not None and bool(ROW_SUBJECT),
+         "the Marker List table, located by AXDescription with the pane excluded by size",
+         f"band={ROW_BAND!r} subject={ROW_SUBJECT!r}", None)
+
 locale_ok = MARKER_WINDOW in titles
 ev.check(f"565/{LOCALE}/precondition-logic-is-actually-in-this-locale", locale_ok,
          f"a window title carries this locale's Marker List name ({MARKER_WINDOW!r}), so the run "
@@ -272,9 +285,8 @@ ev.check(f"565/{LOCALE}/an-independent-witness-agrees-a-marker-appeared",
 
 after = ev.shot(f"565/{LOCALE}/marker-created", settle_region=ROW_BAND, window_title=MARKER_WINDOW)
 ev.visual(f"565/{LOCALE}/a-row-appears-in-the-marker-table",
-          before["file"], after["file"], ROW_BAND, expect_change=True,
-          why="the first rows of the Marker List table are empty before the create and carry the "
-              "new marker after it")
+          before["file"], after["file"], ROW_BAND, subject=ROW_SUBJECT, expect_change=True,
+          why="the Marker List table holds no rows before the create and one after it")
 
 # ---- restore ----------------------------------------------------------------------------------
 # The run leaves the project with the marker count it found. It cannot restore the specific markers

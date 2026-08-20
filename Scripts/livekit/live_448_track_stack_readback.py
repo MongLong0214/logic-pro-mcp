@@ -90,7 +90,19 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # an assertion that cannot fail. This band is flat grey while the stack is closed and fills with
 # subtrack headers when it opens, so it can stay still — which is what makes its changing mean
 # something.
-QUIET_BAND = (603, 470, 325, 90)
+#
+# So the band is a SLICE of the rail, and the rail is located rather than written down. The whole
+# rail would be the wrong subject here for the reason just given; a fixed rectangle was the wrong
+# subject for a different one — measured 2026-08-20 the rail sits at y=162 h=873, not the 192/406
+# the numbers above were taken from, because it moves with the panes around it. The offset into the
+# rail is what this harness actually knows: 308 points down, past the collapsed headers.
+_RAIL, _RAIL_SUBJECT = ev.located_band("Tracks header")
+QUIET_BAND = (_RAIL[0], _RAIL[1] + 308, _RAIL[2], 90) if _RAIL else None
+QUIET_BAND_SUBJECT = f"{_RAIL_SUBJECT} — the empty area below the collapsed headers" if _RAIL else None
+ev.check("448/precondition-the-track-header-rail-was-located",
+         QUIET_BAND is not None and bool(QUIET_BAND_SUBJECT),
+         "the empty slice of the track-header rail, offset into a rail located by AXDescription",
+         f"rail={_RAIL!r} band={QUIET_BAND!r} subject={QUIET_BAND_SUBJECT!r}", None)
 CACHE_REFRESH_TIMEOUT = 40.0
 POLL = 0.5
 ARROW_TOOL_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_stack_arrow.swift")
@@ -437,7 +449,8 @@ try:
              "would not have caught")
 
     ev.visual("448/the-arrangement-visibly-opened",
-              before_shot["file"], after_shot["file"], QUIET_BAND, expect_change=True,
+              before_shot["file"], after_shot["file"], QUIET_BAND, subject=QUIET_BAND_SUBJECT,
+              expect_change=True,
               why="the subtracks Logic revealed are drawn into the empty part of the track-header "
                   "rail, so a band that was flat grey while the stack was closed must not be flat "
                   "grey now — a flag that flipped while the screen stayed still would be "

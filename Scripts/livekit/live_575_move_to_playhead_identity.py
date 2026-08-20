@@ -57,7 +57,19 @@ if missing:
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # Measured band over the track-header rail: the arrange window sits at 0,30 and the rail's own AX
 # frame is 603,192 325x406, so this is 603,162 in window coordinates. Every call here is a read.
-HEADER_BAND = (603, 162, 325, 406)
+# #622: measured from AX when it was written — the comment beside its sibling recorded the rail at
+# 325x406 — and the rail now reports 325x1620. A coordinate measured once is a photograph; the
+# window kept changing after it was taken, so this had become a slice of the rail rather than the
+# rail. Located every run instead.
+#
+# The rail is TALLER than the window it is drawn in, which is what `_clip_to_window` exists for:
+# the crop is the visible part and the record says so, rather than CoreGraphics silently
+# intersecting an oversized rectangle and the evidence naming the whole thing.
+HEADER_BAND, HEADER_SUBJECT = ev.located_band("Tracks header")
+ev.check("575/precondition-the-track-header-rail-was-located",
+         HEADER_BAND is not None and bool(HEADER_SUBJECT),
+         "the rail this run asserts about, located by AXDescription rather than written down",
+         f"band={HEADER_BAND!r} subject={HEADER_SUBJECT!r}", None)
 
 
 def osa(script):
@@ -134,7 +146,7 @@ ev.check("575/the-reachable-surface-is-unchanged",
 
 after = ev.shot("575/after", settle_region=HEADER_BAND)
 ev.visual("575/no-project-state-was-touched",
-          before["file"], after["file"], HEADER_BAND, expect_change=False,
+          before["file"], after["file"], HEADER_BAND, expect_change=False, subject=HEADER_SUBJECT,
           why="every call in this run is a read, so the track-header rail must be byte-identical "
               "across it — a change here would mean a read path wrote something")
 

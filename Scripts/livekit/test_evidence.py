@@ -44,10 +44,10 @@ CASES = [
     (False, {**GOOD, "captures_straddling_displays": 1}, "a capture across two displays"),
     (False, {**GOOD, "restorations_failed": 1}, "a restoration that did not happen"),
     (False, {**GOOD, "cached_reads_used_as_live": 1}, "a cached read presented as live"),
-    # Counted, not gated — see is_clean's docstring. This case asserts the CURRENT contract, so it
-    # is the one to flip when the harnesses have adopted `subject=`.
-    (True, {**GOOD, "visual_assertions_without_a_subject": 1},
-     "a visual that names no subject: counted, not yet refused"),
+    # Gated as of #622, once all thirty-one call sites named a subject. Flipped from the deferred
+    # contract this case used to assert.
+    (False, {**GOOD, "visual_assertions_without_a_subject": 1},
+     "a visual that names no subject"),
     (False, None, "not a summary at all"),
 ]
 
@@ -120,6 +120,31 @@ for raw, why in [
     ok = bool(inside and single and bounded)
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} name={str(raw)[:28]!r:<32} -> {stem[:28]!r:<30} {why}")
+
+# --- a band larger than its window is CLIPPED, and the record says what was hashed -------------
+#
+# `Tracks contents` is 6162 points wide on a 1920-point window: the arrange canvas extends past the
+# viewport that draws it. `CGImageCreateWithImageInRect` intersects an oversized crop against the
+# image and reports nothing, so the record claimed the whole canvas while the hash covered the
+# visible strip — the number in the evidence was not the number that was measured.
+#
+# The case that matters most is the last one. A band entirely outside the window used to crop to
+# nothing in BOTH captures, and two empty crops are equal, which is a PASS for every
+# `expect_change=False` assertion. Unreadable has to stay unreadable.
+WINDOW = (1920, 1050)
+for region, expected, why in [
+    ((10, 20, 100, 50), (10, 20, 100, 50), "wholly inside — untouched"),
+    ((928, 162, 6162, 873), (928, 162, 992, 873), "wider than the window — clipped to the viewport"),
+    ((0, 0, 1920, 1050), (0, 0, 1920, 1050), "exactly the window — untouched"),
+    ((-40, -10, 200, 100), (0, 0, 160, 90), "starts off the top-left — clipped to the origin"),
+    ((2000, 20, 100, 50), None, "wholly outside — unreadable, not an empty crop"),
+    ((10, 20, 100, 50), (10, 20, 100, 50), "no window points is not a licence to clip"),
+]:
+    wp = None if why.startswith("no window points") else WINDOW
+    got = E._clip_to_window(region, wp)
+    ok = (got is None and expected is None) or (got is not None and tuple(got) == expected)
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {str(region):<26} -> {str(got):<22} {why}")
 
 # --- the API the harnesses actually call must exist -------------------------------------------
 #

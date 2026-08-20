@@ -77,7 +77,11 @@ if not win:
     d.close()
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-RAIL = (0, int(win["h"] * 0.10), int(win["w"] * 0.20), int(win["h"] * 0.80))
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("543/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 
 live_tracks = tracks()
 ev.note("precondition", {"track_count": len(live_tracks),
@@ -156,7 +160,7 @@ ev.restored("543/no-state-was-mutated", len(after_tracks) == len(live_tracks),
             f"track count {len(live_tracks)} -> {len(after_tracks)}; the op is refused before any write")
 
 ev.visual("543/the-rail-is-unchanged", shot["file"], ev.shot("rail-after", settle_region=RAIL)["file"],
-          RAIL, expect_change=False,
+          RAIL, subject=RAIL_SUBJECT, expect_change=False,
           why="a refused lookup must leave the track rail exactly as it was; this is the pixel witness "
               "that the run mutated nothing")
 

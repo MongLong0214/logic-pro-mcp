@@ -125,7 +125,19 @@ if not win:
 # WRONG here: with the Library open that strip is the sound browser, which does not move when a track is
 # deleted, so the visual assertion failed while the delete had plainly worked. Sample where the rows
 # actually are. (This is measurement, not control: nothing is ever clicked by coordinate.)
-RAIL = (int(win["w"] * 0.32), int(win["h"] * 0.16), int(win["w"] * 0.17), int(win["h"] * 0.44))
+# The rows themselves, as a slice of a rail located by AXDescription rather than as a fraction of
+# the window. The fractions happened to land on the rail in the layout they were written in;
+# measured 2026-08-20 the rail sits at x=603 w=325, and the same fractions of the same window give
+# x=614 w=326 only because the panes around it have not moved since. A slice, not the whole rail:
+# the rail carries level meters that repaint on their own, and a positive assertion over those is
+# close to one that cannot fail.
+_RAIL, _RAIL_SUBJECT = ev.located_band("Tracks header")
+RAIL = (_RAIL[0], _RAIL[1] + 6, _RAIL[2], 462) if _RAIL else None
+RAIL_SUBJECT = f"{_RAIL_SUBJECT} — the top of the rail, where the rows stand" if _RAIL else None
+ev.check("545/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "a slice of the track-header rail, offset into a rail located by AXDescription",
+         f"rail={_RAIL!r} band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 
 pre = dialog_count()
 ev.check("545/precondition-no-dialog-is-already-up", pre == 0,
@@ -252,7 +264,8 @@ ev.check("545/the-delete-is-certified-not-abandoned",
 
 shot_after = ev.shot("after-delete", settle_region=RAIL)
 ev.visual("545/the-row-goes-away",
-          shot_before["file"], shot_after["file"], RAIL, expect_change=True,
+          shot_before["file"], shot_after["file"], RAIL, subject=RAIL_SUBJECT,
+          expect_change=True,
           why="the deleted track has to disappear from the rail; pixels witness the removal without "
               "trusting any AX read")
 
