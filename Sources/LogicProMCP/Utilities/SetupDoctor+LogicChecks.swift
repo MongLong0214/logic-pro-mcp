@@ -48,6 +48,20 @@ extension SetupDoctor {
                 remediationType: .docs
             )
         }
+        if Self.unshippedVariantOnly(supported) {
+            // Not "unreadable": the bundle read fine and is a Logic this release does not ship for.
+            // Reporting it as unreadable sent the reader looking for a permissions problem.
+            return check(
+                id: "logic.installation",
+                domain: "logic",
+                status: .fail,
+                summary: "Only Logic Pro Creator Studio was found. This release ships for desktop "
+                    + "Logic Pro only; Creator Studio is recognised so it is not driven by mistake.",
+                evidence: ["reason": "unshipped_variant_only",
+                           "path": supported.map(\.path).joined(separator: ",")],
+                remediationType: .docs
+            )
+        }
         guard let primary = preferredReadableLogicApp(supported), let version = primary.version else {
             return check(
                 id: "logic.installation",
