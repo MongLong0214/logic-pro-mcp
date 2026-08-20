@@ -42,7 +42,7 @@ struct Issue628CountingLocatorTests {
         let census = AXHelpers.censusDescendant(of: root, role: kAXButtonRole, runtime: runtime)
         #expect(census.candidates == 2)
         #expect(census.element == nil)
-        #expect(census.isUnambiguous == false)
+        #expect(!census.isUnambiguous)
     }
 
     @Test("exactly one match: identified, and recorded as one")
@@ -75,7 +75,7 @@ struct Issue628CountingLocatorTests {
             of: root, role: kAXButtonRole, runtime: b.makeAXRuntime())
         #expect(census.candidates == 0)
         #expect(census.element == nil)
-        #expect(census.isUnambiguous == false)
+        #expect(!census.isUnambiguous)
     }
 
     /// The case that decides whether the number means anything: a match INSIDE another match.
