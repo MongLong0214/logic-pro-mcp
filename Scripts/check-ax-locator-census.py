@@ -64,7 +64,7 @@ def blind_sites(root):
                 if "static func" in line or line.strip().startswith("//"):
                     continue
                 if re.search(r"\bfindDescendant\(", line):
-                    out.append((path, i + 1, "findDescendant"))
+                    out.append((path, i + 1, "findDescendant — returns first, no count"))
                 elif re.search(r"\bfindAllDescendants\(", line):
                     window = "\n".join(lines[i:i + 14])
                     if re.search(r"\)\s*\.first\b", window):
@@ -74,7 +74,16 @@ def blind_sites(root):
                         # first-match, written long-hand. The census missed thirteen of these while
                         # reporting a confident 27 — a detector that cannot see a spelling is not a
                         # census of the defect, it is a census of one spelling of it.
-                        out.append((path, i + 1, "findAllDescendants + return-in-loop"))
+                        # Whether the loop's test narrows to ONE is not decidable here. Measured:
+                        # all twelve of these carry a discriminator, and one of them
+                        # (getControlBar, before #633) still had two candidates. So this is a
+                        # candidate for review, not a finding.
+                        body = "\n".join(lines[i:i + 16])
+                        after_for = body.split("for ", 1)[1] if "for " in body else ""
+                        tested = bool(re.search(r"\bif\b|\bguard\b|\bwhere\b", after_for))
+                        out.append((path, i + 1,
+                                    "return-in-loop, tests something — NEEDS A HUMAN"
+                                    if tested else "return-in-loop, no test — returns first"))
     return out
 
 
@@ -96,13 +105,21 @@ def main():
                                   if "static func" not in src[max(0, m.start() - 80):m.start()]])
 
     files = {p for p, _, _ in sites}
-    print(f"AX lookups that keep one candidate and record no count: {len(sites)}"
-          f"  (in {len(files)} files)")
-    print(f"lookups that report their candidate count:               {converted}")
-    print(f"budget:                                                  {BLIND_SITE_BUDGET}")
+    print(f"AX lookups this detector cannot clear: {len(sites)}  (in {len(files)} files)")
+    print("  These are CANDIDATES, not findings. The detector sees the shape of a lookup, never")
+    print("  whether its candidate set has one member. Six are already measured DEAD (identifier")
+    print("  lookups matching zero live), and every return-in-loop site carries a test whose")
+    print("  strength it cannot judge. Read the lookup's own comment first — for all six dead ones")
+    print("  the code already said so.")
+    print("  Cheapest order: (1) read the lookup's comment, (2) read what the call site passes,")
+    print("  (3) measure the live candidate set. Twice this was started at (3) and (1) had the")
+    print("  answer — though (3) is what established that (1) could be trusted.")
+    print(f"lookups that report their candidate count: {converted}")
+    print(f"budget (may not rise; not a defect tally): {BLIND_SITE_BUDGET}")
 
     if len(sites) > BLIND_SITE_BUDGET:
-        print("\nOVER BUDGET — a lookup that keeps one candidate without counting them was added.")
+        print("\nOVER BUDGET — a lookup this detector cannot clear was added. That does not make it")
+        print("wrong; it makes it unreviewed, which is what the bar exists to stop.")
         print("Use AXLocalePolicy.censusDescendant, or lower nothing and convert one first.")
         for p, n, kind in sites:
             print(f"  {os.path.relpath(p, repo)}:{n}  {kind}")
