@@ -70,7 +70,11 @@ if not win:
              "no window found", "closed the Tracks window; this check went red")
     d.close(); print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-RAIL = (0, int(win["h"] * 0.10), int(win["w"] * 0.20), int(win["h"] * 0.80))
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("549/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 
 before = tracks()
 ev.note("precondition", {"tracks": len(before), "sheets": sheet_count()})
@@ -166,7 +170,7 @@ ev.check("549/the-node-carries-no-user-content",
          "and the check caught it")
 
 ev.visual("549/the-track-rail-changes",
-          pre["file"], post["file"], RAIL, expect_change=True,
+          pre["file"], post["file"], RAIL, subject=RAIL_SUBJECT, expect_change=True,
           why="one extra track is standing at this point, so the header rail must differ")
 
 # remove the extra track left standing for the visual
@@ -184,4 +188,9 @@ ev.restored("549/track-count-returned-to-start", len(after) == len(before),
 
 d.close()
 ev.stop_recording(rec)
-print(json.dumps(ev.write(), indent=1))
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
+out = ev.write()
+print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

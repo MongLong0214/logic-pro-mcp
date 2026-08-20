@@ -1,7 +1,8 @@
 // A NAMED region of the arrange window, in window coordinates, emitted as JSON with the name it
 // matched — so a caller can state what the band IS, not only where it is.
 //
-//   ./ax_control_bar_band "<AXDescription>" [--role R] [--min-width N] [--min-height N]
+//   ./ax_control_bar_band "<AXDescription>" [--role R]
+//                           [--min-width N] [--min-height N] [--max-width N] [--max-height N]
 //
 // An AXDescription is NOT unique. Measured on this window: "Control Bar" matches two elements,
 // "Library" four, "Event" three. The first version walked depth-first and returned whichever it
@@ -78,6 +79,12 @@ func flag(_ name: String) -> String? {
 let wantRole = flag("--role")
 let minWidth = Int(flag("--min-width") ?? "0") ?? 0
 let minHeight = Int(flag("--min-height") ?? "0") ?? 0
+// Upper bounds too, because nesting is the common shape of an ambiguous description: the Marker
+// List window carries "Marker" twice, the outer one the whole pane and the inner one the table
+// alone. A lower bound cannot separate them — every bound that admits the inner admits the outer.
+// Without these the caller's only options are the wrong subject or no subject at all.
+let maxWidth = Int(flag("--max-width") ?? "") ?? Int.max
+let maxHeight = Int(flag("--max-height") ?? "") ?? Int.max
 
 guard let app = NSWorkspace.shared.runningApplications.first(where: {
     ($0.bundleIdentifier ?? "").contains("logic")
@@ -87,10 +94,31 @@ let ax = AXUIElementCreateApplication(app.processIdentifier)
 // and it was choosing its WINDOW that way. Measured: a harness that had just started an MCP driver
 // got `band: null` while the identical call standing alone resolved fine, because the first
 // standard window was no longer the one holding the content.
-let standardWindows = ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
-    str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
+//
+// Retried, because a single failed AX read is not an answer. Measured 2026-08-20: run from a
+// harness that had just started a screen recording and an MCP driver, `kAXWindowsAttribute` came
+// back EMPTY while Logic was plainly on screen with its window in front — and the identical call
+// a second later returned it. Emitting "no standard window" on the first empty read made a
+// transient look like a fact about the machine, and the caller recorded a refusal for it.
+//
+// The loop only retries EMPTINESS. A window list that comes back populated but without the wanted
+// element is a real answer and is reported as one; retrying that would only make a genuine
+// refusal slow.
+func standardWindowsNow() -> [AXUIElement] {
+    ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
+        str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
+    }
 }
-guard !standardWindows.isEmpty else { emit(["error": "no standard window"]) }
+var standardWindows = standardWindowsNow()
+var windowAttempts = 1
+while standardWindows.isEmpty && windowAttempts < 12 {
+    usleep(300_000)
+    standardWindows = standardWindowsNow()
+    windowAttempts += 1
+}
+guard !standardWindows.isEmpty else {
+    emit(["error": "no standard window", "attempts": windowAttempts])
+}
 
 var hits: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ d: Int) {
@@ -98,7 +126,7 @@ func walk(_ e: AXUIElement, _ d: Int) {
     for c in kids(e) {
         if str(c, kAXDescriptionAttribute as String) == wanted,
            let f = frame(c),
-           f.2 >= minWidth, f.3 >= minHeight,
+           f.2 >= minWidth, f.3 >= minHeight, f.2 <= maxWidth, f.3 <= maxHeight,
            wantRole == nil || str(c, kAXRoleAttribute as String) == wantRole {
             hits.append(c)
         }
@@ -123,7 +151,7 @@ func describeHit(_ e: AXUIElement) -> [String: Any] {
             "band": [f.0 - wf.0, f.1 - wf.1, f.2, f.3]]
 }
 if hits.count > 1 {
-    emit(["error": "AXDescription is ambiguous — add --role / --min-width / --min-height",
+    emit(["error": "AXDescription is ambiguous — add --role / --min-width / --min-height / --max-width / --max-height",
           "wanted": wanted, "matches": hits.map(describeHit),
           "window": str(win, kAXTitleAttribute as String)])
 }
@@ -140,5 +168,9 @@ emit([
     "description": str(r, kAXDescriptionAttribute as String),
     "role": str(r, kAXRoleAttribute as String),
     "candidates": hits.count,
+     // How many reads it took to see a window at all. Anything above 1 means the AX tree was
+     // momentarily empty, which is worth surfacing rather than absorbing: a run that needed six
+     // attempts is telling you something about the machine it ran on.
+     "windowAttempts": windowAttempts,
     "band": [rf.0 - wf.0, rf.1 - wf.1, rf.2, rf.3],
 ])

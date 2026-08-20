@@ -301,10 +301,33 @@ ev.check("519/a-region-exists-and-its-korean-help-string-parses",
          "restore the English-only region-help keyword: the enumeration stops recognising the "
          "region and this check goes red before the move is ever attempted")
 
+# #622: this run recorded the screen and took no captures, so `is_clean` refused it for having
+# looked at nothing — a gap that predates the counter and only became visible when the counter
+# landed. The band is the arrange canvas, located by the AXDescription it carries, and it is
+# resolved HERE rather than at the top of the file because a Korean Logic has only just been
+# launched and given a project; before that there is no canvas to find.
+CANVAS, CANVAS_SUBJECT = ev.located_band("Tracks contents")
+ev.check("519/precondition-the-arrange-canvas-was-located",
+         CANVAS is not None and bool(CANVAS_SUBJECT),
+         "the arrange canvas, located by the AXDescription it carries — the same lookup the other "
+         "harnesses use, which does not depend on Logic's language",
+         f"band={CANVAS!r} subject={CANVAS_SUBJECT!r}", None)
+
+arrange_window = next((t for t in windows() if "트랙" in t or "Tracks" in t), None)
+before_move = ev.shot("519/region-before-move", settle_region=CANVAS, window_title=arrange_window)
+
 seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
 time.sleep(2)
 moved = d.tool("logic_edit", "move_to_playhead", {})
 time.sleep(2)
+
+after_move = ev.shot("519/region-after-move", settle_region=CANVAS, window_title=arrange_window)
+ev.visual("519/the-region-visibly-moved-on-a-korean-logic",
+          before_move["file"], after_move["file"], CANVAS, subject=CANVAS_SUBJECT,
+          expect_change=True,
+          why=f"the region was dragged to bar {TARGET_BAR} through Logic's Korean menus, so the "
+              "canvas it is drawn on must differ — an envelope reporting State A about a region "
+              "nobody can see moving would leave this band alone")
 ev.note("519/move", {"seek": (seek or {}).get("observed"), "move": moved})
 
 body = moved if isinstance(moved, dict) else {}

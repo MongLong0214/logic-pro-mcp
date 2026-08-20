@@ -61,25 +61,11 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # 325x406 — and the rail now reports 325x1620. A coordinate measured once is a photograph; the
 # window kept changing after it was taken, so this had become a slice of the rail rather than the
 # rail. Located every run instead.
-BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
-BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
-subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
-
-
-def located_band(*selector):
-    """(band, subject) for a named region, or (None, None) — never a fallback rectangle."""
-    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
-    try:
-        payload = json.loads(r.stdout or "{}")
-    except ValueError:
-        return None, None
-    b = payload.get("band")
-    if not (isinstance(b, list) and len(b) == 4):
-        return None, None
-    return tuple(b), payload.get("description")
-
-
-HEADER_BAND, HEADER_SUBJECT = located_band("Tracks header")
+#
+# The rail is TALLER than the window it is drawn in, which is what `_clip_to_window` exists for:
+# the crop is the visible part and the record says so, rather than CoreGraphics silently
+# intersecting an oversized rectangle and the evidence naming the whole thing.
+HEADER_BAND, HEADER_SUBJECT = ev.located_band("Tracks header")
 ev.check("575/precondition-the-track-header-rail-was-located",
          HEADER_BAND is not None and bool(HEADER_SUBJECT),
          "the rail this run asserts about, located by AXDescription rather than written down",

@@ -51,9 +51,20 @@ if missing:
     sys.exit(f"cannot run: missing {missing}")
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
-# Band over the arrange window's track headers. NOT because it changes — measured, it does not: the
-# lane Logic creates is below the visible arrangement. That is the point the visual assertion makes.
-HEADER_BAND = (10, 120, 260, 320)
+# A slice of the arrange window's track headers. NOT because it changes — measured, it does not:
+# the lane Logic creates is below the visible arrangement. That is the point the visual assertion
+# makes, and it is exactly why the rectangle that stood here was dangerous.
+#
+# `(10, 120, 260, 320)` is the LIBRARY browser, not the track headers — `live_576_completeness`
+# says so in its own comment, having found it the hard way when two captures hashed identically
+# across a zoom change that plainly worked. Here the assertion is NEGATIVE, so the wrong rectangle
+# did not fail: the Library does not change when a track is created, so the check passed for a
+# reason that had nothing to do with the claim. Sitting green, saying nothing.
+HEADER_BAND, HEADER_BAND_SUBJECT = ev.located_band("Tracks header")
+ev.check("576/precondition-the-track-header-rail-was-located",
+         HEADER_BAND is not None and bool(HEADER_BAND_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={HEADER_BAND!r} subject={HEADER_BAND_SUBJECT!r}", None)
 MAX_ATTEMPTS = 12
 
 
@@ -177,7 +188,8 @@ after = ev.shot("576/after", settle_region=HEADER_BAND)
 # effect leaves no mark inside the viewport, which is why a verification that only reads the viewport
 # cannot certify it — and why an empty region result must not be published as a definite failure.
 ev.visual("576/the-created-track-is-invisible-inside-the-viewport",
-          before["file"], after["file"], HEADER_BAND, expect_change=False,
+          before["file"], after["file"], HEADER_BAND, subject=HEADER_BAND_SUBJECT,
+          expect_change=False,
           why="the envelope reports a track-count delta while the visible track-header band is "
               "byte-identical: the lane Logic created is outside the viewport, so the screenshot "
               "and the AX region reader are blind in the same place and for the same reason")
