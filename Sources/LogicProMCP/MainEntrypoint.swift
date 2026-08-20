@@ -243,6 +243,48 @@ enum MainEntrypoint {
             }
         }
 
+        // #628: the counting locator, run against live Logic from the artifact the gate hashes.
+        //
+        // `AXHelpers.censusDescendant` answers "how many matched", which is the fact the blind
+        // `findDescendant` cannot report. A unit test can prove the counting rule against a tree it
+        // built itself; only this can show the rule surviving contact with Logic's real one, and
+        // the count it returns is checkable against an instrument that is not this code.
+        //
+        // Observation only, exactly like `--probe-event-list`: it reads, adds no MCP surface, and
+        // performs no action. `role` is the one criterion an outside instrument can reproduce
+        // without sharing this code's notion of a label, which is what makes the comparison worth
+        // making — matching on a LabelSet would have the harness and the product agreeing because
+        // they read the same table.
+        if arguments.contains("--probe-locator-census") {
+            let role = arguments.drop(while: { $0 != "--probe-locator-census" })
+                .dropFirst().first ?? "AXButton"
+            let depth = Int(arguments.drop(while: { $0 != "--probe-locator-depth" })
+                .dropFirst().first ?? "") ?? 10
+            guard let window = AXLogicProElements.mainWindow() else {
+                writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
+                return 1
+            }
+            let census = AXHelpers.censusDescendant(of: window, role: role, maxDepth: depth)
+            let payload: [String: Any] = [
+                "ok": true,
+                "role": role,
+                "maxDepth": depth,
+                "candidates": census.candidates,
+                // `identified` is the whole point of the count: it is true only at exactly one, and
+                // a reader can tell that from "something was returned" — which the blind lookup
+                // reports identically at one match and at nine.
+                "identified": census.isUnambiguous,
+                "returnedElement": census.element != nil,
+            ]
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            guard let data, let text = String(data: data, encoding: .utf8) else {
+                writeStdout("{\"ok\":false,\"error\":\"could not encode the census\"}\n")
+                return 1
+            }
+            writeStdout(text + "\n")
+            return 0
+        }
+
         if arguments.contains("--check-permissions") {
             let status = permissionCheck()
             writeStderr(status.summary + "\n")
@@ -314,6 +356,9 @@ enum MainEntrypoint {
           LogicProMCP --help, -h               Print this help and exit
           LogicProMCP --version, -V            Print the version and exit
           LogicProMCP --probe-event-list       Read the open Event List note table once and print JSON; exit
+          LogicProMCP --probe-locator-census <AXRole> [--probe-locator-depth N]
+                                               Count the descendants of the main window with that
+                                               role and print JSON; exit. Observation only.
                                                Observation only: it selects nothing and writes nothing.
           LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates] [--strict] [--profile <core|mixer|keycmd|legacy-scripter|full>] [--client <claude-code|claude-desktop|cursor|vscode|terminal|custom>]
                                                Print a diagnostic report and exit
