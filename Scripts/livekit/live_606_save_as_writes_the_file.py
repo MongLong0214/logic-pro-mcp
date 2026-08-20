@@ -135,10 +135,17 @@ located = [(t, E.logic_window(t)) for t in titles]
 located = [(t, w) for t, w in located if w]
 located.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
 arrange_title, win = located[0] if located else (titles[0], None)
+# The window's own title bar, and the subject says so. The band is derived from a frame this run
+# measured — `logic_window` reads it from CoreGraphics — rather than from a layout somebody
+# remembered, and 28 points is the strip that holds the document name.
 band = (0, 0, win["w"], 28) if win else None
-ev.check("606/precondition-the-window-frame-is-known", band is not None,
-         "the arrange window's own frame read, so the capture band is inside it",
-         f"window={win!r} band={band!r}", None)
+# Not the title it carried before: this run RENAMES the window, so naming the band after the old
+# title would describe the after-capture as something it is not.
+band_subject = "the document window's title bar" if win else None
+ev.check("606/precondition-the-window-frame-is-known",
+         band is not None and bool(band_subject),
+         "the arrange window's own frame read, so the capture band is inside it and can be named",
+         f"window={win!r} band={band!r} subject={band_subject!r}", None)
 if band is None:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -229,7 +236,8 @@ ev.check("606/the-arrange-window-is-still-locatable-after-the-save",
          f"before_title={arrange_title!r} after_title={after_title!r}", None)
 after = ev.shot("606/after", settle_region=band, window_title=after_title)
 ev.visual("606/the-window-title-changed-to-the-new-project",
-          before["file"], after["file"], band, expect_change=True,
+          before["file"], after["file"], band, subject=band_subject,
+          expect_change=True,
           why="saving under a new name renames the document window, so the title band must differ; "
               "if it does not, the project on screen is still the old one whatever the file system "
               "says")
@@ -247,5 +255,10 @@ ev.restored("606/the-project-this-run-created-was-removed",
             f"undo without closing the project, and it is stated rather than papered over.")
 
 ev.stop_recording(rec)
+
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
 out = ev.write()
 print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

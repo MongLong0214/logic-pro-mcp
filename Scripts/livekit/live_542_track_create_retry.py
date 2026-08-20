@@ -77,7 +77,11 @@ if not win:
     d.close()
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
-RAIL = (0, int(win["h"] * 0.10), int(win["w"] * 0.20), int(win["h"] * 0.80))
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("542/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 
 # ---- precondition: no sheet is already up ----
 #
@@ -134,7 +138,7 @@ ev.check("542/exactly-one-track-was-added",
          "the count rose by more than one")
 
 ev.visual("542/a-new-row-appears-in-the-rail",
-          pre["file"], post["file"], RAIL, expect_change=True,
+          pre["file"], post["file"], RAIL, subject=RAIL_SUBJECT, expect_change=True,
           why="a created track has to be visible as a new header row, independent of any AX read")
 
 # ---- restoration: leave the project as it was found ----
@@ -151,4 +155,9 @@ ev.restored("542/project-track-count-restored", restored, detail)
 
 d.close()
 ev.stop_recording(rec)
-print(json.dumps(ev.write(), indent=1))
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
+out = ev.write()
+print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

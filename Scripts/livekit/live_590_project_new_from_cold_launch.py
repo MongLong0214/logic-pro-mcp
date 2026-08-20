@@ -264,8 +264,18 @@ ev.check("590/the-operation-does-not-overclaim-what-it-verified",
 
 created_title = next((t for t in after_titles if "Tracks" in t or "트랙" in t), chooser_title)
 after = ev.shot("590/created", settle_region=None, window_title=created_title)
+# The subject here is deliberately not an AX element: the two captures are of DIFFERENT WINDOWS,
+# the chooser before and the arrange window after, so no single element spans them. What the band
+# is, is the top-left corner of whatever window was on screen at each moment — which is exactly the
+# claim, and saying so keeps it from reading as a region of one window that drifted.
+#
+# One limit worth writing down rather than leaving implied: the two windows have different frames,
+# and `visual` scales the crop by the window points of the LAST capture, so the before-crop is
+# scaled by the arrange window's size. It cannot weaken this assertion — the two corners differ
+# either way — but it would matter to any negative assertion built the same way.
 ev.visual("590/the-screen-shows-a-project-where-it-showed-a-chooser",
           before["file"], after["file"], (0, 0, 400, 200), expect_change=True,
+          subject="the top-left corner of the window on screen — the chooser, then the project",
           why="the capture before the call is the chooser window and the one after is the new "
               "arrange window, so the top-left corner of what was captured must differ — an "
               "envelope claiming a project that nobody can see would not move it")

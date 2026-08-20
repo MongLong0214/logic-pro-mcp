@@ -60,7 +60,17 @@ if missing:
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # Band over the arrange window's track lane area, where an imported region becomes visible.
-REGION_BAND = (280, 120, 700, 220)
+# The arrange canvas, located by AXDescription. The rectangle that stood here spans x 280..980,
+# and measured 2026-08-20 the canvas begins at x=928 — so all but the last fifty points of it lay
+# over the Library, the Inspector and the track headers. An imported region is drawn in the canvas;
+# this band was almost entirely somewhere else.
+_CONTENTS, _CONTENTS_SUBJECT = ev.located_band("Tracks contents")
+REGION_BAND = (_CONTENTS[0], _CONTENTS[1], 700, 220) if _CONTENTS else None
+REGION_BAND_SUBJECT = f"{_CONTENTS_SUBJECT} — the first bars of the top lanes" if _CONTENTS else None
+ev.check("572/precondition-the-arrange-canvas-was-located",
+         REGION_BAND is not None and bool(REGION_BAND_SUBJECT),
+         "a slice of the arrange canvas, offset into a region located by AXDescription",
+         f"contents={_CONTENTS!r} band={REGION_BAND!r} subject={REGION_BAND_SUBJECT!r}", None)
 
 
 def osa(script):
@@ -128,7 +138,8 @@ ev.check("572/a-region-was-actually-created",
 
 after = ev.shot("572/after-first-call", settle_region=REGION_BAND)
 ev.visual("572/the-region-appears-in-the-arrange-window",
-          before["file"], after["file"], REGION_BAND, expect_change=True,
+          before["file"], after["file"], REGION_BAND, subject=REGION_BAND_SUBJECT,
+          expect_change=True,
           why="a new track carrying the imported region is drawn in the arrange area, so this band "
               "must differ across the call")
 

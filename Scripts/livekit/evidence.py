@@ -323,6 +323,64 @@ class Evidence:
         self._window_points = None
         Evidence.current = self
 
+    # -- locating a band ----------------------------------------------------
+
+    def located_band(self, *selector):
+        """`(band, subject)` for a region named by AXDescription, or `(None, None)`.
+
+        A rectangle written as four numbers is not defined by its content. The five harnesses that
+        shared `(0, 0.10h, 0.20w, 0.80h)` were all claiming something about the track-header rail,
+        and measured on 2026-08-20 with the Library pane open that rectangle lies 94% inside the
+        LIBRARY: the rail sits at x=603. The band was right in the layout it was written in and
+        wrong in the next one, and nothing in the run could say which.
+
+        So the band is resolved from the live tree and the `subject` comes back off the element
+        that was found, not off the request — which is what makes it evidence rather than a label.
+
+        `(None, None)` on any failure, INCLUDING an ambiguous description, which the tool reports
+        as an error with all its candidates. Callers must treat that as a red precondition; before
+        #634 a `None` band silently became a whole-image comparison that passed.
+        """
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
+        tool = os.path.join(self.dir, "ax_control_bar_band")
+        if not os.path.exists(tool):
+            built = subprocess.run(["swiftc", "-O", source, "-o", tool], capture_output=True)
+            if built.returncode != 0:
+                self.note("located_band/build-failed",
+                          {"selector": list(selector),
+                           "stderr": (built.stderr or b"").decode("utf-8", "replace")[:400]})
+                return None, None
+
+        def refuse(why, r=None):
+            # A refusal that says nothing is a wall. Every one of these has been mistaken for a
+            # different failure at least once: an ambiguous description reads exactly like a
+            # missing element, and both read like the tool not having run at all.
+            self.note("located_band/refused",
+                      {"selector": list(selector), "why": why,
+                       "rc": None if r is None else r.returncode,
+                       "stdout": "" if r is None else (r.stdout or "")[:400],
+                       "stderr": "" if r is None else (r.stderr or "")[:400]})
+            return None, None
+
+        r = subprocess.run([tool, *selector], capture_output=True, text=True)
+        try:
+            payload = json.loads(r.stdout or "{}")
+        except ValueError:
+            return refuse("the tool printed something that is not JSON", r)
+        band = payload.get("band")
+        if not (isinstance(band, list) and len(band) == 4):
+            return refuse(payload.get("error") or "no band in the tool's answer", r)
+        subject = payload.get("description")
+        if not isinstance(subject, str) or not subject.strip():
+            return refuse("a band with no description cannot be named", r)
+        attempts = payload.get("windowAttempts")
+        if isinstance(attempts, int) and attempts > 1:
+            # Absorbed, not hidden: the lookup succeeded, and it took more than one read of the AX
+            # tree to see a window at all.
+            self.note("located_band/window-list-was-empty-at-first",
+                      {"selector": list(selector), "attempts": attempts})
+        return tuple(band), subject
+
     # -- observations -------------------------------------------------------
 
     def note(self, tag, payload):
@@ -384,7 +442,8 @@ class Evidence:
         for _ in range(_SETTLE_TRIES):
             _capture_window(win["id"], path)
             frames += 1
-            h = _region_hash(path, settle_region, (win["w"], win["h"]))
+            h = _region_hash(path, _clip_to_window(settle_region, (win["w"], win["h"])),
+                             (win["w"], win["h"]))
             if prev is not None and h == prev:
                 settled = True
                 break
@@ -429,14 +488,17 @@ class Evidence:
         # as absent and `is_clean` refuses the run: each harness's next run tells its owner that this
         # assertion does not say what it watches, and the fix arrives with a measurement attached.
         wp = window_points or self._window_points
-        b = _region_hash(before_file, region, wp)
-        a = _region_hash(after_file, region, wp)
+        # What was HASHED, which is not always what was asked for — see `_clip_to_window`. The
+        # record carries the clipped rectangle, and says so when the two differ.
+        effective = _clip_to_window(region, wp)
+        b = _region_hash(before_file, effective, wp)
+        a = _region_hash(after_file, effective, wp)
         readable = b is not None and a is not None
         changed = readable and b != a
         # An unreadable comparison is not a passing one, whichever way the expectation points.
         passed = readable and (changed == bool(expect_change))
         self.records.append({
-            "kind": "visual", "tag": tag, "region": list(region) if region else None,
+            "kind": "visual", "tag": tag, "region": list(effective) if effective else None,
             "subject": subject,   # None until the harness measures what the region is
 
             "before": before_file, "after": after_file,
@@ -444,6 +506,8 @@ class Evidence:
             "observed": f"before {(b or '?')[:16]} after {(a or '?')[:16]} changed={changed}",
             "passed": passed,
         })
+        if effective is not None and region is not None and tuple(effective) != tuple(region):
+            self.records[-1]["region_requested"] = list(region)
         return passed
 
     # -- recording ----------------------------------------------------------
@@ -639,13 +703,16 @@ def is_clean(summary):
       * a subject is any non-empty string. That it truthfully names what the rectangle contains is
         not checkable here.
 
-    `visual_assertions_without_a_subject` is COUNTED and deliberately NOT gated on yet. Measured
-    when this was written: thirty harnesses call `visual()` and zero pass `subject=`, so enforcing
-    it here turns the entire live suite red in one step, and the predictable next move is that
-    somebody deletes the clause. Writing truthful subjects means measuring what each band actually
-    contains — thirty times — and inventing them to make a gate go green is the failure this
-    parameter exists to prevent. The counter lands now so adoption is visible; the clause lands
-    when the count reaches zero honestly.
+    `visual_assertions_without_a_subject` is GATED as of #622. It was counted and not enforced for
+    one release, because enforcing it while thirty harnesses passed no subject would have turned
+    the whole live suite red in a step and the predictable next move is that somebody deletes the
+    clause. All thirty-one call sites name a subject now, and the count reached zero by measuring
+    what each band contains rather than by writing a string that would satisfy the counter.
+
+    What the clause still cannot do is check that the name is TRUE. Most bands are resolved from
+    the live tree by `located_band`, so their subject is read back off the element that was found
+    and cannot drift from it; the few that are authored — a window's title bar, a slice offset into
+    a located rail — are the ones a reviewer has to read.
     """
     if not isinstance(summary, dict):
         return False
@@ -666,6 +733,7 @@ def is_clean(summary):
         and summary["captures_straddling_displays"] == 0
         and summary["restorations_failed"] == 0
         and summary["cached_reads_used_as_live"] == 0
+        and summary["visual_assertions_without_a_subject"] == 0
     )
 
 
@@ -697,6 +765,32 @@ def _file_hash(path):
 # visual(), or write(). Each branch was green and the breakage existed only in their merge.
 #
 # The import smoke test beside this file is the part that would have caught it.
+
+def _clip_to_window(region, window_points):
+    """The part of `region` a capture of that window can actually contain, or None if none of it.
+
+    A band can legitimately be larger than the window it is measured in: `Tracks contents` is 6162
+    points wide on a 1920-point window, because the arrange canvas extends past the viewport it is
+    drawn into. `CGImageCreateWithImageInRect` intersects an oversized crop against the image and
+    says nothing, so the record claimed the whole canvas while the hash covered the visible part.
+
+    Clipping here rather than there keeps the two honest: what is recorded as the region is what
+    was hashed. A band lying entirely outside the window returns None, which reads as unreadable
+    rather than as a comparison of two empty crops — those would be equal, and equal is a PASS for
+    every negative assertion.
+    """
+    if not region or not window_points:
+        return tuple(region) if region else None
+    wpts, hpts = window_points
+    if not wpts or not hpts:
+        return tuple(region)
+    x, y, w, h = region
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(x + w, wpts), min(y + h, hpts)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return (x0, y0, x1 - x0, y1 - y0)
+
 
 def _region_hash(png, region, window_points=None):
     """Hash one rectangle of a PNG.

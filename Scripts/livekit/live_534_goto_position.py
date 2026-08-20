@@ -63,7 +63,16 @@ if not win:
 # The transport LCD sits in the control bar along the top of the arrange window. The region is named so
 # the visual assertion is about the readout, not about "some pixel somewhere changed" — Logic repaints
 # meters continuously and a whole-window diff is always true.
-LCD = (int(win["w"] * 0.42), 0, int(win["w"] * 0.34), int(win["h"] * 0.055))
+# The playhead-position readout, located by the AXDescription it carries. What stood here was a
+# fraction of the window — measured 2026-08-20 those fractions give (806, 0, 652, 57), which is a
+# 652-point slab of the control bar starting inside the title bar, while the readout itself is
+# 120x50 at (828, 27). Wide enough to hold the answer, and wide enough to hold the tempo field, the
+# transport buttons and whatever else Logic repaints up there.
+LCD, LCD_SUBJECT = ev.located_band("Playhead Position")
+ev.check("534/precondition-the-position-readout-was-located",
+         LCD is not None and bool(LCD_SUBJECT),
+         "the transport's playhead-position readout, located by AXDescription",
+         f"band={LCD!r} subject={LCD_SUBJECT!r}", None)
 
 # ---- precondition: park the playhead so the measured move is unambiguous ----
 park_body = d.tool("logic_transport", "goto_position", {"position": PARK})
@@ -123,7 +132,8 @@ ev.check("534/the-dialog-does-not-outlive-the-operation",
          "skipped the dismissal; the modal stayed up and the next call refused")
 
 ev.visual("534/the-transport-readout-moves-with-the-operation",
-          pre["file"], post["file"], LCD, expect_change=True,
+          pre["file"], post["file"], LCD, subject=LCD_SUBJECT,
+          expect_change=True,
           why=f"the playhead moved from {PARK} to {TARGET}, so the LCD must repaint")
 
 # ---- restore ----
@@ -136,4 +146,9 @@ ev.restored("534/playhead-parked-again",
 
 d.close()
 ev.stop_recording(rec)
-print(json.dumps(ev.write(), indent=1))
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
+out = ev.write()
+print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

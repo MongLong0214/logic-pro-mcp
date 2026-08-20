@@ -51,7 +51,11 @@ if not win:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
 # The track rail: a read-only system command has no business repainting it.
-RAIL = (0, int(win["h"] * 0.10), int(win["w"] * 0.20), int(win["h"] * 0.80))
+RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
+ev.check("544/precondition-the-track-header-rail-was-located",
+         RAIL is not None and bool(RAIL_SUBJECT),
+         "the track-header rail, located by the AXDescription it carries",
+         f"band={RAIL!r} subject={RAIL_SUBJECT!r}", None)
 pre = ev.shot("before-system-reads", settle_region=RAIL)
 
 
@@ -115,7 +119,7 @@ ev.check("544/the-text-the-oracle-grades-is-unchanged",
 
 post = ev.shot("after-system-reads", settle_region=RAIL)
 ev.visual("544/read-only-commands-do-not-disturb-the-session",
-          pre["file"], post["file"], RAIL, expect_change=False,
+          pre["file"], post["file"], RAIL, subject=RAIL_SUBJECT, expect_change=False,
           why="permissions, refresh_cache and health are reads; the track rail must be untouched")
 
 ev.restored("544/no-session-state-was-mutated", True,
@@ -123,4 +127,9 @@ ev.restored("544/no-session-state-was-mutated", True,
 
 d.close()
 ev.stop_recording(rec)
-print(json.dumps(ev.write(), indent=1))
+# #622: this harness printed its summary and exited 0 whatever the summary said. Twenty-three of
+# its siblings already ended on `is_clean`, and nine did not, for no reason anyone had written
+# down — so a clause added to `is_clean` was enforced for some runs and decorative for others.
+out = ev.write()
+print(json.dumps(out, indent=1))
+sys.exit(0 if E.is_clean(out) else 1)

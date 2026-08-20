@@ -57,7 +57,17 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 #     Library    x 0..364     Inspector  x 366..601     arrange content  x 603..1920, y 117..
 #
 # so the header column starts just inside x=603, and y=90 is window-relative for the content's top.
-HEADER_BAND = (610, 95, 190, 420)
+# Anchored to the rail rather than written down. The numbers above are a correct measurement of
+# one layout — and the harness below them proves how little that is worth, since the rectangle it
+# replaced was a correct measurement of a different one. The rail moves with the panes beside it;
+# only asking it where it is survives that.
+_RAIL, _RAIL_SUBJECT = ev.located_band("Tracks header")
+HEADER_BAND = (_RAIL[0] + 7, _RAIL[1], 190, 420) if _RAIL else None
+HEADER_BAND_SUBJECT = f"{_RAIL_SUBJECT} — the name column of the rows" if _RAIL else None
+ev.check("576/precondition-the-track-header-rail-was-located",
+         HEADER_BAND is not None and bool(HEADER_BAND_SUBJECT),
+         "a slice of the track-header rail, offset into a rail located by AXDescription",
+         f"rail={_RAIL!r} band={HEADER_BAND!r} subject={HEADER_BAND_SUBJECT!r}", None)
 ZOOM_TIGHT = 0.0     # every track visible
 ZOOM_LOOSE = 0.6     # tall rows, most tracks pushed out of the viewport
 MIN_TRACKS = 12      # below this the loose zoom may still fit everything
@@ -189,7 +199,8 @@ ev.check("576/completeness-is-not-derived-from-the-regions",
          "with no region, so that derivation reports short of the truth and never reaches complete")
 
 ev.visual("576/the-viewport-actually-moved",
-          loose_shot["file"], tight_shot["file"], HEADER_BAND, expect_change=True,
+          loose_shot["file"], tight_shot["file"], HEADER_BAND, subject=HEADER_BAND_SUBJECT,
+          expect_change=True,
           why="the two readings come from genuinely different viewports, not from two calls against "
               "the same screen — the track-header band must differ between them")
 
