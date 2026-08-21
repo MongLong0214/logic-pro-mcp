@@ -159,6 +159,30 @@ ev.check("628/many-matches-are-not-identified",
          "restore `element: hits.first`: an element comes back for an ambiguous lookup and this "
          "check goes red")
 
+# #628 states the refusal must NAME its candidates, not only count them. A count refuses; a name
+# tells the person holding the refusal whether the tree is genuinely ambiguous or the selector is one
+# word too broad. Measured on Logic 12.3: this is exactly where the issue started — TWO elements
+# describe themselves "Control Bar", and until now nothing could say that from the outside.
+named = button.get("candidateNames") or []
+ev.check("628/an-ambiguous-census-names-its-candidates",
+         isinstance(named, list) and len(named) == button.get("candidates"),
+         "every candidate of the ambiguous lookup is named, so the refusal can be acted on — one "
+         "name per candidate, counted against the census's own count rather than a fixed number",
+         f"candidates={button.get('candidates')!r} names={len(named)} sample={named[:4]!r}",
+         "drop `matches: hits` from the Census constructor: the list empties and this goes red")
+
+# Emptiness is the failure mode this placeholder exists for. An element with nothing to call itself
+# would otherwise print "", and a refusal reading ["", "", ""] looks like a broken reporter rather
+# than a fact about the tree — so the run requires every entry to carry something.
+ev.check("628/no-candidate-is-named-with-an-empty-string",
+         bool(named) and all(isinstance(n, str) and n.strip() for n in named),
+         "no name is blank: an unnamed element reports `<unnamed ROLE>` instead, which says what "
+         "was found rather than looking like the reporter failed",
+         f"blank={[i for i, n in enumerate(named) if not (isinstance(n, str) and n.strip())]!r} "
+         f"unnamed_count={sum(1 for n in named if isinstance(n, str) and n.startswith('<unnamed'))}",
+         "return the raw description instead of the placeholder: unnamed elements become \"\" and "
+         "this goes red")
+
 absent = product_census("AXToolbar")
 ev.check("628/zero-matches-are-not-identified-either",
          absent.get("candidates") == 0 and absent.get("identified") is False,
