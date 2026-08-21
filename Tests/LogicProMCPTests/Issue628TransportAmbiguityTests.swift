@@ -5,8 +5,13 @@ import Testing
 
 /// #628: `getTransportBar` gathers groups, narrows with `looksLikeTransportContainer`, and returns
 /// the first survivor. Measured on Logic 12.3 — one project, one track — **thirty-seven gathered,
-/// four survive**, and two of the four are the arrange area: the predicate accepts any container
-/// holding two or more transport-keyword controls, and a track header holds a record-arm checkbox.
+/// four survive**, and two of the four are the arrange area.
+///
+/// The cause first written here was "a track header holds a record-arm checkbox". **That was wrong**
+/// and instrumenting the predicate disproved it: `record` is not among the keywords either arrange
+/// group matches. The real mechanism is substring matching on short generic words —
+/// `"play" ⊂ "Catch Playhead"` and `"loop" ⊂ "Show/Hide Live Loops Grid"` — which is measured, and
+/// which the false-friend guard now rejects. Survivors 4 -> 2 live.
 ///
 /// The element returned is unchanged by this work. What changed is that the count exists as a value
 /// instead of only inside an `if let`, so a tree-order choice among several can say so.
@@ -73,6 +78,44 @@ struct Issue628TransportAmbiguityTests {
         // is exactly the state this site was in.
         #expect(one.first != nil)
         #expect(several.first != nil)
+    }
+
+    /// The measured cause of 37 -> 4. Two labels that carry a transport keyword without being
+    /// transport controls gave the ARRANGE AREA the two distinct keywords the rule requires:
+    ///
+    ///     "play" ⊂ "Catch Playhead"        "loop" ⊂ "Show/Hide Live Loops Grid"
+    ///
+    /// Measured live after the guard: survivors 4 -> 2, and both remaining are real control bars.
+    @Test("a container whose only transport words are false friends is not a transport container")
+    func falseFriendsDoNotQualify() throws {
+        let b = FakeAXRuntimeBuilder()
+        let arrangeish = transportish(b, 6340, labels: ["Catch Playhead", "Show/Hide Live Loops Grid"])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [arrangeish], runtime: b.makeLogicRuntime())
+        #expect(candidates.isEmpty)
+    }
+
+    /// The Korean forms are not translations of the English ones, and two of them keep English
+    /// words inside a Korean UI — `Live Loop 그리드 보기/가리기` and `Session Player`. A guard
+    /// written in one language would miss the other; both halves were read off a live window.
+    @Test("the Korean forms of those labels are rejected too")
+    func koreanFalseFriendsDoNotQualify() throws {
+        let b = FakeAXRuntimeBuilder()
+        let arrangeish = transportish(b, 6350, labels: ["재생헤드 캐치", "Live Loop 그리드 보기/가리기"])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [arrangeish], runtime: b.makeLogicRuntime())
+        #expect(candidates.isEmpty)
+    }
+
+    /// The guard must not swallow the real thing. A container holding genuine transport controls
+    /// still qualifies, including one whose OTHER labels are false friends.
+    @Test("a real transport container still qualifies alongside false friends")
+    func realControlsStillQualify() throws {
+        let b = FakeAXRuntimeBuilder()
+        let realBar = transportish(b, 6360, labels: ["Play", "Record", "Catch Playhead"])
+        let candidates = AXLogicProElements.transportContainerCandidates(
+            among: [realBar], runtime: b.makeLogicRuntime())
+        #expect(candidates.count == 1)
     }
 
     @Test("no survivor is an empty list, not a nil element hiding a count of zero")

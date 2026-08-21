@@ -767,6 +767,44 @@ enum AXLocalePolicy {
         rationale: "Counts distinct transport-control labels to classify the control bar; read-only."
     )
 
+    /// Labels that carry a transport keyword without being a transport control.
+    ///
+    /// `transportContainerControlKeywords` matches with `contains`, which is required: Korean and
+    /// Japanese labels have no word boundaries, so `재생헤드` can only be reached by substring. The
+    /// cost is that short generic words match unrelated controls, and two of them put the ARRANGE
+    /// AREA into `looksLikeTransportContainer` — measured 2026-08-21, Logic 12.3:
+    ///
+    ///     "play" ⊂ "Catch Playhead"                 "loop" ⊂ "Show/Hide Live Loops Grid"
+    ///
+    /// Those two alone gave the track area the two distinct keywords the rule needs, so
+    /// `getTransportBar`'s scan had four survivors where it should have had two.
+    ///
+    /// Measured in BOTH shipped locales by running the same window under `AppleLanguages -array en`
+    /// and `-array ko`, because the Korean forms are not translations of the English ones:
+    ///
+    ///     Catch Playhead              재생헤드 캐치
+    ///     Playhead Position           재생헤드 위치
+    ///     Playhead thumb              재생헤드 썸네일
+    ///     Loop Browser                루프 브라우저
+    ///     Show/Hide Live Loops Grid   Live Loop 그리드 보기/가리기   ← keeps the ENGLISH "Loop"
+    ///     Session Player              Session Player                ← untranslated, keeps "play"
+    ///
+    /// The last two are why this is a measured table and not a translation: a guard written only in
+    /// Korean would miss labels that stay English inside a Korean UI, and a guard written only in
+    /// English would miss `재생헤드 캐치`. Both halves were read off a live window.
+    ///
+    /// ja-JP is NOT here. Nobody has read these labels off a Japanese Logic, and the ship scope is
+    /// Desktop × {en-US, ko-KR}. Inventing them is the defect #519 exists to remove.
+    static let transportKeywordFalseFriends = LabelSet(
+        canonical: "catch playhead",
+        variants: ["playhead position", "playhead thumb", "loop browser", "session player",
+                   "show/hide live loops grid", "live loops grid",
+                   "재생헤드 캐치", "재생헤드 위치", "재생헤드 썸네일", "루프 브라우저",
+                   "live loop 그리드 보기/가리기"],
+        rationale: "Negative guard: labels carrying a transport keyword that are not transport "
+            + "controls. Measured en-US and ko-KR on Logic 12.3; read-only."
+    )
+
     /// Tempo/position slider description tokens inside the transport container.
     static let transportSliderHints = LabelSet(
         canonical: "tempo",

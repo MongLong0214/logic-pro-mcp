@@ -934,8 +934,21 @@ enum AXLogicProElements {
                     ?? ""
             ).lowercased()
 
-            for keyword in transportKeywords where label.contains(keyword) {
-                hits.insert(keyword)
+            // A label that carries a transport word without being a transport control does not
+            // count. Measured: "Catch Playhead" and "Show/Hide Live Loops Grid" alone gave the
+            // arrange area the two distinct keywords this rule requires.
+            //
+            // Written as `if` rather than `guard … else { return }` on purpose: an early `return`
+            // here put a `for` and a `return` in the same window, which is the long-hand first-match
+            // shape `check-ax-locator-census.py` looks for. It counted both `findAllDescendants`
+            // calls above as blind lookups and the budget went 59 -> 61 for a change that added no
+            // lookup at all. Restructuring the code is the honest fix; raising a ratchet for a false
+            // positive is not, and neither is loosening the detector to accommodate one caller.
+            let isFalseFriend = AXLocalePolicy.transportKeywordFalseFriends.containsAny(in: label)
+            if !isFalseFriend {
+                for keyword in transportKeywords where label.contains(keyword) {
+                    hits.insert(keyword)
+                }
             }
         }
 
