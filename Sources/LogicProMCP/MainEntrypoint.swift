@@ -393,14 +393,15 @@ enum MainEntrypoint {
             if let header = AXLogicProElements.findTrackHeader(at: 0) {
                 let sliders = AXHelpers.findAllDescendants(
                     of: header, role: "AXSlider", maxDepth: 4, runtime: ax)
+                // The PRODUCT's predicate, called — not a copy of it. The first version of this
+                // block reimplemented the closure from `findPanControlInHeader` verbatim, which is
+                // the exact thing this issue is a census of and which I had refused four times in
+                // its thread. A copy drifts, and then the probe measures a rule the product no
+                // longer runs.
                 record("AXLogicProElements+Mixer.swift:63 header pan slider",
                        sliders.count,
-                       sliders.filter { slider in
-                           AXHelpers.getChildren(slider, runtime: ax).contains { child in
-                               let desc = (AXHelpers.getDescription(child, runtime: ax) ?? "").lowercased()
-                               return AXLocalePolicy.headerPanHint.containsAny(in: desc)
-                           }
-                       }.count)
+                       AXLogicProElements.headerPanSliderCandidates(
+                           among: sliders, runtime: ax).count)
             } else {
                 results.append(["site": "AXLogicProElements+Mixer.swift:63 header pan slider",
                                 "unreachable": "no track header at index 0 in this UI state"])
@@ -428,6 +429,21 @@ enum MainEntrypoint {
                 results.append(["site": "AXLogicProElements+Mixer.swift:309/:322",
                                 "unreachable": "no mixer channel strip in this UI state"])
             }
+
+            // Does the discriminated sibling accessor resolve, and is its answer the same element
+            // the transport scan takes first? That is the whole question behind "is this a contract
+            // decision or a missing composition" — and it is measurable, not arguable.
+            let controlBar = AXLogicProElements.getControlBar()
+            let scanFirst = AXLogicProElements.transportContainerCandidates(
+                among: AXHelpers.findAllDescendants(of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
+            ).first
+            results.append([
+                "site": "getControlBar() vs the transport scan's first survivor",
+                "controlBarResolves": controlBar != nil,
+                "scanReturnsSomething": scanFirst != nil,
+                "sameElement": (controlBar != nil && scanFirst != nil)
+                    ? CFEqual(controlBar!, scanFirst!) : false,
+            ])
 
             let payload: [String: Any] = ["ok": true, "sites": results]
             let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])

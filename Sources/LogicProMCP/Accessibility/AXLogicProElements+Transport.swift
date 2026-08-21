@@ -20,6 +20,24 @@ extension AXLogicProElements {
             return group
         }
 
+        // #628: the discriminated sibling accessor, before the keyword scan that guesses.
+        //
+        // This composition is not new to the codebase — `AccessibilityChannel+Transport.swift:11`
+        // already writes `getControlBar() ?? getTransportBar()` at a call site. Folding it in here
+        // needs no answer to "is a transport bar a control bar", because `getControlBar` returns an
+        // element only when exactly one labelled group holds a checkbox and nil otherwise: when it
+        // answers, it has identified something; when it does not, the scan below runs exactly as
+        // before.
+        //
+        // Measured on Logic 12.3 before making the change: `getControlBar()` resolves, and it
+        // returns THE SAME element the scan was taking first. So this is observationally a no-op on
+        // the machine it was measured on, and the difference is only visible on a tree where the
+        // scan's first survivor is not the control bar — which is the tree nobody has seen and the
+        // reason the scan was wrong to guess.
+        if let identified = getControlBar(runtime: runtime) {
+            return identified
+        }
+
         let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax)
         let survivors = transportContainerCandidates(among: groups, runtime: runtime)
         if let candidate = survivors.first {
@@ -37,10 +55,19 @@ extension AXLogicProElements {
             // thing — and that is a decision, not a measurement. A discriminator is available when
             // someone makes it: description narrows four to two, and #633's "holds a checkbox"
             // separates those two.
+            // Reached only when `getControlBar` could NOT identify one, so a count above one here
+            // now means both the discriminated route and the keyword scan failed to resolve — a
+            // strictly narrower and more interesting event than before.
+            //
+            // Written to stderr, which the live-evidence harness discards
+            // (`Scripts/livekit/evidence.py:184` runs the server with `stderr=DEVNULL`). So this
+            // reaches an operator reading the server log and does NOT reach the evidence document.
+            // Said here rather than left implied, because a line that cannot reach the channel the
+            // gate reads is not "making it visible" to the gate.
             if survivors.count > 1 {
                 Log.info(
-                    "getTransportBar: \(survivors.count) groups matched looksLikeTransportContainer; "
-                        + "returning the first in tree order",
+                    "getTransportBar: getControlBar did not identify one, and \(survivors.count) "
+                        + "groups matched looksLikeTransportContainer; returning the first in tree order",
                     subsystem: "ax"
                 )
             }

@@ -46,7 +46,21 @@ import sys
 # had been blind to. Raising a ratchet for that reason is legitimate and has to be visible, which is
 # why the reason lives here rather than in a commit nobody re-reads. Raising it because something
 # went red is not.
-BLIND_SITE_BUDGET = 37
+#
+# It rose a second time, 37 -> 59, for the same reason and found by an outside review rather than by
+# this file. The detector required `findAllDescendants(…)` and `.first` to be ADJACENT, so the
+# codebase's dominant spelling —
+#
+#     let groups = AXHelpers.findAllDescendants(…)      // one line
+#     groups.first(where: { … })                        // several lines later
+#
+# — was invisible. Measured: the thirty-seven-site list contained NONE of `Transport.swift:24`,
+# `Mixer.swift:309`, `Mixer.swift:322`, `Tracks.swift:54`, including the one site measured live to
+# be genuinely ambiguous (37 groups narrowed to 4 by its own discriminator, then first-in-tree-order
+# taken). A census blind to the defect it was built for reported "at budget" while that site shipped.
+#
+# The twenty-two are not new code. They were always there; only the instrument changed.
+BLIND_SITE_BUDGET = 59
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
@@ -67,8 +81,25 @@ def blind_sites(root):
                     out.append((path, i + 1, "findDescendant — returns first, no count"))
                 elif re.search(r"\bfindAllDescendants\(", line):
                     window = "\n".join(lines[i:i + 14])
-                    if re.search(r"\)\s*\.first\b", window):
-                        out.append((path, i + 1, "findAllDescendants(...).first"))
+                    # The result BOUND TO A NAME and then reduced — `let groups = findAll…` on one
+                    # line and `groups.first(where:)` further down. This is the dominant spelling in
+                    # this codebase and the detector could not see it: measured 2026-08-21, the
+                    # thirty-seven-site list contained NONE of `Transport.swift:24`,
+                    # `Mixer.swift:309`, `Mixer.swift:322`, `Tracks.swift:54` — including the one
+                    # site measured to be genuinely ambiguous live (37 groups narrowed to 4).
+                    #
+                    # A census that cannot see the defect it was built for is the third instance of
+                    # its own docstring's warning, found by an outside review rather than by the
+                    # instrument.
+                    bound = re.match(r"\s*(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+                    reduced_by_name = bool(
+                        bound and re.search(
+                            r"\b" + re.escape(bound.group(1)) + r"\s*(?:\.first\b|\.last\b|\[0\])",
+                            window,
+                        )
+                    )
+                    if re.search(r"\)\s*\.first\b", window) or reduced_by_name:
+                        out.append((path, i + 1, "findAllDescendants(...) reduced to one"))
                     elif re.search(r"\bfor\b[^\n]*\{", window) and re.search(r"\breturn\b", window):
                         # `for candidate in … { if matches { return candidate } }` is the same
                         # first-match, written long-hand. The census missed thirteen of these while
