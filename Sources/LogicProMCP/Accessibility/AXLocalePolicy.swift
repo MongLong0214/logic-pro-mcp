@@ -1101,13 +1101,10 @@ enum AXLocalePolicy {
     /// for any of them returns something plausible either way.
     ///
     /// `candidates` is the whole point. `1` is a fact a later reader can weigh. Absence is not.
-    struct Census {
-        let element: AXUIElement?
-        let candidates: Int
-
-        /// Exactly one match: the only case where the result is identified rather than merely found.
-        var isUnambiguous: Bool { candidates == 1 }
-    }
+    /// The counting contract lives in `AXHelpers`, the layer both census forms sit on. It was
+    /// declared here first, when only the label-matching form existed; giving the identifier form
+    /// its own copy would have produced two structs that mean the same thing and drift apart.
+    typealias Census = AXHelpers.Census
 
     /// Every match, with the count, so a caller can refuse ambiguity instead of inheriting
     /// traversal order. Deliberately additive: `findDescendant` keeps its behaviour, and adoption is
