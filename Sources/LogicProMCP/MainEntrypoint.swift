@@ -264,11 +264,49 @@ enum MainEntrypoint {
                 writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
                 return 1
             }
-            let census = AXHelpers.censusDescendant(of: window, role: role, maxDepth: depth)
+            // `--probe-locator-from <AXDescription>` searches from a named container instead of the
+            // window. Without it the probe can only answer "how many X in the whole window", and no
+            // call site searches the whole window — they search from a rail, a strip, a header. A
+            // count taken from the wrong root is a number about a different question, and the tail
+            // of this issue is exactly the work of deciding call site by call site whether the set
+            // has one member.
+            //
+            // The container itself is resolved by the SAME counting rule, so an ambiguous container
+            // refuses rather than picking one and reporting a confident count taken from whichever
+            // it happened to reach.
+            var root = window
+            var rootDescription: String? = nil
+            var rootCandidates: Int? = nil
+            if let from = arguments.drop(while: { $0 != "--probe-locator-from" }).dropFirst().first {
+                let container = AXLocalePolicy.censusDescendant(
+                    of: window,
+                    role: "AXGroup",
+                    matching: AXLocalePolicy.LabelSet(
+                        canonical: from, variants: [],
+                        rationale: "probe argument, matched verbatim"),
+                    mode: .exactStrict,
+                    maxDepth: depth,
+                    runtime: .production
+                )
+                rootCandidates = container.candidates
+                guard let found = container.element else {
+                    let why = container.candidates == 0
+                        ? "no container with that description"
+                        : "the container description is ambiguous"
+                    writeStdout("{\"ok\":false,\"error\":\"\(why)\",\"from\":\"\(from)\","
+                        + "\"containerCandidates\":\(container.candidates)}\n")
+                    return 1
+                }
+                root = found
+                rootDescription = from
+            }
+            let census = AXHelpers.censusDescendant(of: root, role: role, maxDepth: depth)
             let payload: [String: Any] = [
                 "ok": true,
                 "role": role,
                 "maxDepth": depth,
+                "from": rootDescription as Any,
+                "containerCandidates": rootCandidates as Any,
                 "candidates": census.candidates,
                 // `identified` is the whole point of the count: it is true only at exactly one, and
                 // a reader can tell that from "something was returned" — which the blind lookup
@@ -356,7 +394,7 @@ enum MainEntrypoint {
           LogicProMCP --help, -h               Print this help and exit
           LogicProMCP --version, -V            Print the version and exit
           LogicProMCP --probe-event-list       Read the open Event List note table once and print JSON; exit
-          LogicProMCP --probe-locator-census <AXRole> [--probe-locator-depth N]
+          LogicProMCP --probe-locator-census <AXRole> [--probe-locator-depth N] [--probe-locator-from <AXDescription>]
                                                Count the descendants of the main window with that
                                                role and print JSON; exit. Observation only.
                                                Observation only: it selects nothing and writes nothing.
