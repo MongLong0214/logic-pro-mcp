@@ -906,28 +906,27 @@ enum AXLogicProElements {
     }
 
     // internal (not private): called cross-file from the +Transport extension (WS3 AC1 split).
-    static func looksLikeTransportContainer(
-        _ element: AXUIElement,
+
+    /// Distinct transport keywords found on this container's own controls, false friends excluded.
+    ///
+    /// Extracted so the composition in `getTransportBar` can ask the CAPABILITY question — "does a
+    /// transport control actually live in here" — with the same code that answers it inside
+    /// `looksLikeTransportContainer`, rather than a second copy of it. A copied predicate that
+    /// drifts from the original is the defect #628 is a census of.
+    ///
+    /// This is deliberately NOT `looksLikeTransportContainer`: that function's first branch matches
+    /// on metadata, so anything described "Control Bar" satisfies it whether or not a single
+    /// transport control is inside. Name and capability are different questions, and a caller that
+    /// needs to find a button in the thing needs the second one.
+    static func transportControlKeywordHits(
+        in element: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
-        let metadata = [
-            AXHelpers.getIdentifier(element, runtime: runtime),
-            AXHelpers.getTitle(element, runtime: runtime),
-            AXHelpers.getDescription(element, runtime: runtime)
-        ]
-            .compactMap { $0?.lowercased() }
-            .joined(separator: " ")
-
-        // #60: centralized control-bar metadata + control-keyword token bags
-        // (read-only classifiers). Same lowercased `.contains` semantics.
-        if AXLocalePolicy.transportContainerMetadata.labels.contains(where: { metadata.contains($0.lowercased()) }) {
-            return true
-        }
-
+    ) -> Set<String> {
         let transportKeywords = AXLocalePolicy.transportContainerControlKeywords.labels.map { $0.lowercased() }
         let controls = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
             + AXHelpers.findAllDescendants(of: element, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
-        let controlHits = controls.reduce(into: Set<String>()) { hits, control in
+        return controls.reduce(into: Set<String>()) { hits, control in
+
             let label = (
                 AXHelpers.getDescription(control, runtime: runtime)
                     ?? AXHelpers.getTitle(control, runtime: runtime)
@@ -951,7 +950,27 @@ enum AXLogicProElements {
                 }
             }
         }
+    }
 
+    static func looksLikeTransportContainer(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let metadata = [
+            AXHelpers.getIdentifier(element, runtime: runtime),
+            AXHelpers.getTitle(element, runtime: runtime),
+            AXHelpers.getDescription(element, runtime: runtime)
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        // #60: centralized control-bar metadata + control-keyword token bags
+        // (read-only classifiers). Same lowercased `.contains` semantics.
+        if AXLocalePolicy.transportContainerMetadata.labels.contains(where: { metadata.contains($0.lowercased()) }) {
+            return true
+        }
+
+        let controlHits = transportControlKeywordHits(in: element, runtime: runtime)
         if controlHits.count >= 2 {
             return true
         }

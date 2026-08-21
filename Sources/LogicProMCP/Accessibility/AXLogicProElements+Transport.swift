@@ -34,7 +34,23 @@ extension AXLogicProElements {
         // the machine it was measured on, and the difference is only visible on a tree where the
         // scan's first survivor is not the control bar — which is the tree nobody has seen and the
         // reason the scan was wrong to guess.
-        if let identified = getControlBar(runtime: runtime) {
+        // The identified bar must still SATISFY the thing callers want from it. `getControlBar`
+        // ends with a branch that returns a lone labelled group holding no checkbox at all
+        // (`:143`), so composing it unconditionally could hand back a "Control Bar" that no
+        // transport control lives in — and `findTransportButton` would then search only that and
+        // return nil, where the old scan would have found the working container further down.
+        //
+        // Raised by review as a real regression path, not a hypothetical: an accessor that answers
+        // by NAME and a caller that needs a CAPABILITY are not the same question, and this is the
+        // seam where a rename becomes a silent failure. Validating here keeps the discriminated
+        // accessor's benefit — an unambiguous answer when it has one — without letting a labelled
+        // shell shadow a container that actually works.
+        // NOT `looksLikeTransportContainer`: its first branch matches on METADATA, so the shell
+        // above — described "Control Bar", holding nothing — satisfies it. That was the first
+        // attempt at this fix and the new test caught it returning the shell anyway. Name and
+        // capability are different questions and this caller needs the second one.
+        if let identified = getControlBar(runtime: runtime),
+           !transportControlKeywordHits(in: identified, runtime: runtime.ax).isEmpty {
             return identified
         }
 
@@ -46,9 +62,15 @@ extension AXLogicProElements {
             //
             // Measured on Logic 12.3, one project, one track: thirty-seven groups gathered, FOUR
             // survive. Two of the four are the arrange area, because the predicate accepts any
-            // container holding two or more transport-keyword controls and a track header holds a
-            // record-arm checkbox. The keyword bag cannot tell "record-arm this track" from
-            // "record".
+            // container holding two or more transport-keyword controls.
+            //
+            // The cause first written here was "a track header holds a record-arm checkbox".
+            // That was WRONG and instrumenting the predicate disproved it — `record` never
+            // matched. The arrange area qualified on substrings of labels that are not transport
+            // controls at all: "play" inside "Catch Playhead", "loop" inside "Show/Hide Live
+            // Loops Grid". The false-friend guard rejects exactly those, and survivors went 4 -> 2
+            // live. Corrected here after the same stale sentence was found still standing in
+            // production having been fixed only in the test file.
             //
             // Deliberately not a refusal. Which of the four this accessor SHOULD return is a
             // question about its contract — whether "transport bar" and "control bar" name the same

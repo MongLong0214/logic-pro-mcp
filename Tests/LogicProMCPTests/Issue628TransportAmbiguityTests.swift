@@ -16,9 +16,9 @@ import Testing
 /// The element returned is unchanged by this work. What changed is that the count exists as a value
 /// instead of only inside an `if let`, so a tree-order choice among several can say so.
 ///
-/// These cases assert the SPLIT, not the predicate: that the candidate list is the same selection
-/// the old `first(where:)` made, and that its size is what a caller would have to look at to know
-/// whether the choice was forced or free.
+/// These cases assert the SPLIT and the COMPOSITION: that the candidate list's size is what a
+/// caller would have to look at to know whether a choice was forced or free, and that consulting
+/// `getControlBar` first cannot hand back a labelled shell in place of a container that works.
 @Suite("Issue #628 — the transport scan's candidate list is a value")
 struct Issue628TransportAmbiguityTests {
 
@@ -131,26 +131,61 @@ struct Issue628TransportAmbiguityTests {
         #expect(candidates.first == nil)
     }
 
-    /// The extraction must not change the selection. If `transportContainerCandidates(among:).first`
-    /// ever differs from what `first(where: looksLikeTransportContainer)` returned, this refactor
-    /// moved an element rather than exposing a number.
-    @Test("the split preserves which element is chosen")
-    func splitPreservesTheChoice() throws {
+    /// **This replaces a tautological case.** The old test compared
+    /// `transportContainerCandidates(among:).first` against
+    /// `groups.first(where: looksLikeTransportContainer)` — the same predicate on both sides, so it
+    /// could not fail, and reverting the production change would have left it green. A reviewer
+    /// pointed that out; it was proving that `filter().first == first(where:)` in Swift.
+    ///
+    /// What actually needs pinning is the COMPOSITION: `getTransportBar` consults `getControlBar`
+    /// first, and `getControlBar` has a branch that returns a lone labelled group holding no
+    /// checkbox at all. Composing that unconditionally lets a labelled shell shadow a container
+    /// that works — `findTransportButton` would search only the shell and return nil.
+    @Test("a labelled Control Bar holding no transport control does not shadow one that works")
+    func labelledShellDoesNotShadowAWorkingContainer() throws {
         let b = FakeAXRuntimeBuilder()
-        let notTransport = b.element(6287)
-        b.setAttribute(notTransport, kAXRoleAttribute as String, kAXGroupRole as String)
-        b.setChildren(notTransport, [])
-        let transport = transportish(b, 6288, labels: ["Play", "Record"])
-        let runtime = b.makeLogicRuntime()
-        let groups = [notTransport, transport]
+        let app = b.element(6390)
+        let window = b.element(6391)
+        b.setAttribute(app, kAXMainWindowAttribute as String, window)
 
-        let viaSplit = AXLogicProElements.transportContainerCandidates(
-            among: groups, runtime: runtime).first
-        let viaOriginal = groups.first {
-            AXLogicProElements.looksLikeTransportContainer($0, runtime: runtime.ax)
-        }
-        let a = try #require(viaSplit)
-        let c = try #require(viaOriginal)
-        #expect(CFEqual(a, c))
+        // Described "Control Bar" — so `getControlBar` finds it — but holding nothing.
+        let shell = b.element(6392)
+        b.setAttribute(shell, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(shell, kAXDescriptionAttribute as String, "Control Bar")
+        b.setChildren(shell, [])
+
+        // ORDER MATTERS, and getting it wrong made this test assert the wrong thing once. With the
+        // shell FIRST, the bare scan returns it too — `looksLikeTransportContainer` matches on
+        // metadata, so "Control Bar" qualifies with nothing inside, and that is pre-existing
+        // behaviour this branch does not change. The regression the composition introduces is only
+        // visible when the WORKING container comes first: the scan would have taken it, and
+        // consulting `getControlBar` first takes the shell instead.
+        let working = transportish(b, 6393, labels: ["Play", "Record"])
+        b.setChildren(window, [working, shell])
+        let runtime = b.makeLogicRuntime(appElement: app)
+
+        let found = try #require(AXLogicProElements.getTransportBar(runtime: runtime))
+        #expect(CFEqual(found, working))
+        #expect(!CFEqual(found, shell))
+    }
+
+    /// The other half: when the labelled bar DOES hold transport controls it is still preferred,
+    /// so the validation above did not simply disable the discriminated accessor.
+    @Test("a labelled Control Bar that holds transport controls is still preferred")
+    func labelledBarWithControlsIsPreferred() throws {
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(6395)
+        let window = b.element(6396)
+        b.setAttribute(app, kAXMainWindowAttribute as String, window)
+
+        let realBar = transportish(b, 6397, labels: ["Play", "Record"])
+        b.setAttribute(realBar, kAXDescriptionAttribute as String, "Control Bar")
+        // A second qualifying container EARLIER in tree order, which the bare scan would take.
+        let other = transportish(b, 6398, labels: ["Play", "Record"])
+        b.setChildren(window, [other, realBar])
+        let runtime = b.makeLogicRuntime(appElement: app)
+
+        let found = try #require(AXLogicProElements.getTransportBar(runtime: runtime))
+        #expect(CFEqual(found, realBar))
     }
 }

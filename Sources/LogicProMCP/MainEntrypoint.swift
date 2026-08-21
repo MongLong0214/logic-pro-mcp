@@ -357,13 +357,13 @@ enum MainEntrypoint {
 
             let groups8 = AXHelpers.findAllDescendants(
                 of: window, role: "AXGroup", maxDepth: 8, runtime: ax)
-            record("AXLogicProElements+Tracks.swift:54 isTrackHeadersGroup",
+            record("AXLogicProElements.isTrackHeadersGroup",
                    groups8.count,
                    groups8.filter { AXLogicProElements.isTrackHeadersGroup($0, runtime: ax) }.count)
 
             let groups6 = AXHelpers.findAllDescendants(
                 of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
-            record("AXLogicProElements+Transport.swift:24 looksLikeTransportContainer",
+            record("AXLogicProElements.looksLikeTransportContainer",
                    groups6.count,
                    groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
 
@@ -374,14 +374,14 @@ enum MainEntrypoint {
             if let controlBar = AXLogicProElements.getControlBar() {
                 let barGroups = AXHelpers.findAllDescendants(
                     of: controlBar, role: "AXGroup", maxDepth: 8, runtime: ax)
-                record("AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                record("AXLocalePolicy.playheadPositionGroupLabel (inside the control bar)",
                        barGroups.count,
                        barGroups.filter {
                            AXLocalePolicy.playheadPositionGroupLabel.matches(
                                AXHelpers.getDescription($0, runtime: ax), mode: .exactStrict)
                        }.count)
             } else {
-                results.append(["site": "AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                results.append(["site": "AXLocalePolicy.playheadPositionGroupLabel (inside the control bar)",
                                 "unreachable": "no control bar in this UI state"])
             }
 
@@ -398,12 +398,12 @@ enum MainEntrypoint {
                 // the exact thing this issue is a census of and which I had refused four times in
                 // its thread. A copy drifts, and then the probe measures a rule the product no
                 // longer runs.
-                record("AXLogicProElements+Mixer.swift:63 header pan slider",
+                record("AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
                        sliders.count,
                        AXLogicProElements.headerPanSliderCandidates(
                            among: sliders, runtime: ax).count)
             } else {
-                results.append(["site": "AXLogicProElements+Mixer.swift:63 header pan slider",
+                results.append(["site": "AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
                                 "unreachable": "no track header at index 0 in this UI state"])
             }
 
@@ -419,14 +419,14 @@ enum MainEntrypoint {
             if let strip = strips.first {
                 let sliders = AXHelpers.findAllDescendants(
                     of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
-                record("AXLogicProElements+Mixer.swift:309 findVolumeFader (falls back to sliders.first)",
+                record("AXLogicProElements.findVolumeFader (falls back to sliders.first)",
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isVolumeFader }.count)
-                record("AXLogicProElements+Mixer.swift:322 findPanControl (falls back to sliders[1])",
+                record("AXLogicProElements.findPanControl (falls back to sliders[1])",
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)
             } else {
-                results.append(["site": "AXLogicProElements+Mixer.swift:309/:322",
+                results.append(["site": "AXLogicProElements.findVolumeFader/.findPanControl",
                                 "unreachable": "no mixer channel strip in this UI state"])
             }
 
