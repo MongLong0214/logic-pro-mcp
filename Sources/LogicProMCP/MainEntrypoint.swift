@@ -406,6 +406,29 @@ enum MainEntrypoint {
                                 "unreachable": "no track header at index 0 in this UI state"])
             }
 
+            // The mixer strip pair. Both have an UNCONDITIONAL positional fallback when their
+            // discriminator finds nothing — `sliders.first` and `sliders[1]` — so what matters here
+            // is not only how many survive the predicate but whether the predicate finds anything
+            // at all. A survivor count of zero means the site is selecting by index, which is this
+            // issue's sentence written literally.
+            let mixerArea = AXLogicProElements.getMixerArea()
+            let strips = mixerArea.map {
+                AXLogicProElements.mixerChannelStrips(in: $0, runtime: ax)
+            } ?? []
+            if let strip = strips.first {
+                let sliders = AXHelpers.findAllDescendants(
+                    of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
+                record("AXLogicProElements+Mixer.swift:309 findVolumeFader (falls back to sliders.first)",
+                       sliders.count,
+                       sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isVolumeFader }.count)
+                record("AXLogicProElements+Mixer.swift:322 findPanControl (falls back to sliders[1])",
+                       sliders.count,
+                       sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Mixer.swift:309/:322",
+                                "unreachable": "no mixer channel strip in this UI state"])
+            }
+
             let payload: [String: Any] = ["ok": true, "sites": results]
             let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             guard let data, let text = String(data: data, encoding: .utf8) else {
