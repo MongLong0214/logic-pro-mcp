@@ -276,16 +276,21 @@ ev.note("628/server-log-tail", {"bytes": len(log_text), "tail": log_text[-1500:]
 ev.note("628/the-mutation-was-run", {
     "mutation": MUTATION,
     "applied_to": "AXLogicProElements+PluginSlots.swift sliderText -- isVolume AND isPan forced false",
-    "clean_run": "10 checks, 10 passed",
-    "mutated_run": "10 checks, 7 passed",
+    "clean_run": "11 checks, 11 passed",
+    "mutated_run": "11 checks, 7 passed",
     "checks_that_flipped": [
         "628/the-volume-fader-fallback-did-not-fire",
         "628/the-pan-fallback-did-not-fire",
-        "628/the-fallback-stayed-silent-through-the-write",
+        "628/the-volume-fallback-stayed-silent-through-the-write",
+        "628/no-fallback-fired-anywhere-in-the-run",
     ],
+    "scoped_window_is_load_bearing": "under mutation the write-scoped check reported "
+                                     "bytes_since_write=1666 with the fallback INSIDE that window, "
+                                     "so the offset catches a line the write itself emitted rather "
+                                     "than inheriting the earlier read's",
     "observed_under_mutation": "fader_fallback_present=True pan_fallback_present=True "
                               "channel_live=True -- the lines this run asserts are absent appeared",
-    "note": "only the three checks the mutation is named on flipped; the other seven held",
+    "note": "only the four checks the mutation is named on flipped; the other seven held",
 })
 
 # `stop_recording` waits out the remaining recording seconds while the server's AX poller keeps
