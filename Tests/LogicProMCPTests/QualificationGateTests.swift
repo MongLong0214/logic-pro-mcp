@@ -265,7 +265,11 @@ struct QualificationGateTests {
         )
 
         #expect(!decision.promotable)
+        // Identical values again: not a mismatch, just not SHA-256s.
         #expect(decision.rejections.contains(
+            .binarySHAUnparseable(expected: "not-a-sha", actual: "not-a-sha")
+        ))
+        #expect(!decision.rejections.contains(
             .binarySHAMismatch(expected: "not-a-sha", actual: "not-a-sha")
         ))
         #expect(QualificationAxis.requiredCombinations.allSatisfy { axis in
@@ -537,9 +541,31 @@ struct QualificationGateTests {
         )
 
         #expect(!decision.promotable)
+        // Two IDENTICAL values. Calling that a "mismatch" reported `expected: "banana",
+        // actual: "banana"` and sent the reader looking for a difference that is not there --
+        // nothing mismatched, the strings are simply not versions.
         #expect(decision.rejections == [
-            .releaseVersionMismatch(expected: "banana", actual: "banana"),
+            .releaseVersionUnparseable(expected: "banana", actual: "banana"),
         ])
+        // The distinction is the point of the split: this must NOT also read as a mismatch.
+        #expect(!decision.rejections.contains(
+            .releaseVersionMismatch(expected: "banana", actual: "banana")))
+    }
+
+    /// The other side of the split: two versions that both PARSE and genuinely differ still report
+    /// a mismatch. Without this, moving every case to `Unparseable` would satisfy the test above.
+    @Test func genuinelyDifferentVersionsStillReportMismatch() {
+        let decision = evaluate(
+            cases: passedRequiredCases(),
+            attestationVersion: "1.2.2",
+            releaseVersion: "1.2.3"
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .releaseVersionMismatch(expected: "1.2.3", actual: "1.2.2")))
+        #expect(!decision.rejections.contains(
+            .releaseVersionUnparseable(expected: "1.2.3", actual: "1.2.2")))
     }
 
     @Test func semanticVersionRejectsLeadingZerosAndUnicodeIdentifiers() {
