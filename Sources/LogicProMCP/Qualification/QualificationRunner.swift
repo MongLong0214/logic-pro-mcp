@@ -1287,6 +1287,11 @@ package struct QualificationRunner: Sendable {
                 reason: "binarySHAMismatch", caseID: nil, key: nil,
                 name: nil, expected: expected, actual: actual
             )
+        case .binarySHAUnparseable(let expected, let actual):
+            VerificationOutput.Rejection(
+                reason: "binarySHAUnparseable", caseID: nil, key: nil,
+                name: nil, expected: expected, actual: actual
+            )
         case .releaseCommitMismatch(let expected, let actual):
             VerificationOutput.Rejection(
                 reason: "releaseCommitMismatch", caseID: nil, key: nil,
@@ -1335,6 +1340,11 @@ package struct QualificationRunner: Sendable {
         case .releaseVersionMismatch(let expected, let actual):
             VerificationOutput.Rejection(
                 reason: "releaseVersionMismatch", caseID: nil, key: nil,
+                name: nil, expected: expected, actual: actual
+            )
+        case .releaseVersionUnparseable(let expected, let actual):
+            VerificationOutput.Rejection(
+                reason: "releaseVersionUnparseable", caseID: nil, key: nil,
                 name: nil, expected: expected, actual: actual
             )
         case .evidenceBindingMismatch(let detail):

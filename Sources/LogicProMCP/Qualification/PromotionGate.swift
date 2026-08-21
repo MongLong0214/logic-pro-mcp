@@ -4,6 +4,8 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case missingArtifact(name: String)
     case requiredArtifactSchemaInvalid(name: String)
     case binarySHAMismatch(expected: String, actual: String)
+    /// One or both values are not a SHA-256. Same reasoning as `releaseVersionUnparseable`.
+    case binarySHAUnparseable(expected: String, actual: String)
     case releaseCommitMismatch(expected: String, actual: String)
     case expiredWaiver(caseID: String)
     case waiverForUnknownCase(caseID: String)
@@ -14,6 +16,11 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case duplicateWaiver(caseID: String)
     case duplicateCaseID(caseID: String)
     case releaseVersionMismatch(expected: String, actual: String)
+    /// Distinct from a mismatch: one or both versions are not a semantic version at all, so there
+    /// was nothing to compare. Folding this into `releaseVersionMismatch` printed
+    /// `expected: "unknown", actual: "unknown"` -- two identical strings reported as disagreeing,
+    /// which sends a reader looking for a difference that does not exist.
+    case releaseVersionUnparseable(expected: String, actual: String)
     case evidenceBindingMismatch(detail: String)
     case requiredOperationNotSatisfied(operationID: String)
     case provenanceSignatureMissing
@@ -37,17 +44,29 @@ struct PromotionGate {
     ) -> PromotionDecision {
         var rejections: [PromotionRejectionReason] = []
 
+        // Three conditions used to share one reason name. A run whose attestation carried
+        // `serverVersion: "unknown"` reported `releaseVersionMismatch` with
+        // `expected: "unknown", actual: "unknown"` -- nothing mismatched; both values were simply
+        // not versions. Naming several causes with one word makes the message point at the wrong
+        // one, and the reader goes looking for a disagreement that is not there.
         if SemanticVersion(attestation.serverVersion) == nil
-            || SemanticVersion(releaseVersion) == nil
-            || attestation.serverVersion != releaseVersion {
+            || SemanticVersion(releaseVersion) == nil {
+            rejections.append(.releaseVersionUnparseable(
+                expected: releaseVersion,
+                actual: attestation.serverVersion
+            ))
+        } else if attestation.serverVersion != releaseVersion {
             rejections.append(.releaseVersionMismatch(
                 expected: releaseVersion,
                 actual: attestation.serverVersion
             ))
         }
-        if !Self.isSHA256(attestation.binarySHA256)
-            || !Self.isSHA256(expectedBinarySHA256)
-            || attestation.binarySHA256 != expectedBinarySHA256 {
+        if !Self.isSHA256(attestation.binarySHA256) || !Self.isSHA256(expectedBinarySHA256) {
+            rejections.append(.binarySHAUnparseable(
+                expected: expectedBinarySHA256,
+                actual: attestation.binarySHA256
+            ))
+        } else if attestation.binarySHA256 != expectedBinarySHA256 {
             rejections.append(.binarySHAMismatch(
                 expected: expectedBinarySHA256,
                 actual: attestation.binarySHA256

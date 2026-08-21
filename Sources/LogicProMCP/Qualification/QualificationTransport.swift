@@ -241,7 +241,14 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .notQualified:
             QualificationDeferral(
                 code: .operationUnavailable,
-                detail: "read-only operation did not return a successful typed response on this host"
+                // NOT "on this host". The cause is almost never the machine: the probe sends
+                // `[:]` for every read-only operation not named in `probeParams`, so operations
+                // that require a parameter refuse correctly and are recorded as unavailable.
+                // `SemanticOracleTable.swift` lists six that cannot reach `passed` for exactly this
+                // reason, by design and pending Phase B. Attributing that to the environment sends
+                // whoever reads the attestation to go look at their machine, which is clean.
+                detail: "read-only operation did not return a successful typed response under the "
+                    + "probe's current parameters (see SemanticOracleTable's known-limitations note)"
             )
         case .protocolSmoke:
             QualificationDeferral(
