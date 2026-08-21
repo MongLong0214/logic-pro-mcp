@@ -398,12 +398,12 @@ enum MainEntrypoint {
                 // the exact thing this issue is a census of and which I had refused four times in
                 // its thread. A copy drifts, and then the probe measures a rule the product no
                 // longer runs.
-                record("AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
+                record("AXLogicProElements.findPanControlInHeader (header pan slider)",
                        sliders.count,
                        AXLogicProElements.headerPanSliderCandidates(
                            among: sliders, runtime: ax).count)
             } else {
-                results.append(["site": "AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
+                results.append(["site": "AXLogicProElements.findPanControlInHeader (header pan slider)",
                                 "unreachable": "no track header at index 0 in this UI state"])
             }
 

@@ -60,7 +60,14 @@ import sys
 # taken). A census blind to the defect it was built for reported "at budget" while that site shipped.
 #
 # The twenty-two are not new code. They were always there; only the instrument changed.
-BLIND_SITE_BUDGET = 59
+#
+# 59 -> 57 (2026-08-21, #628). Two sites converted, so the ratchet takes the ground:
+# `findVolumeFader` and `findPanControl` no longer take a first match in the long-hand shape — they
+# build the candidate list and can say how many there were. This is the bar FALLING because the
+# defect was fixed, which is the only direction it is allowed to move. The check fails when the
+# count comes in UNDER budget too, on purpose: ground gained and not recorded is ground that the
+# next change can quietly give back.
+BLIND_SITE_BUDGET = 57
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
