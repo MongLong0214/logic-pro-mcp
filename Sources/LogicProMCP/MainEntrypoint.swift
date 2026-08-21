@@ -367,6 +367,45 @@ enum MainEntrypoint {
                    groups6.count,
                    groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
 
+            // Sites whose collection is gathered from something other than the window. The input is
+            // resolved through the product's own accessor, so a site that cannot be reached in this
+            // UI state is reported as unreachable rather than as zero — those are different facts
+            // and only one of them is about the code.
+            if let controlBar = AXLogicProElements.getControlBar() {
+                let barGroups = AXHelpers.findAllDescendants(
+                    of: controlBar, role: "AXGroup", maxDepth: 8, runtime: ax)
+                record("AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                       barGroups.count,
+                       barGroups.filter {
+                           AXLocalePolicy.playheadPositionGroupLabel.matches(
+                               AXHelpers.getDescription($0, runtime: ax), mode: .exactStrict)
+                       }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                                "unreachable": "no control bar in this UI state"])
+            }
+
+            // `Tracks.swift:443` is deliberately absent. Its predicate closes over a `labels:
+            // [String]` PARAMETER, so its survivor count is a function of the caller's argument and
+            // not of the tree alone — measuring it with one label set would report a number that
+            // says as much about the arguments I chose as about Logic. Parameterised sites need
+            // their callers enumerated first, which is separate work.
+            if let header = AXLogicProElements.findTrackHeader(at: 0) {
+                let sliders = AXHelpers.findAllDescendants(
+                    of: header, role: "AXSlider", maxDepth: 4, runtime: ax)
+                record("AXLogicProElements+Mixer.swift:63 header pan slider",
+                       sliders.count,
+                       sliders.filter { slider in
+                           AXHelpers.getChildren(slider, runtime: ax).contains { child in
+                               let desc = (AXHelpers.getDescription(child, runtime: ax) ?? "").lowercased()
+                               return AXLocalePolicy.headerPanHint.containsAny(in: desc)
+                           }
+                       }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Mixer.swift:63 header pan slider",
+                                "unreachable": "no track header at index 0 in this UI state"])
+            }
+
             let payload: [String: Any] = ["ok": true, "sites": results]
             let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             guard let data, let text = String(data: data, encoding: .utf8) else {
