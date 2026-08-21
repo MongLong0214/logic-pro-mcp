@@ -212,6 +212,52 @@ ev.check("628/the-depth-bound-is-honoured-live-by-both-walks",
          "drop the `guard maxDepth > 0` from `collectMatching`: the shallow count stops differing "
          "from the deep one and this check goes red")
 
+# ---- the survivor count of a real site's own predicate --------------------------------------------
+#
+# Counting by role answers "how many carry this role". The tail asks something else: how many
+# survive the DISCRIMINATOR a call site applies. A site that gathers thirty-seven groups, narrows to
+# four, and then takes the first has narrowed and still inherited tree order — which is this issue,
+# at a real site, rather than in the abstract.
+#
+# The predicates are called by the product, not reimplemented here. A measurement that rewrites the
+# rule can disagree with the code for a reason that has nothing to do with the tree.
+selection = subprocess.run([E.BIN, "--probe-selection-census"], capture_output=True, text=True)
+try:
+    sites = json.loads(selection.stdout or "{}")
+except ValueError:
+    sites = {"ok": False, "raw": (selection.stdout or selection.stderr)[:200]}
+ev.note("628/selection-census", sites)
+
+rows = sites.get("sites") or []
+ev.check("628/a-site-predicate-reports-how-many-it-left",
+         sites.get("ok") is True and len(rows) >= 2
+         and all(isinstance(r.get("gathered"), int) and isinstance(r.get("survivors"), int)
+                 for r in rows),
+         "each site reports what it gathered and what its own discriminator left — the number the "
+         "blind form never had",
+         "; ".join(f"{r.get('site','?').split()[-1]}: {r.get('gathered')}->{r.get('survivors')}"
+                   for r in rows),
+         "have the probe report only the gathered count: `survivors` disappears and this goes red")
+
+# A property of the REPORT, not of Logic: whatever the tree holds, `identified` has to mean exactly
+# one. Asserting a specific survivor count would be asserting today's project, and it would go red
+# when someone adds a track rather than when the code breaks.
+ev.check("628/identified-means-exactly-one-whatever-the-tree-holds",
+         bool(rows) and all(r.get("identified") == (r.get("survivors") == 1) for r in rows),
+         "`identified` is true for a site if and only if its predicate left one candidate",
+         "; ".join(f"{r.get('survivors')}->{r.get('identified')}" for r in rows),
+         "report `identified: survivors > 0`: a site that narrowed to four claims identity and this "
+         "check goes red")
+
+# The narrowing itself has to be visible. A predicate that leaves everything it gathered is not a
+# discriminator, and a run where that happened should say so rather than look the same as a good one.
+ev.check("628/at-least-one-predicate-actually-narrows",
+         any(r.get("survivors", 0) < r.get("gathered", 0) for r in rows),
+         "at least one site's discriminator rejected something — otherwise the census is measuring "
+         "a filter that filters nothing",
+         "; ".join(f"{r.get('gathered')}->{r.get('survivors')}" for r in rows),
+         "make both predicates return true for every element: nothing narrows and this goes red")
+
 after = ev.shot("628/after-counting", settle_region=RAIL)
 ev.visual("628/counting-changed-nothing-on-screen",
           before["file"], after["file"], RAIL, subject=RAIL_SUBJECT, expect_change=False,

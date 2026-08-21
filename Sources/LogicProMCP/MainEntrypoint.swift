@@ -323,6 +323,60 @@ enum MainEntrypoint {
             return 0
         }
 
+        // #628: the survivor count of a real call site's own predicate.
+        //
+        // `--probe-locator-census` answers "how many carry this role". It cannot answer the question
+        // the tail actually asks, which is how many survive the DISCRIMINATOR a site applies —
+        // `isTrackHeadersGroup`, `looksLikeTransportContainer`. Those are the sites this issue is
+        // about: they gather many and select one with a predicate, and nothing records whether the
+        // predicate left one or several.
+        //
+        // The predicates are called HERE rather than reimplemented. A measurement that rewrites the
+        // rule can disagree with the code for a reason that has nothing to do with the tree, which
+        // is the failure this whole issue is a census of.
+        //
+        // Observation only: it gathers, filters, counts, and returns. It selects nothing.
+        if arguments.contains("--probe-selection-census") {
+            guard let window = AXLogicProElements.mainWindow() else {
+                writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
+                return 1
+            }
+            let ax = AXLogicProElements.Runtime.production.ax
+            var results: [[String: Any]] = []
+
+            func record(_ site: String, _ gathered: Int, _ survivors: Int) {
+                results.append([
+                    "site": site,
+                    "gathered": gathered,
+                    "survivors": survivors,
+                    // The whole point: a predicate that leaves one has identified something. One
+                    // that leaves several has narrowed and then still taken tree order.
+                    "identified": survivors == 1,
+                ])
+            }
+
+            let groups8 = AXHelpers.findAllDescendants(
+                of: window, role: "AXGroup", maxDepth: 8, runtime: ax)
+            record("AXLogicProElements+Tracks.swift:54 isTrackHeadersGroup",
+                   groups8.count,
+                   groups8.filter { AXLogicProElements.isTrackHeadersGroup($0, runtime: ax) }.count)
+
+            let groups6 = AXHelpers.findAllDescendants(
+                of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
+            record("AXLogicProElements+Transport.swift:24 looksLikeTransportContainer",
+                   groups6.count,
+                   groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
+
+            let payload: [String: Any] = ["ok": true, "sites": results]
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            guard let data, let text = String(data: data, encoding: .utf8) else {
+                writeStdout("{\"ok\":false,\"error\":\"could not encode the census\"}\n")
+                return 1
+            }
+            writeStdout(text + "\n")
+            return 0
+        }
+
         if arguments.contains("--check-permissions") {
             let status = permissionCheck()
             writeStderr(status.summary + "\n")
