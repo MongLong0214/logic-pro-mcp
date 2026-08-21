@@ -228,7 +228,25 @@ except ValueError:
     sites = {"ok": False, "raw": (selection.stdout or selection.stderr)[:200]}
 ev.note("628/selection-census", sites)
 
-rows = sites.get("sites") or []
+all_rows = sites.get("sites") or []
+# `unreachable` is a THIRD outcome, not a count of zero. A site whose input is not on screen has not
+# been measured, and folding it in with the measured ones is how "we did not look" becomes "we
+# looked and found none" — the failure this whole harness is built around. The first version of
+# these checks did exactly that and went red the moment a site reported it, which is the check
+# catching its own author.
+rows = [r for r in all_rows if "survivors" in r]
+unreachable = [r for r in all_rows if "unreachable" in r]
+ev.note("628/unreachable-sites", unreachable)
+
+ev.check("628/an-unmeasurable-site-says-so-instead-of-reporting-zero",
+         all("gathered" not in r and "survivors" not in r and bool(r.get("unreachable"))
+             for r in unreachable),
+         "a site whose input is absent from this UI state carries a reason and NO counts — "
+         "'no strip on screen' and 'the predicate left none' are different facts",
+         f"unreachable={[r.get('unreachable') for r in unreachable]!r} measured={len(rows)}",
+         "report `survivors: 0` for an unreachable site: it becomes indistinguishable from a "
+         "discriminator that matched nothing, and this check goes red")
+
 ev.check("628/a-site-predicate-reports-how-many-it-left",
          sites.get("ok") is True and len(rows) >= 2
          and all(isinstance(r.get("gathered"), int) and isinstance(r.get("survivors"), int)
