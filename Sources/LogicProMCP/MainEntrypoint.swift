@@ -293,8 +293,15 @@ enum MainEntrypoint {
                     let why = container.candidates == 0
                         ? "no container with that description"
                         : "the container description is ambiguous"
+                    // #628: the count refuses, the NAMES make the refusal actionable. "2 matched"
+                    // cannot distinguish a genuinely ambiguous tree from a selector one word too
+                    // broad; the two descriptions can.
+                    let named = container.names(runtime: .production)
+                    let namesJSON = (try? JSONSerialization.data(withJSONObject: named))
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
                     writeStdout("{\"ok\":false,\"error\":\"\(why)\",\"from\":\"\(from)\","
-                        + "\"containerCandidates\":\(container.candidates)}\n")
+                        + "\"containerCandidates\":\(container.candidates),"
+                        + "\"containerCandidateNames\":\(namesJSON)}\n")
                     return 1
                 }
                 root = found
@@ -308,6 +315,9 @@ enum MainEntrypoint {
                 "from": rootDescription as Any,
                 "containerCandidates": rootCandidates as Any,
                 "candidates": census.candidates,
+                // Named only when the answer is ambiguous: at one match the name adds nothing the
+                // caller did not already ask for, and each name costs an AX round trip.
+                "candidateNames": census.candidates > 1 ? census.names(runtime: .production) : [],
                 // `identified` is the whole point of the count: it is true only at exactly one, and
                 // a reader can tell that from "something was returned" — which the blind lookup
                 // reports identically at one match and at nine.

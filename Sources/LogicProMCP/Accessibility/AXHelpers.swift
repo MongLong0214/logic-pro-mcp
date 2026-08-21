@@ -509,9 +509,42 @@ enum AXHelpers {
     struct Census {
         let element: AXUIElement?
         let candidates: Int
+        /// Every element that matched, in traversal order.
+        ///
+        /// #628 asks for two things when a lookup is ambiguous: that it REFUSE, and that the
+        /// candidates be NAMED. The count alone delivers the first and not the second -- "2
+        /// matched" tells the person holding the failure nothing about which two, so they cannot
+        /// tell a genuinely ambiguous tree from a selector that is one word too broad.
+        ///
+        /// The matches were already computed and then thrown away. Keeping the references costs
+        /// nothing; READING them costs an AX round trip each, which is why `names(runtime:)` is a
+        /// method and not a stored property -- the ambiguous path can afford it and the
+        /// overwhelmingly common one-match path never pays.
+        let matches: [AXUIElement]
+
+        init(element: AXUIElement?, candidates: Int, matches: [AXUIElement] = []) {
+            self.element = element
+            self.candidates = candidates
+            self.matches = matches
+        }
 
         /// Exactly one match: the only case where the result is identified rather than merely found.
         var isUnambiguous: Bool { candidates == 1 }
+
+        /// What each candidate calls itself, for a refusal that a reader can act on.
+        ///
+        /// An element with no description, title, or identifier yields `"<unnamed \(role)>"` rather
+        /// than an empty string: three anonymous groups must not print as `["", "", ""]`, which
+        /// reads as a bug in this function rather than as a fact about the tree.
+        func names(runtime: Runtime = .production) -> [String] {
+            matches.map { element in
+                let described = AXHelpers.getDescription(element, runtime: runtime)
+                    ?? AXHelpers.getTitle(element, runtime: runtime)
+                    ?? AXHelpers.getIdentifier(element, runtime: runtime)
+                if let described, !described.isEmpty { return described }
+                return "<unnamed \(AXHelpers.getRole(element, runtime: runtime) ?? "element")>"
+            }
+        }
     }
 
     /// Every match, with the count, so a caller can refuse ambiguity instead of inheriting traversal
@@ -529,7 +562,7 @@ enum AXHelpers {
         var hits: [AXUIElement] = []
         collectMatching(of: element, role: role, title: title, identifier: identifier,
                         maxDepth: maxDepth, runtime: runtime, into: &hits)
-        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count)
+        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count, matches: hits)
     }
 
     private static func collectMatching(
