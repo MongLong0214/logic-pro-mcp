@@ -489,6 +489,71 @@ enum AXHelpers {
         return nil
     }
 
+    /// One match, and how many there were. The counting form of `findDescendant`.
+    ///
+    /// `findDescendant` returns whatever the traversal reaches first and says nothing about the
+    /// rest. When it is right, nothing records that it was right for a reason rather than by luck,
+    /// and that silence is the defect — not the choosing. `AXLocalePolicy.censusDescendant` is the
+    /// same contract for lookups that match a localized `LabelSet`; this is the one for lookups
+    /// that match `role` / `title` / `identifier` exactly.
+    ///
+    /// They are deliberately NOT one function. A `LabelSet` is a set of human-facing labels in
+    /// whatever language Logic is running in; an `AXIdentifier` is a stable non-localized name.
+    /// Expressing one as the other would put a locale question and an identity question behind the
+    /// same parameter, and the first bug from that would be a lookup that "works in English".
+    ///
+    /// The count includes matches nested inside other matches, because that is the set
+    /// `findDescendant` could have returned. It stops descending into a match only by virtue of
+    /// having returned it; had the outer node not matched, the walk would have gone in. Counting
+    /// only the outermost would report `1` for a tree the original could resolve two ways.
+    struct Census {
+        let element: AXUIElement?
+        let candidates: Int
+
+        /// Exactly one match: the only case where the result is identified rather than merely found.
+        var isUnambiguous: Bool { candidates == 1 }
+    }
+
+    /// Every match, with the count, so a caller can refuse ambiguity instead of inheriting traversal
+    /// order. Additive on purpose: `findDescendant` keeps its behaviour, and adoption is counted by
+    /// `Scripts/check-ax-locator-census.py` rather than forced — flipping every call site at once
+    /// turns a census into a wall of red, and the move after that is somebody deleting the check.
+    static func censusDescendant(
+        of element: AXUIElement,
+        role: String? = nil,
+        title: String? = nil,
+        identifier: String? = nil,
+        maxDepth: Int = 10,
+        runtime: Runtime = .production
+    ) -> Census {
+        var hits: [AXUIElement] = []
+        collectMatching(of: element, role: role, title: title, identifier: identifier,
+                        maxDepth: maxDepth, runtime: runtime, into: &hits)
+        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count)
+    }
+
+    private static func collectMatching(
+        of element: AXUIElement,
+        role: String?,
+        title: String?,
+        identifier: String?,
+        maxDepth: Int,
+        runtime: Runtime,
+        into results: inout [AXUIElement]
+    ) {
+        guard maxDepth > 0 else { return }
+        for child in getChildren(element, runtime: runtime) {
+            let roleMatch = role == nil || getRole(child, runtime: runtime) == role
+            let titleMatch = title == nil || getTitle(child, runtime: runtime) == title
+            let idMatch = identifier == nil || getIdentifier(child, runtime: runtime) == identifier
+            if roleMatch && titleMatch && idMatch {
+                results.append(child)
+            }
+            collectMatching(of: child, role: role, title: title, identifier: identifier,
+                            maxDepth: maxDepth - 1, runtime: runtime, into: &results)
+        }
+    }
+
     /// Collect all descendants matching criteria. Useful for enumerating track headers, etc.
     static func findAllDescendants(
         of element: AXUIElement,
