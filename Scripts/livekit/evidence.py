@@ -57,6 +57,7 @@ import re
 import shutil
 import signal
 import subprocess
+import tempfile
 import sys
 import time
 
@@ -179,9 +180,20 @@ class Driver:
         self.binary = binary or BIN
         self.timeout = timeout
         self._id = 0
+        # The server's diagnostics go to stderr (`Logger.swift:60`). Discarding them made every
+        # `Log.info` in the product unobservable from a live document -- code could say "this
+        # fallback fired" and no harness could assert it fired or did not. Measured 2026-08-21:
+        # that is exactly the state the two #628 branches were in.
+        #
+        # A FILE, not a PIPE. Nothing drains this stream while `_read` blocks on stdout, so a pipe
+        # would deadlock the server once the buffer filled -- silently, and only on the runs that
+        # logged the most.
+        self._stderr_file = tempfile.NamedTemporaryFile(
+            prefix="lpm-server-stderr-", suffix=".log", delete=False)
+        self._stderr_path = self._stderr_file.name
         self.proc = subprocess.Popen(
             [self.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            stderr=self._stderr_file, text=True, bufsize=1)
         self._send("initialize", {
             "protocolVersion": "2024-11-05", "capabilities": {},
             "clientInfo": {"name": "livekit", "version": "1"}})
@@ -266,6 +278,29 @@ class Driver:
 
     def get(self, uri, key, default=None):
         return self.resource(uri).get(key, default)
+
+    def server_log(self):
+        """Everything the server has written to stderr so far.
+
+        Returns "" when the file is unreadable, which is indistinguishable from a server that logged
+        nothing -- so a caller asserting ABSENCE must pair this with a control proving the channel
+        carries at all. `server_logged` returns that control; prefer it over this.
+        """
+        try:
+            self._stderr_file.flush()
+            with open(self._stderr_path, "r", errors="replace") as fh:
+                return fh.read()
+        except Exception:
+            return ""
+
+    def server_logged(self, needle):
+        """(present, channel_is_live) -- the second value is the control.
+
+        An empty log makes every `needle in log` False, so an absence assertion is vacuous until
+        something has come through. Callers assert on BOTH: absent AND the channel carried.
+        """
+        log = self.server_log()
+        return (needle in log, bool(log.strip()))
 
     def close(self):
         try:
