@@ -1900,7 +1900,11 @@ package struct QualificationRunner: Sendable {
                 return false
             }
             switch evidence.deferral?.code {
-            case .some(.liveMutationNotRun), .some(.operationUnavailable):
+            // `deliberateZeroWriteProbe` sits with these two because it is the same OBSERVATION --
+            // the operation returned a typed refusal. What differs is why the probe asked in a way
+            // that would be refused, and that distinction is in the code, not in the evidence.
+            case .some(.liveMutationNotRun), .some(.operationUnavailable),
+                 .some(.deliberateZeroWriteProbe):
                 return evidence.operationIsError == true
             case .some(.semanticMismatch), .some(.semanticValidatorUnavailable):
                 return evidence.operationIsError == false
