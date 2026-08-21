@@ -238,6 +238,16 @@ struct QualificationOperationResult: Equatable, Sendable {
                 code: .semanticMismatch,
                 detail: "read-only response did not match its operation-specific independent readback"
             )
+        // DERIVED from what the operation answered, not from a list. `clear_traces` needs a set
+        // because nothing in its refusal distinguishes "declined on purpose" from "called wrong";
+        // this one announces itself, and a list here would be a second place to keep in step with
+        // the feature flags.
+        case .notQualified where error == HonestContract.FailureError.commandNotExposed.rawValue:
+            QualificationDeferral(
+                code: .notExposedInProductionContract,
+                detail: "the production MCP contract does not expose this operation; no probe "
+                    + "parameter can qualify it while its feature flag is off"
+            )
         case .notQualified where QualificationTransport.declinesItsSuccessPathByDesign
             .contains(operationID):
             QualificationDeferral(

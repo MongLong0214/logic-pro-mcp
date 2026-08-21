@@ -1904,7 +1904,7 @@ package struct QualificationRunner: Sendable {
             // the operation returned a typed refusal. What differs is why the probe asked in a way
             // that would be refused, and that distinction is in the code, not in the evidence.
             case .some(.liveMutationNotRun), .some(.operationUnavailable),
-                 .some(.deliberateZeroWriteProbe):
+                 .some(.deliberateZeroWriteProbe), .some(.notExposedInProductionContract):
                 return evidence.operationIsError == true
             case .some(.semanticMismatch), .some(.semanticValidatorUnavailable):
                 return evidence.operationIsError == false

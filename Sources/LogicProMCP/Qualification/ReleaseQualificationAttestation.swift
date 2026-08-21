@@ -57,6 +57,15 @@ enum QualificationDeferralCode: String, Codable, Sendable {
     /// never do. Reporting both with one code tells a reader that a deliberate abstention is an
     /// oversight.
     case deliberateZeroWriteProbe = "deliberate_zero_write_probe"
+    /// The production MCP contract does not expose this operation, so no parameter can make it
+    /// reach `passed` -- it answers `command_not_exposed` by design until a feature flag is set.
+    ///
+    /// Distinct from `operationUnavailable` for the same reason `deliberateZeroWriteProbe` is: that
+    /// code says the call did not succeed under the probe's current parameters, which is an
+    /// invitation to change them. Here the parameters are irrelevant. Qualifying it at all would
+    /// mean running the gate with a non-production flag set, at which point it is no longer
+    /// qualifying the production contract.
+    case notExposedInProductionContract = "not_exposed_in_production_contract"
 }
 
 struct QualificationDeferral: Codable, Equatable, Sendable {
