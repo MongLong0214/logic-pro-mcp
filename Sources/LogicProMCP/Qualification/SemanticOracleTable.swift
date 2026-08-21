@@ -793,16 +793,38 @@ enum SemanticOracleTable {
     // complete/scope/reason are hardcoded honesty disclaimers: this read only
     // ever sees the visible arrange viewport, and it must never claim otherwise.
     static let projectGetRegions = OperationOracle(
-        .projectGetRegions,
-        strength: .shapeAndDomain,
-        constraints: [
-            .valueEquals(key: "complete", expected: .bool(false)),
-            .valueEquals(key: "scope", expected: .string("visible_arrange_area")),
-            .valueEquals(key: "reason", expected: .string("logic_ax_viewport_only")),
-            .numericRange(key: "returned_count", min: 0, max: 100_000),
-            .typedField(key: "regions", type: .array),
-        ]
-    )
+        custom: .projectGetRegions,
+        reason: """
+            `complete` is CONDITIONAL, not invariant. The product emits \
+            `scope: complete ? "whole_arrangement" : "visible_arrange_area"` \
+            (`AccessibilityChannel+Regions.swift:53`) -- both branches are its \
+            documented contract. The previous constraint list pinned only the \
+            viewport-limited one, so a project whose regions all fit in view \
+            failed the oracle for answering correctly. That includes the EMPTY \
+            fixture this gate runs against, which is why the case could never \
+            reach passed. Measured live: complete=true, \
+            scope="whole_arrangement", reason absent, returned_count=0.
+            """
+    ) { responseData, _ in
+        guard let response = JSONInspector.parse(responseData) as? [String: Any],
+              let complete = response["complete"], JSONInspector.isBoolean(complete),
+              let regions = response["regions"] as? [Any],
+              let count = response["returned_count"] as? Int,
+              count >= 0, count <= 100_000 else {
+            return false
+        }
+        // Stronger than the list it replaces: the advertised count must match the array it
+        // describes. A reader that says "3" and ships 1 is not answering correctly in either
+        // branch, and no `valueEquals` could express that.
+        guard count == regions.count else { return false }
+        if (complete as? NSNumber)?.boolValue == true {
+            // A complete read covers the arrangement and has no limitation to explain.
+            return response["scope"] as? String == "whole_arrangement"
+        }
+        // An incomplete read must name its scope AND say why it is limited.
+        return response["scope"] as? String == "visible_arrange_area"
+            && response["reason"] as? String == "logic_ax_viewport_only"
+    }
 
     // ProjectExportPlannerModels `ProjectExportPlan` CodingKeys.
     // NOTE: unreachable under the current probe (empty params; the planner
