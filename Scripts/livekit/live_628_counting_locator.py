@@ -88,6 +88,16 @@ def product_census(role, depth=None):
         return {"ok": False, "raw": (r.stdout or r.stderr)[:200]}
 
 
+def product_census_from(role, container):
+    """The product's count taken from a NAMED container rather than from the window."""
+    r = subprocess.run([E.BIN, "--probe-locator-census", role, "--probe-locator-from", container],
+                       capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout or "{}")
+    except ValueError:
+        return {"ok": False, "raw": (r.stdout or r.stderr)[:200]}
+
+
 def independent_count(role, depth=None):
     args = [COUNTER, role]
     if depth is not None:
@@ -157,6 +167,35 @@ ev.check("628/zero-matches-are-not-identified-either",
          "than assumed live",
          f"candidates={absent.get('candidates')!r} identified={absent.get('identified')!r}",
          "return `candidates: 1` for an empty hit list: this check goes red")
+
+# ---- from a CONTAINER, because no call site searches the whole window ----------------------------
+#
+# The window-wide count answers a question nothing asks. `findTrackNameField` searches a track
+# header; `getControlBar` searches the control bar. Deciding whether a site's candidate set has one
+# member needs the count taken from ITS root, and a count from the wrong root is a confident number
+# about a different question.
+scoped = product_census_from("AXTextField", "Tracks header")
+ev.check("628/a-count-can-be-taken-from-a-named-container",
+         scoped.get("ok") is True and scoped.get("containerCandidates") == 1
+         and isinstance(scoped.get("candidates"), int),
+         "the probe resolves a container by description and counts inside it — the shape a call "
+         "site actually has",
+         f"from={scoped.get('from')!r} containerCandidates={scoped.get('containerCandidates')!r} "
+         f"candidates={scoped.get('candidates')!r} identified={scoped.get('identified')!r}",
+         "search from the window instead of the container: the count becomes the window-wide one "
+         "and no longer describes the site")
+
+# The container is resolved by the SAME counting rule, so an ambiguous container refuses instead of
+# picking one and reporting a confident count taken from whichever it reached first. Measured:
+# `Control Bar` matches two elements in the arrange window.
+ambiguous = product_census_from("AXCheckBox", "Control Bar")
+ev.check("628/an-ambiguous-container-refuses-rather-than-choosing",
+         ambiguous.get("ok") is False and ambiguous.get("containerCandidates", 0) > 1,
+         "a container description matching more than one element produces a refusal naming the "
+         "count, not a count taken from an arbitrary one of them",
+         f"error={ambiguous.get('error')!r} containerCandidates={ambiguous.get('containerCandidates')!r}",
+         "resolve the container with `findDescendant` instead of the census: the first match is "
+         "taken, a count comes back, and this check goes red")
 
 # ---- depth, so that agreeing is not the same as both ignoring the bound ---------------------------
 shallow_p = product_census("AXGroup", depth=1)

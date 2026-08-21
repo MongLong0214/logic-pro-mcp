@@ -499,8 +499,36 @@ extension AXLogicProElements {
     /// Find the track name text field on a header.
     static func findTrackNameField(trackIndex: Int, runtime: Runtime = .production) -> AXUIElement? {
         guard let header = findTrackHeader(at: trackIndex, runtime: runtime) else { return nil }
-        return AXHelpers.findDescendant(of: header, role: kAXTextFieldRole, maxDepth: 4, runtime: runtime.ax)
-            ?? AXHelpers.findDescendant(of: header, role: kAXStaticTextRole, maxDepth: 4, runtime: runtime.ax)
+        return trackNameField(in: header, runtime: runtime)
+    }
+
+    /// The one text field on a track header, or nil when there is not exactly one.
+    ///
+    /// #628: the caller WRITES to whatever comes back — press, set `AXValue`, confirm. A blind
+    /// first-match here does not merely read the wrong element, it renames it. So the text-field
+    /// lookup counts, and more than one candidate returns nil rather than a guess.
+    ///
+    /// Returning nil is safe and is the reason this site was chosen first: the rename path falls
+    /// through to select-then-menu and verifies either way, so refusing costs a slower route rather
+    /// than the operation.
+    ///
+    /// Measured 2026-08-21 on Logic 12.3 via `--probe-locator-census AXTextField
+    /// --probe-locator-from "Tracks header"`: **one** text field in the whole rail — only the
+    /// selected track renders one — so per header the set is 0 or 1 and this changes no behaviour
+    /// in the state it was measured in. It changes what happens in the state nobody has seen.
+    ///
+    /// The static-text fallback stays and is measured DEAD in that same state: `AXStaticText` from
+    /// `Tracks header` counts **zero**. It is left rather than deleted because zero is a fact about
+    /// one layout, not about every one, and a fallback that has never fired is cheaper to keep than
+    /// a regression to rediscover. It is NOT reached on ambiguity — two text fields refuse outright,
+    /// because falling to a static text there would write the name into a different element again.
+    static func trackNameField(in header: AXUIElement, runtime: Runtime = .production) -> AXUIElement? {
+        let census = AXHelpers.censusDescendant(
+            of: header, role: kAXTextFieldRole, maxDepth: 4, runtime: runtime.ax)
+        if census.candidates > 1 { return nil }
+        if let only = census.element { return only }
+        return AXHelpers.findDescendant(
+            of: header, role: kAXStaticTextRole, maxDepth: 4, runtime: runtime.ax)
     }
 
 }
