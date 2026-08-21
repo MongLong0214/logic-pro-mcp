@@ -893,6 +893,30 @@ struct QualificationTransport: Sendable {
             // gate. The limitation is real and stated: the HIT branch stays unexercised here, and
             // covering it needs a fixture library rather than a different string.
             return ["path": "__qualification_probe__/definitely-absent"]
+        case .audioAnalyzeFile:
+            // The oracle requires `verification.status ∈ {pass, warn}` -- a `fail` arrives with
+            // isError and is classified before the oracle runs, so accepting it could only launder
+            // a failed analysis into a semantic pass. That means a REAL, analysable file.
+            //
+            // A macOS system sound rather than a committed fixture, and the trade is deliberate:
+            // a repo fixture is repo-controlled but the binary has no way to locate it at run time,
+            // which would need a new option threaded through the transport. This file is externally
+            // owned, which is the weaker guarantee -- but if it ever disappears, `analyze_file`
+            // returns its typed refusal and the case defers exactly as it does today. The downside
+            // is the current state, so this cannot regress anything.
+            //
+            // Measured: 1.502 s, 48 kHz, `verification.status == "pass"`.
+            return ["path": "/System/Library/Sounds/Ping.aiff"]
+        case .projectExportPlan:
+            // A DRY RUN whose oracle allows `status ∈ {planned, degraded}`. An absent project is
+            // honestly `degraded` and still returns a complete, schema-valid manifest, so the probe
+            // needs no fixture project and no path that varies by host. `output_root` is required
+            // too -- omitting it refuses with `output_root must be an absolute local path`, which
+            // is why supplying only `project` still failed.
+            return [
+                "project": "/__qualification_probe__/absent.logicx",
+                "output_root": "/tmp",
+            ]
         case .pluginsGetInventory:
             // Track 0 exists whenever a project does: `project.new` reports
             // `mandatory_track_created`. On a projectless Logic this still returns a typed refusal
