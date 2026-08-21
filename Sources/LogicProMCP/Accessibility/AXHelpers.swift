@@ -541,10 +541,20 @@ enum AXHelpers {
         /// reads as a bug in this function rather than as a fact about the tree.
         func names(runtime: Runtime = .production) -> [String] {
             matches.map { element in
-                let described = AXHelpers.getDescription(element, runtime: runtime)
-                    ?? AXHelpers.getTitle(element, runtime: runtime)
-                    ?? AXHelpers.getIdentifier(element, runtime: runtime)
-                if let described, !described.isEmpty { return described }
+                // `??` falls through on NIL ONLY, and AX hands back present-but-empty strings all
+                // the time. Written as a `??` chain, an element with `description == ""` and
+                // `title == "Mixer"` stopped at the empty description and reported
+                // `<unnamed AXGroup>` -- the fallback existed and could not be reached. A
+                // whitespace-only description was worse: it passed `!isEmpty` and became the name,
+                // which is the blank this placeholder exists to prevent.
+                //
+                // So each attribute is tested for CONTENT, not for presence.
+                for attribute in [kAXDescriptionAttribute, kAXTitleAttribute, kAXIdentifierAttribute] {
+                    let value = AXHelpers.getAttribute(element, attribute, runtime: runtime) ?? ""
+                    if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return value
+                    }
+                }
                 return "<unnamed \(AXHelpers.getRole(element, runtime: runtime) ?? "element")>"
             }
         }

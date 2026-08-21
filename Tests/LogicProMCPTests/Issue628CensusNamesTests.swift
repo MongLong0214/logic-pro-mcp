@@ -78,6 +78,83 @@ struct Issue628CensusNamesTests {
         #expect(!names.contains(""))
     }
 
+    /// **These five exist because the first version of `names()` was a `??` chain**, which falls
+    /// through on nil ONLY. AX returns present-but-empty strings routinely, so an element with
+    /// `description == ""` and `title == "Mixer"` stopped at the empty description and reported
+    /// `<unnamed AXGroup>`: the fallback was written, shipped, and unreachable. The original tests
+    /// covered "description present" and "everything absent" and missed the entire middle.
+    @Test("an empty description falls through to the title")
+    func emptyDescriptionFallsThroughToTitle() throws {
+        let b = FakeAXRuntimeBuilder()
+        let root = b.element(6550)
+        b.setAttribute(root, kAXRoleAttribute as String, kAXGroupRole as String)
+        let g = group(b, 6551, description: "")
+        b.setAttribute(g, kAXTitleAttribute as String, "Mixer")
+        b.setChildren(root, [g])
+
+        let names = AXHelpers.censusDescendant(
+            of: root, role: kAXGroupRole as String, maxDepth: 4, runtime: b.makeAXRuntime()
+        ).names(runtime: b.makeAXRuntime())
+        #expect(names == ["Mixer"])
+    }
+
+    @Test("an empty description and empty title fall through to the identifier")
+    func emptyPairFallsThroughToIdentifier() throws {
+        let b = FakeAXRuntimeBuilder()
+        let root = b.element(6560)
+        b.setAttribute(root, kAXRoleAttribute as String, kAXGroupRole as String)
+        let g = group(b, 6561, description: "")
+        b.setAttribute(g, kAXTitleAttribute as String, "")
+        b.setAttribute(g, kAXIdentifierAttribute as String, "transport-rail")
+        b.setChildren(root, [g])
+
+        let names = AXHelpers.censusDescendant(
+            of: root, role: kAXGroupRole as String, maxDepth: 4, runtime: b.makeAXRuntime()
+        ).names(runtime: b.makeAXRuntime())
+        #expect(names == ["transport-rail"])
+    }
+
+    /// A whitespace-only description passed `!isEmpty` and became the name — producing exactly the
+    /// blank entry the placeholder exists to prevent, while looking like a successful read.
+    @Test("a whitespace-only description is not a name")
+    func whitespaceIsNotAName() throws {
+        let b = FakeAXRuntimeBuilder()
+        let root = b.element(6570)
+        b.setAttribute(root, kAXRoleAttribute as String, kAXGroupRole as String)
+        let g = group(b, 6571, description: "   ")
+        b.setChildren(root, [g])
+
+        let names = AXHelpers.censusDescendant(
+            of: root, role: kAXGroupRole as String, maxDepth: 4, runtime: b.makeAXRuntime()
+        ).names(runtime: b.makeAXRuntime())
+        #expect(names == ["<unnamed AXGroup>"])
+        #expect(!names.contains { $0.trimmingCharacters(in: .whitespaces).isEmpty })
+    }
+
+    /// The LabelSet census is a SECOND producer of `Census`. Dropping `matches:` from it alone left
+    /// every other case here green — nothing covered it, which is how a second implementation of
+    /// the same contract goes uncovered.
+    @Test("the LabelSet census names its candidates too")
+    func labelSetCensusNamesCandidates() throws {
+        let b = FakeAXRuntimeBuilder()
+        let root = b.element(6580)
+        b.setAttribute(root, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setChildren(root, [group(b, 6581, description: "Control Bar"),
+                             group(b, 6582, description: "Control Bar")])
+
+        let census = AXLocalePolicy.censusDescendant(
+            of: root,
+            role: kAXGroupRole as String,
+            matching: AXLocalePolicy.LabelSet(canonical: "Control Bar", variants: [],
+                                              rationale: "test"),
+            mode: .exactStrict,
+            maxDepth: 4,
+            runtime: b.makeAXRuntime())
+        #expect(census.candidates == 2)
+        #expect(census.element == nil)
+        #expect(census.names(runtime: b.makeAXRuntime()) == ["Control Bar", "Control Bar"])
+    }
+
     /// The one-match path must not start paying for names it does not need, and must still report
     /// the match itself.
     @Test("a single match is identified and its match list holds exactly it")
