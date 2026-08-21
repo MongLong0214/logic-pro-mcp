@@ -48,6 +48,15 @@ enum QualificationDeferralCode: String, Codable, Sendable {
     case operationUnavailable = "operation_unavailable"
     case semanticMismatch = "semantic_mismatch"
     case semanticValidatorUnavailable = "semantic_validator_unavailable"
+    /// The probe declines this operation's success path ON PURPOSE, because reaching it would
+    /// destroy or mutate something the qualification must not touch.
+    ///
+    /// Distinct from `operationUnavailable`, which says the call did not succeed under the probe's
+    /// current parameters and therefore invites someone to go fix the parameters. For these there
+    /// is nothing to fix: sending the value that would succeed is the one thing the probe must
+    /// never do. Reporting both with one code tells a reader that a deliberate abstention is an
+    /// oversight.
+    case deliberateZeroWriteProbe = "deliberate_zero_write_probe"
 }
 
 struct QualificationDeferral: Codable, Equatable, Sendable {

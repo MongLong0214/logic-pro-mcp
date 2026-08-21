@@ -238,6 +238,13 @@ struct QualificationOperationResult: Equatable, Sendable {
                 code: .semanticMismatch,
                 detail: "read-only response did not match its operation-specific independent readback"
             )
+        case .notQualified where QualificationTransport.declinesItsSuccessPathByDesign
+            .contains(operationID):
+            QualificationDeferral(
+                code: .deliberateZeroWriteProbe,
+                detail: "the probe declines this operation's success path by design; reaching it "
+                    + "would destroy or mutate state the qualification must not touch"
+            )
         case .notQualified:
             QualificationDeferral(
                 code: .operationUnavailable,
@@ -862,6 +869,18 @@ struct QualificationTransport: Sendable {
             result.isError == true
         )
     }
+
+    /// Operations whose probe parameters are chosen to REFUSE, not to succeed.
+    ///
+    /// Kept beside `probeParams` on purpose: the reason an operation is here is a value that
+    /// function sends, and separating the two is how a list stops matching the code it describes.
+    /// `system.clear_traces` is probed `confirmed: false` so qualification never destroys the
+    /// diagnostic evidence it is producing -- its oracle pins the real success contract
+    /// (`success == true`, a `receipt_path`, a cleared count), and that contract can only be
+    /// satisfied by actually clearing traces.
+    static let declinesItsSuccessPathByDesign: Set<String> = [
+        OperationID.systemClearTraces.rawValue,
+    ]
 
     private static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
         if spec.mutability == .mutating {
