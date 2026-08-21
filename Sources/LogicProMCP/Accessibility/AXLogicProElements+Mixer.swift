@@ -318,8 +318,23 @@ extension AXLogicProElements {
         let sliders = AXHelpers.findAllDescendants(
             of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime
         )
-        if let described = sliders.first(where: { sliderText($0, runtime: runtime).isVolumeFader }) {
-            return described
+        let described = sliders.filter { sliderText($0, runtime: runtime).isVolumeFader }
+        if let only = described.first {
+            // #628: the element is unchanged — still the first description match. What is new is
+            // that choosing among several says so.
+            if described.count > 1 {
+                Log.info("findVolumeFader: \(described.count) sliders described as a volume fader; "
+                    + "returning the first in tree order", subsystem: "ax")
+            }
+            return only
+        }
+        // The description matched NOTHING and the answer becomes an index. Measured 2026-08-21 on
+        // Logic 12.3 this branch is not reached — two sliders in a strip, one of them described —
+        // so a run that reaches it is reporting a tree this code has never been measured against,
+        // which is worth more than silence.
+        if !sliders.isEmpty {
+            Log.info("findVolumeFader: no slider described as a volume fader among \(sliders.count); "
+                + "falling back to position 0", subsystem: "ax")
         }
         return sliders.first
     }
@@ -331,8 +346,21 @@ extension AXLogicProElements {
         let sliders = AXHelpers.findAllDescendants(
             of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime
         )
-        if let described = sliders.first(where: { sliderText($0, runtime: runtime).isPanControl }) {
-            return described
+        let described = sliders.filter { sliderText($0, runtime: runtime).isPanControl }
+        if let only = described.first {
+            if described.count > 1 {
+                Log.info("findPanControl: \(described.count) sliders described as a pan control; "
+                    + "returning the first in tree order", subsystem: "ax")
+            }
+            return only
+        }
+        // `sliders[1]` — identity from tree order, written as an index. Same measurement as the
+        // fader above: not reached on a strip whose pan slider carries a description. Silence here
+        // would make "the description matched" and "the second slider happened to be pan"
+        // indistinguishable, and only one of those is a fact about this strip.
+        if sliders.count > 1 {
+            Log.info("findPanControl: no slider described as a pan control among \(sliders.count); "
+                + "falling back to position 1", subsystem: "ax")
         }
         return sliders.count > 1 ? sliders[1] : nil
     }
