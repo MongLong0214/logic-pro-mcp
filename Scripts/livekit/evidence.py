@@ -295,6 +295,33 @@ def _body(raw):
 # Evidence document
 # ---------------------------------------------------------------------------
 
+# An AXDescription is LOCALIZED, and not uniformly. Measured on Logic 12.3, 2026-08-21, by running
+# the same window under `AppleLanguages -array en` and `-array ko`:
+#
+#     Tracks contents  ->  트랙 콘텐츠          Library    ->  라이브러리
+#     Tracks header    ->  트랙 헤더            Mixer      ->  믹서
+#     Tracks           ->  트랙                 Inspector  ->  인스펙터
+#     Step Sequencer   ->  Step Sequencer      <- NOT translated
+#
+# That last row is why this is a measured table and not a rule. Some descriptions translate and
+# some do not, so neither "they are stable identifiers" nor "they are all localized" is safe — and
+# the first of those is exactly what a comment in `live_519_region_op_on_a_localized_logic` used to
+# claim. A Korean run disproved it: the canvas lookup found nothing and the harness could not take
+# a capture, on the one run where the locale was the entire point.
+#
+# ONLY measured pairs belong here. An unmeasured locale must fail to resolve, loudly, rather than
+# be guessed at — guessing localized labels is the defect #519 exists to remove from the product,
+# and a harness is not exempt from it.
+AX_REGION_LABELS = {
+    "Tracks contents": ["트랙 콘텐츠"],
+    "Tracks header": ["트랙 헤더"],
+    "Tracks": ["트랙"],
+    "Library": ["라이브러리"],
+    "Mixer": ["믹서"],
+    "Inspector": ["인스펙터"],
+}
+
+
 class Evidence:
     """Accumulates records and writes `<root>/<head>/evidence.json`.
 
@@ -362,14 +389,35 @@ class Evidence:
                        "stderr": "" if r is None else (r.stderr or "")[:400]})
             return None, None
 
-        r = subprocess.run([tool, *selector], capture_output=True, text=True)
-        try:
-            payload = json.loads(r.stdout or "{}")
-        except ValueError:
-            return refuse("the tool printed something that is not JSON", r)
+        # The requested name first, then the measured translations of it. Not a fallback in the
+        # sense this file spends so much effort removing — each candidate is an exact match against
+        # a description read off a live window, and a name nobody has measured is simply absent
+        # from the table and cannot be tried.
+        wanted = selector[0] if selector else ""
+        candidates = [wanted] + [alt for alt in AX_REGION_LABELS.get(wanted, []) if alt != wanted]
+        r = None
+        payload = {}
+        for candidate in candidates:
+            r = subprocess.run([tool, candidate, *selector[1:]], capture_output=True, text=True)
+            try:
+                payload = json.loads(r.stdout or "{}")
+            except ValueError:
+                return refuse("the tool printed something that is not JSON", r)
+            if isinstance(payload.get("band"), list):
+                break
+            # An AMBIGUOUS name is an answer, not a miss: trying the next language's word for it
+            # would be answering a different question than the one that just failed.
+            if payload.get("matches"):
+                break
         band = payload.get("band")
         if not (isinstance(band, list) and len(band) == 4):
             return refuse(payload.get("error") or "no band in the tool's answer", r)
+        if payload.get("description") and payload["description"] != wanted:
+            # Which language's label actually matched. Silence here would let a run claim it
+            # watched `Tracks header` when what it found was `트랙 헤더` — the same region, but the
+            # record should say which word was on screen.
+            self.note("located_band/matched-a-localized-label",
+                      {"requested": wanted, "matched": payload["description"]})
         subject = payload.get("description")
         if not isinstance(subject, str) or not subject.strip():
             return refuse("a band with no description cannot be named", r)
