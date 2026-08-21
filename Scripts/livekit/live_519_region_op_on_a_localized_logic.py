@@ -306,11 +306,18 @@ ev.check("519/a-region-exists-and-its-korean-help-string-parses",
 # landed. The band is the arrange canvas, located by the AXDescription it carries, and it is
 # resolved HERE rather than at the top of the file because a Korean Logic has only just been
 # launched and given a project; before that there is no canvas to find.
+#
+# This comment used to say the lookup "does not depend on Logic's language — the one property this
+# harness needs above all others." That was WRONG, and this run is what disproved it: measured
+# 2026-08-21, the canvas answers to `트랙 콘텐츠` on a Korean Logic and the English name finds
+# nothing, so the capture could not be taken on the single run where the locale was the point.
+# `located_band` now tries the measured translations; an unmeasured locale still finds nothing, and
+# that is deliberate.
 CANVAS, CANVAS_SUBJECT = ev.located_band("Tracks contents")
 ev.check("519/precondition-the-arrange-canvas-was-located",
          CANVAS is not None and bool(CANVAS_SUBJECT),
-         "the arrange canvas, located by the AXDescription it carries — the same lookup the other "
-         "harnesses use, which does not depend on Logic's language",
+         "the arrange canvas, located by the AXDescription it carries — through the measured "
+         "translation table, because that description IS localized",
          f"band={CANVAS!r} subject={CANVAS_SUBJECT!r}", None)
 
 arrange_window = next((t for t in windows() if "트랙" in t or "Tracks" in t), None)
