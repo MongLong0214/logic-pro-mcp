@@ -57,6 +57,7 @@ import re
 import shutil
 import signal
 import subprocess
+import tempfile
 import sys
 import time
 
@@ -179,9 +180,25 @@ class Driver:
         self.binary = binary or BIN
         self.timeout = timeout
         self._id = 0
+        # The server's diagnostics go to stderr (`Logger.swift:60`). Discarding them made every
+        # `Log.info` in the product unobservable from a live document -- code could say "this
+        # fallback fired" and no harness could assert it fired or did not. Measured 2026-08-21:
+        # that is exactly the state the two #628 branches were in.
+        #
+        # A FILE, not a PIPE. Nothing drains this stream while `_read` blocks on stdout, so a pipe
+        # would deadlock the server once the buffer filled -- silently, and only on the runs that
+        # logged the most.
+        self._stderr_file = tempfile.NamedTemporaryFile(
+            prefix="lpm-server-stderr-", suffix=".log", delete=False)
+        self._stderr_path = self._stderr_file.name
+        # `Log` gates on LOG_LEVEL (`Logger.swift:69`), which the driver would otherwise INHERIT.
+        # At LOG_LEVEL=warn every `Log.info` vanishes while an unrelated warning still fills the
+        # file -- so a harness asserting absence would see a non-empty log and conclude the channel
+        # carried, when the only lines that could have carried were suppressed. Pinned, not inherited.
+        env = dict(os.environ, LOG_LEVEL="info")
         self.proc = subprocess.Popen(
             [self.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            stderr=self._stderr_file, text=True, bufsize=1, env=env)
         self._send("initialize", {
             "protocolVersion": "2024-11-05", "capabilities": {},
             "clientInfo": {"name": "livekit", "version": "1"}})
@@ -267,6 +284,36 @@ class Driver:
     def get(self, uri, key, default=None):
         return self.resource(uri).get(key, default)
 
+    def server_log(self):
+        """Everything the server has written to stderr so far.
+
+        Returns "" when the file is unreadable, which is indistinguishable from a server that logged
+        nothing -- so a caller asserting ABSENCE must pair this with a control proving the channel
+        carries at all. `server_logged` returns that control; prefer it over this.
+        """
+        try:
+            self._stderr_file.flush()
+            with open(self._stderr_path, "r", errors="replace") as fh:
+                return fh.read()
+        except Exception:
+            return ""
+
+    def server_logged(self, needle, since=0):
+        """(present, channel_is_live) -- the second value is the control.
+
+        `since` is a byte offset from a previous `len(server_log())`, so a caller can ask about the
+        window AFTER something it did rather than about the whole run. Without it every later read
+        still sees the earlier lines, and "nothing was logged by the write" is indistinguishable
+        from "nothing was logged by the read either" -- the check reads as scoped and is not.
+
+        `channel_is_live` requires an `[INFO]` line, not merely a non-empty file. A log holding only
+        warnings proves the stream is connected and proves nothing about whether an INFO line could
+        have arrived, which is the level every caller of this asserts absence at.
+        """
+        log = self.server_log()
+        window = log[since:] if since else log
+        return (needle in window, "[INFO]" in log)
+
     def close(self):
         try:
             self.proc.terminate()
@@ -274,6 +321,14 @@ class Driver:
         except Exception:
             try:
                 self.proc.kill()
+            except Exception:
+                pass
+        # `delete=False` is required -- the server holds this file open and Python must not remove
+        # it underneath. That makes cleanup THIS function's job: without it every Driver in a run
+        # leaves a descriptor and a file behind, and a long harness accumulates both.
+        for step in (self._stderr_file.close, lambda: os.unlink(self._stderr_path)):
+            try:
+                step()
             except Exception:
                 pass
 
