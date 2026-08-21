@@ -560,6 +560,12 @@ enum SemanticOracleTable {
         .midiListPorts,
         .tracksListLibrary,
         .tracksResolvePath,
+        // Entered deliberately, not to get past the guard that stopped this change. A flat
+        // constraint list cannot express what this oracle has to check: `complete` decides which
+        // scope is legal and whether `reason` is required, and the model has no implication case.
+        // Expressing it as an enum over both scopes would accept a response claiming
+        // `complete: true` while naming the viewport scope -- weaker than what it replaces.
+        .projectGetRegions,
     ]
 
     static var customOracles: [OperationOracle] { all.filter { $0.strength == .custom } }
