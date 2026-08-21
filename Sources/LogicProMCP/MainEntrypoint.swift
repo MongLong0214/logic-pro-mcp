@@ -323,6 +323,122 @@ enum MainEntrypoint {
             return 0
         }
 
+        // #628: the survivor count of a real call site's own predicate.
+        //
+        // `--probe-locator-census` answers "how many carry this role". It cannot answer the question
+        // the tail actually asks, which is how many survive the DISCRIMINATOR a site applies —
+        // `isTrackHeadersGroup`, `looksLikeTransportContainer`. Those are the sites this issue is
+        // about: they gather many and select one with a predicate, and nothing records whether the
+        // predicate left one or several.
+        //
+        // The predicates are called HERE rather than reimplemented. A measurement that rewrites the
+        // rule can disagree with the code for a reason that has nothing to do with the tree, which
+        // is the failure this whole issue is a census of.
+        //
+        // Observation only: it gathers, filters, counts, and returns. It selects nothing.
+        if arguments.contains("--probe-selection-census") {
+            guard let window = AXLogicProElements.mainWindow() else {
+                writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
+                return 1
+            }
+            let ax = AXLogicProElements.Runtime.production.ax
+            var results: [[String: Any]] = []
+
+            func record(_ site: String, _ gathered: Int, _ survivors: Int) {
+                results.append([
+                    "site": site,
+                    "gathered": gathered,
+                    "survivors": survivors,
+                    // The whole point: a predicate that leaves one has identified something. One
+                    // that leaves several has narrowed and then still taken tree order.
+                    "identified": survivors == 1,
+                ])
+            }
+
+            let groups8 = AXHelpers.findAllDescendants(
+                of: window, role: "AXGroup", maxDepth: 8, runtime: ax)
+            record("AXLogicProElements+Tracks.swift:54 isTrackHeadersGroup",
+                   groups8.count,
+                   groups8.filter { AXLogicProElements.isTrackHeadersGroup($0, runtime: ax) }.count)
+
+            let groups6 = AXHelpers.findAllDescendants(
+                of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
+            record("AXLogicProElements+Transport.swift:24 looksLikeTransportContainer",
+                   groups6.count,
+                   groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
+
+            // Sites whose collection is gathered from something other than the window. The input is
+            // resolved through the product's own accessor, so a site that cannot be reached in this
+            // UI state is reported as unreachable rather than as zero — those are different facts
+            // and only one of them is about the code.
+            if let controlBar = AXLogicProElements.getControlBar() {
+                let barGroups = AXHelpers.findAllDescendants(
+                    of: controlBar, role: "AXGroup", maxDepth: 8, runtime: ax)
+                record("AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                       barGroups.count,
+                       barGroups.filter {
+                           AXLocalePolicy.playheadPositionGroupLabel.matches(
+                               AXHelpers.getDescription($0, runtime: ax), mode: .exactStrict)
+                       }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                                "unreachable": "no control bar in this UI state"])
+            }
+
+            // `Tracks.swift:443` is deliberately absent. Its predicate closes over a `labels:
+            // [String]` PARAMETER, so its survivor count is a function of the caller's argument and
+            // not of the tree alone — measuring it with one label set would report a number that
+            // says as much about the arguments I chose as about Logic. Parameterised sites need
+            // their callers enumerated first, which is separate work.
+            if let header = AXLogicProElements.findTrackHeader(at: 0) {
+                let sliders = AXHelpers.findAllDescendants(
+                    of: header, role: "AXSlider", maxDepth: 4, runtime: ax)
+                record("AXLogicProElements+Mixer.swift:63 header pan slider",
+                       sliders.count,
+                       sliders.filter { slider in
+                           AXHelpers.getChildren(slider, runtime: ax).contains { child in
+                               let desc = (AXHelpers.getDescription(child, runtime: ax) ?? "").lowercased()
+                               return AXLocalePolicy.headerPanHint.containsAny(in: desc)
+                           }
+                       }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Mixer.swift:63 header pan slider",
+                                "unreachable": "no track header at index 0 in this UI state"])
+            }
+
+            // The mixer strip pair. Both have an UNCONDITIONAL positional fallback when their
+            // discriminator finds nothing — `sliders.first` and `sliders[1]` — so what matters here
+            // is not only how many survive the predicate but whether the predicate finds anything
+            // at all. A survivor count of zero means the site is selecting by index, which is this
+            // issue's sentence written literally.
+            let mixerArea = AXLogicProElements.getMixerArea()
+            let strips = mixerArea.map {
+                AXLogicProElements.mixerChannelStrips(in: $0, runtime: ax)
+            } ?? []
+            if let strip = strips.first {
+                let sliders = AXHelpers.findAllDescendants(
+                    of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
+                record("AXLogicProElements+Mixer.swift:309 findVolumeFader (falls back to sliders.first)",
+                       sliders.count,
+                       sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isVolumeFader }.count)
+                record("AXLogicProElements+Mixer.swift:322 findPanControl (falls back to sliders[1])",
+                       sliders.count,
+                       sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)
+            } else {
+                results.append(["site": "AXLogicProElements+Mixer.swift:309/:322",
+                                "unreachable": "no mixer channel strip in this UI state"])
+            }
+
+            let payload: [String: Any] = ["ok": true, "sites": results]
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            guard let data, let text = String(data: data, encoding: .utf8) else {
+                writeStdout("{\"ok\":false,\"error\":\"could not encode the census\"}\n")
+                return 1
+            }
+            writeStdout(text + "\n")
+            return 0
+        }
+
         if arguments.contains("--check-permissions") {
             let status = permissionCheck()
             writeStderr(status.summary + "\n")
