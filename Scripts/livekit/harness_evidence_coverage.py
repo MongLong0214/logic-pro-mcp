@@ -98,9 +98,22 @@ def _read_json(path):
         return None
 
 
-def changed_paths(worktree, base):
+def changed_paths(worktree, base, head="HEAD"):
+    """Paths the branch changed, excluding deletions.
+
+    `head` is the commit the caller is asking ABOUT, not the worktree's current one. The first
+    version hard-coded `HEAD` and took the head sha only to look up an evidence directory, so a
+    gate invoked for one commit computed coverage from whatever the tree happened to be sitting on.
+    In a pre-push hook those are the same and it would never have shown; anywhere else they are
+    not, and the failure is a coverage verdict about the wrong commit reported as a verdict about
+    this one.
+
+    `--diff-filter=d` drops deletions. A harness that no longer exists cannot be required to have
+    run, and requiring it would make deleting a harness impossible — the branch could never
+    produce the evidence, because there is nothing left to produce it.
+    """
     proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...HEAD"],
+        ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...{head}"],
         cwd=worktree, capture_output=True, text=True)
     if proc.returncode != 0:
         return None
@@ -114,7 +127,7 @@ def main(argv):
     worktree, head, root = argv[1], argv[2], argv[3]
     base = argv[4] if len(argv) > 4 else "origin/main"
 
-    paths = changed_paths(worktree, base)
+    paths = changed_paths(worktree, base, head)
     if paths is None:
         print(f"-> COVERAGE FAIL: could not diff {base}...HEAD in {worktree}")
         return 2
