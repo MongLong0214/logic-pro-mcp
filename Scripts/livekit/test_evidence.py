@@ -193,6 +193,48 @@ for stdout, want_result, want_tag, want_payload, why in [
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} {why:<52} -> {result} {payload if not ok else ''}")
 
+# --- a localized AXDescription still resolves, and the record says which word matched ----------
+#
+# #519: `Tracks contents` is `트랙 콘텐츠` on a Korean Logic, so a lookup for the English name finds
+# nothing — measured on the one run where the locale was the entire point. `Step Sequencer` is NOT
+# translated, which is why the table is measured pairs rather than a rule.
+#
+# The stub answers only for the KOREAN name, so a version that tries the requested name alone fails
+# these cases and a version that tries the table's entries passes them.
+def _with_locale_stub(answers_for, selector=("Tracks contents",)):
+    root = _tempfile.mkdtemp()
+    ev = E.Evidence("c" * 40, root)
+    tool = os.path.join(ev.dir, "ax_control_bar_band")
+    with open(tool, "w") as fh:
+        fh.write("#!/bin/sh\n"
+                 f'if [ "$1" = "{answers_for}" ]; then\n'
+                 f'  echo \'{{"band":[928,162,6162,391],"description":"{answers_for}","candidates":1}}\'\n'
+                 "else\n"
+                 "  echo '{\"error\":\"no element with that exact AXDescription\"}'\n"
+                 "fi\n")
+    os.chmod(tool, os.stat(tool).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return ev.located_band(*selector), ev.records
+
+(result, records) = _with_locale_stub("트랙 콘텐츠")
+matched = [r for r in records if r.get("tag") == "located_band/matched-a-localized-label"]
+ok = (result[0] == (928, 162, 6162, 391) and result[1] == "트랙 콘텐츠"
+      and len(matched) == 1 and matched[0]["payload"]["requested"] == "Tracks contents")
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} a Korean window resolves through the measured table -> {result}")
+
+# The English name still wins when it is the one on screen, and nothing is noted.
+(result, records) = _with_locale_stub("Tracks contents")
+noted = [r for r in records if r.get("tag") == "located_band/matched-a-localized-label"]
+ok = result[1] == "Tracks contents" and not noted
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} an English window needs no translation and notes none -> {result}")
+
+# A name with no measured translation fails closed rather than being guessed at.
+(result, records) = _with_locale_stub("트랙 콘텐츠", selector=("Step Sequencer",))
+ok = result == (None, None)
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} an unmeasured name is refused, not guessed -> {result}")
+
 # --- the API the harnesses actually call must exist -------------------------------------------
 #
 # #620 rewrote evidence.py from a base that predated three functions, and merging it deleted them
