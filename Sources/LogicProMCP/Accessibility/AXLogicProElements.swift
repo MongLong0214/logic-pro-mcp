@@ -906,6 +906,52 @@ enum AXLogicProElements {
     }
 
     // internal (not private): called cross-file from the +Transport extension (WS3 AC1 split).
+
+    /// Distinct transport keywords found on this container's own controls, false friends excluded.
+    ///
+    /// Extracted so the composition in `getTransportBar` can ask the CAPABILITY question — "does a
+    /// transport control actually live in here" — with the same code that answers it inside
+    /// `looksLikeTransportContainer`, rather than a second copy of it. A copied predicate that
+    /// drifts from the original is the defect #628 is a census of.
+    ///
+    /// This is deliberately NOT `looksLikeTransportContainer`: that function's first branch matches
+    /// on metadata, so anything described "Control Bar" satisfies it whether or not a single
+    /// transport control is inside. Name and capability are different questions, and a caller that
+    /// needs to find a button in the thing needs the second one.
+    static func transportControlKeywordHits(
+        in element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Set<String> {
+        let transportKeywords = AXLocalePolicy.transportContainerControlKeywords.labels.map { $0.lowercased() }
+        let controls = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
+            + AXHelpers.findAllDescendants(of: element, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
+        return controls.reduce(into: Set<String>()) { hits, control in
+
+            let label = (
+                AXHelpers.getDescription(control, runtime: runtime)
+                    ?? AXHelpers.getTitle(control, runtime: runtime)
+                    ?? ""
+            ).lowercased()
+
+            // A label that carries a transport word without being a transport control does not
+            // count. Measured: "Catch Playhead" and "Show/Hide Live Loops Grid" alone gave the
+            // arrange area the two distinct keywords this rule requires.
+            //
+            // Written as `if` rather than `guard … else { return }` on purpose: an early `return`
+            // here put a `for` and a `return` in the same window, which is the long-hand first-match
+            // shape `check-ax-locator-census.py` looks for. It counted both `findAllDescendants`
+            // calls above as blind lookups and the budget went 59 -> 61 for a change that added no
+            // lookup at all. Restructuring the code is the honest fix; raising a ratchet for a false
+            // positive is not, and neither is loosening the detector to accommodate one caller.
+            let isFalseFriend = AXLocalePolicy.transportKeywordFalseFriends.containsAny(in: label)
+            if !isFalseFriend {
+                for keyword in transportKeywords where label.contains(keyword) {
+                    hits.insert(keyword)
+                }
+            }
+        }
+    }
+
     static func looksLikeTransportContainer(
         _ element: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -924,21 +970,7 @@ enum AXLogicProElements {
             return true
         }
 
-        let transportKeywords = AXLocalePolicy.transportContainerControlKeywords.labels.map { $0.lowercased() }
-        let controls = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
-            + AXHelpers.findAllDescendants(of: element, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
-        let controlHits = controls.reduce(into: Set<String>()) { hits, control in
-            let label = (
-                AXHelpers.getDescription(control, runtime: runtime)
-                    ?? AXHelpers.getTitle(control, runtime: runtime)
-                    ?? ""
-            ).lowercased()
-
-            for keyword in transportKeywords where label.contains(keyword) {
-                hits.insert(keyword)
-            }
-        }
-
+        let controlHits = transportControlKeywordHits(in: element, runtime: runtime)
         if controlHits.count >= 2 {
             return true
         }

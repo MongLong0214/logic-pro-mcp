@@ -20,12 +20,95 @@ extension AXLogicProElements {
             return group
         }
 
+        // #628: the discriminated sibling accessor, before the keyword scan that guesses.
+        //
+        // This composition is not new to the codebase — `AccessibilityChannel+Transport.swift:11`
+        // already writes `getControlBar() ?? getTransportBar()` at a call site. Folding it in here
+        // needs no answer to "is a transport bar a control bar", because `getControlBar` returns an
+        // element only when exactly one labelled group holds a checkbox and nil otherwise: when it
+        // answers, it has identified something; when it does not, the scan below runs exactly as
+        // before.
+        //
+        // Measured on Logic 12.3 before making the change: `getControlBar()` resolves, and it
+        // returns THE SAME element the scan was taking first. So this is observationally a no-op on
+        // the machine it was measured on, and the difference is only visible on a tree where the
+        // scan's first survivor is not the control bar — which is the tree nobody has seen and the
+        // reason the scan was wrong to guess.
+        // The identified bar must still SATISFY the thing callers want from it. `getControlBar`
+        // ends with a branch that returns a lone labelled group holding no checkbox at all
+        // (`:143`), so composing it unconditionally could hand back a "Control Bar" that no
+        // transport control lives in — and `findTransportButton` would then search only that and
+        // return nil, where the old scan would have found the working container further down.
+        //
+        // Raised by review as a real regression path, not a hypothetical: an accessor that answers
+        // by NAME and a caller that needs a CAPABILITY are not the same question, and this is the
+        // seam where a rename becomes a silent failure. Validating here keeps the discriminated
+        // accessor's benefit — an unambiguous answer when it has one — without letting a labelled
+        // shell shadow a container that actually works.
+        // NOT `looksLikeTransportContainer`: its first branch matches on METADATA, so the shell
+        // above — described "Control Bar", holding nothing — satisfies it. That was the first
+        // attempt at this fix and the new test caught it returning the shell anyway. Name and
+        // capability are different questions and this caller needs the second one.
+        if let identified = getControlBar(runtime: runtime),
+           !transportControlKeywordHits(in: identified, runtime: runtime.ax).isEmpty {
+            return identified
+        }
+
         let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax)
-        if let candidate = groups.first(where: { looksLikeTransportContainer($0, runtime: runtime.ax) }) {
+        let survivors = transportContainerCandidates(among: groups, runtime: runtime)
+        if let candidate = survivors.first {
+            // #628: the element returned is UNCHANGED — still the first survivor in tree order.
+            // What changes is that a tree-order choice among several now says so.
+            //
+            // Measured on Logic 12.3, one project, one track: thirty-seven groups gathered, FOUR
+            // survive. Two of the four are the arrange area, because the predicate accepts any
+            // container holding two or more transport-keyword controls.
+            //
+            // The cause first written here was "a track header holds a record-arm checkbox".
+            // That was WRONG and instrumenting the predicate disproved it — `record` never
+            // matched. The arrange area qualified on substrings of labels that are not transport
+            // controls at all: "play" inside "Catch Playhead", "loop" inside "Show/Hide Live
+            // Loops Grid". The false-friend guard rejects exactly those, and survivors went 4 -> 2
+            // live. Corrected here after the same stale sentence was found still standing in
+            // production having been fixed only in the test file.
+            //
+            // Deliberately not a refusal. Which of the four this accessor SHOULD return is a
+            // question about its contract — whether "transport bar" and "control bar" name the same
+            // thing — and that is a decision, not a measurement. A discriminator is available when
+            // someone makes it: description narrows four to two, and #633's "holds a checkbox"
+            // separates those two.
+            // Reached only when `getControlBar` could NOT identify one, so a count above one here
+            // now means both the discriminated route and the keyword scan failed to resolve — a
+            // strictly narrower and more interesting event than before.
+            //
+            // Written to stderr, which the live-evidence harness discards
+            // (`Scripts/livekit/evidence.py:184` runs the server with `stderr=DEVNULL`). So this
+            // reaches an operator reading the server log and does NOT reach the evidence document.
+            // Said here rather than left implied, because a line that cannot reach the channel the
+            // gate reads is not "making it visible" to the gate.
+            if survivors.count > 1 {
+                Log.info(
+                    "getTransportBar: getControlBar did not identify one, and \(survivors.count) "
+                        + "groups matched looksLikeTransportContainer; returning the first in tree order",
+                    subsystem: "ax"
+                )
+            }
             return candidate
         }
 
         return looksLikeTransportContainer(window, runtime: runtime.ax) ? window : nil
+    }
+
+    /// Every group the transport scan accepts, in tree order — split out so the count is a value a
+    /// test can assert on rather than a number that exists only inside an `if let`.
+    ///
+    /// `first` of this is exactly what the previous `groups.first(where:)` returned, so extracting
+    /// it changes nothing about which element is chosen.
+    static func transportContainerCandidates(
+        among groups: [AXUIElement],
+        runtime: Runtime = .production
+    ) -> [AXUIElement] {
+        groups.filter { looksLikeTransportContainer($0, runtime: runtime.ax) }
     }
 
     /// Find a specific transport button by its title or description.

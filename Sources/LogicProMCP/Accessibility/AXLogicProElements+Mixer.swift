@@ -57,15 +57,27 @@ extension AXLogicProElements {
         return findPanControlInHeader(header, runtime: runtime.ax)
     }
 
-    /// Header-level pan-slider selection (split out for deterministic testing).
-    static func findPanControlInHeader(_ header: AXUIElement, runtime: AXHelpers.Runtime = .production) -> AXUIElement? {
-        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
-        if let pan = sliders.first(where: { slider in
+    /// Every slider on a header whose children describe it as a pan control, in tree order.
+    ///
+    /// Split out so a probe can call the SAME predicate the product runs rather than a copy of it.
+    /// The copy existed for one commit and is exactly what #628 is a census of: a measurement that
+    /// can drift from the code and then disagree with it for a reason unrelated to the tree.
+    static func headerPanSliderCandidates(
+        among sliders: [AXUIElement],
+        runtime: AXHelpers.Runtime = .production
+    ) -> [AXUIElement] {
+        sliders.filter { slider in
             AXHelpers.getChildren(slider, runtime: runtime).contains { child in
                 let desc = (AXHelpers.getDescription(child, runtime: runtime) ?? "").lowercased()
                 return AXLocalePolicy.headerPanHint.containsAny(in: desc)
             }
-        }) {
+        }
+    }
+
+    /// Header-level pan-slider selection (split out for deterministic testing).
+    static func findPanControlInHeader(_ header: AXUIElement, runtime: AXHelpers.Runtime = .production) -> AXUIElement? {
+        let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
+        if let pan = headerPanSliderCandidates(among: sliders, runtime: runtime).first {
             return pan
         }
         // Fallback: the slider that is NOT the volume fader.

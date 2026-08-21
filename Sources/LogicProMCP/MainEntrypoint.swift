@@ -357,13 +357,13 @@ enum MainEntrypoint {
 
             let groups8 = AXHelpers.findAllDescendants(
                 of: window, role: "AXGroup", maxDepth: 8, runtime: ax)
-            record("AXLogicProElements+Tracks.swift:54 isTrackHeadersGroup",
+            record("AXLogicProElements.isTrackHeadersGroup",
                    groups8.count,
                    groups8.filter { AXLogicProElements.isTrackHeadersGroup($0, runtime: ax) }.count)
 
             let groups6 = AXHelpers.findAllDescendants(
                 of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
-            record("AXLogicProElements+Transport.swift:24 looksLikeTransportContainer",
+            record("AXLogicProElements.looksLikeTransportContainer",
                    groups6.count,
                    groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
 
@@ -374,14 +374,14 @@ enum MainEntrypoint {
             if let controlBar = AXLogicProElements.getControlBar() {
                 let barGroups = AXHelpers.findAllDescendants(
                     of: controlBar, role: "AXGroup", maxDepth: 8, runtime: ax)
-                record("AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                record("AXLocalePolicy.playheadPositionGroupLabel (inside the control bar)",
                        barGroups.count,
                        barGroups.filter {
                            AXLocalePolicy.playheadPositionGroupLabel.matches(
                                AXHelpers.getDescription($0, runtime: ax), mode: .exactStrict)
                        }.count)
             } else {
-                results.append(["site": "AXLogicProElements+Transport.swift:165 playheadPositionGroupLabel",
+                results.append(["site": "AXLocalePolicy.playheadPositionGroupLabel (inside the control bar)",
                                 "unreachable": "no control bar in this UI state"])
             }
 
@@ -393,16 +393,17 @@ enum MainEntrypoint {
             if let header = AXLogicProElements.findTrackHeader(at: 0) {
                 let sliders = AXHelpers.findAllDescendants(
                     of: header, role: "AXSlider", maxDepth: 4, runtime: ax)
-                record("AXLogicProElements+Mixer.swift:63 header pan slider",
+                // The PRODUCT's predicate, called — not a copy of it. The first version of this
+                // block reimplemented the closure from `findPanControlInHeader` verbatim, which is
+                // the exact thing this issue is a census of and which I had refused four times in
+                // its thread. A copy drifts, and then the probe measures a rule the product no
+                // longer runs.
+                record("AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
                        sliders.count,
-                       sliders.filter { slider in
-                           AXHelpers.getChildren(slider, runtime: ax).contains { child in
-                               let desc = (AXHelpers.getDescription(child, runtime: ax) ?? "").lowercased()
-                               return AXLocalePolicy.headerPanHint.containsAny(in: desc)
-                           }
-                       }.count)
+                       AXLogicProElements.headerPanSliderCandidates(
+                           among: sliders, runtime: ax).count)
             } else {
-                results.append(["site": "AXLogicProElements+Mixer.swift:63 header pan slider",
+                results.append(["site": "AXLogicProElements+Mixer.swift findPanControlInHeader (header pan slider)",
                                 "unreachable": "no track header at index 0 in this UI state"])
             }
 
@@ -418,16 +419,31 @@ enum MainEntrypoint {
             if let strip = strips.first {
                 let sliders = AXHelpers.findAllDescendants(
                     of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
-                record("AXLogicProElements+Mixer.swift:309 findVolumeFader (falls back to sliders.first)",
+                record("AXLogicProElements.findVolumeFader (falls back to sliders.first)",
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isVolumeFader }.count)
-                record("AXLogicProElements+Mixer.swift:322 findPanControl (falls back to sliders[1])",
+                record("AXLogicProElements.findPanControl (falls back to sliders[1])",
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)
             } else {
-                results.append(["site": "AXLogicProElements+Mixer.swift:309/:322",
+                results.append(["site": "AXLogicProElements.findVolumeFader/.findPanControl",
                                 "unreachable": "no mixer channel strip in this UI state"])
             }
+
+            // Does the discriminated sibling accessor resolve, and is its answer the same element
+            // the transport scan takes first? That is the whole question behind "is this a contract
+            // decision or a missing composition" — and it is measurable, not arguable.
+            let controlBar = AXLogicProElements.getControlBar()
+            let scanFirst = AXLogicProElements.transportContainerCandidates(
+                among: AXHelpers.findAllDescendants(of: window, role: "AXGroup", maxDepth: 6, runtime: ax)
+            ).first
+            results.append([
+                "site": "getControlBar() vs the transport scan's first survivor",
+                "controlBarResolves": controlBar != nil,
+                "scanReturnsSomething": scanFirst != nil,
+                "sameElement": (controlBar != nil && scanFirst != nil)
+                    ? CFEqual(controlBar!, scanFirst!) : false,
+            ])
 
             let payload: [String: Any] = ["ok": true, "sites": results]
             let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
