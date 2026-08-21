@@ -86,6 +86,48 @@ struct Issue628MixerFallbackTests {
         #expect(AXLogicProElements.findPanControl(in: node, runtime: b.makeAXRuntime()) == nil)
     }
 
+    /// The duplicate-description branch this change added. Every other fixture here has exactly
+    /// ONE described slider, which means `described.first` and `described.last` are the same
+    /// element and no case could tell a tree-order choice from a forced one -- a reviewer noted
+    /// that swapping to `.last` would have kept the suite green.
+    @Test("two sliders described as the volume fader return the FIRST in tree order")
+    func twoDescribedFadersReturnTheFirst() throws {
+        let b = FakeAXRuntimeBuilder()
+        let node = b.element(6400)
+        var sliders: [AXUIElement] = []
+        for i in 0..<2 {
+            let slider = b.element(6401 + i)
+            b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+            b.setAttribute(slider, kAXDescriptionAttribute as String, "Volume")
+            sliders.append(slider)
+        }
+        b.setChildren(node, sliders)
+        let found = try #require(AXLogicProElements.findVolumeFader(
+            in: node, runtime: b.makeAXRuntime()))
+        #expect(CFEqual(found, sliders[0]))
+        #expect(!CFEqual(found, sliders[1]))
+    }
+
+    /// Same for pan, and it is not the same assertion: pan's FALLBACK is `sliders[1]`, so a
+    /// description-matched answer at index 0 is the only result that distinguishes the two paths.
+    @Test("two sliders described as pan return the FIRST, not the fallback's index 1")
+    func twoDescribedPansReturnTheFirst() throws {
+        let b = FakeAXRuntimeBuilder()
+        let node = b.element(6410)
+        var sliders: [AXUIElement] = []
+        for i in 0..<2 {
+            let slider = b.element(6411 + i)
+            b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+            b.setAttribute(slider, kAXDescriptionAttribute as String, "Pan")
+            sliders.append(slider)
+        }
+        b.setChildren(node, sliders)
+        let found = try #require(AXLogicProElements.findPanControl(
+            in: node, runtime: b.makeAXRuntime()))
+        #expect(CFEqual(found, sliders[0]))
+        #expect(!CFEqual(found, sliders[1]))
+    }
+
     @Test("no sliders at all is nil from both, not an index into an empty list")
     func emptyStrip() throws {
         let b = FakeAXRuntimeBuilder()

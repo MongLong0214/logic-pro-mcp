@@ -191,9 +191,14 @@ class Driver:
         self._stderr_file = tempfile.NamedTemporaryFile(
             prefix="lpm-server-stderr-", suffix=".log", delete=False)
         self._stderr_path = self._stderr_file.name
+        # `Log` gates on LOG_LEVEL (`Logger.swift:69`), which the driver would otherwise INHERIT.
+        # At LOG_LEVEL=warn every `Log.info` vanishes while an unrelated warning still fills the
+        # file -- so a harness asserting absence would see a non-empty log and conclude the channel
+        # carried, when the only lines that could have carried were suppressed. Pinned, not inherited.
+        env = dict(os.environ, LOG_LEVEL="info")
         self.proc = subprocess.Popen(
             [self.binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=self._stderr_file, text=True, bufsize=1)
+            stderr=self._stderr_file, text=True, bufsize=1, env=env)
         self._send("initialize", {
             "protocolVersion": "2024-11-05", "capabilities": {},
             "clientInfo": {"name": "livekit", "version": "1"}})
@@ -293,14 +298,21 @@ class Driver:
         except Exception:
             return ""
 
-    def server_logged(self, needle):
+    def server_logged(self, needle, since=0):
         """(present, channel_is_live) -- the second value is the control.
 
-        An empty log makes every `needle in log` False, so an absence assertion is vacuous until
-        something has come through. Callers assert on BOTH: absent AND the channel carried.
+        `since` is a byte offset from a previous `len(server_log())`, so a caller can ask about the
+        window AFTER something it did rather than about the whole run. Without it every later read
+        still sees the earlier lines, and "nothing was logged by the write" is indistinguishable
+        from "nothing was logged by the read either" -- the check reads as scoped and is not.
+
+        `channel_is_live` requires an `[INFO]` line, not merely a non-empty file. A log holding only
+        warnings proves the stream is connected and proves nothing about whether an INFO line could
+        have arrived, which is the level every caller of this asserts absence at.
         """
         log = self.server_log()
-        return (needle in log, bool(log.strip()))
+        window = log[since:] if since else log
+        return (needle in window, "[INFO]" in log)
 
     def close(self):
         try:
@@ -309,6 +321,14 @@ class Driver:
         except Exception:
             try:
                 self.proc.kill()
+            except Exception:
+                pass
+        # `delete=False` is required -- the server holds this file open and Python must not remove
+        # it underneath. That makes cleanup THIS function's job: without it every Driver in a run
+        # leaves a descriptor and a file behind, and a long harness accumulates both.
+        for step in (self._stderr_file.close, lambda: os.unlink(self._stderr_path)):
+            try:
+                step()
             except Exception:
                 pass
 

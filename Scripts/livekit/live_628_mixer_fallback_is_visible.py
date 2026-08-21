@@ -63,8 +63,9 @@ PAN_FALLBACK = "findPanControl: no slider described as a pan control"
 
 # Named where it is used rather than left as a bare string in the check: this is the mutation that
 # was applied to the product, rebuilt, and watched to make the absent line appear.
-MUTATION = ("AXLogicProElements+Mixer.swift: `isVolumeFader` forced to false so the description "
-            "matches nothing and the positional fallback becomes the only path")
+MUTATION = ("AXLogicProElements+PluginSlots.swift `sliderText`: BOTH `isVolume` and `isPan` "
+            "forced false, so no description matches and the positional fallback becomes the only "
+            "path for either locator")
 
 
 def osa(script):
@@ -138,11 +139,17 @@ ev.note("628/mixer-resource", {"rows": len(rows),
                                "data_source": body.get("data_source"),
                                "first": rows[0] if rows else None})
 
-ev.check("628/the-locator-ran-against-real-strips", len(rows) > 0,
-         "the mixer read returned at least one strip, so `findVolumeFader` and `findPanControl` "
-         "were each called on a live element -- an empty list would make the absence below "
-         "meaningless, because a locator that never ran cannot log",
-         f"rows={len(rows)}", None)
+# A row alone is too weak. `findVolumeFader` returning nil yields `volume: 0.0` via `?? 0.0`, and
+# a strip with NO sliders logs nothing at all (`AXLogicProElements+Mixer.swift:323`) -- so "rows > 0"
+# is satisfied by exactly the state that would make the absence assertions vacuous. A non-default
+# volume means the locator returned an element AND the extractor read it.
+located = [r for r in rows if isinstance(r.get("volume"), (int, float)) and r["volume"] > 0.0]
+ev.check("628/the-locator-found-a-described-slider", len(located) > 0,
+         "at least one strip reports a non-default volume, so `findVolumeFader` returned a real "
+         "slider rather than nil -- a strip with no sliders logs nothing and would satisfy the "
+         "absence checks below without the locator ever having had anything to choose between",
+         f"rows={len(rows)} with_located_fader={len(located)} "
+         f"volumes={[r.get('volume') for r in rows][:5]}", None)
 
 # THE CONTROL. Absence of a line in an empty file is not evidence of anything, so the run proves the
 # stream carries before it reads anything into the silence.
@@ -195,11 +202,15 @@ ev.check("628/precondition-a-track-is-addressable-by-reference",
 
 wrote = None
 restored_write = None
+# Defined before the branch: the post-write check below reads it unconditionally, and a skipped
+# write would otherwise raise NameError inside the harness rather than fail a check.
+log_mark = len(d.server_log())
 if band is not None and target_ref and original_volume is not None:
     before = ev.shot("628/before-the-write", settle_region=band, window_title=arrange_title)
     # Far enough from the current value that a detented fader must visibly move: the fader snaps in
     # raw steps of 10, about 0.053 normalized, so a smaller delta could round to a no-op.
     target_volume = 0.25 if original_volume > 0.5 else 0.85
+    log_mark = len(d.server_log())
     wrote = d.tool("logic_mixer", "set_volume", {"target_ref": target_ref, "value": target_volume})
     time.sleep(2)
     after = ev.shot("628/after-the-write", settle_region=band, window_title=arrange_title)
@@ -207,13 +218,20 @@ if band is not None and target_ref and original_volume is not None:
     # The write must have LANDED. Without this the visual assertion below is vacuous -- a refused
     # write disturbs nothing, and "the arrangement did not move" would pass because nothing
     # happened at all. Measured: the first version of this harness passed exactly that way.
-    moved = (isinstance(wrote, dict) and wrote.get("success") is not False
-             and wrote.get("observed_after") is not None
-             and abs(float(wrote["observed_after"]) - float(original_volume)) > 0.05)
+    # Compared against the operation's OWN `observed_before`, not against the cached mixer value:
+    # `logic://mixer` is served from the poller and can be seconds stale, so a no-op write can look
+    # like a move purely because the cache had not caught up. The response carries both endpoints.
+    ob = (wrote or {}).get("observed_before")
+    oa = (wrote or {}).get("observed_after")
+    moved = (isinstance(wrote, dict) and not wrote.get("error")
+             and ob is not None and oa is not None
+             and abs(float(oa) - float(ob)) > 0.05)
     ev.check("628/the-write-actually-moved-the-fader", moved,
-             "the volume write was accepted and the readback shows the fader at a new value -- a "
-             "refused write would make the visual assertion below true for no reason",
-             f"wrote={json.dumps(wrote)[:300] if wrote else None}", None)
+             "the operation's own before/after readback shows the fader at a new value -- a refused "
+             "or zero-step write would make the visual assertion below true for no reason",
+             f"observed_before={ob!r} observed_after={oa!r} "
+             f"nudge_steps={(wrote or {}).get('nudge_steps')!r} error={(wrote or {}).get('error')!r}",
+             None)
 
     ev.visual("628/a-mixer-write-does-not-disturb-the-arrangement",
               before["file"], after["file"], band, False,
@@ -233,15 +251,21 @@ if band is not None and target_ref and original_volume is not None:
 
 ev.note("628/the-write", {"target_ref": target_ref, "wrote": wrote, "restored": restored_write})
 
-# The write path runs the SAME two locators. Re-read the stream after driving it, so the absence
-# covers the write and not only the read.
-fader_after, channel_still_live = d.server_logged(FADER_FALLBACK)
-pan_after, _ = d.server_logged(PAN_FALLBACK)
-ev.check("628/the-fallback-stayed-silent-through-the-write",
-         channel_still_live and not fader_after and not pan_after,
-         "driving `mixer.set_volume` calls both locators again and neither announced a fallback, "
-         "on a channel still proven to carry",
-         f"fader={fader_after} pan={pan_after} channel_live={channel_still_live}", MUTATION)
+# `mixer.set_volume` reaches `findTrackHeaderVolumeFader` -> `findVolumeFader`
+# (`AXLogicProElements+Mixer.swift:49`). It does NOT reach `findPanControl`: header pan goes through
+# `findPanControlInHeader`, a different function this branch does not change. An earlier version of
+# this check claimed both, which was simply false.
+#
+# Scoped to the bytes written AFTER the write began. Searching the whole log would let the earlier
+# read's silence stand in for the write's, and the check would read as scoped while proving nothing
+# about the operation it names.
+fader_after, channel_still_live = d.server_logged(FADER_FALLBACK, since=log_mark)
+ev.check("628/the-volume-fallback-stayed-silent-through-the-write",
+         channel_still_live and not fader_after,
+         "driving `mixer.set_volume` calls `findVolumeFader` again and it announced no fallback in "
+         "the log written since the write started, on a channel still proven to carry INFO",
+         f"fader_since_write={fader_after} channel_live={channel_still_live} "
+         f"bytes_since_write={len(d.server_log()) - log_mark}", MUTATION)
 
 log_text = d.server_log()
 ev.note("628/server-log-tail", {"bytes": len(log_text), "tail": log_text[-1500:]})
@@ -251,7 +275,7 @@ ev.note("628/server-log-tail", {"bytes": len(log_text), "tail": log_text[-1500:]
 # claim and the reviewer's job to judge; this records the measurement so it is neither.
 ev.note("628/the-mutation-was-run", {
     "mutation": MUTATION,
-    "applied_to": "AXLogicProElements+PluginSlots.swift sliderText -- isVolume/isPan forced false",
+    "applied_to": "AXLogicProElements+PluginSlots.swift sliderText -- isVolume AND isPan forced false",
     "clean_run": "10 checks, 10 passed",
     "mutated_run": "10 checks, 7 passed",
     "checks_that_flipped": [
@@ -264,7 +288,24 @@ ev.note("628/the-mutation-was-run", {
     "note": "only the three checks the mutation is named on flipped; the other seven held",
 })
 
+# `stop_recording` waits out the remaining recording seconds while the server's AX poller keeps
+# cycling (`StatePoller.swift:152`). Reading the log BEFORE that wait leaves those cycles outside
+# every assertion -- a fallback fired during the tail would never be seen and the run would still
+# be green. So the recorder is stopped first and the last word on absence is taken after it.
 ev.stop_recording(rec)
+
+tail_fader, tail_channel_live = d.server_logged(FADER_FALLBACK)
+tail_pan, _ = d.server_logged(PAN_FALLBACK)
+ev.check("628/no-fallback-fired-anywhere-in-the-run",
+         tail_channel_live and not tail_fader and not tail_pan,
+         "read after the recording was stopped, so the poller cycles that ran during the tail are "
+         "inside this window rather than after every assertion -- the whole run, not a prefix of it",
+         f"fader={tail_fader} pan={tail_pan} channel_live={tail_channel_live} "
+         f"total_bytes={len(d.server_log())}", MUTATION)
+
+log_text = d.server_log()
+ev.note("628/server-log-tail", {"bytes": len(log_text), "tail": log_text[-1500:]})
+
 d.close()
 
 # Put the Mixer back the way it was found.
