@@ -111,6 +111,64 @@ ok = got == (["live_a"], [])
 failed += 0 if ok else 1
 print(f"{'ok  ' if ok else 'FAIL'} a document named `evidence` satisfies no harness -> {got}")
 
+# --- `changed_paths` against a REAL repository -------------------------------------------------
+#
+# Two contracts were written in a docstring and tested nowhere, which is the same shape as the
+# defect this whole file is about — a rule named in one place and enforced in another.
+#
+#   1. deletions are excluded. A harness that no longer exists cannot be required to have run, and
+#      requiring it would make deleting a harness impossible: the branch can never produce the
+#      evidence, because there is nothing left to produce it.
+#   2. the commit asked about is the `head` ARGUMENT, not the worktree's HEAD. The first version
+#      hard-coded HEAD and took the sha only to find an evidence directory. In a pre-push hook the
+#      two agree and it would never have shown.
+import subprocess
+
+def _git(repo, *args):
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+
+with tempfile.TemporaryDirectory() as repo:
+    os.makedirs(os.path.join(repo, "Scripts", "livekit"))
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+
+    def write(rel, text):
+        with open(os.path.join(repo, rel), "w") as fh:
+            fh.write(text)
+
+    write("Scripts/livekit/live_kept.py", "# kept\n")
+    write("Scripts/livekit/live_doomed.py", "# doomed\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    write("Scripts/livekit/live_added.py", "# added\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "add one harness")
+    mid_sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    os.remove(os.path.join(repo, "Scripts/livekit/live_doomed.py"))
+    write("Scripts/livekit/live_kept.py", "# kept, edited\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "delete one harness, edit another")
+    tip_sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    at_tip = C.harness_stems(C.changed_paths(repo, base_sha, tip_sha))
+    ok = at_tip == {"live_added", "live_kept"}
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a deleted harness is not required to have run -> {sorted(at_tip)}")
+
+    # The worktree is sitting on `tip`. Asking about `mid` must answer about `mid`.
+    at_mid = C.harness_stems(C.changed_paths(repo, base_sha, mid_sha))
+    ok = at_mid == {"live_added"}
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} the head ARGUMENT decides, not the worktree's HEAD -> {sorted(at_mid)}")
+
+    ok = C.changed_paths(repo, "no/such/ref", tip_sha) is None
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} an unreadable base is None, not an empty change set")
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)
