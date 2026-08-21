@@ -522,7 +522,10 @@ enum AXHelpers {
         /// overwhelmingly common one-match path never pays.
         let matches: [AXUIElement]
 
-        init(element: AXUIElement?, candidates: Int, matches: [AXUIElement] = []) {
+        /// `matches` is deliberately NOT defaulted. A future construction site that forgot it would
+        /// compile and then report zero names for a real ambiguity — a silent downgrade back to
+        /// exactly the count-only refusal this issue exists to remove. Let it fail to build instead.
+        init(element: AXUIElement?, candidates: Int, matches: [AXUIElement]) {
             self.element = element
             self.candidates = candidates
             self.matches = matches
