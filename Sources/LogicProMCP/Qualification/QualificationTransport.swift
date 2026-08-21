@@ -880,6 +880,25 @@ struct QualificationTransport: Sendable {
             return ["idempotency_key": "qualification-read-probe", "steps": []]
         case .systemSagaStatus:
             return ["idempotency_key": "qualification-read-probe"]
+
+        // #373 Phase A. `default: [:]` sends NO parameters, so every read-only operation that
+        // requires one refuses correctly and is recorded as unavailable -- the product working,
+        // scored as a failure. `SemanticOracleTable`'s KNOWN GAPS note lists six in that state.
+        // These two are the ones a qualifying parameter can fix without a fixture or a side effect.
+        case .tracksResolvePath:
+            // A LIBRARY path classifier, not a filesystem one. Its oracle accepts either contract:
+            // a hit must name `matchedPath` and classify the node, a miss must say why. This path
+            // is a deterministic MISS, chosen on purpose -- a hit depends on what patches the
+            // machine happens to have installed, and a gate whose result varies by host is not a
+            // gate. The limitation is real and stated: the HIT branch stays unexercised here, and
+            // covering it needs a fixture library rather than a different string.
+            return ["path": "__qualification_probe__/definitely-absent"]
+        case .pluginsGetInventory:
+            // Track 0 exists whenever a project does: `project.new` reports
+            // `mandatory_track_created`. On a projectless Logic this still returns a typed refusal
+            // rather than the bare `invalid_params` an absent parameter produced.
+            return ["track": 0]
+
         default:
             return [:]
         }
