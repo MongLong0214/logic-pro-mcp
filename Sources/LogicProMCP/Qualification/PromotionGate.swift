@@ -303,7 +303,10 @@ struct PromotionGate {
         }
     }
 
-    private static func isSHA256(_ value: String) -> Bool {
+    /// Internal, not private: `QualificationRunner` compares the PUBLISHED digest against the
+    /// candidate at a second site and needs the same validity test. A copy there would be a second
+    /// definition of "is this a SHA-256" free to drift from this one.
+    static func isSHA256(_ value: String) -> Bool {
         value.count == 64 && value.allSatisfy(\.isHexDigit)
     }
 }

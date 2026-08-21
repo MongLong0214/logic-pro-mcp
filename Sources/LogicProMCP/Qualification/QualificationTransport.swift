@@ -248,7 +248,7 @@ struct QualificationOperationResult: Equatable, Sendable {
                 // reason, by design and pending Phase B. Attributing that to the environment sends
                 // whoever reads the attestation to go look at their machine, which is clean.
                 detail: "read-only operation did not return a successful typed response under the "
-                    + "probe's current parameters (see SemanticOracleTable's known-limitations note)"
+                    + "probe's current parameters (see SemanticOracleTable's KNOWN GAPS note)"
             )
         case .protocolSmoke:
             QualificationDeferral(

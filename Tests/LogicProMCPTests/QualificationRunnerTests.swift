@@ -2098,6 +2098,46 @@ struct QualificationRunnerTests {
         #expect(Self.rejectionReasons(try Self.resultObject(result)).isEmpty)
     }
 
+    /// The PUBLISHED-vs-candidate digest comparison is a SECOND site, separate from the gate's
+    /// attestation-vs-candidate check. Splitting the unparseable cause in `PromotionGate` and not
+    /// here left `--expected-binary-sha256 not-a-sha` still reporting `binarySHAMismatch` — the fix
+    /// applied to one named instance rather than to the property, and a review caught it.
+    ///
+    /// This drives the real CLI path. The `PromotionGate`-level test cannot reach this site: the
+    /// gate is handed the COMPUTED candidate digest, never the supplied one.
+    @Test func malformedPublishedSHAIsReportedUnparseableNotMismatched() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(expectedSHA256: "not-a-sha")
+        let json = try Self.resultObject(result)
+        let reasons = Self.rejectionReasons(json)
+
+        #expect(result.exitCode != 0)
+        #expect(reasons.contains("binarySHAUnparseable"))
+        // The distinction is the whole point: a malformed value is not a disagreement.
+        #expect(!reasons.contains("binarySHAMismatch"))
+    }
+
+    /// The other side, so moving every case to `Unparseable` cannot satisfy the test above: a
+    /// well-formed published digest that genuinely differs must still read as a mismatch.
+    @Test func wellFormedDifferentPublishedSHAStillReportsMismatch() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let otherDigest = String(repeating: "a", count: 64)
+        #expect(otherDigest != fixture.binarySHA256)
+
+        let result = await fixture.verify(expectedSHA256: otherDigest)
+        let reasons = Self.rejectionReasons(try Self.resultObject(result))
+
+        #expect(result.exitCode != 0)
+        #expect(reasons.contains("binarySHAMismatch"))
+        #expect(!reasons.contains("binarySHAUnparseable"))
+    }
+
     @Test func differentPublishedSHARejects() async throws {
         let fixture = try promotableFixture()
         defer { fixture.remove() }

@@ -954,11 +954,23 @@ package struct QualificationRunner: Sendable {
             requiredOperationIDs: requiredOperationIDs
         )
         var rejections = decision.rejections
+        // The SECOND digest comparison: published-vs-candidate, distinct from the gate's
+        // attestation-vs-candidate check. Splitting the unparseable cause in `PromotionGate` and
+        // not here left `--expected-binary-sha256 not-a-sha` still reporting `binarySHAMismatch`
+        // -- the fix applied to one named instance instead of to the property. `--expected-binary-
+        // sha256` is not format-validated when parsed, so a malformed value reaches here intact.
         if let publishedBinarySHA256, publishedBinarySHA256 != candidateSHA256 {
-            rejections.append(.binarySHAMismatch(
-                expected: publishedBinarySHA256,
-                actual: candidateSHA256
-            ))
+            if !PromotionGate.isSHA256(publishedBinarySHA256) {
+                rejections.append(.binarySHAUnparseable(
+                    expected: publishedBinarySHA256,
+                    actual: candidateSHA256
+                ))
+            } else {
+                rejections.append(.binarySHAMismatch(
+                    expected: publishedBinarySHA256,
+                    actual: candidateSHA256
+                ))
+            }
         }
         rejections.append(contentsOf: Self.requiredArtifactSchemaRejections(
             requiredArtifacts: requestedArtifacts,
