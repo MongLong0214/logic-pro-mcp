@@ -3,7 +3,7 @@
   "name": "io.github.MongLong0214/logic-pro-mcp",
   "title": "Logic Pro MCP",
   "description": "Logic Pro MCP server for stateful DAW control, live readback, MIDI, plugins, and safety gates.",
-  "websiteUrl": "https://github.com/MongLong0214/logic-pro-mcp#readme",
+  "websiteUrl": "https://logicpromcp.com",
   "repository": {
     "url": "https://github.com/MongLong0214/logic-pro-mcp",
     "source": "github"
