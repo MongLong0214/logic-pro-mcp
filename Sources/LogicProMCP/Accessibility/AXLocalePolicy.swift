@@ -1159,6 +1159,6 @@ enum AXLocalePolicy {
         let hits = AXHelpers.findAllDescendants(
             of: element, role: role, maxDepth: maxDepth, runtime: runtime
         ).filter { elementMatches($0, labels, mode: mode, runtime: runtime) }
-        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count)
+        return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count, matches: hits)
     }
 }

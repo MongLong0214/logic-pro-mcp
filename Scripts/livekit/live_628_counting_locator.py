@@ -159,6 +159,43 @@ ev.check("628/many-matches-are-not-identified",
          "restore `element: hits.first`: an element comes back for an ambiguous lookup and this "
          "check goes red")
 
+# #628 states the refusal must NAME its candidates, not only count them. A count refuses; a name
+# tells the person holding the refusal whether the tree is genuinely ambiguous or the selector is one
+# word too broad. Measured on Logic 12.3: this is exactly where the issue started — TWO elements
+# describe themselves "Control Bar", and until now nothing could say that from the outside.
+named = button.get("candidateNames") or []
+ev.check("628/an-ambiguous-census-names-its-candidates",
+         isinstance(named, list) and len(named) == button.get("candidates"),
+         "every candidate of the ambiguous lookup is named, so the refusal can be acted on — one "
+         "name per candidate, counted against the census's own count rather than a fixed number",
+         f"candidates={button.get('candidates')!r} names={len(named)} sample={named[:4]!r}",
+         "drop `matches: hits` from the Census constructor: the list empties and this goes red")
+
+# Emptiness is the failure mode the placeholder exists for. Aimed at GROUPS, not buttons: measured
+# on Logic 12.3 the group census contains elements with no description at all, and the button one
+# may not. A no-blank assertion over candidates that all happen to be named passes with the
+# placeholder completely broken — it would be a check that cannot see its own subject.
+group_census = product_census("AXGroup", depth=3)
+group_named = group_census.get("candidateNames") or []
+placeholder_fired = sum(1 for n in group_named if isinstance(n, str) and n.startswith("<unnamed"))
+
+ev.check("628/the-unnamed-placeholder-is-exercised-on-this-tree",
+         placeholder_fired > 0,
+         "at least one live candidate has nothing to call itself, so the no-blank check below has a "
+         "subject — without this it would pass on a tree where every element is named and say "
+         "nothing about the fallback",
+         f"candidates={group_census.get('candidates')!r} named={len(group_named)} "
+         f"unnamed={placeholder_fired}", None)
+
+ev.check("628/no-candidate-is-named-with-an-empty-string",
+         bool(group_named) and all(isinstance(n, str) and n.strip() for n in group_named),
+         "no name is blank on a census proven to contain unnamed elements: they report "
+         "`<unnamed ROLE>`, which says what was found rather than looking like the reporter failed",
+         f"blank={[i for i, n in enumerate(group_named) if not (isinstance(n, str) and n.strip())]!r} "
+         f"unnamed={placeholder_fired} sample={group_named[:4]!r}",
+         "return the raw description instead of the placeholder: unnamed elements become \"\" and "
+         "this goes red")
+
 absent = product_census("AXToolbar")
 ev.check("628/zero-matches-are-not-identified-either",
          absent.get("candidates") == 0 and absent.get("identified") is False,
@@ -196,6 +233,21 @@ ev.check("628/an-ambiguous-container-refuses-rather-than-choosing",
          f"error={ambiguous.get('error')!r} containerCandidates={ambiguous.get('containerCandidates')!r}",
          "resolve the container with `findDescendant` instead of the census: the first match is "
          "taken, a count comes back, and this check goes red")
+
+# `AXLocalePolicy.censusDescendant` is a SECOND producer of `Census` and nothing here covered its
+# names. Dropping `matches: hits` from that function alone left every other check on this branch
+# green — a second implementation of the same contract, uncovered.
+container_named = ambiguous.get("containerCandidateNames") or []
+ev.check("628/the-ambiguous-container-refusal-names-its-candidates",
+         isinstance(container_named, list)
+         and len(container_named) == ambiguous.get("containerCandidates")
+         and all(isinstance(n, str) and n.strip() for n in container_named),
+         "the container refusal says WHICH elements answered to that description, one name per "
+         "candidate — the count alone cannot separate an ambiguous tree from too broad a selector",
+         f"containerCandidates={ambiguous.get('containerCandidates')!r} "
+         f"names={container_named!r}",
+         "drop `matches: hits` from AXLocalePolicy.censusDescendant: the list empties and this "
+         "goes red while every unit test stays green")
 
 # ---- depth, so that agreeing is not the same as both ignoring the bound ---------------------------
 shallow_p = product_census("AXGroup", depth=1)
