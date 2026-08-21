@@ -21,11 +21,45 @@ extension AXLogicProElements {
         }
 
         let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax)
-        if let candidate = groups.first(where: { looksLikeTransportContainer($0, runtime: runtime.ax) }) {
+        let survivors = transportContainerCandidates(among: groups, runtime: runtime)
+        if let candidate = survivors.first {
+            // #628: the element returned is UNCHANGED — still the first survivor in tree order.
+            // What changes is that a tree-order choice among several now says so.
+            //
+            // Measured on Logic 12.3, one project, one track: thirty-seven groups gathered, FOUR
+            // survive. Two of the four are the arrange area, because the predicate accepts any
+            // container holding two or more transport-keyword controls and a track header holds a
+            // record-arm checkbox. The keyword bag cannot tell "record-arm this track" from
+            // "record".
+            //
+            // Deliberately not a refusal. Which of the four this accessor SHOULD return is a
+            // question about its contract — whether "transport bar" and "control bar" name the same
+            // thing — and that is a decision, not a measurement. A discriminator is available when
+            // someone makes it: description narrows four to two, and #633's "holds a checkbox"
+            // separates those two.
+            if survivors.count > 1 {
+                Log.info(
+                    "getTransportBar: \(survivors.count) groups matched looksLikeTransportContainer; "
+                        + "returning the first in tree order",
+                    subsystem: "ax"
+                )
+            }
             return candidate
         }
 
         return looksLikeTransportContainer(window, runtime: runtime.ax) ? window : nil
+    }
+
+    /// Every group the transport scan accepts, in tree order — split out so the count is a value a
+    /// test can assert on rather than a number that exists only inside an `if let`.
+    ///
+    /// `first` of this is exactly what the previous `groups.first(where:)` returned, so extracting
+    /// it changes nothing about which element is chosen.
+    static func transportContainerCandidates(
+        among groups: [AXUIElement],
+        runtime: Runtime = .production
+    ) -> [AXUIElement] {
+        groups.filter { looksLikeTransportContainer($0, runtime: runtime.ax) }
     }
 
     /// Find a specific transport button by its title or description.
