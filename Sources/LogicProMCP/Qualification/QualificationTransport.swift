@@ -571,8 +571,17 @@ struct QualificationTransport: Sendable {
                 )
             }
             let negativeBody = try negative(session, id: 8)
-
-            var nextID = 9
+            // #373 Phase A: seed a saga JOURNAL record so `system.saga_status` has something to
+            // report. Exactly the shape `traceSeed` above already establishes -- the transport
+            // arranges the state a read-only probe needs, then probes it. Nothing new is being
+            // decided here; `probeParams` has handed `systemGetTrace` a seeded `trace_id` since
+            // this file was written.
+            //
+            // The seed is a REFUSED saga (`feature_disabled`), so no step ever executes and nothing
+            // is mutated -- but the journal still records the outcome, which is what
+            // `saga_status` reads. A zero-write seed.
+            _ = try? sagaSeed(session, id: 9)
+            var nextID = 10
             var operationResults: [String: QualificationOperationResult] = [:]
             for spec in request.operations {
                 var response: (text: String, isError: Bool)?
@@ -888,6 +897,11 @@ struct QualificationTransport: Sendable {
     /// diagnostic evidence it is producing -- its oracle pins the real success contract
     /// (`success == true`, a `receipt_path`, a cleared count), and that contract can only be
     /// satisfied by actually clearing traces.
+    /// One spelling of the key, shared by the seed and the probe. Two literals would be two
+    /// places to keep in step, and the failure mode is silent: `saga_status` would look up a
+    /// record nothing wrote and report exactly what it reported before the seed existed.
+    static let sagaProbeIdempotencyKey = "qualification-read-probe"
+
     static let declinesItsSuccessPathByDesign: Set<String> = [
         OperationID.systemClearTraces.rawValue,
     ]
@@ -906,9 +920,9 @@ struct QualificationTransport: Sendable {
         case .systemHelp:
             return ["category": "system"]
         case .systemSagaPreflight:
-            return ["idempotency_key": "qualification-read-probe", "steps": []]
+            return ["idempotency_key": Self.sagaProbeIdempotencyKey, "steps": []]
         case .systemSagaStatus:
-            return ["idempotency_key": "qualification-read-probe"]
+            return ["idempotency_key": Self.sagaProbeIdempotencyKey]
 
         // #373 Phase A. `default: [:]` sends NO parameters, so every read-only operation that
         // requires one refuses correctly and is recorded as unavailable -- the product working,
@@ -1042,6 +1056,34 @@ struct QualificationTransport: Sendable {
             phase: "negative_failclosed"
         )
         return (result.isError == true, body, text)
+    }
+
+    /// Seed a saga journal record under the key `probeParams` hands `system.saga_status`.
+    ///
+    /// Deliberately tolerant: the qualification must not fail because a SETUP step did not take.
+    /// If this does not land, `saga_status` reports `element_not_found` and defers exactly as it
+    /// did before -- the downside is the previous behaviour, so the seed cannot make things worse.
+    @discardableResult
+    private func sagaSeed(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> Bool {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "saga_execute",
+                    "params": [
+                        "idempotency_key": Self.sagaProbeIdempotencyKey,
+                        "steps": [] as [Any],
+                    ],
+                ],
+            ],
+            phase: "saga_seed"
+        )
+        return result.isError == true
     }
 
     private func traceSeed(
