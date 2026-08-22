@@ -281,7 +281,7 @@ actor StatePoller {
             section: .transport,
             axChannel: axChannel, cache: cache, as: TransportState.self
         ) { cache, state, observed in
-            await cache.updateTransport(state, ifCurrent: observed)
+            await cache.updateTransport(state, ifCurrent: observed, source: .backgroundPoll)
         }
         if transportReady { cacheKeys.append(.transport) }
         let mixerReady = await poll(

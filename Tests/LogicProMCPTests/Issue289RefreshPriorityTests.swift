@@ -161,6 +161,25 @@ struct Issue289RefreshPriorityTests {
         #expect((await cache.getTransport()).tempo == surviving)
     }
 
+    /// Every caller of the conditional writes today is `StatePoller`, a background loop. If the
+    /// source-less overload defaulted to anything above the bottom rank, those writes would be
+    /// labelled authoritative and could not be displaced by a real mutation verification — the
+    /// mislabelling this rule exists to prevent, applied silently to every unconverted call site.
+    @Test("the source-less overload is the lowest rank, so unconverted callers stay displaceable")
+    func sourcelessWritesAreNotTreatedAsAuthoritative() async {
+        let cache = StateCache()
+        let observed = await cache.currentVersion(for: .transport)
+
+        #expect(await cache.updateTransport(transport(tempo: 90), ifCurrent: observed))
+
+        let applied = await cache.updateTransport(
+            transport(tempo: 140), ifCurrent: observed, source: .mutationVerification
+        )
+
+        #expect(applied)
+        #expect((await cache.getTransport()).tempo == 140)
+    }
+
     private func transport(tempo: Double) -> TransportState {
         var state = TransportState()
         state.tempo = tempo

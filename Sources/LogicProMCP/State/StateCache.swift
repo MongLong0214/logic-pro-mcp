@@ -273,7 +273,7 @@ actor StateCache {
         }
     }
 
-    private func advanceSectionRevision(_ section: CacheSectionID, source: RefreshSource = .explicitRead) {
+    private func advanceSectionRevision(_ section: CacheSectionID, source: RefreshSource = .backgroundPoll) {
         let next = sectionRevisions[section, default: 0] + 1
         sectionRevisions[section] = next
         var history = revisionSources[section, default: [:]]
@@ -319,7 +319,7 @@ actor StateCache {
     private func accepts(
         _ observed: SectionVersion,
         for section: CacheSectionID,
-        source: RefreshSource = .explicitRead
+        source: RefreshSource = .backgroundPoll
     ) -> Bool {
         // A stale revision is not automatically a stale VALUE. When everything committed since the
         // observation came from sources this write strictly outranks, the refusal would be the
@@ -357,8 +357,13 @@ actor StateCache {
     /// Applies `state` only if the transport has not changed since `observed`
     /// was captured before the read that produced it.
     @discardableResult
+    /// Source-less overload. It defaults to `.backgroundPoll`, the LOWEST rank, because every
+    /// caller of the conditional writes today is `StatePoller` — a background loop. Defaulting to
+    /// anything higher would label a background poll authoritative, which is the exact mislabelling
+    /// ADR-006's priority rule exists to prevent, and it would do so silently at every call site
+    /// that has not been converted yet. A caller that really is authoritative has to say so.
     func updateTransport(_ state: TransportState, ifCurrent observed: SectionVersion) -> Bool {
-        updateTransport(state, ifCurrent: observed, source: .explicitRead)
+        updateTransport(state, ifCurrent: observed, source: .backgroundPoll)
     }
 
     func updateTransport(
