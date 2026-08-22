@@ -645,7 +645,18 @@ enum OperationRegistry {
     } + ([
         (.systemHealth, "health", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
         (.systemPermissions, "permissions", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
-        (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
+        // #668 — `.short` (25s) was wrong for this one. `refresh_cache` drives a full poll cycle,
+        // whose cost grows with project size: measured median 12.6s on a 74-track project, with
+        // roughly 1 call in 5 hitting the 25s ceiling and returning `operation_timeout`.
+        //
+        // `.medium` (90s) is NOT a computed headroom figure. The 74-track maximum is CENSORED —
+        // every sample at ~26.67s was cut by the old deadline, so the true maximum is unknown and
+        // any multiple of the median would be arithmetic on a truncated distribution. This is a
+        // deliberately generous class chosen so the operation can finish, not a measurement.
+        //
+        // This is mitigation, not a fix: the cycle still costs what it costs, and a large enough
+        // project will exhaust 90s too. Splitting the poll cycle per section closes #668.
+        (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, []),
         (.systemListRecentTraces, "list_recent_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["limit"]),
         (.systemGetTrace, "get_trace", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["trace_id"]),
         // WHY: trace deletion destroys internal evidence, not Logic state, so it stays readOnly and bypasses the Logic-write gate.

@@ -354,7 +354,7 @@ struct OperationRegistryTests {
         ("logic_audio", "audio.recommend_eq", "recommend_eq", .readOnly, .short, .none),
         ("logic_system", "system.health", "health", .readOnly, .short, .none),
         ("logic_system", "system.permissions", "permissions", .readOnly, .short, .none),
-        ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .short, .none),
+        ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .medium, .none),   // #668
         ("logic_system", "system.list_recent_traces", "list_recent_traces", .readOnly, .short, .none),
         ("logic_system", "system.get_trace", "get_trace", .readOnly, .short, .none),
         ("logic_system", "system.clear_traces", "clear_traces", .readOnly, .short, .none),
