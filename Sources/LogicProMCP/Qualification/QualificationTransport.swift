@@ -544,7 +544,27 @@ struct QualificationTransport: Sendable {
 
         do {
             let handshake = try initialize(session)
-            let healthBefore = try health(session, id: 2, phase: "health_before")
+            // The UI locale comes from a MENU-BAR read (`AXLogicProElements+Menu.swift:25`): the
+            // observed top-level titles must contain one language's full set. That read is
+            // TRANSIENTLY EMPTY -- measured, three consecutive fresh processes reported `unknown`
+            // and two reads seconds later reported `en-US`, with Logic untouched between them.
+            //
+            // Sampling it once meant a single unreadable read aborted the entire run, and the guard
+            // downstream reported it as a locale MISMATCH for a locale that was correct. That
+            // message cost eight wrong explanations before the mechanism was found.
+            //
+            // Retried ONLY while the value is unrecognised. A recognised locale -- en-US or ko-KR --
+            // stops immediately even when it is the WRONG one, because that is a real mismatch and
+            // must still fail closed. Retrying an unrecognised value cannot convert a genuine
+            // ko-KR run into an en-US pass: ko-KR is recognised and exits the loop on the first read.
+            var healthBefore = try health(session, id: 2, phase: "health_before")
+            var localeRetryID = 900
+            while QualificationLocale(rawValue: healthBefore.value.logicProUILocale) == nil,
+                  localeRetryID < 906 {
+                Thread.sleep(forTimeInterval: 1.5)
+                healthBefore = try health(session, id: localeRetryID, phase: "health_before_retry")
+                localeRetryID += 1
+            }
             let catalogBefore = try catalog(session, id: 3, phase: "catalog_before")
             let baselineTraceList = try traces(session, id: 4)
             let baselineTraceIDs = Set(baselineTraceList.traces.map(\.traceID))
