@@ -31,6 +31,13 @@ actor StateCache {
     private var projectEpoch: UInt64 = 0
     private var sectionRevisions: [CacheSectionID: UInt64] = [:]
     private var droppedStaleWriteCounts: [CacheSectionID: UInt64] = [:]
+    /// Which source produced each committed revision, per section. ADR-006's commit rule has to
+    /// answer "was everything committed since my observation lower-priority than me?", and that is
+    /// a question about the commits in the GAP, not about the newest one alone: a background poll
+    /// landing on top of an explicit read would otherwise let a subscription refresh erase the read
+    /// it never outranked. Bounded — entries at or below the observable window are pruned.
+    private var revisionSources: [CacheSectionID: [UInt64: RefreshSource]] = [:]
+    private static let revisionSourceWindow: UInt64 = 64
 
     /// Whether Logic Pro has an open document with a visible window.
     /// Defaults to true (optimistic) — StatePoller sets to false when no document detected.
@@ -266,8 +273,35 @@ actor StateCache {
         }
     }
 
-    private func advanceSectionRevision(_ section: CacheSectionID) {
-        sectionRevisions[section, default: 0] += 1
+    private func advanceSectionRevision(_ section: CacheSectionID, source: RefreshSource = .explicitRead) {
+        let next = sectionRevisions[section, default: 0] + 1
+        sectionRevisions[section] = next
+        var history = revisionSources[section, default: [:]]
+        history[next] = source
+        if next > Self.revisionSourceWindow {
+            let floor = next - Self.revisionSourceWindow
+            history = history.filter { $0.key >= floor }
+        }
+        revisionSources[section] = history
+    }
+
+    /// True when every revision committed after `observed` came from a source this write strictly
+    /// outranks. An unknown revision (pruned, or written before sources were recorded) is treated
+    /// as NOT displaceable: forgetting who wrote something is not evidence that it was unimportant.
+    private func everyCommitInGapIsOutrankedBy(
+        _ source: RefreshSource,
+        section: CacheSectionID,
+        observed: SectionVersion
+    ) -> Bool {
+        let current = sectionRevisions[section, default: 0]
+        guard current > observed.sectionRevision else { return false }
+        let history = revisionSources[section, default: [:]]
+        var revision = observed.sectionRevision + 1
+        while revision <= current {
+            guard let committed = history[revision], committed.rank < source.rank else { return false }
+            revision += 1
+        }
+        return true
     }
 
     /// Advances the cache's project epoch without changing section content.
@@ -284,8 +318,23 @@ actor StateCache {
     /// per-section diagnostic counter records the drop.
     private func accepts(
         _ observed: SectionVersion,
-        for section: CacheSectionID
+        for section: CacheSectionID,
+        source: RefreshSource = .explicitRead
     ) -> Bool {
+        // A stale revision is not automatically a stale VALUE. When everything committed since the
+        // observation came from sources this write strictly outranks, the refusal would be the
+        // inversion ADR-006 forbids — a slow background poll burying a mutation verification that
+        // read the same generation. A stale project epoch is never displaceable: the value is about
+        // a different project, and no amount of authority makes it true here.
+        if projectEpoch == observed.projectEpoch,
+           everyCommitInGapIsOutrankedBy(source, section: section, observed: observed) {
+            Log.debug(
+                "priority displacement for \(section.rawValue): \(source.rawValue) overrides "
+                + "rev \(observed.sectionRevision)..\(sectionRevisions[section, default: 0])",
+                subsystem: "cache"
+            )
+            return true
+        }
         guard projectEpoch == observed.projectEpoch,
               sectionRevisions[section, default: 0] == observed.sectionRevision else {
             droppedStaleWriteCounts[section, default: 0] += 1
@@ -309,8 +358,17 @@ actor StateCache {
     /// was captured before the read that produced it.
     @discardableResult
     func updateTransport(_ state: TransportState, ifCurrent observed: SectionVersion) -> Bool {
-        guard accepts(observed, for: .transport) else { return false }
-        updateTransport(state)
+        updateTransport(state, ifCurrent: observed, source: .explicitRead)
+    }
+
+    func updateTransport(
+        _ state: TransportState,
+        ifCurrent observed: SectionVersion,
+        source: RefreshSource
+    ) -> Bool {
+        guard accepts(observed, for: .transport, source: source) else { return false }
+        transport = state
+        advanceSectionRevision(.transport, source: source)
         return true
     }
 
