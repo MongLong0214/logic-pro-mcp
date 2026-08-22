@@ -378,7 +378,39 @@ enum SemanticOracleFixtures {
                 {"bands":[{"centerHz":5001.953125,"gainDb":-36.0,"q":8.6,\
                 "reason":"resonance_cut"}]}
                 """,
-            readback: health
+            readback: health,
+            customMutants: [
+                .init(.malformed, "not json"),
+                .init(.malformed, "{}"),
+                // An empty band list is the REFUSAL branch, and a refusal that will not say why
+                // is not a safe refusal -- it is an unexplained one.
+                .init(.wellFormedButWrong, "{\"bands\":[]}"),
+                // Declining for a reason the engine cannot produce.
+                .init(.wellFormedButWrong, "{\"bands\":[],\"reason\":\"because_i_said_so\"}"),
+                // Recommending AND claiming it could not recommend.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"bands\":[{\"centerHz\":5000,\"gainDb\":-36.0,\"q\":8.6,"
+                        + "\"reason\":\"resonance_cut\"}],\"reason\":\"confidence_below_minimum\"}"
+                ),
+                // A cut outside the audible range the old constraint pinned.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"bands\":[{\"centerHz\":19,\"gainDb\":-36.0,\"q\":8.6,\"reason\":\"resonance_cut\"}]}"
+                ),
+                // A band that is not a resonance cut.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"bands\":[{\"centerHz\":5000,\"gainDb\":-36.0,\"q\":8.6,\"reason\":\"guesswork\"}]}"
+                ),
+                // CFBoolean where a number belongs -- the hole a review found in get_regions.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"bands\":[{\"centerHz\":false,\"gainDb\":-36.0,\"q\":8.6,\"reason\":\"resonance_cut\"}]}"
+                ),
+                // A scalar where a band object belongs.
+                .init(.wellFormedButWrong, "{\"bands\":[5000]}"),
+            ]
         ),
         .midiListPorts: SemanticOracleFixture(
             response: """

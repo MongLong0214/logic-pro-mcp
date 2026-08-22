@@ -759,6 +759,29 @@ struct SemanticOracleMutationTests {
     /// the target position removed. The envelope must bind that equality:
     /// otherwise stable reads, typed counts, and echoed target metadata can
     /// falsely certify a no-op or the deletion of a marker at another position.
+    /// `recommend_eq`'s refusal branch, asserted positively — the same omission a review caught in
+    /// the get_regions change, where ten negative mutants shipped without one positive case.
+    ///
+    /// `recommendEQ` declines on analysis_incomplete, confidence_below_minimum, and
+    /// source_classification_unknown. It measured and judged the measurement insufficient to cut
+    /// safely; declining IS the contract, which is why the handler returns it without `isError`.
+    @Test func recommendEQOracleAcceptsASafeRefusalThatNamesItsReason() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.audioRecommendEQ])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.audioRecommendEQ])
+
+        for reason in ["analysis_incomplete", "confidence_below_minimum", "source_classification_unknown"] {
+            let refusal = "{\"bands\":[],\"reason\":\"\(reason)\"}"
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(refusal.utf8), readbackData: fixture.readbackData))
+            #expect(accepted, "safe refusal \(reason) must qualify — declining is the contract")
+        }
+
+        // And the recommending branch still qualifies, so widening did not trade one for the other.
+        let stillHonest = try #require(oracle.evaluate(
+            responseData: fixture.responseData, readbackData: fixture.readbackData))
+        #expect(stillHonest, "the recommending branch stopped qualifying")
+    }
+
     /// The branch this oracle was widened FOR, asserted positively.
     ///
     /// A review pointed out that the change shipped seven negative mutants and never once showed
