@@ -538,7 +538,7 @@ enum SemanticOracleTable {
     ///
     /// The root cause is a gap in the constraint data model, not laziness: a
     /// constraint binds to ONE payload and has no cross-check case, and there is
-    /// no implication case. For these eight the only honest checks ARE
+    /// no implication case. For these nine the only honest checks ARE
     /// cross-checks and conditionals. Forcing them under a numeric cap would
     /// have produced tautological oracles (`enumMember` over a field a
     /// `typedField` already types) — checkbox oracles of exactly the kind this
@@ -566,6 +566,8 @@ enum SemanticOracleTable {
         // Expressing it as an enum over both scopes would accept a response claiming
         // `complete: true` while naming the viewport scope -- weaker than what it replaces.
         .projectGetRegions,
+        // Same shape as projectGetRegions: two success branches, and a flat list can only pin one.
+        .audioRecommendEQ,
     ]
 
     static var customOracles: [OperationOracle] { all.filter { $0.strength == .custom } }
@@ -964,16 +966,46 @@ enum SemanticOracleTable {
     // directly. The default six-bands-per-octave grid keeps a detected
     // resonance's Q at or below 10; recommendEQ makes gainDb non-positive.
     static let audioRecommendEQ = OperationOracle(
-        .audioRecommendEQ,
-        strength: .shapeAndDomain,
-        constraints: [
-            .nonEmptyArray(key: "bands"),
-            .numericRange(key: "bands.0.centerHz", min: 20, max: 20_000),
-            .typedField(key: "bands.0.gainDb", type: .number),
-            .numericRange(key: "bands.0.q", min: 0, max: 10),
-            .valueEquals(key: "bands.0.reason", expected: .string("resonance_cut")),
-        ]
-    )
+        custom: .audioRecommendEQ,
+        reason: """
+            `EQRecommendationOutcome` has TWO success branches and the handler \
+            returns both without `isError`: a recommendation, or a safe refusal \
+            carrying a reason. `recommendEQ` declines on analysis_incomplete, \
+            confidence_below_minimum, and source_classification_unknown -- it \
+            measured, then judged the measurement insufficient to cut safely. \
+            Declining IS the contract there, which is why it is not an error. \
+            A `nonEmptyArray` constraint pins only the recommending branch and \
+            fails the operation for behaving correctly; the constraint model \
+            has no implication case, so the branch lives in the closure.
+            """
+    ) { responseData, _ in
+        guard let response = JSONInspector.parse(responseData) as? [String: Any],
+              let bands = response["bands"] as? [Any] else {
+            return false
+        }
+        guard let first = bands.first else {
+            // The refusal branch. It must NAME why it declined, and only with a reason the engine
+            // can actually produce -- an empty band list with an invented excuse is not a safe
+            // refusal, it is an unexplained one.
+            let known = ["analysis_incomplete", "confidence_below_minimum", "source_classification_unknown"]
+            guard let reason = response["reason"] as? String, known.contains(reason) else {
+                return false
+            }
+            return true
+        }
+        // The recommending branch keeps every obligation the constraint list carried.
+        guard let band = first as? [String: Any],
+              let centerHz = JSONInspector.number(of: band["centerHz"] ?? NSNull()),
+              centerHz >= 20, centerHz <= 20_000,
+              JSONInspector.number(of: band["gainDb"] ?? NSNull()) != nil,
+              let q = JSONInspector.number(of: band["q"] ?? NSNull()),
+              q >= 0, q <= 10,
+              band["reason"] as? String == "resonance_cut" else {
+            return false
+        }
+        // A recommendation that also claims it could not recommend is contradicting itself.
+        return response["reason"] == nil || response["reason"] is NSNull
+    }
 
     // MARK: - midi
 
