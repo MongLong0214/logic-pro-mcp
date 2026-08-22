@@ -227,6 +227,15 @@ through, so this is a behaviour change, not only a reordering.
 - **A health-probe retry absorbs Logic's settle window.** Locale detection returned `unknown` when the top-level menu titles were read before Logic had settled, which aborted the run. The probe now retries; the aborts went to zero.
 - **Known limit — the qualification does not open a project.** Operations that require one (`get_regions`, `get_inventory`) therefore depend on ambient Logic state: a run scores 18 with a project open and 16 at the chooser. The health artifact records `logic_pro_has_document` and `logic_pro_project_chooser_visible`, so a score is interpretable after the fact, but nothing enforces the precondition.
 
+### Added — `edit.move_to_playhead`
+
+- **A new public edit verb, registered with its semantic oracle (#575).** `logic_edit.move_to_playhead` moves the selected region to the playhead. It is a mutating operation and answers with the same Honest Contract envelope as the rest of the edit surface.
+
+### Changed — mixer strip response shape (#291)
+
+- **`sends` is optional and is now absent rather than empty.** It was `[SendState] = []`, so every strip of every project serialised `"sends": []` while nothing ever populated it — a consumer reading that saw "this strip has no sends" when the truth was "nobody looked". **This is a wire-format change: the key can now be missing.** It stays absent deliberately: measured on Logic Pro 12.3, an empty send slot is an `AXButton` described only as "send button", with no `AXValue`, no `AXValueDescription` and no `AXTitle`, so there is nothing to read a destination from.
+- **`input` and `output` are populated where they can be read.** Both are optional for the same reason — absence means unread, not empty.
+
 ---
 
 ## [3.13.0] — 2026-07-22
@@ -235,7 +244,7 @@ Small follow-on release: the coordinate-free actuation campaign now covers plugi
 
 ### Changed — coordinate-free actuation
 
-- **`logic_plugins.insert_verified` leaf selection is coordinate-free by default.** The direct/search leaf-selection path now presses the target plugin's entry in the AX-children format submenu (`AXPress`) instead of a synthetic coordinate click; `LOGIC_MCP_INSERT_COORD_FREE=0` is the kill-switch back to the coordinate path. The recursive category-hover fallback stays coordinate-only by governed waiver — reachable in principle but unexercised in practice for the three supported plugins — and the response's `select_trace.leaf_select_coord_free` is sourced from the winning strategy rather than the raw flag, so a recursive win still honestly reports `false` even with the flag on. Slot-open remains a coordinate click (AXPress was live-probed and rejected: it either no-ops or opens an `AXShowMenu` tracking loop that wedges Logic). A DEBUG-only test seam deterministically exercises the honest `commit_strategy` on a forced post-commit timeout; it is compiled out of release builds. ([#425](https://github.com/MongLong0214/logic-pro-mcp/issues/425)) (Historical 3.13.0 behavior; superseded for current code by the Unreleased #425 entry above.)
+- **`logic_plugins.insert_verified` leaf selection is coordinate-free by default.** The direct/search leaf-selection path now presses the target plugin's entry in the AX-children format submenu (`AXPress`) instead of a synthetic coordinate click; `LOGIC_MCP_INSERT_COORD_FREE=0` is the kill-switch back to the coordinate path. The recursive category-hover fallback stays coordinate-only by governed waiver — reachable in principle but unexercised in practice for the three supported plugins — and the response's `select_trace.leaf_select_coord_free` is sourced from the winning strategy rather than the raw flag, so a recursive win still honestly reports `false` even with the flag on. Slot-open remains a coordinate click (AXPress was live-probed and rejected: it either no-ops or opens an `AXShowMenu` tracking loop that wedges Logic). A DEBUG-only test seam deterministically exercises the honest `commit_strategy` on a forced post-commit timeout; it is compiled out of release builds. ([#425](https://github.com/MongLong0214/logic-pro-mcp/issues/425)) (Historical 3.13.0 behavior; superseded for current code by the #425 entry under 3.14.0 above.)
 
 ### Fixed
 
