@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
-"""Live proof that ADR-006's stale-write guard actually refuses writes, and that its counter moves.
+"""An envelope PROBE for ADR-006's stale-write counter. Deliberately not a `live_*` harness.
 
 Usage:  LPM_EVIDENCE_ROOT=/abs/path/outside/repo \
-        python3 live_289_stale_write_guard_fires.py <worktree> <full-40-char-head-sha>
+        python3 probe_289_stale_write_counter.py <worktree> <full-40-char-head-sha>
+
+WHY THIS IS NOT NAMED live_289_*
+--------------------------------
+`Scripts/livekit/live_*.py` is a contract, not a naming style: `harness_evidence_coverage.py` treats
+any file matching that name as a harness the branch must prove clean, and `evidence.is_clean`
+requires `captures > 0`, `visual_assertions > 0` and `recordings > 0` — because "the zeros have to
+be earned". A run that asserts nothing visual satisfies "every visual names a subject" vacuously.
+
+This file reads a JSON envelope and never looks at the screen, so it can never satisfy that
+contract honestly. It was written as `live_289_...` first, and the coverage rule refused it — the
+rule was right. Padding it with a screenshot nobody asserts on, or widening `is_clean` for it,
+would each have defeated the clause rather than met it. It is renamed instead.
 
 WHY THIS HARNESS EXISTS
 -----------------------
