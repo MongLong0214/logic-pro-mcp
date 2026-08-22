@@ -538,7 +538,7 @@ enum SemanticOracleTable {
     ///
     /// The root cause is a gap in the constraint data model, not laziness: a
     /// constraint binds to ONE payload and has no cross-check case, and there is
-    /// no implication case. For these seven the only honest checks ARE
+    /// no implication case. For these eight the only honest checks ARE
     /// cross-checks and conditionals. Forcing them under a numeric cap would
     /// have produced tautological oracles (`enumMember` over a field a
     /// `typedField` already types) — checkbox oracles of exactly the kind this
@@ -801,7 +801,9 @@ enum SemanticOracleTable {
     static let projectGetRegions = OperationOracle(
         custom: .projectGetRegions,
         reason: """
-            `complete` is CONDITIONAL, not invariant. The product emits \
+            `complete` is CONDITIONAL, not invariant -- an earlier note here \
+            said this read only ever sees the visible viewport, which is not \
+            what the product does. The product emits \
             `scope: complete ? "whole_arrangement" : "visible_arrange_area"` \
             (`AccessibilityChannel+Regions.swift:53`) -- both branches are its \
             documented contract. The previous constraint list pinned only the \
@@ -814,22 +816,36 @@ enum SemanticOracleTable {
     ) { responseData, _ in
         guard let response = JSONInspector.parse(responseData) as? [String: Any],
               let complete = response["complete"], JSONInspector.isBoolean(complete),
-              let regions = response["regions"] as? [Any],
-              let count = response["returned_count"] as? Int,
-              count >= 0, count <= 100_000 else {
+              let regions = response["regions"] as? [Any] else {
             return false
         }
-        // Stronger than the list it replaces: the advertised count must match the array it
-        // describes. A reader that says "3" and ships 1 is not answering correctly in either
-        // branch, and no `valueEquals` could express that.
-        guard count == regions.count else { return false }
+        // `JSONInspector.number`, NOT `as? Int`. A review found the counterexample: on Darwin a
+        // JSON boolean is a CFBoolean-backed NSNumber, so `as? Int` bridges `false` to 0 and
+        // `returned_count: false` would agree with an empty array. The `.numericRange` constraint
+        // this closure replaced went through `JSONInspector.number`, which rejects CFBooleans
+        // outright -- so that payload was an old-reject/new-accept case, and the claim that this
+        // change only tightened the grader was wrong until this line.
+        guard let countValue = response["returned_count"],
+              let count = JSONInspector.number(of: countValue),
+              count >= 0, count <= 100_000,
+              count == Double(regions.count) else {
+            return false
+        }
+        // The product emits `[RegionInfo]`. An array carrying nulls or scalars is not a region
+        // list, and "is an array" was the whole of the old check.
+        guard regions.allSatisfy({ $0 is [String: Any] }) else { return false }
+
+        let reason = response["reason"]
         if (complete as? NSNumber)?.boolValue == true {
-            // A complete read covers the arrangement and has no limitation to explain.
+            // A complete read covers the arrangement and has NO limitation to explain. The product
+            // encodes `reason: nil`, which JSON omits, so a complete response that names one is
+            // describing a limitation it also claims not to have.
+            guard reason == nil || reason is NSNull else { return false }
             return response["scope"] as? String == "whole_arrangement"
         }
         // An incomplete read must name its scope AND say why it is limited.
         return response["scope"] as? String == "visible_arrange_area"
-            && response["reason"] as? String == "logic_ax_viewport_only"
+            && reason as? String == "logic_ax_viewport_only"
     }
 
     // ProjectExportPlannerModels `ProjectExportPlan` CodingKeys.

@@ -270,6 +270,26 @@ enum SemanticOracleFixtures {
                     .wellFormedButWrong,
                     "{\"complete\":\"true\",\"scope\":\"whole_arrangement\",\"regions\":[],\"returned_count\":0}"
                 ),
+                // A review's counterexample: on Darwin a JSON boolean is a CFBoolean-backed
+                // NSNumber, so `as? Int` bridged this to 0 and it agreed with an empty array.
+                // The constraint list this closure replaced rejected it.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":false,\"scope\":\"visible_arrange_area\","
+                        + "\"reason\":\"logic_ax_viewport_only\",\"regions\":[],\"returned_count\":false}"
+                ),
+                // Complete, yet naming a limitation it also claims not to have.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"whole_arrangement\",\"regions\":[],"
+                        + "\"returned_count\":0,\"reason\":\"bogus_limitation\"}"
+                ),
+                // "is an array" was the whole of the old check; nulls are not regions.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"whole_arrangement\",\"regions\":[null],"
+                        + "\"returned_count\":1}"
+                ),
             ]
         ),
         .projectExportPlan: SemanticOracleFixture(
