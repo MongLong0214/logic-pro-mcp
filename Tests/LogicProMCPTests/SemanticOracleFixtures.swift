@@ -237,7 +237,60 @@ enum SemanticOracleFixtures {
                 "returned_count":1,"_debug":{"layoutItems":1,"nonRegion":0}}
                 """,
             readback: "{\"cache_age_sec\":1.0,\"fetched_at\":null,\"ax_occluded\":false,"
-                + "\"source\":\"ax_live\",\"data\":[]}"
+                + "\"source\":\"ax_live\",\"data\":[]}",
+            customMutants: [
+                .init(.malformed, "not json"),
+                .init(.malformed, "{}"),
+                // The contradiction a flat enum over both scopes would have let through: a read
+                // claiming it covered everything while naming the viewport-limited scope.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"visible_arrange_area\",\"regions\":[],\"returned_count\":0}"
+                ),
+                // The mirror: limited, but naming the whole-arrangement scope.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":false,\"scope\":\"whole_arrangement\",\"regions\":[],\"returned_count\":0,"
+                        + "\"reason\":\"logic_ax_viewport_only\"}"
+                ),
+                // Limited, correct scope, but declining to say WHY it is limited.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":false,\"scope\":\"visible_arrange_area\",\"regions\":[],\"returned_count\":0}"
+                ),
+                // A reader that advertises three and ships one. The constraint list this oracle
+                // replaced could not express this at all, in either branch.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"whole_arrangement\",\"returned_count\":3,"
+                        + "\"regions\":[{\"name\":\"Audio 1\"}]}"
+                ),
+                // `complete` stringified -- NSNumber/String confusion must not pass.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":\"true\",\"scope\":\"whole_arrangement\",\"regions\":[],\"returned_count\":0}"
+                ),
+                // A review's counterexample: on Darwin a JSON boolean is a CFBoolean-backed
+                // NSNumber, so `as? Int` bridged this to 0 and it agreed with an empty array.
+                // The constraint list this closure replaced rejected it.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":false,\"scope\":\"visible_arrange_area\","
+                        + "\"reason\":\"logic_ax_viewport_only\",\"regions\":[],\"returned_count\":false}"
+                ),
+                // Complete, yet naming a limitation it also claims not to have.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"whole_arrangement\",\"regions\":[],"
+                        + "\"returned_count\":0,\"reason\":\"bogus_limitation\"}"
+                ),
+                // "is an array" was the whole of the old check; nulls are not regions.
+                .init(
+                    .wellFormedButWrong,
+                    "{\"complete\":true,\"scope\":\"whole_arrangement\",\"regions\":[null],"
+                        + "\"returned_count\":1}"
+                ),
+            ]
         ),
         .projectExportPlan: SemanticOracleFixture(
             response: """

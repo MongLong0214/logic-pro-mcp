@@ -759,6 +759,33 @@ struct SemanticOracleMutationTests {
     /// the target position removed. The envelope must bind that equality:
     /// otherwise stable reads, typed counts, and echoed target metadata can
     /// falsely certify a no-op or the deletion of a marker at another position.
+    /// The branch this oracle was widened FOR, asserted positively.
+    ///
+    /// A review pointed out that the change shipped seven negative mutants and never once showed
+    /// that the response it exists to accept actually passes. Negatives alone are satisfied by an
+    /// oracle that rejects everything, which is the opposite failure from the one being fixed.
+    ///
+    /// This payload is the shape measured live on Logic 12.3 against the empty fixture project:
+    /// every region visible, so the read is complete, names the whole arrangement, and has no
+    /// limitation to explain.
+    @Test func getRegionsOracleAcceptsTheCompleteWholeArrangementBranch() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.projectGetRegions])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.projectGetRegions])
+
+        let complete = """
+            {"complete":true,"scope":"whole_arrangement","regions":[],"returned_count":0,\
+            "_debug":{"layoutItems":0,"nonRegion":0,"track_headers":1,"track_headers_in_viewport":1}}
+            """
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(complete.utf8), readbackData: fixture.readbackData))
+        #expect(accepted, "the complete/whole_arrangement branch must qualify — it is why this oracle changed")
+
+        // And the branch that already worked still does, so widening did not trade one for the other.
+        let stillHonest = try #require(oracle.evaluate(
+            responseData: fixture.responseData, readbackData: fixture.readbackData))
+        #expect(stillHonest, "the viewport-limited branch stopped qualifying")
+    }
+
     @Test func deleteMarkerOracleRequiresTheExactSettledPositionMultiset() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.navigateDeleteMarker])
         let fixture = try #require(SemanticOracleFixtures.byOperationID[.navigateDeleteMarker])
