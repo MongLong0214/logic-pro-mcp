@@ -106,15 +106,27 @@ struct Issue425ContractTests {
         )
 
         let hasRemovedControlToken = Self.inertFlagTokens.contains { changelog.contains($0) }
-        let paragraphs = changelog.components(separatedBy: "\n\n")
-        let statesRemoval = paragraphs.contains { paragraph in
-            Self.inertFlagTokens.allSatisfy { paragraph.contains($0) }
-                && paragraph.localizedCaseInsensitiveContains("removed")
+        // Per LINE, not per blank-line paragraph. This file separates adjacent list items with a
+        // single newline, so splitting on "\n\n" hands back a whole bullet list as one "paragraph"
+        // -- and a review reproduced acceptance of two neighbouring bullets, one saying the controls
+        // remain supported and another saying an unrelated fallback was removed. One bullet is one
+        // claim; that is the unit the relation has to hold within.
+        let negations = ["not removed", "never removed", "no longer removed", "not been removed"]
+        let statesRemoval = changelog.components(separatedBy: .newlines).contains { line in
+            Self.inertFlagTokens.allSatisfy { line.contains($0) }
+                && line.localizedCaseInsensitiveContains("removed")
+                && !negations.contains { line.localizedCaseInsensitiveContains($0) }
         }
         let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
-        let claimsCategoryPick = changelog.range(
-            of: categoryPickPattern, options: .regularExpression
-        ) != nil
+        // Per line and negation-aware for the same reason as above: widening the scan to the whole
+        // file also widened what a truthful sentence can trip. "The server does not AXPick any
+        // category" is an accurate thing for a release note to say, and a bare regex reads it as
+        // the claim it denies.
+        let pickNegations = ["does not `AXPick`", "does not AXPick", "never `AXPick`", "never AXPick"]
+        let claimsCategoryPick = changelog.components(separatedBy: .newlines).contains { line in
+            line.range(of: categoryPickPattern, options: .regularExpression) != nil
+                && !pickNegations.contains { line.localizedCaseInsensitiveContains($0) }
+        }
 
         #expect(
             !hasRemovedControlToken || statesRemoval,
