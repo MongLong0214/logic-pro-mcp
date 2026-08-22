@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+(No unreleased changes yet.)
+
+---
+
+## [3.14.0] — 2026-08-22
+
 **These changes remove several ways the server could report that it had verified something it had not.**
 
 Every operation answers with an Honest Contract envelope: State A means performed *and* independently
@@ -209,6 +215,17 @@ through, so this is a behaviour change, not only a reordering.
 
 - **#425 current behavior supersedes the 3.13.0 #425 entry below.** Slot-open uses the measured custom action. Discovery is read-only and recurses through each already-attached `AXMenu` child; `AXPick` is dispatched only to the exact target leaf. `LOGIC_MCP_INSERT_COORD_FREE` / `insertCoordFree` is removed, not a kill switch. The coordinate click remains only when action enumeration succeeds and the custom action is absent; enumeration failure fails closed as `slot_action_enumeration_failed` and is recorded in the trace.
 - **`select_trace.leaf_select_coord_free` is a published compatibility receipt emitted as the literal `true`: every leaf-selection strategy is `AXPick`, so the field is constant rather than a strategy discriminator.**
+
+### Changed — ambiguous AX locators refuse instead of guessing (#628)
+
+- **A locator that matches two candidates now fails closed and names both.** Several sites previously bound the first match, so a caller could receive a State A receipt for an operation applied to the wrong element. Refusal is now the answer, and the receipt carries both candidates rather than a count, so the caller can tell *which* two collided.
+- **`Census.isUnambiguous` is the single predicate.** Transport and mixer locator sites were converted to it. Sites not yet converted are tracked by `BLIND_SITE_BUDGET`, a ratchet that fails the build in both directions — over budget and under it — so the number cannot drift silently either way. It is a count of unconverted sites, not a count of defects.
+
+### Added — per-operation qualification evidence (#373, #284)
+
+- **The qualification harness reports per-operation semantic outcomes rather than one aggregate.** Coverage moved from 12 to 18 passing operations on both locale axes (en-US and ko-KR) with an identical `binarySHA256`; `operation_unavailable` fell from 9 to 2 and `semantic_mismatch` from 2 to 1.
+- **A health-probe retry absorbs Logic's settle window.** Locale detection returned `unknown` when the top-level menu titles were read before Logic had settled, which aborted the run. The probe now retries; the aborts went to zero.
+- **Known limit — the qualification does not open a project.** Operations that require one (`get_regions`, `get_inventory`) therefore depend on ambient Logic state: a run scores 18 with a project open and 16 at the chooser. The health artifact records `logic_pro_has_document` and `logic_pro_project_chooser_visible`, so a score is interpretable after the fact, but nothing enforces the precondition.
 
 ---
 

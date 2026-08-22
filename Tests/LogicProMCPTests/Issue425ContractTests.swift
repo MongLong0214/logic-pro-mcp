@@ -85,32 +85,37 @@ struct Issue425ContractTests {
     @Test("#425 changelog supersedes the removed coordinate-free control")
     func changelogSupersedesRemovedCoordinateFreeControl() throws {
         let changelog = try scriptContents("CHANGELOG.md")
-        let unreleased = try #require(
+
+        // The section has to exist for the next branch to write into, but this guard no longer
+        // reads its contents. Cutting a release renames `## [Unreleased]` to a dated heading and
+        // moves the notes with it, so requiring the removal statement to live under [Unreleased]
+        // made the repository's own release procedure fail -- and the only ways to satisfy it
+        // were to copy released text back into a section that means "not yet released", or to
+        // never cut a release. The property worth guarding is that the changelog documents the
+        // removal, which is true wherever the sentence sits.
+        _ = try #require(
             Self.markdownSection(named: "## [Unreleased]", in: changelog),
             "CHANGELOG.md must contain an ## [Unreleased] section"
         )
+
         let hasRemovedControlToken = Self.inertFlagTokens.contains { changelog.contains($0) }
-        let unreleasedIsNonEmpty = !unreleased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let unreleasedStatesRemoval = unreleased.contains("LOGIC_MCP_INSERT_COORD_FREE")
-            && unreleased.contains("insertCoordFree")
-            && unreleased.localizedCaseInsensitiveContains("removed")
+        let statesRemoval = changelog.contains("LOGIC_MCP_INSERT_COORD_FREE")
+            && changelog.contains("insertCoordFree")
+            && changelog.localizedCaseInsensitiveContains("removed")
         let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
-        let unreleasedClaimsCategoryPick = unreleased.range(
+        let claimsCategoryPick = changelog.range(
             of: categoryPickPattern, options: .regularExpression
         ) != nil
 
-        #expect(unreleasedIsNonEmpty, "CHANGELOG.md ## [Unreleased] must not be empty")
         #expect(
-            !unreleased.contains("(No unreleased changes yet.)"),
-            "CHANGELOG.md ## [Unreleased] must describe this branch's changes"
+            !hasRemovedControlToken || statesRemoval,
+            "CHANGELOG.md names the coordinate-free insert control, so it must also state that it was removed"
         )
+        // Widened from the [Unreleased] section to the whole file: a released section claiming a
+        // category is AXPick'ed is exactly as wrong as an unreleased one claiming it.
         #expect(
-            !hasRemovedControlToken || unreleasedStatesRemoval,
-            "Historical coordinate-free control tokens require ## [Unreleased] to state their removal"
-        )
-        #expect(
-            !unreleasedClaimsCategoryPick,
-            "CHANGELOG.md ## [Unreleased] must not claim that a category is AXPick'ed"
+            !claimsCategoryPick,
+            "CHANGELOG.md must not claim that a category is AXPick'ed"
         )
     }
 }
