@@ -61,6 +61,20 @@ Copy the closest existing one. Then:
   mandatory New Track sheet through `track.delete`; the create route reaches the same sheet through
   different code. A green 538 run said nothing about the create fix, and writing
   `live_542_track_create_retry.py` for that call site is what surfaced #549 on its first run.
+- **Assert what you can make happen, and record what you cannot.** `live_289_stale_write_guard_fires.py`
+  was written to prove that driving mutations makes `dropped_stale_writes` rise, because a single run had
+  shown exactly that. Three repeats refuted it: the counter moved in 2 of 5 runs, in different phases, and
+  never in the contended window. A start-up explanation died the same way against a 0.4s sample. The
+  harness now asserts the four things that are observable — the key exists, the poller advances, the
+  counter neither runs away nor decreases — and its evidence document carries
+  `counter_reachable_on_demand: false` so the next person does not re-measure the same wall. Tuning the
+  original assertion until it passed would have produced a green harness certifying a mechanism nobody
+  has ever seen fire.
+- **A missing key reads as a falsy value.** That harness first queried `cache_age_ms` against an envelope
+  that emits `cache_age_sec`. The absent key came back `None`, which compares like "empty", and the wrong
+  conclusion — "the field is declared but never populated" — happened to agree with a true fact about an
+  unwired struct. Agreement between a real fact and a measurement error is not corroboration. Assert the
+  key is PRESENT before asserting anything about its value.
 - **When a check goes red, measure the baseline before calling it a regression.** Re-run the same harness
   against the pre-change binary in the same worktree and session. #549's receipt was byte-for-byte
   identical at `HEAD~1`, which is the difference between a blocker and a separate pre-existing issue.
