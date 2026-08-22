@@ -85,32 +85,58 @@ struct Issue425ContractTests {
     @Test("#425 changelog supersedes the removed coordinate-free control")
     func changelogSupersedesRemovedCoordinateFreeControl() throws {
         let changelog = try scriptContents("CHANGELOG.md")
+
+        // The removal statement moves when a release is cut -- `## [Unreleased]` becomes a dated
+        // heading and carries its notes with it -- so requiring the statement to sit under
+        // [Unreleased] tied a permanent invariant to a transient location. It is checked against
+        // the whole file instead.
+        //
+        // But NOT as three independent substrings. A file whose newest section says the control is
+        // live again still contains both tokens, and any unrelated historical entry supplies the
+        // word "removed", so a token-anywhere check passes a changelog that asserts the opposite of
+        // what it is supposed to guarantee. The tokens and the removal have to be the SAME
+        // statement, so the claim is read as a claim rather than as a bag of words.
         let unreleased = try #require(
             Self.markdownSection(named: "## [Unreleased]", in: changelog),
             "CHANGELOG.md must contain an ## [Unreleased] section"
         )
-        let hasRemovedControlToken = Self.inertFlagTokens.contains { changelog.contains($0) }
-        let unreleasedIsNonEmpty = !unreleased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let unreleasedStatesRemoval = unreleased.contains("LOGIC_MCP_INSERT_COORD_FREE")
-            && unreleased.contains("insertCoordFree")
-            && unreleased.localizedCaseInsensitiveContains("removed")
-        let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
-        let unreleasedClaimsCategoryPick = unreleased.range(
-            of: categoryPickPattern, options: .regularExpression
-        ) != nil
+        #expect(
+            !unreleased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            "CHANGELOG.md ## [Unreleased] must not be empty"
+        )
 
-        #expect(unreleasedIsNonEmpty, "CHANGELOG.md ## [Unreleased] must not be empty")
+        let hasRemovedControlToken = Self.inertFlagTokens.contains { changelog.contains($0) }
+        // Per LINE, not per blank-line paragraph. This file separates adjacent list items with a
+        // single newline, so splitting on "\n\n" hands back a whole bullet list as one "paragraph"
+        // -- and a review reproduced acceptance of two neighbouring bullets, one saying the controls
+        // remain supported and another saying an unrelated fallback was removed. One bullet is one
+        // claim; that is the unit the relation has to hold within.
+        let negations = ["not removed", "never removed", "no longer removed", "not been removed"]
+        let statesRemoval = changelog.components(separatedBy: .newlines).contains { line in
+            Self.inertFlagTokens.allSatisfy { line.contains($0) }
+                && line.localizedCaseInsensitiveContains("removed")
+                && !negations.contains { line.localizedCaseInsensitiveContains($0) }
+        }
+        let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
+        // Per line and negation-aware for the same reason as above: widening the scan to the whole
+        // file also widened what a truthful sentence can trip. "The server does not AXPick any
+        // category" is an accurate thing for a release note to say, and a bare regex reads it as
+        // the claim it denies.
+        let pickNegations = ["does not `AXPick`", "does not AXPick", "never `AXPick`", "never AXPick"]
+        let claimsCategoryPick = changelog.components(separatedBy: .newlines).contains { line in
+            line.range(of: categoryPickPattern, options: .regularExpression) != nil
+                && !pickNegations.contains { line.localizedCaseInsensitiveContains($0) }
+        }
+
         #expect(
-            !unreleased.contains("(No unreleased changes yet.)"),
-            "CHANGELOG.md ## [Unreleased] must describe this branch's changes"
+            !hasRemovedControlToken || statesRemoval,
+            "CHANGELOG.md names the coordinate-free insert control, so one statement must carry both tokens and say it was removed"
         )
+        // Widened from [Unreleased] to the whole file: a dated section claiming a category is
+        // AXPick'ed is exactly as wrong as an unreleased one claiming it.
         #expect(
-            !hasRemovedControlToken || unreleasedStatesRemoval,
-            "Historical coordinate-free control tokens require ## [Unreleased] to state their removal"
-        )
-        #expect(
-            !unreleasedClaimsCategoryPick,
-            "CHANGELOG.md ## [Unreleased] must not claim that a category is AXPick'ed"
+            !claimsCategoryPick,
+            "CHANGELOG.md must not claim that a category is AXPick'ed"
         )
     }
 }

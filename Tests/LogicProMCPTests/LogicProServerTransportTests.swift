@@ -432,12 +432,12 @@ func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
         "logic://system/operations",
     ]
     #expect(expectedTemplates.isSubset(of: Set(snapshot.templateURIs)))
-    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.13.0 — 10 tools, \(snapshot.resourceURIs.count) resources, 4 channels")
+    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.14.0 — 10 tools, \(snapshot.resourceURIs.count) resources, 4 channels")
 }
 
 @Test func testServerCatalogStartupBannerUsesProvidedChannelCount() {
     let banner = ServerCatalog.startupBanner(channelCount: 7)
-    #expect(banner == "Starting logic-pro-mcp v3.13.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
+    #expect(banner == "Starting logic-pro-mcp v3.14.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
 }
 
 @Test func testLogicProServerCompositionSnapshotMatchesExpectedOrder() async {
@@ -456,5 +456,5 @@ func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
     ])
     #expect(snapshot.toolNames.count == 10)
     #expect(snapshot.resourceURIs.contains("logic://system/health"))
-    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.13.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
+    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.14.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
 }
