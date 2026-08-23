@@ -87,6 +87,11 @@ actor StatePoller {
     private let runtime: Runtime
     private let postPoll: @Sendable ([ResourceCacheKey]) async -> Void
     private var pollingTask: Task<Void, Never>?
+    /// #668 coalescing state. `cycleInProgress` is the mutual exclusion the `actor` keyword does
+    /// not give across `await`; `waitingForNextCycle` holds callers that arrived mid-cycle and are
+    /// owed reads taken after their own request.
+    private var cycleInProgress = false
+    private var waitingForNextCycle: [CheckedContinuation<Bool, Never>] = []
 
     init(
         axChannel: AccessibilityChannel,
@@ -146,14 +151,55 @@ actor StatePoller {
     /// (#544 review).
     @discardableResult
     func refreshNow() async -> Bool {
-        await pollOnce(axChannel: axChannel, cache: cache)
+        await runCoalescedCycle()
+    }
+
+    /// #668 — one poll cycle at a time, and callers that arrive during one share a single fresh
+    /// cycle rather than each starting their own.
+    ///
+    /// `actor` does not provide this. Actors are re-entrant across `await`, and the poll body
+    /// suspends on every AX read, so concurrent callers used to enter it together, all capture the
+    /// same section version, and race their conditional writes. Measured: four concurrent nudges
+    /// produced three refused writes and three wasted AX walks, deterministically.
+    ///
+    /// The subtle part is what a late caller is owed. It must NOT be served the in-flight cycle's
+    /// result: that cycle's AX reads may predate the caller's request, so a caller that just wrote
+    /// something — `refreshAfterWrite` on the saga path does exactly this — would be handed state
+    /// from before its own write. Joining the in-flight cycle would reintroduce the staleness the
+    /// compare-and-swap exists to prevent, only without the counter noticing.
+    ///
+    /// So arrivals queue for the NEXT cycle and share it. N concurrent callers cost at most two
+    /// cycles instead of N, every caller's reads begin after its own request, and no two cycles
+    /// overlap — which is also why poller-vs-poller `dropped_stale_writes` becomes unreachable
+    /// here, this time by construction rather than by my assuming it.
+    private func runCoalescedCycle() async -> Bool {
+        if cycleInProgress {
+            return await withCheckedContinuation { waitingForNextCycle.append($0) }
+        }
+        cycleInProgress = true
+        let mine = await pollOnce(axChannel: axChannel, cache: cache)
+
+        // Drain in batches: everyone who queued during the cycle just finished shares ONE fresh
+        // cycle. Anyone arriving during THAT cycle forms the next batch, so a steady stream of
+        // nudges cannot starve the loop into never returning.
+        while !waitingForNextCycle.isEmpty {
+            let batch = waitingForNextCycle
+            waitingForNextCycle = []
+            let shared = await pollOnce(axChannel: axChannel, cache: cache)
+            for waiter in batch { waiter.resume(returning: shared) }
+        }
+        cycleInProgress = false
+        return mine
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
         let intervalNs = ServerConfig.statePollingIntervalNs
 
         while !Task.isCancelled {
-            await pollOnce(axChannel: axChannel, cache: cache)
+            // Through the same gate as `refreshNow`: the scheduled cycle is the one a nudge most
+            // often collides with, since at the measured 12.6s median on a 74-track project the
+            // loop is mid-cycle roughly 80% of the time.
+            _ = await runCoalescedCycle()
 
             do {
                 // Route through runtime.sleep so tests can drive this loop at
