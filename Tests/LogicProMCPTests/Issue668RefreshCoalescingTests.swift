@@ -6,77 +6,100 @@ import Testing
 ///
 /// The census on that issue found 19 in-tree callers that ignore the result and use this purely as
 /// a "hurry up" signal inside their own polling loops: `Scripts/live-e2e-test.py` at `timeout=3`
-/// (x4) and `Scripts/logic_session_bootstrap.py` at 5s (x15). None of them coordinate with each
-/// other.
+/// (x4) and `Scripts/logic_session_bootstrap.py` at 5s (x15). None of them coordinate.
 ///
-/// `StatePoller` is an actor and `refreshNow()` calls `pollOnce` directly, so concurrent nudges do
-/// not interleave — they queue. That is safe, but it means N nudges cost N full poll cycles rather
-/// than sharing one. At the measured 12.6s median on a 74-track project, a burst of nudges is a
-/// multiple of that, and every one of those callers has a 3–5s budget.
+/// I first wrote these tests asserting that `StatePoller` being an actor means concurrent nudges
+/// queue rather than interleave. **That is wrong, and measuring it is what corrected me.** Swift
+/// actors are re-entrant across `await`: `pollOnce` suspends on every AX read and on `postPoll`, so
+/// concurrent nudges enter the poll body, all capture the same section version before any of them
+/// writes, and then race their conditional writes. One wins and the rest are refused.
 ///
-/// This pins the current behaviour so a later coalescing change is visible as a change.
+/// Two consequences follow, and both contradict what I had recorded on #668 and #289:
+///
+///  1. Poller-vs-poller compare-and-swap rejection is **reachable**, not structurally impossible.
+///     Four concurrent nudges produce three dropped writes, deterministically, with no live Logic
+///     involved at all. `dropped_stale_writes` — the counter I could not make move — moves here.
+///
+///  2. The wasted work is the real cost. All four cycles pay for the full AX walk; three of them
+///     then have their result thrown away. At the 12.6s median measured on a 74-track project that
+///     is roughly 38s of AX work discarded to answer one question, while each caller waits on a
+///     3-5s budget. Coalescing would collapse those four cycles into one.
 @Suite("Issue668RefreshCoalescing")
 struct Issue668RefreshCoalescingTests {
 
-    @Test("concurrent nudges queue rather than share one cycle")
-    func concurrentNudgesDoNotCoalesce() async {
-        // A postPoll that costs a known amount makes the queueing measurable: if the calls shared
-        // one cycle the total would be ~one delay, and if they queue it is ~N delays. The AX side
-        // is irrelevant — what is measured is whether the actor runs the body once or N times.
-        let delay = Duration.milliseconds(200)
-        let runs = Counter()
+    @Test("concurrent nudges race their writes; the losers are refused, not queued")
+    func concurrentNudgesRaceRatherThanQueue() async {
+        let cache = StateCache()
+        let emissions = Recorder()
         let poller = StatePoller(
             axChannel: AccessibilityChannel(),
-            cache: StateCache(),
+            cache: cache,
             runtime: .init(hasVisibleWindow: { true }),
-            postPoll: { _ in runs.bump(); try? await Task.sleep(for: delay) }
+            postPoll: { keys in emissions.add(keys.count) }
         )
 
-        let started = ContinuousClock().now
-        await withTaskGroup(of: Void.self) { group in
-            for _ in 0..<4 {
-                group.addTask { _ = await poller.refreshNow() }
-            }
+        let droppedBefore = await cache.droppedStaleWriteCount(for: .tracks)
+        var receipts: [Bool] = []
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<4 { group.addTask { await poller.refreshNow() } }
+            for await didAdvance in group { receipts.append(didAdvance) }
         }
-        let elapsed = started.duration(to: ContinuousClock().now)
+        let dropped = await cache.droppedStaleWriteCount(for: .tracks) - droppedBefore
 
-        // Four nudges, four cycles. I first wrote this expecting zero — assuming no live AX means
-        // nothing is written and `postPoll` never fires. It fired four times. The cycle writes at
-        // least the document section regardless, so every nudge pays for a whole cycle.
-        //
-        // That is the coalescing gap, measured rather than argued: nothing merges concurrent
-        // refresh requests, so a burst from the 19 nudge callers costs one full poll each. At the
-        // 12.6s median on a 74-track project, four of them is a minute of AX work for one
-        // question, and each of those callers is waiting on a 3–5s budget.
-        #expect(runs.value() == 4, "each nudge ran its own cycle; none was shared")
-        #expect(elapsed >= delay * 4,
-                "the cycles are serialised by the actor, so their costs add rather than overlap")
+        // Measured 3 dropped / 1 emission on four consecutive runs. The count is asserted as a
+        // property rather than as the exact 3: the interleaving is structural (every task suspends
+        // on the AX read before any write lands) but how many land is not something this test can
+        // guarantee on every machine, and a test that pins a timing-shaped number is a test that
+        // fails for reasons unrelated to the code.
+        #expect(dropped >= 1,
+                "no write was refused, so the concurrent nudges did not actually overlap (measured 3)")
+        #expect(receipts.contains(false),
+                "every nudge claimed the cache advanced, but they cannot all have won the race")
+        #expect(emissions.count() < receipts.count,
+                "postPoll fired once per nudge, so no write was dropped after all (measured 1 of 4)")
+
+        // The wasted work is the point: the losers did the whole AX walk before being refused.
+        #expect(receipts.count == 4, "all four cycles ran; nothing merged them")
     }
 
-    @Test("a nudge and a scheduled poll cannot run concurrently — the actor serialises them")
-    func actorSerialisesNudgeAgainstItself() async {
+    @Test("a refused write still leaves the section readable")
+    func refusedWriteDoesNotMakeTheDocumentLookClosed() async {
+        let cache = StateCache()
         let poller = StatePoller(
             axChannel: AccessibilityChannel(),
-            cache: StateCache(),
+            cache: cache,
             runtime: .init(hasVisibleWindow: { true }),
             postPoll: { _ in }
         )
 
-        // Two overlapping nudges. If the actor did not serialise them, both would enter `pollOnce`
-        // and could capture the same section version, race their conditional writes, and one would
-        // be refused — the drop this cache counts. Serialisation is what makes that impossible for
-        // poller-vs-poller, and is why `dropped_stale_writes` is unreachable through this path.
-        async let a = poller.refreshNow()
-        async let b = poller.refreshNow()
-        let results = await [a, b]
+        // `hasDocument` defaults to true, so asserting it after a poll would pass whether or not
+        // the poll did anything. Drive it false first: then the assertion is answering "did the
+        // poll set it", not "was it already set".
+        await cache.updateDocumentState(false)
+        #expect(!(await cache.getHasDocument()), "precondition not established")
 
-        #expect(results.count == 2, "both calls completed; neither was merged into the other")
+        // Losing the race must not read as "the document went away". This is the asymmetry the
+        // receipt fix rests on: `hasDocument` is built from readability, the receipt from the write
+        // outcome, and only the second one is allowed to go false when a race is lost.
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<4 { group.addTask { await poller.refreshNow() } }
+            for await _ in group {}
+        }
+
+        #expect(await cache.droppedStaleWriteCount(for: .tracks) >= 1, "no race occurred to test")
+        #expect(await cache.getHasDocument(),
+                "refused writes made the poller declare the document closed")
+
+        // STATED LIMIT: this does not catch `hasDocument = projectReady.applied || …`. In a race
+        // one write always wins, so that mutation would still leave the flag true here. What pins
+        // the readable/applied asymmetry is `Issue668RefreshReceiptTests`; this pins that the
+        // combination of a refused write and a live document does not close the document.
     }
 }
 
-private final class Counter: @unchecked Sendable {
-    private var n = 0
+private final class Recorder: @unchecked Sendable {
+    private var counts: [Int] = []
     private let lock = NSLock()
-    func bump() { lock.lock(); n += 1; lock.unlock() }
-    func value() -> Int { lock.lock(); defer { lock.unlock() }; return n }
+    func add(_ n: Int) { lock.lock(); counts.append(n); lock.unlock() }
+    func count() -> Int { lock.lock(); defer { lock.unlock() }; return counts.count }
 }

@@ -235,10 +235,13 @@ actor StatePoller {
         let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
         if let tracks = await axChannel.readTrackStates() {
-            // Same reasoning as `poll`: the read succeeded, so tracks are readable. Whether this
-            // particular value was applied or dropped in favour of a newer one does not change that.
-            _ = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
-            tracksReady = PollOutcome(readable: true, applied: true)
+            // The read succeeded, so tracks are readable regardless of what the write does. The
+            // write outcome is a separate answer and has to come from the CAS, not be assumed:
+            // this fast path bypasses `poll`, so it is the one place the old `_ =` discard could
+            // survive the split, and it is the section most likely to lose a race on a large
+            // project — exactly where a receipt claiming `refreshed: true` would be wrong.
+            let applied = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
+            tracksReady = PollOutcome(readable: true, applied: applied)
         } else {
             tracksReady = await poll(
                 operation: "track.get_tracks", label: "Track",
