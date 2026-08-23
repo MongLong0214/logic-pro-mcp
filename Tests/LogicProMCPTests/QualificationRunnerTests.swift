@@ -1222,11 +1222,28 @@ struct QualificationRunnerTests {
         #expect(readOnly.allSatisfy {
             $0.status == .passed || $0.status == .notQualified || $0.status == .protocolSmoke
         })
-        print(
-            "qualification operation classification: "
-                + "qualified=\(qualified.count), protocol_smoke=\(smoke.count), "
-                + "deferred=\(deferred.count), failed=0"
-        )
+        // `failed` used to be a literal `0` inside this format string, so the line reported
+        // "failed=0" on runs where the `status != .failed` assertion had just failed. Believing it
+        // cost real time: the only way to see that one operation had failed was to notice that
+        // qualified + protocol_smoke + deferred summed to 110 against 111 specs and do the
+        // subtraction by hand. A diagnostic that states a count it never counted is worse than none,
+        // because it is believed.
+        //
+        // Counted by grouping rather than by naming three buckets: `QualificationStatus` has six
+        // cases, and a summary that names a subset of them is the same defect in a slower form —
+        // my first attempt at this fix hand-listed four and would have reported `waived` and
+        // `skipped` operations as unaccounted, turning a legitimate status into a test failure.
+        let byStatus = Dictionary(grouping: operationResults, by: \.status)
+            .mapValues(\.count)
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue)=\($0.value)" }
+            .joined(separator: ", ")
+        print("qualification operation classification: \(byStatus) of \(operationResults.count)")
+
+        let failed = operationResults.filter { $0.status == .failed }
+        if !failed.isEmpty {
+            print("failed operations: \(failed.map(\.operationID).sorted().joined(separator: ", "))")
+        }
     }
 
     /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
