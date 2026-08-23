@@ -168,11 +168,6 @@ actor StatePoller {
         Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
     }
 
-    /// Emits `postPoll` iff this cycle touched at least one cache section, and
-    /// reports that as the honest "did the cache advance" signal. A poll that
-    /// returns having written nothing (window not visible below threshold,
-    /// backing off under an occluding dialog) must report `false`, not merely
-    /// "the function returned" (#544 review).
     /// What one section's poll answers. #668 — a single `Bool` could not distinguish "the value
     /// was readable" from "the write landed", and the refresh receipt was built from the first
     /// while claiming the second.
@@ -186,6 +181,11 @@ actor StatePoller {
         static let unreadable = PollOutcome(readable: false, applied: false)
     }
 
+    /// Emits `postPoll` iff this cycle touched at least one cache section, and
+    /// reports that as the honest "did the cache advance" signal. A poll that
+    /// returns having written nothing (window not visible below threshold,
+    /// backing off under an occluding dialog) must report `false`, not merely
+    /// "the function returned" (#544 review).
     @discardableResult
     private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
         guard !cacheKeys.isEmpty else { return false }
