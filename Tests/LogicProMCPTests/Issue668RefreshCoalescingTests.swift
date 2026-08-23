@@ -334,26 +334,47 @@ struct Issue668RefreshCoalescingTests {
         #expect(cycles.value() == atStop, "a nudge after stop() started a cycle")
     }
 
-    @Test("a steady stream of nudges does not starve the initiator")
+    @Test("callers arriving during a cycle are batched rather than served one cycle each")
     func drainingTerminates() async {
         let cycles = Counter()
-        let poller = Self.makePoller(cache: StateCache(), cycles: cycles)
+        let entered = Counter()
+        let hold = OneShotGate()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { cycles.bump(); return true }),
+            // Holding the cycle open here is what makes the overlap a fact instead of a hope.
+            postPoll: { _ in entered.bump(); await hold.wait() }
+        )
 
-        // The drain loop serves waiters in batches, so callers arriving during the shared cycle
-        // form the next batch rather than extending the current one. If it instead served each
-        // arrival individually, a continuous stream would keep the first caller suspended.
-        await withTaskGroup(of: Void.self) { group in
-            for i in 0..<12 {
-                group.addTask {
-                    try? await Task.sleep(for: .milliseconds(20 * i))
-                    _ = await poller.refreshNow()
-                }
-            }
+        // The first draft spread twelve nudges 20ms apart and asserted the cycle count came out
+        // under twelve. That assumed a cycle outlasts the gaps between arrivals — and it does, on a
+        // machine where the AX walk takes a second. It failed in the ship gate at 0.235s for the
+        // whole test: with AX answering instantly, nothing overlapped, and twelve nudges each
+        // getting their own cycle is *correct* behaviour, not a batching failure. The assertion was
+        // demanding sharing in a run where there was nothing to share.
+        let callers = (0..<12).map { _ in Task { _ = await poller.refreshNow() } }
+
+        // Once one cycle is parked inside postPoll the gate is held, so every later arrival must
+        // queue. No sleep decides that; the gate does.
+        while entered.value() == 0 { await Task.yield() }
+        while cycles.value() < 2 && entered.value() == 1 {
+            // Give the queued callers a chance to register before releasing. They cannot start a
+            // cycle while the first is held, so this cannot race ahead of the property.
+            await Task.yield()
+            if entered.value() > 1 { break }
+            try? await Task.sleep(for: .milliseconds(50))
+            break
         }
+        hold.open()
+        for caller in callers { _ = await caller.value }
 
-        // Twelve nudges spread across the run, batched into far fewer cycles. The point is that it
-        // finished at all and did not run one cycle per caller.
-        #expect(cycles.value() < 12, "\(cycles.value()) cycles for 12 nudges; batching did nothing")
+        // Eleven callers queued behind one held cycle share the drain rather than each running
+        // their own. The bound is generous because how many land in the first batch is scheduling;
+        // twelve would mean nothing was shared at all.
+        #expect(cycles.value() < 12,
+                "\(cycles.value()) cycles for 12 nudges; nothing was batched")
+        #expect(cycles.value() >= 1, "no cycle ran")
     }
 }
 
@@ -362,6 +383,27 @@ private final class KeyRecorder: @unchecked Sendable {
     private let lock = NSLock()
     func add(_ k: [ResourceCacheKey]) { lock.lock(); seen.append(contentsOf: k); lock.unlock() }
     func sawTracks() -> Bool { lock.lock(); defer { lock.unlock() }; return seen.contains(.tracks) }
+}
+
+private final class OneShotGate: @unchecked Sendable {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private let lock = NSLock()
+    func open() {
+        lock.lock()
+        guard !isOpen else { lock.unlock(); return }
+        isOpen = true
+        let parked = waiters; waiters = []
+        lock.unlock()
+        for w in parked { w.resume() }
+    }
+    func wait() async {
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if isOpen { lock.unlock(); c.resume(); return }
+            waiters.append(c); lock.unlock()
+        }
+    }
 }
 
 private final class Flag: @unchecked Sendable {
