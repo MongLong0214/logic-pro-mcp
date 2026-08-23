@@ -173,6 +173,19 @@ actor StatePoller {
     /// returns having written nothing (window not visible below threshold,
     /// backing off under an occluding dialog) must report `false`, not merely
     /// "the function returned" (#544 review).
+    /// What one section's poll answers. #668 — a single `Bool` could not distinguish "the value
+    /// was readable" from "the write landed", and the refresh receipt was built from the first
+    /// while claiming the second.
+    struct PollOutcome: Sendable {
+        /// The section produced a usable value. Drives `hasDocument` and occlusion logic, and
+        /// stays true when the conditional write is refused.
+        let readable: Bool
+        /// The conditional write was accepted. Drives what the caller is told was refreshed.
+        let applied: Bool
+
+        static let unreadable = PollOutcome(readable: false, applied: false)
+    }
+
     @discardableResult
     private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
         guard !cacheKeys.isEmpty else { return false }
@@ -217,14 +230,15 @@ actor StatePoller {
         ) { cache, info, observed in
             await cache.updateProject(info, ifCurrent: observed)
         }
-        if projectReady { cacheKeys.append(.project) }
-        let tracksReady: Bool
+        // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
+        if projectReady.applied { cacheKeys.append(.project) }
+        let tracksReady: PollOutcome
         let tracksVersion = await cache.currentVersion(for: .tracks)
         if let tracks = await axChannel.readTrackStates() {
             // Same reasoning as `poll`: the read succeeded, so tracks are readable. Whether this
             // particular value was applied or dropped in favour of a newer one does not change that.
             _ = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
-            tracksReady = true
+            tracksReady = PollOutcome(readable: true, applied: true)
         } else {
             tracksReady = await poll(
                 operation: "track.get_tracks", label: "Track",
@@ -234,8 +248,11 @@ actor StatePoller {
                 await cache.updateTracks(tracks, ifCurrent: observed)
             }
         }
-        if tracksReady { cacheKeys.append(.tracks) }
-        let hasDocument = projectReady || tracksReady
+        if tracksReady.applied { cacheKeys.append(.tracks) }
+        // Deliberately `readable`, not `applied`: a refused write means the cache already holds
+        // something newer, so the document is open. Using `applied` here would let lost races
+        // make the poller declare the document closed — the bug the old comment guarded against.
+        let hasDocument = projectReady.readable || tracksReady.readable
         if hasDocument {
             consecutivePollMisses = 0
             await cache.updateDocumentState(true)
@@ -283,7 +300,7 @@ actor StatePoller {
         ) { cache, state, observed in
             await cache.updateTransport(state, ifCurrent: observed)
         }
-        if transportReady { cacheKeys.append(.transport) }
+        if transportReady.applied { cacheKeys.append(.transport) }
         let mixerReady = await poll(
             operation: "mixer.get_state", label: "Mixer",
             section: .mixer,
@@ -291,7 +308,7 @@ actor StatePoller {
         ) { cache, strips, observed in
             await cache.updateChannelStrips(strips, ifCurrent: observed)
         }
-        if mixerReady { cacheKeys.append(.mixer) }
+        if mixerReady.applied { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
             markerPollTick = 0
@@ -344,26 +361,34 @@ actor StatePoller {
         cache: StateCache,
         as type: T.Type,
         update: (StateCache, T, StateCache.SectionVersion) async -> Bool
-    ) async -> Bool {
+    ) async -> PollOutcome {
         // This must happen before `execute`: observing after the AX read
         // returns would make a stale result look current and reintroduce the
         // overwrite race this guard is meant to prevent.
         let observed = await cache.currentVersion(for: section)
         let result = await axChannel.execute(operation: operation, params: [:])
-        guard case .success(let json) = result else { return false }
-        guard let data = json.data(using: .utf8) else { return false }
+        guard case .success(let json) = result else { return .unreadable }
+        guard let data = json.data(using: .utf8) else { return .unreadable }
         do {
             let value = try Self.iso8601Decoder.decode(T.self, from: data)
-            // The return value answers "does this section have a usable value", NOT "did this write
-            // land". A dropped write means the cache already holds something NEWER, so the section is
-            // if anything more current than if we had applied ours. Returning the write outcome here
-            // feeds `hasDocument`, and enough consecutive drops would make the poller declare the
-            // document closed — turning the guard into a worse bug than the race it prevents.
-            _ = await update(cache, value, observed)
-            return true
+            // Two different questions, and collapsing them into one Bool is #668.
+            //
+            // `readable` answers "does this section have a usable value". It must stay true when a
+            // conditional write is REJECTED: a dropped write means the cache already holds
+            // something newer, so the section is if anything more current than if we had applied
+            // ours. Feeding the write outcome into `hasDocument` would let a few lost races make
+            // the poller declare the document closed — a worse bug than the race it prevents.
+            //
+            // `applied` answers "did this write land", and that is what a refresh RECEIPT owes its
+            // caller. Before this split, `refresh_cache` answered `refreshed: true` for a section
+            // whose write had been refused, because the receipt was built from the readability
+            // answer. The cache recorded the rejection all along — `droppedStaleWriteCount` — and
+            // nothing on the receipt path consulted it.
+            let applied = await update(cache, value, observed)
+            return PollOutcome(readable: true, applied: applied)
         } catch {
             Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
-            return false
+            return .unreadable
         }
     }
 
