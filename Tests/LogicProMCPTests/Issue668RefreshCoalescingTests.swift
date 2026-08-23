@@ -158,6 +158,98 @@ struct Issue668RefreshCoalescingTests {
         for waiter in waiters { _ = await waiter.value }
     }
 
+    @Test("stop() returns while nudges keep arriving")
+    func stopIsBoundedUnderContinuousNudges() async {
+        let poller = Self.makePoller(cache: StateCache(), cycles: Counter())
+        await poller.start()
+        let halt = Flag()
+        // Fire-and-forget on a timer, which is the shape the 15 bootstrap callers actually have:
+        // nothing waits for a previous result, so a nudge lands while the drain's own cycle is
+        // still running. My first attempt at this test had each sender await its own result, which
+        // left a gap where the queue was briefly empty — and it passed against the defect.
+        let sender = Task {
+            while !halt.isSet() {
+                Task { _ = await poller.refreshNow() }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // The drain kept accepting new batches and `refreshNow` stays callable after the loop task
+        // is gone, so one nudge per cycle held `stop()` open indefinitely — measured at over 20s
+        // with no sign of returning, ending only when the nudges did.
+        let returned = Flag()
+        let stopper = Task { await poller.stop(); returned.set() }
+        try? await Task.sleep(for: .seconds(12))
+        let stoppedInTime = returned.isSet()
+
+        halt.set()
+        sender.cancel()
+        _ = await stopper.value
+        #expect(stoppedInTime, "stop() was still waiting after 12s of continuous nudges")
+    }
+
+    @Test("stopImmediately() does not leave a cycle about to start")
+    func stopImmediatelyStartsNoNewCycle() async {
+        let cycles = Counter()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
+                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
+            postPoll: { _ in try? await Task.sleep(for: .milliseconds(200)) }
+        )
+        // An external nudge takes the flag first, so the loop reaches the gate while a cycle runs.
+        let nudge = Task { _ = await poller.refreshNow() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await poller.start()
+        try? await Task.sleep(for: .milliseconds(300))
+
+        // A queued loop suspends in a continuation cancellation cannot wake, so it used to be
+        // served by a whole AX cycle that began AFTER stopImmediately() had returned — work done
+        // purely for a loop that was already cancelled. The loop now skips a redundant tick
+        // instead of queueing.
+        await poller.stopImmediately()
+        let atReturn = cycles.value()
+        // Long enough for the in-flight cycle to END and any drain it spawns to run. An earlier
+        // 3s window closed before the initiator had even finished, so the test reported "no new
+        // cycles" about a stretch of time in which nothing had happened yet.
+        try? await Task.sleep(for: .seconds(8))
+
+        #expect(cycles.value() == atReturn,
+                "\(cycles.value() - atReturn) cycle(s) began after stopImmediately() returned")
+        _ = await nudge.value
+    }
+
+    @Test("a debounced write is not reported as a refresh")
+    func debouncedWriteIsNotReportedAsRefreshed() async {
+        let cache = StateCache()
+        // The occlusion debounce absorbs the first two empty track reads while a document is open
+        // and the cache is non-empty, returning without touching tracks, timestamp, or revision.
+        // The conditional wrapper still answers `true`, because the compare-and-swap DID accept —
+        // and that `true` used to reach `refresh_cache`'s `refreshed`. "CAS accepted" is not
+        // "the cache advanced", and the receipt claims the second.
+        await cache.updateTracks([TrackState(id: 0, name: "Kept", type: .audio)])
+        await cache.updateDocumentState(true)
+        let revisionBefore = await cache.currentVersion(for: .tracks)
+
+        let keys = KeyRecorder()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: cache,
+            runtime: .init(hasVisibleWindow: { true }),
+            postPoll: { keys.add($0) }
+        )
+        _ = await poller.refreshNow()
+
+        // Precondition: the debounce must actually have fired, or this measures nothing.
+        let revisionAfter = await cache.currentVersion(for: .tracks)
+        #expect(revisionAfter == revisionBefore, "tracks advanced; the debounce never engaged")
+        #expect(await cache.getTracks().first?.name == "Kept", "the cache was overwritten")
+
+        #expect(!keys.sawTracks(), "a write that changed nothing was reported as a refresh")
+    }
+
     @Test("a steady stream of nudges does not starve the initiator")
     func drainingTerminates() async {
         let cycles = Counter()
@@ -179,6 +271,13 @@ struct Issue668RefreshCoalescingTests {
         // finished at all and did not run one cycle per caller.
         #expect(cycles.value() < 12, "\(cycles.value()) cycles for 12 nudges; batching did nothing")
     }
+}
+
+private final class KeyRecorder: @unchecked Sendable {
+    private var seen: [ResourceCacheKey] = []
+    private let lock = NSLock()
+    func add(_ k: [ResourceCacheKey]) { lock.lock(); seen.append(contentsOf: k); lock.unlock() }
+    func sawTracks() -> Bool { lock.lock(); defer { lock.unlock() }; return seen.contains(.tracks) }
 }
 
 private final class Flag: @unchecked Sendable {

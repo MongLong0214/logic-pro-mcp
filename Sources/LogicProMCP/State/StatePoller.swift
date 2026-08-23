@@ -131,6 +131,7 @@ actor StatePoller {
         // itself as waiting for the current cycle. In practice the drain usually finishes while
         // this function is suspended above -- it shares this actor -- but "usually" is scheduling
         // luck, and a stop guarantee resting on it is not a guarantee.
+        drainTask?.cancel()
         await drainTask?.value
         drainTask = nil
         Log.info("StatePoller stopped", subsystem: "poller")
@@ -217,21 +218,45 @@ actor StatePoller {
         // finding nobody left to serve it.
         defer { cycleInProgress = false }
         while !waitingForNextCycle.isEmpty {
+            // Cooperative cancellation, because without it this loop has no upper bound: it keeps
+            // accepting new batches, and `refreshNow` stays callable after the loop task is gone,
+            // so one nudge per cycle from any caller kept `stop()` awaiting this task forever.
+            // Reproduced with fire-and-forget timed nudges -- the shape the 15 bootstrap callers
+            // actually have -- where stop() had not returned after 20s and only returned once the
+            // nudges ceased.
+            if Task.isCancelled { break }
             let batch = waitingForNextCycle
             waitingForNextCycle = []
             let shared = await pollOnce(axChannel: axChannel, cache: cache)
             for waiter in batch { waiter.resume(returning: shared) }
         }
+        // Whoever is still queued when this exits is owed an answer, and the honest one is that
+        // the cache did not advance for them. Leaving them suspended would be the lost
+        // continuation this design is otherwise free of.
+        let stranded = waitingForNextCycle
+        waitingForNextCycle = []
+        for waiter in stranded { waiter.resume(returning: false) }
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
         let intervalNs = ServerConfig.statePollingIntervalNs
 
         while !Task.isCancelled {
-            // Through the same gate as `refreshNow`: the scheduled cycle is the one a nudge most
+            // Through the same gate as `refreshNow` -- the scheduled cycle is what a nudge most
             // often collides with, since at the measured 12.6s median on a 74-track project the
-            // loop is mid-cycle roughly 80% of the time.
-            _ = await runCoalescedCycle()
+            // loop is mid-cycle roughly 80% of the time -- but NEVER as a queued waiter.
+            //
+            // A waiter suspends in a continuation that cancellation cannot wake, so a queued loop
+            // made `stopImmediately()` return and THEN have a whole AX cycle start, run purely to
+            // service a loop that was already cancelled. The loop has no use for the
+            // fresh-after-request guarantee anyway: it is a periodic refresh, not a caller with a
+            // pending write. If a cycle is already under way, this tick is redundant -- skip it.
+            //
+            // No suspension separates this check from `runCoalescedCycle`'s own, so the loop
+            // always takes the initiator path and can never become a waiter.
+            if !cycleInProgress {
+                _ = await runCoalescedCycle()
+            }
 
             do {
                 // Route through runtime.sleep so tests can drive this loop at
@@ -318,8 +343,9 @@ actor StatePoller {
             // this fast path bypasses `poll`, so it is the one place the old `_ =` discard could
             // survive the split, and it is the section most likely to lose a race on a large
             // project — exactly where a receipt claiming `refreshed: true` would be wrong.
-            let applied = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
-            tracksReady = PollOutcome(readable: true, applied: applied)
+            let accepted = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
+            let advanced = await cache.currentVersion(for: .tracks) != tracksVersion
+            tracksReady = PollOutcome(readable: true, applied: accepted && advanced)
         } else {
             tracksReady = await poll(
                 operation: "track.get_tracks", label: "Track",
@@ -465,8 +491,16 @@ actor StatePoller {
             // whose write had been refused, because the receipt was built from the readability
             // answer. The cache recorded the rejection all along — `droppedStaleWriteCount` — and
             // nothing on the receipt path consulted it.
-            let applied = await update(cache, value, observed)
-            return PollOutcome(readable: true, applied: applied)
+            // "The CAS accepted" is not "the cache advanced", and the receipt claims the second.
+            // `updateTracks` absorbs the first two empty reads under an occluding dialog and
+            // returns without touching tracks, timestamp, or revision -- while the conditional
+            // wrapper still reports true. That `true` reached `refresh_cache`'s `refreshed`.
+            //
+            // Comparing the revision closes it: acceptance means the section was still at
+            // `observed`, so any advance from there is ours, and no advance means nothing landed.
+            let accepted = await update(cache, value, observed)
+            let advanced = await cache.currentVersion(for: section) != observed
+            return PollOutcome(readable: true, applied: accepted && advanced)
         } catch {
             Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
             return .unreadable
