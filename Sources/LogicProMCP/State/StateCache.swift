@@ -347,6 +347,27 @@ actor StateCache {
         return true
     }
 
+    /// #668 — the write outcome a refresh RECEIPT needs, computed without a gap.
+    ///
+    /// `updateTracks(_:ifCurrent:)` answers "the compare-and-swap accepted", which is a different
+    /// question: the occlusion debounce above accepts and then returns without touching tracks,
+    /// timestamp, or revision, so `refresh_cache` reported `refreshed: true` for a poll that wrote
+    /// nothing. Computing the difference in the poller does not fix it — that needs a second actor
+    /// call to read the revision, and any other writer to this section (MCU feedback, a track
+    /// dispatcher, the server's own load path) can advance it in that window and be credited to
+    /// the poll. This is the only place it can be answered atomically, because nothing can
+    /// interleave inside one synchronous actor method.
+    ///
+    /// Tracks is the only section that needs this: project, transport and mixer have no path that
+    /// accepts and then declines to write.
+    @discardableResult
+    func applyTracks(_ newTracks: [TrackState], ifCurrent observed: SectionVersion) -> Bool {
+        guard accepts(observed, for: .tracks) else { return false }
+        let before = sectionRevisions[.tracks, default: 0]
+        updateTracks(newTracks)
+        return sectionRevisions[.tracks, default: 0] != before
+    }
+
     /// v3.1.1 (P1-3) — exposed for diagnostics and tests. Returns the number
     /// of consecutive empty `updateTracks([])` calls suppressed since the
     /// last non-empty update. Resets to 0 once any non-empty update lands or
