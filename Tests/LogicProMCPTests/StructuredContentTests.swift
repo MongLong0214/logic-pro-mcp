@@ -78,6 +78,11 @@ struct StructuredContentTests {
         }
     }
 
+    /// A ceiling for "the harness gives up", not a latency assertion. The measured response was
+    /// 1.52s; this is generous enough that machine speed and load do not decide the verdict, and
+    /// small enough that a genuine hang still fails the run rather than stalling it.
+    private static let accessibilityBackedProbeBudget: UInt64 = 30_000_000_000
+
     @Test("tools_call_probe_includes_structured_content", processInspectionUnavailableInSandbox)
     func toolsCallProbeIncludesStructuredContent() async throws {
         let server = LogicProServer()
@@ -89,7 +94,17 @@ struct StructuredContentTests {
         _ = try await waitForProbeResponse(transport, id: 1)
 
         await transport.queueJSON(probeToolCallFrame(id: 2, name: "logic_system", command: "health"))
-        let response = try await waitForProbeResponse(transport, id: 2)
+        // The probe helper's 1s default is a budget for a protocol round trip, and this one is not
+        // that: `logic_system health` walks Accessibility. Measured here at 1.52s with a correct
+        // `result` in the frame — so the harness was giving up half a second before the answer
+        // arrived and reporting `result` as nil. That is absence of observation, not a defect, and
+        // it made this test fail intermittently on `origin/main` as well as on feature branches.
+        //
+        // Nothing below is relaxed: the assertions on `structuredContent` and its equality with the
+        // text payload are unchanged, so a genuinely malformed response still fails. This only
+        // stops the harness from blinking first. A real hang still fails, just later.
+        let response = try await waitForProbeResponse(
+            transport, id: 2, timeoutNanoseconds: Self.accessibilityBackedProbeBudget)
         let result = try #require(response["result"] as? [String: Any])
         let content = try #require(result["content"] as? [[String: Any]])
         let firstContent = try #require(content.first)
