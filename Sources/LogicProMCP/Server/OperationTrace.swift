@@ -77,6 +77,32 @@ final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
 /// nested scope with a fresh box carrying the parent's trace ID so child
 /// traces correlate instead of clobbering the parent registration.
 final class OperationTraceContext: @unchecked Sendable {
+    /// #668 — the deadline the enclosing command is racing against, as an absolute instant.
+    ///
+    /// `runWithDeadline` computes this and then discards it: the work closure never learns its
+    /// own budget, so it cannot stop early. By the time cancellation reaches it the timeout has
+    /// already won the continuation (`DeadlineRace` is first-past-the-post), and any partial
+    /// result computed after that point is thrown away.
+    ///
+    /// Measured on a 74-track project: the poll cycle `system.refresh_cache` drives has a median
+    /// of 12.6s against a 25s deadline and exceeds it in roughly one call in five. Sections that
+    /// completed before the cut DID write to the cache — `fetched_at` advances on timed-out runs —
+    /// and the caller is told none of it.
+    ///
+    /// Injected inside the detached work task for the same reason the trace context is:
+    /// `Task.detached` severs TaskLocal inheritance, so a value bound in the caller is invisible
+    /// below it.
+    @TaskLocal static var deadline: ContinuousClock.Instant?
+
+    /// Time left before the enclosing command's deadline, or nil when there is no deadline in
+    /// scope. Negative is clamped to zero: past the deadline there is no budget, and a caller
+    /// that reads a negative duration as "plenty" is the bug this exists to prevent.
+    static var remainingBudget: Duration? {
+        guard let deadline else { return nil }
+        let now = ContinuousClock().now
+        return now < deadline ? now.duration(to: deadline) : .zero
+    }
+
     @TaskLocal static var current: OperationTraceContext?
 
     private let lock = NSLock()

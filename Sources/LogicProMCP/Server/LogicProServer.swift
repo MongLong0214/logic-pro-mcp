@@ -805,8 +805,15 @@ actor LogicProServer {
                 }
             )
             let workTask = Task.detached(priority: .userInitiated) {
-                let result = await OperationTraceContext.$current.withValue(traceContext) {
-                    await work()
+                // #668: bind the budget INSIDE the detached task, for the same reason the trace
+                // context is bound here — `Task.detached` severs TaskLocal inheritance. Bound from
+                // the same `deadline` the timeout task races against, so work that consults it is
+                // reasoning about the identical instant rather than an approximation of it.
+                let budgetDeadline = ContinuousClock().now.advanced(by: .milliseconds(Int(deadline * 1000)))
+                let result = await OperationTraceContext.$deadline.withValue(budgetDeadline) {
+                    await OperationTraceContext.$current.withValue(traceContext) {
+                        await work()
+                    }
                 }
                 if let heldClaim { heldMutationGate?.release(heldClaim) }
                 let didWin = race.resume(continuation, returning: result)
