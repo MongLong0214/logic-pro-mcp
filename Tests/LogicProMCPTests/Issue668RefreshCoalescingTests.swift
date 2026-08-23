@@ -129,6 +129,35 @@ struct Issue668RefreshCoalescingTests {
         _ = await queued.value
     }
 
+    @Test("stop() still waits for the cycles it is documented to wait for")
+    func stopCoversTheHandedOffDrain() async {
+        let resolved = Counter()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { true },
+                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
+            postPoll: { _ in try? await Task.sleep(for: .seconds(1)) }
+        )
+        await poller.start()
+        let waiters = (0..<3).map { _ in Task { _ = await poller.refreshNow(); resolved.bump() } }
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // Handing the drain to its own task let AX polling outlive a `stop()` whose own
+        // documentation says it waits for the current cycle. It usually finished in time anyway,
+        // because it shares this actor and `stop()` suspends — but that is scheduling luck, and a
+        // stop guarantee resting on luck is not a guarantee. Measured over three runs each:
+        // unawaited left 3 of 3 callers unresolved every time; awaited left 0, 1, 1.
+        let pendingBefore = 3 - resolved.value()
+        await poller.stop()
+        let unresolved = 3 - resolved.value()
+
+        #expect(pendingBefore > 0, "no drain was outstanding, so this measured nothing")
+        #expect(unresolved < pendingBefore,
+                "stop() returned without waiting for any of the drain it handed off")
+        for waiter in waiters { _ = await waiter.value }
+    }
+
     @Test("a steady stream of nudges does not starve the initiator")
     func drainingTerminates() async {
         let cycles = Counter()

@@ -92,6 +92,8 @@ actor StatePoller {
     /// owed reads taken after their own request.
     private var cycleInProgress = false
     private var waitingForNextCycle: [CheckedContinuation<Bool, Never>] = []
+    /// The handed-off drain, tracked rather than detached so `stop()` still means what it says.
+    private var drainTask: Task<Void, Never>?
 
     init(
         axChannel: AccessibilityChannel,
@@ -124,6 +126,13 @@ actor StatePoller {
         pollingTask = nil
         // Wait for the cancelled task to complete its current cycle
         await task.value
+        // #668: the drain runs as its own task so the caller that starts a cycle is not billed for
+        // everyone else's. That would otherwise let AX polling outlive a `stop()` that documents
+        // itself as waiting for the current cycle. In practice the drain usually finishes while
+        // this function is suspended above -- it shares this actor -- but "usually" is scheduling
+        // luck, and a stop guarantee resting on it is not a guarantee.
+        await drainTask?.value
+        drainTask = nil
         Log.info("StatePoller stopped", subsystem: "poller")
     }
 
@@ -131,6 +140,7 @@ actor StatePoller {
         guard let task = pollingTask else { return }
         task.cancel()
         pollingTask = nil
+        drainTask?.cancel()
         Log.info("StatePoller stop requested without awaiting current AX poll", subsystem: "poller")
     }
 
@@ -185,7 +195,7 @@ actor StatePoller {
             // its own cycle ended; holding it to serve later arrivals adds whole cycles to a
             // latency that already overruns its deadline — measured at roughly 2x the solo cost
             // under a continuous stream of nudges, and the deadline overrun is what #668 is about.
-            Task { await self.drainWaiters() }
+            drainTask = Task { await self.drainWaiters() }
         }
         return mine
     }
@@ -194,15 +204,17 @@ actor StatePoller {
     /// Anyone arriving during THAT cycle forms the following batch, so arrivals never extend a
     /// cycle already under way, and the loop ends the moment a cycle finishes with nobody waiting.
     private func drainWaiters() async {
+        // On every exit, not just the loop's: leaving `cycleInProgress` true would make every
+        // later nudge queue behind a drain that is gone, and no suspension separates the loop's
+        // emptiness check from this, so no arrival can be stranded by observing it true and then
+        // finding nobody left to serve it.
+        defer { cycleInProgress = false }
         while !waitingForNextCycle.isEmpty {
             let batch = waitingForNextCycle
             waitingForNextCycle = []
             let shared = await pollOnce(axChannel: axChannel, cache: cache)
             for waiter in batch { waiter.resume(returning: shared) }
         }
-        // No suspension between the emptiness check and this line, so no arrival can be stranded
-        // by observing `cycleInProgress == true` and then finding nobody left to serve it.
-        cycleInProgress = false
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
