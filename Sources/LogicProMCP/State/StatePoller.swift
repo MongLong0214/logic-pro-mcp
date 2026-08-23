@@ -151,14 +151,21 @@ actor StatePoller {
 
     // MARK: - Poll loop
 
-    /// Runs one poll cycle and reports whether the cache actually advanced —
-    /// i.e. at least one section was written and `postPoll` fired for it — not
-    /// merely whether this function returned. A poll that finds no visible
-    /// window (below the miss threshold) or that backs off under an occluding
-    /// dialog writes nothing and returns `false`; every caller that needs to
-    /// know "did state move" (not "did I call refreshNow") must read this
-    /// return value rather than assume a completed call means a write landed
-    /// (#544 review).
+    /// Runs a poll cycle — or shares one — and reports whether the cache
+    /// actually advanced: i.e. at least one section was written and `postPoll`
+    /// fired for it, not merely whether this function returned. A poll that
+    /// finds no visible window (below the miss threshold) or that backs off
+    /// under an occluding dialog writes nothing and returns `false`; every
+    /// caller that needs to know "did state move" (not "did I call
+    /// refreshNow") must read this return value rather than assume a completed
+    /// call means a write landed (#544 review).
+    ///
+    /// "or shares one" is #668 and is not a detail: a call arriving while a
+    /// cycle is under way waits for the NEXT one and is served its result
+    /// alongside everyone else who arrived in that window, so the returned
+    /// answer may describe a cycle this call did not itself start. What it
+    /// never describes is a cycle whose AX reads predate this call — see
+    /// `runCoalescedCycle` for why that distinction is load-bearing.
     @discardableResult
     func refreshNow() async -> Bool {
         await runCoalescedCycle()
