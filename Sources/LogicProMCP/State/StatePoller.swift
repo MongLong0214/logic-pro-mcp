@@ -178,18 +178,31 @@ actor StatePoller {
         }
         cycleInProgress = true
         let mine = await pollOnce(axChannel: axChannel, cache: cache)
+        if waitingForNextCycle.isEmpty {
+            cycleInProgress = false
+        } else {
+            // Hand the drain off rather than running it here. This caller's answer was ready when
+            // its own cycle ended; holding it to serve later arrivals adds whole cycles to a
+            // latency that already overruns its deadline — measured at roughly 2x the solo cost
+            // under a continuous stream of nudges, and the deadline overrun is what #668 is about.
+            Task { await self.drainWaiters() }
+        }
+        return mine
+    }
 
-        // Drain in batches: everyone who queued during the cycle just finished shares ONE fresh
-        // cycle. Anyone arriving during THAT cycle forms the next batch, so a steady stream of
-        // nudges cannot starve the loop into never returning.
+    /// Serves queued callers in batches: everyone who arrived during one cycle shares the next.
+    /// Anyone arriving during THAT cycle forms the following batch, so arrivals never extend a
+    /// cycle already under way, and the loop ends the moment a cycle finishes with nobody waiting.
+    private func drainWaiters() async {
         while !waitingForNextCycle.isEmpty {
             let batch = waitingForNextCycle
             waitingForNextCycle = []
             let shared = await pollOnce(axChannel: axChannel, cache: cache)
             for waiter in batch { waiter.resume(returning: shared) }
         }
+        // No suspension between the emptiness check and this line, so no arrival can be stranded
+        // by observing `cycleInProgress == true` and then finding nobody left to serve it.
         cycleInProgress = false
-        return mine
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {

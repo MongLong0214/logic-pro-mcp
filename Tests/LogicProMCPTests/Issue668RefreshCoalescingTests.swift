@@ -107,6 +107,28 @@ struct Issue668RefreshCoalescingTests {
         #expect(await cache.getHasDocument(), "the poller declared the document closed")
     }
 
+    @Test("the initiator returns without waiting for the callers it queued")
+    func initiatorIsNotHeldByTheDrain() async {
+        let cycles = Counter()
+        let poller = Self.makePoller(cache: StateCache(), cycles: cycles)
+        let waiterFinished = Flag()
+
+        // The caller that finds the poller idle runs the cycle. Its own answer is ready when that
+        // cycle ends — but a first draft served the queued callers before returning, so the
+        // initiator paid for their cycles too. Measured at ~1.4x its solo latency under a stream of
+        // nudges, against a 25s deadline the cycle already overruns on a 74-track project. Whole
+        // extra cycles on the critical path make #668 worse, not better.
+        async let initiator: Bool = poller.refreshNow()
+        try? await Task.sleep(for: .milliseconds(300))  // land inside the initiator's cycle
+        let queued = Task { _ = await poller.refreshNow(); waiterFinished.set() }
+        _ = await initiator
+
+        // The queued caller is owed a FRESH cycle, which cannot have finished yet. If the initiator
+        // had drained before returning, that cycle would be complete and this flag set.
+        #expect(!waiterFinished.isSet(), "the initiator waited for the queued caller's cycle")
+        _ = await queued.value
+    }
+
     @Test("a steady stream of nudges does not starve the initiator")
     func drainingTerminates() async {
         let cycles = Counter()
@@ -128,6 +150,13 @@ struct Issue668RefreshCoalescingTests {
         // finished at all and did not run one cycle per caller.
         #expect(cycles.value() < 12, "\(cycles.value()) cycles for 12 nudges; batching did nothing")
     }
+}
+
+private final class Flag: @unchecked Sendable {
+    private var v = false
+    private let lock = NSLock()
+    func set() { lock.lock(); v = true; lock.unlock() }
+    func isSet() -> Bool { lock.lock(); defer { lock.unlock() }; return v }
 }
 
 private final class Counter: @unchecked Sendable {
