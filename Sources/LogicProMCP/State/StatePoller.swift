@@ -94,6 +94,13 @@ actor StatePoller {
     private var waitingForNextCycle: [CheckedContinuation<Bool, Never>] = []
     /// The handed-off drain, tracked rather than detached so `stop()` still means what it says.
     private var drainTask: Task<Void, Never>?
+    /// Set the moment a stop begins. Cancelling the loop is not enough: a cycle owned by an
+    /// external `refreshNow` keeps running, and when it ends it would hand off a fresh, uncancelled
+    /// drain — starting AX work after `stop()` had already returned. This refuses new cycles and
+    /// new drains instead of trying to chase them.
+    private var stopped = false
+    /// Parked `stop()` calls, waiting for a cycle they do not own to finish.
+    private var quiesceWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         axChannel: AccessibilityChannel,
@@ -109,6 +116,7 @@ actor StatePoller {
 
     /// Start the background polling loop.
     func start() {
+        stopped = false
         guard pollingTask == nil else {
             Log.warn("StatePoller already running", subsystem: "poller")
             return
@@ -122,23 +130,33 @@ actor StatePoller {
     /// Stop the polling loop and wait for the current poll cycle to finish.
     func stop() async {
         guard let task = pollingTask else { return }
+        // Before anything else: no new cycle and no new drain may start from here on. Cancelling
+        // the loop does not cover a cycle owned by an external `refreshNow`, and that cycle would
+        // otherwise hand off a fresh drain -- uncancelled, because it did not exist when stop ran.
+        stopped = true
         task.cancel()
         pollingTask = nil
         // Wait for the cancelled task to complete its current cycle
         await task.value
-        // #668: the drain runs as its own task so the caller that starts a cycle is not billed for
-        // everyone else's. That would otherwise let AX polling outlive a `stop()` that documents
-        // itself as waiting for the current cycle. In practice the drain usually finishes while
-        // this function is suspended above -- it shares this actor -- but "usually" is scheduling
-        // luck, and a stop guarantee resting on it is not a guarantee.
+        // The drain runs as its own task so the caller that starts a cycle is not billed for
+        // everyone else's; without awaiting it, AX polling outlives a `stop()` that documents
+        // itself as waiting for the current cycle. Cancel first, or a steady stream of nudges
+        // keeps the drain accepting batches and this await never returns.
         drainTask?.cancel()
         await drainTask?.value
         drainTask = nil
+        // A cycle this poller does not own may still be in flight. `stopped` guarantees nothing
+        // follows it, so this waits at most that one cycle -- which is exactly what this function
+        // documents itself as waiting for.
+        if cycleInProgress {
+            await withCheckedContinuation { quiesceWaiters.append($0) }
+        }
         Log.info("StatePoller stopped", subsystem: "poller")
     }
 
     func stopImmediately() {
         guard let task = pollingTask else { return }
+        stopped = true
         task.cancel()
         pollingTask = nil
         drainTask?.cancel()
@@ -191,13 +209,16 @@ actor StatePoller {
     /// overlap — which is also why poller-vs-poller `dropped_stale_writes` becomes unreachable
     /// here, this time by construction rather than by my assuming it.
     private func runCoalescedCycle() async -> Bool {
+        // A stop is under way; starting a cycle now is the AX work that stop exists to end.
+        if stopped { return false }
         if cycleInProgress {
             return await withCheckedContinuation { waitingForNextCycle.append($0) }
         }
         cycleInProgress = true
         let mine = await pollOnce(axChannel: axChannel, cache: cache)
         if waitingForNextCycle.isEmpty {
-            cycleInProgress = false
+            strandWaiters()
+            releaseCycle()
         } else {
             // Hand the drain off rather than running it here. This caller's answer was ready when
             // its own cycle ended; holding it to serve later arrivals adds whole cycles to a
@@ -216,8 +237,9 @@ actor StatePoller {
         // later nudge queue behind a drain that is gone, and no suspension separates the loop's
         // emptiness check from this, so no arrival can be stranded by observing it true and then
         // finding nobody left to serve it.
-        defer { cycleInProgress = false }
+        defer { strandWaiters(); releaseCycle() }
         while !waitingForNextCycle.isEmpty {
+            if stopped { break }
             // Cooperative cancellation, because without it this loop has no upper bound: it keeps
             // accepting new batches, and `refreshNow` stays callable after the loop task is gone,
             // so one nudge per cycle from any caller kept `stop()` awaiting this task forever.
@@ -230,12 +252,25 @@ actor StatePoller {
             let shared = await pollOnce(axChannel: axChannel, cache: cache)
             for waiter in batch { waiter.resume(returning: shared) }
         }
-        // Whoever is still queued when this exits is owed an answer, and the honest one is that
-        // the cache did not advance for them. Leaving them suspended would be the lost
-        // continuation this design is otherwise free of.
+    }
+
+    /// Whoever is still queued is owed an answer, and the honest one is that the cache did not
+    /// advance for them. Leaving them suspended would be the lost continuation this design is
+    /// otherwise free of. Synchronous by construction: no arrival can slip between the snapshot
+    /// and the resumes.
+    private func strandWaiters() {
         let stranded = waitingForNextCycle
         waitingForNextCycle = []
         for waiter in stranded { waiter.resume(returning: false) }
+    }
+
+    /// Releases the cycle and wakes any `stop()` parked on it. Ordering matters: waiters are
+    /// stranded first, so nobody is left queued against a flag that has just been released.
+    private func releaseCycle() {
+        cycleInProgress = false
+        let parked = quiesceWaiters
+        quiesceWaiters = []
+        for waiter in parked { waiter.resume() }
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
@@ -343,16 +378,18 @@ actor StatePoller {
             // this fast path bypasses `poll`, so it is the one place the old `_ =` discard could
             // survive the split, and it is the section most likely to lose a race on a large
             // project — exactly where a receipt claiming `refreshed: true` would be wrong.
-            let accepted = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
-            let advanced = await cache.currentVersion(for: .tracks) != tracksVersion
-            tracksReady = PollOutcome(readable: true, applied: accepted && advanced)
+            // `applyTracks`, not `updateTracks`: the answer must come from inside the cache.
+            // Comparing revisions out here needs a second actor call, and another writer to this
+            // section can advance it in that window and be credited to this poll.
+            let applied = await cache.applyTracks(tracks, ifCurrent: tracksVersion)
+            tracksReady = PollOutcome(readable: true, applied: applied)
         } else {
             tracksReady = await poll(
                 operation: "track.get_tracks", label: "Track",
                 section: .tracks,
                 axChannel: axChannel, cache: cache, as: [TrackState].self
             ) { cache, tracks, observed in
-                await cache.updateTracks(tracks, ifCurrent: observed)
+                await cache.applyTracks(tracks, ifCurrent: observed)
             }
         }
         if tracksReady.applied { cacheKeys.append(.tracks) }
@@ -498,9 +535,11 @@ actor StatePoller {
             //
             // Comparing the revision closes it: acceptance means the section was still at
             // `observed`, so any advance from there is ours, and no advance means nothing landed.
-            let accepted = await update(cache, value, observed)
-            let advanced = await cache.currentVersion(for: section) != observed
-            return PollOutcome(readable: true, applied: accepted && advanced)
+            // The closure is what knows whether the cache advanced, and it answers atomically
+            // inside the cache actor. Reading the revision here instead would leave a window for
+            // another writer to advance the section and be credited to this poll.
+            let applied = await update(cache, value, observed)
+            return PollOutcome(readable: true, applied: applied)
         } catch {
             Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
             return .unreadable

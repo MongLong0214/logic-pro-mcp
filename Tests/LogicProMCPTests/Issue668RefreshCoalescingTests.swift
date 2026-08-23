@@ -250,6 +250,90 @@ struct Issue668RefreshCoalescingTests {
         #expect(!keys.sawTracks(), "a write that changed nothing was reported as a refresh")
     }
 
+    @Test("no cycle begins once a stop is requested, including from a cycle stop does not own")
+    func stopQuiescesACycleItDoesNotOwn() async {
+        let cycles = Counter()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
+                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
+            postPoll: { _ in try? await Task.sleep(for: .milliseconds(200)) }
+        )
+        // An external nudge owns the cycle, so the loop skips its tick and sleeps. Cancelling the
+        // loop then leaves `drainTask` nil, and stop() used to await nothing and return — after
+        // which the external cycle would find the queued callers and hand off a fresh,
+        // uncancelled drain, running AX work past the stop.
+        let owner = Task { _ = await poller.refreshNow() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await poller.start()
+        let queued = (0..<2).map { _ in Task { _ = await poller.refreshNow() } }
+        try? await Task.sleep(for: .milliseconds(250))
+
+        // Sampled when stop is REQUESTED, not when it returns. Measuring after the return hides
+        // the defect: stop parks on the cycle it does not own, so a drain spawned in the meantime
+        // finishes inside the wait and its cycle is invisible to an after-the-fact comparison.
+        let atRequest = cycles.value()
+        await poller.stop()
+        try? await Task.sleep(for: .seconds(6))
+
+        #expect(cycles.value() == atRequest,
+                "\(cycles.value() - atRequest) cycle(s) began after the stop was requested")
+        _ = await owner.value
+        for q in queued { _ = await q.value }
+    }
+
+    @Test("stop() does not return while a cycle it does not own is still running")
+    func stopWaitsForACycleItDoesNotOwn() async {
+        let cycleEnded = Flag()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { true },
+                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
+            postPoll: { _ in
+                try? await Task.sleep(for: .seconds(1))
+                cycleEnded.set()
+            }
+        )
+        // Cancelling the loop covers only cycles the loop owns. An external `refreshNow` holding
+        // the gate keeps running AX after stop() has cancelled everything it can see, so stop()
+        // parks until the cycle releases — otherwise it reports the poller stopped while the
+        // poller is mid-walk.
+        let owner = Task { _ = await poller.refreshNow() }
+        try? await Task.sleep(for: .milliseconds(50))
+        await poller.start()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        await poller.stop()
+        #expect(cycleEnded.isSet(), "stop() returned while a cycle was still running")
+        _ = await owner.value
+    }
+
+    @Test("a nudge arriving after stop() does not restart AX work")
+    func nudgeAfterStopIsRefused() async {
+        let cycles = Counter()
+        let poller = StatePoller(
+            axChannel: AccessibilityChannel(),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { cycles.bump(); return true },
+                           sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }),
+            postPoll: { _ in }
+        )
+        await poller.start()
+        try? await Task.sleep(for: .milliseconds(200))
+        await poller.stop()
+
+        // `refresh_cache` stays reachable after the poller stops — the tool does not know about
+        // the lifecycle. Serving it would walk AX on a poller that has been told to stop, which is
+        // the work stop exists to end, so it is refused and answers honestly that nothing advanced.
+        let atStop = cycles.value()
+        let advanced = await poller.refreshNow()
+
+        #expect(!advanced, "a nudge after stop() claimed the cache advanced")
+        #expect(cycles.value() == atStop, "a nudge after stop() started a cycle")
+    }
+
     @Test("a steady stream of nudges does not starve the initiator")
     func drainingTerminates() async {
         let cycles = Counter()
