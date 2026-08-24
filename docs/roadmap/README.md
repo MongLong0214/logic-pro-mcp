@@ -26,6 +26,13 @@ identical to a complete one, and written against `--limit 200` this check would 
 against the newest 200 of 239 issues and passed. `Scripts/test-roadmap-table-guard.sh` drives every
 one of those paths and asserts the exit codes, so the guard has been watched fail.
 
+One exception, and it is narrow: **a pull request may mark closed the issues it says it closes.**
+Without it a closing PR has no truthful row to write — open while it is open, stale the instant it
+merges — and #684 hit exactly that, turning `main` red on its own merge commit. The exemption
+applies only to issues named in that PR's `Closes #N`, only in the ahead direction, and not at all
+on a push to `main`; a row claiming an open issue is closed still fails, and the closing PR must
+still list the issue rather than delete its row.
+
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
@@ -64,7 +71,7 @@ Also open, outside the ADR set:
 | #369 | OPEN | Export panel AX-opaque — no accessible path to per-track stems |
 | #373 | OPEN | Phase B needs live readback; `logic://tracks` is cache-served, so a stale read passes the same equality check |
 | #448 | OPEN | layout readback is deliverable; colour and reorder need a definition of "verified" for a write nothing can read back |
-| #678 | OPEN | this file |
+| #678 | closed | the drift guard and this file's update rule shipped in #684 |
 | #683 | OPEN | external report — MCU feedback from Logic Pro Creator Studio wedges the loop; four hypotheses refuted or weakened by measurement, blocked on a `sample` from the reporter's host |
 | #685 | OPEN | `mixer.set_pan`/`set_volume` abandon the nudge loop on a single `nil` AX read and leave the fader partway; measured 4/4 short on the first call of a process, root cause identified |
 

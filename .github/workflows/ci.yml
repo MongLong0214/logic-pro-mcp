@@ -41,9 +41,15 @@ jobs:
         run: bash Scripts/test-roadmap-table-guard.sh
 
       - name: Roadmap table matches GitHub (#678)
+        # `--pr` is passed only on a pull request, and only so the table may mark closed the issues
+        # THAT pull request says it closes. Without it a PR closing an issue has no truthful row to
+        # write: open while it is open, stale the instant it merges — which is what turned main red
+        # on #684's own merge commit. On a push to main no number is passed and nothing is exempt.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 Scripts/roadmap-table-matches-github.py
+        run: |
+          python3 Scripts/roadmap-table-matches-github.py \
+            ${{ github.event.pull_request.number && format('--pr {0}', github.event.pull_request.number) || '' }}
 
   compile:
     runs-on: macos-15
