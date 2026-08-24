@@ -145,6 +145,9 @@ struct QualificationOperationResult: Equatable, Sendable {
     let isError: Bool?
     let state: String?
     let error: String?
+    /// The refusal's actionable half. Captured because the deferral used to guess a cause the
+    /// operation had already named -- see `operationUnavailable` below.
+    let hint: String?
     let writeAttempted: Bool?
     let readbackSource: String?
     let readbackRequestID: String?
@@ -258,14 +261,21 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .notQualified:
             QualificationDeferral(
                 code: .operationUnavailable,
-                // NOT "on this host". The cause is almost never the machine: the probe sends
-                // `[:]` for every read-only operation not named in `probeParams`, so operations
-                // that require a parameter refuse correctly and are recorded as unavailable.
-                // `SemanticOracleTable.swift` lists six that cannot reach `passed` for exactly this
-                // reason, by design and pending Phase B. Attributing that to the environment sends
-                // whoever reads the attestation to go look at their machine, which is clean.
-                detail: "read-only operation did not return a successful typed response under the "
-                    + "probe's current parameters (see SemanticOracleTable's KNOWN GAPS note)"
+                // This used to assert one cause for every shortfall: that the probe sends `[:]`
+                // and the operation refused for want of a parameter. That is true for some and
+                // false for others, and the attestation had no way to tell them apart.
+                //
+                // Measured 2026-08-24: `tracks.list_library` takes NO parameters and refuses with
+                // `channels_exhausted` / "Library panel not found. Open Library (Y) in Logic Pro.";
+                // `tracks.scan_plugin_presets` refuses with "No plugin window with Setting dropdown
+                // found." Both name their precondition exactly. The old text sent whoever read the
+                // attestation to check probe parameters that do not exist for those operations,
+                // while the operation had already said what it needed.
+                //
+                // So the detail now carries what the operation said. The generic sentence remains
+                // only for a refusal that named nothing, which is the one case where a category
+                // guess is all there is.
+                detail: Self.unavailableDetail(error: error, hint: hint)
             )
         case .protocolSmoke:
             QualificationDeferral(
@@ -274,6 +284,26 @@ struct QualificationOperationResult: Equatable, Sendable {
             )
         default:
             nil
+        }
+    }
+
+    /// The refusal in the operation's own words when it gave any, and a stated absence otherwise.
+    ///
+    /// Kept deliberately literal: an attestation is read by someone deciding whether a shortfall is
+    /// their environment or the product, and a paraphrase is where that distinction goes missing.
+    static func unavailableDetail(error: String?, hint: String?) -> String {
+        let code = error?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reason = hint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch (code?.isEmpty == false ? code : nil, reason?.isEmpty == false ? reason : nil) {
+        case let (.some(code), .some(reason)):
+            return "read-only operation refused with `\(code)`: \(reason)"
+        case let (.some(code), .none):
+            return "read-only operation refused with `\(code)` and named no precondition"
+        case let (.none, .some(reason)):
+            return "read-only operation did not return a successful typed response: \(reason)"
+        case (.none, .none):
+            return "read-only operation did not return a successful typed response and named "
+                + "neither an error code nor a precondition"
         }
     }
 
@@ -663,6 +693,7 @@ struct QualificationTransport: Sendable {
                     isError: response?.isError,
                     state: typed?.state,
                     error: typed?.error,
+                    hint: typed?.hint,
                     writeAttempted: typed?.writeAttempted,
                     readbackSource: readbackSource,
                     readbackRequestID: readbackRequestID,
@@ -1301,12 +1332,14 @@ private struct TraceDetailResult: Decodable {
 private struct OperationProbeResult: Decodable {
     let state: String?
     let error: String?
+    let hint: String?
     let writeAttempted: Bool?
     let traceID: String?
 
     enum CodingKeys: String, CodingKey {
         case state
         case error
+        case hint
         case writeAttempted = "write_attempted"
         case traceID = "trace_id"
     }
