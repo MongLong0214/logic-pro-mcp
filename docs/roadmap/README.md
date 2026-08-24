@@ -18,20 +18,26 @@ without the other**. That is the failure this file exists to end.
 "when someone remembers" is stale within two weeks — measured, that is exactly how its predecessor
 got here.
 
-That rule is a convention, and a convention is a claim. The stronger form is a CI check that fails
-when this table disagrees with GitHub, and it is tracked separately (#678 follow-up) so the document
-lands correct before a machine starts enforcing it. **Until that check exists, treat this file as
-verified only as far as its "measured" date.**
+That rule is a convention, and a convention is a claim. **The check now exists**:
+`Scripts/roadmap-table-matches-github.py` runs in CI and fails when this table and GitHub disagree —
+either a row that was never flipped, or an open issue nobody added. It refuses (exit 2) rather than
+reporting clean when it cannot tell: a `gh issue list` result that hit its own `--limit` looks
+identical to a complete one, and written against `--limit 200` this check would have compared
+against the newest 200 of 239 issues and passed. `Scripts/test-roadmap-table-guard.sh` drives every
+one of those paths and asserts the exit codes, so the guard has been watched fail.
 
-## State — measured 2026-08-24
+It does not check the prose. The "waiting on" column, the order, and the state block below are still
+claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
+
+## State — measured 2026-08-24 at `d02d85f4`
 
 ```
-open PRs 0 · main bd943f5 · v3.14.0 published
+open PRs 0 · v3.14.0 published · 19 open issues
 ```
 
 | ADR | issue | state | what it is waiting on |
 |---|---|---|---|
-| ADR-001 | #284 | OPEN | 6 of 7 LPMCP-PRD-001 contracts open; five are `release.yml` requirements |
+| ADR-001 | #284 | OPEN | 6 of 7 LPMCP-PRD-001 contracts open; `R-SEM` splits 23 read-only (15 already pass) / 49 mutating awaiting a write-and-readback qualification mode that does not exist / 37 mutating with a waiver route |
 | ADR-002 | #285 | closed | |
 | ADR-003 | #286 | closed | |
 | ADR-004 | #287 | closed | |
@@ -42,7 +48,7 @@ open PRs 0 · main bd943f5 · v3.14.0 published
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
 | ADR-010 | #293 | OPEN | provider exists (10 modules); its collector was written against a fixture shape Logic does not produce |
 | ADR-011 | #299 | OPEN | behind #292 |
-| ADR-012 | #300 | OPEN | **implemented and registered** — `audio.analyze_file`, `audio.recommend_eq`; gated behind `LOGIC_MCP_ADR012_SPECTRAL_EQ=1`, so what is open is promotion, not implementation |
+| ADR-012 | #300 | OPEN | **implemented and registered**, gated behind `LOGIC_MCP_ADR012_SPECTRAL_EQ=1`; measured working (injected 250 Hz recovered at 253.98 Hz, control silent) but promotion would ship three band artifacts — see the issue |
 | ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
 | ADR-014 | #302 | OPEN | R1 shipped; R2 blocked on `columnResolveFailed` — `kAXColumns` absent on the live Event List |
 | ADR-015 | #303 | OPEN | behind #293 |
@@ -59,6 +65,7 @@ Also open, outside the ADR set:
 | #373 | OPEN | Phase B needs live readback; `logic://tracks` is cache-served, so a stale read passes the same equality check |
 | #448 | OPEN | layout readback is deliverable; colour and reorder need a definition of "verified" for a write nothing can read back |
 | #678 | OPEN | this file |
+| #683 | OPEN | external report — MCU feedback from Logic Pro Creator Studio wedges the loop; four hypotheses refuted or weakened by measurement, blocked on a `sample` from the reporter's host |
 
 ### Three reopen reasons, checked rather than inferred
 
@@ -79,7 +86,10 @@ next step is a measurement and the honest outcome may be a scope decision with t
 attached — not a silent deferral.
 
 1. **#284** — the release gate. Five of its six open contracts are `release.yml` requirements, so
-   most of it is repo-side work rather than live work. `R-SEM` is the large one and depends on #373.
+   most of it is repo-side work rather than live work. `R-SEM` is the large one, and measuring it
+   on 2026-08-24 moved its blocker: the 49 mutating operations with a verification plan are waiting
+   on a write-and-readback qualification mode that does not exist, which the #284 matrix does not
+   supply. #373 covers a smaller part of it than "depends on #373" suggested.
 2. **#290** — the selector atlas, because every capability below addresses Logic through AX
    selectors and ad-hoc selectors are the measured source of wrong-target behaviour.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
