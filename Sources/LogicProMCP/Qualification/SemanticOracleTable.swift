@@ -22,17 +22,34 @@ import Foundation
 //    live-run drift catcher. Until then, treat green fixtures as evidence the
 //    ORACLE LOGIC works — not as evidence the shapes are current.
 //
-// 2. SIX OPERATIONS CANNOT REACH `passed` UNDER THE CURRENT PROBE PARAMS. The
-//    runner classifies on `isError` before any oracle runs, and these probes
-//    are typed refusals by construction: project.export_plan,
-//    plugins.get_inventory, tracks.resolve_path (empty params → invalid_params),
-//    audio.analyze_file (empty params → unsafe_path), system.clear_traces
-//    (probed `confirmed:false` on purpose, so qualification never destroys
-//    diagnostic evidence), system.saga_status (probed with a key no record
-//    exists for). Their oracles pin the real success contract and are unit- and
-//    mutation-tested, but a live run cannot exercise them. Phase B: give these
-//    probes qualifying params (a fixture project, a real track index, a seeded
-//    saga) rather than weaken the oracles.
+// 2. SIX READ-ONLY OPERATIONS ARE SHORT OF `passed`, AND NOT FOR THE REASON THIS
+//    NOTE USED TO GIVE. It said six operations could not reach `passed` for want
+//    of probe parameters and prescribed supplying them. They have had them for
+//    some time -- `probeParams` hands `tracks.resolve_path`, `audio.analyze_file`,
+//    `project.export_plan`, `plugins.get_inventory` and `system.saga_status`
+//    qualifying values -- so the note prescribed work already done, and nobody
+//    could tell because no run printed the names. It does now
+//    (`read-only short of passed` in QualificationRunnerTests).
+//
+//    Measured 2026-08-24, one-track project open, 6 of 23 read-only short:
+//
+//      audio.analyze_spectrum      gated behind LOGIC_MCP_ADR012_SPECTRAL_EQ=1 (#300)
+//      audio.recommend_eq          same flag
+//      tracks.list_library         library surface
+//      tracks.scan_plugin_presets  library surface
+//      tracks.resolve_path         deterministic MISS by design; the HIT branch
+//                                  needs a fixture library, not a different string
+//      system.clear_traces         deliberate `confirmed:false`; reaching its
+//                                  success path would destroy diagnostic evidence
+//
+//    Only two of these overlap the six the old note named. Two are a promotion
+//    decision on #300 rather than qualification work, and two are deliberate and
+//    should stay short. That leaves the library surface as the real Phase-A
+//    remainder.
+//
+//    Coverage also moves with fixture state: the same binary scored
+//    `passed=15` with no document open and `passed=17` with a one-track project.
+//    A coverage number quoted without its fixture state is not reproducible.
 //
 // 3. THREE MORE ARE ENVIRONMENT-CONDITIONAL live: project.get_regions,
 //    tracks.list_library and tracks.scan_plugin_presets need Logic running with
