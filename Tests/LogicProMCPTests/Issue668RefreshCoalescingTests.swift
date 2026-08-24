@@ -223,32 +223,42 @@ struct Issue668RefreshCoalescingTests {
 
     @Test("a debounced write is not reported as a refresh")
     func debouncedWriteIsNotReportedAsRefreshed() async {
-        let cache = StateCache()
         // The occlusion debounce absorbs the first two empty track reads while a document is open
         // and the cache is non-empty, returning without touching tracks, timestamp, or revision.
-        // The conditional wrapper still answers `true`, because the compare-and-swap DID accept —
-        // and that `true` used to reach `refresh_cache`'s `refreshed`. "CAS accepted" is not
-        // "the cache advanced", and the receipt claims the second.
+        // The older `updateTracks(_:ifCurrent:)` still answers `true` there, because the
+        // compare-and-swap DID accept — and that `true` used to reach `refresh_cache`'s
+        // `refreshed`. "CAS accepted" is not "the cache advanced", and the receipt claims the
+        // second. `applyTracks` is the fix, so it is what this measures.
+        //
+        // This drove the poller through a real `AccessibilityChannel` until 2026-08-24, which made
+        // it a statement about the machine rather than about the code: the debounce only engages
+        // when the AX read comes back empty, so the test passed with Logic closed and failed with a
+        // project open. It failed exactly that way in a ship gate while CI, which has no Logic,
+        // stayed green — an environmental accident encoded as a contract.
+        let cache = StateCache()
         await cache.updateTracks([TrackState(id: 0, name: "Kept", type: .audio)])
         await cache.updateDocumentState(true)
-        let revisionBefore = await cache.currentVersion(for: .tracks)
+        let observed = await cache.currentVersion(for: .tracks)
 
-        let keys = KeyRecorder()
-        let poller = StatePoller(
-            axChannel: AccessibilityChannel(),
-            cache: cache,
-            runtime: .init(hasVisibleWindow: { true }),
-            postPoll: { keys.add($0) }
-        )
-        _ = await poller.refreshNow()
+        let applied = await cache.applyTracks([], ifCurrent: observed)
 
-        // Precondition: the debounce must actually have fired, or this measures nothing.
-        let revisionAfter = await cache.currentVersion(for: .tracks)
-        #expect(revisionAfter == revisionBefore, "tracks advanced; the debounce never engaged")
+        #expect(!applied, "the CAS accepted but the cache did not advance; that is not a refresh")
+        #expect(await cache.currentVersion(for: .tracks) == observed, "the revision moved")
         #expect(await cache.getTracks().first?.name == "Kept", "the cache was overwritten")
 
-        #expect(!keys.sawTracks(), "a write that changed nothing was reported as a refresh")
+        // The negative above is only worth something if the same call can answer `true`. A read
+        // that genuinely carries new content is not absorbed, and must be reported as a refresh.
+        let advanced = await cache.applyTracks(
+            [TrackState(id: 0, name: "Replaced", type: .audio)], ifCurrent: observed)
+        #expect(advanced, "a write that changed the cache was not reported as a refresh")
+        #expect(await cache.currentVersion(for: .tracks) != observed)
     }
+
+    /// NOT covered here: that `applied == false` stops the poller emitting a `tracks` cache key.
+    /// `StatePoller` takes a concrete `AccessibilityChannel`, so there is no seam to hand it a
+    /// controlled read, and the only way to reach that link is to walk whatever Logic is doing —
+    /// which is what made the test above environment-coupled. Stating the gap rather than
+    /// re-introducing a check that passes for the wrong reason.
 
     @Test("no cycle begins once a stop is requested, including from a cycle stop does not own")
     func stopQuiescesACycleItDoesNotOwn() async {
