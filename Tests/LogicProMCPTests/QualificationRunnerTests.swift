@@ -1244,6 +1244,22 @@ struct QualificationRunnerTests {
         if !failed.isEmpty {
             print("failed operations: \(failed.map(\.operationID).sorted().joined(separator: ", "))")
         }
+
+        // #373 Phase A. The classification line above says how many reached each status; it cannot
+        // say WHICH, and the difference is the whole remaining question. `SemanticOracleTable`'s
+        // KNOWN GAPS note still names six operations as unable to reach `passed` for want of probe
+        // parameters -- all six have had them for some time, so the note prescribes work already
+        // done, and nobody could tell because no run ever printed the names.
+        //
+        // Read-only only: a mutating operation cannot reach `passed` at all today
+        // (`QualificationTransport.status` returns `.notQualified` or `.failed` for every one of
+        // them), so listing them here would be listing the Phase-B gap rather than Phase A's.
+        let readOnlyShort = readOnly
+            .filter { $0.status != .passed }
+            .map { "\($0.operationID)=\($0.status.rawValue)" }
+            .sorted()
+        print("read-only short of passed (\(readOnlyShort.count) of \(readOnly.count)): "
+                + (readOnlyShort.isEmpty ? "none" : readOnlyShort.joined(separator: ", ")))
     }
 
     /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
