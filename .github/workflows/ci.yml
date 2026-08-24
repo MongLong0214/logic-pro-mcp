@@ -17,6 +17,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # `docs/roadmap/README.md` declares itself the source of truth for what is open, and its update
+  # rule ("the same PR that opens or closes an issue updates the table") is a convention until
+  # something fails when it is not kept. This is that something.
+  #
+  # Its own job rather than a step in `compile`: the check reads issue state, so it needs a token
+  # scope the build jobs do not have. Adding `issues: read` to the workflow-level `permissions`
+  # would hand it to every job instead of the one that needs it. It is also not in
+  # `run-repo-guards.py`, whose contract is plain Python needing neither Xcode nor a network.
+  roadmap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Self-test the roadmap drift guard (#678)
+        # Offline, fixtures only. Asserts the guard fails on a stale row, on an open issue nobody
+        # added, and on a row pointing at no issue — and that it refuses (exit 2) rather than
+        # reporting clean on a truncated issue list or a table it could not parse.
+        run: bash Scripts/test-roadmap-table-guard.sh
+
+      - name: Roadmap table matches GitHub (#678)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 Scripts/roadmap-table-matches-github.py
+
   compile:
     runs-on: macos-15
     timeout-minutes: 60
