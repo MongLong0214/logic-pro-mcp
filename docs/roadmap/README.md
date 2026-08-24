@@ -66,6 +66,7 @@ Also open, outside the ADR set:
 | #448 | OPEN | layout readback is deliverable; colour and reorder need a definition of "verified" for a write nothing can read back |
 | #678 | OPEN | this file |
 | #683 | OPEN | external report — MCU feedback from Logic Pro Creator Studio wedges the loop; four hypotheses refuted or weakened by measurement, blocked on a `sample` from the reporter's host |
+| #685 | OPEN | `mixer.set_pan`/`set_volume` abandon the nudge loop on a single `nil` AX read and leave the fader partway; measured 4/4 short on the first call of a process, root cause identified |
 
 ### Three reopen reasons, checked rather than inferred
 
