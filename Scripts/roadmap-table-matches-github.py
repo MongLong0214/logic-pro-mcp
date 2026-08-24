@@ -40,6 +40,9 @@ import sys
 
 OK, DRIFT, CANNOT_DETERMINE = 0, 1, 2
 
+# `Closes #12`, `fixes #12`, `Resolved: #12` — the forms GitHub itself acts on.
+CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]*#(\d+)", re.I)
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_ROADMAP = os.path.join(REPO_ROOT, "docs", "roadmap", "README.md")
 
@@ -78,11 +81,40 @@ def fetch_issues(fixture):
     return {int(r["number"]): str(r["state"]).upper() for r in rows}, None
 
 
+def pending_closes(pr, body=None):
+    """Issues a pull request declares it closes, which the table may mark closed early.
+
+    A PR that closes an issue cannot describe the result truthfully in its own diff: while it is
+    open the issue is open, and the moment it merges the issue is closed and the table it just
+    landed is stale. Enforcing both directions with no exception makes that window unavoidable —
+    #684 shipped this guard, closed #678, and turned `main` red on the merge commit.
+
+    So on a pull request the table is allowed to be AHEAD of GitHub, but only for the issues that
+    pull request says it closes. That is not a general "closed rows are unchecked" hole: on a push
+    to `main` no PR number is passed, no issue is exempt, and a row that claims an open issue is
+    closed still fails — which is the direction that hides live work.
+    """
+    if body is None:
+        if not pr:
+            return set()
+        try:
+            out = subprocess.run(["gh", "pr", "view", str(pr), "--json", "body", "-q", ".body"],
+                                 capture_output=True, text=True, check=True).stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None  # asked, could not tell — the caller refuses rather than guessing
+        body = out
+    return {int(n) for n in CLOSES.findall(body or "")}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--roadmap", default=DEFAULT_ROADMAP)
     ap.add_argument("--issues-json", default=None,
                     help="read issue state from this JSON file instead of calling gh (self-test)")
+    ap.add_argument("--pr", default=None,
+                    help="pull request number; its `Closes #N` issues may be marked closed early")
+    ap.add_argument("--pr-body", default=None,
+                    help="use this text as the pull request body instead of asking gh (self-test)")
     args = ap.parse_args()
 
     if not os.path.exists(args.roadmap):
@@ -100,6 +132,13 @@ def main():
         print(f"CANNOT DETERMINE: {error}")
         return CANNOT_DETERMINE
 
+    pending = pending_closes(args.pr, args.pr_body)
+    if pending is None:
+        print("CANNOT DETERMINE: a pull request number was given but its body could not be read, "
+              "so which issues it closes is unknown. Guessing would either invent an exemption or "
+              "fail a correct table.")
+        return CANNOT_DETERMINE
+
     wrong_state = []
     not_an_issue = []
     for number, claimed in sorted(table.items()):
@@ -107,8 +146,14 @@ def main():
         if actual is None:
             not_an_issue.append(number)
         elif actual != claimed:
+            # The one allowed disagreement: this PR closes it, and the table already says so.
+            if claimed == "CLOSED" and actual == "OPEN" and number in pending:
+                continue
             wrong_state.append((number, claimed, actual))
 
+    # No exemption here, deliberately. A pull request that closes an issue still has to LIST it —
+    # marked closed — and exempting it from this direction would let the closing PR delete the row
+    # instead, which is the drift this half exists to catch.
     open_and_absent = sorted(n for n, s in issues.items() if s == "OPEN" and n not in table)
 
     if not (wrong_state or not_an_issue or open_and_absent):

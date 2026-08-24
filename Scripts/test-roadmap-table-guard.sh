@@ -16,10 +16,17 @@ trap 'rm -rf "$TMP"' EXIT
 FAILURES=0
 
 # Asserts the guard exits with $1 for the given roadmap/issues pair. $2 is the case name.
+# $5, when given, is a pull-request body: the guard then allows the table to be ahead of GitHub
+# for the issues that body says the PR closes.
 expect_exit() {
-  local want="$1" name="$2" roadmap="$3" issues="$4"
+  local want="$1" name="$2" roadmap="$3" issues="$4" prbody="${5-}"
   local got=0 out
-  out="$(python3 "$GUARD" --roadmap "$roadmap" --issues-json "$issues" 2>&1)" || got=$?
+  if [ -n "$prbody" ]; then
+    out="$(python3 "$GUARD" --roadmap "$roadmap" --issues-json "$issues" \
+             --pr 1 --pr-body "$prbody" 2>&1)" || got=$?
+  else
+    out="$(python3 "$GUARD" --roadmap "$roadmap" --issues-json "$issues" 2>&1)" || got=$?
+  fi
   if [ "$got" != "$want" ]; then
     printf 'FAIL  %-46s expected exit %s, got %s\n%s\n' "$name" "$want" "$got" "$out"
     FAILURES=$((FAILURES + 1))
@@ -78,6 +85,29 @@ expect_exit 1 "table row for a nonexistent issue"        "$TMP/roadmap-ok.md"   
 expect_exit 2 "truncated issue list is not 'clean'"      "$TMP/roadmap-ok.md"           "$TMP/issues-truncated.json"
 expect_exit 2 "unparseable table is not 'clean'"         "$TMP/roadmap-empty.md"        "$TMP/issues-ok.json"
 expect_exit 2 "absent roadmap file is not 'clean'"       "$TMP/nope.md"                 "$TMP/issues-ok.json"
+
+# --- the closing-PR window ----------------------------------------------------------------------
+# A pull request that closes an issue cannot describe the result truthfully in its own diff. Marked
+# closed early it disagrees with GitHub; left open it lands stale the moment it merges. #684 hit the
+# second and turned main red. The table may run ahead, but only for what the PR says it closes.
+sed 's/| #300 | OPEN |/| #300 | closed |/' "$TMP/roadmap-ok.md" > "$TMP/roadmap-ahead.md"
+
+expect_exit 1 "a row ahead of GitHub fails without a PR"  "$TMP/roadmap-ahead.md" "$TMP/issues-ok.json"
+expect_exit 0 "the PR that closes it may mark it closed"  "$TMP/roadmap-ahead.md" "$TMP/issues-ok.json" \
+  "Adds the thing.
+
+Closes #300"
+expect_exit 1 "a PR closing something else grants nothing" "$TMP/roadmap-ahead.md" "$TMP/issues-ok.json" \
+  "Closes #284"
+# The exemption runs one way only. Claiming an issue is OPEN when GitHub closed it is staleness,
+# and no PR body excuses it — that is what #684's merge produced.
+sed 's/| #285 | closed |/| #285 | OPEN |/' "$TMP/roadmap-ok.md" > "$TMP/roadmap-behind.md"
+expect_exit 1 "a stale OPEN row is not excused by a PR"   "$TMP/roadmap-behind.md" "$TMP/issues-ok.json" \
+  "Closes #285"
+# And the exemption does not let the closing PR DELETE the row instead of flipping it.
+grep -v '| #300 |' "$TMP/roadmap-ok.md" > "$TMP/roadmap-dropped.md"
+expect_exit 1 "the closing PR must still list the issue"  "$TMP/roadmap-dropped.md" "$TMP/issues-ok.json" \
+  "Closes #300"
 
 # The failing cases must name the issue they are about, or the report is unusable in CI.
 OUT="$(python3 "$GUARD" --roadmap "$TMP/roadmap-ok.md" --issues-json "$TMP/issues-extra-open.json" 2>&1)" || true
