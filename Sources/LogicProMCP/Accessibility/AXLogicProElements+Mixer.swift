@@ -66,23 +66,72 @@ extension AXLogicProElements {
         among sliders: [AXUIElement],
         runtime: AXHelpers.Runtime = .production
     ) -> [AXUIElement] {
-        sliders.filter { slider in
-            AXHelpers.getChildren(slider, runtime: runtime).contains { child in
-                let desc = (AXHelpers.getDescription(child, runtime: runtime) ?? "").lowercased()
-                return AXLocalePolicy.headerPanHint.containsAny(in: desc)
-            }
-        }
+        // This used to run its own predicate — `headerPanHint` against the CHILDREN's
+        // `AXDescription` — and `--probe-selection-census` measured it at zero survivors of two
+        // sliders on every header, so `findPanControlInHeader` reached its elimination fallback
+        // every time.
+        //
+        // Measured 2026-08-24, Logic 12.x (ko), read off the live tree: the header pan slider has
+        // no `AXDescription`, and no `AXIdentifier` — that attribute is absent from the element
+        // entirely. What it carries is `AXHelp` = "패닝 노브 및 밸런스 노브".
+        //
+        // The product already had a predicate that reads that. `sliderText` searches
+        // identifier + description + title + HELP, and `sliderPanHint` carries `패닝` and `밸런스`;
+        // it is what `findPanControl` uses for mixer strips, where the same census measured one
+        // survivor of two. So this was not a missing capability, it was a second, weaker copy of an
+        // existing one — used on headers only, and never matching. Deleting the copy is the fix.
+        //
+        // Checked that it still separates the pair rather than assuming it: the volume fader's
+        // searchable text ("볼륨", "볼륨 페이더. …") carries none of `pan` / `panning` / `패닝` /
+        // `밸런스`. `sliderText` also excludes send and zoom sliders, which the deleted copy did
+        // not — strictly narrower, not wider.
+        sliders.filter { sliderText($0, runtime: runtime).isPanControl }
     }
 
+    /// `AXMaxValue` of a track-header pan slider, measured at 127 against the volume fader's 233.
+    ///
+    /// A value-range signature, so unlike the help text it does not depend on locale. Used only to
+    /// separate candidates when the hint leaves more than one — never on its own, because a range
+    /// is a weaker claim about identity than a name.
+    static let headerPanSliderMaxValue: Double = 127
+
     /// Header-level pan-slider selection (split out for deterministic testing).
+    ///
+    /// Only the Korean help string is measured. On a locale whose `AXHelp` carries none of the
+    /// hint's variants the predicate yields nothing, and this falls through to elimination exactly
+    /// as it did before — so an unmeasured locale is no worse off, and never silently better.
     static func findPanControlInHeader(_ header: AXUIElement, runtime: AXHelpers.Runtime = .production) -> AXUIElement? {
         let sliders = AXHelpers.findAllDescendants(of: header, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
-        if let pan = headerPanSliderCandidates(among: sliders, runtime: runtime).first {
-            return pan
+        let candidates = headerPanSliderCandidates(among: sliders, runtime: runtime)
+
+        if candidates.count == 1 { return candidates[0] }
+
+        if candidates.count > 1 {
+            // Narrow by the value-range signature before giving up — it does not depend on locale.
+            let ranged = candidates.filter { slider in
+                let maxValue: Double? = AXHelpers.getAttribute(
+                    slider, kAXMaxValueAttribute as String, runtime: runtime)
+                return maxValue.map { abs($0 - headerPanSliderMaxValue) < 0.5 } ?? false
+            }
+            if ranged.count == 1 { return ranged[0] }
+            // Refusing, not choosing. Returning the first in tree order is what the census on #628
+            // exists to find, and here there is nothing left to distinguish them by.
+            Log.info("findPanControlInHeader: \(candidates.count) sliders carry a pan identity and "
+                + "\(ranged.count) carry the measured range; refusing rather than picking one",
+                subsystem: "ax")
+            return nil
         }
-        // Fallback: the slider that is NOT the volume fader.
+
+        // No slider named itself. Elimination is the last resort, and it is only correct while
+        // there are exactly two sliders and the other one IS named — an asymmetry the code relied
+        // on without stating. Saying so means a tree where it stops holding leaves a trace.
         let volume = findVolumeFader(in: header, runtime: runtime)
-        return sliders.first { volume == nil || !CFEqual($0, volume!) }
+        let eliminated = sliders.first { volume == nil || !CFEqual($0, volume!) }
+        if eliminated != nil {
+            Log.info("findPanControlInHeader: no slider among \(sliders.count) carries a pan "
+                + "identity; selecting by elimination against the volume fader", subsystem: "ax")
+        }
+        return eliminated
     }
 
     /// Find a volume fader for a specific track index within the mixer.
