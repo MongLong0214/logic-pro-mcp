@@ -14,8 +14,11 @@ What it refuses to let you record:
   resulting image is not what the user sees. Every capture records which display it fell wholly within.
 - **A whole-window diff as a visual assertion.** A full-window comparison changes when the clock ticks.
   `visual()` requires an explicit region and states what it expected to happen there.
-- **A check that cannot fail.** `check()` requires you to name the mutation you applied to the product
-  that flipped it. A check nobody has seen fail is not evidence.
+- **A check that cannot fail.** `check()` requires you to NAME a mutation you believe would flip it —
+  which is a claim, and the field says so (`mutation_claimed`). `falsifiable()` is the form that
+  establishes something: it hands the assertion to this module, which runs it against the observation
+  AND against a counterexample the author wrote down, and passes only if the first is accepted and the
+  second REJECTED. A condition that cannot fail fails there.
 - **A cached read presented as live.** `provenance()` records the source and age of any value that did
   not come from a fresh read, and marks it unusable as live evidence.
 
@@ -507,16 +510,78 @@ class Evidence:
     def check(self, tag, passed, expected, observed, mutation):
         """Assert something about the run.
 
-        `mutation` names the change to the PRODUCT that was seen to flip this check. A check whose
-        mutation is unknown is recorded with `mutation_flips: false` and the gate refuses the run — a
-        check nobody has watched fail is decoration.
+        `mutation` NAMES a change to the product the author believes would flip this check. The
+        field recording it is called `mutation_claimed` because that is all it is. It was called
+        `mutation_flips` until 2026-08-28, one word away from a claim nothing here establishes:
+        nobody reruns the build with the mutation applied, so `bool(mutation)` only ever meant "a
+        non-empty string was supplied". The docstring above it said "a check nobody has watched fail
+        is decoration" while the value beneath it counted decoration.
+
+        Requiring a mutant receipt was considered and rejected. The live gate hashes every
+        `*.evidence.json` at a head against the shipped release binary, and a mutant binary has a
+        different digest by construction — so a receipt cannot live in that directory at all, and
+        exempting it would move the trust rather than establish it. A second GUI run against another
+        binary in another UI state also cannot show that the NAMED mutation caused the red; it shows
+        only that something did.
+
+        `falsifiable()` below is the cheap form that does establish something.
         """
         self.records.append({
             "kind": "check", "tag": tag, "passed": bool(passed),
             "expected": expected, "observed": observed,
-            "mutation": mutation or None, "mutation_flips": bool(mutation),
+            "mutation": mutation or None, "mutation_claimed": bool(mutation),
+            # `mutation_flips` is the old name, emitted for one release. The live gate takes
+            # `is_clean` from origin/main on purpose and RECOMPUTES the summary from these
+            # records rather than reading the one written here — so the trusted copy counts
+            # the field IT knows. Renaming a record field is therefore a wire change to an
+            # external reader, not a local one, and needs the same two-step a renamed summary
+            # key does. Land this, then delete both aliases in a follow-up.
+            "mutation_flips": bool(mutation),
         })
         return bool(passed)
+
+    def falsifiable(self, tag, predicate, observation, counterexample, expected, mutation=None):
+        """A check whose assertion is run against a state it MUST reject, in the same run.
+
+        `check()` records whether the author's condition held. It cannot notice a condition that
+        could not have failed — a constant, a field that is never read, a comparison too weak to
+        reject the state it names. Those pass live and pass everywhere.
+
+        So the predicate is handed to the framework and the framework calls it twice: once on what
+        the run observed, once on an explicit counterexample the author had to write down. The check
+        passes only when the first is accepted AND the second is rejected. An author cannot supply
+        the second result; there is no parameter for it.
+
+        This costs no rebuild and no second Logic session, and it catches the defects that make an
+        assertion decoration. What it does NOT establish is that the check would catch a real
+        regression in the product — only that its condition can distinguish the observation from one
+        stated alternative. That boundary is the tag and that counterexample, and nothing wider.
+        """
+        try:
+            live_ok = bool(predicate(observation))
+        except Exception as exc:                       # noqa: BLE001 - recorded, not swallowed
+            live_ok, observation = False, f"predicate raised on the observation: {exc!r}"
+        try:
+            counter_ok = bool(predicate(counterexample))
+        except Exception as exc:                       # noqa: BLE001
+            # A predicate that throws on the counterexample has not rejected it on the merits, and
+            # reading a crash as a rejection is how a broken condition looks strong.
+            counter_ok, counterexample = True, f"predicate raised on the counterexample: {exc!r}"
+
+        passed = live_ok and not counter_ok
+        self.records.append({
+            "kind": "check", "tag": tag, "passed": passed,
+            "expected": expected,
+            "observed": {"observation": repr(observation)[:400],
+                         "accepted_the_observation": live_ok,
+                         "counterexample": repr(counterexample)[:400],
+                         "rejected_the_counterexample": not counter_ok},
+            "mutation": mutation or None, "mutation_claimed": bool(mutation),
+            "mutation_flips": bool(mutation),   # transitional alias, see check()
+            "has_counterexample": True,
+            "counterexample_rejected": not counter_ok,
+        })
+        return passed
 
     def provenance(self, tag, source, cache_age_sec, usable):
         """Record where a value came from when it did not come from a fresh read."""
@@ -755,7 +820,17 @@ def summarize(recs, out=None):
         "file": out,
         "checks": len(checks),
         "passed": sum(1 for c in checks if c.get("passed")),
-        "mutation_backed": sum(1 for c in checks if c.get("mutation_flips")),
+        "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
+        # Alias, and it has to be here for one release. The live gate extracts `is_clean` from
+        # origin/main deliberately — a branch may not edit its own judge — so while the trusted copy
+        # still requires `mutation_backed`, a document carrying only the new name is missing a
+        # required key and the gate refuses it. Renaming a key a trusted external reader depends on
+        # is the same chicken-and-egg as a pull request closing its own issue: emit both, land the
+        # rename, then delete this line in a follow-up.
+        "mutation_backed": sum(1 for c in checks if c.get("mutation_claimed")),
+        "checks_with_a_counterexample": sum(1 for c in checks if c.get("has_counterexample")),
+        "counterexamples_not_rejected":
+            sum(1 for c in checks if c.get("has_counterexample") and not c.get("counterexample_rejected")),
         "captures_unsettled": sum(1 for c in caps if not c.get("settled")),
         "captures_straddling_displays":
             sum(1 for c in caps if not c.get("display", {}).get("wholly_within")),
@@ -779,12 +854,13 @@ def summarize(recs, out=None):
 # Every counter `is_clean` reads. A summary missing any of them is not clean.
 #
 # The polarity used to depend on which key it was: `summary.get("visual_assertions_without_a_subject", 0) == 0`
-# passed when the key was ABSENT, while `summary.get("mutation_backed", 0) > 0` failed when absent.
+# passed when the key was ABSENT, while `summary.get("mutation_claimed", 0) > 0` failed when absent.
 # So a summary carrying the new counters but not that one — an older _summary, a hand-built dict —
 # was clean, and the newest condition was the one that vanished quietly. Listing the keys fixes the
 # shape of the bug rather than the one clause where it was noticed.
 _REQUIRED_SUMMARY_KEYS = (
-    "checks", "passed", "mutation_backed", "operations_driven",
+    "checks", "passed", "mutation_claimed", "mutation_backed", "operations_driven",
+    "checks_with_a_counterexample", "counterexamples_not_rejected",
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
     "visual_assertions", "visual_failed", "visual_assertions_without_a_subject",
@@ -814,9 +890,17 @@ def is_clean(summary):
       * `operations_driven` counts tool calls, not successful ones. A warm-up call, a read, or a
         call that came back a transport error each increment it. It rules out a harness that never
         touched the product; it does not show the run drove its own subject.
-      * `mutation_backed` counts checks that NAME a mutation. Naming is not demonstrating — the
+      * `mutation_claimed` counts checks that NAME a mutation. Naming is not demonstrating — the
         string is prose, and nothing here reruns the build with the mutation applied. Whether the
         named mutation would actually flip that check is the author's claim and a reviewer's job.
+        It was called `mutation_backed` until 2026-08-28, which read as though something backed it.
+      * `counterexamples_not_rejected` is enforced and `checks_with_a_counterexample` is NOT, yet.
+        A `falsifiable()` check whose predicate accepts the state it was supposed to reject fails
+        immediately — that clause is real. Requiring every harness to HAVE one is the clause with
+        teeth, and it is left counted-but-unenforced for the same reason
+        `visual_assertions_without_a_subject` was: thirty-odd harnesses predate the affordance, and
+        turning the whole live suite red in one step invites someone to delete the clause instead of
+        converting the call sites. Enforce it when the count reaches the harness count, not before.
       * a subject is any non-empty string. That it truthfully names what the rectangle contains is
         not checkable here.
 
@@ -842,7 +926,8 @@ def is_clean(summary):
         and summary["captures"] > 0
         and summary["visual_assertions"] > 0
         and summary["recordings"] > 0
-        and summary["mutation_backed"] > 0
+        and summary["mutation_claimed"] > 0
+        and summary["counterexamples_not_rejected"] == 0
         and summary["operations_driven"] > 0
         # ... and nothing it did may have gone wrong.
         and summary["visual_failed"] == 0

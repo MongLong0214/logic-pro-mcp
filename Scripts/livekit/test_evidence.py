@@ -17,7 +17,9 @@ import evidence as E  # noqa: E402
 # A complete, honest summary: one check that names a mutation, one driven operation, one capture,
 # one visual with a subject, one recording, nothing gone wrong.
 GOOD = {
-    "checks": 1, "passed": 1, "mutation_backed": 1, "operations_driven": 1,
+    "checks": 1, "passed": 1, "mutation_claimed": 1, "mutation_backed": 1,
+    "operations_driven": 1,
+    "checks_with_a_counterexample": 0, "counterexamples_not_rejected": 0,
     "captures": 1, "captures_unsettled": 0, "captures_straddling_displays": 0,
     "restorations_failed": 0, "cached_reads_used_as_live": 0,
     "visual_assertions": 1, "visual_failed": 0, "visual_assertions_without_a_subject": 0,
@@ -32,7 +34,9 @@ CASES = [
     (False, {**GOOD, "captures": 0}, "no capture — nothing was unsettled because nothing was shot"),
     (False, {**GOOD, "recordings": 0}, "no screen recording"),
     (False, {**GOOD, "operations_driven": 0}, "never called the product"),
-    (False, {**GOOD, "mutation_backed": 0}, "no check names a mutation"),
+    (False, {**GOOD, "mutation_claimed": 0}, "no check names a mutation"),
+    (False, {**GOOD, "counterexamples_not_rejected": 1},
+     "a counterexample the assertion failed to reject"),
     (False, {**GOOD, "checks": 0, "passed": 0}, "no checks"),
     # Absence must never be clean, for EVERY key — the polarity used to depend on which one.
     *[(False, {k: v for k, v in GOOD.items() if k != key}, f"summary missing {key!r}")
@@ -325,6 +329,44 @@ shapes.append(("is_clean() returns a bool", isinstance(E.is_clean(out), bool)))
 shapes.append(("the driven visual named a subject", out["visual_assertions_without_a_subject"] == 0))
 shapes.append(("have_tools() returns a list", isinstance(E.have_tools(), list)))
 shapes.append(("_safe_name() returns a str", isinstance(E._safe_name("x"), str)))
+# --- falsifiable(): the assertion is run against a state it must reject -------------------------
+# The whole point is that a condition which cannot fail must not pass here. Each case below is a
+# predicate defect that `check()` records as green, because `check()` only ever sees the author's
+# own boolean.
+fev = E.Evidence("f" * 40, tmp, name="falsifiable_cases")
+FCASES = [
+    ("a real condition passes",              lambda o: o["survivors"] == 1, True),
+    ("a constant-true predicate fails",      lambda o: True,                False),
+    ("a predicate that rejects the observation fails", lambda o: False,     False),
+    ("a condition too weak to reject the counterexample fails",
+     lambda o: "survivors" in o,                                            False),
+    ("a predicate that raises on the counterexample fails",
+     lambda o: o["survivors"] == 1 or o["missing"],                         False),
+]
+OBS = {"survivors": 1, "identified": True}
+COUNTER = {"survivors": 0, "identified": False}
+for why, pred, want in FCASES:
+    got = fev.falsifiable(f"f/{why}", pred, OBS, COUNTER, "expected", mutation=None)
+    shapes.append((f"falsifiable: {why}", got is want))
+
+frecords = [r for r in fev.records if r["kind"] == "check"]
+shapes.append(("falsifiable records a counterexample on every check",
+               all(r.get("has_counterexample") for r in frecords)))
+# The rejection is COMPUTED. There is no parameter for it, and the recorded value has to follow the
+# predicate rather than anything the caller said — that is the difference from `mutation_claimed`.
+shapes.append(("the constant-true case records the counterexample as NOT rejected",
+               frecords[1]["counterexample_rejected"] is False))
+shapes.append(("the real condition records it as rejected",
+               frecords[0]["counterexample_rejected"] is True))
+fsummary = fev.write()
+shapes.append(("the summary counts them", fsummary["checks_with_a_counterexample"] == len(FCASES)))
+# THREE of the five, not four. The always-false predicate DOES reject the counterexample — it
+# rejects everything — and fails for the other reason, that it rejected the observation too. The two
+# failure modes are separate and the counter must only see its own: a predicate that cannot accept
+# anything is a broken check, but it is not a check that failed to discriminate.
+shapes.append(("and counts only the ones that failed to reject",
+               fsummary["counterexamples_not_rejected"] == 3))
+
 for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")

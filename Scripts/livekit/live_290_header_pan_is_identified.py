@@ -100,14 +100,26 @@ except json.JSONDecodeError:
 row = next((s for s in sites if isinstance(s, dict) and s.get("site", "").startswith(SITE)), None)
 ev.note("290/selection-census", {"row": row, "sites": len(sites)})
 
-ev.check("290/the-pan-slider-names-itself",
-         isinstance(row, dict) and row.get("survivors") == 1 and row.get("identified") is True,
-         "exactly one slider on the header survives the pan discriminator, and the census calls the "
-         "answer unambiguous — measured at ZERO survivors before this change, which by the probe's "
-         "own rule is the site selecting by index",
-         f"row={row!r}",
-         "revert headerPanSliderCandidates to matching headerPanHint against the children's "
-         "AXDescription: survivors returns to 0 and this check goes red")
+def one_unambiguous_survivor(r):
+    return isinstance(r, dict) and r.get("survivors") == 1 and r.get("identified") is True
+
+
+# The counterexample is not invented: it is the row this census actually printed before the fix, on
+# this machine, transcribed. `falsifiable` runs the same predicate against both, so a condition that
+# would also accept the pre-fix state fails here rather than passing live and proving nothing.
+PRE_FIX_ROW = {"site": SITE + " (header pan slider)",
+               "gathered": 2, "survivors": 0, "identified": False}
+
+ev.falsifiable(
+    "290/the-pan-slider-names-itself",
+    one_unambiguous_survivor,
+    row,
+    PRE_FIX_ROW,
+    "exactly one slider on the header survives the pan discriminator, and the census calls the "
+    "answer unambiguous — measured at ZERO survivors before this change, which by the probe's own "
+    "rule is the site selecting by index",
+    mutation="revert headerPanSliderCandidates to matching headerPanHint against the children's "
+             "AXDescription: survivors returns to 0 and this check goes red")
 
 d = E.Driver()
 time.sleep(3)

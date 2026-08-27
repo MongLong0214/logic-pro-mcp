@@ -41,7 +41,7 @@ for paths, expected, why in [
 # Through the REAL `E.summarize` and `E.is_clean`, not a copy of the predicate: a test that
 # reimplements the rule agrees with itself no matter what the code says.
 CLEAN = {"records": [
-    {"kind": "check", "passed": True, "mutation_flips": True},
+    {"kind": "check", "passed": True, "mutation_claimed": True},
     {"kind": "capture", "settled": True, "display": {"wholly_within": True}},
     {"kind": "visual", "passed": True, "subject": "Tracks header", "region": [0, 0, 1, 1]},
     {"kind": "recording"},
