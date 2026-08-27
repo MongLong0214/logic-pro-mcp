@@ -972,10 +972,21 @@ enum AXLocalePolicy {
     )
 
     /// Track-header pan slider locator (header-level).
+    /// No longer consulted in production as of 2026-08-24. `headerPanSliderCandidates` was its only
+    /// caller and now uses `sliderPanHint` via `sliderText`, which reads `AXHelp` and is what
+    /// identifies the same control on a mixer strip — this set searched children's `AXDescription`
+    /// and measured zero survivors on every header.
+    ///
+    /// Left in place rather than deleted. Its `팬` variant is not in `sliderPanHint`, so removing it
+    /// would drop a label from the repository on the strength of one measurement, in one locale, on
+    /// one Logic version — a narrowing dressed up as a cleanup. Whether `팬` belongs in
+    /// `sliderPanHint`, and whether this set should then go, is a separate question with its own
+    /// evidence: no tree measured so far contains `팬` at all, and `팬` does not occur inside
+    /// `패닝` (different syllables), so it has never been the variant doing the work.
     static let headerPanHint = LabelSet(
         canonical: "pan",
         variants: ["팬", "밸런스"],
-        rationale: "Locates the track-header pan slider by child description; read-only locator (structural fallback exists)."
+        rationale: "Retired locator for the track-header pan slider; superseded by sliderPanHint."
     )
 
     /// Track-header rail description (normalized exact match).
