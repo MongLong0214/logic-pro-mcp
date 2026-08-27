@@ -530,13 +530,6 @@ class Evidence:
             "kind": "check", "tag": tag, "passed": bool(passed),
             "expected": expected, "observed": observed,
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
-            # `mutation_flips` is the old name, emitted for one release. The live gate takes
-            # `is_clean` from origin/main on purpose and RECOMPUTES the summary from these
-            # records rather than reading the one written here — so the trusted copy counts
-            # the field IT knows. Renaming a record field is therefore a wire change to an
-            # external reader, not a local one, and needs the same two-step a renamed summary
-            # key does. Land this, then delete both aliases in a follow-up.
-            "mutation_flips": bool(mutation),
         })
         return bool(passed)
 
@@ -577,7 +570,6 @@ class Evidence:
                          "counterexample": repr(counterexample)[:400],
                          "rejected_the_counterexample": not counter_ok},
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
-            "mutation_flips": bool(mutation),   # transitional alias, see check()
             "has_counterexample": True,
             "counterexample_rejected": not counter_ok,
         })
@@ -821,13 +813,6 @@ def summarize(recs, out=None):
         "checks": len(checks),
         "passed": sum(1 for c in checks if c.get("passed")),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
-        # Alias, and it has to be here for one release. The live gate extracts `is_clean` from
-        # origin/main deliberately — a branch may not edit its own judge — so while the trusted copy
-        # still requires `mutation_backed`, a document carrying only the new name is missing a
-        # required key and the gate refuses it. Renaming a key a trusted external reader depends on
-        # is the same chicken-and-egg as a pull request closing its own issue: emit both, land the
-        # rename, then delete this line in a follow-up.
-        "mutation_backed": sum(1 for c in checks if c.get("mutation_claimed")),
         "checks_with_a_counterexample": sum(1 for c in checks if c.get("has_counterexample")),
         "counterexamples_not_rejected":
             sum(1 for c in checks if c.get("has_counterexample") and not c.get("counterexample_rejected")),
@@ -859,7 +844,7 @@ def summarize(recs, out=None):
 # was clean, and the newest condition was the one that vanished quietly. Listing the keys fixes the
 # shape of the bug rather than the one clause where it was noticed.
 _REQUIRED_SUMMARY_KEYS = (
-    "checks", "passed", "mutation_claimed", "mutation_backed", "operations_driven",
+    "checks", "passed", "mutation_claimed", "operations_driven",
     "checks_with_a_counterexample", "counterexamples_not_rejected",
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",

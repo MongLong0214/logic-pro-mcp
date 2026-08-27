@@ -17,8 +17,7 @@ import evidence as E  # noqa: E402
 # A complete, honest summary: one check that names a mutation, one driven operation, one capture,
 # one visual with a subject, one recording, nothing gone wrong.
 GOOD = {
-    "checks": 1, "passed": 1, "mutation_claimed": 1, "mutation_backed": 1,
-    "operations_driven": 1,
+    "checks": 1, "passed": 1, "mutation_claimed": 1, "operations_driven": 1,
     "checks_with_a_counterexample": 0, "counterexamples_not_rejected": 0,
     "captures": 1, "captures_unsettled": 0, "captures_straddling_displays": 0,
     "restorations_failed": 0, "cached_reads_used_as_live": 0,
