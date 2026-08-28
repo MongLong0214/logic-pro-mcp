@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Live proof that the track header's selectors resolve by IDENTITY, not by position.
+"""Live proof that the selectors #290's census covers resolve by IDENTITY, not by position.
 
 Usage:  LPM_EVIDENCE_ROOT=/abs/path/outside/repo \
-        python3 live_290_header_selectors_resolve_by_identity.py <worktree> <full-40-char-head-sha>
+        python3 live_290_selectors_resolve_by_identity.py <worktree> <full-40-char-head-sha>
 
 WHAT THIS PROVES
 ----------------
@@ -144,6 +144,23 @@ for site in TOGGLE_SITES:
         f"{site} leaves exactly one candidate on the header and the census calls it unambiguous",
         mutation="widen the toggle predicate to any checkbox carrying a description: several "
                  "survive and the census stops calling the answer unambiguous")
+
+# The transport container is the last site the census reported ambiguous. The raw keyword scan
+# still leaves five survivors — it over-accepts on false friends like "play" inside "Catch
+# Playhead" — but the site no longer reduces that by tree order. The counterexample is the state
+# this change is about: several survivors and nothing chosen among them.
+narrowed = next((s for s in sites if isinstance(s, dict)
+                 and s.get("site", "").startswith("AXLogicProElements.getTransportBar")), None)
+ev.falsifiable(
+    "290/the-transport-bar-narrows-instead-of-taking-tree-order",
+    one_unambiguous_survivor,
+    narrowed,
+    {"site": "AXLogicProElements.getTransportBar (after narrowing)",
+     "gathered": 5, "survivors": 5, "identified": False},
+    "the keyword scan's survivors reduce to exactly one after the control-bar discriminators, and "
+    "the census calls the answer unambiguous",
+    mutation="return survivors.first from transportContainerFinalists: five survive, nothing "
+             "narrows them, and the site is back to choosing by tree order")
 
 d = E.Driver()
 time.sleep(3)

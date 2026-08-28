@@ -57,43 +57,45 @@ extension AXLogicProElements {
         let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax)
         let survivors = transportContainerCandidates(among: groups, runtime: runtime)
         if let candidate = survivors.first {
-            // #628: the element returned is UNCHANGED — still the first survivor in tree order.
-            // What changes is that a tree-order choice among several now says so.
+            // Reached only when `getControlBar` could NOT identify one, so more than one survivor
+            // here means both the discriminated route and the keyword scan failed to resolve.
             //
-            // Measured on Logic 12.3, one project, one track: thirty-seven groups gathered, FOUR
-            // survive. Two of the four are the arrange area, because the predicate accepts any
-            // container holding two or more transport-keyword controls.
+            // The keyword scan over-accepts, and the cause is measured. It takes any container
+            // holding two or more transport-keyword controls, and the arrange area qualifies on
+            // substrings of labels that are not transport controls at all: "play" inside "Catch
+            // Playhead", "loop" inside "Show/Hide Live Loops Grid". (The cause first written here
+            // was "a track header holds a record-arm checkbox"; instrumenting the predicate
+            // disproved it — `record` never matched.) The false-friend guard rejects those, and
+            // survivors went 4 -> 2 on a one-track project. Measured again 2026-08-28 on this
+            // machine: five survivors, and adding three tracks moved `gathered` by three while
+            // leaving `survivors` at five — so the count is not a function of project size, and
+            // what accounts for four versus five is not established.
             //
-            // The cause first written here was "a track header holds a record-arm checkbox".
-            // That was WRONG and instrumenting the predicate disproved it — `record` never
-            // matched. The arrange area qualified on substrings of labels that are not transport
-            // controls at all: "play" inside "Catch Playhead", "loop" inside "Show/Hide Live
-            // Loops Grid". The false-friend guard rejects exactly those, and survivors went 4 -> 2
-            // live. Corrected here after the same stale sentence was found still standing in
-            // production having been fixed only in the test file.
+            // Whatever that count is, tree order was the wrong way to reduce it.
             //
-            // Deliberately not a refusal. Which of the four this accessor SHOULD return is a
-            // question about its contract — whether "transport bar" and "control bar" name the same
-            // thing — and that is a decision, not a measurement. A discriminator is available when
-            // someone makes it: description narrows four to two, and #633's "holds a checkbox"
-            // separates those two.
-            // Reached only when `getControlBar` could NOT identify one, so a count above one here
-            // now means both the discriminated route and the keyword scan failed to resolve — a
-            // strictly narrower and more interesting event than before.
-            //
-            // Written to stderr, which the live-evidence harness discards
-            // (`Scripts/livekit/evidence.py:184` runs the server with `stderr=DEVNULL`). So this
-            // reaches an operator reading the server log and does NOT reach the evidence document.
-            // Said here rather than left implied, because a line that cannot reach the channel the
-            // gate reads is not "making it visible" to the gate.
-            if survivors.count > 1 {
-                Log.info(
-                    "getTransportBar: getControlBar did not identify one, and \(survivors.count) "
-                        + "groups matched looksLikeTransportContainer; returning the first in tree order",
-                    subsystem: "ax"
-                )
+            // Log lines below go to stderr, which the live-evidence harness discards
+            // (`Scripts/livekit/evidence.py` runs the server with `stderr=DEVNULL`). They reach an
+            // operator reading the server log and do NOT reach the evidence document — said rather
+            // than left implied, because a line that cannot reach the channel the gate reads is not
+            // "making it visible" to the gate.
+            _ = candidate
+            let finalists = transportContainerFinalists(among: survivors, runtime: runtime.ax)
+            if finalists.count == 1 {
+                return finalists[0]
             }
-            return candidate
+            // Refusing, not choosing. Reaching here means the discriminated route failed AND the
+            // narrowed keyword scan cannot tell its candidates apart, which is a tree this code has
+            // never been measured against. Every caller writes `?? …` or guards on nil, and
+            // ADR-007's version policy is explicit that an unknown signature fails closed rather
+            // than guessing — returning the first in tree order is the wrong-target behaviour that
+            // policy names.
+            Log.info(
+                "getTransportBar: getControlBar did not identify one, \(survivors.count) groups "
+                    + "matched the keyword scan and \(finalists.count) survived narrowing; "
+                    + "refusing rather than picking one",
+                subsystem: "ax"
+            )
+            return nil
         }
 
         return looksLikeTransportContainer(window, runtime: runtime.ax) ? window : nil
@@ -109,6 +111,58 @@ extension AXLogicProElements {
         runtime: Runtime = .production
     ) -> [AXUIElement] {
         groups.filter { looksLikeTransportContainer($0, runtime: runtime.ax) }
+    }
+
+    /// The keyword scan's survivors, reduced by the discriminators `getControlBar` already applies.
+    ///
+    /// This answers the contract question the site deferred — whether "transport bar" and "control
+    /// bar" name the same thing — and the evidence answered it rather than a preference:
+    /// `getTransportBar` tries `getControlBar()` FIRST and every caller writes one or the other;
+    /// `--probe-selection-census` measures both paths returning the SAME element on a live tree;
+    /// and the group Logic labels is `Control Bar` / `컨트롤 막대`. They are one thing, so the scan
+    /// narrows the way the discriminated route does instead of choosing by tree order.
+    ///
+    /// Split out for the reason the other predicates were: the census must call the same reduction
+    /// the product runs, not a copy that can drift from it. A returned count other than one is what
+    /// the site refuses on, so this is also the number worth measuring.
+    static func transportContainerFinalists(
+        among survivors: [AXUIElement],
+        runtime: AXHelpers.Runtime = .production
+    ) -> [AXUIElement] {
+        if survivors.count <= 1 { return survivors }
+
+        func labelled(_ pool: [AXUIElement]) -> [AXUIElement] {
+            pool.filter { group in
+                AXLocalePolicy.controlBarGroupLabel.matches(
+                    AXHelpers.getDescription(group, runtime: runtime) ?? "", mode: .exactStrict)
+            }
+        }
+
+        // CAPABILITY BEFORE NAME, and the order is load-bearing. The site's first branch already
+        // says why — "Name and capability are different questions and this caller needs the
+        // second one" — and #628 measured the shape that makes it concrete: a group described
+        // `Control Bar` holding NOTHING, beside one that works. Narrowing by label first picks the
+        // shell, which is the regression `Issue628TransportAmbiguityTests` exists to catch, and it
+        // caught this function's first draft doing exactly that.
+        //
+        // Capability is `transportControlKeywordHits`, the SAME test the first branch validates
+        // `getControlBar` with — not `getControlBar`'s own "holds a checkbox", which was this
+        // function's second draft and which the same test also caught: it describes the real
+        // Logic bar but not a container whose transport controls are buttons.
+        let withControls = survivors.filter { group in
+            !transportControlKeywordHits(in: group, runtime: runtime).isEmpty
+        }
+        if withControls.count == 1 { return withControls }
+        if withControls.count > 1 {
+            // Several bars hold a control; now the name is the discriminator that is left.
+            let named = labelled(withControls)
+            return named.count == 1 ? named : (named.isEmpty ? withControls : named)
+        }
+
+        // Nothing holds a control. A lone group that at least names itself is still more than tree
+        // order — the same last resort `getControlBar` takes before giving up.
+        let named = labelled(survivors)
+        return named.count == 1 ? named : []
     }
 
     /// Find a specific transport button by its title or description.

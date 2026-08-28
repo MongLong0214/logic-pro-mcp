@@ -376,6 +376,17 @@ enum MainEntrypoint {
             record("AXLogicProElements.looksLikeTransportContainer",
                    groups6.count,
                    groups6.filter { AXLogicProElements.looksLikeTransportContainer($0, runtime: ax) }.count)
+            // The row above is the RAW discriminator's survivor count. It is not what the site
+            // resolves to any more: `getTransportBar` narrows those survivors by the control-bar
+            // label and the holds-a-control test, and refuses unless exactly one is left. Measuring
+            // only the raw count would keep reporting the site as ambiguous after it stopped being.
+            let transportSurvivors = groups6.filter {
+                AXLogicProElements.looksLikeTransportContainer($0, runtime: ax)
+            }
+            record("AXLogicProElements.getTransportBar (after narrowing)",
+                   transportSurvivors.count,
+                   AXLogicProElements.transportContainerFinalists(
+                       among: transportSurvivors, runtime: ax).count)
 
             // Sites whose collection is gathered from something other than the window. The input is
             // resolved through the product's own accessor, so a site that cannot be reached in this
