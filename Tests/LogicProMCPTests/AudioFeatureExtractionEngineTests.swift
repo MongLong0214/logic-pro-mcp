@@ -630,3 +630,74 @@ private final class ChunkFeeder {
         return block
     }
 }
+
+/// #300 — a band whose edges enclose no FFT bin does not report the floor as a reading.
+///
+/// Measured 2026-08-28 at 44.1 kHz with the default grid: the bands at 25.198 and 40 Hz come back
+/// at exactly `floorDbfs` for every signal tried, white noise included. The log-spaced bands are
+/// about 3 Hz wide down there and the 8192-point window resolves 5.383 Hz, so no bin lands inside
+/// them. `-80 dB` in that position reads as "this region is silent", which is a false statement
+/// about the audio rather than a small one about the grid.
+@Suite("Issue300UnmeasurableBands")
+struct Issue300UnmeasurableBandsTests {
+
+    @Test("the grid names exactly the bands it cannot measure at 44.1 kHz")
+    func maskMatchesTheMeasurement() {
+        let grid = AudioFeatureExtractionEngine.makeGrid()
+        let mask = AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: 44_100)
+
+        #expect(mask.count == grid.centers.count)
+        let unmeasurable = zip(grid.centers, mask).filter { !$0.1 }.map { ($0.0 * 1000).rounded() / 1000 }
+        // Derived from the code and confirmed against the live analyser's output, not asserted from
+        // one side only: `analyze_spectrum` reports `measured: false` for these two and no others.
+        #expect(unmeasurable == [25.198, 40.0], "got \(unmeasurable)")
+    }
+
+    @Test("bands 0 and n-1 are not called unmeasured, because they do receive energy")
+    func edgeBandsAreNotFlagged() throws {
+        let grid = AudioFeatureExtractionEngine.makeGrid()
+        let mask = AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: 44_100)
+        // `bandIndex(forFrequency:)` sends everything below the first edge into band 0 and
+        // everything above the last into band n-1. They are measured — of the wrong range. Calling
+        // them unmeasured would paper over that separate defect with this one's vocabulary.
+        // Bound with `try #require`: these are `Bool?`, and comparing an optional against a boolean
+        // literal is always-pass on this toolchain — the dead-assertion shape the guard rejects.
+        let firstBand = try #require(mask.first)
+        let lastBand = try #require(mask.last)
+        #expect(firstBand, "band 0 was called unmeasured, but it receives every bin below edges[1]")
+        #expect(lastBand, "the top band was called unmeasured at a rate where it does receive bins")
+    }
+
+    @Test("a finer window measures bands the default one cannot")
+    func theMaskFollowsTheWindow() {
+        // The negative control for the mask: it has to depend on resolution, or it is just a
+        // hard-coded pair of frequencies.
+        //
+        // Counted BELOW 100 Hz, and the first version of this case did not, which is why it failed:
+        // a quarter sample rate gives the same window four times the low-frequency resolution AND
+        // drops Nyquist to 5512 Hz, so every band above that becomes unmeasurable and the total
+        // goes UP (9 against 2). The mask is right about both ends; the assertion was only looking
+        // at one and calling the sum a resolution.
+        let grid = AudioFeatureExtractionEngine.makeGrid()
+        func unmeasurableBelow100Hz(_ rate: Double) -> Int {
+            zip(grid.centers, AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: rate))
+                .filter { $0.0 < 100 && !$0.1 }.count
+        }
+        #expect(unmeasurableBelow100Hz(44_100) == 2)
+        #expect(unmeasurableBelow100Hz(11_025) < unmeasurableBelow100Hz(44_100),
+                "four times the low-frequency resolution measured no more bands")
+
+        // And the other end, so the Nyquist half is asserted rather than merely explained.
+        //
+        // Keyed on the LOWER EDGE, not the centre. A band whose centre sits above Nyquist can still
+        // enclose a bin when its lower edge is below it — that band straddles Nyquist and is
+        // genuinely measurable. Filtering by centre called it a defect, which is the third time
+        // this control has been sharper than its first phrasing.
+        let nyquist = 11_025.0 / 2
+        let mask11k = AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: 11_025)
+        let whollyAbove = (0..<grid.centers.count).filter { grid.edges[$0] > nyquist }
+        #expect(!whollyAbove.isEmpty)
+        #expect(whollyAbove.allSatisfy { !mask11k[$0] },
+                "a band whose lower edge is above Nyquist was called measurable")
+    }
+}

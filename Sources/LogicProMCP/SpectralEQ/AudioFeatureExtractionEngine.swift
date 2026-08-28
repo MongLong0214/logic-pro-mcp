@@ -192,6 +192,40 @@ enum AudioFeatureExtractionEngine {
         )
     }
 
+    /// Which bands this grid can actually measure at `sampleRate`.
+    ///
+    /// A band is measurable when its edges enclose at least one FFT bin of the window it is
+    /// stitched from — LF below the crossover, HF at or above it, the same rule the splice uses. It
+    /// is not a runtime count: the splice is deterministic, so the answer follows from the grid and
+    /// the sample rate alone.
+    ///
+    /// Bands 0 and n-1 are always measurable and it is not because their edges enclose a bin.
+    /// `bandIndex(forFrequency:)` sends everything below the first edge to band 0 and everything
+    /// above the last to band n-1, so both receive energy from OUTSIDE their nominal range. That is
+    /// a separate defect — band 0's `energyDb` is the sum of all sub-18.9 Hz content, not the 20 Hz
+    /// band's — and this function does not paper over it by calling those bands unmeasured.
+    static func measurableBands(grid: BandGrid, sampleRate: Double, config: Config = .default) -> [Bool] {
+        let n = grid.centers.count
+        guard n > 0, sampleRate > 0 else { return [] }
+        return (0..<n).map { i in
+            let window = grid.edges[i] < config.crossoverHz ? config.windowLarge : config.windowSmall
+            let df = sampleRate / Double(window)
+            guard df > 0 else { return false }
+            let nyquist = df * Double(window / 2)
+            // Band 0 collects every bin below `edges[1]`, DC included, so it always receives.
+            if i == 0 { return true }
+            // The top band collects everything at or above its lower edge — which is nothing at all
+            // when Nyquist is below that edge. Marking it measurable unconditionally was this
+            // function's first draft, and the test that counts unmeasurable bands above Nyquist
+            // caught it: at 11.025 kHz the top band receives no bin and still claimed to.
+            if i == n - 1 { return nyquist >= grid.edges[i] }
+            // The lowest bin index at or above the band's lower edge, and whether it is still below
+            // the upper edge — i.e. does any k * df land inside [lo, hi).
+            let firstBin = (grid.edges[i] / df).rounded(.up)
+            return firstBin * df < grid.edges[i + 1] && Int(firstBin) <= window / 2
+        }
+    }
+
     /// Shared tail: energy-average per-channel band powers (NOT sum-to-mono, which cancels
     /// out-of-phase stereo), floor, then resonance/centroid/peaks/classification.
     private static func finishAnalysis(
@@ -224,8 +258,13 @@ enum AudioFeatureExtractionEngine {
         for i in 0..<bandPower.count { bandPower[i] = max(bandPower[i], floorLin) }
         let bandsDb = bandPower.map { 10.0 * log10($0) }
 
-        let bands = zip(grid.centers, bandsDb).map { SpectralBand(centerHz: $0.0, energyDb: $0.1) }
-        let resonances = detectResonances(centers: grid.centers, db: bandsDb, config: config, grid: grid)
+        let measurable = measurableBands(grid: grid, sampleRate: sampleRate, config: config)
+        let bands = zip(grid.centers, bandsDb).enumerated().map { index, pair in
+            SpectralBand(centerHz: pair.0, energyDb: pair.1,
+                         measured: index < measurable.count ? measurable[index] : true)
+        }
+        let resonances = detectResonances(
+            centers: grid.centers, db: bandsDb, measurable: measurable, config: config, grid: grid)
         let (centroid, peaks) = centroidAndPeaks(centers: grid.centers, db: bandsDb, power: bandPower, config: config)
         let (classification, confidence) = classify(centers: grid.centers, power: bandPower, centroid: centroid, config: config)
 
@@ -706,6 +745,7 @@ enum AudioFeatureExtractionEngine {
     private static func detectResonances(
         centers: [Double],
         db: [Double],
+        measurable: [Bool],
         config: Config,
         grid: BandGrid
     ) -> [SpectralResonance] {
@@ -717,7 +757,13 @@ enum AudioFeatureExtractionEngine {
             guard db[i] > floorGate else { continue }
             let lo = max(0, i - half)
             let hi = min(centers.count - 1, i + half)
-            let baseline = median(Array(db[lo...hi]))
+            // Unmeasurable bands sit at the floor for every signal, so leaving them in the window
+            // drags the median down and inflates the prominence of everything beside them — a
+            // resonance manufactured by the grid rather than found in the audio. They are excluded
+            // from the baseline, not from the spectrum.
+            let window = (lo...hi).filter { measurable.isEmpty || ($0 < measurable.count && measurable[$0]) }
+                .map { db[$0] }
+            let baseline = median(window.isEmpty ? Array(db[lo...hi]) : window)
             let prominence = db[i] - baseline
             let leftOk = i == 0 || db[i] >= db[i - 1]
             let rightOk = i == centers.count - 1 || db[i] >= db[i + 1]
