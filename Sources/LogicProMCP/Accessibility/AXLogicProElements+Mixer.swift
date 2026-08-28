@@ -85,8 +85,42 @@ extension AXLogicProElements {
         // searchable text ("볼륨", "볼륨 페이더. …") carries none of `pan` / `panning` / `패닝` /
         // `밸런스`. `sliderText` also excludes send and zoom sliders, which the deleted copy did
         // not — strictly narrower, not wider.
-        sliders.filter { sliderText($0, runtime: runtime).isPanControl }
+        sliders.filter { slider in
+            let candidate = AXResolvableCandidate.make(
+                from: slider, ancestors: ["AXLayoutItem"], runtime: runtime)
+            return resolve(headerPanSelector, in: [candidate], locale: "any") == .exact(index: 0)
+        }
     }
+
+    /// The atlas selector for a track-header pan slider — the FIRST production adoption of
+    /// `SelectorAtlas`.
+    ///
+    /// The atlas had every piece and zero callers, because nothing turned an `AXUIElement` into a
+    /// `ResolvableCandidate` and because the scoring could not clear an ordinary threshold without
+    /// an `AXIdentifier` Logic does not expose here. Both are fixed, so the rules this site runs are
+    /// now the rules the atlas expresses rather than a predicate written beside it.
+    ///
+    /// The evidence is the measured evidence: `AXHelp` carrying one of `sliderPanHint`'s labels,
+    /// and the `0...127` range that separates pan from the volume fader's `0...233` and does not
+    /// depend on locale. `failClosed` is the policy — two candidates are a refusal, which is what
+    /// `findPanControlInHeader` already does and what ADR-007 requires of a mutating path.
+    ///
+    /// `locale: "any"` because the alias set is not keyed by locale here: `attributeContainsAny`
+    /// carries every measured label at once, which is how `AXLocalePolicy` has always matched.
+    static let headerPanSelector = SemanticSelector(
+        id: .mixerStripVolumeFader,
+        requiredRole: kAXSliderRole as String,
+        allowedSubroles: [],
+        titleAliases: [:],
+        ancestorConstraints: [AncestorConstraint(role: "AXLayoutItem")],
+        attributePredicates: [
+            .attributeContainsAny(kAXHelpAttribute as String, AXLocalePolicy.sliderPanHint.labels),
+            .valueSignature("0...127"),
+        ],
+        geometryHint: nil,
+        minimumConfidence: 0.6,
+        ambiguityPolicy: .failClosed
+    )
 
     /// `AXMaxValue` of a track-header pan slider, measured at 127 against the volume fader's 233.
     ///
