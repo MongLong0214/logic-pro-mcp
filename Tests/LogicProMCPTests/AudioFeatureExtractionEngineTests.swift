@@ -704,3 +704,48 @@ struct Issue300UnmeasurableBandsTests {
                 "a band whose lower edge is above Nyquist was called measurable")
     }
 }
+
+/// #300 — the accumulator bands are excluded from peaks and the centroid too, not only from
+/// resonance candidates.
+///
+/// Found by auditing this issue's acceptance criteria AFTER the surface was promoted, which is the
+/// wrong order: `frequency_peaks` published band 0 at 20 Hz — the sub-18.9 Hz sum — while the
+/// resonance detector had already been taught to skip it. The same artifact was reachable through a
+/// different field.
+@Suite("Issue300AccumulatorsAreNotPeaks")
+struct Issue300AccumulatorsAreNotPeaksTests {
+
+    @Test("no reported peak is a band the analyser could not measure")
+    func peaksExcludeUnmeasurableBands() throws {
+        // Pink-ish: real energy below the grid, which is what fills the accumulator. A flat signal
+        // would not exercise this at all.
+        var b = [Double](repeating: 0, count: 7)
+        var samples = [Double]()
+        var state = UInt64(7)
+        for _ in 0..<(44_100 * 3) {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let w = Double(Int64(bitPattern: state >> 11)) / Double(Int64.max) * 1e-8
+            b[0] = 0.99886 * b[0] + w * 0.0555179
+            b[1] = 0.99332 * b[1] + w * 0.0750759
+            b[2] = 0.96900 * b[2] + w * 0.1538520
+            b[3] = 0.86650 * b[3] + w * 0.3104856
+            b[4] = 0.55000 * b[4] + w * 0.5329522
+            b[5] = -0.7616 * b[5] - w * 0.0168980
+            samples.append((b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + w * 0.5362) * 0.11)
+            b[6] = w * 0.115926
+        }
+        let peak = samples.map(abs).max() ?? 1
+        samples = samples.map { $0 / peak * 0.7 }
+
+        let result = AudioFeatureExtractionEngine.analyze(
+            channels: [samples], sampleRate: 44_100,
+            analysisRef: "peaks-1", artifactFingerprint: "x")
+
+        let unmeasurable = Set(result.bands.filter { !$0.measured }.map { $0.centerHz })
+        #expect(!unmeasurable.isEmpty, "the fixture did not produce an unmeasurable band")
+        for peak in result.frequencyPeaks {
+            #expect(!unmeasurable.contains(peak.frequencyHz),
+                    "\(peak.frequencyHz) Hz is reported as a peak and could not be measured")
+        }
+    }
+}
