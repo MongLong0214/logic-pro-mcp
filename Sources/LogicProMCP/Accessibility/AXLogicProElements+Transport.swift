@@ -135,7 +135,7 @@ extension AXLogicProElements {
     /// Identity only. Whether the named bar actually HOLDS a transport control is a separate
     /// question, and `transportContainerFinalists` asks it separately.
     static let controlBarSelector = SemanticSelector(
-        id: .transportPlayButton,
+        id: .controlBar,
         requiredRole: kAXGroupRole as String,
         allowedSubroles: [],
         titleAliases: [:],

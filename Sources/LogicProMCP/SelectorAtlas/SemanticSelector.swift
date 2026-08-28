@@ -1,6 +1,19 @@
 import Foundation
 
 enum SelectorID: String, CaseIterable, Sendable {
+    // Added when the first four sites were adopted. Every one of them had to borrow an ill-fitting
+    // ID until now — the header pan slider was filed as `mixerStripVolumeFader`, the mute, solo and
+    // record-arm checkboxes as `trackHeaderNameField`, the control bar as `transportPlayButton` —
+    // and `UIDriftReport` keys its affected-operations map on exactly this enum. A pan slider
+    // drifting was therefore reported as putting `mixer.set_volume` at risk, which is a wrong
+    // answer produced confidently.
+    case trackHeaderPanControl
+    case trackHeaderVolumeFader
+    case trackHeaderMuteToggle
+    case trackHeaderSoloToggle
+    case trackHeaderArmToggle
+    case controlBar
+
     case transportPlayButton
     case trackHeaderNameField
     case mixerStripVolumeFader

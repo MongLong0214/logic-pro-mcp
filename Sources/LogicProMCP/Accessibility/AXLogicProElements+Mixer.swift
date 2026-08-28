@@ -108,7 +108,7 @@ extension AXLogicProElements {
     /// `locale: "any"` because the alias set is not keyed by locale here: `attributeContainsAny`
     /// carries every measured label at once, which is how `AXLocalePolicy` has always matched.
     static let headerPanSelector = SemanticSelector(
-        id: .mixerStripVolumeFader,
+        id: .trackHeaderPanControl,
         requiredRole: kAXSliderRole as String,
         allowedSubroles: [],
         titleAliases: [:],
@@ -446,7 +446,7 @@ extension AXLogicProElements {
     /// carries none of `volume` / `fader` / `볼륨` in any of these fields — which is what
     /// `sliderText(_:).isVolumeFader` already relied on.
     static let volumeFaderSelector = SemanticSelector(
-        id: .mixerStripVolumeFader,
+        id: .trackHeaderVolumeFader,
         requiredRole: kAXSliderRole as String,
         allowedSubroles: [],
         titleAliases: [:],
