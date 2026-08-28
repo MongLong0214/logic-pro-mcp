@@ -468,9 +468,17 @@ enum MainEntrypoint {
             if let strip = strips.first {
                 let sliders = AXHelpers.findAllDescendants(
                     of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
-                record("AXLogicProElements.findVolumeFader (falls back to sliders.first)",
+                // The ADOPTED predicate, not the one it replaced. `findVolumeFader` resolves
+                // through the selector atlas now, and measuring `sliderText(_:).isVolumeFader`
+                // here would report a rule the product no longer runs — the exact drift this
+                // census exists to catch, committed by the census.
+                record("AXLogicProElements.findVolumeFader (atlas)",
                        sliders.count,
-                       sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isVolumeFader }.count)
+                       sliders.filter { slider in
+                           resolve(AXLogicProElements.volumeFaderSelector,
+                                   in: [AXResolvableCandidate.make(from: slider, runtime: ax)],
+                                   locale: "any") == .exact(index: 0)
+                       }.count)
                 record("AXLogicProElements.findPanControl (falls back to sliders[1])",
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)

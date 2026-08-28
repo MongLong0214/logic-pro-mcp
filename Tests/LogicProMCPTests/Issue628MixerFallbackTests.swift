@@ -45,15 +45,21 @@ struct Issue628MixerFallbackTests {
         #expect(CFEqual(found, sliders[1]))
     }
 
-    /// The branch this change makes visible. With no description the answer is `sliders[0]`, chosen
-    /// for no reason beyond tree order.
-    @Test("no described fader falls back to position 0, and the element is unchanged by instrumenting it")
-    func faderFallsBackToIndexZero() throws {
+    /// The branch this case was written to make visible, now closed.
+    ///
+    /// It used to assert `sliders[0]` — chosen for no reason beyond tree order — and that was the
+    /// honest record of what the code did. #290's atlas adoption removes the positional fallback:
+    /// a strip whose sliders name nothing is a tree this code has never been measured against, and
+    /// answering with an index there is the wrong-target behaviour ADR-007 exists to stop.
+    ///
+    /// `--probe-selection-census` measures a real strip at two sliders with ONE surviving the
+    /// discriminator, so this shape is not what Logic produces — which is why refusing costs
+    /// nothing measured and buys the guarantee.
+    @Test("no named fader is refused rather than answered with position 0")
+    func faderWithNoNameIsRefused() {
         let b = FakeAXRuntimeBuilder()
-        let (node, sliders) = strip(b, base: 6290, count: 2, describedIndex: -1, description: "Volume")
-        let found = try #require(AXLogicProElements.findVolumeFader(
-            in: node, runtime: b.makeAXRuntime()))
-        #expect(CFEqual(found, sliders[0]))
+        let (node, _) = strip(b, base: 6290, count: 2, describedIndex: -1, description: "Volume")
+        #expect(AXLogicProElements.findVolumeFader(in: node, runtime: b.makeAXRuntime()) == nil)
     }
 
     @Test("a described pan control is returned, and the index is not consulted")
@@ -90,8 +96,12 @@ struct Issue628MixerFallbackTests {
     /// ONE described slider, which means `described.first` and `described.last` are the same
     /// element and no case could tell a tree-order choice from a forced one -- a reviewer noted
     /// that swapping to `.last` would have kept the suite green.
-    @Test("two sliders described as the volume fader return the FIRST in tree order")
-    func twoDescribedFadersReturnTheFirst() throws {
+    /// Inverted with #290's atlas adoption. It asserted `sliders[0]` — the reviewer's point stands,
+    /// and it was the honest record of a tree-order choice being made. The choice is gone: the
+    /// selector's `AmbiguityPolicy` is `failClosed`, so two equally-qualified candidates are a
+    /// refusal rather than a pick, which is what ADR-007 requires of anything a write depends on.
+    @Test("two sliders described as the volume fader are refused, not resolved to the first")
+    func twoDescribedFadersAreRefused() {
         let b = FakeAXRuntimeBuilder()
         let node = b.element(6400)
         var sliders: [AXUIElement] = []
@@ -102,10 +112,7 @@ struct Issue628MixerFallbackTests {
             sliders.append(slider)
         }
         b.setChildren(node, sliders)
-        let found = try #require(AXLogicProElements.findVolumeFader(
-            in: node, runtime: b.makeAXRuntime()))
-        #expect(CFEqual(found, sliders[0]))
-        #expect(!CFEqual(found, sliders[1]))
+        #expect(AXLogicProElements.findVolumeFader(in: node, runtime: b.makeAXRuntime()) == nil)
     }
 
     /// Same for pan, and it is not the same assertion: pan's FALLBACK is `sliders[1]`, so a

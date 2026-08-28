@@ -80,7 +80,10 @@ import Testing
     builder.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     builder.setChildren(mixer, [strip])
     builder.setChildren(strip, [fader, pan])
+    // Named, as Logic names it and as the three-strip fixture below already does. This one carried
+    // role only, so it was found by the positional fallback #290's atlas adoption removes.
     builder.setAttribute(fader, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(fader, kAXDescriptionAttribute as String, "볼륨 페이더")
     builder.setAttribute(pan, kAXRoleAttribute as String, kAXSliderRole as String)
 
     let runtime = builder.makeLogicRuntime(appElement: app)

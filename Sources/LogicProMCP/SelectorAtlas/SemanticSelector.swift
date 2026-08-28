@@ -36,6 +36,19 @@ enum AttributePredicate: Equatable, Sendable {
     /// `AXLocalePolicy.LabelSet.containsAny`.
     case attributeContainsAny(String, [String])
 
+    /// Substring match against any of several alternatives, in ANY of several attributes.
+    ///
+    /// Two `attributeContainsAny` predicates are ANDed, so naming both `AXHelp` and
+    /// `AXDescription` demands the label appear in both. Measured: Logic puts a volume fader's name
+    /// in `AXDescription` on a track header and its sentence in `AXHelp`, and a synthetic fixture
+    /// carries only the description — the conjunction matched neither reliably and the existing
+    /// mixer tests caught it.
+    ///
+    /// What the product has always meant is a search across a group of fields, which is
+    /// `AXLogicProElements.elementSearchText` joining identifier, description, title and help
+    /// before a single `containsAny`. This is that, expressed as a selector.
+    case anyAttributeContainsAny([String], [String])
+
     case valueSignature(String)
 }
 
@@ -117,7 +130,18 @@ func confidence(of candidate: ResolvableCandidate, against selector: SemanticSel
         guard case let .attributeContainsAny(name, needles) = predicate else { return nil }
         return (name, needles)
     }
-    evidence.append((0.20, !equals.isEmpty || !contains.isEmpty || !containsAny.isEmpty,
+    let anyOf = selector.attributePredicates.compactMap { predicate -> ([String], [String])? in
+        guard case let .anyAttributeContainsAny(names, needles) = predicate else { return nil }
+        return (names, needles)
+    }
+    func hits(_ value: String?, _ needles: [String]) -> Bool {
+        guard let value else { return false }
+        return needles.contains {
+            !$0.isEmpty && value.range(of: $0, options: [.caseInsensitive]) != nil
+        }
+    }
+    evidence.append((0.20,
+                     !equals.isEmpty || !contains.isEmpty || !containsAny.isEmpty || !anyOf.isEmpty,
                      equals.allSatisfy { candidate.attributes[$0.0] == $0.1 }
                          && contains.allSatisfy { name, needle in
                              candidate.attributes[name].map {
@@ -125,12 +149,10 @@ func confidence(of candidate: ResolvableCandidate, against selector: SemanticSel
                              } ?? false
                          }
                          && containsAny.allSatisfy { name, needles in
-                             candidate.attributes[name].map { value in
-                                 needles.contains {
-                                     !$0.isEmpty
-                                         && value.range(of: $0, options: [.caseInsensitive]) != nil
-                                 }
-                             } ?? false
+                             hits(candidate.attributes[name], needles)
+                         }
+                         && anyOf.allSatisfy { names, needles in
+                             names.contains { hits(candidate.attributes[$0], needles) }
                          }, false))
 
     let aliases = selector.titleAliases.values.flatMap { $0 }

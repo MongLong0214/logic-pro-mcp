@@ -401,26 +401,64 @@ extension AXLogicProElements {
         let sliders = AXHelpers.findAllDescendants(
             of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime
         )
-        let described = sliders.filter { sliderText($0, runtime: runtime).isVolumeFader }
-        if let only = described.first {
-            // #628: the element is unchanged — still the first description match. What is new is
-            // that choosing among several says so.
-            if described.count > 1 {
-                Log.info("findVolumeFader: \(described.count) sliders described as a volume fader; "
-                    + "returning the first in tree order", subsystem: "ax")
-            }
-            return only
+        // Second atlas adoption. This site had BOTH of the shapes ADR-007 exists to remove: it
+        // returned the first description match when several qualified, and it fell back to
+        // `sliders.first` — position 0 — when none did. Routing it through the resolver removes
+        // both, because `failClosed` refuses an ambiguous set and there is no positional path to
+        // fall into.
+        let candidates = sliders.filter { slider in
+            let candidate = AXResolvableCandidate.make(from: slider, runtime: runtime)
+            return resolve(volumeFaderSelector, in: [candidate], locale: "any") == .exact(index: 0)
         }
-        // The description matched NOTHING and the answer becomes an index. Measured 2026-08-21 on
-        // Logic 12.3 this branch is not reached — two sliders in a strip, one of them described —
-        // so a run that reaches it is reporting a tree this code has never been measured against,
-        // which is worth more than silence.
+        if candidates.count == 1 { return candidates[0] }
+        if candidates.count > 1 {
+            Log.info("findVolumeFader: \(candidates.count) sliders satisfy the volume selector; "
+                + "refusing rather than returning the first in tree order", subsystem: "ax")
+            return nil
+        }
+        // Measured 2026-08-21 on Logic 12.3, and again through the census since: a strip has two
+        // sliders and one of them names itself, so this branch is not reached. It used to return
+        // position 0 anyway. A tree that reaches it is one this code has never been measured
+        // against, and answering with an index there is the wrong-target behaviour the ADR names.
         if !sliders.isEmpty {
-            Log.info("findVolumeFader: no slider described as a volume fader among \(sliders.count); "
-                + "falling back to position 0", subsystem: "ax")
+            Log.info("findVolumeFader: no slider among \(sliders.count) satisfies the volume "
+                + "selector; refusing rather than falling back to position 0", subsystem: "ax")
         }
-        return sliders.first
+        return nil
     }
+
+    /// The atlas selector for a volume fader, on a track header or a mixer strip.
+    ///
+    /// Evidence is the alias set across the fields Logic might carry the name in, and nothing else.
+    ///
+    /// `anyAttributeContainsAny`, not two per-attribute predicates: those are ANDed, and naming
+    /// both `AXHelp` and `AXDescription` demands the label appear in both. Logic puts a header
+    /// fader's name in `AXDescription` and its sentence in `AXHelp`, a synthetic fixture carries
+    /// only the description, and the conjunction matched neither reliably — the existing mixer
+    /// tests caught that draft.
+    ///
+    /// A `valueSignature` is deliberately ABSENT. The header fader was measured at `0...233`; the
+    /// mixer strip's range was not, and a selector asserting a number nobody read is the failure
+    /// this whole sequence has been about. The aliases discriminate on their own — the pan slider
+    /// carries none of `volume` / `fader` / `볼륨` in any of these fields — which is what
+    /// `sliderText(_:).isVolumeFader` already relied on.
+    static let volumeFaderSelector = SemanticSelector(
+        id: .mixerStripVolumeFader,
+        requiredRole: kAXSliderRole as String,
+        allowedSubroles: [],
+        titleAliases: [:],
+        ancestorConstraints: [],
+        attributePredicates: [
+            .anyAttributeContainsAny(
+                [kAXHelpAttribute as String,
+                 kAXDescriptionAttribute as String,
+                 kAXRoleDescriptionAttribute as String],
+                AXLocalePolicy.sliderVolumeHint.labels),
+        ],
+        geometryHint: nil,
+        minimumConfidence: 0.6,
+        ambiguityPolicy: .failClosed
+    )
 
     static func findPanControl(
         in strip: AXUIElement,

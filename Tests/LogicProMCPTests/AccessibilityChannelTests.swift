@@ -3804,9 +3804,15 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     builder.setChildren(mixer, [strip])
     builder.setChildren(strip, [fader, pan])
+    // Named, because Logic names them. This fixture carried role and value only, so the strip
+    // fader was found by the positional fallback that #290's atlas adoption removes — and
+    // `--probe-selection-census` measures a real strip at two sliders with ONE surviving the
+    // discriminator, so an unnamed pair is not the tree Logic produces.
     builder.setAttribute(fader, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(fader, kAXDescriptionAttribute as String, "Volume")
     builder.setAttribute(fader, kAXValueAttribute as String, 0.8)
     builder.setAttribute(pan, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(pan, kAXDescriptionAttribute as String, "Pan")
     builder.setAttribute(pan, kAXValueAttribute as String, -0.25)
     // #107: writes target the per-track header fader/pan, not the mixer strip.
     let headerControls = attachTrackHeaderRail(
