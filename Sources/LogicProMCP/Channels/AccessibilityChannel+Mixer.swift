@@ -208,7 +208,30 @@ extension AccessibilityChannel {
         // Closed-loop AXIncrement/AXDecrement nudge toward `targetRaw`. Stops on
         // reaching/crossing the target (landing on the nearer detent) or when no
         // detent moves the value (rail / unresponsive).
-        var current = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
+        // #685: both exits below used to be silent, and the measurement showed what that cost. On
+        // the FIRST call of a fresh process — where the AX round trip is slow and the read
+        // intermittently fails — the loop abandoned the write partway, four runs of four, moving
+        // 58% to 87% of the requested travel and returning success with the fader left somewhere
+        // nobody asked for.
+        //
+        // A nil read is the ABSENCE of an answer, not the answer "it did not move", so it is
+        // retried with backoff before being treated as terminal. And a value unchanged 25ms after
+        // an increment is a rail OR a read that has not caught up; those are indistinguishable at
+        // that timescale, so stagnation is confirmed against a longer settle before it is believed.
+        func readSlider() -> Double? {
+            var wait: UInt32 = 25_000
+            for _ in 0..<4 {
+                if let value = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) {
+                    return value
+                }
+                usleep(wait)
+                wait *= 2
+            }
+            return nil
+        }
+
+        let startRaw = readSlider()
+        var current = startRaw
         var steps = 0
         var stagnant = 0
         let maxSteps = 64
@@ -218,7 +241,11 @@ extension AccessibilityChannel {
             _ = AXHelpers.performAction(slider, goingUp ? kAXIncrementAction : kAXDecrementAction, runtime: runtime.ax)
             steps += 1
             usleep(25_000)
-            guard let next = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else { break }
+            guard var next = readSlider() else { break }
+            if next == cur {
+                usleep(150_000)
+                next = readSlider() ?? next
+            }
             let crossed = (cur < targetRaw && next >= targetRaw) || (cur > targetRaw && next <= targetRaw)
             if crossed {
                 // Land on whichever of cur/next is closer to the target.
@@ -232,7 +259,11 @@ extension AccessibilityChannel {
             current = next
         }
 
-        let observedRaw = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
+        // Retried too, and for the same reason. This read is what decides State A versus State B:
+        // a write that landed correctly and then failed its ONE verification read is reported as
+        // unverified, which is honest about the read and wrong about the write. Measured after the
+        // loop was fixed — a run that reached its target still came back State B here.
+        let observedRaw = readSlider()
         let observedAfter = readContract()
         // One detent is ~10 raw units; "verified" means we converged to the
         // nearest AX-representable detent (within ~half a detent of target).
@@ -253,6 +284,11 @@ extension AccessibilityChannel {
             "verify_source": "ax_slider",
             "write_method": "ax_increment_decrement",
             "nudge_steps": steps,
+            // #685: `nudge_steps` alone is not checkable — a partial move and a complete one look
+            // the same in it. These two are what a caller, a log or an evidence document needs to
+            // see that the loop stopped short, without re-reading the fader to find out.
+            "detents_to_target": startRaw.map { ((abs(targetRaw - $0) / 10.0) * 100).rounded() / 100 } ?? NSNull(),
+            "reached_target": convergedToNearestDetent,
             "quantization_note": "Logic exposes this fader to AX in ~10-raw-unit detents; observed is the nearest representable level to requested.",
         ]
         if convergedToNearestDetent, let actual = observedAfter {
