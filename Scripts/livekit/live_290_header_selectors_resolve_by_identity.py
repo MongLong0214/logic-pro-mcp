@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Live proof that the track-header pan slider is IDENTIFIED rather than eliminated to.
+"""Live proof that the track header's selectors resolve by IDENTITY, not by position.
 
 Usage:  LPM_EVIDENCE_ROOT=/abs/path/outside/repo \
-        python3 live_290_header_pan_is_identified.py <worktree> <full-40-char-head-sha>
+        python3 live_290_header_selectors_resolve_by_identity.py <worktree> <full-40-char-head-sha>
 
 WHAT THIS PROVES
 ----------------
@@ -15,6 +15,12 @@ same question at this head and records the answer.
 It also drives the control the identity now names, and shows the write lands on the track it was
 aimed at and no other. A selector that resolves confidently to the wrong element is worse than one
 that refuses, so "it resolved" is not on its own the property worth having.
+
+The mute, solo and record-arm locators are measured in the same pass. They were absent from that
+probe until their callers were enumerated — the predicate closes over a `labels:` parameter, and a
+survivor count taken with one label set says as much about the argument as about the tree. There
+are exactly three callers and each passes a fixed `AXLocalePolicy` set, so these rows carry the
+product's own arguments.
 
 WHAT IT DOES NOT PROVE
 ----------------------
@@ -121,6 +127,24 @@ ev.falsifiable(
     mutation="revert headerPanSliderCandidates to matching headerPanHint against the children's "
              "AXDescription: survivors returns to 0 and this check goes red")
 
+# The three toggle locators, measured with the label sets the product itself passes. Their
+# counterexample is the shape that made them worth measuring: a header where the discriminator
+# accepts more than one checkbox, which is the wrong-target failure ADR-007 exists to stop. A
+# predicate that only asks "did something survive" accepts it, and this rejects that predicate.
+TOGGLE_SITES = ["AXLogicProElements.findTrackMuteButton",
+                "AXLogicProElements.findTrackSoloButton",
+                "AXLogicProElements.findTrackArmButton"]
+for site in TOGGLE_SITES:
+    trow = next((s for s in sites if isinstance(s, dict) and s.get("site", "").startswith(site)), None)
+    ev.falsifiable(
+        f"290/{site.rsplit('.', 1)[-1]}-resolves-to-exactly-one",
+        one_unambiguous_survivor,
+        trow,
+        {"site": site, "gathered": 4, "survivors": 2, "identified": False},
+        f"{site} leaves exactly one candidate on the header and the census calls it unambiguous",
+        mutation="widen the toggle predicate to any checkbox carrying a description: several "
+                 "survive and the census stops calling the answer unambiguous")
+
 d = E.Driver()
 time.sleep(3)
 
@@ -146,6 +170,19 @@ ev.check("290/precondition-the-poller-reads-this-project",
          None)
 if not body.get("readable") or len(before_pans) < 2:
     d.close(); print(json.dumps(ev.write(), indent=1)); sys.exit(1)
+
+# The visual below asserts that track 0's pan knob moved IN THE PIXELS, which silently requires
+# track 0's header to be on screen. It is not, on a project with enough tracks to fill the rail and
+# the mixer open — measured: at six tracks the rail showed 오디오 3-5 and the write to track 0
+# changed nothing inside the band, so a correct write produced a red visual for a reason that had
+# nothing to do with the code.
+#
+# The precondition is established through the product rather than assumed: selecting the track
+# scrolls its header into the rail. `tracks.select` addresses by index, not by position on screen,
+# so this does not reintroduce a coordinate.
+select = d.tool("logic_tracks", "select", {"index": 0})
+ev.note("290/scroll-target-into-view", select if isinstance(select, dict) else {"raw": str(select)[:200]})
+time.sleep(1.5)
 
 rec = ev.record_screen(seconds=120)
 before = ev.shot("290/before", settle_region=RAIL, window_title=arrange_title)

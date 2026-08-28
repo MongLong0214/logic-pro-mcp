@@ -395,11 +395,39 @@ enum MainEntrypoint {
                                 "unreachable": "no control bar in this UI state"])
             }
 
-            // `Tracks.swift:443` is deliberately absent. Its predicate closes over a `labels:
-            // [String]` PARAMETER, so its survivor count is a function of the caller's argument and
-            // not of the tree alone — measuring it with one label set would report a number that
-            // says as much about the arguments I chose as about Logic. Parameterised sites need
-            // their callers enumerated first, which is separate work.
+            // The toggle locator was deliberately absent here. Its predicate closes over a
+            // `labels: [String]` PARAMETER, so a survivor count taken with one label set says as
+            // much about the argument as about the tree, and parameterised sites needed their
+            // callers enumerated first.
+            //
+            // They are enumerated now, and the answer is why this can be measured: there are
+            // exactly THREE production callers — mute, solo, arm — and every one passes a fixed
+            // `AXLocalePolicy` set rather than an arbitrary array. So the three rows below carry
+            // the product's own arguments, not a probe author's choice, and the count means what
+            // the other rows mean.
+            //
+            // The predicate is called, not reimplemented: `trackToggleCandidates` is the same
+            // function `findTrackToggleControl` selects from.
+            if let header = AXLogicProElements.findTrackHeader(at: 0) {
+                let boxes = AXHelpers.findAllDescendants(
+                    of: header, role: "AXCheckBox", maxDepth: 4, runtime: ax)
+                for (site, labels) in [
+                    ("AXLogicProElements.findTrackMuteButton",
+                     AXLocalePolicy.trackMuteButton.labels),
+                    ("AXLogicProElements.findTrackSoloButton",
+                     AXLocalePolicy.trackSoloButton.labels),
+                    ("AXLogicProElements.findTrackArmButton",
+                     AXLocalePolicy.trackRecordEnableCheckbox.labels),
+                ] {
+                    record(site, boxes.count,
+                           AXLogicProElements.trackToggleCandidates(
+                               among: boxes, labels: labels, runtime: ax).count)
+                }
+            } else {
+                results.append(["site": "AXLogicProElements.findTrackMute/Solo/ArmButton",
+                                "unreachable": "no track header at index 0 in this UI state"])
+            }
+
             if let header = AXLogicProElements.findTrackHeader(at: 0) {
                 let sliders = AXHelpers.findAllDescendants(
                     of: header, role: "AXSlider", maxDepth: 4, runtime: ax)
