@@ -55,7 +55,7 @@ open PRs 0 · v3.14.0 published · 19 open issues
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
 | ADR-010 | #293 | OPEN | provider exists (10 modules); its collector was written against a fixture shape Logic does not produce |
 | ADR-011 | #299 | OPEN | behind #292 |
-| ADR-012 | #300 | OPEN | **implemented and registered**, gated behind `LOGIC_MCP_ADR012_SPECTRAL_EQ=1`; measured working (injected 250 Hz recovered at 253.98 Hz, control silent) but promotion would ship three band artifacts — see the issue |
+| ADR-012 | #300 | closed | promoted and closed 2026-08-28; all seven acceptance criteria measured, four artifacts found and fixed on the way (#693-#697) |
 | ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
 | ADR-014 | #302 | OPEN | R1 shipped; R2 blocked on `columnResolveFailed` — `kAXColumns` absent on the live Event List |
 | ADR-015 | #303 | OPEN | behind #293 |
@@ -84,8 +84,13 @@ The instruction that produced this file asked for these to be established, not g
   collector was written against a shape Logic does not produce.
 - **#301** — genuine absence. No band read or write is registered in `OperationRegistry`, which
   matches "a measured wall" rather than contradicting it.
-- **#300** — neither. Four modules exist *and* two operations are registered, but the spectral
-  commands require `LOGIC_MCP_ADR012_SPECTRAL_EQ=1`. What is open is the promotion decision.
+- **#300** — neither, and it is closed now. Four modules existed *and* two operations were
+  registered; what was open was the promotion decision. Answering it took measuring what the flag
+  was holding back, which turned up four artifacts nobody had recorded: three bands reporting the
+  floor as a reading, an accumulator band drawing a cut at 20 Hz on material with nothing wrong
+  there, a loudness gate published under the name `confidence`, and that same accumulator still
+  reaching `frequency_peaks` after the first three were fixed. Promotion was the decision; the
+  measurement was the work.
 
 ## Order
 
@@ -102,7 +107,7 @@ attached — not a silent deferral.
    selectors and ad-hoc selectors are the measured source of wrong-target behaviour.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
 4. **#302** — blocked on the Event List's absent `kAXColumns` until that is re-measured.
-5. **#292 → #299**, and **#300**'s promotion, which needs no Logic work.
+5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
 6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement.
 7. **#373 → #284's `R-SEM`**, then **#308** closes as an index.
 
