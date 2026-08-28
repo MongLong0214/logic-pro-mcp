@@ -267,7 +267,8 @@ enum AudioFeatureExtractionEngine {
         }
         let resonances = detectResonances(
             centers: grid.centers, db: bandsDb, measurable: measurable, config: config, grid: grid)
-        let (centroid, peaks) = centroidAndPeaks(centers: grid.centers, db: bandsDb, power: bandPower, config: config)
+        let (centroid, peaks) = centroidAndPeaks(
+            centers: grid.centers, db: bandsDb, power: bandPower, measurable: measurable, config: config)
         let (classification, levelConfidence) = classify(centers: grid.centers, power: bandPower, centroid: centroid, config: config)
 
         return SpectralAnalysisResult(
@@ -830,12 +831,24 @@ enum AudioFeatureExtractionEngine {
         centers: [Double],
         db: [Double],
         power: [Double],
+        measurable: [Bool],
         config: Config
     ) -> (centroid: Double?, peaks: [AudioAnalyzer.FrequencyPeak]) {
         let gate = config.floorDbfs + 3.0
+        // Same exclusion the resonance detector makes, and for the same reason. The edge bands
+        // accumulate everything outside the grid, so band 0 sits above the floor carrying the
+        // sub-18.9 Hz sum — measured: it was published in `frequency_peaks` at 20 Hz, and it
+        // biases an energy-weighted centroid downward with content the grid does not cover.
+        //
+        // Found by auditing this issue's acceptance criteria AFTER the surface was promoted, which
+        // is the wrong order: excluding accumulators from resonances and not from peaks left the
+        // same artifact reachable through a different field.
+        func usable(_ i: Int) -> Bool {
+            db[i] > gate && (measurable.isEmpty || (i < measurable.count && measurable[i]))
+        }
         var num = 0.0
         var den = 0.0
-        for i in 0..<centers.count where db[i] > gate {
+        for i in 0..<centers.count where usable(i) {
             num += centers[i] * power[i]
             den += power[i]
         }
@@ -844,7 +857,7 @@ enum AudioFeatureExtractionEngine {
         // Frequency peaks = local maxima above the floor, strongest first, top 5. magnitude
         // is the linear band power (computed, never a placeholder).
         var maxima = [(hz: Double, magnitude: Double)]()
-        for i in 0..<centers.count where db[i] > gate {
+        for i in 0..<centers.count where usable(i) {
             let leftOk = i == 0 || db[i] >= db[i - 1]
             let rightOk = i == centers.count - 1 || db[i] >= db[i + 1]
             if leftOk && rightOk { maxima.append((centers[i], power[i])) }
