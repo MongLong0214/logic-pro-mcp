@@ -430,7 +430,10 @@ enum MainEntrypoint {
                     ("AXLogicProElements.findTrackArmButton",
                      AXLocalePolicy.trackRecordEnableCheckbox.labels),
                 ] {
-                    record(site, boxes.count,
+                    // Still the product's own predicate — `trackToggleCandidates` resolves through
+                    // the selector atlas now, and this calls it rather than a copy, which is the
+                    // rule this census has enforced on itself since it was written.
+                    record(site + " (atlas)", boxes.count,
                            AXLogicProElements.trackToggleCandidates(
                                among: boxes, labels: labels, runtime: ax).count)
                 }

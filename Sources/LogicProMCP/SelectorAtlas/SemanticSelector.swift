@@ -16,38 +16,24 @@ struct AncestorConstraint: Equatable, Sendable {
 
 enum AttributePredicate: Equatable, Sendable {
     case axIdentifier(String)
-    case attribute(String, equals: String)
 
-    /// Substring match on an attribute, case-insensitively.
+    /// Any of `attributes` matching any of `labels` under `mode`.
     ///
-    /// Added because equality could not express the evidence Logic actually offers. The
-    /// discriminator that identifies a track-header pan slider is the word `밸런스` inside an
-    /// `AXHelp` that reads "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로
-    /// 드래그합니다." — an equality predicate there pins a whole localized sentence, so it breaks on
-    /// any wording change and cannot be written for a locale nobody has measured.
-    case attributeContains(String, String)
-
-    /// Substring match against ANY of several alternatives, case-insensitively.
+    /// One predicate with a mode, rather than one case per matching style. Four had accumulated —
+    /// equality, containment, containment-against-a-set, and containment across a set of attributes
+    /// — each added when a call site needed it, and the toggle locators would have needed a fifth
+    /// for exact-or-prefix. That is the atlas becoming a union of the ad-hoc rules it exists to
+    /// replace.
     ///
-    /// Multiple `attributeContains` predicates are ANDed, which cannot express what a locale set
-    /// is: the header pan slider is identified by `AXHelp` containing any one of
-    /// `pan` / `panning` / `패닝` / `밸런스`, and requiring all four matches nothing in any locale.
-    /// This is the atlas gaining the primitive the product already uses everywhere else —
-    /// `AXLocalePolicy.LabelSet.containsAny`.
-    case attributeContainsAny(String, [String])
-
-    /// Substring match against any of several alternatives, in ANY of several attributes.
+    /// The mode is `AXLocalePolicy.MatchMode`, which the product has always had and which already
+    /// enumerates exactly these: `.exact` trims and compares, `.exactStrict` compares verbatim,
+    /// `.prefix` tolerates the trailing state suffixes some Logic builds append to a checkbox
+    /// description, `.contains` is a substring. Reusing it means a selector and the accessor it
+    /// replaces can express the same rule, which is the whole point of adopting one over the other.
     ///
-    /// Two `attributeContainsAny` predicates are ANDed, so naming both `AXHelp` and
-    /// `AXDescription` demands the label appear in both. Measured: Logic puts a volume fader's name
-    /// in `AXDescription` on a track header and its sentence in `AXHelp`, and a synthetic fixture
-    /// carries only the description — the conjunction matched neither reliably and the existing
-    /// mixer tests caught it.
-    ///
-    /// What the product has always meant is a search across a group of fields, which is
-    /// `AXLogicProElements.elementSearchText` joining identifier, description, title and help
-    /// before a single `containsAny`. This is that, expressed as a selector.
-    case anyAttributeContainsAny([String], [String])
+    /// Multiple attributes are ORed and multiple labels are ORed — a name may live in `AXHelp` on
+    /// one control and `AXDescription` on another, which is measured, not assumed.
+    case attributes([String], anyOf: [String], mode: AXLocalePolicy.MatchMode)
 
     case valueSignature(String)
 }
@@ -118,42 +104,24 @@ func confidence(of candidate: ResolvableCandidate, against selector: SemanticSel
     evidence.append((0.20, !selector.ancestorConstraints.isEmpty,
                      matchesAncestorChain(candidate.ancestors, selector.ancestorConstraints), false))
 
-    let equals = selector.attributePredicates.compactMap { predicate -> (String, String)? in
-        guard case let .attribute(name, expected) = predicate else { return nil }
-        return (name, expected)
+    let attributeRules = selector.attributePredicates.compactMap {
+        predicate -> ([String], [String], AXLocalePolicy.MatchMode)? in
+        guard case let .attributes(names, anyOf: labels, mode: mode) = predicate else { return nil }
+        return (names, labels, mode)
     }
-    let contains = selector.attributePredicates.compactMap { predicate -> (String, String)? in
-        guard case let .attributeContains(name, expected) = predicate else { return nil }
-        return (name, expected)
-    }
-    let containsAny = selector.attributePredicates.compactMap { predicate -> (String, [String])? in
-        guard case let .attributeContainsAny(name, needles) = predicate else { return nil }
-        return (name, needles)
-    }
-    let anyOf = selector.attributePredicates.compactMap { predicate -> ([String], [String])? in
-        guard case let .anyAttributeContainsAny(names, needles) = predicate else { return nil }
-        return (names, needles)
-    }
-    func hits(_ value: String?, _ needles: [String]) -> Bool {
-        guard let value else { return false }
-        return needles.contains {
-            !$0.isEmpty && value.range(of: $0, options: [.caseInsensitive]) != nil
-        }
-    }
-    evidence.append((0.20,
-                     !equals.isEmpty || !contains.isEmpty || !containsAny.isEmpty || !anyOf.isEmpty,
-                     equals.allSatisfy { candidate.attributes[$0.0] == $0.1 }
-                         && contains.allSatisfy { name, needle in
-                             candidate.attributes[name].map {
-                                 $0.range(of: needle, options: [.caseInsensitive]) != nil
-                             } ?? false
+    evidence.append((0.20, !attributeRules.isEmpty,
+                     attributeRules.allSatisfy { names, labels, mode in
+                         let set = AXLocalePolicy.LabelSet(
+                             canonical: labels.first ?? "",
+                             variants: Array(labels.dropFirst()),
+                             rationale: "selector predicate")
+                         return names.contains { name in
+                             guard let value = candidate.attributes[name] else { return false }
+                             return mode == .contains
+                                 ? set.containsAny(in: value)
+                                 : set.matches(value, mode: mode)
                          }
-                         && containsAny.allSatisfy { name, needles in
-                             hits(candidate.attributes[name], needles)
-                         }
-                         && anyOf.allSatisfy { names, needles in
-                             names.contains { hits(candidate.attributes[$0], needles) }
-                         }, false))
+                     }, false))
 
     let aliases = selector.titleAliases.values.flatMap { $0 }
     evidence.append((0.10, !aliases.isEmpty,

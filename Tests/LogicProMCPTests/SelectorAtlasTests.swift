@@ -281,7 +281,7 @@ struct Issue290ScoringNormalisesOverRequestedEvidenceTests {
         // The case the budget refused at 0.40. Nothing about the element changed — the selector no
         // longer has an identifier in its denominator, because it never asked for one.
         let s = selector([
-            .attributeContains("AXHelp", "밸런스"),
+            .attributes(["AXHelp"], anyOf: ["밸런스"], mode: .contains),
             .valueSignature("0...127"),
         ])
         #expect(confidence(of: measuredPanSlider, against: s) == 1)
@@ -295,7 +295,7 @@ struct Issue290ScoringNormalisesOverRequestedEvidenceTests {
         // strongest evidence and the denominator says so.
         let s = selector([
             .axIdentifier("pan-slider"),
-            .attributeContains("AXHelp", "밸런스"),
+            .attributes(["AXHelp"], anyOf: ["밸런스"], mode: .contains),
             .valueSignature("0...127"),
         ])
         let score = confidence(of: measuredPanSlider, against: s)
@@ -335,8 +335,8 @@ struct Issue290ScoringNormalisesOverRequestedEvidenceTests {
     @Test("containment is what equality could not express")
     func containmentIsWhatWasMissing() {
         let help = "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다."
-        let byEquality = selector([.attribute("AXHelp", equals: help)])
-        let byContainment = selector([.attributeContains("AXHelp", "밸런스")])
+        let byEquality = selector([.attributes(["AXHelp"], anyOf: [help], mode: .exact)])
+        let byContainment = selector([.attributes(["AXHelp"], anyOf: ["밸런스"], mode: .contains)])
         #expect(confidence(of: measuredPanSlider, against: byEquality) == 1)
         #expect(confidence(of: measuredPanSlider, against: byContainment) == 1)
 
