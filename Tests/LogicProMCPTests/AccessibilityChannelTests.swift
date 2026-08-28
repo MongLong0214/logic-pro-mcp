@@ -579,9 +579,39 @@ private func makeAXBackedAccessibilityChannel(
 /// #107: a logic runtime whose AXIncrement/AXDecrement move a slider by one
 /// ~10-raw-unit detent (clamped to AXMin/AXMax), so the closed-loop nudge
 /// writer (`mixer.set_volume`/`set_pan`) converges against a fake AX tree.
-private func nudgeResponsiveLogicRuntime(_ builder: FakeAXRuntimeBuilder, app: AXUIElement) -> AXLogicProElements.Runtime {
-    builder.makeLogicRuntime(
+/// #685: counts reads so a fixture can drop every Nth one, which is what the AX layer was measured
+/// doing on the first call of a fresh process.
+private final class ReadDropper: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen = 0
+    private let every: Int
+    init(every: Int) { self.every = every }
+    func shouldDrop() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        seen += 1
+        return every > 0 && seen % every == 0
+    }
+}
+
+private func nudgeResponsiveLogicRuntime(
+    _ builder: FakeAXRuntimeBuilder,
+    app: AXUIElement,
+    dropEveryNthSliderRead: Int = 0
+) -> AXLogicProElements.Runtime {
+    let dropper = ReadDropper(every: dropEveryNthSliderRead)
+    let handler: @Sendable (AXUIElement, String) -> AnyObject?? = { element, attribute in
+            guard attribute == (kAXValueAttribute as String),
+                  (builder.attributeValue(element, kAXRoleAttribute as String) as? String)
+                      == (kAXSliderRole as String) else { return AnyObject??.none }
+            // `.some(nil)` is "handled, and the answer is nil" — an AX read that failed, not an
+            // element without a value.
+            return dropper.shouldDrop() ? .some(nil) : AnyObject??.none
+    }
+    let dropReads: (@Sendable (AXUIElement, String) -> AnyObject??)? =
+        dropEveryNthSliderRead == 0 ? nil : handler
+    return builder.makeLogicRuntime(
         appElement: app,
+        attributeValueHandler: dropReads,
         setAttributeHandler: nil,
         performActionHandler: { element, action in
             let number: @Sendable (String) -> Double? = { attr in
@@ -4396,4 +4426,56 @@ func issue604DismissalSummaryReportsTheObservation() {
     #expect(nothingThere.summary.contains("No panel-shaped window was open"))
     // The one thing it must never say when nothing was there: that it cleared something.
     #expect(!nothingThere.summary.contains("cleared"))
+}
+
+/// #685 — an intermittent AX read must not abandon the write partway.
+///
+/// Measured on the first call of a fresh process, four runs of four: the loop moved 58% to 87% of
+/// the requested travel and returned success, leaving the fader somewhere nobody asked for. Two
+/// exits were silent — `guard let next = read() else { break }` on a single nil, and a two-sample
+/// stagnation counter that reads a slow round trip as a rail.
+///
+/// The fixture drops every third slider read. Before the fix the first drop ends the loop; the
+/// fader stops short and `verified` is false.
+@Test func testMixerWriteSurvivesAnIntermittentSliderRead() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(6850)
+    let window = builder.element(6851)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    let controls = attachTrackHeaderRail(
+        builder, window: window, siblings: [], baseID: 6_860,
+        volume: (value: 173, min: 0, max: 233),
+        pan: (value: 64, min: 0, max: 127)
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder, app: app,
+        logicRuntime: nudgeResponsiveLogicRuntime(builder, app: app, dropEveryNthSliderRead: 3)
+    )
+
+    // 0.5 is about seven detents away from the fader's starting raw 173, so the loop has to survive
+    // several drops rather than one lucky read.
+    let result = await channel.execute(operation: "mixer.set_volume", params: ["index": "0", "value": "0.5"])
+    #expect(result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+
+    let raw = (builder.attributeValue(controls.volume, kAXValueAttribute as String) as? NSNumber)?.doubleValue
+        ?? (builder.attributeValue(controls.volume, kAXValueAttribute as String) as? Double) ?? -1
+    #expect(raw >= 90 && raw <= 110,
+            "the fader stopped short of the ~98 target detent at raw \(raw) — a dropped read ended the write")
+    // Bound with `try #require` rather than compared against a boolean literal. That comparison is
+    // always-pass on this toolchain and proves nothing, which is the dead-assertion shape the
+    // repository's guard rejects — it caught this test's first draft doing exactly that.
+    let verified = try #require(obj["verified"] as? Bool)
+    #expect(verified, "a partial move was reported as verified")
+    let reached = try #require(obj["reached_target"] as? Bool)
+    #expect(reached, "the loop stopped short of the target")
+
+    // The envelope has to make a shortfall visible without re-reading the fader. `nudge_steps`
+    // alone cannot: a complete move and a partial one look identical in it.
+    #expect(obj["detents_to_target"] != nil, "the envelope does not say how far it had to go")
+    let required = (obj["detents_to_target"] as? NSNumber)?.doubleValue ?? -1
+    let issued = (obj["nudge_steps"] as? NSNumber)?.doubleValue ?? -1
+    #expect(required > 1, "the fixture did not actually require several detents")
+    #expect(issued >= required - 1,
+            "issued \(issued) of about \(required) detents — the loop gave up early")
 }

@@ -233,6 +233,22 @@ ev.check("290/the-envelope-names-the-control-it-drove",
          f"state={envelope.get('state') if isinstance(envelope, dict) else None!r}",
          None)
 
+# #685: the same write, asked whether it FINISHED. The loop used to abandon partway on a single
+# failed AX read and return success with the fader left short — measured 58% to 87% of the
+# requested travel, four runs of four. The counterexample is that state: a receipt that names the
+# distance it had to travel and a step count well under it.
+ev.falsifiable(
+    "685/the-write-reached-its-target",
+    lambda e: (isinstance(e, dict) and e.get("reached_target") is True
+               and isinstance(e.get("detents_to_target"), (int, float))
+               and isinstance(e.get("nudge_steps"), int)
+               and e["nudge_steps"] >= e["detents_to_target"] - 1),
+    envelope,
+    {"reached_target": False, "detents_to_target": 7.76, "nudge_steps": 3},
+    "the fader reached the requested level, and the steps issued account for the distance",
+    mutation="restore `guard let next = extractSliderValue(...) else { break }`: one dropped read "
+             "ends the loop and the fader stops short")
+
 after = ev.shot("290/after", settle_region=RAIL, window_title=arrange_title)
 ev.visual("290/the-pan-knob-moved-in-the-pixels",
           before["file"], after["file"], RAIL, subject=RAIL_SUBJECT,
