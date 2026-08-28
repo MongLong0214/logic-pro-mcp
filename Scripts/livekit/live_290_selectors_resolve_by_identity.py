@@ -162,8 +162,47 @@ ev.falsifiable(
     mutation="return survivors.first from transportContainerFinalists: five survive, nothing "
              "narrows them, and the site is back to choosing by tree order")
 
+# #300: the spectral surface is flag-gated, and `E.Driver` inherits this process's environment, so
+# setting it here reaches the server it spawns. The flag gates only the spectral commands, so the
+# rest of this run is unaffected.
+os.environ["LOGIC_MCP_ADR012_SPECTRAL_EQ"] = "1"
+
 d = E.Driver()
 time.sleep(3)
+
+# #300: a band whose edges enclose no FFT bin used to report `floorDbfs`, which reads as "this
+# region is silent" — a false statement about the audio rather than a small one about the grid.
+# Driven through the running binary rather than asserted from the source, because the gate's
+# evidence would otherwise be about this branch's OTHER change and nothing about this one.
+_SOUND = "/System/Library/Sounds/Submarine.aiff"
+spectrum = d.tool("logic_audio", "analyze_spectrum", {"path": _SOUND}) if os.path.exists(_SOUND) else {}
+ev.note("300/analyze-spectrum", {"path": _SOUND,
+                                 "bands": len((spectrum or {}).get("bands") or []),
+                                 "unmeasured": [round(b["centerHz"], 3)
+                                                for b in ((spectrum or {}).get("bands") or [])
+                                                if b.get("measured") is False]})
+
+
+def flags_what_it_could_not_measure(body):
+    bands = (body or {}).get("bands") or []
+    if not bands:
+        return False
+    unmeasured = [b for b in bands if b.get("measured") is False]
+    # Some band must be flagged, AND every flagged one must be sitting at the floor — a band that
+    # claims it measured nothing while reporting real energy is the opposite error.
+    return bool(unmeasured) and all(b.get("energyDb", 0) <= -79.9 for b in unmeasured)
+
+
+ev.falsifiable(
+    "300/a-band-that-measured-nothing-says-so",
+    flags_what_it_could_not_measure,
+    spectrum,
+    # The pre-change output: the same sixty bands, every one claiming to be a reading.
+    {"bands": [{"centerHz": 25.198, "energyDb": -80, "measured": True},
+               {"centerHz": 1000.0, "energyDb": -30, "measured": True}]},
+    "the analyser flags the bands its grid cannot resolve, and every flagged band is at the floor",
+    mutation="return `true` from measurableBands: nothing is flagged and a floor reading is "
+             "published as silence again")
 
 
 def pans():

@@ -654,14 +654,18 @@ struct Issue300UnmeasurableBandsTests {
     }
 
     @Test("bands 0 and n-1 are not called unmeasured, because they do receive energy")
-    func edgeBandsAreNotFlagged() {
+    func edgeBandsAreNotFlagged() throws {
         let grid = AudioFeatureExtractionEngine.makeGrid()
         let mask = AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: 44_100)
         // `bandIndex(forFrequency:)` sends everything below the first edge into band 0 and
         // everything above the last into band n-1. They are measured — of the wrong range. Calling
         // them unmeasured would paper over that separate defect with this one's vocabulary.
-        #expect(mask.first == true)
-        #expect(mask.last == true)
+        // Bound with `try #require`: these are `Bool?`, and comparing an optional against a boolean
+        // literal is always-pass on this toolchain — the dead-assertion shape the guard rejects.
+        let firstBand = try #require(mask.first)
+        let lastBand = try #require(mask.last)
+        #expect(firstBand, "band 0 was called unmeasured, but it receives every bin below edges[1]")
+        #expect(lastBand, "the top band was called unmeasured at a rate where it does receive bins")
     }
 
     @Test("a finer window measures bands the default one cannot")
