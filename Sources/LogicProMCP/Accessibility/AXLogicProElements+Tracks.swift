@@ -470,8 +470,20 @@ extension AXLogicProElements {
     /// fixed `AXLocalePolicy` sets, which is what let `--probe-selection-census` measure all three
     /// once their callers were enumerated.
     static func toggleSelector(labels: [String]) -> SemanticSelector {
-        SemanticSelector(
-            id: .trackHeaderNameField,
+        // The ID follows the label set, because `UIDriftReport` keys its affected-operations map on
+        // it: filing all three under one ID would report a mute-locator drift as endangering solo
+        // and record-arm, and vice versa. Derived from the policy sets rather than passed in, so a
+        // caller cannot pair a label set with the wrong identity.
+        let id: SelectorID
+        if labels == AXLocalePolicy.trackSoloButton.labels {
+            id = .trackHeaderSoloToggle
+        } else if labels == AXLocalePolicy.trackRecordEnableCheckbox.labels {
+            id = .trackHeaderArmToggle
+        } else {
+            id = .trackHeaderMuteToggle
+        }
+        return SemanticSelector(
+            id: id,
             requiredRole: kAXCheckBoxRole as String,
             allowedSubroles: [],
             titleAliases: [:],

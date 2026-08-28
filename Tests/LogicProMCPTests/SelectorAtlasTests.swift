@@ -158,7 +158,17 @@ struct SelectorAtlasTests {
     }
 
     @Test func selectorIDsAreCompleteAndFeatureFlagDefaultsOff() {
+        // The six leading cases were added when the first production adoptions landed. Until then
+        // each borrowed an ill-fitting ID — the header pan slider was filed as
+        // `mixerStripVolumeFader` — and `UIDriftReport` keys its affected-operations map on this
+        // enum, so a pan drift was reported as endangering `mixer.set_volume`.
         #expect(SelectorID.allCases == [
+            .trackHeaderPanControl,
+            .trackHeaderVolumeFader,
+            .trackHeaderMuteToggle,
+            .trackHeaderSoloToggle,
+            .trackHeaderArmToggle,
+            .controlBar,
             .transportPlayButton,
             .trackHeaderNameField,
             .mixerStripVolumeFader,
@@ -351,5 +361,87 @@ struct Issue290ScoringNormalisesOverRequestedEvidenceTests {
         )
         #expect(confidence(of: reworded, against: byEquality) < 0.6)
         #expect(confidence(of: reworded, against: byContainment) == 1)
+    }
+}
+
+/// #290 — the affected-operations map is a second copy of a relationship, and this is what keeps
+/// it honest.
+///
+/// `UIDriftReport` answers "which operations does this selector's drift put at risk" from a
+/// hand-maintained dictionary. Nothing checked it. Four selectors adopted in production had to
+/// borrow ill-fitting IDs until the enum gained cases for them — the header pan slider was filed as
+/// `mixerStripVolumeFader` — so a pan drift was reported as endangering `mixer.set_volume`. That is
+/// a wrong answer delivered confidently, which is the only kind this map can produce.
+@Suite("SelectorAtlasOperationMap")
+struct SelectorAtlasOperationMapTests {
+
+    @Test("every selector has a decision recorded, including an empty one")
+    func everySelectorIsMapped() {
+        // A missing key and a deliberate empty list are indistinguishable at the call site, which
+        // reads `operationsBySelector[id] ?? []`. So an ID added without a decision would silently
+        // report that its drift affects nothing.
+        let mapped = drift(
+            previous: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.9) }),
+            current: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.9) }),
+            roleChanges: [:]
+        )
+        #expect(mapped.count == SelectorID.allCases.count)
+        let unmapped = mapped.filter { $0.affectedOperations.isEmpty }.map(\.selectorID)
+        // `mixerStripSendSlot` is the one deliberate empty: no send operation is registered.
+        #expect(unmapped == [.mixerStripSendSlot], "unmapped: \(unmapped)")
+    }
+
+    @Test("every operation the map names is registered")
+    func mappedOperationsExist() {
+        // The failure this catches is a rename or a removal in the registry leaving this map
+        // pointing at an operation nobody serves — a drift report that names impact on something
+        // that cannot be impacted.
+        let registered = Set(OperationRegistry.specs.map(\.id))
+        let named = Set(drift(
+            previous: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.9) }),
+            current: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.5) }),
+            roleChanges: [:]
+        ).flatMap(\.affectedOperations))
+        #expect(!named.isEmpty)
+        #expect(named.isSubset(of: registered),
+                "not registered: \(named.subtracting(registered).map(\.rawValue).sorted())")
+    }
+
+    @Test("the adopted selectors map to the operations that actually drive them")
+    func adoptedSelectorsMapToTheirOwnOperations() {
+        // The two checks above do NOT catch the defect this suite was written for. Mapping the pan
+        // slider to `mixer.set_volume` passes both — every ID has an entry, and `mixerSetVolume` is
+        // registered — which is a check that cannot see its own subject. Measured by mutation:
+        // re-pointing `.trackHeaderPanControl` at `.mixerSetVolume` left the suite green.
+        //
+        // So the six selectors with production consumers are pinned. It is a second copy of the
+        // mapping and that is the point: changing one now requires changing the other, which is how
+        // a hand-maintained relationship is kept from drifting silently.
+        let reported = Dictionary(uniqueKeysWithValues: drift(
+            previous: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.9) }),
+            current: Dictionary(uniqueKeysWithValues: SelectorID.allCases.map { ($0, 0.5) }),
+            roleChanges: [:]
+        ).map { ($0.selectorID, Set($0.affectedOperations)) })
+
+        #expect(reported[.trackHeaderPanControl] == [.mixerSetPan])
+        #expect(reported[.trackHeaderVolumeFader] == [.mixerSetVolume])
+        #expect(reported[.trackHeaderMuteToggle] == [.tracksMute])
+        #expect(reported[.trackHeaderSoloToggle] == [.tracksSolo])
+        #expect(reported[.trackHeaderArmToggle] == [.tracksArm, .tracksArmOnly])
+        #expect(reported[.controlBar] == [.transportPlay, .transportStop])
+    }
+
+    @Test("the adopted selectors carry the identity they actually select")
+    func adoptedSelectorsAreHonestlyIdentified() {
+        // The defect this suite exists for, asserted directly at the four production selectors.
+        #expect(AXLogicProElements.headerPanSelector.id == .trackHeaderPanControl)
+        #expect(AXLogicProElements.volumeFaderSelector.id == .trackHeaderVolumeFader)
+        #expect(AXLogicProElements.controlBarSelector.id == .controlBar)
+        #expect(AXLogicProElements.toggleSelector(
+            labels: AXLocalePolicy.trackMuteButton.labels).id == .trackHeaderMuteToggle)
+        #expect(AXLogicProElements.toggleSelector(
+            labels: AXLocalePolicy.trackSoloButton.labels).id == .trackHeaderSoloToggle)
+        #expect(AXLogicProElements.toggleSelector(
+            labels: AXLocalePolicy.trackRecordEnableCheckbox.labels).id == .trackHeaderArmToggle)
     }
 }
