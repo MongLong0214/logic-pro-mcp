@@ -230,18 +230,22 @@ struct SelectorAtlasTests {
     }
 }
 
-/// #290 — what the scoring can award an element Logic actually exposes.
+/// #290 — the scoring is a ratio over the evidence a selector ASKED FOR, not a fixed budget.
 ///
-/// The atlas is written and nothing in `Sources/` outside `SelectorAtlas/` refers to it. Before
-/// adopting it, the question is whether it CAN resolve the elements the product addresses, and the
-/// answer is arithmetic over the scoring plus one measurement.
+/// This suite recorded the defect before it recorded the fix, and the numbers below are the same
+/// measurement read the other way round.
 ///
-/// `confidence` awards 0.25 for role, then 0.55 for an exact `AXIdentifier` and crumbs for
-/// everything else. Measured 2026-08-28 on Logic 12.x: the track-header sliders expose no
-/// `AXIdentifier` at all — the attribute is absent from the element, not empty — and the pan slider
-/// has no `AXTitle` either, because its name lives in `AXHelp`.
-@Suite("Issue290AtlasScoringCeiling")
-struct Issue290AtlasScoringCeilingTests {
+/// The budget awarded 0.55 of a possible 1.0 for an exact `AXIdentifier`, so an element without one
+/// could never exceed 0.45 however much else it matched. Measured 2026-08-28 on Logic 12.x: the
+/// track-header sliders expose no `AXIdentifier` at all — the attribute is absent from the element,
+/// not empty — and the pan slider has no `AXTitle` either, because its name lives in `AXHelp`. A
+/// slider satisfying every predicate its selector named scored **0.40**, and an ordinary-looking
+/// `minimumConfidence: 0.6` refused it.
+///
+/// Lowering thresholds to 0.4 instead would have left the tiers decorative and published a
+/// confidence nothing measures — the shape removed from three other places the same day.
+@Suite("Issue290ScoringNormalisesOverRequestedEvidence")
+struct Issue290ScoringNormalisesOverRequestedEvidenceTests {
 
     /// Transcribed from the live tree, not invented: role, absent identifier, absent title, the
     /// help string that carries the name, and the value range that separates pan from volume.
@@ -258,62 +262,94 @@ struct Issue290AtlasScoringCeilingTests {
         )
     }
 
-    private func selector(minimumConfidence: Double) -> SemanticSelector {
+    private func selector(
+        _ predicates: [AttributePredicate],
+        ancestors: [AncestorConstraint] = [AncestorConstraint(role: "AXLayoutItem")],
+        geometry: GeometryHint? = nil,
+        minimumConfidence: Double = 0.6
+    ) -> SemanticSelector {
         SemanticSelector(
-            id: .mixerStripVolumeFader,
-            requiredRole: "AXSlider",
-            allowedSubroles: [],
-            titleAliases: [:],
-            ancestorConstraints: [AncestorConstraint(role: "AXLayoutItem")],
-            attributePredicates: [
-                .attribute("AXHelp", equals: "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다."),
-                .valueSignature("0...127"),
-            ],
-            geometryHint: nil,
-            minimumConfidence: minimumConfidence,
-            ambiguityPolicy: .failClosed
+            id: .mixerStripVolumeFader, requiredRole: "AXSlider", allowedSubroles: [],
+            titleAliases: [:], ancestorConstraints: ancestors,
+            attributePredicates: predicates, geometryHint: geometry,
+            minimumConfidence: minimumConfidence, ambiguityPolicy: .failClosed
         )
     }
 
-    @Test("an element with no AXIdentifier cannot score above the identifier tier")
-    func noIdentifierMeansALowCeiling() {
-        let score = confidence(of: measuredPanSlider, against: selector(minimumConfidence: 0))
-        // Everything this element can offer, awarded: role 0.25 + ancestor 0.08 + attribute 0.05
-        // + value signature 0.02. No identifier, no title, no geometry.
-        #expect(score > 0.39 && score < 0.41, "scored \(score)")
-        #expect(score < 0.55,
-                "the identifier tier alone is worth more than everything this element has")
+    @Test("an element with no identifier resolves when it matches what the selector asked for")
+    func normalisedOverRequestedEvidence() {
+        // The case the budget refused at 0.40. Nothing about the element changed — the selector no
+        // longer has an identifier in its denominator, because it never asked for one.
+        let s = selector([
+            .attributeContains("AXHelp", "밸런스"),
+            .valueSignature("0...127"),
+        ])
+        #expect(confidence(of: measuredPanSlider, against: s) == 1)
+        #expect(resolve(s, in: [measuredPanSlider], locale: "ko") == .exact(index: 0))
     }
 
-    @Test("a minimumConfidence above the ceiling makes the element unresolvable")
-    func aboveTheCeilingIsNotFound() {
-        // 0.6 is an ordinary-looking threshold for "resolve confidently", and it refuses an element
-        // that matched every predicate the selector named.
-        let result = resolve(selector(minimumConfidence: 0.6), in: [measuredPanSlider], locale: "ko")
-        #expect(result == .notFound)
+    @Test("asking for an identifier the element lacks still scores low")
+    func askingForAMissingIdentifierStillCosts() {
+        // The strictness that had to survive. A ratio could have made everything resolve; it does
+        // not, because a selector that names an identifier and does not get one has lost its
+        // strongest evidence and the denominator says so.
+        let s = selector([
+            .axIdentifier("pan-slider"),
+            .attributeContains("AXHelp", "밸런스"),
+            .valueSignature("0...127"),
+        ])
+        let score = confidence(of: measuredPanSlider, against: s)
+        #expect(score < 0.6, "scored \(score); a missing identifier cost nothing")
+        #expect(resolve(s, in: [measuredPanSlider], locale: "ko") == .notFound)
     }
 
-    @Test("the same element with an identifier clears it easily")
-    func withAnIdentifierItResolves() {
-        // The control: the ceiling is about the missing identifier, not about the element being a
-        // poor match. Nothing else changes.
+    @Test("an identifier still dominates when it is there")
+    func identifierStillDominates() {
+        // ADR-007's evidence priority is unchanged: the identifier is the heaviest single tier.
         let withID = ResolvableCandidate(
-            axIdentifier: "pan-slider",
-            role: measuredPanSlider.role,
-            subrole: measuredPanSlider.subrole,
-            title: measuredPanSlider.title,
-            ancestors: measuredPanSlider.ancestors,
-            attributes: measuredPanSlider.attributes,
-            valueSignature: measuredPanSlider.valueSignature,
-            geometry: measuredPanSlider.geometry
+            axIdentifier: "pan-slider", role: "AXSlider", subrole: nil, title: nil,
+            ancestors: measuredPanSlider.ancestors, attributes: [:], valueSignature: nil, geometry: nil
         )
-        var s = selector(minimumConfidence: 0.6)
-        s = SemanticSelector(
-            id: s.id, requiredRole: s.requiredRole, allowedSubroles: s.allowedSubroles,
-            titleAliases: s.titleAliases, ancestorConstraints: s.ancestorConstraints,
-            attributePredicates: s.attributePredicates + [.axIdentifier("pan-slider")],
-            geometryHint: s.geometryHint, minimumConfidence: 0.6, ambiguityPolicy: s.ambiguityPolicy
-        )
+        let s = selector([.axIdentifier("pan-slider")], ancestors: [])
         #expect(resolve(s, in: [withID], locale: "ko") == .exact(index: 0))
+    }
+
+    @Test("role alone cannot identify anything")
+    func roleAloneIsCapped() {
+        // Under a ratio a selector naming ONLY a role matches everything it asked for and would
+        // otherwise score 1.0. "It is a slider" is not an identification.
+        #expect(confidence(of: measuredPanSlider, against: selector([], ancestors: [])) <= 0.49)
+    }
+
+    @Test("geometry alone cannot produce high confidence")
+    func geometryAloneIsCapped() {
+        // ADR-007 acceptance criterion, preserved through the rewrite rather than assumed.
+        let hint = GeometryHint(x: 1, y: 2, width: 3, height: 4)
+        let positioned = ResolvableCandidate(
+            axIdentifier: nil, role: "AXSlider", subrole: nil, title: nil,
+            ancestors: [], attributes: [:], valueSignature: nil, geometry: hint
+        )
+        #expect(confidence(of: positioned, against: selector([], ancestors: [], geometry: hint)) <= 0.49)
+    }
+
+    @Test("containment is what equality could not express")
+    func containmentIsWhatWasMissing() {
+        let help = "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다."
+        let byEquality = selector([.attribute("AXHelp", equals: help)])
+        let byContainment = selector([.attributeContains("AXHelp", "밸런스")])
+        #expect(confidence(of: measuredPanSlider, against: byEquality) == 1)
+        #expect(confidence(of: measuredPanSlider, against: byContainment) == 1)
+
+        // The difference is what happens when the sentence changes — a Logic update, another
+        // locale. Equality breaks; containment does not. An equality predicate on a localized
+        // sentence cannot be written for a locale nobody has measured.
+        let reworded = ResolvableCandidate(
+            axIdentifier: nil, role: "AXSlider", subrole: nil, title: nil,
+            ancestors: measuredPanSlider.ancestors,
+            attributes: ["AXHelp": "밸런스 노브입니다."],
+            valueSignature: measuredPanSlider.valueSignature, geometry: nil
+        )
+        #expect(confidence(of: reworded, against: byEquality) < 0.6)
+        #expect(confidence(of: reworded, against: byContainment) == 1)
     }
 }

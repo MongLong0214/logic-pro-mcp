@@ -70,7 +70,7 @@ private func supportsSchema(
         switch predicate {
         case let .axIdentifier(value), let .valueSignature(value):
             !value.isEmpty
-        case let .attribute(name, equals: value):
+        case let .attribute(name, equals: value), let .attributeContains(name, value):
             !name.isEmpty && !value.isEmpty
         }
     }
