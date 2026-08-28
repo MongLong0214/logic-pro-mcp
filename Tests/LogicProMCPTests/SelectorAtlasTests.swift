@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import Testing
 @testable import LogicProMCP
@@ -443,5 +444,126 @@ struct SelectorAtlasOperationMapTests {
             labels: AXLocalePolicy.trackSoloButton.labels).id == .trackHeaderSoloToggle)
         #expect(AXLogicProElements.toggleSelector(
             labels: AXLocalePolicy.trackRecordEnableCheckbox.labels).id == .trackHeaderArmToggle)
+    }
+}
+
+/// #290 — a fixture cannot carry a user's project, track or plugin name.
+///
+/// The criterion is "fixtures contain no user project/track/plugin names", and the way to satisfy it
+/// is not to scrub: a scrubber has to enumerate what to remove, and the thing it has never heard of
+/// is exactly the thing a user named. `AXSnapshot` is an ALLOWLIST — a free-text value survives only
+/// if it appears in `AXLocalePolicy`, and everything else is reduced to its shape.
+@Suite("Issue290SnapshotRedaction")
+struct Issue290SnapshotRedactionTests {
+
+    @Test("a recognised label survives verbatim, including its case")
+    func recognisedLabelsSurvive() {
+        // Verbatim and case-preserved, because selectors match `.exactStrict` — a snapshot that
+        // lower-cased everything would show a tree no selector could be tested against.
+        #expect(AXSnapshot.redact("볼륨") == "볼륨")
+        #expect(AXSnapshot.redact("Control Bar") == "Control Bar")
+        #expect(AXSnapshot.redact("컨트롤 막대") == "컨트롤 막대")
+    }
+
+    @Test("names the product does not recognise are reduced to a shape")
+    func userNamesAreReducedToShape() throws {
+        // Every one of these is a plausible thing a user types, and none is in any policy set.
+        for name in ["Absolute Zero", "Vintage EQ", "무제 30", "lead vox DOUBLE 2", "Song.logicx"] {
+            let redacted = try #require(AXSnapshot.redact(name))
+            #expect(redacted != name, "\(name) survived verbatim")
+            #expect(redacted.hasPrefix("len:"), "\(name) -> \(redacted)")
+        }
+    }
+
+    @Test("the shape says enough to notice a change and not enough to read a name")
+    func shapeIsInformativeButNotRevealing() {
+        let shape = AXSnapshot.shape(of: "Absolute Zero")
+        #expect(shape.contains("len:13"))
+        #expect(shape.contains("latin"))
+        #expect(!shape.lowercased().contains("absolute"))
+        #expect(!shape.lowercased().contains("zero"))
+        // A different name of the SAME shape is indistinguishable, which is the property that makes
+        // this safe rather than a weak cipher. Both are thirteen latin-and-space characters — the
+        // first version of this case compared a 13 against a 14 and failed, which is the shape doing
+        // its job: length is information it deliberately keeps.
+        #expect(AXSnapshot.shape(of: "Absolute Zero") == AXSnapshot.shape(of: "Terrible Noiz"))
+    }
+
+    @Test("a prefix is only conceded where Logic actually appends state")
+    func prefixAllowanceIsScopedToItsPhenomenon() throws {
+        // Measured on a real capture: five `AXTextField` descriptions came out as `오디오…` because
+        // `오디오` is a variant in two policy sets and the tracks were named `오디오 1`, `오디오 2`.
+        // A track name's leading token is part of a track name, so the fixture was leaking one.
+        //
+        // The concession exists for checkbox descriptions that carry state. It belongs there.
+        // Bound with `try #require`, not compared against a boolean literal — that comparison is
+        // always-pass on this toolchain, and the first version of this case used it. Mutation-tested
+        // afterwards: restoring the prefix allowance everywhere left the suite GREEN, which is how
+        // a dead assertion looks from the outside.
+        let inATextField = try #require(
+            AXSnapshot.redact("오디오 1", role: kAXTextFieldRole as String))
+        #expect(inATextField.hasPrefix("len:"), "a track name kept its recognised prefix")
+
+        let inACheckbox = try #require(
+            AXSnapshot.redact("음소거, 켬", role: kAXCheckBoxRole as String))
+        #expect(inACheckbox.hasPrefix("음소거"), "the state-suffix concession stopped working")
+
+        // Without a role at all, no concession — the caller has not established the phenomenon.
+        let roleless = try #require(AXSnapshot.redact("오디오 1"))
+        #expect(roleless.hasPrefix("len:"))
+        // An EXACT match is safe in any role: the value IS a label the product knows.
+        #expect(AXSnapshot.redact("볼륨", role: kAXTextFieldRole as String) == "볼륨")
+    }
+
+    @Test("the committed baseline carries no name from the project it was captured on")
+    func committedFixtureIsClean() throws {
+        // The criterion at the artifact, not the function. This fixture was captured on a live
+        // project whose tracks were named `Absolute Zero`, `오디오 1` and `오디오 2`, in a document
+        // called `무제 30`.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-ko-track-headers.json")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        for name in ["Absolute Zero", "Absolute", "오디오", "무제", "Stereo Out"] {
+            #expect(!text.contains(name), "\(name) is in the committed fixture")
+        }
+        // And it is a real capture, not an empty file that trivially contains no names.
+        #expect(text.contains("볼륨"))
+        #expect(text.count > 5_000)
+    }
+
+    @Test("a label with a state suffix keeps its recognised prefix and loses the rest")
+    func statePrefixesAreKept() throws {
+        // Logic appends state to some checkbox descriptions and `.prefix` is a mode selectors use,
+        // so `음소거, 켬` must not read as an unrecognised string — but the suffix is still not a
+        // label the product knows, and it does not survive intact.
+        let redacted = try #require(AXSnapshot.redact("음소거, 켬", role: kAXCheckBoxRole as String))
+        #expect(redacted.hasPrefix("음소거"), "\(redacted)")
+        #expect(redacted != "음소거, 켬")
+    }
+
+    @Test("a captured tree carries no unrecognised free text anywhere in it")
+    func capturedTreeIsClean() throws {
+        // The property at the level it matters: not one value, a whole tree. The names below are in
+        // description, help and identifier, at two depths.
+        let b = FakeAXRuntimeBuilder()
+        let root = b.element(9000)
+        let child = b.element(9001)
+        b.setAttribute(root, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(root, kAXDescriptionAttribute as String, "My Secret Project")
+        b.setAttribute(child, kAXRoleAttribute as String, kAXSliderRole as String)
+        b.setAttribute(child, kAXDescriptionAttribute as String, "볼륨")
+        b.setAttribute(child, kAXHelpAttribute as String, "Lead Vocal Double")
+        b.setAttribute(child, kAXIdentifierAttribute as String, "user-named-thing")
+        b.setChildren(root, [child])
+
+        let node = AXSnapshot.capture(root, runtime: b.makeAXRuntime())
+        let encoded = String(decoding: try JSONEncoder().encode(node), as: UTF8.self)
+
+        for secret in ["My Secret Project", "Lead Vocal Double", "user-named-thing"] {
+            #expect(!encoded.contains(secret), "\(secret) reached the snapshot")
+        }
+        // And the recognised one did survive, or the snapshot would be useless.
+        #expect(encoded.contains("볼륨"))
     }
 }

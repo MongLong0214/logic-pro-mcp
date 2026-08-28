@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Darwin
 import Dispatch
 import Foundation
@@ -346,6 +347,57 @@ enum MainEntrypoint {
         // is the failure this whole issue is a census of.
         //
         // Observation only: it gathers, filters, counts, and returns. It selects nothing.
+        // ADR-007's atlas capture. Developer-only, read-only, and redacted BY CONSTRUCTION — see
+        // `AXSnapshot`, which is an allowlist rather than a scrubber, so a track or plugin name
+        // cannot reach the file by being something the redactor had not heard of.
+        //
+        //   LogicProMCP --ax-snapshot --ax-snapshot-scope mixer --ax-snapshot-locale ko
+        //
+        // Writes the document to stdout. The caller decides where it lands, because a command that
+        // also chooses the path is a command that can overwrite a fixture nobody meant to replace.
+        if arguments.contains("--ax-snapshot") {
+            guard let window = AXLogicProElements.mainWindow() else {
+                writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
+                return 1
+            }
+            let scope = arguments.drop(while: { $0 != "--ax-snapshot-scope" })
+                .dropFirst().first ?? "window"
+            let locale = arguments.drop(while: { $0 != "--ax-snapshot-locale" })
+                .dropFirst().first ?? "unknown"
+            let root: AXUIElement
+            if scope == "window" {
+                root = window
+            } else if let scoped = AXLocalePolicy.censusDescendant(
+                of: window, role: "AXGroup",
+                matching: AXLocalePolicy.LabelSet(canonical: scope, variants: [],
+                                                  rationale: "ax-snapshot scope"),
+                mode: .exactStrict, maxDepth: 8, runtime: .production).element {
+                root = scoped
+            } else {
+                writeStdout("{\"ok\":false,\"error\":\"no unambiguous container described \(scope)\"}\n")
+                return 1
+            }
+            let document = AXSnapshot.Document(
+                // Not read from Logic: no accessor exposes its version, and inventing one here
+                // would put a number in a fixture that nothing measured. The capture is filed under
+                // whatever the operator names it.
+                logicVersion: arguments.drop(while: { $0 != "--ax-snapshot-version" })
+                    .dropFirst().first ?? "unspecified",
+                locale: locale,
+                scope: scope,
+                capturedFrom: "ax",
+                root: AXSnapshot.capture(root, runtime: .production)
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            if let data = try? encoder.encode(document) {
+                writeStdout(String(decoding: data, as: UTF8.self) + "\n")
+                return 0
+            }
+            writeStdout("{\"ok\":false,\"error\":\"could not encode the snapshot\"}\n")
+            return 1
+        }
+
         if arguments.contains("--probe-selection-census") {
             guard let window = AXLogicProElements.mainWindow() else {
                 writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
