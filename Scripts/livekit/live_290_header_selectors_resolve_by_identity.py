@@ -171,6 +171,19 @@ ev.check("290/precondition-the-poller-reads-this-project",
 if not body.get("readable") or len(before_pans) < 2:
     d.close(); print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
+# The visual below asserts that track 0's pan knob moved IN THE PIXELS, which silently requires
+# track 0's header to be on screen. It is not, on a project with enough tracks to fill the rail and
+# the mixer open — measured: at six tracks the rail showed 오디오 3-5 and the write to track 0
+# changed nothing inside the band, so a correct write produced a red visual for a reason that had
+# nothing to do with the code.
+#
+# The precondition is established through the product rather than assumed: selecting the track
+# scrolls its header into the rail. `tracks.select` addresses by index, not by position on screen,
+# so this does not reintroduce a coordinate.
+select = d.tool("logic_tracks", "select", {"index": 0})
+ev.note("290/scroll-target-into-view", select if isinstance(select, dict) else {"raw": str(select)[:200]})
+time.sleep(1.5)
+
 rec = ev.record_screen(seconds=120)
 before = ev.shot("290/before", settle_region=RAIL, window_title=arrange_title)
 
