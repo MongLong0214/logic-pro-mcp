@@ -1,0 +1,620 @@
+{
+  "capturedFrom" : "ax",
+  "locale" : "ko",
+  "logicVersion" : "12.x",
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "help" : "len:84 latin+non-latin+punct+space",
+            "role" : "AXDisclosureTriangle",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:16 digit+non-latin+punct+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:13 latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:22 digit+latin+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:15 digit+non-latin+punct+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 digit+non-latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:15 digit+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:16 digit+non-latin+punct+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 digit+non-latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:15 digit+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:4 digit+non-latin+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 digit+non-latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:15 digit+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:4 digit+non-latin+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 digit+non-latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:15 digit+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "트랙…",
+            "role" : "AXRadioButton",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:11 non-latin+punct+space",
+            "help" : "len:134 latin+non-latin+punct+space",
+            "role" : "AXSplitter",
+            "valueRange" : "-50...50"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "음소거",
+            "help" : "음소거…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "솔로…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 활성화",
+            "help" : "녹음 활성화…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "입력…",
+            "help" : "입력…",
+            "role" : "AXCheckBox",
+            "valueRange" : "0...1"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:4 digit+non-latin+space",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...127"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "볼륨",
+                "role" : "AXValueIndicator"
+              }
+            ],
+            "description" : "볼륨",
+            "help" : "len:114 latin+non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "0...233"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 digit+non-latin+space",
+            "help" : "len:31 non-latin+punct+space",
+            "role" : "AXTextField",
+            "valueRange" : "0...1"
+          }
+        ],
+        "description" : "len:15 digit+non-latin+punct+space",
+        "help" : "len:117 latin+non-latin+punct+space",
+        "role" : "AXLayoutItem",
+        "valueRange" : "0...1"
+      }
+    ],
+    "description" : "트랙 헤더",
+    "role" : "AXGroup"
+  },
+  "scope" : "트랙 헤더"
+}
