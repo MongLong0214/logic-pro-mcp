@@ -449,12 +449,40 @@ extension AXLogicProElements {
         labels: [String],
         runtime: AXHelpers.Runtime = .production
     ) -> [AXUIElement] {
-        checkboxes.filter { cb in
-            guard let desc = AXHelpers.getDescription(cb, runtime: runtime) else { return false }
-            // Exact match preserves the historical arm locator semantics;
-            // prefix match tolerates trailing state suffixes some builds append.
-            return labels.contains(desc) || labels.contains { !$0.isEmpty && desc.hasPrefix($0) }
+        // Third atlas adoption. The predicate is unchanged in MEANING — `.prefix` in
+        // `AXLocalePolicy.MatchMode` is exact-or-prefix, which is what the two clauses here spelled
+        // out: exact preserves the historical arm locator semantics, prefix tolerates the trailing
+        // state suffixes some Logic builds append to a checkbox description.
+        //
+        // Expressing it as a selector is what changes. `failClosed` means the caller can refuse an
+        // ambiguous set instead of taking `.first`, and the rule now lives where the drift report
+        // and the census can both read it.
+        let selector = toggleSelector(labels: labels)
+        return checkboxes.filter { checkbox in
+            let candidate = AXResolvableCandidate.make(from: checkbox, runtime: runtime)
+            return resolve(selector, in: [candidate], locale: "any") == .exact(index: 0)
         }
+    }
+
+    /// The atlas selector for a track-header toggle, built for a caller's label set.
+    ///
+    /// Parameterised because the site is: mute, solo and record-arm are the same locator with three
+    /// fixed `AXLocalePolicy` sets, which is what let `--probe-selection-census` measure all three
+    /// once their callers were enumerated.
+    static func toggleSelector(labels: [String]) -> SemanticSelector {
+        SemanticSelector(
+            id: .trackHeaderNameField,
+            requiredRole: kAXCheckBoxRole as String,
+            allowedSubroles: [],
+            titleAliases: [:],
+            ancestorConstraints: [],
+            attributePredicates: [
+                .attributes([kAXDescriptionAttribute as String], anyOf: labels, mode: .prefix),
+            ],
+            geometryHint: nil,
+            minimumConfidence: 0.6,
+            ambiguityPolicy: .failClosed
+        )
     }
 
     static func findTrackToggleControl(

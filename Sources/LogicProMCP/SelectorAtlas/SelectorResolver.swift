@@ -70,15 +70,12 @@ private func supportsSchema(
         switch predicate {
         case let .axIdentifier(value), let .valueSignature(value):
             !value.isEmpty
-        case let .attribute(name, equals: value), let .attributeContains(name, value):
-            !name.isEmpty && !value.isEmpty
-        case let .anyAttributeContainsAny(names, values):
+        case let .attributes(names, anyOf: labels, mode: _):
+            // An empty attribute list can never match, an empty label list can never match, and an
+            // empty label matches everything — all three are a selector that cannot mean what it
+            // says.
             !names.isEmpty && names.allSatisfy { !$0.isEmpty }
-                && !values.isEmpty && values.allSatisfy { !$0.isEmpty }
-        case let .attributeContainsAny(name, values):
-            // An empty alternative list can never match, and an empty needle matches everything —
-            // both are a selector that cannot mean what it says.
-            !name.isEmpty && !values.isEmpty && values.allSatisfy { !$0.isEmpty }
+                && !labels.isEmpty && labels.allSatisfy { !$0.isEmpty }
         }
     }
 }

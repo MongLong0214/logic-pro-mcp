@@ -114,7 +114,10 @@ extension AXLogicProElements {
         titleAliases: [:],
         ancestorConstraints: [AncestorConstraint(role: "AXLayoutItem")],
         attributePredicates: [
-            .attributeContainsAny(kAXHelpAttribute as String, AXLocalePolicy.sliderPanHint.labels),
+            .attributes([kAXHelpAttribute as String,
+                         kAXDescriptionAttribute as String,
+                         kAXRoleDescriptionAttribute as String],
+                        anyOf: AXLocalePolicy.sliderPanHint.labels, mode: .contains),
             .valueSignature("0...127"),
         ],
         geometryHint: nil,
@@ -449,11 +452,10 @@ extension AXLogicProElements {
         titleAliases: [:],
         ancestorConstraints: [],
         attributePredicates: [
-            .anyAttributeContainsAny(
-                [kAXHelpAttribute as String,
-                 kAXDescriptionAttribute as String,
-                 kAXRoleDescriptionAttribute as String],
-                AXLocalePolicy.sliderVolumeHint.labels),
+            .attributes([kAXHelpAttribute as String,
+                         kAXDescriptionAttribute as String,
+                         kAXRoleDescriptionAttribute as String],
+                        anyOf: AXLocalePolicy.sliderVolumeHint.labels, mode: .contains),
         ],
         geometryHint: nil,
         minimumConfidence: 0.6,
