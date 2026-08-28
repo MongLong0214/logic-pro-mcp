@@ -3,6 +3,35 @@ import Foundation
 struct SpectralBand: Codable, Equatable, Sendable {
     let centerHz: Double
     let energyDb: Double
+
+    /// False when this band's edges enclose no FFT bin of the window it is stitched from, so its
+    /// `energyDb` is the floor sentinel and not a reading.
+    ///
+    /// Measured 2026-08-28 at 44.1 kHz with the default grid: bands at 20, 25.198 and 40 Hz report
+    /// exactly `floorDbfs` for every signal, including white noise — the log-spaced bands are ~3 Hz
+    /// wide down there and the 8192-point window resolves 5.383 Hz. `-80 dB` in that position reads
+    /// as "this region is silent", which is a false statement about the audio rather than a small
+    /// one about the grid.
+    ///
+    /// Defaults to `true` so a hand-built band in a test is a reading unless it says otherwise.
+    var measured: Bool = true
+
+    init(centerHz: Double, energyDb: Double, measured: Bool = true) {
+        self.centerHz = centerHz
+        self.energyDb = energyDb
+        self.measured = measured
+    }
+
+    /// Written by hand because Swift's synthesised `init(from:)` does NOT apply a property's
+    /// default for a missing key — it requires every non-optional key to be present. Adding
+    /// `measured` therefore broke decoding of every document written before it existed, which
+    /// `legacyResonanceArrayDecodesWithDefaults` caught on the first run.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        centerHz = try container.decode(Double.self, forKey: .centerHz)
+        energyDb = try container.decode(Double.self, forKey: .energyDb)
+        measured = try container.decodeIfPresent(Bool.self, forKey: .measured) ?? true
+    }
 }
 
 struct SpectralResonance: Codable, Equatable, Sendable {
