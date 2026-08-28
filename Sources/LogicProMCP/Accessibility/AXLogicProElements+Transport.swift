@@ -125,16 +125,53 @@ extension AXLogicProElements {
     /// Split out for the reason the other predicates were: the census must call the same reduction
     /// the product runs, not a copy that can drift from it. A returned count other than one is what
     /// the site refuses on, so this is also the number worth measuring.
+    /// The atlas selector for the control bar, by name.
+    ///
+    /// `.exactStrict` because that is what `getControlBar` uses: a group described exactly
+    /// `Control Bar` / `컨트롤 막대` / `コントロールバー`, not one whose description merely contains
+    /// it. A containment match would let `Hide Control Bar` be taken for the bar — the same
+    /// false-friend class the keyword scan already fails on.
+    ///
+    /// Identity only. Whether the named bar actually HOLDS a transport control is a separate
+    /// question, and `transportContainerFinalists` asks it separately.
+    static let controlBarSelector = SemanticSelector(
+        id: .transportPlayButton,
+        requiredRole: kAXGroupRole as String,
+        allowedSubroles: [],
+        titleAliases: [:],
+        ancestorConstraints: [],
+        attributePredicates: [
+            .attributes([kAXDescriptionAttribute as String],
+                        anyOf: AXLocalePolicy.controlBarGroupLabel.labels, mode: .exactStrict),
+        ],
+        geometryHint: nil,
+        minimumConfidence: 0.6,
+        ambiguityPolicy: .failClosed
+    )
+
     static func transportContainerFinalists(
         among survivors: [AXUIElement],
         runtime: AXHelpers.Runtime = .production
     ) -> [AXUIElement] {
         if survivors.count <= 1 { return survivors }
 
+        // Fourth atlas adoption, and a PARTIAL one — the limit is worth stating rather than working
+        // around.
+        //
+        // This reduction has two discriminators. The label is an identity question and resolves
+        // through the atlas below. The capability test is not: `transportControlKeywordHits`
+        // searches the group's DESCENDANTS for transport controls, and ADR-007's evidence model is
+        // about an element and its ANCESTORS — identifier, role, ancestor chain, attributes, title,
+        // value, geometry. A subtree property is not in it.
+        //
+        // It could have been smuggled in as a synthetic attribute. It is not, because the site
+        // already says why the two are separate: "Name and capability are different questions and
+        // this caller needs the second one." Identity goes through the selector; capability stays
+        // its own step.
         func labelled(_ pool: [AXUIElement]) -> [AXUIElement] {
             pool.filter { group in
-                AXLocalePolicy.controlBarGroupLabel.matches(
-                    AXHelpers.getDescription(group, runtime: runtime) ?? "", mode: .exactStrict)
+                let candidate = AXResolvableCandidate.make(from: group, runtime: runtime)
+                return resolve(controlBarSelector, in: [candidate], locale: "any") == .exact(index: 0)
             }
         }
 
