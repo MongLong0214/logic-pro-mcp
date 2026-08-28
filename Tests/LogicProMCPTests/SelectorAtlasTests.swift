@@ -229,3 +229,91 @@ struct SelectorAtlasTests {
         )
     }
 }
+
+/// #290 — what the scoring can award an element Logic actually exposes.
+///
+/// The atlas is written and nothing in `Sources/` outside `SelectorAtlas/` refers to it. Before
+/// adopting it, the question is whether it CAN resolve the elements the product addresses, and the
+/// answer is arithmetic over the scoring plus one measurement.
+///
+/// `confidence` awards 0.25 for role, then 0.55 for an exact `AXIdentifier` and crumbs for
+/// everything else. Measured 2026-08-28 on Logic 12.x: the track-header sliders expose no
+/// `AXIdentifier` at all — the attribute is absent from the element, not empty — and the pan slider
+/// has no `AXTitle` either, because its name lives in `AXHelp`.
+@Suite("Issue290AtlasScoringCeiling")
+struct Issue290AtlasScoringCeilingTests {
+
+    /// Transcribed from the live tree, not invented: role, absent identifier, absent title, the
+    /// help string that carries the name, and the value range that separates pan from volume.
+    private var measuredPanSlider: ResolvableCandidate {
+        ResolvableCandidate(
+            axIdentifier: nil,
+            role: "AXSlider",
+            subrole: nil,
+            title: nil,
+            ancestors: ["AXLayoutItem", "AXGroup", "AXWindow"],
+            attributes: ["AXHelp": "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다."],
+            valueSignature: "0...127",
+            geometry: nil
+        )
+    }
+
+    private func selector(minimumConfidence: Double) -> SemanticSelector {
+        SemanticSelector(
+            id: .mixerStripVolumeFader,
+            requiredRole: "AXSlider",
+            allowedSubroles: [],
+            titleAliases: [:],
+            ancestorConstraints: [AncestorConstraint(role: "AXLayoutItem")],
+            attributePredicates: [
+                .attribute("AXHelp", equals: "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다."),
+                .valueSignature("0...127"),
+            ],
+            geometryHint: nil,
+            minimumConfidence: minimumConfidence,
+            ambiguityPolicy: .failClosed
+        )
+    }
+
+    @Test("an element with no AXIdentifier cannot score above the identifier tier")
+    func noIdentifierMeansALowCeiling() {
+        let score = confidence(of: measuredPanSlider, against: selector(minimumConfidence: 0))
+        // Everything this element can offer, awarded: role 0.25 + ancestor 0.08 + attribute 0.05
+        // + value signature 0.02. No identifier, no title, no geometry.
+        #expect(score > 0.39 && score < 0.41, "scored \(score)")
+        #expect(score < 0.55,
+                "the identifier tier alone is worth more than everything this element has")
+    }
+
+    @Test("a minimumConfidence above the ceiling makes the element unresolvable")
+    func aboveTheCeilingIsNotFound() {
+        // 0.6 is an ordinary-looking threshold for "resolve confidently", and it refuses an element
+        // that matched every predicate the selector named.
+        let result = resolve(selector(minimumConfidence: 0.6), in: [measuredPanSlider], locale: "ko")
+        #expect(result == .notFound)
+    }
+
+    @Test("the same element with an identifier clears it easily")
+    func withAnIdentifierItResolves() {
+        // The control: the ceiling is about the missing identifier, not about the element being a
+        // poor match. Nothing else changes.
+        let withID = ResolvableCandidate(
+            axIdentifier: "pan-slider",
+            role: measuredPanSlider.role,
+            subrole: measuredPanSlider.subrole,
+            title: measuredPanSlider.title,
+            ancestors: measuredPanSlider.ancestors,
+            attributes: measuredPanSlider.attributes,
+            valueSignature: measuredPanSlider.valueSignature,
+            geometry: measuredPanSlider.geometry
+        )
+        var s = selector(minimumConfidence: 0.6)
+        s = SemanticSelector(
+            id: s.id, requiredRole: s.requiredRole, allowedSubroles: s.allowedSubroles,
+            titleAliases: s.titleAliases, ancestorConstraints: s.ancestorConstraints,
+            attributePredicates: s.attributePredicates + [.axIdentifier("pan-slider")],
+            geometryHint: s.geometryHint, minimumConfidence: 0.6, ambiguityPolicy: s.ambiguityPolicy
+        )
+        #expect(resolve(s, in: [withID], locale: "ko") == .exact(index: 0))
+    }
+}

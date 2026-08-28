@@ -50,7 +50,7 @@ open PRs 0 · v3.14.0 published · 19 open issues
 | ADR-004 | #287 | closed | |
 | ADR-005 | #288 | closed | |
 | ADR-006 | #289 | closed | shipped #674/#675, measured and closed |
-| ADR-007 | #290 | OPEN | the three AX trees it must encode are measured; the atlas is not written |
+| ADR-007 | #290 | OPEN | the atlas IS written (`Sources/LogicProMCP/SelectorAtlas/`, all three pieces) and has **zero production consumers**; adoption is blocked on the scoring, which awards 0.55 of 1 for an `AXIdentifier` Logic does not expose on these elements — a fully-matching header slider scores 0.40 |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
 | ADR-010 | #293 | OPEN | provider exists (10 modules); its collector was written against a fixture shape Logic does not produce |
@@ -103,8 +103,9 @@ attached — not a silent deferral.
    on 2026-08-24 moved its blocker: the 49 mutating operations with a verification plan are waiting
    on a write-and-readback qualification mode that does not exist, which the #284 matrix does not
    supply. #373 covers a smaller part of it than "depends on #373" suggested.
-2. **#290** — the selector atlas, because every capability below addresses Logic through AX
-   selectors and ad-hoc selectors are the measured source of wrong-target behaviour.
+2. **#290** — not "write the atlas": it is written and unused. The next step is a decision
+   about its scoring, which cannot resolve an element with no `AXIdentifier` above 0.45 and so
+   cannot resolve the ones the product addresses. Measured, with the real function.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
 4. **#302** — blocked on the Event List's absent `kAXColumns` until that is re-measured.
 5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
