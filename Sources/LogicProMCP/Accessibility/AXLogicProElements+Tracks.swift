@@ -431,6 +431,32 @@ extension AXLogicProElements {
     /// found its element). This unifies all three on the checkbox-first match
     /// using the centralized `AXLocalePolicy` label sets, keeping the legacy
     /// `AXButton` description/title fallback for build drift.
+    /// Every checkbox on a header the toggle locator would accept for `labels`, in tree order.
+    ///
+    /// Split out for the same reason `headerPanSliderCandidates` was: `--probe-selection-census`
+    /// measures how many candidates survive the discriminator a site applies, and it has to call the
+    /// SAME predicate the product runs. A copy drifts, and then the probe measures a rule the
+    /// product no longer follows — which is the failure that census is itself a census of.
+    ///
+    /// This site was deliberately absent from that probe, with the reason recorded: the predicate
+    /// closes over `labels`, so a survivor count taken with one label set says as much about the
+    /// argument as about the tree, and "parameterised sites need their callers enumerated first".
+    /// They are now enumerated — there are exactly three (`findTrackMuteButton`,
+    /// `findTrackSoloButton`, `findTrackArmButton`) and each passes a fixed `AXLocalePolicy` set,
+    /// so measuring all three measures the product's arguments rather than the probe author's.
+    static func trackToggleCandidates(
+        among checkboxes: [AXUIElement],
+        labels: [String],
+        runtime: AXHelpers.Runtime = .production
+    ) -> [AXUIElement] {
+        checkboxes.filter { cb in
+            guard let desc = AXHelpers.getDescription(cb, runtime: runtime) else { return false }
+            // Exact match preserves the historical arm locator semantics;
+            // prefix match tolerates trailing state suffixes some builds append.
+            return labels.contains(desc) || labels.contains { !$0.isEmpty && desc.hasPrefix($0) }
+        }
+    }
+
     static func findTrackToggleControl(
         in header: AXUIElement,
         labels: [String],
@@ -440,12 +466,8 @@ extension AXLogicProElements {
         let checkboxes = AXHelpers.findAllDescendants(
             of: header, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax
         )
-        if let match = checkboxes.first(where: { cb in
-            guard let desc = AXHelpers.getDescription(cb, runtime: runtime.ax) else { return false }
-            // Exact match preserves the historical arm locator semantics;
-            // prefix match tolerates trailing state suffixes some builds append.
-            return labels.contains(desc) || labels.contains { !$0.isEmpty && desc.hasPrefix($0) }
-        }) {
+        let candidates = trackToggleCandidates(among: checkboxes, labels: labels, runtime: runtime.ax)
+        if let match = candidates.first {
             return match
         }
         // Legacy fallback: AXButton with description prefix / single-letter title.
