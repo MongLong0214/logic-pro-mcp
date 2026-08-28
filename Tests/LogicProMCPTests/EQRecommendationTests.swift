@@ -5,7 +5,7 @@ import Testing
 @Suite("ADR-012 spectral EQ recommendations")
 struct EQRecommendationTests {
     @Test func lowConfidenceReturnsNoSafeRecommendation() {
-        expectNoSafeRecommendation(recommendEQ(analysis(confidence: 0.59)))
+        expectNoSafeRecommendation(recommendEQ(analysis(levelConfidence: 0.59)))
     }
 
     @Test func unknownSourceReturnsNoSafeRecommendation() {
@@ -120,8 +120,8 @@ struct EQRecommendationTests {
     }
 
     @Test func confidenceStaysWithinUnitInterval() {
-        #expect(analysis(confidence: -0.1).confidence == 0)
-        #expect(analysis(confidence: 1.1).confidence == 1)
+        #expect(analysis(levelConfidence: -0.1).levelConfidence == 0)
+        #expect(analysis(levelConfidence: 1.1).levelConfidence == 1)
     }
 
     @Test func adr012FeatureFlagDefaultsToFalse() {
@@ -143,7 +143,7 @@ struct EQRecommendationTests {
         bands: [SpectralBand] = [],
         resonances: [SpectralResonance] = [],
         classification: SourceClassification = .vocal,
-        confidence: Double = 0.9,
+        levelConfidence: Double = 0.9,
         complete: Bool = true,
         partialReason: String? = nil
     ) -> SpectralAnalysisResult {
@@ -152,7 +152,7 @@ struct EQRecommendationTests {
             bands: bands,
             resonances: resonances,
             classification: classification,
-            confidence: confidence,
+            levelConfidence: levelConfidence,
             complete: complete,
             partialReason: partialReason
         )

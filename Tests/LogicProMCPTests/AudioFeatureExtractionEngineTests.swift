@@ -123,7 +123,7 @@ struct AudioFeatureExtractionEngineTests {
     @Test func silenceIsCompleteButLowConfidence() {
         let r = analyze([[Double](repeating: 0, count: Self.frames1s)])
         #expect(r.complete)
-        #expect(r.confidence < 0.6)
+        #expect(r.levelConfidence < 0.6)
         guard case .noSafeRecommendation = recommendEQ(r) else {
             Issue.record("silence must yield no_safe_recommendation")
             return
@@ -267,7 +267,7 @@ struct AudioFeatureExtractionEngineTests {
         let outcome = recommendEQ(
             SpectralAnalysisResult(
                 analysisRef: "a", bands: [], resonances: [SpectralResonance(hz: 800, gainDb: 4, q: 3)],
-                classification: .vocal, confidence: 0.9, complete: true, partialReason: nil
+                classification: .vocal, levelConfidence: 0.9, complete: true, partialReason: nil
             )
         )
         guard case .recommendation(let bands) = outcome else {
@@ -577,7 +577,7 @@ struct AudioFeatureExtractionEngineTests {
             analysisRef: "rt-1",
             bands: [SpectralBand(centerHz: 1_000, energyDb: -3)],
             resonances: [SpectralResonance(hz: 5_120, gainDb: 9, q: 12, resolutionLimited: true)],
-            classification: .drums, confidence: 0.7, complete: true, partialReason: nil,
+            classification: .drums, levelConfidence: 0.7, complete: true, partialReason: nil,
             artifactFingerprint: "fp", sampleRate: 48_000, channelCount: 2, durationSeconds: 1.0,
             windowsAnalyzed: 42, channelMode: .stereoEnergyAverage,
             spectralCentroidHz: 1_234.5, frequencyPeaks: [AudioAnalyzer.FrequencyPeak(frequencyHz: 5_120, magnitude: 0.5)]

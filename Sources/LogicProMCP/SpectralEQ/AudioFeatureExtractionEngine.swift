@@ -134,7 +134,7 @@ enum AudioFeatureExtractionEngine {
                 bands: [],
                 resonances: [],
                 classification: .unknown,
-                confidence: 0,
+                levelConfidence: 0,
                 complete: false,
                 partialReason: reason,
                 artifactFingerprint: artifactFingerprint,
@@ -249,7 +249,7 @@ enum AudioFeatureExtractionEngine {
         for i in 0..<bandPower.count where !bandPower[i].isFinite {
             return SpectralAnalysisResult(
                 analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
-                confidence: 0, complete: false, partialReason: "non_finite_input",
+                levelConfidence: 0, complete: false, partialReason: "non_finite_input",
                 artifactFingerprint: artifactFingerprint, sampleRate: sampleRate,
                 channelCount: channelCount, durationSeconds: durationSeconds, windowsAnalyzed: 0,
                 channelMode: mode, spectralCentroidHz: nil, frequencyPeaks: []
@@ -268,14 +268,14 @@ enum AudioFeatureExtractionEngine {
         let resonances = detectResonances(
             centers: grid.centers, db: bandsDb, measurable: measurable, config: config, grid: grid)
         let (centroid, peaks) = centroidAndPeaks(centers: grid.centers, db: bandsDb, power: bandPower, config: config)
-        let (classification, confidence) = classify(centers: grid.centers, power: bandPower, centroid: centroid, config: config)
+        let (classification, levelConfidence) = classify(centers: grid.centers, power: bandPower, centroid: centroid, config: config)
 
         return SpectralAnalysisResult(
             analysisRef: analysisRef,
             bands: bands,
             resonances: resonances,
             classification: classification,
-            confidence: confidence,
+            levelConfidence: levelConfidence,
             complete: true,
             partialReason: nil,
             artifactFingerprint: artifactFingerprint,
@@ -327,7 +327,7 @@ enum AudioFeatureExtractionEngine {
         if let maxBytes = policy.maximumInputFileSizeBytes, maxBytes > 0, Int64(fdInfo.st_size) > maxBytes {
             return SpectralAnalysisResult(
                 analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
-                confidence: 0, complete: false, partialReason: "input_too_large",
+                levelConfidence: 0, complete: false, partialReason: "input_too_large",
                 artifactFingerprint: artifactFingerprint, sampleRate: 0, channelCount: 0,
                 durationSeconds: 0, windowsAnalyzed: 0, channelMode: .mono,
                 spectralCentroidHz: nil, frequencyPeaks: []
@@ -433,7 +433,7 @@ enum AudioFeatureExtractionEngine {
             let dur = sampleRate > 0 ? Double(max(frames, 0)) / sampleRate : 0
             return SpectralAnalysisResult(
                 analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
-                confidence: 0, complete: false, partialReason: reason,
+                levelConfidence: 0, complete: false, partialReason: reason,
                 artifactFingerprint: artifactFingerprint, sampleRate: sampleRate,
                 channelCount: channelCount, durationSeconds: dur, windowsAnalyzed: 0,
                 channelMode: mode, spectralCentroidHz: nil, frequencyPeaks: []
@@ -860,8 +860,8 @@ enum AudioFeatureExtractionEngine {
         return sum
     }
 
-    /// Coarse, advisory classification + confidence (out-of-scope for this rollout beyond coarse). A
-    /// near-silent signal is `unknown` with ~0 confidence, which the recommendation layer
+    /// Coarse, advisory classification plus a LEVEL figure (out-of-scope for this rollout beyond
+    /// coarse). A near-silent signal is `unknown` with ~0 level, which the recommendation layer
     /// fails closed on. Confidence is capped below 1 — the classifier is coarse and must
     /// not over-claim certainty.
     private static func classify(
@@ -873,7 +873,7 @@ enum AudioFeatureExtractionEngine {
         let total = power.reduce(0, +)
         guard total > 0, let centroid else { return (.unknown, 0) }
         let overallDb = 10.0 * log10(total)
-        // Level gate: below ~-60 dBFS overall → 0 confidence (silence); ~-20 dBFS → 1.
+        // Level gate: below ~-60 dBFS overall → 0 (silence); ~-20 dBFS → 1.
         let level = min(max((overallDb + 60.0) / 40.0, 0.0), 1.0)
         guard level > 0 else { return (.unknown, 0) }
 
@@ -891,9 +891,11 @@ enum AudioFeatureExtractionEngine {
         } else {
             classification = .fullMix
         }
-        // Cap confidence: coarse heuristic, never claim full certainty.
-        let confidence = min(0.9, level)
-        return (classification, confidence)
+        // Capped at 0.9. The cap is the only part of this number that was ever about the
+        // classifier — a reminder never to claim full certainty — and capping a LOUDNESS figure
+        // does not make it one. The name says what it is now; the cap is kept so the published
+        // range does not change.
+        return (classification, min(0.9, level))
     }
 
 }

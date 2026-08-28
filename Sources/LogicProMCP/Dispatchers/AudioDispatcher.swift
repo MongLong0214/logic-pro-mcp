@@ -12,7 +12,7 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_audio",
-        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_confidence?: number }. The spectral commands require LOGIC_MCP_ADR012_SPECTRAL_EQ=1. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
+        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }. The spectral commands require LOGIC_MCP_ADR012_SPECTRAL_EQ=1. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
         commandDescription: "Audio command to execute"
     )
 
@@ -87,20 +87,20 @@ struct AudioDispatcher: OperationTraceDispatching {
         case .refusal(let result):
             return result
         case .input(let input):
-            let minimumConfidence: Double
-            if params["minimum_confidence"] == nil {
-                minimumConfidence = 0.6
-            } else if let value = doubleParamOrNil(params, "minimum_confidence") {
-                minimumConfidence = value
+            let minimumLevel: Double
+            if params["minimum_level"] == nil {
+                minimumLevel = 0.6
+            } else if let value = doubleParamOrNil(params, "minimum_level") {
+                minimumLevel = value
             } else {
                 return toolInvalidParamsResult(
-                    "recommend_eq 'minimum_confidence' must be a finite number",
+                    "recommend_eq 'minimum_level' must be a finite number",
                     extras: ["operation": "audio.recommend_eq", "write_attempted": false]
                 )
             }
             do {
                 let analysis = try analyzeSpectrum(path: input.path, command: command)
-                switch recommendEQ(analysis, minimumConfidence: minimumConfidence) {
+                switch recommendEQ(analysis, minimumLevel: minimumLevel) {
                 case .recommendation(let bands):
                     return toolTextResult(encodeJSON(EQRecommendationResponse(bands: bands)))
                 case .noSafeRecommendation(let reason):

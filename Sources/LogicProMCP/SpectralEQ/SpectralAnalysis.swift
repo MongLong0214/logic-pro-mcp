@@ -109,14 +109,25 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
     let spectralCentroidHz: Double?
     let frequencyPeaks: [AudioAnalyzer.FrequencyPeak]
     let classification: SourceClassification
-    let confidence: Double
+    /// How loud the material is, normalised — NOT how sure the classifier is.
+    ///
+    /// Measured 2026-08-28: it comes out of `classify` as `min(0.9, (overallDb + 60) / 40)`, a
+    /// level gate and nothing else, so every signal above about -20 dBFS scores exactly 0.9
+    /// whatever it is. Five of six test signals did, including a pure 1 kHz sine the classifier
+    /// called `vocal`. Named `confidence` it is a claim about the classification that the number
+    /// cannot support; named this, it is a true statement and the gate it drives — do not
+    /// recommend EQ for near-silence — is a reasonable one.
+    ///
+    /// There is no classification-certainty figure on this type. That is the honest state: adding
+    /// one would mean inventing a metric, and the classifier itself is documented as coarse.
+    let levelConfidence: Double
 
     init(
         analysisRef: String,
         bands: [SpectralBand],
         resonances: [SpectralResonance],
         classification: SourceClassification,
-        confidence: Double,
+        levelConfidence: Double,
         complete: Bool,
         partialReason: String?,
         artifactFingerprint: String = "",
@@ -140,19 +151,31 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
         self.spectralCentroidHz = spectralCentroidHz
         self.frequencyPeaks = frequencyPeaks
         self.classification = classification
-        self.confidence = confidence.isFinite ? min(max(confidence, 0), 1) : 0
+        self.levelConfidence = levelConfidence.isFinite ? min(max(levelConfidence, 0), 1) : 0
         self.complete = complete
         self.partialReason = complete ? nil : partialReason
     }
 
+    /// Accepts the legacy `confidence` key as well as `levelConfidence`.
+    ///
+    /// The field was renamed because the number is a loudness gate and the old name claimed it was
+    /// a statement about the classification. Encoding writes the new name only; decoding takes
+    /// either, because analyses stored by a build running with the flag on carry the old one and a
+    /// rename is not a reason to stop being able to read them.
+    private enum LegacyKeys: String, CodingKey { case confidence }
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        let level = try values.decodeIfPresent(Double.self, forKey: .levelConfidence)
+            ?? legacy.decodeIfPresent(Double.self, forKey: .confidence)
+            ?? 0
         self.init(
             analysisRef: try values.decode(String.self, forKey: .analysisRef),
             bands: try values.decode([SpectralBand].self, forKey: .bands),
             resonances: try values.decode([SpectralResonance].self, forKey: .resonances),
             classification: try values.decode(SourceClassification.self, forKey: .classification),
-            confidence: try values.decode(Double.self, forKey: .confidence),
+            levelConfidence: level,
             complete: try values.decode(Bool.self, forKey: .complete),
             partialReason: try values.decodeIfPresent(String.self, forKey: .partialReason),
             // New rollout-1 fields decode leniently so legacy skeleton fixtures still round-trip;
