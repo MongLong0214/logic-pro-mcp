@@ -68,6 +68,17 @@ enum AudioFeatureExtractionEngine {
         /// Bin frequency → band index. Sub-`fMin` energy (incl. DC) clamps into band 0 and
         /// super-`fMax` energy (incl. a Nyquist tone) clamps into the top band, so no energy
         /// is silently dropped.
+        /// The band this frequency belongs to. Total: everything below the first edge lands in band
+        /// 0 and everything above the last lands in the top band.
+        ///
+        /// That makes the edge bands ACCUMULATORS — band 0's energy is the sum of all sub-18.9 Hz
+        /// content, DC included, and not the 20 Hz band's. Dropping the out-of-range content was
+        /// tried and reverted: `dcOnlyMapsToLowestBandOnly` and `nyquistToneIsNotOneSidedDoubled`
+        /// pin calibration properties that need those bins accounted somewhere, and changing where
+        /// the energy goes to fix how a band is REPORTED is a wider change than the defect.
+        ///
+        /// The reporting is fixed instead — see `measurableBands`, which no longer exempts the edge
+        /// bands, so band 0 is marked as not a reading of its own range.
         func bandIndex(forFrequency f: Double) -> Int {
             if f < edges[0] { return 0 }
             if f >= edges[edges.count - 1] { return centers.count - 1 }
@@ -199,11 +210,10 @@ enum AudioFeatureExtractionEngine {
     /// is not a runtime count: the splice is deterministic, so the answer follows from the grid and
     /// the sample rate alone.
     ///
-    /// Bands 0 and n-1 are always measurable and it is not because their edges enclose a bin.
-    /// `bandIndex(forFrequency:)` sends everything below the first edge to band 0 and everything
-    /// above the last to band n-1, so both receive energy from OUTSIDE their nominal range. That is
-    /// a separate defect — band 0's `energyDb` is the sum of all sub-18.9 Hz content, not the 20 Hz
-    /// band's — and this function does not paper over it by calling those bands unmeasured.
+    /// The edge bands are no ordinary exception any more. They used to absorb everything outside the
+    /// grid — band 0 the whole sub-18.9 Hz region, the top band everything above the last edge — so
+    /// they always received energy and this function had to call them measurable whatever their own
+    /// range contained. They no longer do, so they are subject to the same test as every other band.
     static func measurableBands(grid: BandGrid, sampleRate: Double, config: Config = .default) -> [Bool] {
         let n = grid.centers.count
         guard n > 0, sampleRate > 0 else { return [] }
@@ -211,14 +221,6 @@ enum AudioFeatureExtractionEngine {
             let window = grid.edges[i] < config.crossoverHz ? config.windowLarge : config.windowSmall
             let df = sampleRate / Double(window)
             guard df > 0 else { return false }
-            let nyquist = df * Double(window / 2)
-            // Band 0 collects every bin below `edges[1]`, DC included, so it always receives.
-            if i == 0 { return true }
-            // The top band collects everything at or above its lower edge — which is nothing at all
-            // when Nyquist is below that edge. Marking it measurable unconditionally was this
-            // function's first draft, and the test that counts unmeasurable bands above Nyquist
-            // caught it: at 11.025 kHz the top band receives no bin and still claimed to.
-            if i == n - 1 { return nyquist >= grid.edges[i] }
             // The lowest bin index at or above the band's lower edge, and whether it is still below
             // the upper edge — i.e. does any k * df land inside [lo, hi).
             let firstBin = (grid.edges[i] / df).rounded(.up)
@@ -755,6 +757,11 @@ enum AudioFeatureExtractionEngine {
 
         for i in 0..<centers.count {
             guard db[i] > floorGate else { continue }
+            // An unmeasurable band is not a candidate. Band 0 is above the floor because it
+            // ACCUMULATES everything below the grid, so the floor gate does not exclude it, and on
+            // material with real sub-20 Hz content that sum makes it look like a resonance —
+            // measured: pink noise drew a -9.4 dB cut at 20 Hz with nothing wrong at 20 Hz.
+            guard measurable.isEmpty || (i < measurable.count && measurable[i]) else { continue }
             let lo = max(0, i - half)
             let hi = min(centers.count - 1, i + half)
             // Unmeasurable bands sit at the floor for every signal, so leaving them in the window

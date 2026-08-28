@@ -187,18 +187,54 @@ def flags_what_it_could_not_measure(body):
     bands = (body or {}).get("bands") or []
     if not bands:
         return False
-    unmeasured = [b for b in bands if b.get("measured") is False]
-    # Some band must be flagged, AND every flagged one must be sitting at the floor — a band that
-    # claims it measured nothing while reporting real energy is the opposite error.
-    return bool(unmeasured) and all(b.get("energyDb", 0) <= -79.9 for b in unmeasured)
+    unmeasured = [i for i, b in enumerate(bands) if b.get("measured") is False]
+    if not unmeasured:
+        return False
+    # Every flagged INTERIOR band must be sitting at the floor: an interior band that claims it
+    # measured nothing while reporting real energy is the opposite error.
+    #
+    # The edge bands are excluded from that clause and it is not a loophole. They accumulate
+    # everything outside the grid, so band 0 carries the sub-18.9 Hz sum and reads well above the
+    # floor — measured at -76.6 dB here — while still not being a reading of the 20 Hz band. The
+    # first version of this predicate asserted the floor for all of them and went red on exactly
+    # that band, which is the property it was written to protect.
+    last = len(bands) - 1
+    interior = [i for i in unmeasured if i not in (0, last)]
+    return all(bands[i].get("energyDb", 0) <= -79.9 for i in interior)
 
+
+# #300: and nothing the analyser could not measure may reach a recommendation. Band 0 accumulates
+# everything below the grid, so it sits above the floor and used to be picked as a resonance —
+# measured: pink noise drew a -9.4 dB cut at 20 Hz with nothing wrong at 20 Hz, and the injected
+# 250 Hz resonance was reported beside it.
+recommendation = d.tool("logic_audio", "recommend_eq", {"path": _SOUND}) if os.path.exists(_SOUND) else {}
+_advice = {
+    "unmeasured": sorted({round(b["centerHz"], 3)
+                          for b in ((spectrum or {}).get("bands") or [])
+                          if b.get("measured") is False}),
+    "recommended": sorted({round(b["centerHz"], 3)
+                           for b in ((recommendation or {}).get("bands") or [])}),
+}
+ev.note("300/recommend-eq", _advice)
+
+ev.falsifiable(
+    "300/no-recommendation-names-a-band-the-analyser-could-not-measure",
+    lambda a: (isinstance(a, dict) and bool(a.get("unmeasured"))
+               and not (set(a.get("recommended") or []) & set(a.get("unmeasured") or []))),
+    _advice,
+    # The pre-change output on pink noise: 20 Hz flagged unmeasurable and recommended anyway.
+    {"unmeasured": [20.0, 25.198, 40.0], "recommended": [20.0, 254.0]},
+    "no recommended band is one the analyser flagged as unmeasurable",
+    mutation="drop the measurable guard from the resonance candidate loop: the 20 Hz accumulator "
+             "is picked again and appears in the recommendation")
 
 ev.falsifiable(
     "300/a-band-that-measured-nothing-says-so",
     flags_what_it_could_not_measure,
     spectrum,
     # The pre-change output: the same sixty bands, every one claiming to be a reading.
-    {"bands": [{"centerHz": 25.198, "energyDb": -80, "measured": True},
+    {"bands": [{"centerHz": 20.0, "energyDb": -76.6, "measured": True},
+               {"centerHz": 25.198, "energyDb": -80, "measured": True},
                {"centerHz": 1000.0, "energyDb": -30, "measured": True}]},
     "the analyser flags the bands its grid cannot resolve, and every flagged band is at the floor",
     mutation="return `true` from measurableBands: nothing is flagged and a floor reading is "

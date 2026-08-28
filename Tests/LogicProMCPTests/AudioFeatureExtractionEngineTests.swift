@@ -650,22 +650,25 @@ struct Issue300UnmeasurableBandsTests {
         let unmeasurable = zip(grid.centers, mask).filter { !$0.1 }.map { ($0.0 * 1000).rounded() / 1000 }
         // Derived from the code and confirmed against the live analyser's output, not asserted from
         // one side only: `analyze_spectrum` reports `measured: false` for these two and no others.
-        #expect(unmeasurable == [25.198, 40.0], "got \(unmeasurable)")
+        #expect(unmeasurable == [20.0, 25.198, 40.0], "got \(unmeasurable)")
     }
 
-    @Test("bands 0 and n-1 are not called unmeasured, because they do receive energy")
-    func edgeBandsAreNotFlagged() throws {
+    @Test("an edge band that accumulates out-of-range content is not reported as a reading")
+    func accumulatorBandsAreNotReadings() throws {
         let grid = AudioFeatureExtractionEngine.makeGrid()
+        // The mapping is TOTAL and stays that way: everything below the first edge lands in band 0.
+        // Dropping that content was tried and reverted — `dcOnlyMapsToLowestBandOnly` and
+        // `nyquistToneIsNotOneSidedDoubled` pin calibration properties that need those bins
+        // accounted somewhere, and moving where energy goes to fix how a band is REPORTED is a
+        // wider change than the defect.
+        #expect(grid.bandIndex(forFrequency: 5) == 0)
+        #expect(grid.bandIndex(forFrequency: 25_000) == grid.centers.count - 1)
+
+        // What changes is the reporting. Band 0's own edges enclose no bin at 44.1 kHz, so its
+        // energy is the sub-18.9 Hz sum and not a reading of the 20 Hz band — and it says so.
         let mask = AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: 44_100)
-        // `bandIndex(forFrequency:)` sends everything below the first edge into band 0 and
-        // everything above the last into band n-1. They are measured — of the wrong range. Calling
-        // them unmeasured would paper over that separate defect with this one's vocabulary.
-        // Bound with `try #require`: these are `Bool?`, and comparing an optional against a boolean
-        // literal is always-pass on this toolchain — the dead-assertion shape the guard rejects.
         let firstBand = try #require(mask.first)
-        let lastBand = try #require(mask.last)
-        #expect(firstBand, "band 0 was called unmeasured, but it receives every bin below edges[1]")
-        #expect(lastBand, "the top band was called unmeasured at a rate where it does receive bins")
+        #expect(!firstBand, "band 0 still claims a reading its own range cannot support")
     }
 
     @Test("a finer window measures bands the default one cannot")
@@ -683,7 +686,7 @@ struct Issue300UnmeasurableBandsTests {
             zip(grid.centers, AudioFeatureExtractionEngine.measurableBands(grid: grid, sampleRate: rate))
                 .filter { $0.0 < 100 && !$0.1 }.count
         }
-        #expect(unmeasurableBelow100Hz(44_100) == 2)
+        #expect(unmeasurableBelow100Hz(44_100) == 3)
         #expect(unmeasurableBelow100Hz(11_025) < unmeasurableBelow100Hz(44_100),
                 "four times the low-frequency resolution measured no more bands")
 
