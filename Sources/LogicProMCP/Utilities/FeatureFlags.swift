@@ -6,7 +6,6 @@ enum FeatureFlags: Sendable {
     @TaskLocal static var adr003StrictParamsOverride: Bool?
     @TaskLocal static var adr004MutationSagaOverride: Bool?
     @TaskLocal static var adr005OperationTraceOverride: Bool?
-    @TaskLocal static var adr012SpectralEQOverride: Bool?
     #endif
 
     /// PRD-007 Part 2 (ADR-002 #285): promoted from opt-in to DEFAULT ON, so the
@@ -108,21 +107,10 @@ enum FeatureFlags: Sendable {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR011_COMPRESSOR_CONTROL"] == "1"
     }
 
-    static var adr012SpectralEQ: Bool {
-        #if DEBUG
-        if let adr012SpectralEQOverride { return adr012SpectralEQOverride }
-        #endif
-        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR012_SPECTRAL_EQ"] == "1"
-    }
-
-    #if DEBUG
-    static func withAdr012SpectralEQForTests<Result>(
-        _ value: Bool,
-        operation: () async throws -> Result
-    ) async rethrows -> Result {
-        try await $adr012SpectralEQOverride.withValue(value, operation: operation)
-    }
-    #endif
+    // `adr012SpectralEQ` was here until 2026-08-28. The spectral commands are promoted, and the
+    // flag is REMOVED rather than defaulted on: one nothing reads still looks like a control, and
+    // the next person to set `LOGIC_MCP_ADR012_SPECTRAL_EQ=0` would have every reason to expect it
+    // to do something.
 
     static var adr013ChannelEQ: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR013_CHANNEL_EQ"] == "1"

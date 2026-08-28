@@ -626,7 +626,7 @@ enum OperationRegistry {
             ]
         ),
         (.audioAnalyzeSpectrum, "analyze_spectrum", Mutability.readOnly, ["path"]),
-        (.audioRecommendEQ, "recommend_eq", Mutability.readOnly, ["path", "minimum_confidence"]),
+        (.audioRecommendEQ, "recommend_eq", Mutability.readOnly, ["path", "minimum_level"]),
     ] as [(OperationID, String, Mutability, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

@@ -162,10 +162,11 @@ ev.falsifiable(
     mutation="return survivors.first from transportContainerFinalists: five survive, nothing "
              "narrows them, and the site is back to choosing by tree order")
 
-# #300: the spectral surface is flag-gated, and `E.Driver` inherits this process's environment, so
-# setting it here reaches the server it spawns. The flag gates only the spectral commands, so the
-# rest of this run is unaffected.
-os.environ["LOGIC_MCP_ADR012_SPECTRAL_EQ"] = "1"
+# #300: the spectral surface was flag-gated and this used to set the flag before building the
+# driver. It is promoted now, and the flag is REMOVED rather than defaulted on — so the variable is
+# set to "0" here instead. A run that still answered `command_not_exposed` under it would mean the
+# guard survived with a flipped default, which is a different thing from being gone.
+os.environ["LOGIC_MCP_ADR012_SPECTRAL_EQ"] = "0"
 
 d = E.Driver()
 time.sleep(3)

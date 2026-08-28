@@ -134,7 +134,7 @@ struct OperationCatalogTests {
             "path",
         ],
         .audioAnalyzeSpectrum: ["path"],
-        .audioRecommendEQ: ["minimum_confidence", "path"],
+        .audioRecommendEQ: ["minimum_level", "path"],
         .systemListRecentTraces: ["limit"],
         .systemGetTrace: ["trace_id"],
         .systemClearTraces: ["confirmed"],

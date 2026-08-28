@@ -20,13 +20,15 @@ enum EQRecommendationOutcome: Equatable, Sendable {
 
 func recommendEQ(
     _ analysis: SpectralAnalysisResult,
-    minimumConfidence: Double = 0.6
+    minimumLevel: Double = 0.6
 ) -> EQRecommendationOutcome {
     guard analysis.complete else {
         return .noSafeRecommendation(reason: "analysis_incomplete")
     }
-    guard analysis.confidence >= minimumConfidence else {
-        return .noSafeRecommendation(reason: "confidence_below_minimum")
+    // A LOUDNESS gate, named as one. It refuses to recommend EQ for near-silence, which is
+    // sensible; what it never was is a measure of how sure the classifier is.
+    guard analysis.levelConfidence >= minimumLevel else {
+        return .noSafeRecommendation(reason: "level_below_minimum")
     }
     guard analysis.classification != .unknown else {
         return .noSafeRecommendation(reason: "source_classification_unknown")

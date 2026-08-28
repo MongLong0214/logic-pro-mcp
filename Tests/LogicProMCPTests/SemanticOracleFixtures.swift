@@ -391,7 +391,7 @@ enum SemanticOracleFixtures {
                 .init(
                     .wellFormedButWrong,
                     "{\"bands\":[{\"centerHz\":5000,\"gainDb\":-36.0,\"q\":8.6,"
-                        + "\"reason\":\"resonance_cut\"}],\"reason\":\"confidence_below_minimum\"}"
+                        + "\"reason\":\"resonance_cut\"}],\"reason\":\"level_below_minimum\"}"
                 ),
                 // A cut outside the audible range the old constraint pinned.
                 .init(
