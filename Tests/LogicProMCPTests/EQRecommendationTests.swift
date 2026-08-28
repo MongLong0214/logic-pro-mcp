@@ -124,20 +124,6 @@ struct EQRecommendationTests {
         #expect(analysis(levelConfidence: 1.1).levelConfidence == 1)
     }
 
-    @Test func adr012FeatureFlagDefaultsToFalse() {
-        let key = "LOGIC_MCP_ADR012_SPECTRAL_EQ"
-        let previous = ProcessInfo.processInfo.environment[key]
-        unsetenv(key)
-        defer {
-            if let previous {
-                setenv(key, previous, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-
-        #expect(!FeatureFlags.adr012SpectralEQ)
-    }
 
     private func analysis(
         bands: [SpectralBand] = [],

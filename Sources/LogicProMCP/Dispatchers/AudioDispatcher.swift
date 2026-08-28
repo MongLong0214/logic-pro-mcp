@@ -12,7 +12,7 @@ struct AudioDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_audio",
-        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }. The spectral commands require LOGIC_MCP_ADR012_SPECTRAL_EQ=1. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
+        description: "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file, analyze_spectrum, recommend_eq. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }; analyze_spectrum -> { path: absolute audio file path }; recommend_eq -> { path: absolute audio file path, minimum_level?: number }. analyze_spectrum returns per-band energy; a band whose edges enclose no FFT bin at the file's sample rate is marked measured:false and its energyDb is the floor sentinel, not a reading. `classification` is a coarse advisory heuristic — it reads white noise as drums and a pure tone as vocal — and `levelConfidence` is a loudness figure, not a measure of how sure that classification is. Returns analysis/recommendation JSON and never mutates files or Logic Pro.",
         commandDescription: "Audio command to execute"
     )
 
@@ -36,22 +36,20 @@ struct AudioDispatcher: OperationTraceDispatching {
                 isError: result.verification.status == .fail
             )
 
+        // Promoted 2026-08-28. What the flag was holding back was measured and fixed first: bands
+        // whose edges enclose no FFT bin no longer report the floor as a reading, the edge
+        // accumulators are no longer picked as resonances — which is what produced a recommended
+        // cut at 20 Hz on material with nothing wrong at 20 Hz — and the number called `confidence`
+        // is named `levelConfidence`, because it is a loudness gate and never said anything about
+        // the classification.
+        //
+        // What is NOT fixed and is stated in the description instead: the classifier is coarse. It
+        // reads white noise as `drums` and a pure sine as `vocal`. Advisory is what it is, so
+        // advisory is what it says.
         case "analyze_spectrum":
-            guard FeatureFlags.adr012SpectralEQ else {
-                return notExposedCommandResult(
-                    operation: "audio.analyze_spectrum",
-                    reason: "requires LOGIC_MCP_ADR012_SPECTRAL_EQ=1"
-                )
-            }
             return spectralAnalysisResult(command: command, params: params)
 
         case "recommend_eq":
-            guard FeatureFlags.adr012SpectralEQ else {
-                return notExposedCommandResult(
-                    operation: "audio.recommend_eq",
-                    reason: "requires LOGIC_MCP_ADR012_SPECTRAL_EQ=1"
-                )
-            }
             return eqRecommendationResult(command: command, params: params)
 
         default:
