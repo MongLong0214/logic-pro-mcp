@@ -152,3 +152,71 @@ struct EQRecommendationTests {
         #expect(!reason.isEmpty)
     }
 }
+
+/// #300 AC — "recommendations include confidence and reason codes".
+///
+/// They carried a reason and nothing else. The analysis-level number called `confidence` turned out
+/// to be a loudness gate (#695), so satisfying this by publishing that would have been the same
+/// false claim one level down.
+///
+/// What decides a recommendation is the peak's prominence over its local baseline against
+/// `prominenceMinDb`, plus whether Q could be resolved. Both were computed and discarded. They are
+/// published now, with a confidence derived from them — and the derivation is checkable because its
+/// inputs ship beside it.
+@Suite("Issue300RecommendationConfidence")
+struct Issue300RecommendationConfidenceTests {
+
+    private func recommendation(prominenceDb: Double, resolutionLimited: Bool = false)
+        -> EQBandRecommendation? {
+        let analysis = SpectralAnalysisResult(
+            analysisRef: "conf-1",
+            bands: [SpectralBand(centerHz: 250, energyDb: -10)],
+            resonances: [SpectralResonance(hz: 250, gainDb: prominenceDb, q: 4,
+                                           resolutionLimited: resolutionLimited)],
+            classification: .vocal,
+            levelConfidence: 0.9,
+            complete: true,
+            partialReason: nil
+        )
+        guard case .recommendation(let bands) = recommendEQ(analysis) else { return nil }
+        return bands.first
+    }
+
+    @Test("confidence scales with how far the peak cleared the detection threshold")
+    func confidenceTracksProminence() throws {
+        // 6 dB is `prominenceMinDb`: a peak that only just qualified scores 0, and one that cleared
+        // the bar by as much again scores 1. A number that did not move across this range would be
+        // the loudness gate's mistake repeated.
+        let barely = try #require(recommendation(prominenceDb: 6))
+        let clear = try #require(recommendation(prominenceDb: 9))
+        let strong = try #require(recommendation(prominenceDb: 12))
+        let huge = try #require(recommendation(prominenceDb: 40))
+
+        #expect(barely.confidence == 0)
+        #expect(clear.confidence > barely.confidence)
+        #expect(strong.confidence > clear.confidence)
+        #expect(strong.confidence == 1)
+        #expect(huge.confidence == 1, "confidence is not bounded above")
+    }
+
+    @Test("a resolution-limited Q caps confidence however tall the peak is")
+    func resolutionLimitedCaps() throws {
+        // Q is a lower bound there, so the band's shape is under-determined and a tall peak does not
+        // make it well-characterised. Measured live: a pure tone reports resolutionLimited and is
+        // capped, while a band-limited hump of the same depth is not.
+        let tall = try #require(recommendation(prominenceDb: 40, resolutionLimited: true))
+        #expect(tall.confidence == 0.5)
+        let uncapped = try #require(recommendation(prominenceDb: 40, resolutionLimited: false))
+        #expect(uncapped.confidence == 1)
+    }
+
+    @Test("the inputs the confidence is derived from are published with it")
+    func derivationIsCheckable() throws {
+        let band = try #require(recommendation(prominenceDb: 9, resolutionLimited: true))
+        #expect(band.prominenceDb == 9)
+        #expect(band.resolutionLimited)
+        #expect(band.reason == "resonance_cut")
+        // Without these a consumer has to take the compressed number on trust, which is the
+        // position `confidence` put everyone in before it was renamed.
+    }
+}
