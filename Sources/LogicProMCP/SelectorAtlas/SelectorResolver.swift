@@ -72,6 +72,10 @@ private func supportsSchema(
             !value.isEmpty
         case let .attribute(name, equals: value), let .attributeContains(name, value):
             !name.isEmpty && !value.isEmpty
+        case let .attributeContainsAny(name, values):
+            // An empty alternative list can never match, and an empty needle matches everything —
+            // both are a selector that cannot mean what it says.
+            !name.isEmpty && !values.isEmpty && values.allSatisfy { !$0.isEmpty }
         }
     }
 }

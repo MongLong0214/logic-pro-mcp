@@ -27,6 +27,15 @@ enum AttributePredicate: Equatable, Sendable {
     /// any wording change and cannot be written for a locale nobody has measured.
     case attributeContains(String, String)
 
+    /// Substring match against ANY of several alternatives, case-insensitively.
+    ///
+    /// Multiple `attributeContains` predicates are ANDed, which cannot express what a locale set
+    /// is: the header pan slider is identified by `AXHelp` containing any one of
+    /// `pan` / `panning` / `패닝` / `밸런스`, and requiring all four matches nothing in any locale.
+    /// This is the atlas gaining the primitive the product already uses everywhere else —
+    /// `AXLocalePolicy.LabelSet.containsAny`.
+    case attributeContainsAny(String, [String])
+
     case valueSignature(String)
 }
 
@@ -104,11 +113,23 @@ func confidence(of candidate: ResolvableCandidate, against selector: SemanticSel
         guard case let .attributeContains(name, expected) = predicate else { return nil }
         return (name, expected)
     }
-    evidence.append((0.20, !equals.isEmpty || !contains.isEmpty,
+    let containsAny = selector.attributePredicates.compactMap { predicate -> (String, [String])? in
+        guard case let .attributeContainsAny(name, needles) = predicate else { return nil }
+        return (name, needles)
+    }
+    evidence.append((0.20, !equals.isEmpty || !contains.isEmpty || !containsAny.isEmpty,
                      equals.allSatisfy { candidate.attributes[$0.0] == $0.1 }
                          && contains.allSatisfy { name, needle in
                              candidate.attributes[name].map {
                                  $0.range(of: needle, options: [.caseInsensitive]) != nil
+                             } ?? false
+                         }
+                         && containsAny.allSatisfy { name, needles in
+                             candidate.attributes[name].map { value in
+                                 needles.contains {
+                                     !$0.isEmpty
+                                         && value.range(of: $0, options: [.caseInsensitive]) != nil
+                                 }
                              } ?? false
                          }, false))
 
