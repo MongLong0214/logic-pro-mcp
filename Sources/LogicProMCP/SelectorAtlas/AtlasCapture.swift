@@ -28,6 +28,14 @@ enum AtlasCapture {
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
         if AXLocalePolicy.controlBarGroupLabel.matches(scope, mode: .exactStrict) {
+            // NOTE, because the signature would otherwise imply more than happens: `getControlBar`
+            // resolves `mainWindow()` itself and takes its own runtime, so on THIS path the
+            // `window` and `runtime` given here are not used. `pairsForThisRun` passes
+            // `mainWindow()` too, so the two agree by construction there — but a caller handing
+            // `pairs(baselinesIn:window:)` some other window would get the control bar of the main
+            // one, silently. Naming that is cheaper than a signature nobody re-reads; closing it
+            // means teaching `getControlBar` to take a window, which is a change to a resolver
+            // several other call sites depend on. Named by review, 2026-08-29.
             return AXLogicProElements.getControlBar()
         }
         if scope == "window" { return window }
