@@ -805,6 +805,16 @@ package struct QualificationRunner: Sendable {
             binarySHA256: binarySHA256,
             traceID: "atlas-drift-diff"
         ) {
+            // AFTER the external-manifest collision check at the top of this function, so this id
+            // has to be checked here or not at all. An external manifest declaring
+            // `atlas.drift_diff` would otherwise produce two cases with one id, and every consumer
+            // that keys by id — the promotion gate, a waiver, a reader counting a failure — would
+            // see whichever it reached first. Found by review before merge, 2026-08-29.
+            guard !cases.contains(where: { $0.id == atlasCase.id }) else {
+                throw RunnerError.evidenceBindingMismatch(
+                    "case id \(atlasCase.id) is already present; the ADR-007 step cannot add a "
+                        + "second case under the same id")
+            }
             cases.append(atlasCase)
         }
 

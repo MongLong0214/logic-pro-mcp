@@ -111,6 +111,24 @@ struct AtlasQualificationTests {
         #expect(ko.axis != en.axis)
     }
 
+    @Test("the case id is the one the runner refuses to duplicate")
+    func theCaseIdIsStable() throws {
+        // The runner checks external-manifest ids for collisions BEFORE this step appends, so the
+        // guard against a second `atlas.drift_diff` lives at the append site and keys on this exact
+        // string. Pinning it here means renaming the id cannot silently make that guard watch a
+        // name nothing produces. Found by review before merge, 2026-08-29.
+        let armed = AtlasQualification.outcome(armed: true, pairs: try pairs())
+        let emitted = try #require(AtlasQualification.caseFor(
+            armed, axis: axis, binarySHA256: "abc", traceID: "t"))
+        #expect(emitted.id == "atlas.drift_diff")
+        #expect(emitted.operationID == "atlas.drift_diff")
+
+        // And it must not look like the ids the promotion gate matches on. That gate finds a
+        // required operation by `id == "in-process/<operationID>"`, so a case shaped like one would
+        // be read as satisfying an operation this step never drove.
+        #expect(!emitted.id.hasPrefix("in-process/"))
+    }
+
     @Test("read-only reuse is not enough for a run asking about mutations")
     func readOnlyOnlyStillFails() throws {
         // `policy(for:)` grants `.readOnlyOnly` to a minor drift with high confidence. This step is
