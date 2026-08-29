@@ -38,12 +38,26 @@ for label, files, want in [
      [harness("live_b.py", "E.check(tag, True, 'x', 'y')\n")], 0),
     ("a mention in prose is not a call",
      [harness("live_c.py", "# see falsifiable in evidence.py, it is the strong one\n")], 0),
+    # The case the prose one could not see. A regex matched `falsifiable(` wherever it appeared,
+    # so a harness whose only occurrence was a COMMENT held the floor and passed CI — and this
+    # test's first version wrote the word without the parenthesis, which the regex also rejected.
+    # The control agreed with the defect.
+    ("a commented-out call is not a call",
+     [harness("live_h.py", "# E.falsifiable(tag, p, obs, cx, exp)\nE.check(1)\n")], 0),
+    ("the word inside a string is not a call",
+     [harness("live_i.py", "msg = 'use falsifiable(...) instead'\n")], 0),
+    ("a call reached through the module still counts",
+     [harness("live_j.py", "import evidence\nevidence.falsifiable(1)\n")], 1),
+    ("a call nested inside a function body counts",
+     [harness("live_k.py", "def run():\n    if x:\n        E.falsifiable(1)\n")], 1),
+    ("a file that will not parse is not an adopter",
+     [harness("live_l.py", "def (\n E.falsifiable(1)\n")], 0),
     ("whitespace before the paren still counts",
      [harness("live_d.py", "E.falsifiable (tag, p, obs, cx, exp)\n")], 1),
     ("a longer name is not this one",
      [harness("live_e.py", "unfalsifiable(x)\n")], 0),
     ("two adopters count as two",
-     [harness("live_f.py", "falsifiable(\n"), harness("live_g.py", "falsifiable(\n")], 2),
+     [harness("live_f.py", "falsifiable(1)\n"), harness("live_g.py", "E.falsifiable(1)\n")], 2),
     ("an unreadable file is not adopted",
      [os.path.join(tmp, "live_missing.py")], 0),
 ]:

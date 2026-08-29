@@ -166,6 +166,16 @@ with tempfile.TemporaryDirectory() as repo:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} the head ARGUMENT decides, not the worktree's HEAD -> {sorted(at_mid)}")
 
+    # Deletions: excluded for the harness question, INCLUDED for the source one. Applying the
+    # filter to `Sources/` was a way through the whole source-coverage rule — delete a file the
+    # atlas harness claims and the path never reached `required_by_sources`.
+    kept = C.changed_paths(repo, base_sha, tip_sha)
+    with_dels = C.changed_paths(repo, base_sha, tip_sha, exclude_deletions=False)
+    ok = ("Scripts/livekit/live_doomed.py" not in kept
+          and "Scripts/livekit/live_doomed.py" in with_dels)
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a deletion is hidden from one question and visible to the other")
+
     ok = C.changed_paths(repo, "no/such/ref", tip_sha) is None
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} an unreadable base is None, not an empty change set")

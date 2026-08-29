@@ -196,8 +196,8 @@ def _read_json(path):
         return None
 
 
-def changed_paths(worktree, base, head="HEAD"):
-    """Paths the branch changed, excluding deletions.
+def changed_paths(worktree, base, head="HEAD", exclude_deletions=True):
+    """Paths the branch changed; deletions excluded only when the caller asks.
 
     `head` is the commit the caller is asking ABOUT, not the worktree's current one. The first
     version hard-coded `HEAD` and took the head sha only to look up an evidence directory, so a
@@ -206,12 +206,19 @@ def changed_paths(worktree, base, head="HEAD"):
     not, and the failure is a coverage verdict about the wrong commit reported as a verdict about
     this one.
 
-    `--diff-filter=d` drops deletions. A harness that no longer exists cannot be required to have
-    run, and requiring it would make deleting a harness impossible — the branch could never
-    produce the evidence, because there is nothing left to produce it.
+    `--diff-filter=d` drops deletions, and that is right for HARNESSES: one that no longer exists
+    cannot be required to have run, and requiring it would make deleting a harness impossible.
+
+    It is wrong for `Sources/`, and applying it there was a way through the whole source-coverage
+    rule — DELETE a file the atlas harness claims and the path never reached `required_by_sources`,
+    so removing covered product code needed no proof at all. Deleting code is a change to what
+    ships, and the harness that claims that area is exactly what should be run over it. Found by
+    review, 2026-08-29.
     """
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...{head}"],
+    cmd = ["git", "diff", "--name-only"]
+    if exclude_deletions:
+        cmd.append("--diff-filter=d")
+    proc = subprocess.run(cmd + [f"{base}...{head}"],
         cwd=worktree, capture_output=True, text=True)
     if proc.returncode != 0:
         return None
@@ -231,6 +238,12 @@ def main(argv):
         return 2
     required = harness_stems(paths)
 
+    # Deletions INCLUDED for the source question, excluded for the harness one. See `changed_paths`.
+    all_paths = changed_paths(worktree, base, head, exclude_deletions=False)
+    if all_paths is None:
+        print(f"-> COVERAGE FAIL: could not diff {base}...HEAD in {worktree} (with deletions)")
+        return 2
+
     # What the branch's `Sources/` changes oblige, from declarations on the TRUSTED ref.
     declarations = declarations_from_ref(worktree, base)
     if declarations is None:
@@ -238,7 +251,7 @@ def main(argv):
         print("   The declarations are deliberately NOT read from the branch under test, so a")
         print("   missing ref is a refusal, not a fallback. Run: git fetch origin main")
         return 2
-    by_sources, unproven = required_by_sources(paths, declarations)
+    by_sources, unproven = required_by_sources(all_paths, declarations)
     required |= by_sources
 
     if not required:

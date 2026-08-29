@@ -27,9 +27,9 @@ can distinguish the observation from one stated alternative, and no more; whethe
 is the one that matters is the author's claim and a reviewer's job. Said here because a guard named
 "adoption" invites being read as "quality".
 """
+import ast
 import glob
 import os
-import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +37,28 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
 FLOOR = 1
 
-CALL = re.compile(r"\bfalsifiable\s*\(")
+def _calls_falsifiable(text):
+    """Whether the source contains an actual CALL to `falsifiable`, not a mention of the word.
+
+    Parsed, because a regex counts `# falsifiable(` in a comment and a `"falsifiable("` in a
+    string. Found by review, 2026-08-29, reproduced: a harness whose only occurrence was a comment
+    held the floor and passed CI, and the test that was supposed to catch it wrote the word without
+    the parenthesis — so the control could not see the defect it was aimed at.
+
+    A file that will not parse claims nothing. It cannot be run either, so it cannot be an adopter.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        if name == "falsifiable":
+            return True
+    return False
 
 
 def adoption(paths=None):
@@ -53,7 +74,7 @@ def adoption(paths=None):
             # Unreadable is not adopted. Counting it either way would let a permissions accident
             # move the number, and this number is the whole point of the guard.
             continue
-        if CALL.search(text):
+        if _calls_falsifiable(text):
             adopters.append(os.path.basename(path))
     return adopters, len(files)
 
