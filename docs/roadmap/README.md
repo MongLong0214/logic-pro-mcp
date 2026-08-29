@@ -36,7 +36,7 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-08-29 at `8959bee7`
+## State — measured 2026-08-29 at `4ef4d3cf`
 
 ```
 open PRs 0 · v3.14.0 published · 17 open issues
@@ -53,11 +53,11 @@ open PRs 0 · v3.14.0 published · 17 open issues
 | ADR-007 | #290 | OPEN | scoring fixed and six selectors adopted; the diff, four baselines and cross-locale coverage shipped in #707/#708. Waiting on a **decision**, not work: wiring the diff into `--qualify` changes the attestation schema or the release gate's behaviour, and the three options are written up on the issue |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
-| ADR-010 | #293 | OPEN | provider exists (10 modules); its collector was written against a fixture shape Logic does not produce |
+| ADR-010 | #293 | OPEN | the collector's shape was already right; measured 2026-08-29 it reads a real note table and returns both notes. It could not START in any language but English — the Event tab was matched against the literal `"Event"` — fixed in #712. What stays closed is ADR-010's body: `assessReadback` and the public provider |
 | ADR-011 | #299 | OPEN | behind #292 |
 | ADR-012 | #300 | closed | promoted and closed 2026-08-28; all seven acceptance criteria measured, four artifacts found and fixed on the way (#693-#697) |
 | ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
-| ADR-014 | #302 | OPEN | R1 shipped; R2 blocked on `columnResolveFailed` — `kAXColumns` absent on the live Event List |
+| ADR-014 | #302 | OPEN | R1 shipped. R2 is NOT STARTED rather than blocked: measured 2026-08-29, `kAXColumns` is present and returns 8 columns — what is absent is any title or description ON them, and the header's sort buttons carry the names the collector already binds. Next step is an R2 ticket, not another measurement |
 | ADR-015 | #303 | OPEN | behind #293 |
 | ADR-016 | #304 | OPEN | implementation; no measured AX wall in front of it |
 | ADR-017 | #305 | OPEN | AU parameter view observed AX-opaque; starts with a measurement |
@@ -109,7 +109,10 @@ attached — not a silent deferral.
    diff runs, but nothing calls it at qualification time, and every way of wiring it touches either
    the attestation schema or what `--qualify` refuses. That choice is on the issue as A/B/C.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
-4. **#302** — blocked on the Event List's absent `kAXColumns` until that is re-measured.
+   #293's collector is measured reading a live note table; what remains there is the ADR body.
+4. **#302** — re-measured. `kAXColumns` resolves 8 columns and none of them carries a name, which
+   is a different fact from the one recorded; the header sort buttons supply the column map and
+   `readHeaders` already reads them. The next step is an R2 ticket.
 5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
 6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement.
 7. **#373 → #284's `R-SEM`**, then **#308** closes as an index.
