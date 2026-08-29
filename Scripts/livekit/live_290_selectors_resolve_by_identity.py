@@ -45,6 +45,19 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evidence as E  # noqa: E402
 
+# What this harness proves, for `harness_evidence_coverage.py`. A branch touching any of these
+# paths must run this harness and produce a clean document; before declarations existed, ANY
+# harness's clean document satisfied ANY `Sources/` change.
+#
+# Claimed because this run drives them: the census rows come from the selector predicates in
+# `SelectorAtlas`, and the six adopted sites live in the two accessibility files below. The
+# snapshot and diff are claimed too — the same predicates decide what a baseline scores.
+COVERS = [
+    "Sources/LogicProMCP/SelectorAtlas/",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Transport.swift",
+]
+
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
 HEAD = sys.argv[2] if len(sys.argv) > 2 else ""
 if not WT or not HEAD:

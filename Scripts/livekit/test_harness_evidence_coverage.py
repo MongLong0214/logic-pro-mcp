@@ -169,6 +169,64 @@ with tempfile.TemporaryDirectory() as repo:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} an unreadable base is None, not an empty change set")
 
+# --- declarations: which harness a Sources/ change obliges ------------------------------------
+#
+# The hole these close: before 2026-08-29 a `Sources/` change required NO particular harness, so
+# any clean document satisfied any change.
+
+DECL = {"live_atlas": ["Sources/LogicProMCP/SelectorAtlas/"],
+        "live_eq": ["Sources/LogicProMCP/SpectralEQ/"]}
+# The same claim written without its trailing slash. It must mean the same thing, or a typo
+# silently widens a harness's claim into every sibling whose name starts the same way.
+DECL_NO_SLASH = {"live_atlas": ["Sources/LogicProMCP/SelectorAtlas"]}
+
+for label, changed, want_required, want_unproven in [
+    ("a claimed path obliges its claimant",
+     ["Sources/LogicProMCP/SelectorAtlas/AtlasDiff.swift"], {"live_atlas"}, []),
+    ("a path nobody claims is unproven, not proved",
+     ["Sources/LogicProMCP/Channels/AccessibilityChannel.swift"], set(),
+     ["Sources/LogicProMCP/Channels/AccessibilityChannel.swift"]),
+    ("two subsystems oblige two harnesses",
+     ["Sources/LogicProMCP/SelectorAtlas/A.swift", "Sources/LogicProMCP/SpectralEQ/B.swift"],
+     {"live_atlas", "live_eq"}, []),
+    ("non-Sources paths oblige nothing and are not unproven",
+     ["docs/roadmap/README.md", "Tests/X.swift"], set(), []),
+    ("a prefix must not match a sibling directory by string alone",
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"], set(),
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"]),
+]:
+    required, unproven = C.required_by_sources(changed, DECL)
+    ok = required == want_required and unproven == want_unproven
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> required={sorted(required)} unproven={unproven}")
+
+for label, decl, changed, want_required in [
+    ("a slashless declaration still claims its own directory", DECL_NO_SLASH,
+     ["Sources/LogicProMCP/SelectorAtlas/AtlasDiff.swift"], {"live_atlas"}),
+    ("a slashless declaration does NOT claim a sibling that starts the same", DECL_NO_SLASH,
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"], set()),
+    ("a declaration naming one file claims exactly it", {"live_x": ["Sources/A/B.swift"]},
+     ["Sources/A/B.swift"], {"live_x"}),
+    ("and not a file whose name extends it", {"live_x": ["Sources/A/B.swift"]},
+     ["Sources/A/B.swift.orig"], set()),
+]:
+    required, _ = C.required_by_sources(changed, decl)
+    ok = required == want_required
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> {sorted(required)}")
+
+for label, text, want in [
+    ("a literal list is read", "COVERS = ['Sources/A/']\n", ["Sources/A/"]),
+    ("a computed declaration is refused", "P='Sources/'\nCOVERS = [P + 'A/']\n", []),
+    ("a non-string member voids the whole claim", "COVERS = ['Sources/A/', 3]\n", []),
+    ("no declaration is no claim", "x = 1\n", []),
+    ("a file that does not parse claims nothing", "def (\n", []),
+]:
+    got = C.declared_coverage(text)
+    ok = got == want
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> {got}")
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)
