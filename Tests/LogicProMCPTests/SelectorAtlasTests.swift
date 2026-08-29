@@ -524,9 +524,32 @@ struct Issue290SnapshotRedactionTests {
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-ko-track-headers.json")
         let text = try String(contentsOf: url, encoding: .utf8)
-        for name in ["Absolute Zero", "Absolute", "오디오", "무제", "Stereo Out"] {
+        for name in ["Absolute Zero", "Absolute", "무제", "Stereo Out"] {
             #expect(!text.contains(name), "\(name) is in the committed fixture")
         }
+
+        // `오디오` is NOT on that list, and the reason is worth stating rather than quietly
+        // dropping: it appears six times in the fixture, every one inside a checkbox's 98-character
+        // help sentence about record-enabling an audio track. That is Logic's own chrome. The
+        // criterion is "no user project/track/plugin NAMES", not "no token that also occurs in
+        // one" — and the tracks here were called `오디오 1` and `오디오 2`, which do not appear.
+        //
+        // So the structural property is asserted instead, and it is stronger than any blacklist: a
+        // name lives in a text field, and every text field in this capture is a shape.
+        let document = try JSONDecoder().decode(AXSnapshot.Document.self, from: Data(text.utf8))
+        var textFieldDescriptions: [String] = []
+        func walk(_ node: AXSnapshot.Node) {
+            if node.role == kAXTextFieldRole as String, let description = node.description {
+                textFieldDescriptions.append(description)
+            }
+            node.children.forEach(walk)
+        }
+        walk(document.root)
+        #expect(!textFieldDescriptions.isEmpty, "no text field in the capture — nothing was tested")
+        for description in textFieldDescriptions {
+            #expect(description.hasPrefix("len:"), "a text field kept \(description)")
+        }
+
         // And it is a real capture, not an empty file that trivially contains no names.
         #expect(text.contains("볼륨"))
         #expect(text.count > 5_000)
@@ -565,5 +588,82 @@ struct Issue290SnapshotRedactionTests {
         }
         // And the recognised one did survive, or the snapshot would be useless.
         #expect(encoded.contains("볼륨"))
+    }
+}
+
+/// #290 — the atlas diff, which is the last criterion with no environment constraint.
+///
+/// `UIDriftReport` takes `[SelectorID: Double]` and nothing produced those numbers, so it could not
+/// be called from anywhere — the same shape as the resolver having no adapter. `AtlasDiff` scores a
+/// baseline against the selectors actually in production, so a diff is two snapshots and needs no
+/// Logic on the machine. That matters: a qualification step that required the application open
+/// would not run where qualification runs.
+@Suite("Issue290AtlasDiff")
+struct Issue290AtlasDiffTests {
+
+    private func baseline() throws -> AXSnapshot.Document {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-ko-track-headers.json")
+        return try JSONDecoder().decode(AXSnapshot.Document.self, from: Data(contentsOf: url))
+    }
+
+    @Test("the committed baseline scores the selectors that resolve against it")
+    func baselineScoresAdoptedSelectors() throws {
+        // If it did not, every diff below would compare two empty dictionaries and pass while
+        // measuring nothing — the vacuous shape this suite has to avoid first.
+        let scores = AtlasDiff.confidences(in: try baseline())
+        #expect(scores[.trackHeaderPanControl] != nil, "pan scored nothing in the baseline")
+        #expect(scores[.trackHeaderVolumeFader] != nil)
+        #expect(scores[.trackHeaderMuteToggle] != nil)
+        #expect(scores[.trackHeaderSoloToggle] != nil)
+        #expect(scores[.trackHeaderArmToggle] != nil)
+        for (id, value) in scores {
+            #expect(value >= 0.6, "\(id) scored \(value), below the selectors' own threshold")
+        }
+    }
+
+    @Test("a baseline against itself is stable and reusable")
+    func identicalBaselinesAreStable() throws {
+        let doc = try baseline()
+        let drifts = AtlasDiff.between(baseline: doc, current: doc)
+        #expect(!drifts.isEmpty)
+        #expect(drifts.allSatisfy { $0.status == .stable })
+        #expect(AtlasDiff.verdict(for: drifts) == .reuseFull)
+    }
+
+    @Test("a selector that loses its control fails the run closed")
+    func aVanishedSelectorFailsClosed() throws {
+        // The failure this step exists to catch: a Logic update renames what a selector matches on,
+        // and the control stops being findable. Simulated by removing the label from the tree, not
+        // by editing the expected numbers.
+        let doc = try baseline()
+        let stripped = try JSONDecoder().decode(
+            AXSnapshot.Document.self,
+            from: Data(String(decoding: try JSONEncoder().encode(doc), as: UTF8.self)
+                .replacingOccurrences(of: "볼륨", with: "len:2 non-latin").utf8))
+
+        let drifts = AtlasDiff.between(baseline: doc, current: stripped)
+        let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
+        #expect(volume.status == .missing)
+        #expect(volume.affectedOperations == [.mixerSetVolume])
+        #expect(AtlasDiff.verdict(for: drifts) == .failClosedMutation,
+                "a selector that cannot find its control did not stop a mutation")
+    }
+
+    @Test("the run verdict is the worst case, not the average")
+    func verdictIsTheWorstCase() {
+        // Five stable selectors and one that vanished must not average out to reusable. That is how
+        // a gate stops being one.
+        let stable = SelectorDrift(
+            selectorID: .trackHeaderPanControl, status: .stable,
+            previousConfidence: 1, currentConfidence: 1,
+            changedRoles: [], affectedOperations: [.mixerSetPan])
+        let gone = SelectorDrift(
+            selectorID: .trackHeaderVolumeFader, status: .missing,
+            previousConfidence: 1, currentConfidence: 0,
+            changedRoles: [], affectedOperations: [.mixerSetVolume])
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, stable]) == .reuseFull)
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, gone]) == .failClosedMutation)
     }
 }

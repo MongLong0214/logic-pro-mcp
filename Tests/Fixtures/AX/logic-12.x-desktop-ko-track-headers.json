@@ -11,7 +11,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 패닝 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -19,8 +19,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "트랙 기본 설정 확대 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -28,7 +28,7 @@
             "children" : [
 
             ],
-            "help" : "len:84 latin+non-latin+punct+space",
+            "help" : "track 트랙 | len:84 latin+non-latin+punct+space",
             "role" : "AXDisclosureTriangle",
             "valueRange" : "0...127"
           },
@@ -37,7 +37,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 믹서 재생 채널 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -46,7 +46,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -55,7 +55,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -63,8 +63,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -78,7 +78,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -93,7 +93,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -119,7 +119,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 트랙 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -127,8 +127,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "설정 기본 트랙 클릭 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -137,7 +137,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 재생 트랙 믹서 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -146,7 +146,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -155,7 +155,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -163,8 +163,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -178,7 +178,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -193,7 +193,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -219,7 +219,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 트랙 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -227,8 +227,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "설정 기본 트랙 클릭 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -237,7 +237,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 재생 트랙 믹서 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -246,7 +246,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -255,7 +255,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -263,8 +263,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -278,7 +278,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -293,7 +293,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -319,7 +319,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 트랙 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -327,8 +327,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "설정 기본 트랙 클릭 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -337,7 +337,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 재생 트랙 믹서 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -346,7 +346,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -355,7 +355,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -363,8 +363,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -378,7 +378,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -393,7 +393,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -419,7 +419,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 트랙 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -427,8 +427,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "설정 기본 트랙 클릭 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -437,7 +437,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 재생 트랙 믹서 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -446,7 +446,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -455,7 +455,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -463,8 +463,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -478,7 +478,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -493,7 +493,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -519,7 +519,7 @@
 
             ],
             "description" : "len:6 non-latin+space",
-            "help" : "트랙…",
+            "help" : "트랙 헤더 음소거 활성화 트랙 | len:117 latin+non-latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -527,8 +527,8 @@
             "children" : [
 
             ],
-            "description" : "len:11 non-latin+punct+space",
-            "help" : "len:134 latin+non-latin+punct+space",
+            "description" : "트랙 확대 | len:11 non-latin+punct+space",
+            "help" : "설정 기본 트랙 클릭 | len:134 latin+non-latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -537,7 +537,7 @@
 
             ],
             "description" : "음소거",
-            "help" : "음소거…",
+            "help" : "음소거 재생 트랙 믹서 | len:96 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -546,7 +546,7 @@
 
             ],
             "description" : "솔로",
-            "help" : "솔로…",
+            "help" : "aux 솔로 트랙 출력 | len:92 latin+non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -555,7 +555,7 @@
 
             ],
             "description" : "녹음 활성화",
-            "help" : "녹음 활성화…",
+            "help" : "녹음 활성화 활성화 상태 트랙 | len:101 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -563,8 +563,8 @@
             "children" : [
 
             ],
-            "description" : "입력…",
-            "help" : "입력…",
+            "description" : "모니터링 입력 | len:7 non-latin+space",
+            "help" : "녹음 활성화 모니터링 활성화 오디오 | len:98 non-latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -578,7 +578,7 @@
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "len:51 non-latin+punct+space",
+            "help" : "밸런스 위치 패닝 트랙 | len:51 non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -593,7 +593,7 @@
               }
             ],
             "description" : "볼륨",
-            "help" : "len:114 latin+non-latin+punct+space",
+            "help" : "aux 페이더 재생 볼륨 | len:114 latin+non-latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },

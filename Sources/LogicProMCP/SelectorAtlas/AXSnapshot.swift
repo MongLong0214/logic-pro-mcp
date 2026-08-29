@@ -68,21 +68,39 @@ enum AXSnapshot {
     /// A text field's contents are user content by nature. Exact matches are always safe — the
     /// value IS a label the product knows — but a prefix is a concession, and it belongs only where
     /// the phenomenon it concedes to actually happens.
-    static let rolesWithStateSuffixes: Set<String> = [
+    /// Roles whose text is Logic's own chrome and cannot be something a user typed.
+    ///
+    /// The line that matters is not prefix-versus-contains, it is WHICH FIELDS CAN CARRY USER
+    /// CONTENT. A track name lives in an `AXTextField`; a plugin name lives in an `AXGroup`
+    /// description — both measured on this machine. A slider's `AXHelp` ("패닝 노브 및 밸런스
+    /// 노브. …") and a checkbox's description are Logic's strings in every tree seen so far.
+    ///
+    /// Inside these roles a value keeps the recognised labels it CONTAINS, beside its shape. Outside
+    /// them only an exact match survives, because a container or a text field is where a name would
+    /// be — and `오디오 1` leaking `오디오` from a text field is what the first capture did.
+    static let rolesCarryingOnlyChrome: Set<String> = [
+        kAXSliderRole as String,
         kAXCheckBoxRole as String,
         kAXRadioButtonRole as String,
+        kAXSplitterRole as String,
+        kAXDisclosureTriangleRole as String,
     ]
 
     static func redact(_ value: String?, role: String? = nil) -> String? {
         guard let value, !value.isEmpty else { return nil }
         if recognisedLabels.contains(value.lowercased()) { return value }
-        if let role, rolesWithStateSuffixes.contains(role),
-           let prefix = recognisedLabels.first(where: {
-               value.lowercased().hasPrefix($0) && !$0.isEmpty
-           }) {
-            return "\(value.prefix(prefix.count))…"
-        }
-        return shape(of: value)
+        guard let role, rolesCarryingOnlyChrome.contains(role) else { return shape(of: value) }
+
+        // Only allowlist members are emitted, never the text around them — so a chrome string keeps
+        // enough for a `.contains` selector to be scored against this fixture, which is what a
+        // baseline is FOR. Over-redacting here is safe and useless: the pan selector scored 0.583
+        // against a fixture that had shaped its help sentence away, below its own threshold.
+        let haystack = value.lowercased()
+        let found = recognisedLabels
+            .filter { !$0.isEmpty && haystack.contains($0) }
+            .sorted { $0.count > $1.count }
+        guard !found.isEmpty else { return shape(of: value) }
+        return "\(found.prefix(4).joined(separator: " ")) | \(shape(of: value))"
     }
 
     /// `len:13 latin+space` — enough to notice a tree changed, not enough to read a name.
