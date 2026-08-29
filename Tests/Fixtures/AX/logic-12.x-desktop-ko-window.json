@@ -1,0 +1,2566 @@
+{
+  "capturedFrom" : "ax",
+  "locale" : "ko",
+  "logicVersion" : "12.x",
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXCloseButton"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "role" : "AXGroup"
+              }
+            ],
+            "role" : "AXGroup"
+          }
+        ],
+        "help" : "len:24 non-latin+punct+space",
+        "role" : "AXButton",
+        "subrole" : "AXFullScreenButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "role" : "AXButton",
+        "subrole" : "AXMinimizeButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "role" : "AXImage"
+      },
+      {
+        "children" : [
+
+        ],
+        "role" : "AXStaticText"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:5 non-latin+space",
+                "help" : "len:93 non-latin+punct+space",
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "마디",
+                    "role" : "AXSlider",
+                    "valueRange" : "4...6"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "비트",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...2"
+                  }
+                ],
+                "description" : "len:7 non-latin+space",
+                "help" : "len:97 non-latin+punct+space",
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "템포",
+                "help" : "녹음 입력 재생 클릭 템포 값 | len:80 non-latin+punct+space",
+                "role" : "AXSlider",
+                "valueRange" : "5...990"
+              },
+              {
+                "children" : [
+
+                ],
+                "help" : "len:117 latin+non-latin+punct+space",
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "len:3 non-latin",
+                "help" : "len:90 non-latin+punct+space",
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "len:2 non-latin",
+                "help" : "len:60 non-latin+punct+space",
+                "role" : "AXPopUpButton"
+              }
+            ],
+            "description" : "len:6 non-latin+space",
+            "role" : "AXGroup"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "사이클",
+            "help" : "사이클 녹음 재생 | len:83 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:7 non-latin+space",
+            "help" : "len:82 latin+non-latin+punct+space",
+            "role" : "AXButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음 템포 | len:8 non-latin+space",
+            "help" : "음소거 콘텐츠 녹음 템포 | len:67 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "녹음",
+            "help" : "녹음 트랙 | len:46 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "재생",
+            "help" : "재생헤드 위치 사이클 위치 재생 | len:70 non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:7 non-latin+space",
+            "help" : "len:51 non-latin+punct+space",
+            "role" : "AXButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:2 non-latin",
+            "help" : "녹음 신규 | len:46 non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:2 non-latin",
+            "help" : "악기 | len:31 non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "솔로",
+            "help" : "리전 솔로 재생 | len:33 non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 non-latin+space",
+            "help" : "길이 녹음 재생 클릭 l | len:101 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "메트로놈 클릭 | len:7 non-latin+space",
+            "help" : "메트로놈 녹음 재생 클릭 템포 | len:80 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "라이브러리",
+            "help" : "라이브러리 프리셋 재생 채널 | len:113 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "인스펙터",
+            "help" : "인스펙터 리전 볼륨 설정 위치 채널 트랙 패닝 편집 | len:103 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:6 non-latin+space",
+            "help" : "인스펙터 윈도우 | len:65 non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 non-latin+space",
+            "help" : "len:56 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "l m | len:14 latin+space",
+            "help" : "smart controls 채널 편집 l m | len:96 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "믹서",
+            "help" : "믹서 채널 트랙 편집 | len:107 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "편집 | len:3 non-latin",
+            "help" : "session player play 오디오 트랙 파일 편집 l | len:108 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "목록 편집 | len:6 non-latin+space",
+            "help" : "midi 마커 목록 템포 편집 m | len:69 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:3 non-latin",
+            "help" : "생성 트랙 편집 | len:52 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "루프 브라우저",
+            "help" : "루프 브라우저 녹음 | len:49 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:4 non-latin",
+            "help" : "오디오 파일 | len:79 latin+non-latin+punct+space",
+            "role" : "AXCheckBox"
+          }
+        ],
+        "description" : "len:6 non-latin+space",
+        "help" : "len:108 latin+non-latin+punct+space",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXOutlineRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "identifier" : "len:7 latin",
+                            "role" : "AXColumn"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "identifier" : "len:7 latin",
+                            "role" : "AXColumn"
+                          }
+                        ],
+                        "identifier" : "len:6 digit+latin+punct",
+                        "role" : "AXOutline"
+                      }
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXScrollArea"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXDisclosureTriangle"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXStaticText"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXTableRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXTableRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXTableRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXTableRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXRow",
+                            "subrole" : "AXTableRow"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "identifier" : "len:7 latin",
+                            "role" : "AXColumn"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "identifier" : "len:7 latin",
+                            "role" : "AXColumn"
+                          }
+                        ],
+                        "identifier" : "len:6 digit+latin+punct",
+                        "role" : "AXTable"
+                      }
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXScrollArea"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXDisclosureTriangle"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXStaticText"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXTextField"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:36 non-latin+punct+space",
+                            "role" : "AXTextField"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:3 non-latin",
+                            "help" : "len:111 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:88 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:101 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:4 non-latin",
+                            "help" : "len:98 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "페이더 볼륨 | len:6 non-latin+space",
+                            "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                            "role" : "AXSlider",
+                            "valueRange" : "0...233"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:108 digit+latin+non-latin+punct+space",
+                            "role" : "AXTextField"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:113 digit+latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "패닝",
+                            "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                            "role" : "AXSlider",
+                            "valueRange" : "-64...63"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:15 non-latin+punct+space",
+                            "role" : "AXGroup"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:74 non-latin+punct+space",
+                            "role" : "AXPopUpButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:13 latin+space",
+                            "help" : "len:53 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:6 non-latin+space",
+                            "help" : "len:72 latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:8 non-latin+space",
+                            "help" : "len:81 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:5 non-latin+space",
+                            "help" : "len:103 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:4 digit+non-latin+space",
+                            "help" : "len:93 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 latin",
+                            "help" : "len:130 latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:108 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:62 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:17 latin+non-latin+punct+space",
+                            "help" : "len:77 non-latin+punct+space",
+                            "role" : "AXButton"
+                          }
+                        ],
+                        "description" : "len:7 digit+latin+space",
+                        "help" : "len:45 non-latin+punct+space",
+                        "role" : "AXLayoutItem"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:36 non-latin+punct+space",
+                            "role" : "AXTextField"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:3 non-latin",
+                            "help" : "len:111 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:3 non-latin",
+                            "help" : "len:65 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "페이더 볼륨 | len:6 non-latin+space",
+                            "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                            "role" : "AXSlider",
+                            "valueRange" : "0...233"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:108 digit+latin+non-latin+punct+space",
+                            "role" : "AXTextField"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:113 digit+latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "패닝",
+                            "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                            "role" : "AXSlider",
+                            "valueRange" : "-64...63"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:15 non-latin+punct+space",
+                            "role" : "AXGroup"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:74 non-latin+punct+space",
+                            "role" : "AXPopUpButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:8 non-latin+space",
+                            "help" : "len:81 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:5 non-latin+space",
+                            "help" : "len:66 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:19 latin+space",
+                            "help" : "len:54 latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 latin",
+                            "help" : "len:130 latin+non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "help" : "len:108 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "subrole" : "AXSwitch"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:2 non-latin",
+                            "help" : "len:62 non-latin+punct+space",
+                            "role" : "AXButton"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:17 latin+non-latin+punct+space",
+                            "help" : "len:77 non-latin+punct+space",
+                            "role" : "AXButton"
+                          }
+                        ],
+                        "description" : "len:10 latin+space",
+                        "help" : "len:163 latin+non-latin+punct+space",
+                        "role" : "AXLayoutItem"
+                      }
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXLayoutArea"
+                  }
+                ],
+                "role" : "AXGroup"
+              }
+            ],
+            "role" : "AXList"
+          }
+        ],
+        "description" : "len:4 non-latin",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "identifier" : "len:6 digit+latin+punct",
+                        "role" : "AXStaticText"
+                      }
+                    ],
+                    "help" : "len:106 latin+non-latin+punct+space",
+                    "identifier" : "len:6 digit+latin+punct",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "identifier" : "len:6 digit+latin+punct",
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "role" : "AXSplitter",
+                        "valueRange" : "0...221"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "help" : "len:66 non-latin+punct+space",
+                            "identifier" : "len:7 digit+latin+punct",
+                            "role" : "AXTextField",
+                            "subrole" : "AXSearchField"
+                          }
+                        ],
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:5 non-latin",
+                            "identifier" : "len:7 digit+latin+punct",
+                            "role" : "AXBrowser"
+                          }
+                        ],
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXGroup"
+                      }
+                    ],
+                    "identifier" : "len:6 digit+latin+punct",
+                    "role" : "AXSplitGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXGroup"
+                          }
+                        ],
+                        "role" : "AXGroup",
+                        "subrole" : "AXHostingView"
+                      }
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "help" : "len:36 non-latin+punct+space",
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXPopUpButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "help" : "len:88 non-latin+punct+space",
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "help" : "len:52 non-latin+punct+space",
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "help" : "len:60 non-latin+punct+space",
+                        "identifier" : "len:7 digit+latin+punct",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "identifier" : "len:7 digit+latin+punct",
+                    "role" : "AXGroup"
+                  }
+                ],
+                "identifier" : "len:7 digit+latin+punct",
+                "role" : "AXGroup"
+              }
+            ],
+            "description" : "len:5 non-latin",
+            "help" : "len:106 latin+non-latin+punct+space",
+            "role" : "AXGroup"
+          }
+        ],
+        "description" : "len:5 non-latin",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:6 non-latin+space",
+                "help" : "len:6 non-latin+space",
+                "role" : "AXButton"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "loop 보기 l | len:20 latin+non-latin+punct+space",
+                    "help" : "loop 보기 l | len:20 latin+non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "보기 트랙 | len:12 non-latin+punct+space",
+                    "help" : "보기 트랙 | len:12 non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "오토메이션 보기 | len:12 non-latin+punct+space",
+                    "help" : "오토메이션 보기 | len:16 latin+non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "보기 l | len:11 latin+non-latin+punct+space",
+                    "help" : "보기 l | len:16 latin+non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "재생헤드 캐치",
+                "help" : "재생헤드 캐치 재생 | len:11 non-latin+punct+space",
+                "role" : "AXCheckBox"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:16 non-latin+punct+space",
+                    "help" : "len:8 non-latin+space",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:20 latin+non-latin+punct+space",
+                    "help" : "len:13 latin+non-latin+punct+space",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+
+                ],
+                "role" : "AXStaticText"
+              },
+              {
+                "children" : [
+
+                ],
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+
+                ],
+                "role" : "AXStaticText"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "len:6 non-latin+space",
+                "help" : "len:6 non-latin+space",
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "확대 | len:8 non-latin+punct+space",
+                "help" : "확대 | len:8 non-latin+punct+space",
+                "role" : "AXCheckBox"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "확대 | len:11 non-latin+punct+space",
+                    "help" : "확대 | len:11 non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "확대 | len:11 non-latin+punct+space",
+                    "help" : "확대 | len:11 non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "role" : "AXValueIndicator"
+                  }
+                ],
+                "description" : "확대 | len:8 non-latin+punct+space",
+                "help" : "확대 | len:8 non-latin+punct+space",
+                "role" : "AXSlider",
+                "valueRange" : "0...1"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "role" : "AXValueIndicator"
+                  }
+                ],
+                "description" : "확대 | len:8 non-latin+punct+space",
+                "help" : "확대 | len:8 non-latin+punct+space",
+                "role" : "AXSlider",
+                "valueRange" : "0...1"
+              }
+            ],
+            "description" : "len:2 non-latin",
+            "role" : "AXGroup"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:11 latin+non-latin+punct+space",
+                            "help" : "len:63 non-latin+punct+space",
+                            "role" : "AXButton",
+                            "valueRange" : "0...1"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:19 latin+non-latin+punct+space",
+                            "help" : "len:80 latin+non-latin+punct+space",
+                            "role" : "AXButton",
+                            "valueRange" : "0...1"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "보기 트랙 | len:17 latin+non-latin+punct+space",
+                            "help" : "템포 트랙 | len:60 non-latin+punct+space",
+                            "role" : "AXCheckBox",
+                            "valueRange" : "0...1"
+                          }
+                        ],
+                        "description" : "len:5 non-latin+space",
+                        "role" : "AXGroup"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:9 non-latin+space",
+                            "role" : "AXLayoutArea"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXScrollBar"
+                          }
+                        ],
+                        "role" : "AXScrollArea"
+                      }
+                    ],
+                    "role" : "AXSplitGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:5 non-latin+space",
+                            "role" : "AXGroup"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXScrollBar"
+                          }
+                        ],
+                        "role" : "AXScrollArea"
+                      },
+                      {
+                        "children" : [
+                          {
+                            "children" : [
+
+                            ],
+                            "description" : "len:6 non-latin+space",
+                            "role" : "AXGroup"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXScrollBar"
+                          },
+                          {
+                            "children" : [
+
+                            ],
+                            "role" : "AXScrollBar"
+                          }
+                        ],
+                        "role" : "AXScrollArea"
+                      }
+                    ],
+                    "role" : "AXSplitGroup"
+                  }
+                ],
+                "role" : "AXSplitGroup"
+              }
+            ],
+            "description" : "len:2 non-latin",
+            "role" : "AXGroup"
+          }
+        ],
+        "description" : "len:2 non-latin",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "len:6 non-latin+space",
+                "help" : "len:6 non-latin+space",
+                "role" : "AXButton"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "role" : "AXMenuButton",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+
+                ],
+                "role" : "AXStaticText"
+              },
+              {
+                "children" : [
+
+                ],
+                "help" : "페이더 볼륨 센드 채널 패닝 끔 | len:68 non-latin+punct+space",
+                "role" : "AXCheckBox"
+              },
+              {
+                "children" : [
+
+                ],
+                "help" : "len:68 non-latin+punct+space",
+                "role" : "AXPopUpButton"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "보기 트랙 | len:16 non-latin+space",
+                    "role" : "AXRadioButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "트랙",
+                    "help" : "보기 채널 트랙 | len:22 non-latin+space",
+                    "role" : "AXRadioButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "보기 채널 | len:12 non-latin+space",
+                    "role" : "AXRadioButton",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXRadioGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "오디오",
+                    "help" : "오디오 채널 | len:13 non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "악기",
+                    "help" : "악기 채널 | len:12 non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "Aux",
+                    "help" : "aux 채널 | len:13 latin+non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "채널 | len:12 non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "입력",
+                    "help" : "입력 채널 | len:12 non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "출력",
+                    "help" : "채널 출력 | len:12 non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:7 latin+non-latin+punct",
+                    "help" : "채널 | len:17 latin+non-latin+punct+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "MIDI",
+                    "help" : "midi 채널 m | len:14 latin+non-latin+space",
+                    "role" : "AXCheckBox",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXGroup"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "채널 | len:9 non-latin+space",
+                    "help" : "채널 | len:9 non-latin+space",
+                    "role" : "AXRadioButton",
+                    "subrole" : "AXSegment"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "채널 | len:9 non-latin+space",
+                    "help" : "채널 | len:9 non-latin+space",
+                    "role" : "AXRadioButton",
+                    "subrole" : "AXSegment"
+                  }
+                ],
+                "role" : "AXRadioGroup"
+              }
+            ],
+            "description" : "len:2 non-latin",
+            "role" : "AXGroup"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:36 non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "track | len:11 latin+space",
+                    "help" : "track 믹서 보기 트랙 확인 | len:84 latin+non-latin+punct+space",
+                    "role" : "AXDisclosureTriangle"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:111 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:88 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:10 latin+space",
+                        "role" : "AXValueIndicator"
+                      }
+                    ],
+                    "description" : "페이더 볼륨 | len:6 non-latin+space",
+                    "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...233"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 digit+latin+non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:113 digit+latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:12 latin+space",
+                        "role" : "AXStaticText"
+                      }
+                    ],
+                    "description" : "패닝",
+                    "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "-64...63"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "오토메이션",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:15 non-latin+punct+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:74 non-latin+punct+space",
+                    "role" : "AXPopUpButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:13 latin+space",
+                    "help" : "len:53 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:6 non-latin+space",
+                    "help" : "len:72 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:10 latin",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:10 latin",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:21 latin+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 latin",
+                    "help" : "len:130 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:13 latin+space",
+                    "help" : "len:62 non-latin+punct+space",
+                    "role" : "AXButton"
+                  }
+                ],
+                "description" : "len:13 latin+space",
+                "role" : "AXLayoutItem"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:36 non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:111 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:88 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:101 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:4 non-latin",
+                    "help" : "len:98 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:10 latin+space",
+                        "role" : "AXValueIndicator"
+                      }
+                    ],
+                    "description" : "페이더 볼륨 | len:6 non-latin+space",
+                    "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...233"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 digit+latin+non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:113 digit+latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:12 latin+space",
+                        "role" : "AXStaticText"
+                      }
+                    ],
+                    "description" : "패닝",
+                    "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "-64...63"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "오토메이션",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:15 non-latin+punct+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:74 non-latin+punct+space",
+                    "role" : "AXPopUpButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:13 latin+space",
+                    "help" : "len:53 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:6 non-latin+space",
+                    "help" : "len:72 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "help" : "len:103 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:4 digit+non-latin+space",
+                    "help" : "len:93 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 latin",
+                    "help" : "len:130 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:62 non-latin+punct+space",
+                    "role" : "AXButton"
+                  }
+                ],
+                "description" : "len:7 digit+latin+space",
+                "role" : "AXLayoutItem"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:36 non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:111 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:88 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:10 latin+space",
+                        "role" : "AXValueIndicator"
+                      }
+                    ],
+                    "description" : "페이더 볼륨 | len:6 non-latin+space",
+                    "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...233"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 digit+latin+non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:113 digit+latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:12 latin+space",
+                        "role" : "AXStaticText"
+                      }
+                    ],
+                    "description" : "패닝",
+                    "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "-64...63"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "오토메이션",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:15 non-latin+punct+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:74 non-latin+punct+space",
+                    "role" : "AXPopUpButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:13 latin+space",
+                    "help" : "len:53 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:6 non-latin+space",
+                    "help" : "len:72 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:10 latin",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:10 latin",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:10 latin+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "바이패스",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:5 latin",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 latin+non-latin+space",
+                    "help" : "len:56 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 latin",
+                    "help" : "len:130 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:12 latin+space",
+                    "help" : "len:62 non-latin+punct+space",
+                    "role" : "AXButton"
+                  }
+                ],
+                "description" : "len:12 latin+space",
+                "role" : "AXLayoutItem"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:36 non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:111 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:65 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:10 latin+space",
+                        "role" : "AXValueIndicator"
+                      }
+                    ],
+                    "description" : "페이더 볼륨 | len:6 non-latin+space",
+                    "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...233"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 digit+latin+non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:113 digit+latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:12 latin+space",
+                        "role" : "AXStaticText"
+                      }
+                    ],
+                    "description" : "패닝",
+                    "help" : "밸런스 채널 패닝 | len:55 non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "-64...63"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "오토메이션",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:15 non-latin+punct+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:74 non-latin+punct+space",
+                    "role" : "AXPopUpButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:8 non-latin+space",
+                    "help" : "len:81 non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:5 non-latin+space",
+                    "help" : "len:66 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:19 latin+space",
+                    "help" : "len:54 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 latin",
+                    "help" : "len:130 latin+non-latin+punct+space",
+                    "role" : "AXButton"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:62 non-latin+punct+space",
+                    "role" : "AXButton"
+                  }
+                ],
+                "description" : "len:10 latin+space",
+                "role" : "AXLayoutItem"
+              },
+              {
+                "children" : [
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:36 non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 non-latin",
+                    "help" : "len:111 latin+non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:3 latin",
+                    "help" : "len:70 non-latin+punct+space",
+                    "role" : "AXButton",
+                    "subrole" : "AXSwitch"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:10 latin+space",
+                        "role" : "AXValueIndicator"
+                      }
+                    ],
+                    "description" : "페이더 볼륨 | len:6 non-latin+space",
+                    "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:120 digit+latin+non-latin+punct+space",
+                    "role" : "AXSlider",
+                    "valueRange" : "0...233"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:9 non-latin+space",
+                    "help" : "len:108 digit+latin+non-latin+punct+space",
+                    "role" : "AXTextField"
+                  },
+                  {
+                    "children" : [
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "오토메이션",
+                        "role" : "AXCheckBox"
+                      },
+                      {
+                        "children" : [
+
+                        ],
+                        "description" : "len:2 non-latin",
+                        "role" : "AXButton"
+                      }
+                    ],
+                    "description" : "len:16 non-latin+punct+space",
+                    "role" : "AXGroup"
+                  },
+                  {
+                    "children" : [
+
+                    ],
+                    "description" : "len:2 non-latin",
+                    "help" : "len:74 non-latin+punct+space",
+                    "role" : "AXPopUpButton"
+                  }
+                ],
+                "description" : "len:6 latin",
+                "role" : "AXLayoutItem"
+              }
+            ],
+            "description" : "len:2 non-latin",
+            "role" : "AXLayoutArea"
+          }
+        ],
+        "description" : "len:2 non-latin",
+        "role" : "AXGroup"
+      }
+    ],
+    "role" : "AXWindow",
+    "subrole" : "AXStandardWindow"
+  },
+  "scope" : "window"
+}

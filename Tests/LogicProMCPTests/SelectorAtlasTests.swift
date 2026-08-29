@@ -456,13 +456,25 @@ struct SelectorAtlasOperationMapTests {
 @Suite("Issue290SnapshotRedaction")
 struct Issue290SnapshotRedactionTests {
 
-    @Test("a recognised label survives verbatim, including its case")
+    @Test("a recognised label survives verbatim, including its case, inside a chrome role")
     func recognisedLabelsSurvive() {
         // Verbatim and case-preserved, because selectors match `.exactStrict` — a snapshot that
         // lower-cased everything would show a tree no selector could be tested against.
-        #expect(AXSnapshot.redact("볼륨") == "볼륨")
-        #expect(AXSnapshot.redact("Control Bar") == "Control Bar")
-        #expect(AXSnapshot.redact("컨트롤 막대") == "컨트롤 막대")
+        //
+        // Inside a chrome role. These three used to be asserted with no role at all, which is the
+        // caller declining to say where the string came from — and the answer to that question can
+        // no longer be "verbatim", because a track a user named `Audio` walked out of an
+        // `AXTextField` on exactly that path.
+        #expect(AXSnapshot.redact("볼륨", role: kAXSliderRole as String) == "볼륨")
+        #expect(AXSnapshot.redact("Control Bar", role: kAXCheckBoxRole as String) == "Control Bar")
+        #expect(AXSnapshot.redact("컨트롤 막대", role: kAXSliderRole as String) == "컨트롤 막대")
+
+        // And an `AXGroup` is not a chrome role, which has a cost this suite states rather than
+        // hides: the control bar is identified BY its group description, so shaping group text
+        // means no committed baseline can score `.controlBar`. `AtlasDiff.uncovered` reports that
+        // instead of letting the verdict read the silence as agreement.
+        #expect(AXSnapshot.redact("컨트롤 막대", role: kAXGroupRole as String)
+                    == "len:6 non-latin+space")
     }
 
     @Test("names the product does not recognise are reduced to a shape")
@@ -511,25 +523,86 @@ struct Issue290SnapshotRedactionTests {
         // Without a role at all, no concession — the caller has not established the phenomenon.
         let roleless = try #require(AXSnapshot.redact("오디오 1"))
         #expect(roleless.hasPrefix("len:"))
-        // An EXACT match is safe in any role: the value IS a label the product knows.
-        #expect(AXSnapshot.redact("볼륨", role: kAXTextFieldRole as String) == "볼륨")
+
+        // An exact match is NOT safe outside a chrome role, and this case used to assert the
+        // opposite. `redact("볼륨", role: textField) == "볼륨"` encoded the reasoning that the value
+        // IS a label the product knows — which is a statement about the string and not about where
+        // it came from. `audio` is declared in two policy sets, so a track a user named `Audio`
+        // walked out of an `AXTextField` intact. The role gate now comes first.
+        #expect(AXSnapshot.redact("볼륨", role: kAXTextFieldRole as String) == "len:2 non-latin")
+        #expect(AXSnapshot.redact("Audio", role: kAXTextFieldRole as String) == "len:5 latin")
+        // And it still survives where the role says the string is Logic's own.
+        #expect(AXSnapshot.redact("볼륨", role: kAXSliderRole as String) == "볼륨")
+
+        // An identifier never gets the concession, whatever carries it. A slider is a chrome role,
+        // so before `redactIdentifier` existed this returned the labels found INSIDE the value —
+        // `user-named-thing` contains `name`, and the fixture kept it.
+        let identifier = try #require(AXSnapshot.redactIdentifier("user-named-thing"))
+        #expect(identifier.hasPrefix("len:"), "an identifier kept \(identifier)")
+
+        // And an identifier that IS a label exactly. Without this line the case above cannot see
+        // the concession being restored — `user-named-thing` is not an exact match either way, so
+        // the test passed with the defect back in. `Solo` is the value that separates them.
+        #expect(AXSnapshot.redactIdentifier("Solo") == "len:4 latin",
+                "an identifier equal to a label survived verbatim")
     }
 
-    @Test("the committed baseline carries no name from the project it was captured on")
-    func committedFixtureIsClean() throws {
-        // The criterion at the artifact, not the function. This fixture was captured on a live
-        // project whose tracks were named `Absolute Zero`, `오디오 1` and `오디오 2`, in a document
-        // called `무제 30`.
-        let url = URL(fileURLWithPath: #filePath)
+    /// The three committed baselines, by the name they are filed under.
+    static let committedFixtures = [
+        "logic-12.x-desktop-ko-track-headers.json",
+        "logic-12.x-desktop-en-track-headers.json",
+        "logic-12.x-desktop-ko-window.json",
+    ]
+
+    static func fixtureURL(_ name: String) -> URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-ko-track-headers.json")
-        let text = try String(contentsOf: url, encoding: .utf8)
-        for name in ["Absolute Zero", "Absolute", "오디오", "무제", "Stereo Out"] {
-            #expect(!text.contains(name), "\(name) is in the committed fixture")
+            .appendingPathComponent("Fixtures/AX/\(name)")
+    }
+
+    @Test("no committed baseline carries a name from the project it was captured on",
+          arguments: Issue290SnapshotRedactionTests.committedFixtures)
+    func committedFixtureIsClean(_ name: String) throws {
+        // The criterion at the artifact, not the function — and at EVERY artifact, because a rule
+        // that holds for the file someone remembered to check is not a rule.
+        //
+        // All three were captured on `lpm-606-warm`, whose tracks are named `Audio 1` and whose
+        // channel strip shows `Absolute Zero` and `Stereo Out`.
+        let text = try String(contentsOf: Self.fixtureURL(name), encoding: .utf8)
+        for secret in ["lpm-606-warm", "Absolute Zero", "Absolute", "Stereo Out", "Audio 1"] {
+            #expect(!text.contains(secret), "\(secret) is in \(name)")
         }
+
+        // A bare token is NOT on that list, and the reason is worth stating rather than quietly
+        // dropping: `오디오` and `audio` appear inside Logic's own help sentences about
+        // record-enabling an audio track. The criterion is "no user project/track/plugin NAMES",
+        // not "no token that also occurs in one".
+        //
+        // So the structural property is asserted too, and it is stronger than any blacklist: a name
+        // lives in a text field, a group description or a layout row, and every one of those in
+        // these captures is a shape.
+        let document = try JSONDecoder().decode(AXSnapshot.Document.self, from: Data(text.utf8))
+        let nameBearing: Set<String> = [
+            kAXTextFieldRole as String, kAXGroupRole as String, kAXLayoutItemRole as String,
+        ]
+        var carried: [String] = []
+        var shaped = 0
+        func walk(_ node: AXSnapshot.Node) {
+            if nameBearing.contains(node.role) {
+                for value in [node.description, node.help, node.identifier].compactMap({ $0 }) {
+                    carried.append(value)
+                    if value.hasPrefix("len:") { shaped += 1 }
+                }
+            }
+            node.children.forEach(walk)
+        }
+        walk(document.root)
+        #expect(!carried.isEmpty, "nothing name-bearing in \(name) — nothing was tested")
+        #expect(shaped == carried.count,
+                "\(name) kept \(carried.filter { !$0.hasPrefix("len:") })")
+
         // And it is a real capture, not an empty file that trivially contains no names.
-        #expect(text.contains("볼륨"))
-        #expect(text.count > 5_000)
+        #expect(text.count > 5_000, "\(name) is too small to be a capture")
     }
 
     @Test("a label with a state suffix keeps its recognised prefix and loses the rest")
@@ -565,5 +638,386 @@ struct Issue290SnapshotRedactionTests {
         }
         // And the recognised one did survive, or the snapshot would be useless.
         #expect(encoded.contains("볼륨"))
+    }
+}
+
+/// #290 — the atlas diff, which is the last criterion with no environment constraint.
+///
+/// `UIDriftReport` takes `[SelectorID: Double]` and nothing produced those numbers, so it could not
+/// be called from anywhere — the same shape as the resolver having no adapter. `AtlasDiff` scores a
+/// baseline against the selectors actually in production, so a diff is two snapshots and needs no
+/// Logic on the machine. That matters: a qualification step that required the application open
+/// would not run where qualification runs.
+@Suite("Issue290AtlasDiff")
+struct Issue290AtlasDiffTests {
+
+    private func load(_ name: String) throws -> AXSnapshot.Document {
+        try JSONDecoder().decode(
+            AXSnapshot.Document.self,
+            from: Data(contentsOf: Issue290SnapshotRedactionTests.fixtureURL(name)))
+    }
+
+    private func baseline() throws -> AXSnapshot.Document {
+        try load("logic-12.x-desktop-ko-track-headers.json")
+    }
+
+    /// A track-header rail does not contain the control bar, so a pair of them leaves `.controlBar`
+    /// unmeasured. That is what `uncovered` is for, and this is the second baseline that closes it.
+    private func windowBaseline() throws -> AXSnapshot.Document {
+        try load("logic-12.x-desktop-ko-window.json")
+    }
+
+    @Test("the committed baseline scores the selectors that resolve against it")
+    func baselineScoresAdoptedSelectors() throws {
+        // If it did not, every diff below would compare two empty dictionaries and pass while
+        // measuring nothing — the vacuous shape this suite has to avoid first.
+        let scores = AtlasDiff.confidences(in: try baseline())
+        #expect(scores[.trackHeaderPanControl] != nil, "pan scored nothing in the baseline")
+        #expect(scores[.trackHeaderVolumeFader] != nil)
+        #expect(scores[.trackHeaderMuteToggle] != nil)
+        #expect(scores[.trackHeaderSoloToggle] != nil)
+        #expect(scores[.trackHeaderArmToggle] != nil)
+        for (id, value) in scores {
+            #expect(value >= 0.6, "\(id) scored \(value), below the selectors' own threshold")
+        }
+    }
+
+    @Test("a baseline against itself is stable, and reusable only once every selector is covered")
+    func identicalBaselinesAreStable() throws {
+        let rail = try baseline()
+        let drifts = AtlasDiff.between(baseline: rail, current: rail)
+        #expect(!drifts.isEmpty)
+        #expect(drifts.allSatisfy { $0.status == .stable })
+
+        // A rail on its own does NOT earn full reuse, and this is the case that used to say it did.
+        // Nothing in a track-header capture contradicts the control bar, so a verdict read off the
+        // drift list alone called transport qualified on the strength of never having looked at it.
+        let railOnly = AtlasDiff.uncovered(baseline: rail, current: rail)
+        #expect(railOnly == [.controlBar], "the rail's coverage gap moved: \(railOnly)")
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: railOnly) == .failClosedMutation)
+
+        // The window baseline does not close it either, and that is a measured fact rather than an
+        // oversight: the control bar is identified by an `AXGroup` description, groups can carry a
+        // plugin name, and the redaction shapes them. So `.controlBar` is unmeasured by every
+        // committed baseline, and until one covers it no pair of them can qualify a transport
+        // mutation. Naming the gap is the point — the previous verdict called it qualified.
+        let window = try windowBaseline()
+        let both = railOnly.intersection(
+            AtlasDiff.uncovered(baseline: window, current: window))
+        #expect(both == [.controlBar], "the coverage gap moved: \(both)")
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: both) == .failClosedMutation)
+
+        // Reuse is reachable — it just takes a baseline set that covers everything, which is what
+        // the empty argument stands for here.
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .reuseFull)
+    }
+
+    @Test("a selector that keeps its best score but loses most of its controls is drift")
+    func partialLossIsDrift() throws {
+        // The failure the best-score view cannot see, and the reason `coverage` exists. Logic strips
+        // the volume fader from every track header but the first: the strongest evidence in the tree
+        // is still a perfect match, so `confidences` is unchanged and the diff read `.stable` —
+        // while `mixer.set_volume` fails on every track except one.
+        let rail = try baseline()
+        let rows = rail.root.children
+        #expect(rows.count >= 3, "the rail has \(rows.count) rows — too few to lose most of them")
+
+        let keptFirst = Self.replacingRoot(
+            of: rail, with: [rows[0]] + rows.dropFirst().map(Self.withoutVolume))
+
+        #expect(AtlasDiff.confidences(in: keptFirst)[.trackHeaderVolumeFader]
+                    == AtlasDiff.confidences(in: rail)[.trackHeaderVolumeFader],
+                "the best score changed, so this case is not testing what it says")
+
+        let drifts = AtlasDiff.between(baseline: rail, current: keptFirst)
+        let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
+        #expect(volume.status == .changed, "partial loss read as \(volume.status)")
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .failClosedMutation)
+    }
+
+    @Test("partial loss is visible when the repetition is nested, not just at the root")
+    func partialLossInsideAWindowCapture() throws {
+        // The counterexample that killed the first version of `coverage`, kept as a case because the
+        // rail is the easy shape and the window is the one that was wrong.
+        //
+        // Units used to be the ROOT's children — in a whole-window capture, five top-level groups
+        // (inspector, library, tracks, mixer, control bar). Every mixer fader lives inside one of
+        // them, so removing four of five left that group still hit, the ratio unchanged at one fifth
+        // both before and after, and the loss read `.stable` while the best score stayed 1.0.
+        let window = try windowBaseline()
+        let fader = AXLogicProElements.volumeFaderSelector
+        let path = try #require(AtlasDiff.unitPath(in: window, for: fader),
+                                "no repetition found for the fader in a whole-window capture")
+        let before = try #require(AtlasDiff.coverage(in: window, for: fader, at: path))
+        #expect(before == 1.0, "the mixer's strips do not all carry a fader: \(before)")
+
+        // Strip the volume evidence from all but the first of the deepest repeated set that holds
+        // faders — found the same way `coverage` finds it, so this mutation lands where it measures.
+        let sets = AtlasDiff.siblingSets(in: window.root)
+        let strips = try #require(sets.filter { units in
+            units.filter { Self.holdsVolume($0) }.count >= 3
+        }.min { $0.count < $1.count })
+        let stripped = Self.replacingSubtree(
+            of: window,
+            replacing: strips.dropFirst().map { ($0, Self.withoutVolume($0)) })
+
+        #expect(AtlasDiff.confidences(in: stripped)[.trackHeaderVolumeFader]
+                    == AtlasDiff.confidences(in: window)[.trackHeaderVolumeFader],
+                "the best score changed, so this case is not testing what it says")
+        // Read at the path the BASELINE named. Asking `stripped` where its own repetition is would
+        // let the measurement move: with four of five faders gone, a two-strip set elsewhere has
+        // the most matches and scores 1.0 again, from a different place.
+        let after = try #require(AtlasDiff.coverage(in: stripped, for: fader, at: path))
+        #expect(after < before, "nested partial loss left coverage at \(after)")
+
+        let drifts = AtlasDiff.between(baseline: window, current: stripped)
+        let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
+        #expect(volume.status == .changed, "nested partial loss read as \(volume.status)")
+    }
+
+    @Test("a path that lands on a different kind of place is not a reading")
+    func aShiftedPathIsNotAReading() throws {
+        // An index path names a POSITION. Read in another capture it can resolve to a container
+        // that was never the one measured — and if that one is fully covered, a real loss elsewhere
+        // reads as no change. The role chain along the path is checked, so the reading is refused.
+        let window = try windowBaseline()
+        let fader = AXLogicProElements.volumeFaderSelector
+        let path = try #require(AtlasDiff.unitPath(in: window, for: fader))
+        #expect(!path.isEmpty, "the fader's repetition is at the root — nothing to shift")
+
+        // Reparent: the container the path points at is replaced by a differently-rolled one that
+        // still holds two like children. The indexes all still resolve.
+        let decoy = AXSnapshot.Node(
+            role: kAXListRole as String, subrole: nil, description: nil, help: nil,
+            identifier: nil, valueRange: nil,
+            children: (0..<2).map { _ in
+                AXSnapshot.Node(
+                    role: kAXGroupRole as String, subrole: nil, description: "볼륨", help: nil,
+                    identifier: nil, valueRange: "0...233", children: [])
+            })
+        let shifted = Self.replacing(window, at: path, with: decoy)
+
+        #expect(AtlasDiff.coverage(in: shifted, for: fader, at: path) != nil,
+                "the path stopped resolving, so this case is not testing the signature")
+        let signature = try #require(AtlasDiff.pathSignature(in: window, at: path))
+        #expect(AtlasDiff.coverage(in: shifted, for: fader, at: path, expecting: signature) == nil,
+                "a different kind of container was accepted as the same measurement")
+    }
+
+    private static func replacing(
+        _ document: AXSnapshot.Document, at path: [Int], with replacement: AXSnapshot.Node
+    ) -> AXSnapshot.Document {
+        func rewrite(_ node: AXSnapshot.Node, _ remaining: ArraySlice<Int>) -> AXSnapshot.Node {
+            guard let index = remaining.first else { return replacement }
+            var children = node.children
+            children[index] = rewrite(children[index], remaining.dropFirst())
+            return AXSnapshot.Node(
+                role: node.role, subrole: node.subrole, description: node.description,
+                help: node.help, identifier: node.identifier, valueRange: node.valueRange,
+                children: children)
+        }
+        return AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom, root: rewrite(document.root, path[...]))
+    }
+
+    @Test("scoring a selector somewhere is not the same as having measured its coverage")
+    func confidenceWithoutRepetitionIsNotCoverage() throws {
+        // `uncovered` used to be "did it score anywhere", which a capture holding exactly one
+        // instance of every selector satisfies — full confidences, nothing unmeasured, full reuse,
+        // and the measurement that catches partial loss never ran once.
+        let rail = try baseline()
+        let single = Self.replacingRoot(of: rail, with: [rail.root.children[0]])
+
+        #expect(AtlasDiff.confidences(in: single)[.trackHeaderVolumeFader] != nil,
+                "the lone row does not score, so this case is not testing what it says")
+        #expect(AtlasDiff.unitPath(in: single, for: AXLogicProElements.volumeFaderSelector) == nil,
+                "one row still offered a repetition to measure")
+        #expect(AtlasDiff.uncovered(baseline: single, current: single)
+                    .contains(.trackHeaderVolumeFader),
+                "a selector scored but never measured for coverage counted as covered")
+        #expect(AtlasDiff.verdict(baselines: [(single, single)]) == .failClosedMutation)
+    }
+
+    @Test("a verdict taken from the documents cannot be told a coverage it did not measure")
+    func documentVerdictDerivesItsOwnCoverage() throws {
+        // `verdict(for:uncovered:)` removing its default makes the question unavoidable; it does not
+        // make the answer true, and a caller can still spell `[]`. This overload has nothing to
+        // spell — both the drifts and the unmeasured set come from the same two documents.
+        let rail = try baseline()
+        let window = try windowBaseline()
+
+        // The rail alone: stable everywhere it looks, and still not reusable, because `.controlBar`
+        // is unmeasured. This is the exact call the argument-taking overload lets a caller fake.
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail)]) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (window, window)])
+                    == .failClosedMutation,
+                "no committed baseline covers .controlBar, so neither should a union of them")
+
+        // And an empty run is not agreement either.
+        #expect(AtlasDiff.verdict(baselines: []) == .failClosedMutation)
+    }
+
+    private static func holdsVolume(_ node: AXSnapshot.Node) -> Bool {
+        AtlasDiff.candidates(in: node).contains {
+            confidence(of: $0.candidate, against: AXLogicProElements.volumeFaderSelector) >= 0.6
+        }
+    }
+
+    private static func replacingRoot(
+        of document: AXSnapshot.Document, with children: [AXSnapshot.Node]
+    ) -> AXSnapshot.Document {
+        AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom,
+            root: AXSnapshot.Node(
+                role: document.root.role, subrole: document.root.subrole,
+                description: document.root.description, help: document.root.help,
+                identifier: document.root.identifier, valueRange: document.root.valueRange,
+                children: children))
+    }
+
+    /// Swap named subtrees wherever they appear, by value — the snapshot has no identity to key on.
+    private static func replacingSubtree(
+        of document: AXSnapshot.Document,
+        replacing pairs: [(AXSnapshot.Node, AXSnapshot.Node)]
+    ) -> AXSnapshot.Document {
+        func rewrite(_ node: AXSnapshot.Node) -> AXSnapshot.Node {
+            if let match = pairs.first(where: { $0.0 == node }) { return match.1 }
+            return AXSnapshot.Node(
+                role: node.role, subrole: node.subrole, description: node.description,
+                help: node.help, identifier: node.identifier, valueRange: node.valueRange,
+                children: node.children.map(rewrite))
+        }
+        return AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom, root: rewrite(document.root))
+    }
+
+    /// Every volume label removed from one track row, and nothing else touched.
+    private static func withoutVolume(_ node: AXSnapshot.Node) -> AXSnapshot.Node {
+        func strip(_ value: String?) -> String? {
+            guard let value else { return nil }
+            return AXLocalePolicy.sliderVolumeHint.labels.contains(where: {
+                value.lowercased().contains($0.lowercased())
+            }) ? "len:\(value.count) redacted" : value
+        }
+        return AXSnapshot.Node(
+            role: node.role, subrole: node.subrole,
+            description: strip(node.description), help: strip(node.help),
+            identifier: node.identifier, valueRange: node.valueRange,
+            children: node.children.map(withoutVolume))
+    }
+
+    @Test("a selector that loses its control fails the run closed")
+    func aVanishedSelectorFailsClosed() throws {
+        // The failure this step exists to catch: a Logic update renames what a selector matches on,
+        // and the control stops being findable. Simulated by removing the label from the tree, not
+        // by editing the expected numbers.
+        let doc = try baseline()
+        let stripped = try JSONDecoder().decode(
+            AXSnapshot.Document.self,
+            from: Data(String(decoding: try JSONEncoder().encode(doc), as: UTF8.self)
+                .replacingOccurrences(of: "볼륨", with: "len:2 non-latin").utf8))
+
+        let drifts = AtlasDiff.between(baseline: doc, current: stripped)
+        let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
+        #expect(volume.status == .missing)
+        #expect(volume.affectedOperations == [.mixerSetVolume])
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .failClosedMutation,
+                "a selector that cannot find its control did not stop a mutation")
+    }
+
+    private func englishBaseline() throws -> AXSnapshot.Document {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-en-track-headers.json")
+        return try JSONDecoder().decode(AXSnapshot.Document.self, from: Data(contentsOf: url))
+    }
+
+    @Test("the same selectors resolve against a baseline captured in another language")
+    func selectorsResolveAcrossLocales() throws {
+        // The claim a single-locale atlas cannot make. Both fixtures are real captures from this
+        // machine — Logic quit, `defaults write com.apple.logic10 AppleLanguages -array en`,
+        // relaunched — so the two differ in Logic's own strings and in nothing else.
+        //
+        // What it caught: the rail is `트랙 헤더` in Korean and `Tracks header` in English. Not a
+        // translation of the same shape — the noun that is plural in one is singular in the other,
+        // and a selector written from the Korean alone would have looked for `track headers`.
+        let scores = AtlasDiff.confidences(in: try englishBaseline())
+        for id: SelectorID in [
+            .trackHeaderPanControl, .trackHeaderVolumeFader,
+            .trackHeaderMuteToggle, .trackHeaderSoloToggle, .trackHeaderArmToggle,
+        ] {
+            let value = try #require(scores[id], "\(id) found nothing in the English baseline")
+            #expect(value >= 0.6, "\(id) scored \(value) in English, below its own threshold")
+        }
+    }
+
+    @Test("a cross-locale diff is drift in Logic, not drift in the language")
+    func localeChangeIsNotDrift() throws {
+        // The trap this pins: diffing two locales must NOT read as a broken atlas. If it did, the
+        // qualification step would fail closed on every machine that is not the one the baseline was
+        // captured on — a gate that fires on its operator's language is not measuring Logic.
+        let drifts = AtlasDiff.between(
+            baseline: try baseline(), current: try englishBaseline())
+        #expect(!drifts.isEmpty, "nothing was compared")
+        let moved = drifts.filter { $0.status != .stable }
+            .map { "\($0.selectorID) \($0.status)" }.joined(separator: ", ")
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .reuseFull,
+                "changing Logic's language read as UI drift: \(moved)")
+    }
+
+    @Test("the English baseline carries no name from the project it was captured on")
+    func englishFixtureIsClean() throws {
+        // Same criterion as the Korean fixture, and it has to be re-measured rather than inherited:
+        // this capture ran against `lpm-606-warm`, a different project with latin track names, and
+        // latin text is exactly what the shape encoding compresses least.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/AX/logic-12.x-desktop-en-track-headers.json")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(!text.contains("lpm-606-warm"), "the project name is in the fixture")
+
+        let document = try JSONDecoder().decode(AXSnapshot.Document.self, from: Data(text.utf8))
+        var textFields: [String] = []
+        var layoutItems: [String] = []
+        func walk(_ node: AXSnapshot.Node) {
+            if let description = node.description {
+                if node.role == kAXTextFieldRole as String { textFields.append(description) }
+                if node.role == kAXLayoutItemRole as String { layoutItems.append(description) }
+            }
+            node.children.forEach(walk)
+        }
+        walk(document.root)
+
+        // Both places a track name reaches: the field that shows it, and the row that contains it.
+        #expect(!textFields.isEmpty, "no text field in the capture — nothing was tested")
+        #expect(!layoutItems.isEmpty, "no track row in the capture — nothing was tested")
+        for description in textFields + layoutItems {
+            #expect(description.hasPrefix("len:"), "a name-bearing element kept \(description)")
+        }
+
+        // And it is a real capture of English Logic, not an empty file that trivially holds no name.
+        for label in ["Mute", "Solo", "Volume", "Record Enable"] {
+            #expect(text.contains(label), "\(label) is missing — this is not an English capture")
+        }
+        #expect(document.locale == "en")
+    }
+
+    @Test("the run verdict is the worst case, not the average")
+    func verdictIsTheWorstCase() {
+        // Five stable selectors and one that vanished must not average out to reusable. That is how
+        // a gate stops being one.
+        let stable = SelectorDrift(
+            selectorID: .trackHeaderPanControl, status: .stable,
+            previousConfidence: 1, currentConfidence: 1,
+            changedRoles: [], affectedOperations: [.mixerSetPan])
+        let gone = SelectorDrift(
+            selectorID: .trackHeaderVolumeFader, status: .missing,
+            previousConfidence: 1, currentConfidence: 0,
+            changedRoles: [], affectedOperations: [.mixerSetVolume])
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, stable], assumingCoverage: []) == .reuseFull)
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, gone], assumingCoverage: []) == .failClosedMutation)
     }
 }

@@ -68,20 +68,77 @@ enum AXSnapshot {
     /// A text field's contents are user content by nature. Exact matches are always safe — the
     /// value IS a label the product knows — but a prefix is a concession, and it belongs only where
     /// the phenomenon it concedes to actually happens.
-    static let rolesWithStateSuffixes: Set<String> = [
+    /// Roles whose text is Logic's own chrome and cannot be something a user typed.
+    ///
+    /// The line that matters is not prefix-versus-contains, it is WHICH FIELDS CAN CARRY USER
+    /// CONTENT. A track name lives in an `AXTextField`; a plugin name lives in an `AXGroup`
+    /// description — both measured on this machine. A slider's `AXHelp` ("패닝 노브 및 밸런스
+    /// 노브. …") and a checkbox's description are Logic's strings in every tree seen so far.
+    ///
+    /// Inside these roles a value keeps the recognised labels it CONTAINS, beside its shape. Outside
+    /// them only an exact match survives, because a container or a text field is where a name would
+    /// be — and `오디오 1` leaking `오디오` from a text field is what the first capture did.
+    static let rolesCarryingOnlyChrome: Set<String> = [
+        kAXSliderRole as String,
         kAXCheckBoxRole as String,
         kAXRadioButtonRole as String,
+        kAXSplitterRole as String,
+        kAXDisclosureTriangleRole as String,
     ]
 
     static func redact(_ value: String?, role: String? = nil) -> String? {
         guard let value, !value.isEmpty else { return nil }
+        // The role gate comes FIRST, and an exact match does not get past it.
+        //
+        // It used to: `recognisedLabels.contains(value.lowercased())` returned the value verbatim
+        // before the role was considered, on the reasoning that "the value IS a label the product
+        // knows". That is a statement about the string, not about where it came from — and a track
+        // named `Solo`, `Audio` or `Region` is a user's name that happens to spell a label. `audio`
+        // is declared in two policy sets, so `Audio` in a text field would have reached the file
+        // intact. Naming the roles that can carry user text and shaping everything in them costs
+        // nothing: no adopted selector matches a text field, a group or a layout item.
+        guard let role, rolesCarryingOnlyChrome.contains(role) else { return shape(of: value) }
         if recognisedLabels.contains(value.lowercased()) { return value }
-        if let role, rolesWithStateSuffixes.contains(role),
-           let prefix = recognisedLabels.first(where: {
-               value.lowercased().hasPrefix($0) && !$0.isEmpty
-           }) {
-            return "\(value.prefix(prefix.count))…"
-        }
+
+        // Only allowlist members are emitted, never the text around them — so a chrome string keeps
+        // enough for a `.contains` selector to be scored against this fixture, which is what a
+        // baseline is FOR. Over-redacting here is safe and useless: the pan selector scored 0.583
+        // against a fixture that had shaped its help sentence away, below its own threshold.
+        //
+        // EVERY match, and a total order over them.
+        //
+        // This used to keep the four longest. Two things went wrong with that, and the first English
+        // capture showed the symptom: three checkboxes carrying nearly the same 193-character help
+        // sentence rendered as `mixer track play mute` and `mixer track mute play`. Whichever
+        // labels tie at four characters, only some of them fit in four slots — so which ones
+        // survive depends on the rest of the matched set, and `Set` iteration is seeded per process,
+        // so it can also depend on which process wrote the file.
+        //
+        // I did not reproduce a cross-process difference; three captures of the same tree hash
+        // identically. The claim here is narrower and enough on its own: truncation makes the output
+        // a function of more than its input, and a selector scored against a fixture can be looking
+        // for a label that the cut dropped. Keeping all of them is bounded by the allowlist, and
+        // sorting by length THEN by the label itself is a total order where length alone was not.
+        let haystack = value.lowercased()
+        let found = recognisedLabels
+            .filter { !$0.isEmpty && haystack.contains($0) }
+            .sorted { ($0.count, $1) > ($1.count, $0) }
+        guard !found.isEmpty else { return shape(of: value) }
+        return "\(found.joined(separator: " ")) | \(shape(of: value))"
+    }
+
+    /// An identifier is always a shape. No role earns it a concession, and neither does its content.
+    ///
+    /// The containment concession reports the labels found INSIDE a value, which is right for a help
+    /// sentence Logic wrote and wrong for an identifier. The exact-match concession is wrong here
+    /// too, for the same reason it was wrong on a text field: `Solo` is a label the product knows
+    /// AND a plausible name, and an identifier equal to it would have walked out verbatim on a
+    /// slider. Measured on Logic 12.3, the track-header elements expose no identifier at all — so
+    /// the concession would only ever apply to a value this code has never seen, which is the worst
+    /// place to be generous. Nothing is lost: an identifier the atlas could match on would be
+    /// Logic's own, and a selector that needs one is a selector this capture cannot serve anyway.
+    static func redactIdentifier(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
         return shape(of: value)
     }
 
@@ -123,9 +180,7 @@ enum AXSnapshot {
             subrole: AXHelpers.getAttribute(element, kAXSubroleAttribute as String, runtime: runtime),
             description: redact(AXHelpers.getDescription(element, runtime: runtime), role: role),
             help: redact(AXHelpers.getHelp(element, runtime: runtime), role: role),
-            // Identifiers are Logic's own, never a user string — but they are redacted through the
-            // same path anyway, so nothing reaches the file by a route the allowlist does not see.
-            identifier: redact(AXHelpers.getIdentifier(element, runtime: runtime), role: role),
+            identifier: redactIdentifier(AXHelpers.getIdentifier(element, runtime: runtime)),
             valueRange: range,
             children: children
         )
