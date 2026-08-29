@@ -72,6 +72,56 @@ _SETTLE_TRIES = 8
 _SETTLE_GAP = 0.35
 
 
+# The Event tab of the List Editors pane. Measured 2026-08-29 on a Korean Logic, where the four
+# list tabs describe themselves `이벤트`, `마커`, `템포`, `조표 및 박자표` — and where the
+# collector's own literal `== "Event"` meant it could not find the tab at all.
+EVENT_LIST_TAB_NAMES = ["event", "Event", "이벤트", "イベント"]
+# The Marker tab, needed only to point the pane somewhere else so a refusal can be observed.
+# Measured beside the others on 2026-08-29: `마커`.
+MARKER_LIST_TAB_NAMES = ["Marker", "마커", "マーカー"]
+# The other two, measured in the same read. They are here so a harness can tell "no list tab is
+# selected" from "a tab I do not recognise is selected" — filtering to only the tabs a run drives
+# turns the second into the first, and a run that then skips restoration reports itself clean.
+OTHER_LIST_TAB_NAMES = ["Tempo", "템포", "テンポ",
+                        "Signature", "조표 및 박자표", "調号と拍子記号"]
+ALL_LIST_TAB_NAMES = (EVENT_LIST_TAB_NAMES + MARKER_LIST_TAB_NAMES + OTHER_LIST_TAB_NAMES)
+
+
+def label_set(name, repo=None):
+    """`[canonical] + variants` for one `AXLocalePolicy` LabelSet, read from the Swift source.
+
+    PARSED, not imported — a harness cannot link the product, and shelling out to it would make the
+    thing under test supply the labels its own assertion is checked against.
+
+    The limit is worth stating: the harness and the product then read the SAME declaration, so a
+    declaration that is wrong for a locale is wrong in both and this comparison cannot see it. What
+    it does catch is the case it was written for — Logic rendering a different set of columns than
+    the product expects — and it catches it in every language, which a list of English literals in
+    a harness does not.
+    """
+    repo = repo or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(repo, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return None
+    # Comments first. Swift `// "위치" is documentation` inside a variants list is not a declared
+    # variant, and a regex that cannot see the difference reports one the compiler does not.
+    text = re.sub(r"//[^\n]*", "", text)
+    m = re.search(r"static let " + re.escape(name) + r"\s*=\s*LabelSet\((.*?)\)\s*\n", text, re.S)
+    if not m:
+        return None
+    body = m.group(1)
+    canonical = re.search(r'canonical:\s*"((?:[^"\\]|\\.)*)"', body)
+    if not canonical:
+        return None
+    out = [canonical.group(1)]
+    variants = re.search(r"variants:\s*\[(.*?)\]", body, re.S)
+    if variants:
+        out += re.findall(r'"((?:[^"\\]|\\.)*)"', variants.group(1))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Window geometry
 # ---------------------------------------------------------------------------
@@ -371,8 +421,17 @@ def _body(raw):
 # be guessed at — guessing localized labels is the defect #519 exists to remove from the product,
 # and a harness is not exempt from it.
 AX_REGION_LABELS = {
+    # Measured 2026-08-29: absent until then, so `located_band("Control Bar", ...)` answered
+    # `no element with that exact AXDescription` on a Korean Logic and three harnesses failed a
+    # precondition about a window frame. Every other region in this table already had its row —
+    # this was one missing line, not a missing mechanism.
+    "Control Bar": ["컨트롤 막대", "コントロールバー"],
     "Tracks contents": ["트랙 콘텐츠"],
-    "Tracks header": ["트랙 헤더"],
+    # Four ASCII spellings because the policy declares four and nothing here knows which one a
+    # given Logic renders — measured `Tracks header` in English 12.x, `트랙 헤더` in Korean. The
+    # alias guard found the other three unreachable: the policy claimed to know them and the
+    # locator would never have tried them.
+    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers"],
     "Tracks": ["트랙"],
     "Library": ["라이브러리"],
     "Mixer": ["믹서"],

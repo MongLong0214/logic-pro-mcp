@@ -996,6 +996,19 @@ enum AXLocalePolicy {
         rationale: "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred)."
     )
 
+    /// The Event tab of the List Editors pane, by `AXDescription`.
+    ///
+    /// `EventListReadbackCollector` compared this description against the literal `"Event"`, so on
+    /// a Logic running in any other language the tab could not be found and the collector threw
+    /// `eventTabNotFound` — a readback that cannot start rather than one that reads wrong.
+    /// Measured 2026-08-29 on a Korean Logic: the four list tabs describe themselves
+    /// `이벤트`, `마커`, `템포`, `조표 및 박자표`.
+    static let eventListTab = LabelSet(
+        canonical: "event",
+        variants: ["이벤트", "イベント"],
+        rationale: "Identifies the Event tab of the List Editors pane; the collector presses it."
+    )
+
     /// Choose-Project picker window title markers.
     static let projectPickerWindow = LabelSet(
         canonical: "프로젝트 선택",
@@ -1287,6 +1300,7 @@ enum AXLocalePolicy {
         trackTypeMaster,
         headerPanHint,
         trackHeadersDescription,
+        eventListTab,
         projectPickerWindow,
         transportTextFieldHint,
         trackContentExplicit,
