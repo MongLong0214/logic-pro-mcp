@@ -78,19 +78,21 @@ enum AtlasDiff {
         return out
     }
 
-    /// The repeated units a scope is made of — one per track on a track-header rail.
+    /// Every set of like siblings in the tree — each a candidate for "the thing there are many of".
     ///
-    /// A rail is a list of rows with the same controls in each. Anything measured over the whole
-    /// tree cannot tell six rows from one, and that is the gap `coverage` closes.
-    static func repeatedUnits(in document: AXSnapshot.Document) -> [AXSnapshot.Node] {
-        let children = document.root.children
-        let modal = Dictionary(grouping: children, by: \.role)
-            .max { $0.value.count < $1.value.count }
-        guard let modal, modal.value.count >= 2 else { return [] }
-        return modal.value
+    /// A container qualifies when it has two or more children and they all carry the same role: a
+    /// track-header rail's rows, a mixer's strips. The set is not chosen here, because which one is
+    /// the right unit depends on the selector being measured — see `coverage`.
+    static func siblingSets(in node: AXSnapshot.Node) -> [[AXSnapshot.Node]] {
+        var out: [[AXSnapshot.Node]] = []
+        if node.children.count >= 2, Set(node.children.map(\.role)).count == 1 {
+            out.append(node.children)
+        }
+        for child in node.children { out += siblingSets(in: child) }
+        return out
     }
 
-    /// The fraction of repeated units in which a selector finds its control.
+    /// The fraction of like units in which a selector finds its control.
     ///
     /// This is the measurement the best-score view cannot make. `confidences` takes the maximum
     /// across the tree, so a Logic update that strips the volume fader from five of six track
@@ -98,19 +100,69 @@ enum AtlasDiff {
     /// against those five tracks fails. Coverage goes 1.0 -> 0.17 and the run stops.
     ///
     /// A FRACTION, not a count. Counts are not comparable between two captures of different
-    /// projects: the Korean baseline has six tracks and the English one three, and demanding equal
-    /// counts would report every honest re-capture as drift.
-    static func coverage(in document: AXSnapshot.Document) -> [SelectorID: Double] {
-        let units = repeatedUnits(in: document)
-        guard !units.isEmpty else { return [:] }
-        var out: [SelectorID: Double] = [:]
-        for selector in adoptedSelectors {
-            let hits = units.filter { unit in
-                candidates(in: unit).contains {
-                    confidence(of: $0.candidate, against: selector) >= 0.6
+    /// projects: a six-track baseline against a three-track one would report every honest
+    /// re-capture as drift.
+    ///
+    /// The unit set is chosen PER SELECTOR, as the one holding the most of its matches — and that
+    /// choice is the whole difference between working and not. Taking the root's children instead
+    /// picked, in a whole-window capture, the five top-level groups (inspector, library, tracks,
+    /// mixer, control bar): the mixer's faders all live inside one of them, so removing four of five
+    /// left that one group still hit, coverage unchanged, and the loss read `.stable`. The repetition
+    /// is nested, and the measurement has to find it where it is rather than where the root is.
+    /// Where a selector's repetition lives, as an index path to the container holding the units.
+    ///
+    /// A PATH, because the unit set has to be chosen once and then read in both documents. Choosing
+    /// it independently on each side is what broke the first version: strip four of five mixer
+    /// faders and the five-strip set drops to one hit, so a smaller two-unit set elsewhere now has
+    /// the most matches and wins — reporting 1.0 again, from a different place. The measurement
+    /// moved to keep its own score up. The baseline names the place; the current capture is read
+    /// there and nowhere else.
+    static func unitPath(in document: AXSnapshot.Document, for selector: SemanticSelector) -> [Int]? {
+        var best: (path: [Int], hits: Int, ratio: Double)?
+        func visit(_ node: AXSnapshot.Node, _ path: [Int]) {
+            if node.children.count >= 2, Set(node.children.map(\.role)).count == 1 {
+                let hits = node.children.filter { matches(selector, in: $0) }.count
+                let ratio = Double(hits) / Double(node.children.count)
+                if hits > 0,
+                   best == nil || hits > best!.hits || (hits == best!.hits && ratio < best!.ratio) {
+                    best = (path, hits, ratio)
                 }
             }
-            out[selector.id] = Double(hits.count) / Double(units.count)
+            for (index, child) in node.children.enumerated() { visit(child, path + [index]) }
+        }
+        visit(document.root, [])
+        return best?.path
+    }
+
+    static func matches(_ selector: SemanticSelector, in node: AXSnapshot.Node) -> Bool {
+        candidates(in: node).contains { confidence(of: $0.candidate, against: selector) >= 0.6 }
+    }
+
+    /// The fraction of units at `path` that still find the selector's control.
+    ///
+    /// Returns nil when the path is not a container of two or more like siblings any more, which is
+    /// itself a change worth failing on rather than scoring.
+    static func coverage(
+        in document: AXSnapshot.Document, for selector: SemanticSelector, at path: [Int]
+    ) -> Double? {
+        var node = document.root
+        for index in path {
+            guard index < node.children.count else { return nil }
+            node = node.children[index]
+        }
+        guard node.children.count >= 2 else { return nil }
+        return Double(node.children.filter { matches(selector, in: $0) }.count)
+            / Double(node.children.count)
+    }
+
+    /// Coverage for every adopted selector, each measured where that selector's repetition is.
+    static func coverage(in document: AXSnapshot.Document) -> [SelectorID: Double] {
+        var out: [SelectorID: Double] = [:]
+        for selector in adoptedSelectors {
+            if let path = unitPath(in: document, for: selector),
+               let ratio = coverage(in: document, for: selector, at: path) {
+                out[selector.id] = ratio
+            }
         }
         return out
     }
@@ -126,8 +178,17 @@ enum AtlasDiff {
         baseline: AXSnapshot.Document,
         current: AXSnapshot.Document
     ) -> [SelectorDrift] {
-        let before = coverage(in: baseline)
-        let after = coverage(in: current)
+        // Measured at the SAME place on both sides: the baseline names where the repetition is, and
+        // the current capture is read there. See `unitPath`.
+        var before: [SelectorID: Double] = [:]
+        var after: [SelectorID: Double] = [:]
+        for selector in adoptedSelectors {
+            guard let path = unitPath(in: baseline, for: selector) else { continue }
+            before[selector.id] = coverage(in: baseline, for: selector, at: path)
+            // A path that stopped being a set of like siblings scores zero rather than nothing —
+            // the units did not go missing, the tree around them changed shape.
+            after[selector.id] = coverage(in: current, for: selector, at: path) ?? 0
+        }
         return drift(
             previous: confidences(in: baseline),
             current: confidences(in: current),
@@ -168,10 +229,31 @@ enum AtlasDiff {
     /// `policy(for:)` already decides per selector; this is the run-level answer, and it is the
     /// worst case rather than a majority. One selector that can no longer find its control is
     /// enough to make a mutation unsafe, and averaging that away is how a gate stops being one.
-    /// - Parameter uncovered: adopted selectors this pair did not measure. A run that leaves any
-    ///   selector unmeasured cannot reuse a mutation qualification for it, so passing an empty set
-    ///   is a claim the caller has to be able to make. The parameter has no default for that
-    ///   reason: a default would let the honest question go unasked at the call site.
+    /// The verdict for a qualification run, from the baselines themselves.
+    ///
+    /// THIS is the entry point a caller should use, and the reason it exists is that the other one
+    /// takes coverage as an argument — which means a caller can assert coverage it never measured.
+    /// Removing the default from that parameter made the question unavoidable; it did not make the
+    /// answer true. Here there is nothing to pass: the drifts and the unmeasured set are both
+    /// derived from the same two documents, so `.reuseFull` cannot be reached by spelling `[]`.
+    ///
+    /// - Parameter baselines: every pair to be considered. Coverage is the UNION across them,
+    ///   because one scope covering what another misses is exactly how a full baseline set is
+    ///   assembled — and a selector no pair covers is unmeasured however many pairs there are.
+    static func verdict(
+        baselines: [(baseline: AXSnapshot.Document, current: AXSnapshot.Document)]
+    ) -> QualificationReuse {
+        guard !baselines.isEmpty else { return .failClosedMutation }
+        let drifts = baselines.flatMap { between(baseline: $0.baseline, current: $0.current) }
+        let unmeasured = baselines
+            .map { uncovered(baseline: $0.baseline, current: $0.current) }
+            .reduce(Set(adoptedSelectors.map(\.id))) { $0.intersection($1) }
+        return verdict(for: drifts, uncovered: unmeasured)
+    }
+
+    /// - Parameter uncovered: adopted selectors this pair did not measure. Prefer
+    ///   `verdict(baselines:)`, which derives this rather than trusting it — a caller that passes
+    ///   `[]` here is making a claim, and a claim is not a measurement.
     static func verdict(
         for drifts: [SelectorDrift],
         uncovered: Set<SelectorID>

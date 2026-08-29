@@ -127,16 +127,19 @@ enum AXSnapshot {
         return "\(found.joined(separator: " ")) | \(shape(of: value))"
     }
 
-    /// An identifier is never given the chrome concession, whatever role carries it.
+    /// An identifier is always a shape. No role earns it a concession, and neither does its content.
     ///
-    /// A `.contains` match reports the labels found INSIDE a value, which is right for a help
-    /// sentence Logic wrote and wrong for an identifier: identifiers are opaque strings, and the
-    /// ones this capture might meet are not in any policy set anyway. Measured on Logic 12.3, the
-    /// track-header elements expose no identifier at all — so the concession would only ever apply
-    /// to a value this code has never seen, which is the worst place to be generous.
+    /// The containment concession reports the labels found INSIDE a value, which is right for a help
+    /// sentence Logic wrote and wrong for an identifier. The exact-match concession is wrong here
+    /// too, for the same reason it was wrong on a text field: `Solo` is a label the product knows
+    /// AND a plausible name, and an identifier equal to it would have walked out verbatim on a
+    /// slider. Measured on Logic 12.3, the track-header elements expose no identifier at all — so
+    /// the concession would only ever apply to a value this code has never seen, which is the worst
+    /// place to be generous. Nothing is lost: an identifier the atlas could match on would be
+    /// Logic's own, and a selector that needs one is a selector this capture cannot serve anyway.
     static func redactIdentifier(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
-        return recognisedLabels.contains(value.lowercased()) ? value : shape(of: value)
+        return shape(of: value)
     }
 
     /// `len:13 latin+space` — enough to notice a tree changed, not enough to read a name.

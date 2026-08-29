@@ -539,6 +539,12 @@ struct Issue290SnapshotRedactionTests {
         // `user-named-thing` contains `name`, and the fixture kept it.
         let identifier = try #require(AXSnapshot.redactIdentifier("user-named-thing"))
         #expect(identifier.hasPrefix("len:"), "an identifier kept \(identifier)")
+
+        // And an identifier that IS a label exactly. Without this line the case above cannot see
+        // the concession being restored — `user-named-thing` is not an exact match either way, so
+        // the test passed with the defect back in. `Solo` is the value that separates them.
+        #expect(AXSnapshot.redactIdentifier("Solo") == "len:4 latin",
+                "an identifier equal to a label survived verbatim")
     }
 
     /// The three committed baselines, by the name they are filed under.
@@ -713,17 +719,11 @@ struct Issue290AtlasDiffTests {
         // is still a perfect match, so `confidences` is unchanged and the diff read `.stable` —
         // while `mixer.set_volume` fails on every track except one.
         let rail = try baseline()
-        let units = AtlasDiff.repeatedUnits(in: rail)
-        #expect(units.count >= 3, "the rail has \(units.count) rows — too few to lose most of them")
+        let rows = rail.root.children
+        #expect(rows.count >= 3, "the rail has \(rows.count) rows — too few to lose most of them")
 
-        let keptFirst = AXSnapshot.Document(
-            logicVersion: rail.logicVersion, locale: rail.locale, scope: rail.scope,
-            capturedFrom: rail.capturedFrom,
-            root: AXSnapshot.Node(
-                role: rail.root.role, subrole: rail.root.subrole,
-                description: rail.root.description, help: rail.root.help,
-                identifier: rail.root.identifier, valueRange: rail.root.valueRange,
-                children: [units[0]] + units.dropFirst().map(Self.withoutVolume)))
+        let keptFirst = Self.replacingRoot(
+            of: rail, with: [rows[0]] + rows.dropFirst().map(Self.withoutVolume))
 
         #expect(AtlasDiff.confidences(in: keptFirst)[.trackHeaderVolumeFader]
                     == AtlasDiff.confidences(in: rail)[.trackHeaderVolumeFader],
@@ -733,6 +733,101 @@ struct Issue290AtlasDiffTests {
         let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
         #expect(volume.status == .changed, "partial loss read as \(volume.status)")
         #expect(AtlasDiff.verdict(for: drifts, uncovered: []) == .failClosedMutation)
+    }
+
+    @Test("partial loss is visible when the repetition is nested, not just at the root")
+    func partialLossInsideAWindowCapture() throws {
+        // The counterexample that killed the first version of `coverage`, kept as a case because the
+        // rail is the easy shape and the window is the one that was wrong.
+        //
+        // Units used to be the ROOT's children — in a whole-window capture, five top-level groups
+        // (inspector, library, tracks, mixer, control bar). Every mixer fader lives inside one of
+        // them, so removing four of five left that group still hit, the ratio unchanged at one fifth
+        // both before and after, and the loss read `.stable` while the best score stayed 1.0.
+        let window = try windowBaseline()
+        let fader = AXLogicProElements.volumeFaderSelector
+        let path = try #require(AtlasDiff.unitPath(in: window, for: fader),
+                                "no repetition found for the fader in a whole-window capture")
+        let before = try #require(AtlasDiff.coverage(in: window, for: fader, at: path))
+        #expect(before == 1.0, "the mixer's strips do not all carry a fader: \(before)")
+
+        // Strip the volume evidence from all but the first of the deepest repeated set that holds
+        // faders — found the same way `coverage` finds it, so this mutation lands where it measures.
+        let sets = AtlasDiff.siblingSets(in: window.root)
+        let strips = try #require(sets.filter { units in
+            units.filter { Self.holdsVolume($0) }.count >= 3
+        }.min { $0.count < $1.count })
+        let stripped = Self.replacingSubtree(
+            of: window,
+            replacing: strips.dropFirst().map { ($0, Self.withoutVolume($0)) })
+
+        #expect(AtlasDiff.confidences(in: stripped)[.trackHeaderVolumeFader]
+                    == AtlasDiff.confidences(in: window)[.trackHeaderVolumeFader],
+                "the best score changed, so this case is not testing what it says")
+        // Read at the path the BASELINE named. Asking `stripped` where its own repetition is would
+        // let the measurement move: with four of five faders gone, a two-strip set elsewhere has
+        // the most matches and scores 1.0 again, from a different place.
+        let after = try #require(AtlasDiff.coverage(in: stripped, for: fader, at: path))
+        #expect(after < before, "nested partial loss left coverage at \(after)")
+
+        let drifts = AtlasDiff.between(baseline: window, current: stripped)
+        let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
+        #expect(volume.status == .changed, "nested partial loss read as \(volume.status)")
+    }
+
+    @Test("a verdict taken from the documents cannot be told a coverage it did not measure")
+    func documentVerdictDerivesItsOwnCoverage() throws {
+        // `verdict(for:uncovered:)` removing its default makes the question unavoidable; it does not
+        // make the answer true, and a caller can still spell `[]`. This overload has nothing to
+        // spell — both the drifts and the unmeasured set come from the same two documents.
+        let rail = try baseline()
+        let window = try windowBaseline()
+
+        // The rail alone: stable everywhere it looks, and still not reusable, because `.controlBar`
+        // is unmeasured. This is the exact call the argument-taking overload lets a caller fake.
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail)]) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (window, window)])
+                    == .failClosedMutation,
+                "no committed baseline covers .controlBar, so neither should a union of them")
+
+        // And an empty run is not agreement either.
+        #expect(AtlasDiff.verdict(baselines: []) == .failClosedMutation)
+    }
+
+    private static func holdsVolume(_ node: AXSnapshot.Node) -> Bool {
+        AtlasDiff.candidates(in: node).contains {
+            confidence(of: $0.candidate, against: AXLogicProElements.volumeFaderSelector) >= 0.6
+        }
+    }
+
+    private static func replacingRoot(
+        of document: AXSnapshot.Document, with children: [AXSnapshot.Node]
+    ) -> AXSnapshot.Document {
+        AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom,
+            root: AXSnapshot.Node(
+                role: document.root.role, subrole: document.root.subrole,
+                description: document.root.description, help: document.root.help,
+                identifier: document.root.identifier, valueRange: document.root.valueRange,
+                children: children))
+    }
+
+    /// Swap named subtrees wherever they appear, by value — the snapshot has no identity to key on.
+    private static func replacingSubtree(
+        of document: AXSnapshot.Document,
+        replacing pairs: [(AXSnapshot.Node, AXSnapshot.Node)]
+    ) -> AXSnapshot.Document {
+        func rewrite(_ node: AXSnapshot.Node) -> AXSnapshot.Node {
+            if let match = pairs.first(where: { $0.0 == node }) { return match.1 }
+            return AXSnapshot.Node(
+                role: node.role, subrole: node.subrole, description: node.description,
+                help: node.help, identifier: node.identifier, valueRange: node.valueRange,
+                children: node.children.map(rewrite))
+        }
+        return AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom, root: rewrite(document.root))
     }
 
     /// Every volume label removed from one track row, and nothing else touched.
