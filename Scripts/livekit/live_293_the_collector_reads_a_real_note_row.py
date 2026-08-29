@@ -41,6 +41,18 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evidence as E  # noqa: E402
 
+# What this harness proves, for `harness_evidence_coverage.py`. A branch touching this path must
+# run it and produce a clean document.
+#
+# ONE file, deliberately. `--probe-event-list` calls `observeNoteTable`, which drives
+# `findEventTab` -> `findEventPaneAndTable` -> `readHeaders` -> `readRows` -> `readRow` — the whole
+# collector and nothing else in the module. Claiming `MIDIReadback/` entire would cover
+# `MIDINoteCanonicalizer`, `MIDIRegionDiff` and seven more this run never touches, and a claim
+# wider than the drive is how a coverage rule starts lying on its owner's behalf.
+COVERS = [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift",
+]
+
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
 HEAD = sys.argv[2] if len(sys.argv) > 2 else ""
 if not WT or not HEAD:
