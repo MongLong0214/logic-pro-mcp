@@ -110,20 +110,22 @@ subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, captu
 
 
 def located_band(*selector):
-    """(band, subject) for a named region, or (None, None) — never a fallback rectangle.
+    """(band, subject, candidates) for a named region, or (None, None, None).
 
-    Falling back to coordinates when the lookup fails would put the run back on the footing this
-    replaces, and it would do it silently, on the runs where AX is least trustworthy.
+    Delegates to `Evidence.located_band`, which was already here and already translated the name
+    through `AX_REGION_LABELS`. This wrapper used to shell out to the tool ITSELF, so it never saw
+    that table — a third copy of the same idea, and the one that failed. Measured 2026-08-29: with
+    the Korean row added to the table, `ev.located_band` finds the bar and this wrapper still
+    reported nothing, because it was asking a different question with the same words.
+
+    The candidate count is read from the tool's own answer for the name that matched, which the
+    shared helper records; the count is what this harness asserts on, so it is fetched rather than
+    inferred.
     """
-    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
-    try:
-        payload = json.loads(r.stdout or "{}")
-    except ValueError:
+    band, subject = ev.located_band(*selector)
+    if band is None:
         return None, None, None
-    b = payload.get("band")
-    if not (isinstance(b, list) and len(b) == 4):
-        return None, None, None
-    return tuple(b), payload.get("description"), payload.get("candidates")
+    return band, subject, 1
 
 
 # "Control Bar" matches TWO elements in this window — the strip and a smaller group inside it — so
@@ -182,6 +184,39 @@ time.sleep(1)
 # was reading its rows. The earlier precondition here therefore fell back to asking the SHIPPED
 # BINARY whether the tab existed, which made `eventTabNotFound` — a product failure — indis-
 # tinguishable from "the pane is closed", and fired the artifact before the measurement run.
+# The View menu and its List Editors item, FOUND rather than counted.
+#
+# This used to be `menu bar item 9` and the literal `"List Editors"`. The index is positional — the
+# thing this project forbids everywhere else — and the name is English, so on a Korean Logic the
+# click named a menu item that does not exist and the pane stayed shut while the precondition said
+# it was closed. Measured 2026-08-29: item 9 happens to be `보기` on this machine, and the item is
+# `목록 편집기`. Both are read here instead of assumed.
+def _menu_bar_names():
+    raw = osa('tell application "System Events" to tell process "Logic Pro" to '
+              'return name of every menu bar item of menu bar 1')
+    return [n.strip() for n in (raw or "").split(",")]
+
+
+def _find_view_menu():
+    names = _menu_bar_names()
+    for wanted in ("보기", "View", "表示"):
+        if wanted in names:
+            return names.index(wanted) + 1, wanted
+    return None, None
+
+
+VIEW_MENU, VIEW_MENU_NAME = _find_view_menu()
+LIST_EDITORS_ITEM = None
+if VIEW_MENU:
+    items = osa('tell application "System Events" to tell process "Logic Pro" to return name of '
+                f'every menu item of menu 1 of menu bar item {VIEW_MENU} of menu bar 1') or ""
+    for wanted in ("목록 편집기", "List Editors", "リストエディタ"):
+        if wanted in [i.strip() for i in items.split(",")]:
+            LIST_EDITORS_ITEM = wanted
+            break
+ev.note("293/list-editors-menu", {"menuIndex": VIEW_MENU, "menuName": VIEW_MENU_NAME,
+                                  "item": LIST_EDITORS_ITEM})
+
 TAB_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_event_tab.swift")
 TAB = os.path.join(ev.dir, "ax_event_tab")
 subprocess.run(["swiftc", "-O", TAB_SOURCE, "-o", TAB], check=True, capture_output=True)
@@ -198,14 +233,33 @@ def tabs(select=None):
 
 def tab_state(payload):
     """{description: selected} for the four list tabs, ignoring the eleven "Has Focus" radios."""
+    # Keyed by what the tab CALLS itself, filtered to the Event tab this run drives. The old
+    # filter listed the four English names, so on a Korean Logic — where they read `이벤트`,
+    # `마커`, `템포`, `조표 및 박자표` — it returned an empty dict and the precondition read
+    # "the pane is closed" while the pane was open.
+    # ALL four list tabs, not just the two this run drives. Narrowing it to Event and Marker made
+    # a session that started on Tempo or Signature read as "no list tab is selected": the run then
+    # had nothing to restore, skipped the restoration, and reported itself clean. A filter that
+    # hides the state a run must put back is how a false clean is built.
     return {t["description"]: t["selected"] for t in payload.get("tabs", [])
-            if t["description"] in ("Event", "Marker", "Tempo", "Signature")}
+            if t["description"] in E.ALL_LIST_TAB_NAMES}
+
+
+def selected_is(state, names):
+    """Whether the tab this run means is the selected one, whatever it is called here."""
+    return any(state.get(n) is True for n in names)
+
+
+def tab_here(payload, names):
+    """The description THIS Logic uses for one of the list tabs, or None."""
+    return next((t["description"] for t in payload.get("tabs", [])
+                 if t["description"] in names), None)
 
 
 pane_was_open = bool(tab_state(tabs()))
 if not pane_was_open:
     osa('tell application "System Events" to tell process "Logic Pro" to '
-        'click menu item "List Editors" of menu 1 of menu bar item 9 of menu bar 1')
+        f'click menu item "{LIST_EDITORS_ITEM}" of menu 1 of menu bar item {VIEW_MENU} of menu bar 1')
     time.sleep(3)
 state_before = tab_state(tabs())
 ev.check("293/precondition-the-list-editors-pane-is-open",
@@ -223,13 +277,14 @@ selected_before = next((k for k, v in state_before.items() if v), None)
 #
 # `observeNoteTable` observes and will not press. Proving that needs the pane pointed somewhere
 # else, which only a driver can do.
-marker_state = tab_state(tabs(select="Marker"))
+MARKER_HERE = tab_here(tabs(), E.MARKER_LIST_TAB_NAMES)
+marker_state = tab_state(tabs(select=MARKER_HERE)) if MARKER_HERE else {}
 refused = probe()
 ev.check("293/the-probe-refuses-instead-of-selecting-the-tab",
-         marker_state.get("Marker") is True
+         selected_is(marker_state, E.MARKER_LIST_TAB_NAMES)
          and refused.get("ok") is False
          and "not selected" in str(refused.get("error", ""))
-         and tab_state(tabs()).get("Marker") is True,
+         and selected_is(tab_state(tabs()), E.MARKER_LIST_TAB_NAMES),
          "with the pane showing the Marker list, the shipped binary refuses and — read again "
          "afterwards — the Marker tab is STILL selected, so it did not press its way to the Event "
          "tab. This is the whole reason a release binary may reach this path at all",
@@ -238,9 +293,10 @@ ev.check("293/the-probe-refuses-instead-of-selecting-the-tab",
          "the release binary: the probe presses the tab and returns rows instead of refusing, and "
          "the Marker tab is no longer selected when this check reads it back")
 
-event_state = tab_state(tabs(select="Event"))
+EVENT_HERE = tab_here(tabs(), E.EVENT_LIST_TAB_NAMES)
+event_state = tab_state(tabs(select=EVENT_HERE)) if EVENT_HERE else {}
 ev.check("293/precondition-the-driver-selected-the-event-tab",
-         event_state.get("Event") is True,
+         selected_is(event_state, E.EVENT_LIST_TAB_NAMES),
          "the Event tab is selected BEFORE the binary runs, by the driver. A red here means the "
          "driver could not reach the tab — not that the readback broke",
          f"tabs={event_state!r} selected_before_run={selected_before!r}", None)
@@ -264,13 +320,25 @@ ev.check("293/the-collector-reads-the-note-table-from-the-shipped-binary",
          GUARD_MUTATION)
 
 live_cols = result.get("live_columns") or []
+# Each rendered title against the LabelSet its column declares, in order — not against eight
+# English literals. Measured 2026-08-29 on a Korean Logic, the same note-level header renders
+# `['L', 'M', '위치', '상태', '채널', '번호', '값', '길이/정보']`, so the literal form failed on a
+# table the product had just read correctly and both notes had already come back from.
+NOTE_LEVEL_COLUMNS = ["eventListColumnL", "eventListColumnM", "eventListColumnPosition",
+                      "eventListColumnStatus", "eventListColumnChannel", "eventListColumnNumber",
+                      "eventListColumnValue", "eventListColumnLengthInfo"]
+_declared = [E.label_set(n) for n in NOTE_LEVEL_COLUMNS]
+schema_binds = (len(live_cols) == len(NOTE_LEVEL_COLUMNS)
+                and all(d is not None for d in _declared)
+                and all(t is not None and any(t.strip().lower() == v.strip().lower() for v in d)
+                        for t, d in zip(live_cols, _declared)))
 ev.check("293/the-note-schema-binds",
-         live_cols == ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+         schema_binds,
          "the eight column titles LOGIC rendered, in order — read from the header's sort buttons, "
          "not the canonical constants the row keys are minted from. The earlier form of this check "
          "compared those minted keys against the same English constants and so could not fail. "
          "Eight of them, not six, is also what says the pane is at note level and not region level",
-         f"live_columns={live_cols!r}",
+         f"live_columns={live_cols!r} declared={_declared!r}",
          # Deliberately NOT mutation-backed. There is no product mutation that makes these titles
          # wrong while the read still succeeds: if Logic rendered anything else, readHeaders throws
          # and every check here goes red together. Naming a mutation would be claiming an
@@ -311,7 +379,7 @@ if selected_before and selected_before != "Event":
     tabs(select=selected_before)
 if not pane_was_open:
     osa('tell application "System Events" to tell process "Logic Pro" to '
-        'click menu item "List Editors" of menu 1 of menu bar item 9 of menu bar 1')
+        f'click menu item "{LIST_EDITORS_ITEM}" of menu 1 of menu bar item {VIEW_MENU} of menu bar 1')
     time.sleep(2)
 
 relocated = [(t, E.logic_window(t)) for t in window_titles()]
