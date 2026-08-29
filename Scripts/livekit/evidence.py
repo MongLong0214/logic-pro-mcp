@@ -156,12 +156,32 @@ def _running_harness_name():
     return _safe_name(f"unidentified-harness-pid{os.getpid()}")
 
 
-def logic_window(title_contains="Tracks"):
+# The arrange window's title, in every language this repository has measured it in. Logic names it
+# after the current view, so an English Logic says `… - Tracks` and a Korean one `… - 트랙`.
+#
+# This sits beside `logic_window` because its DEFAULT was the English word, and eighteen harnesses
+# take that default. Measured 2026-08-29 on a Korean Logic: `logic_window("Tracks")` returned None,
+# so `shot` took its no-window branch and recorded `settled: false`, `region: null` and
+# `wholly_within: false` — and I read those three as a settling problem and blamed blinking level
+# meters. They were one missing translation, and the capture never happened at all.
+ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック"]
+
+
+def logic_window(title_contains=None):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
 
     Deliberately not an AX read: the harness must be able to see the window even when the AX tree is
     exactly what is under test. Returns None when no matching window is on screen.
+
+    `title_contains` defaults to every known spelling of the arrange window rather than to one of
+    them. A caller naming a specific window still gets exactly that.
     """
+    if title_contains is None:
+        for candidate in ARRANGE_WINDOW_TITLES:
+            found = logic_window(candidate)
+            if found:
+                return found
+        return None
     try:
         import Quartz
     except ImportError:
@@ -651,7 +671,7 @@ class Evidence:
 
     # -- capture ------------------------------------------------------------
 
-    def shot(self, tag, settle_region=None, window_title="Tracks"):
+    def shot(self, tag, settle_region=None, window_title=None):
         """Capture the Logic window, waiting until the pixels stop moving.
 
         `settle_region` is an (x, y, w, h) rectangle in window coordinates. Settling is judged on that

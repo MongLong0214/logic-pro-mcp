@@ -88,6 +88,12 @@ def product_census(role, depth=None):
         return {"ok": False, "raw": (r.stdout or r.stderr)[:200]}
 
 
+def control_bar_description():
+    """The description THIS Logic uses for the control bar, read off the element that was found."""
+    band, subject = ev.located_band("Control Bar", "--min-width", "1000")
+    return subject if band else None
+
+
 def product_census_from(role, container):
     """The product's count taken from a NAMED container rather than from the window."""
     r = subprocess.run([E.BIN, "--probe-locator-census", role, "--probe-locator-from", container],
@@ -109,6 +115,11 @@ def independent_count(role, depth=None):
         return {"ok": False, "raw": (r.stdout or r.stderr)[:200]}
 
 
+# `located_band` translates the name through `AX_REGION_LABELS`, so the English spelling reaches a
+# Korean Logic's `트랙 헤더`. Before that table had the row, this returned None — and a band of None
+# means the captures below have no settle region, which reads as `captures_unsettled` and
+# `wholly_within: false` on a three-display machine. I called that an environmental wall and blamed
+# blinking level meters; measured 2026-08-29, it was this lookup and nothing else.
 RAIL, RAIL_SUBJECT = ev.located_band("Tracks header")
 ev.check("628/precondition-the-track-header-rail-was-located",
          RAIL is not None and bool(RAIL_SUBJECT),
@@ -211,7 +222,11 @@ ev.check("628/zero-matches-are-not-identified-either",
 # header; `getControlBar` searches the control bar. Deciding whether a site's candidate set has one
 # member needs the count taken from ITS root, and a count from the wrong root is a confident number
 # about a different question.
-scoped = product_census_from("AXTextField", "Tracks header")
+# The rail's description as THIS Logic renders it, read off the element the band lookup found.
+# `--probe-locator-from` matches exactly, so the English spelling resolved no container and the
+# probe reported zero candidates — which reads like a tree with nothing in it rather than like a
+# lookup that missed.
+scoped = product_census_from("AXTextField", RAIL_SUBJECT)
 ev.check("628/a-count-can-be-taken-from-a-named-container",
          scoped.get("ok") is True and scoped.get("containerCandidates") == 1
          and isinstance(scoped.get("candidates"), int),
@@ -225,7 +240,8 @@ ev.check("628/a-count-can-be-taken-from-a-named-container",
 # The container is resolved by the SAME counting rule, so an ambiguous container refuses instead of
 # picking one and reporting a confident count taken from whichever it reached first. Measured:
 # `Control Bar` matches two elements in the arrange window.
-ambiguous = product_census_from("AXCheckBox", "Control Bar")
+CONTROL_BAR_HERE = control_bar_description()
+ambiguous = product_census_from("AXCheckBox", CONTROL_BAR_HERE)
 ev.check("628/an-ambiguous-container-refuses-rather-than-choosing",
          ambiguous.get("ok") is False and ambiguous.get("containerCandidates", 0) > 1,
          "a container description matching more than one element produces a refusal naming the "
