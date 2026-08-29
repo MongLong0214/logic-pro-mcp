@@ -67,7 +67,7 @@ import sys
 # defect was fixed, which is the only direction it is allowed to move. The check fails when the
 # count comes in UNDER budget too, on purpose: ground gained and not recorded is ground that the
 # next change can quietly give back.
-BLIND_SITE_BUDGET = 56
+BLIND_SITE_BUDGET = 55
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
