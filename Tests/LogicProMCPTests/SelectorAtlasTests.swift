@@ -487,12 +487,12 @@ struct Issue290SnapshotRedactionTests {
             description: "len:6 non-latin+space", help: nil, identifier: nil,
             valueRange: nil, children: [])
 
-        #expect(AXSnapshot.scopedRoot(shaped, scope: "컨트롤 막대").description == "컨트롤 막대")
+        #expect(AXSnapshot.scopedRoot(shaped, readBackDescription: "컨트롤 막대").description == "컨트롤 막대")
 
         // And only for a label the product recognises. An operator can aim a capture at any
         // container by description, including one Logic named after a plugin — that string is
         // theirs to type, and it is not one this code copies into a second field.
-        #expect(AXSnapshot.scopedRoot(shaped, scope: "Vintage Warmer").description
+        #expect(AXSnapshot.scopedRoot(shaped, readBackDescription: "Vintage Warmer").description
                     == "len:6 non-latin+space")
 
         // And only when the scope really WAS that description. A generic scope matches title or
@@ -504,12 +504,54 @@ struct Issue290SnapshotRedactionTests {
             role: kAXGroupRole as String, subrole: nil,
             description: "len:11 latin+space", help: nil, identifier: nil,
             valueRange: nil, children: [])
-        #expect(AXSnapshot.scopedRoot(differentLength, scope: "컨트롤 막대").description
+        #expect(AXSnapshot.scopedRoot(differentLength, readBackDescription: "컨트롤 막대").description
                     == "len:11 latin+space")
         let noDescription = AXSnapshot.Node(
             role: kAXGroupRole as String, subrole: nil, description: nil, help: nil,
             identifier: nil, valueRange: nil, children: [])
-        #expect(AXSnapshot.scopedRoot(noDescription, scope: "컨트롤 막대").description == nil)
+        #expect(AXSnapshot.scopedRoot(noDescription, readBackDescription: "컨트롤 막대").description
+                    == nil)
+
+        // The shape is the SECOND lock, not the first, because on its own it is lossy: a title
+        // `Mixer` beside an unrelated description `Serum` both render `len:5 latin`. The parameter
+        // name carries the first lock — the value has to have been read back from this element's
+        // description, which only the `control-bar` capture can answer, so a generic scope never
+        // reaches here at all.
+        #expect(AXSnapshot.shape(of: "Mixer") == AXSnapshot.shape(of: "Serum"),
+                "the collision this argues about does not exist, so the argument is wrong")
+    }
+
+    @Test("only a scope the tool resolved itself may have its root description restored")
+    func onlyAPredicateResolvedScopeMayRestore() {
+        // The rule, tested where it is decided. Left as a call-site convention inside the capture
+        // command, widening it to every scope compiled, passed, and would only have shown up in the
+        // next fixture someone captured.
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "control-bar", resolvedDescription: "컨트롤 막대") == "컨트롤 막대")
+
+        // `트랙 헤더` is a recognised label whose shape matches the rail fixture's root exactly, so
+        // nothing downstream would have stopped it — the scope matched title OR description and the
+        // capture never recorded which.
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "트랙 헤더", resolvedDescription: "트랙 헤더") == nil)
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "window", resolvedDescription: nil) == nil)
+    }
+
+    @Test("only a capture that read the description back may restore it")
+    func onlyTheControlBarPathRestoresARootDescription() throws {
+        // The call site is the lock. Every committed baseline except the control bar was captured
+        // through a route that cannot say what the root's description was, and none of them carries
+        // a root description that is not a shape.
+        for name in Self.committedFixtures where !name.contains("control-bar") {
+            let document = try JSONDecoder().decode(
+                AXSnapshot.Document.self,
+                from: Data(contentsOf: Self.fixtureURL(name)))
+            if let description = document.root.description {
+                #expect(description.hasPrefix("len:"),
+                        "\(name) restored a root description on a route that cannot verify it")
+            }
+        }
     }
 
     @Test("names the product does not recognise are reduced to a shape")

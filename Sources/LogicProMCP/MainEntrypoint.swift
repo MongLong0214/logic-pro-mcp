@@ -371,6 +371,9 @@ enum MainEntrypoint {
             // `getControlBar` already discriminates them by the property callers depend on — the
             // bar you can find a transport control in.
             var scopeLabel = scope
+            // Set where the tool resolved the element itself and then asked what it is called.
+            // `AXSnapshot.restorableRootDescription` owns the rule; this only supplies the answer.
+            var resolvedDescription: String?
             if scope == "control-bar" {
                 guard let bar = AXLogicProElements.getControlBar() else {
                     writeStdout("{\"ok\":false,\"error\":\"getControlBar found no bar to capture\"}\n")
@@ -380,6 +383,7 @@ enum MainEntrypoint {
                 // Filed under the label Logic actually used, so the fixture says which locale's
                 // string was resolved rather than the argument that asked for it.
                 scopeLabel = AXHelpers.getDescription(bar, runtime: .production) ?? scope
+                resolvedDescription = AXHelpers.getDescription(bar, runtime: .production)
             } else if scope == "window" {
                 root = window
             } else if let scoped = AXLocalePolicy.censusDescendant(
@@ -401,8 +405,12 @@ enum MainEntrypoint {
                 locale: locale,
                 scope: scopeLabel,
                 capturedFrom: "ax",
-                root: AXSnapshot.scopedRoot(
-                    AXSnapshot.capture(root, runtime: .production), scope: scopeLabel)
+                root: AXSnapshot.restorableRootDescription(
+                    scope: scope, resolvedDescription: resolvedDescription
+                ).map {
+                    AXSnapshot.scopedRoot(
+                        AXSnapshot.capture(root, runtime: .production), readBackDescription: $0)
+                } ?? AXSnapshot.capture(root, runtime: .production)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

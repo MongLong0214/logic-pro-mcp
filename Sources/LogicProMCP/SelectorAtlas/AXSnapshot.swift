@@ -169,14 +169,38 @@ enum AXSnapshot {
     /// And only when the scope is a label the product recognises. An operator can aim a capture at
     /// any container by description, including one Logic named after a plugin — that string is the
     /// operator's to type, but it is not one this code will copy into a second field.
-    /// It also has to have BEEN the description, and that is checkable without trusting anyone.
+    /// It also has to have BEEN the description, and the caller has to be able to say so.
     ///
-    /// The redacted value is the shape of whatever the description held. If the scope was really
-    /// that description, `shape(of: scope)` reproduces it exactly. A capture whose scope matched a
-    /// title instead, or `--ax-snapshot-scope window` where nothing was matched at all, does not
-    /// reproduce — and writing the scope in anyway would put a string into a field the element
+    /// `scope` here is not the argument someone typed — it is a value READ BACK from the element's
+    /// own description. Only the named `control-bar` capture can supply that, because only it
+    /// resolves through `getControlBar` and then asks the resulting element what it is called. A
+    /// generic scope matches title OR description, and `--ax-snapshot-scope window` matches
+    /// neither; writing the scope in on those paths would put a string into a field the element
     /// never held, which is manufacturing evidence for a selector to score against.
-    static func scopedRoot(_ node: Node, scope: String) -> Node {
+    ///
+    /// The shape check stays as the second lock, not the first. It is lossy on its own — a title
+    /// `Mixer` beside an unrelated description `Serum` both render `len:5 latin` — so it can
+    /// confirm a value the caller already read, and cannot establish one it did not.
+    /// Scopes whose root element is resolved by a product predicate, not by matching a description.
+    ///
+    /// Only these may have their root's description restored, and the reason is which question the
+    /// capture can answer. `control-bar` resolves through `getControlBar` and then asks the element
+    /// what it is called, so the label is a READ-BACK. Every other scope matches a string against
+    /// title or description without recording which one hit, and `window` matches nothing at all.
+    static let scopesResolvedByPredicate: Set<String> = ["control-bar"]
+
+    /// The description a capture may restore on its root, or nil.
+    ///
+    /// Extracted so the rule can be tested where it is decided. Left inside the capture command it
+    /// was a call-site convention: widening it to every scope compiles, passes, and only shows up in
+    /// the next fixture someone captures — which is the shape of a rule with no test.
+    static func restorableRootDescription(
+        scope: String, resolvedDescription: String?
+    ) -> String? {
+        scopesResolvedByPredicate.contains(scope) ? resolvedDescription : nil
+    }
+
+    static func scopedRoot(_ node: Node, readBackDescription scope: String) -> Node {
         guard recognisedLabels.contains(scope.lowercased()),
               node.description == shape(of: scope)
         else { return node }
