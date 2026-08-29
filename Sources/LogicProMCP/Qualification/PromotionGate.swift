@@ -23,6 +23,14 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case releaseVersionUnparseable(expected: String, actual: String)
     case evidenceBindingMismatch(detail: String)
     case requiredOperationNotSatisfied(operationID: String)
+    /// The ADR-007 atlas diff ran and refused.
+    ///
+    /// A case of its own because this gate rejects a FAILED case only when its id equals a required
+    /// axis key, and `atlas.drift_diff` is not one — so without this the step reported a failure
+    /// that stopped nothing. Measured before merge, 2026-08-29: the case landed `.failed`,
+    /// `attestation.failed` counted it, and the release stayed promotable. A verdict nobody acts on
+    /// is the shape this whole step exists to remove.
+    case atlasDriftRefused(detail: String)
     case provenanceSignatureMissing
     case provenanceSignatureInvalid
     case trustedProvenanceKeyUnavailable
@@ -117,6 +125,14 @@ struct PromotionGate {
         for caseID in expiredWaiverIDs.sorted() {
             rejections.append(.expiredWaiver(caseID: caseID))
         }
+        // The atlas step, if it ran at all. Absent means the flag was off, which is today's
+        // pipeline and not a rejection; present-and-failed is one.
+        if let atlas = attestation.cases.first(where: { $0.id == "atlas.drift_diff" }),
+           atlas.status == .failed {
+            rejections.append(.atlasDriftRefused(
+                detail: atlas.reason ?? "the atlas diff refused without a stated reason"))
+        }
+
         for operationID in requiredOperationIDs.sorted() {
             let operationCases = attestation.cases.filter {
                 $0.id == "in-process/\(operationID)" && $0.operationID == operationID

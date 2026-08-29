@@ -20,6 +20,9 @@ package struct QualificationRunner: Sendable {
         let handlerExists: @Sendable (String, String) -> Bool
         let beforeEvidenceRead: @Sendable (URL) -> Void
         let drive: @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult
+        /// Baseline/live pairs for the ADR-007 diff. Empty in a build that cannot capture, which an
+        /// ARMED run treats as a refusal rather than as agreement — see `AtlasQualification`.
+        let atlasPairs: @Sendable () -> (pairs: [AtlasQualification.Pair], dropped: [String])
 
         static let production = Runtime(
             executableURL: { try QualificationRunner.currentExecutableURL() },
@@ -37,7 +40,8 @@ package struct QualificationRunner: Sendable {
             beforeEvidenceRead: { _ in },
             drive: { request in
                 try QualificationTransport().drive(request)
-            }
+            },
+            atlasPairs: { AtlasCapture.pairsForThisRun() }
         )
     }
 
@@ -787,6 +791,40 @@ package struct QualificationRunner: Sendable {
             cases.append(contentsOf: externalCases)
         }
 
+        // ADR-007: the atlas diff, as one more case rather than a new attestation field.
+        //
+        // `runtime.atlasPairs` is injected so this decision is testable without Logic — and so the
+        // capture side, which needs a running application, cannot make the DECISION untestable.
+        // Off unless `adr007SelectorAtlas` is set: only `ko` has a control-bar baseline today, and
+        // arming it everywhere would refuse every run on a Logic speaking anything else.
+        // The flag decides before anything is CAPTURED, not only before a case is emitted. Passing
+        // `runtime.atlasPairs()` as an argument evaluated it eagerly, so a run with the flag off
+        // still walked the AX tree — work nobody asked for, and a claim in the PR ("the flag is the
+        // only thing arming it") that the code did not keep. Named by review, 2026-08-29.
+        let atlasArmed = FeatureFlags.adr007SelectorAtlas
+        let atlasCaptured = atlasArmed ? runtime.atlasPairs() : (pairs: [], dropped: [])
+        if let atlasCase = AtlasQualification.caseFor(
+            AtlasQualification.outcome(
+                armed: atlasArmed,
+                pairs: atlasCaptured.pairs,
+                dropped: atlasCaptured.dropped),
+            axis: observedAxis,
+            binarySHA256: binarySHA256,
+            traceID: "atlas-drift-diff"
+        ) {
+            // AFTER the external-manifest collision check at the top of this function, so this id
+            // has to be checked here or not at all. An external manifest declaring
+            // `atlas.drift_diff` would otherwise produce two cases with one id, and every consumer
+            // that keys by id — the promotion gate, a waiver, a reader counting a failure — would
+            // see whichever it reached first. Found by review before merge, 2026-08-29.
+            guard !cases.contains(where: { $0.id == atlasCase.id }) else {
+                throw RunnerError.evidenceBindingMismatch(
+                    "case id \(atlasCase.id) is already present; the ADR-007 step cannot add a "
+                        + "second case under the same id")
+            }
+            cases.append(atlasCase)
+        }
+
         let caseManifest = QualificationCaseManifest(
             schema: "qualification-case-manifest/v1",
             binarySHA256: binarySHA256,
@@ -1278,6 +1316,11 @@ package struct QualificationRunner: Sendable {
             VerificationOutput.Rejection(
                 reason: "requiredCaseFailed", caseID: caseID, key: nil,
                 name: nil, expected: nil, actual: nil
+            )
+        case .atlasDriftRefused(let detail):
+            VerificationOutput.Rejection(
+                reason: "atlasDriftRefused", caseID: "atlas.drift_diff", key: nil,
+                name: nil, expected: nil, actual: detail
             )
         case .requiredCombinationNotQualified(let key):
             VerificationOutput.Rejection(
