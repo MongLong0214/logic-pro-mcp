@@ -477,6 +477,25 @@ struct Issue290SnapshotRedactionTests {
                     == "len:6 non-latin+space")
     }
 
+    @Test("a scoped capture's root keeps the identity its scope already spells out")
+    func scopedRootKeepsARecognisedScope() {
+        // Tested on the FUNCTION, not on a fixture. The committed control-bar baseline has the
+        // description baked in, so reverting this rule leaves that file — and any test reading it —
+        // exactly as green as before. Only the producer can see the producer's defect.
+        let shaped = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil,
+            description: "len:6 non-latin+space", help: nil, identifier: nil,
+            valueRange: nil, children: [])
+
+        #expect(AXSnapshot.scopedRoot(shaped, scope: "컨트롤 막대").description == "컨트롤 막대")
+
+        // And only for a label the product recognises. An operator can aim a capture at any
+        // container by description, including one Logic named after a plugin — that string is
+        // theirs to type, and it is not one this code copies into a second field.
+        #expect(AXSnapshot.scopedRoot(shaped, scope: "Vintage Warmer").description
+                    == "len:6 non-latin+space")
+    }
+
     @Test("names the product does not recognise are reduced to a shape")
     func userNamesAreReducedToShape() throws {
         // Every one of these is a plausible thing a user types, and none is in any policy set.
@@ -552,6 +571,7 @@ struct Issue290SnapshotRedactionTests {
         "logic-12.x-desktop-ko-track-headers.json",
         "logic-12.x-desktop-en-track-headers.json",
         "logic-12.x-desktop-ko-window.json",
+        "logic-12.x-desktop-ko-control-bar.json",
     ]
 
     static func fixtureURL(_ name: String) -> URL {
@@ -587,16 +607,21 @@ struct Issue290SnapshotRedactionTests {
         ]
         var carried: [String] = []
         var shaped = 0
-        func walk(_ node: AXSnapshot.Node) {
+        func walk(_ node: AXSnapshot.Node, isRoot: Bool = false) {
             if nameBearing.contains(node.role) {
                 for value in [node.description, node.help, node.identifier].compactMap({ $0 }) {
+                    // The one exception, and it is arithmetic rather than judgement: a scoped
+                    // capture's root keeps the description that `scope` already spells out, so the
+                    // two fields together reveal exactly what `scope` alone does. Without it no
+                    // baseline could score `.controlBar`, whose entire identity is that string.
+                    if isRoot, value == document.scope { continue }
                     carried.append(value)
                     if value.hasPrefix("len:") { shaped += 1 }
                 }
             }
-            node.children.forEach(walk)
+            node.children.forEach { walk($0) }
         }
-        walk(document.root)
+        walk(document.root, isRoot: true)
         #expect(!carried.isEmpty, "nothing name-bearing in \(name) — nothing was tested")
         #expect(shaped == carried.count,
                 "\(name) kept \(carried.filter { !$0.hasPrefix("len:") })")
@@ -837,6 +862,56 @@ struct Issue290AtlasDiffTests {
                     .contains(.trackHeaderVolumeFader),
                 "a selector scored but never measured for coverage counted as covered")
         #expect(AtlasDiff.verdict(baselines: [(single, single)]) == .failClosedMutation)
+    }
+
+    private func controlBarBaseline() throws -> AXSnapshot.Document {
+        try load("logic-12.x-desktop-ko-control-bar.json")
+    }
+
+    @Test("the rail and the control bar together cover every adopted selector")
+    func theBaselineSetIsComplete() throws {
+        // The gap this closes, and it took two things. The bar is identified by an `AXGroup`
+        // description and groups are shaped, so nothing could score `.controlBar` — a scoped
+        // capture's root now keeps the identity its `scope` field already spells out. And there is
+        // exactly ONE control bar, so requiring a repetition to measure coverage in made it
+        // permanently unmeasured whatever the fixture said.
+        let bar = try controlBarBaseline()
+        let scored = try #require(AtlasDiff.confidences(in: bar)[.controlBar],
+                                  "the control-bar baseline does not score .controlBar")
+        #expect(scored >= 0.6, ".controlBar scored \(scored), below its own threshold")
+        #expect(!AtlasDiff.uncovered(baseline: bar, current: bar).contains(.controlBar))
+
+        let rail = try baseline()
+        let unmeasured = AtlasDiff.uncovered(baseline: rail, current: rail)
+            .intersection(AtlasDiff.uncovered(baseline: bar, current: bar))
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, bar)]) == .reuseFull,
+                "unmeasured across the pair: \(unmeasured)")
+
+        // And the rail alone still is not enough, or the union above proved nothing.
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail)]) == .failClosedMutation)
+    }
+
+    @Test("the control bar losing its name stops a transport mutation")
+    func aRenamedControlBarFailsClosed() throws {
+        // The drift this baseline exists to catch, driven by removing the label rather than by
+        // editing an expected number.
+        let bar = try controlBarBaseline()
+        let renamed = AXSnapshot.Document(
+            logicVersion: bar.logicVersion, locale: bar.locale, scope: bar.scope,
+            capturedFrom: bar.capturedFrom,
+            root: AXSnapshot.Node(
+                role: bar.root.role, subrole: bar.root.subrole,
+                description: "len:6 non-latin+space", help: bar.root.help,
+                identifier: bar.root.identifier, valueRange: bar.root.valueRange,
+                children: bar.root.children))
+
+        let drifts = AtlasDiff.between(baseline: bar, current: renamed)
+        let control = try #require(drifts.first { $0.selectorID == .controlBar })
+        #expect(control.status == .missing, "a renamed control bar read as \(control.status)")
+        #expect(control.affectedOperations == [.transportPlay, .transportStop])
+        let rail = try baseline()
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, renamed)])
+                    == .failClosedMutation)
     }
 
     @Test("a verdict taken from the documents cannot be told a coverage it did not measure")

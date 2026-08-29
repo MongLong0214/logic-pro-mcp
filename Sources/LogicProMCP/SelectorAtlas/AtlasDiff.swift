@@ -27,6 +27,16 @@ enum AtlasDiff {
         ]
     }
 
+    /// Selectors that name ONE thing, not one-per-row.
+    ///
+    /// How many there should be is part of what a selector means, and coverage only asks a question
+    /// that has an answer for the repeating kind. Without this, `.controlBar` was permanently
+    /// unmeasured: `uncovered` requires a coverage measurement, coverage requires a repetition, and
+    /// there is exactly one control bar in a window — so no baseline could ever cover it and no
+    /// verdict could ever be `.reuseFull`. That is a gate that fails closed on its own definition
+    /// rather than on the tree.
+    static let singularSelectors: Set<SelectorID> = [.controlBar]
+
     /// A snapshot node as something the resolver can score.
     ///
     /// `ancestors` is threaded down the walk rather than read back up, because a snapshot has no
@@ -262,7 +272,8 @@ enum AtlasDiff {
         for selector in adoptedSelectors {
             let scored = confidences(in: baseline)[selector.id] != nil
                 || confidences(in: current)[selector.id] != nil
-            let measurable = unitPath(in: baseline, for: selector) != nil
+            let measurable = singularSelectors.contains(selector.id)
+                || unitPath(in: baseline, for: selector) != nil
             if scored, measurable { covered.insert(selector.id) }
         }
         return Set(adoptedSelectors.map(\.id)).subtracting(covered)

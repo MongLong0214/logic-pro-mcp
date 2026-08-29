@@ -365,7 +365,22 @@ enum MainEntrypoint {
             let locale = arguments.drop(while: { $0 != "--ax-snapshot-locale" })
                 .dropFirst().first ?? "unknown"
             let root: AXUIElement
-            if scope == "window" {
+            // A named scope resolves through the code production uses, not through a description
+            // match. The control bar needs it: two nested groups carry that description (#628), so
+            // the census route refuses as ambiguous and no baseline could ever cover `.controlBar`.
+            // `getControlBar` already discriminates them by the property callers depend on — the
+            // bar you can find a transport control in.
+            var scopeLabel = scope
+            if scope == "control-bar" {
+                guard let bar = AXLogicProElements.getControlBar() else {
+                    writeStdout("{\"ok\":false,\"error\":\"getControlBar found no bar to capture\"}\n")
+                    return 1
+                }
+                root = bar
+                // Filed under the label Logic actually used, so the fixture says which locale's
+                // string was resolved rather than the argument that asked for it.
+                scopeLabel = AXHelpers.getDescription(bar, runtime: .production) ?? scope
+            } else if scope == "window" {
                 root = window
             } else if let scoped = AXLocalePolicy.censusDescendant(
                 of: window, role: "AXGroup",
@@ -384,9 +399,10 @@ enum MainEntrypoint {
                 logicVersion: arguments.drop(while: { $0 != "--ax-snapshot-version" })
                     .dropFirst().first ?? "unspecified",
                 locale: locale,
-                scope: scope,
+                scope: scopeLabel,
                 capturedFrom: "ax",
-                root: AXSnapshot.capture(root, runtime: .production)
+                root: AXSnapshot.scopedRoot(
+                    AXSnapshot.capture(root, runtime: .production), scope: scopeLabel)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

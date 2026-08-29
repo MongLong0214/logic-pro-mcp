@@ -155,6 +155,27 @@ enum AXSnapshot {
         return "len:\(value.count) \(classes.sorted().joined(separator: "+"))"
     }
 
+    /// The root of a scoped capture, keeping the identity the scope already records.
+    ///
+    /// A container's own description is shaped like any other group's, and for the control bar that
+    /// is the whole identity — `컨트롤 막대` is what `controlBarSelector` matches, so no committed
+    /// baseline could score `.controlBar` at all.
+    ///
+    /// Restoring it on the ROOT of a scoped capture costs nothing, and the reason is arithmetic
+    /// rather than judgement: `Document.scope` already carries that exact string, written by the
+    /// caller who asked for it. A file that says `"scope": "컨트롤 막대"` and a root described
+    /// `len:6 non-latin+space` reveals precisely as much as one that describes the root by name.
+    ///
+    /// And only when the scope is a label the product recognises. An operator can aim a capture at
+    /// any container by description, including one Logic named after a plugin — that string is the
+    /// operator's to type, but it is not one this code will copy into a second field.
+    static func scopedRoot(_ node: Node, scope: String) -> Node {
+        guard recognisedLabels.contains(scope.lowercased()) else { return node }
+        return Node(
+            role: node.role, subrole: node.subrole, description: scope, help: node.help,
+            identifier: node.identifier, valueRange: node.valueRange, children: node.children)
+    }
+
     static func capture(
         _ element: AXUIElement,
         depth: Int = 0,

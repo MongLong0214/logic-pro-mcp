@@ -1,0 +1,258 @@
+{
+  "capturedFrom" : "ax",
+  "locale" : "ko",
+  "logicVersion" : "12.x",
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:5 non-latin+space",
+            "help" : "len:93 non-latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "마디",
+                "role" : "AXSlider",
+                "valueRange" : "4...6"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "비트",
+                "role" : "AXSlider",
+                "valueRange" : "0...2"
+              }
+            ],
+            "description" : "len:7 non-latin+space",
+            "help" : "len:97 non-latin+punct+space",
+            "role" : "AXGroup"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "템포",
+            "help" : "녹음 입력 재생 클릭 템포 값 | len:80 non-latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "5...990"
+          },
+          {
+            "children" : [
+
+            ],
+            "help" : "len:117 latin+non-latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:3 non-latin",
+            "help" : "len:90 non-latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:2 non-latin",
+            "help" : "len:60 non-latin+punct+space",
+            "role" : "AXPopUpButton"
+          }
+        ],
+        "description" : "len:6 non-latin+space",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "사이클",
+        "help" : "사이클 녹음 재생 | len:83 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:7 non-latin+space",
+        "help" : "len:82 latin+non-latin+punct+space",
+        "role" : "AXButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "녹음 템포 | len:8 non-latin+space",
+        "help" : "음소거 콘텐츠 녹음 템포 | len:67 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "녹음",
+        "help" : "녹음 트랙 | len:46 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "재생",
+        "help" : "재생헤드 위치 사이클 위치 재생 | len:70 non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:7 non-latin+space",
+        "help" : "len:51 non-latin+punct+space",
+        "role" : "AXButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:2 non-latin",
+        "help" : "녹음 신규 | len:46 non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:2 non-latin",
+        "help" : "오디오 악기 트랙 | len:71 non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "솔로",
+        "help" : "리전 솔로 재생 | len:33 non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:5 non-latin+space",
+        "help" : "길이 녹음 재생 클릭 l | len:101 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "메트로놈 클릭 | len:7 non-latin+space",
+        "help" : "메트로놈 녹음 재생 클릭 템포 | len:80 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "라이브러리",
+        "help" : "라이브러리 프리셋 재생 채널 | len:113 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "인스펙터",
+        "help" : "인스펙터 리전 볼륨 설정 위치 채널 트랙 패닝 편집 | len:103 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:6 non-latin+space",
+        "help" : "인스펙터 윈도우 | len:65 non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:5 non-latin+space",
+        "help" : "len:56 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "l m | len:14 latin+space",
+        "help" : "smart controls 채널 편집 l m | len:96 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "믹서",
+        "help" : "믹서 채널 트랙 편집 | len:107 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "편집 | len:3 non-latin",
+        "help" : "session player play 오디오 트랙 파일 편집 l | len:108 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "목록 편집 | len:6 non-latin+space",
+        "help" : "midi 마커 목록 템포 편집 m | len:69 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:3 non-latin",
+        "help" : "생성 트랙 편집 | len:52 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "루프 브라우저",
+        "help" : "루프 브라우저 녹음 | len:49 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:4 non-latin",
+        "help" : "오디오 파일 | len:79 latin+non-latin+punct+space",
+        "role" : "AXCheckBox"
+      }
+    ],
+    "description" : "컨트롤 막대",
+    "help" : "len:108 latin+non-latin+punct+space",
+    "role" : "AXGroup"
+  },
+  "scope" : "컨트롤 막대"
+}
