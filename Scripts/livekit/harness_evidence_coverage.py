@@ -22,12 +22,21 @@ A harness is required to have proved itself when the branch CHANGED it:
 That is decidable from the diff, and it is exactly the case that went wrong. What is NOT decidable,
 and is not attempted here: which harnesses a `Sources/` change ought to have been proved against.
 Nothing in the tree records that mapping, and inventing one would put a guess where this check's
-whole value is that it does not guess. A branch that changes only `Sources/` therefore passes this
-check with nothing required — the existing "live evidence for this head" step is what covers it.
+whole value is that it does not guess. A branch that changes only `Sources/` used to pass this check with
+nothing required, and the ship gate's "live evidence for this head" step accepted ANY clean
+document — so changing the spectral engine and running the selector-atlas harness passed, with a
+document that was true and about something else.
 
-So this is a coverage floor, not a coverage proof. Said plainly because a check named `coverage`
-invites being read as more.
+That is closed as of 2026-08-29, and still without a guess: a harness DECLARES what it covers, in
+a `COVERS = [...]` literal in its own file, read from a trusted ref so a branch cannot rewrite its
+own obligations. A `Sources/` path some harness claims obliges that harness to have run clean. A
+path nobody claims is printed as `unproven` rather than treated as proved.
+
+So this is still a coverage floor, not a coverage proof — the unproven list is the size of the gap
+and it is reported, not enforced. Said plainly because a check named `coverage` invites being read
+as more.
 """
+import ast
 import glob
 import json
 import os
@@ -53,6 +62,95 @@ def harness_stems(changed_paths):
         if os.path.dirname(path).replace("\\", "/").endswith("Scripts/livekit"):
             stems.add(name[: -len(".py")])
     return stems
+
+
+def declared_coverage(text):
+    """The repo paths a harness DECLARES it proves, from its `COVERS = [...]` literal.
+
+    Parsed out of the source rather than imported, because importing a harness runs it — and the
+    thing being judged does not get to execute inside its own judge. `ast.literal_eval` accepts a
+    list of strings and nothing else, so a declaration cannot be computed, and a harness cannot
+    widen its own claim at read time.
+    """
+    try:
+        tree = ast.parse(text or "")
+    except SyntaxError:
+        return []
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if "COVERS" not in names:
+            continue
+        try:
+            value = ast.literal_eval(node.value)
+        except (ValueError, SyntaxError):
+            return []
+        if isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value):
+            return [v for v in value if v.strip()]
+        return []
+    return []
+
+
+def required_by_sources(changed, declarations):
+    """`(required, unproven)` — harnesses a `Sources/` change obliges, and the paths nobody claims.
+
+    THE HOLE THIS CLOSES. Until 2026-08-29 a branch that changed only `Sources/` required no
+    particular harness: the ship gate asked for *some* clean document bound to this head, and any
+    harness supplied one. Change the spectral engine, run the selector-atlas harness, pass. The
+    document was true and about something else.
+
+    The old rule declined to invent a mapping, and that was right — a guess in a gate is worse than
+    a gap. This does not guess. A harness SAYS what it covers, in its own file, reviewed like any
+    other line, and the declarations are read from a trusted ref so a branch cannot rewrite its own
+    obligations. What nobody claims is reported rather than assumed proved.
+
+    Matching is by path COMPONENT, not by string prefix. `Sources/LogicProMCP/SelectorAtlas`
+    written without its trailing slash would otherwise claim `SelectorAtlasExtras/` too — a
+    declaration silently wider than the directory it names, and the widening happens in the
+    direction that makes a harness look like it covers more.
+    """
+    required, unproven = set(), []
+    for path in changed or []:
+        if not path.startswith("Sources/"):
+            continue
+        claimants = sorted(
+            stem for stem, covers in (declarations or {}).items()
+            if any(path == prefix or path.startswith(prefix.rstrip("/") + "/")
+                   for prefix in covers)
+        )
+        if claimants:
+            required.update(claimants)
+        else:
+            unproven.append(path)
+    return required, sorted(unproven)
+
+
+def declarations_from_ref(worktree, ref):
+    """`{stem: [paths]}` read from `ref`, not from the branch under test.
+
+    Same principle the gate already applies to the rule itself: a branch that supplies its own
+    judgement is not judged. A harness the branch ADDS therefore claims nothing here — which is
+    safe, because the changed-harness rule already requires it to have run.
+    """
+    listing = subprocess.run(
+        ["git", "ls-tree", "--name-only", f"{ref}:Scripts/livekit"],
+        cwd=worktree, capture_output=True, text=True)
+    if listing.returncode != 0:
+        return None
+    out = {}
+    for name in listing.stdout.splitlines():
+        if not (name.startswith("live_") and name.endswith(".py")):
+            continue
+        blob = subprocess.run(
+            ["git", "show", f"{ref}:Scripts/livekit/{name}"],
+            cwd=worktree, capture_output=True, text=True)
+        if blob.returncode != 0:
+            return None
+        covers = declared_coverage(blob.stdout)
+        if covers:
+            out[name[: -len(".py")]] = covers
+    return out
 
 
 def documents_present(head_dir):
@@ -98,8 +196,8 @@ def _read_json(path):
         return None
 
 
-def changed_paths(worktree, base, head="HEAD"):
-    """Paths the branch changed, excluding deletions.
+def changed_paths(worktree, base, head="HEAD", exclude_deletions=True):
+    """Paths the branch changed; deletions excluded only when the caller asks.
 
     `head` is the commit the caller is asking ABOUT, not the worktree's current one. The first
     version hard-coded `HEAD` and took the head sha only to look up an evidence directory, so a
@@ -108,12 +206,19 @@ def changed_paths(worktree, base, head="HEAD"):
     not, and the failure is a coverage verdict about the wrong commit reported as a verdict about
     this one.
 
-    `--diff-filter=d` drops deletions. A harness that no longer exists cannot be required to have
-    run, and requiring it would make deleting a harness impossible — the branch could never
-    produce the evidence, because there is nothing left to produce it.
+    `--diff-filter=d` drops deletions, and that is right for HARNESSES: one that no longer exists
+    cannot be required to have run, and requiring it would make deleting a harness impossible.
+
+    It is wrong for `Sources/`, and applying it there was a way through the whole source-coverage
+    rule — DELETE a file the atlas harness claims and the path never reached `required_by_sources`,
+    so removing covered product code needed no proof at all. Deleting code is a change to what
+    ships, and the harness that claims that area is exactly what should be run over it. Found by
+    review, 2026-08-29.
     """
-    proc = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...{head}"],
+    cmd = ["git", "diff", "--name-only"]
+    if exclude_deletions:
+        cmd.append("--diff-filter=d")
+    proc = subprocess.run(cmd + [f"{base}...{head}"],
         cwd=worktree, capture_output=True, text=True)
     if proc.returncode != 0:
         return None
@@ -132,15 +237,62 @@ def main(argv):
         print(f"-> COVERAGE FAIL: could not diff {base}...HEAD in {worktree}")
         return 2
     required = harness_stems(paths)
+
+    # Deletions INCLUDED for the source question, excluded for the harness one. See `changed_paths`.
+    all_paths = changed_paths(worktree, base, head, exclude_deletions=False)
+    if all_paths is None:
+        print(f"-> COVERAGE FAIL: could not diff {base}...HEAD in {worktree} (with deletions)")
+        return 2
+
+    # What the branch's `Sources/` changes oblige, from declarations on the TRUSTED ref.
+    declarations = declarations_from_ref(worktree, base)
+    if declarations is None:
+        print(f"-> COVERAGE FAIL: could not read harness declarations from {base}")
+        print("   The declarations are deliberately NOT read from the branch under test, so a")
+        print("   missing ref is a refusal, not a fallback. Run: git fetch origin main")
+        return 2
+    by_sources, unproven = required_by_sources(all_paths, declarations)
+    required |= by_sources
+
     if not required:
-        print("n/a — this branch changes no live harness")
+        # A livekit change that obliges no particular harness still has to point at a clean run.
+        # Without this, editing `evidence.py` — which DEFINES `is_clean` — reached the gate and
+        # then returned here before any document was judged by it: the branch could change what
+        # passing means, run any harness, produce red records, and be asked nothing. The binding
+        # step checks artifact metadata, not records.
+        touched_kit = [p for p in paths
+                       if p.startswith("Scripts/livekit/") and p.endswith(".py")
+                       and not os.path.basename(p).startswith("test_")]
+        if touched_kit:
+            present = documents_present(os.path.join(root, head))
+            clean = [stem for stem, path in present.items()
+                     if E.is_clean(E.summarize((_read_json(path) or {}).get("records")))]
+            print(f"   livekit changed ({len(touched_kit)} file(s)) and obliges no single harness;"
+                  f" {len(clean)} of {len(present)} document(s) at this head are clean")
+            if not clean:
+                print("-> COVERAGE FAIL: a change to the live kit must point at a clean run,"
+                      " and none of the documents at this head is one")
+                return 1
+        if unproven:
+            print(f"n/a — no harness claims the {len(unproven)} changed Sources/ path(s):")
+            for path in unproven[:8]:
+                print(f"          unproven  {path}")
+            if len(unproven) > 8:
+                print(f"          unproven  … and {len(unproven) - 8} more")
+        else:
+            print("n/a — this branch changes no live harness")
         return 0
 
     head_dir = os.path.join(root, head)
     present = documents_present(head_dir)
     missing, unclean = verdict(required, present)
 
-    print(f"   harnesses changed by this branch: {len(required)}")
+    print(f"   harnesses this branch must prove: {len(required)}"
+          f" ({len(by_sources)} obliged by a Sources/ change)")
+    for path in unproven[:8]:
+        print(f"   unproven  {path}")
+    if len(unproven) > 8:
+        print(f"   unproven  … and {len(unproven) - 8} more")
     for stem in sorted(required):
         state = "missing" if stem in missing else ("UNCLEAN" if stem in unclean else "ok")
         print(f"   {state:>7}  {stem}")

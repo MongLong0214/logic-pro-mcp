@@ -122,6 +122,7 @@ print(f"{'ok  ' if ok else 'FAIL'} a document named `evidence` satisfies no harn
 #   2. the commit asked about is the `head` ARGUMENT, not the worktree's HEAD. The first version
 #      hard-coded HEAD and took the sha only to find an evidence directory. In a pre-push hook the
 #      two agree and it would never have shown.
+import json
 import subprocess
 
 def _git(repo, *args):
@@ -165,9 +166,134 @@ with tempfile.TemporaryDirectory() as repo:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} the head ARGUMENT decides, not the worktree's HEAD -> {sorted(at_mid)}")
 
+    # Deletions: excluded for the harness question, INCLUDED for the source one. Applying the
+    # filter to `Sources/` was a way through the whole source-coverage rule — delete a file the
+    # atlas harness claims and the path never reached `required_by_sources`.
+    kept = C.changed_paths(repo, base_sha, tip_sha)
+    with_dels = C.changed_paths(repo, base_sha, tip_sha, exclude_deletions=False)
+    ok = ("Scripts/livekit/live_doomed.py" not in kept
+          and "Scripts/livekit/live_doomed.py" in with_dels)
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a deletion is hidden from one question and visible to the other")
+
     ok = C.changed_paths(repo, "no/such/ref", tip_sha) is None
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} an unreadable base is None, not an empty change set")
+
+# --- declarations: which harness a Sources/ change obliges ------------------------------------
+#
+# The hole these close: before 2026-08-29 a `Sources/` change required NO particular harness, so
+# any clean document satisfied any change.
+
+DECL = {"live_atlas": ["Sources/LogicProMCP/SelectorAtlas/"],
+        "live_eq": ["Sources/LogicProMCP/SpectralEQ/"]}
+# The same claim written without its trailing slash. It must mean the same thing, or a typo
+# silently widens a harness's claim into every sibling whose name starts the same way.
+DECL_NO_SLASH = {"live_atlas": ["Sources/LogicProMCP/SelectorAtlas"]}
+
+for label, changed, want_required, want_unproven in [
+    ("a claimed path obliges its claimant",
+     ["Sources/LogicProMCP/SelectorAtlas/AtlasDiff.swift"], {"live_atlas"}, []),
+    ("a path nobody claims is unproven, not proved",
+     ["Sources/LogicProMCP/Channels/AccessibilityChannel.swift"], set(),
+     ["Sources/LogicProMCP/Channels/AccessibilityChannel.swift"]),
+    ("two subsystems oblige two harnesses",
+     ["Sources/LogicProMCP/SelectorAtlas/A.swift", "Sources/LogicProMCP/SpectralEQ/B.swift"],
+     {"live_atlas", "live_eq"}, []),
+    ("non-Sources paths oblige nothing and are not unproven",
+     ["docs/roadmap/README.md", "Tests/X.swift"], set(), []),
+    ("a prefix must not match a sibling directory by string alone",
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"], set(),
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"]),
+]:
+    required, unproven = C.required_by_sources(changed, DECL)
+    ok = required == want_required and unproven == want_unproven
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> required={sorted(required)} unproven={unproven}")
+
+for label, decl, changed, want_required in [
+    ("a slashless declaration still claims its own directory", DECL_NO_SLASH,
+     ["Sources/LogicProMCP/SelectorAtlas/AtlasDiff.swift"], {"live_atlas"}),
+    ("a slashless declaration does NOT claim a sibling that starts the same", DECL_NO_SLASH,
+     ["Sources/LogicProMCP/SelectorAtlasExtras/C.swift"], set()),
+    ("a declaration naming one file claims exactly it", {"live_x": ["Sources/A/B.swift"]},
+     ["Sources/A/B.swift"], {"live_x"}),
+    ("and not a file whose name extends it", {"live_x": ["Sources/A/B.swift"]},
+     ["Sources/A/B.swift.orig"], set()),
+]:
+    required, _ = C.required_by_sources(changed, decl)
+    ok = required == want_required
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> {sorted(required)}")
+
+for label, text, want in [
+    ("a literal list is read", "COVERS = ['Sources/A/']\n", ["Sources/A/"]),
+    ("a computed declaration is refused", "P='Sources/'\nCOVERS = [P + 'A/']\n", []),
+    ("a non-string member voids the whole claim", "COVERS = ['Sources/A/', 3]\n", []),
+    ("no declaration is no claim", "x = 1\n", []),
+    ("a file that does not parse claims nothing", "def (\n", []),
+]:
+    got = C.declared_coverage(text)
+    ok = got == want
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} {label} -> {got}")
+
+# --- a live-kit change that obliges no harness still has to point at a clean run ---------------
+#
+# The path this covers is the one editing `evidence.py` takes. It reaches the gate (the ship
+# trigger was widened) and then used to return before any document was judged — so a branch could
+# change what `is_clean` MEANS, run any harness, produce red records, and be asked nothing.
+
+with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evroot:
+    os.makedirs(os.path.join(repo, "Scripts", "livekit"))
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+
+    def w2(rel, text):
+        with open(os.path.join(repo, rel), "w") as fh:
+            fh.write(text)
+
+    w2("Scripts/livekit/evidence.py", "# base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    base2 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    w2("Scripts/livekit/evidence.py", "# changed — is_clean now means something else\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "change the definition of passing")
+    head2 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    headdir = os.path.join(evroot, head2)
+    os.makedirs(headdir)
+
+    def put(stem, passed):
+        # Every non-vacuity counter `is_clean` reads has to be earned, so the fixture earns them.
+        # Building it by hand rather than copying a real document keeps this case runnable with no
+        # evidence root and no Logic — and it is the same predicate either way, taken from the
+        # trusted module rather than restated here.
+        doc = {"name": stem, "records": [
+            {"kind": "check", "tag": "t", "passed": passed, "mutation_claimed": True},
+            {"kind": "capture", "tag": "c", "settled": True,
+             "display": {"wholly_within": True}},
+            {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
+            {"kind": "recording", "tag": "r"},
+            {"kind": "operation", "tag": "o"},
+        ]}
+        with open(os.path.join(headdir, f"{stem}.evidence.json"), "w") as fh:
+            json.dump(doc, fh)
+
+    put("live_unrelated", False)
+    rc = C.main(["x", repo, head2, evroot, base2])
+    ok = rc == 1
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a live-kit change with no clean document is refused -> rc={rc}")
+
+    put("live_unrelated", True)
+    rc = C.main(["x", repo, head2, evroot, base2])
+    ok = rc == 0
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} ...and is allowed once one document is clean -> rc={rc}")
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
