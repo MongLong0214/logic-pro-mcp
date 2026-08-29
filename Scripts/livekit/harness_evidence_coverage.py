@@ -242,6 +242,24 @@ def main(argv):
     required |= by_sources
 
     if not required:
+        # A livekit change that obliges no particular harness still has to point at a clean run.
+        # Without this, editing `evidence.py` — which DEFINES `is_clean` — reached the gate and
+        # then returned here before any document was judged by it: the branch could change what
+        # passing means, run any harness, produce red records, and be asked nothing. The binding
+        # step checks artifact metadata, not records.
+        touched_kit = [p for p in paths
+                       if p.startswith("Scripts/livekit/") and p.endswith(".py")
+                       and not os.path.basename(p).startswith("test_")]
+        if touched_kit:
+            present = documents_present(os.path.join(root, head))
+            clean = [stem for stem, path in present.items()
+                     if E.is_clean(E.summarize((_read_json(path) or {}).get("records")))]
+            print(f"   livekit changed ({len(touched_kit)} file(s)) and obliges no single harness;"
+                  f" {len(clean)} of {len(present)} document(s) at this head are clean")
+            if not clean:
+                print("-> COVERAGE FAIL: a change to the live kit must point at a clean run,"
+                      " and none of the documents at this head is one")
+                return 1
         if unproven:
             print(f"n/a — no harness claims the {len(unproven)} changed Sources/ path(s):")
             for path in unproven[:8]:

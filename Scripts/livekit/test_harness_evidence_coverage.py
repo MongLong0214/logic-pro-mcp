@@ -122,6 +122,7 @@ print(f"{'ok  ' if ok else 'FAIL'} a document named `evidence` satisfies no harn
 #   2. the commit asked about is the `head` ARGUMENT, not the worktree's HEAD. The first version
 #      hard-coded HEAD and took the sha only to find an evidence directory. In a pre-push hook the
 #      two agree and it would never have shown.
+import json
 import subprocess
 
 def _git(repo, *args):
@@ -226,6 +227,63 @@ for label, text, want in [
     ok = got == want
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} {label} -> {got}")
+
+# --- a live-kit change that obliges no harness still has to point at a clean run ---------------
+#
+# The path this covers is the one editing `evidence.py` takes. It reaches the gate (the ship
+# trigger was widened) and then used to return before any document was judged — so a branch could
+# change what `is_clean` MEANS, run any harness, produce red records, and be asked nothing.
+
+with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evroot:
+    os.makedirs(os.path.join(repo, "Scripts", "livekit"))
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+
+    def w2(rel, text):
+        with open(os.path.join(repo, rel), "w") as fh:
+            fh.write(text)
+
+    w2("Scripts/livekit/evidence.py", "# base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    base2 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    w2("Scripts/livekit/evidence.py", "# changed — is_clean now means something else\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "change the definition of passing")
+    head2 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    headdir = os.path.join(evroot, head2)
+    os.makedirs(headdir)
+
+    def put(stem, passed):
+        # Every non-vacuity counter `is_clean` reads has to be earned, so the fixture earns them.
+        # Building it by hand rather than copying a real document keeps this case runnable with no
+        # evidence root and no Logic — and it is the same predicate either way, taken from the
+        # trusted module rather than restated here.
+        doc = {"name": stem, "records": [
+            {"kind": "check", "tag": "t", "passed": passed, "mutation_claimed": True},
+            {"kind": "capture", "tag": "c", "settled": True,
+             "display": {"wholly_within": True}},
+            {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
+            {"kind": "recording", "tag": "r"},
+            {"kind": "operation", "tag": "o"},
+        ]}
+        with open(os.path.join(headdir, f"{stem}.evidence.json"), "w") as fh:
+            json.dump(doc, fh)
+
+    put("live_unrelated", False)
+    rc = C.main(["x", repo, head2, evroot, base2])
+    ok = rc == 1
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a live-kit change with no clean document is refused -> rc={rc}")
+
+    put("live_unrelated", True)
+    rc = C.main(["x", repo, head2, evroot, base2])
+    ok = rc == 0
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} ...and is allowed once one document is clean -> rc={rc}")
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
