@@ -20,6 +20,9 @@ package struct QualificationRunner: Sendable {
         let handlerExists: @Sendable (String, String) -> Bool
         let beforeEvidenceRead: @Sendable (URL) -> Void
         let drive: @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult
+        /// Baseline/live pairs for the ADR-007 diff. Empty in a build that cannot capture, which an
+        /// ARMED run treats as a refusal rather than as agreement — see `AtlasQualification`.
+        let atlasPairs: @Sendable () -> [AtlasQualification.Pair]
 
         static let production = Runtime(
             executableURL: { try QualificationRunner.currentExecutableURL() },
@@ -37,7 +40,8 @@ package struct QualificationRunner: Sendable {
             beforeEvidenceRead: { _ in },
             drive: { request in
                 try QualificationTransport().drive(request)
-            }
+            },
+            atlasPairs: { AtlasCapture.pairsForThisRun() }
         )
     }
 
@@ -785,6 +789,23 @@ package struct QualificationRunner: Sendable {
                 }
             }
             cases.append(contentsOf: externalCases)
+        }
+
+        // ADR-007: the atlas diff, as one more case rather than a new attestation field.
+        //
+        // `runtime.atlasPairs` is injected so this decision is testable without Logic — and so the
+        // capture side, which needs a running application, cannot make the DECISION untestable.
+        // Off unless `adr007SelectorAtlas` is set: only `ko` has a control-bar baseline today, and
+        // arming it everywhere would refuse every run on a Logic speaking anything else.
+        if let atlasCase = AtlasQualification.caseFor(
+            AtlasQualification.outcome(
+                armed: FeatureFlags.adr007SelectorAtlas,
+                pairs: runtime.atlasPairs()),
+            axis: observedAxis,
+            binarySHA256: binarySHA256,
+            traceID: "atlas-drift-diff"
+        ) {
+            cases.append(atlasCase)
         }
 
         let caseManifest = QualificationCaseManifest(

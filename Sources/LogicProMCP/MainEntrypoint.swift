@@ -355,6 +355,39 @@ enum MainEntrypoint {
         //
         // Writes the document to stdout. The caller decides where it lands, because a command that
         // also chooses the path is a command that can overwrite a fixture nobody meant to replace.
+        // The live half of the ADR-007 diff, on its own, so it can be exercised without a whole
+        // qualification run. The DECISION is pure and tested offline; this is the part that needs
+        // Logic on screen, and a wiring nobody can run separately is a wiring nobody can debug.
+        //
+        // Reads `LOGIC_MCP_ATLAS_BASELINES` exactly as the qualification path does — same function,
+        // not a copy — so a green answer here is about the code that will run there.
+        if arguments.contains("--probe-atlas-diff") {
+            let pairs = AtlasCapture.pairsForThisRun()
+            let outcome = AtlasQualification.outcome(armed: true, pairs: pairs)
+            var payload: [String: Any] = ["pairs": pairs.count,
+                                          "scopes": pairs.map(\.scope)]
+            switch outcome {
+            case .notArmed:
+                payload["outcome"] = "not_armed"
+            case let .noBaselines(reason):
+                payload["outcome"] = "no_baselines"
+                payload["reason"] = reason
+            case let .diffed(verdict, drifts, unmeasured):
+                payload["outcome"] = "diffed"
+                payload["verdict"] = "\(verdict)"
+                payload["moved"] = drifts.filter { $0.status != .stable }
+                    .map { "\($0.selectorID)=\($0.status)" }
+                payload["unmeasured"] = unmeasured.map { "\($0)" }.sorted()
+            }
+            if let data = try? JSONSerialization.data(
+                withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
+                writeStdout(String(decoding: data, as: UTF8.self) + "\n")
+                return 0
+            }
+            writeStdout("{\"ok\":false,\"error\":\"could not encode the probe\"}\n")
+            return 1
+        }
+
         if arguments.contains("--ax-snapshot") {
             guard let window = AXLogicProElements.mainWindow() else {
                 writeStdout("{\"ok\":false,\"error\":\"no main window\"}\n")
