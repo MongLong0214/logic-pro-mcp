@@ -38,15 +38,49 @@ import ast
 import importlib
 import inspect
 import os
+import subprocess
 import sys
 
 SKIP_DIRS = {".git", ".build", "node_modules", ".venv", "venv"}
 
 
+def _ignored_top_level(root):
+    """Directory names at the repo root that git ignores, asked of git rather than listed.
+
+    The hand-written `SKIP_DIRS` cannot know what a `.gitignore` says, and the difference is not
+    cosmetic: measured 2026-08-29, a vendored tool directory — gitignored, never committed,
+    present only on one machine — carried a file that will not parse, so this guard failed locally
+    and passed in CI, where that directory does not exist. A guard whose verdict depends on
+    untracked scratch is a guard nobody can act on, and the direction of the error is the bad one:
+    it fails where there is MORE, so whoever can reproduce it is least able to tell it from a real
+    defect.
+
+    Top level only, which is where a vendored tree lands. A nested ignored path stays in scope, and
+    that is the safer direction: this errs toward scanning too much.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", root, "status", "--porcelain", "--ignored=matching", "-z"],
+            capture_output=True, text=True)
+    except OSError:
+        return set()
+    if proc.returncode != 0:
+        return set()
+    out = set()
+    for entry in proc.stdout.split("\0"):
+        if not entry.startswith("!! "):
+            continue
+        path = entry[3:].strip("/")
+        if path and "/" not in path:
+            out.add(path)
+    return out
+
+
 def local_modules(root):
     out = {}
+    skip = SKIP_DIRS | _ignored_top_level(root)
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames if d not in skip]
         for f in filenames:
             if f.endswith(".py"):
                 out.setdefault(f[:-3], os.path.join(dirpath, f))
