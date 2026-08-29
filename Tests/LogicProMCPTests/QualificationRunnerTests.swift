@@ -3243,7 +3243,13 @@ struct QualificationRunnerTests {
                 handlerValidationErrors: { handlerValidationErrors },
                 handlerExists: handlerExists,
                 beforeEvidenceRead: beforeEvidenceRead,
-                drive: drive
+                drive: drive,
+                // No atlas pairs. These fixtures do not run Logic, and the ADR-007 step is off
+                // unless `adr007SelectorAtlas` is set — so it emits no case and every count below
+                // is about the same cases it was about before. Spelled rather than defaulted: a
+                // default here would let the step appear in these runs the day the flag flips,
+                // and the first sign would be an arithmetic failure in an unrelated assertion.
+                atlasPairs: { [] }
             ))
         }
 
