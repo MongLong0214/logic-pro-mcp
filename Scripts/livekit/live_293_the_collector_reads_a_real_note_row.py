@@ -41,6 +41,18 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evidence as E  # noqa: E402
 
+# What this harness proves, for `harness_evidence_coverage.py`. A branch touching this path must
+# run it and produce a clean document.
+#
+# ONE file, deliberately. `--probe-event-list` calls `observeNoteTable`, which drives
+# `findEventTab` -> `findEventPaneAndTable` -> `readHeaders` -> `readRows` -> `readRow` — the whole
+# collector and nothing else in the module. Claiming `MIDIReadback/` entire would cover
+# `MIDINoteCanonicalizer`, `MIDIRegionDiff` and seven more this run never touches, and a claim
+# wider than the drive is how a coverage rule starts lying on its owner's behalf.
+COVERS = [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift",
+]
+
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
 HEAD = sys.argv[2] if len(sys.argv) > 2 else ""
 if not WT or not HEAD:
@@ -374,14 +386,6 @@ ev.check("293/the-flag-cells-really-are-childless",
          f"children={children!r} L={first.get('L')!r} M={first.get('M')!r}",
          GUARD_MUTATION)
 
-# Put the pane back the way it was found: the tab first, then the pane itself.
-if selected_before and selected_before != "Event":
-    tabs(select=selected_before)
-if not pane_was_open:
-    osa('tell application "System Events" to tell process "Logic Pro" to '
-        f'click menu item "{LIST_EDITORS_ITEM}" of menu 1 of menu bar item {VIEW_MENU} of menu bar 1')
-    time.sleep(2)
-
 relocated = [(t, E.logic_window(t)) for t in window_titles()]
 relocated = [(t, w) for t, w in relocated if w]
 relocated.sort(key=lambda pair: pair[1]["w"] * pair[1]["h"], reverse=True)
@@ -397,11 +401,31 @@ ev.visual("293/the-transport-is-undisturbed-by-the-probe",
               "from one that moved and came back. Between these two frames the only product call is "
               "the probe, which must only read")
 
+# Put the pane back the way it was found — AFTER the visual, not before it.
+#
+# This used to run ahead of the `after` shot, so closing the pane changed the layout between the
+# two frames the visual compares and `the-transport-is-undisturbed-by-the-probe` went red for the
+# restoration rather than for the probe. The bracket is supposed to contain the probe and nothing
+# else; putting a window toggle inside it made the run's own tidying look like a disturbance.
+if selected_before and selected_before != EVENT_HERE:
+    tabs(select=selected_before)
+if not pane_was_open:
+    osa('tell application "System Events" to tell process "Logic Pro" to '
+        f'click menu item "{LIST_EDITORS_ITEM}" of menu 1 of menu bar item {VIEW_MENU} of menu bar 1')
+    time.sleep(2)
+
 final_state = tab_state(tabs())
+# The tab clause applies only when the pane is LEFT OPEN. When this run opened the pane itself it
+# also closes it, and then `final_state` is empty by design — so demanding the remembered tab still
+# read selected asked for a selection inside a closed pane and could never hold. Measured: two
+# earlier runs were clean only because the pane happened to be open already, which is the same
+# state-dependence in the other direction.
+tab_is_back = (not pane_was_open) or (not selected_before) \
+    or final_state.get(selected_before) is True
 ev.restored("293/the-list-editors-pane-is-as-it-was-found",
-            bool(final_state) == pane_was_open
-            and (not selected_before or final_state.get(selected_before) is True),
-            f"the pane is back to open={pane_was_open!r} with {selected_before!r} selected again. "
+            bool(final_state) == pane_was_open and tab_is_back,
+            f"the pane is back to open={bool(final_state)!r} (found {pane_was_open!r}) and the tab "
+            f"clause {'held' if tab_is_back else 'did not hold'} for {selected_before!r}. "
             "The region it recorded is NOT undone: `record_sequence` creates a track and a region "
             "and nothing reverses it, so the project is one track larger than it was. Stated rather "
             "than claimed away.")
