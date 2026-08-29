@@ -694,7 +694,7 @@ struct Issue290AtlasDiffTests {
         // drift list alone called transport qualified on the strength of never having looked at it.
         let railOnly = AtlasDiff.uncovered(baseline: rail, current: rail)
         #expect(railOnly == [.controlBar], "the rail's coverage gap moved: \(railOnly)")
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: railOnly) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: railOnly) == .failClosedMutation)
 
         // The window baseline does not close it either, and that is a measured fact rather than an
         // oversight: the control bar is identified by an `AXGroup` description, groups can carry a
@@ -705,11 +705,11 @@ struct Issue290AtlasDiffTests {
         let both = railOnly.intersection(
             AtlasDiff.uncovered(baseline: window, current: window))
         #expect(both == [.controlBar], "the coverage gap moved: \(both)")
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: both) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: both) == .failClosedMutation)
 
         // Reuse is reachable — it just takes a baseline set that covers everything, which is what
         // the empty argument stands for here.
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: []) == .reuseFull)
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .reuseFull)
     }
 
     @Test("a selector that keeps its best score but loses most of its controls is drift")
@@ -732,7 +732,7 @@ struct Issue290AtlasDiffTests {
         let drifts = AtlasDiff.between(baseline: rail, current: keptFirst)
         let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
         #expect(volume.status == .changed, "partial loss read as \(volume.status)")
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: []) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .failClosedMutation)
     }
 
     @Test("partial loss is visible when the repetition is nested, not just at the root")
@@ -773,6 +773,70 @@ struct Issue290AtlasDiffTests {
         let drifts = AtlasDiff.between(baseline: window, current: stripped)
         let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
         #expect(volume.status == .changed, "nested partial loss read as \(volume.status)")
+    }
+
+    @Test("a path that lands on a different kind of place is not a reading")
+    func aShiftedPathIsNotAReading() throws {
+        // An index path names a POSITION. Read in another capture it can resolve to a container
+        // that was never the one measured — and if that one is fully covered, a real loss elsewhere
+        // reads as no change. The role chain along the path is checked, so the reading is refused.
+        let window = try windowBaseline()
+        let fader = AXLogicProElements.volumeFaderSelector
+        let path = try #require(AtlasDiff.unitPath(in: window, for: fader))
+        #expect(!path.isEmpty, "the fader's repetition is at the root — nothing to shift")
+
+        // Reparent: the container the path points at is replaced by a differently-rolled one that
+        // still holds two like children. The indexes all still resolve.
+        let decoy = AXSnapshot.Node(
+            role: kAXListRole as String, subrole: nil, description: nil, help: nil,
+            identifier: nil, valueRange: nil,
+            children: (0..<2).map { _ in
+                AXSnapshot.Node(
+                    role: kAXGroupRole as String, subrole: nil, description: "볼륨", help: nil,
+                    identifier: nil, valueRange: "0...233", children: [])
+            })
+        let shifted = Self.replacing(window, at: path, with: decoy)
+
+        #expect(AtlasDiff.coverage(in: shifted, for: fader, at: path) != nil,
+                "the path stopped resolving, so this case is not testing the signature")
+        let signature = try #require(AtlasDiff.pathSignature(in: window, at: path))
+        #expect(AtlasDiff.coverage(in: shifted, for: fader, at: path, expecting: signature) == nil,
+                "a different kind of container was accepted as the same measurement")
+    }
+
+    private static func replacing(
+        _ document: AXSnapshot.Document, at path: [Int], with replacement: AXSnapshot.Node
+    ) -> AXSnapshot.Document {
+        func rewrite(_ node: AXSnapshot.Node, _ remaining: ArraySlice<Int>) -> AXSnapshot.Node {
+            guard let index = remaining.first else { return replacement }
+            var children = node.children
+            children[index] = rewrite(children[index], remaining.dropFirst())
+            return AXSnapshot.Node(
+                role: node.role, subrole: node.subrole, description: node.description,
+                help: node.help, identifier: node.identifier, valueRange: node.valueRange,
+                children: children)
+        }
+        return AXSnapshot.Document(
+            logicVersion: document.logicVersion, locale: document.locale, scope: document.scope,
+            capturedFrom: document.capturedFrom, root: rewrite(document.root, path[...]))
+    }
+
+    @Test("scoring a selector somewhere is not the same as having measured its coverage")
+    func confidenceWithoutRepetitionIsNotCoverage() throws {
+        // `uncovered` used to be "did it score anywhere", which a capture holding exactly one
+        // instance of every selector satisfies — full confidences, nothing unmeasured, full reuse,
+        // and the measurement that catches partial loss never ran once.
+        let rail = try baseline()
+        let single = Self.replacingRoot(of: rail, with: [rail.root.children[0]])
+
+        #expect(AtlasDiff.confidences(in: single)[.trackHeaderVolumeFader] != nil,
+                "the lone row does not score, so this case is not testing what it says")
+        #expect(AtlasDiff.unitPath(in: single, for: AXLogicProElements.volumeFaderSelector) == nil,
+                "one row still offered a repetition to measure")
+        #expect(AtlasDiff.uncovered(baseline: single, current: single)
+                    .contains(.trackHeaderVolumeFader),
+                "a selector scored but never measured for coverage counted as covered")
+        #expect(AtlasDiff.verdict(baselines: [(single, single)]) == .failClosedMutation)
     }
 
     @Test("a verdict taken from the documents cannot be told a coverage it did not measure")
@@ -860,7 +924,7 @@ struct Issue290AtlasDiffTests {
         let volume = try #require(drifts.first { $0.selectorID == .trackHeaderVolumeFader })
         #expect(volume.status == .missing)
         #expect(volume.affectedOperations == [.mixerSetVolume])
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: []) == .failClosedMutation,
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .failClosedMutation,
                 "a selector that cannot find its control did not stop a mutation")
     }
 
@@ -900,7 +964,7 @@ struct Issue290AtlasDiffTests {
         #expect(!drifts.isEmpty, "nothing was compared")
         let moved = drifts.filter { $0.status != .stable }
             .map { "\($0.selectorID) \($0.status)" }.joined(separator: ", ")
-        #expect(AtlasDiff.verdict(for: drifts, uncovered: []) == .reuseFull,
+        #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: []) == .reuseFull,
                 "changing Logic's language read as UI drift: \(moved)")
     }
 
@@ -953,7 +1017,7 @@ struct Issue290AtlasDiffTests {
             selectorID: .trackHeaderVolumeFader, status: .missing,
             previousConfidence: 1, currentConfidence: 0,
             changedRoles: [], affectedOperations: [.mixerSetVolume])
-        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, stable], uncovered: []) == .reuseFull)
-        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, gone], uncovered: []) == .failClosedMutation)
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, stable], assumingCoverage: []) == .reuseFull)
+        #expect(AtlasDiff.verdict(for: [stable, stable, stable, stable, gone], assumingCoverage: []) == .failClosedMutation)
     }
 }

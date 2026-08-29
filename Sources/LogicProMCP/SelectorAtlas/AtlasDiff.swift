@@ -92,24 +92,19 @@ enum AtlasDiff {
         return out
     }
 
-    /// The fraction of like units in which a selector finds its control.
+    /// Where a selector's repetition lives, as an index path to the container holding the units.
     ///
-    /// This is the measurement the best-score view cannot make. `confidences` takes the maximum
+    /// Coverage is the measurement the best-score view cannot make. `confidences` takes the maximum
     /// across the tree, so a Logic update that strips the volume fader from five of six track
     /// headers leaves the maximum at 1.0 and the diff reads `.stable` — while every operation
-    /// against those five tracks fails. Coverage goes 1.0 -> 0.17 and the run stops.
-    ///
-    /// A FRACTION, not a count. Counts are not comparable between two captures of different
-    /// projects: a six-track baseline against a three-track one would report every honest
-    /// re-capture as drift.
+    /// against those five tracks fails. Coverage goes 1.0 -> 0.2 and the run stops.
     ///
     /// The unit set is chosen PER SELECTOR, as the one holding the most of its matches — and that
     /// choice is the whole difference between working and not. Taking the root's children instead
     /// picked, in a whole-window capture, the five top-level groups (inspector, library, tracks,
     /// mixer, control bar): the mixer's faders all live inside one of them, so removing four of five
-    /// left that one group still hit, coverage unchanged, and the loss read `.stable`. The repetition
-    /// is nested, and the measurement has to find it where it is rather than where the root is.
-    /// Where a selector's repetition lives, as an index path to the container holding the units.
+    /// left that one group still hit, coverage unchanged, and the loss read `.stable`. The
+    /// repetition is nested, and the measurement has to find it where it is, not where the root is.
     ///
     /// A PATH, because the unit set has to be chosen once and then read in both documents. Choosing
     /// it independently on each side is what broke the first version: strip four of five mixer
@@ -138,19 +133,55 @@ enum AtlasDiff {
         candidates(in: node).contains { confidence(of: $0.candidate, against: selector) >= 0.6 }
     }
 
-    /// The fraction of units at `path` that still find the selector's control.
+    /// The roles along a path, plus the role of the units at the end of it.
     ///
-    /// Returns nil when the path is not a container of two or more like siblings any more, which is
-    /// itself a change worth failing on rather than scoring.
-    static func coverage(
-        in document: AXSnapshot.Document, for selector: SemanticSelector, at path: [Int]
-    ) -> Double? {
+    /// An index path names a POSITION, not a thing. Read in another capture it can land on a
+    /// different container that happens to have two or more children — and if that one is fully
+    /// covered, a real loss elsewhere reads as no change at all. The role chain is the cheapest
+    /// identity a snapshot can carry, and requiring it to still hold turns "the path resolved" into
+    /// "the path resolved to the same kind of place".
+    ///
+    /// It is not a true identity and this does not pretend otherwise: two containers of the same
+    /// role at the same depth are indistinguishable here. What it removes is the accidental case —
+    /// a shifted index landing on something structurally unrelated.
+    static func pathSignature(
+        in document: AXSnapshot.Document, at path: [Int]
+    ) -> [String]? {
         var node = document.root
+        var roles = [node.role]
         for index in path {
             guard index < node.children.count else { return nil }
             node = node.children[index]
+            roles.append(node.role)
         }
-        guard node.children.count >= 2 else { return nil }
+        guard node.children.count >= 2,
+              let unitRole = node.children.first?.role,
+              node.children.allSatisfy({ $0.role == unitRole })
+        else { return nil }
+        return roles + [unitRole]
+    }
+
+    /// The fraction of units at `path` that still find the selector's control.
+    ///
+    /// Returns nil when the path no longer resolves, no longer holds two or more like siblings, or
+    /// no longer has the role chain `expecting` describes. Each of those is a change worth failing
+    /// on rather than scoring, and `between` reads a nil here as zero.
+    ///
+    /// A LIMIT worth stating: this measures how many of the units present carry the control, so it
+    /// cannot see units themselves disappearing — five strips at 5/5 becoming two strips at 2/2
+    /// reads as no change. That is deliberate. Unit count follows the project (three tracks make
+    /// three rows), so a baseline captured on one project and a run on another would report drift
+    /// on every honest comparison if the count were part of the measurement.
+    static func coverage(
+        in document: AXSnapshot.Document,
+        for selector: SemanticSelector,
+        at path: [Int],
+        expecting signature: [String]? = nil
+    ) -> Double? {
+        guard let actual = pathSignature(in: document, at: path) else { return nil }
+        if let signature, signature != actual { return nil }
+        var node = document.root
+        for index in path { node = node.children[index] }
         return Double(node.children.filter { matches(selector, in: $0) }.count)
             / Double(node.children.count)
     }
@@ -183,11 +214,14 @@ enum AtlasDiff {
         var before: [SelectorID: Double] = [:]
         var after: [SelectorID: Double] = [:]
         for selector in adoptedSelectors {
-            guard let path = unitPath(in: baseline, for: selector) else { continue }
+            guard let path = unitPath(in: baseline, for: selector),
+                  let signature = pathSignature(in: baseline, at: path) else { continue }
             before[selector.id] = coverage(in: baseline, for: selector, at: path)
-            // A path that stopped being a set of like siblings scores zero rather than nothing —
-            // the units did not go missing, the tree around them changed shape.
-            after[selector.id] = coverage(in: current, for: selector, at: path) ?? 0
+            // A path that no longer resolves, no longer holds like siblings, or now holds a
+            // different KIND of place scores zero rather than nothing — the units did not go
+            // missing, the tree around them changed shape, and that is not a reason to say stable.
+            after[selector.id] = coverage(
+                in: current, for: selector, at: path, expecting: signature) ?? 0
         }
         return drift(
             previous: confidences(in: baseline),
@@ -215,13 +249,23 @@ enum AtlasDiff {
     /// them produces no `.controlBar` row at all — and a verdict read off that list alone would call
     /// transport qualified because nothing contradicted it. The caller has to see what was not
     /// measured, which is why it is a separate return rather than a quietly dropped key.
+    /// A selector counts as covered only when BOTH measurements were possible — it scored somewhere,
+    /// and there was a repetition to read its coverage in. Scoring alone is not coverage: a capture
+    /// holding exactly one instance of every selector and no repeated sibling set anywhere produces
+    /// a full set of confidences, an empty unmeasured set, and a verdict of full reuse — while the
+    /// measurement that catches partial loss never ran once.
     static func uncovered(
         baseline: AXSnapshot.Document,
         current: AXSnapshot.Document
     ) -> Set<SelectorID> {
-        let scored = Set(confidences(in: baseline).keys)
-            .union(confidences(in: current).keys)
-        return Set(adoptedSelectors.map(\.id)).subtracting(scored)
+        var covered = Set<SelectorID>()
+        for selector in adoptedSelectors {
+            let scored = confidences(in: baseline)[selector.id] != nil
+                || confidences(in: current)[selector.id] != nil
+            let measurable = unitPath(in: baseline, for: selector) != nil
+            if scored, measurable { covered.insert(selector.id) }
+        }
+        return Set(adoptedSelectors.map(\.id)).subtracting(covered)
     }
 
     /// What a qualification run should do with a diff.
@@ -248,15 +292,17 @@ enum AtlasDiff {
         let unmeasured = baselines
             .map { uncovered(baseline: $0.baseline, current: $0.current) }
             .reduce(Set(adoptedSelectors.map(\.id))) { $0.intersection($1) }
-        return verdict(for: drifts, uncovered: unmeasured)
+        return verdict(for: drifts, assumingCoverage: unmeasured)
     }
 
-    /// - Parameter uncovered: adopted selectors this pair did not measure. Prefer
-    ///   `verdict(baselines:)`, which derives this rather than trusting it — a caller that passes
-    ///   `[]` here is making a claim, and a claim is not a measurement.
+    /// - Parameter assumingCoverage: the selectors the caller asserts were NOT measured. Named for
+    ///   what it is: an assumption. `verdict(baselines:)` derives the same value from the documents
+    ///   and is what production should call — passing `[]` here is a claim, and a claim is not a
+    ///   measurement. Kept for the cases that build drifts by hand, where there is no document to
+    ///   derive anything from.
     static func verdict(
         for drifts: [SelectorDrift],
-        uncovered: Set<SelectorID>
+        assumingCoverage uncovered: Set<SelectorID>
     ) -> QualificationReuse {
         // An empty comparison measured NOTHING, and nothing is not agreement. Two snapshots of the
         // wrong scope produce no drift rows at all, and this used to answer `.reuseFull` for them —
