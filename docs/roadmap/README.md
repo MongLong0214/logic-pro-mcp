@@ -36,7 +36,7 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-08-29 at `4ef4d3cf`
+## State — measured 2026-08-29 at `b1e2c0ee`
 
 ```
 open PRs 0 · v3.14.0 published · 17 open issues
@@ -50,7 +50,7 @@ open PRs 0 · v3.14.0 published · 17 open issues
 | ADR-004 | #287 | closed | |
 | ADR-005 | #288 | closed | |
 | ADR-006 | #289 | closed | shipped #674/#675, measured and closed |
-| ADR-007 | #290 | OPEN | scoring fixed and six selectors adopted; the diff, four baselines and cross-locale coverage shipped in #707/#708. Waiting on a **decision**, not work: wiring the diff into `--qualify` changes the attestation schema or the release gate's behaviour, and the three options are written up on the issue |
+| ADR-007 | #290 | OPEN | six of seven criteria measured met; the diff is wired into `--qualify` as a `QualificationCase` (#715) and a refused one now blocks promotion. What is left is ONE fixture — an `en` control-bar baseline, which needs Logic's language changed — and a wording fix: the criterion asks for Creator baselines, and Creator left product scope on 2026-07-17 |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
 | ADR-010 | #293 | OPEN | the collector's shape was already right; measured 2026-08-29 it reads a real note table and returns both notes. It could not START in any language but English — the Event tab was matched against the literal `"Event"` — fixed in #712. What stays closed is ADR-010's body: `assessReadback` and the public provider |
@@ -103,11 +103,10 @@ attached — not a silent deferral.
    on 2026-08-24 moved its blocker: the 49 mutating operations with a verification plan are waiting
    on a write-and-readback qualification mode that does not exist, which the #284 matrix does not
    supply. #373 covers a smaller part of it than "depends on #373" suggested.
-2. **#290** — the scoring decision is made and the atlas is in use. `confidence` is a ratio over
-   the evidence a selector actually requests, so a header slider with no `AXIdentifier` scores 1.0
-   on what it does expose; six selectors resolve identity through it. What remains is not code: the
-   diff runs, but nothing calls it at qualification time, and every way of wiring it touches either
-   the attestation schema or what `--qualify` refuses. That choice is on the issue as A/B/C.
+2. **#290** — wired. The diff runs at qualification time as a case, and a refusal rejects a
+   promotion; the attestation schema is untouched, which is why the case shape was chosen. What
+   remains is one `en` control-bar baseline and a criterion that still asks for Creator fixtures
+   after Creator left product scope.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
    #293's collector is measured reading a live note table; what remains there is the ADR body.
 4. **#302** — re-measured. `kAXColumns` resolves 8 columns and none of them carries a name, which
