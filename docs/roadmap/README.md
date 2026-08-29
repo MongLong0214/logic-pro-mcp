@@ -58,7 +58,7 @@ open PRs 0 · v3.14.0 published · 17 open issues
 | ADR-012 | #300 | closed | promoted and closed 2026-08-28; all seven acceptance criteria measured, four artifacts found and fixed on the way (#693-#697) |
 | ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
 | ADR-014 | #302 | OPEN | R1 shipped. R2 is NOT STARTED rather than blocked: measured 2026-08-29, `kAXColumns` is present and returns 8 columns — what is absent is any title or description ON them, and the header's sort buttons carry the names the collector already binds. Next step is an R2 ticket, not another measurement |
-| ADR-015 | #303 | OPEN | behind #293 |
+| ADR-015 | #303 | OPEN | behind #293, and measured 2026-08-29 the dependency is narrower than "transforms must not read their own plan" — `TransformVerification` already refuses a proof that shares the observed pipeline. What is missing is a MAKER: `IndependentExpectedSeam` is inside `#if QUALIFICATION_FAULT_SEAM`, so in a release build `independentPayload` is always nil and no positive match is possible. The three modules exist; the gap is the live ingestion boundary in front of them |
 | ADR-016 | #304 | OPEN | implementation; no measured AX wall in front of it |
 | ADR-017 | #305 | OPEN | AU parameter view observed AX-opaque; starts with a measurement |
 | ADR-018 | #306 | OPEN | same wall as #305 |
