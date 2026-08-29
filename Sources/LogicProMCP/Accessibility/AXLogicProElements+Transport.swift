@@ -149,6 +149,38 @@ extension AXLogicProElements {
         ambiguityPolicy: .failClosed
     )
 
+    /// The atlas selector for the transport's play control, inside the control bar.
+    ///
+    /// `controlBarSelector` names the bar and nothing else, which makes a coverage claim for it
+    /// hollow: `.controlBar` reports `transport.play` and `transport.stop` as the operations its
+    /// drift endangers, and removing the play checkbox from the bar left every adopted selector at
+    /// full confidence. A baseline that says transport is qualified has to have looked at the thing
+    /// transport uses.
+    ///
+    /// It also closes the empty-shell case. Two groups carry the bar's description (#628) and
+    /// `getControlBar` falls back to a lone labelled one when none holds a control — so a capable
+    /// bar losing its label while a named shell survives left the best score untouched. A shell has
+    /// no play control, so this selector is missing there.
+    ///
+    /// MEASURED BY MIRROR, not resolved through — worth saying plainly. `findControlBarCheckbox`
+    /// matches `AXTitle` first and `AXDescription` second against the same `AXLocalePolicy` set;
+    /// this asks the description, which is the field a snapshot carries. The predicate is the same
+    /// question, put to the evidence a fixture has.
+    static let transportPlaySelector = SemanticSelector(
+        id: .transportPlayButton,
+        requiredRole: kAXCheckBoxRole as String,
+        allowedSubroles: [],
+        titleAliases: [:],
+        ancestorConstraints: [],
+        attributePredicates: [
+            .attributes([kAXDescriptionAttribute as String],
+                        anyOf: AXLocalePolicy.transportPlayControl.labels, mode: .exactStrict),
+        ],
+        geometryHint: nil,
+        minimumConfidence: 0.6,
+        ambiguityPolicy: .failClosed
+    )
+
     static func transportContainerFinalists(
         among survivors: [AXUIElement],
         runtime: AXHelpers.Runtime = .production

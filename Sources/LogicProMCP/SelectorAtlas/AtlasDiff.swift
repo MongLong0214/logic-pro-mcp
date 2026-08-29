@@ -21,6 +21,7 @@ enum AtlasDiff {
             AXLogicProElements.headerPanSelector,
             AXLogicProElements.volumeFaderSelector,
             AXLogicProElements.controlBarSelector,
+            AXLogicProElements.transportPlaySelector,
             AXLogicProElements.toggleSelector(labels: AXLocalePolicy.trackMuteButton.labels),
             AXLogicProElements.toggleSelector(labels: AXLocalePolicy.trackSoloButton.labels),
             AXLogicProElements.toggleSelector(labels: AXLocalePolicy.trackRecordEnableCheckbox.labels),
@@ -35,7 +36,7 @@ enum AtlasDiff {
     /// there is exactly one control bar in a window — so no baseline could ever cover it and no
     /// verdict could ever be `.reuseFull`. That is a gate that fails closed on its own definition
     /// rather than on the tree.
-    static let singularSelectors: Set<SelectorID> = [.controlBar]
+    static let singularSelectors: Set<SelectorID> = [.controlBar, .transportPlayButton]
 
     /// A snapshot node as something the resolver can score.
     ///

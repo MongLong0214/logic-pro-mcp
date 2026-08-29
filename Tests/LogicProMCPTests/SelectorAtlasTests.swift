@@ -494,6 +494,22 @@ struct Issue290SnapshotRedactionTests {
         // theirs to type, and it is not one this code copies into a second field.
         #expect(AXSnapshot.scopedRoot(shaped, scope: "Vintage Warmer").description
                     == "len:6 non-latin+space")
+
+        // And only when the scope really WAS that description. A generic scope matches title or
+        // description, and `--ax-snapshot-scope window` matches neither — writing the scope in
+        // regardless puts a string into a field the element never held, which is manufacturing
+        // evidence for a selector to score against. The shape is the check: it reproduces only for
+        // the value that produced it.
+        let differentLength = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil,
+            description: "len:11 latin+space", help: nil, identifier: nil,
+            valueRange: nil, children: [])
+        #expect(AXSnapshot.scopedRoot(differentLength, scope: "컨트롤 막대").description
+                    == "len:11 latin+space")
+        let noDescription = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil, description: nil, help: nil,
+            identifier: nil, valueRange: nil, children: [])
+        #expect(AXSnapshot.scopedRoot(noDescription, scope: "컨트롤 막대").description == nil)
     }
 
     @Test("names the product does not recognise are reduced to a shape")
@@ -718,7 +734,8 @@ struct Issue290AtlasDiffTests {
         // Nothing in a track-header capture contradicts the control bar, so a verdict read off the
         // drift list alone called transport qualified on the strength of never having looked at it.
         let railOnly = AtlasDiff.uncovered(baseline: rail, current: rail)
-        #expect(railOnly == [.controlBar], "the rail's coverage gap moved: \(railOnly)")
+        #expect(railOnly == [.controlBar, .transportPlayButton],
+                "the rail's coverage gap moved: \(railOnly)")
         #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: railOnly) == .failClosedMutation)
 
         // The window baseline does not close it either, and that is a measured fact rather than an
@@ -729,6 +746,8 @@ struct Issue290AtlasDiffTests {
         let window = try windowBaseline()
         let both = railOnly.intersection(
             AtlasDiff.uncovered(baseline: window, current: window))
+        // Only the bar. The window capture DOES cover `.transportPlayButton` — a checkbox is a
+        // chrome role, so `재생` survives there while the bar's own group description does not.
         #expect(both == [.controlBar], "the coverage gap moved: \(both)")
         #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: both) == .failClosedMutation)
 
@@ -911,6 +930,42 @@ struct Issue290AtlasDiffTests {
         #expect(control.affectedOperations == [.transportPlay, .transportStop])
         let rail = try baseline()
         #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, renamed)])
+                    == .failClosedMutation)
+    }
+
+    @Test("a control bar that keeps its name but loses the play control fails closed")
+    func aBarWithoutPlayFailsClosed() throws {
+        // The counterexample that made the first version of this baseline hollow. `.controlBar`
+        // reports `transport.play` and `transport.stop` as the operations its drift endangers, and
+        // it scores on the bar's own description — so deleting the play checkbox left every adopted
+        // selector at full confidence and the pair still read `.reuseFull`. A baseline claiming
+        // transport is qualified has to have looked at the thing transport uses.
+        let bar = try controlBarBaseline()
+        let play = AXLocalePolicy.transportPlayControl.labels.map { $0.lowercased() }
+        let withoutPlay = AXSnapshot.Document(
+            logicVersion: bar.logicVersion, locale: bar.locale, scope: bar.scope,
+            capturedFrom: bar.capturedFrom,
+            root: AXSnapshot.Node(
+                role: bar.root.role, subrole: bar.root.subrole,
+                description: bar.root.description, help: bar.root.help,
+                identifier: bar.root.identifier, valueRange: bar.root.valueRange,
+                children: bar.root.children.filter { child in
+                    !play.contains((child.description ?? "").lowercased())
+                }))
+        #expect(withoutPlay.root.children.count == bar.root.children.count - 1,
+                "no play control was removed, so this case is not testing what it says")
+
+        // The bar itself is untouched — that is the point.
+        #expect(AtlasDiff.confidences(in: withoutPlay)[.controlBar]
+                    == AtlasDiff.confidences(in: bar)[.controlBar])
+
+        let drifts = AtlasDiff.between(baseline: bar, current: withoutPlay)
+        let transport = try #require(drifts.first { $0.selectorID == .transportPlayButton })
+        #expect(transport.status == .missing, "a bar without play read as \(transport.status)")
+        #expect(transport.affectedOperations == [.transportPlay, .transportStop])
+
+        let rail = try baseline()
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, withoutPlay)])
                     == .failClosedMutation)
     }
 

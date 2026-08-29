@@ -169,8 +169,17 @@ enum AXSnapshot {
     /// And only when the scope is a label the product recognises. An operator can aim a capture at
     /// any container by description, including one Logic named after a plugin — that string is the
     /// operator's to type, but it is not one this code will copy into a second field.
+    /// It also has to have BEEN the description, and that is checkable without trusting anyone.
+    ///
+    /// The redacted value is the shape of whatever the description held. If the scope was really
+    /// that description, `shape(of: scope)` reproduces it exactly. A capture whose scope matched a
+    /// title instead, or `--ax-snapshot-scope window` where nothing was matched at all, does not
+    /// reproduce — and writing the scope in anyway would put a string into a field the element
+    /// never held, which is manufacturing evidence for a selector to score against.
     static func scopedRoot(_ node: Node, scope: String) -> Node {
-        guard recognisedLabels.contains(scope.lowercased()) else { return node }
+        guard recognisedLabels.contains(scope.lowercased()),
+              node.description == shape(of: scope)
+        else { return node }
         return Node(
             role: node.role, subrole: node.subrole, description: scope, help: node.help,
             identifier: node.identifier, valueRange: node.valueRange, children: node.children)
