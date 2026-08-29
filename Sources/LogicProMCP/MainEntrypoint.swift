@@ -362,27 +362,35 @@ enum MainEntrypoint {
         // Reads `LOGIC_MCP_ATLAS_BASELINES` exactly as the qualification path does — same function,
         // not a copy — so a green answer here is about the code that will run there.
         if arguments.contains("--probe-atlas-diff") {
-            let pairs = AtlasCapture.pairsForThisRun()
-            let outcome = AtlasQualification.outcome(armed: true, pairs: pairs)
-            var payload: [String: Any] = ["pairs": pairs.count,
-                                          "scopes": pairs.map(\.scope)]
+            let captured = AtlasCapture.pairsForThisRun()
+            let outcome = AtlasQualification.outcome(
+                armed: true, pairs: captured.pairs, dropped: captured.dropped)
+            var payload: [String: Any] = ["pairs": captured.pairs.count,
+                                          "dropped": captured.dropped,
+                                          "scopes": captured.pairs.map(\.scope)]
             switch outcome {
             case .notArmed:
                 payload["outcome"] = "not_armed"
             case let .noBaselines(reason):
                 payload["outcome"] = "no_baselines"
                 payload["reason"] = reason
-            case let .diffed(verdict, drifts, unmeasured):
+            case let .diffed(verdict, drifts, unmeasured, _):
                 payload["outcome"] = "diffed"
                 payload["verdict"] = "\(verdict)"
                 payload["moved"] = drifts.filter { $0.status != .stable }
                     .map { "\($0.selectorID)=\($0.status)" }
                 payload["unmeasured"] = unmeasured.map { "\($0)" }.sorted()
             }
+            // The EXIT CODE carries the verdict, not just the JSON. A probe that answers 0 while
+            // printing `no_baselines` teaches a caller to read the text, and a caller reading text
+            // is the shape a `grep`-based gate had before it was fixed this week. Named by review.
+            let probePassed: Bool
+            if case let .diffed(verdict, _, _, _) = outcome { probePassed = verdict == .reuseFull }
+            else { probePassed = false }
             if let data = try? JSONSerialization.data(
                 withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
                 writeStdout(String(decoding: data, as: UTF8.self) + "\n")
-                return 0
+                return probePassed ? 0 : 1
             }
             writeStdout("{\"ok\":false,\"error\":\"could not encode the probe\"}\n")
             return 1

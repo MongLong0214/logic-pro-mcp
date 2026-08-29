@@ -595,6 +595,46 @@ struct QualificationGateTests {
         #expect(decoded.completedAt == Date(timeIntervalSince1970: 1_060))
     }
 
+    @Test func aRefusedAtlasDiffIsNotPromotable() {
+        // Found by review before merge, 2026-08-29. This gate rejects a FAILED case only when its
+        // id equals a required axis key, and `atlas.drift_diff` is not one — so the ADR-007 step
+        // reported a failure, `attestation.failed` counted it, and the release stayed promotable.
+        // A verdict nobody acts on is the shape that step exists to remove.
+        let refused = QualificationCase(
+            id: "atlas.drift_diff", status: .failed, tool: "selector_atlas",
+            command: "drift_diff", traceID: "t", verified: false, evidenceFiles: [],
+            reason: "atlas diff verdict failClosedMutation — drifted: trackHeaderVolumeFader",
+            binarySHA256: binarySHA256,
+            axis: QualificationAxis(variant: .desktop, locale: .enUS, profile: .core,
+                                    cache: .cold, fixture: .empty),
+            operationID: "atlas.drift_diff", operationRequestID: nil,
+            verificationKind: .readResponse, deferral: nil, readback: nil,
+            availabilityReason: nil)
+
+        let decision = evaluate(cases: [refused])
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains {
+            if case .atlasDriftRefused = $0 { return true }
+            return false
+        }, "a refused atlas diff did not reject: \(decision.rejections)")
+
+        // And a PASSING one contributes no rejection of its own — otherwise this case would be
+        // asserting that the step blocks everything rather than that it blocks a refusal.
+        let clean = QualificationCase(
+            id: "atlas.drift_diff", status: .passed, tool: "selector_atlas",
+            command: "drift_diff", traceID: "t", verified: true, evidenceFiles: [],
+            reason: nil, binarySHA256: binarySHA256,
+            axis: QualificationAxis(variant: .desktop, locale: .enUS, profile: .core,
+                                    cache: .cold, fixture: .empty),
+            operationID: "atlas.drift_diff", operationRequestID: nil,
+            verificationKind: .readResponse, deferral: nil, readback: nil,
+            availabilityReason: nil)
+        #expect(!evaluate(cases: [clean]).rejections.contains {
+            if case .atlasDriftRefused = $0 { return true }
+            return false
+        })
+    }
+
     @Test func requiredCombinationKeysAreExact() {
         // Ship-scope decision (2026-07-17): desktop-only matrix. Creator
         // Studio is permanently out of product scope and never enters the

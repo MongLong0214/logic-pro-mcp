@@ -3249,7 +3249,7 @@ struct QualificationRunnerTests {
                 // is about the same cases it was about before. Spelled rather than defaulted: a
                 // default here would let the step appear in these runs the day the flag flips,
                 // and the first sign would be an arithmetic failure in an unrelated assertion.
-                atlasPairs: { [] }
+                atlasPairs: { (pairs: [], dropped: []) }
             ))
         }
 

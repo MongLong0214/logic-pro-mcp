@@ -48,20 +48,31 @@ enum AtlasCapture {
         baselinesIn directory: URL,
         window: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [AtlasQualification.Pair] {
+    ) -> (pairs: [AtlasQualification.Pair], dropped: [String]) {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil)) ?? []
         var out: [AtlasQualification.Pair] = []
+        // What was NOT paired, by name. Dropping is right — an empty current would diff as "every
+        // selector vanished", true-looking and about nothing — but dropping SILENTLY is not: with
+        // one baseline unreadable and the rest covering every selector, the case passed while a
+        // scope nobody could resolve went unmentioned. Named by review, 2026-08-29.
+        var dropped: [String] = []
         for url in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
         where url.pathExtension.lowercased() == "json" {
             guard let data = try? Data(contentsOf: url),
                   let baseline = try? JSONDecoder().decode(AXSnapshot.Document.self, from: data),
                   let root = resolveScope(baseline.scope, in: window, runtime: runtime)
-            else { continue }
+            else { dropped.append(url.lastPathComponent); continue }
             let captured = AXSnapshot.capture(root, runtime: runtime)
+            // NOT the baseline's `logicVersion` and `locale`. Copying them made the live document
+            // assert what it was compared AGAINST rather than what it is, so a `ko` baseline read
+            // on an English Logic produced a "ko" current and the pair looked matched. Nothing here
+            // can read the running version or language, so the honest value is a name that says so
+            // — a reader seeing `observed` knows to look elsewhere for the axis, which is exactly
+            // what an empty-looking `ko` would have hidden. Named by review, 2026-08-29.
             let current = AXSnapshot.Document(
-                logicVersion: baseline.logicVersion,
-                locale: baseline.locale,
+                logicVersion: "observed",
+                locale: "observed",
                 scope: baseline.scope,
                 capturedFrom: "ax",
                 root: AXSnapshot.restorableRootDescription(
@@ -73,7 +84,7 @@ enum AtlasCapture {
             out.append(AtlasQualification.Pair(
                 scope: baseline.scope, baseline: baseline, current: current))
         }
-        return out
+        return (out, dropped)
     }
 
     /// Pairs for the run happening now, or none.
@@ -81,11 +92,11 @@ enum AtlasCapture {
     /// None when the directory is unset, when it holds nothing readable, or when Logic is not on
     /// screen. All three are the same fact from this function's point of view — it could not look —
     /// and the caller is the one that decides what that means.
-    static func pairsForThisRun() -> [AtlasQualification.Pair] {
+    static func pairsForThisRun() -> (pairs: [AtlasQualification.Pair], dropped: [String]) {
         guard let path = ProcessInfo.processInfo.environment["LOGIC_MCP_ATLAS_BASELINES"],
               !path.isEmpty,
               let window = AXLogicProElements.mainWindow()
-        else { return [] }
+        else { return ([], []) }
         return pairs(baselinesIn: URL(fileURLWithPath: path), window: window)
     }
 }

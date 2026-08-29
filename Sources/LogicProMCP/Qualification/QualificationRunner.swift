@@ -22,7 +22,7 @@ package struct QualificationRunner: Sendable {
         let drive: @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult
         /// Baseline/live pairs for the ADR-007 diff. Empty in a build that cannot capture, which an
         /// ARMED run treats as a refusal rather than as agreement — see `AtlasQualification`.
-        let atlasPairs: @Sendable () -> [AtlasQualification.Pair]
+        let atlasPairs: @Sendable () -> (pairs: [AtlasQualification.Pair], dropped: [String])
 
         static let production = Runtime(
             executableURL: { try QualificationRunner.currentExecutableURL() },
@@ -797,10 +797,17 @@ package struct QualificationRunner: Sendable {
         // capture side, which needs a running application, cannot make the DECISION untestable.
         // Off unless `adr007SelectorAtlas` is set: only `ko` has a control-bar baseline today, and
         // arming it everywhere would refuse every run on a Logic speaking anything else.
+        // The flag decides before anything is CAPTURED, not only before a case is emitted. Passing
+        // `runtime.atlasPairs()` as an argument evaluated it eagerly, so a run with the flag off
+        // still walked the AX tree — work nobody asked for, and a claim in the PR ("the flag is the
+        // only thing arming it") that the code did not keep. Named by review, 2026-08-29.
+        let atlasArmed = FeatureFlags.adr007SelectorAtlas
+        let atlasCaptured = atlasArmed ? runtime.atlasPairs() : (pairs: [], dropped: [])
         if let atlasCase = AtlasQualification.caseFor(
             AtlasQualification.outcome(
-                armed: FeatureFlags.adr007SelectorAtlas,
-                pairs: runtime.atlasPairs()),
+                armed: atlasArmed,
+                pairs: atlasCaptured.pairs,
+                dropped: atlasCaptured.dropped),
             axis: observedAxis,
             binarySHA256: binarySHA256,
             traceID: "atlas-drift-diff"
@@ -1309,6 +1316,11 @@ package struct QualificationRunner: Sendable {
             VerificationOutput.Rejection(
                 reason: "requiredCaseFailed", caseID: caseID, key: nil,
                 name: nil, expected: nil, actual: nil
+            )
+        case .atlasDriftRefused(let detail):
+            VerificationOutput.Rejection(
+                reason: "atlasDriftRefused", caseID: "atlas.drift_diff", key: nil,
+                name: nil, expected: nil, actual: detail
             )
         case .requiredCombinationNotQualified(let key):
             VerificationOutput.Rejection(

@@ -28,8 +28,10 @@ enum AtlasQualification {
         case notArmed
         /// Armed, but there is nothing to diff against. A refusal, not a pass — see `caseFor`.
         case noBaselines(reason: String)
-        /// Diffed. `unmeasured` is the adopted set no pair covered.
-        case diffed(verdict: QualificationReuse, drifts: [SelectorDrift], unmeasured: Set<SelectorID>)
+        /// Diffed. `unmeasured` is the adopted set no pair covered; `dropped` names baselines that
+        /// could not be paired at all.
+        case diffed(verdict: QualificationReuse, drifts: [SelectorDrift],
+                    unmeasured: Set<SelectorID>, dropped: [String])
     }
 
     /// A baseline and the live capture taken at the same scope.
@@ -43,7 +45,7 @@ enum AtlasQualification {
     ///
     /// `armed` is passed rather than read here so the decision has one home and the tests do not
     /// have to move an environment variable to exercise both sides.
-    static func outcome(armed: Bool, pairs: [Pair]) -> Outcome {
+    static func outcome(armed: Bool, pairs: [Pair], dropped: [String] = []) -> Outcome {
         guard armed else { return .notArmed }
         guard !pairs.isEmpty else {
             return .noBaselines(
@@ -54,10 +56,14 @@ enum AtlasQualification {
         let unmeasured = pairs
             .map { AtlasDiff.uncovered(baseline: $0.baseline, current: $0.current) }
             .reduce(Set(AtlasDiff.adoptedSelectors.map(\.id))) { $0.intersection($1) }
+        // A dropped baseline is a scope this run could not read. Even when the pairs that DID
+        // resolve cover every selector, the run measured less than it was given — and calling that
+        // full reuse is the silence this step exists to refuse.
+        let verdict = dropped.isEmpty
+            ? AtlasDiff.verdict(for: drifts, assumingCoverage: unmeasured)
+            : .failClosedMutation
         return .diffed(
-            verdict: AtlasDiff.verdict(for: drifts, assumingCoverage: unmeasured),
-            drifts: drifts,
-            unmeasured: unmeasured)
+            verdict: verdict, drifts: drifts, unmeasured: unmeasured, dropped: dropped)
     }
 
     /// The case an outcome produces, or nil when the run is not armed.
@@ -83,9 +89,10 @@ enum AtlasQualification {
         case let .noBaselines(why):
             passed = false
             reason = why
-        case let .diffed(verdict, drifts, unmeasured):
+        case let .diffed(verdict, drifts, unmeasured, dropped):
             passed = verdict == .reuseFull
-            reason = passed ? nil : describe(verdict: verdict, drifts: drifts, unmeasured: unmeasured)
+            reason = passed ? nil : describe(
+                verdict: verdict, drifts: drifts, unmeasured: unmeasured, dropped: dropped)
         }
         return QualificationCase(
             id: "atlas.drift_diff",
@@ -114,7 +121,8 @@ enum AtlasQualification {
     static func describe(
         verdict: QualificationReuse,
         drifts: [SelectorDrift],
-        unmeasured: Set<SelectorID>
+        unmeasured: Set<SelectorID>,
+        dropped: [String] = []
     ) -> String {
         var parts: [String] = ["atlas diff verdict \(verdict)"]
         let moved = drifts.filter { $0.status != .stable }
@@ -126,7 +134,11 @@ enum AtlasQualification {
         if !unmeasured.isEmpty {
             parts.append("unmeasured: " + unmeasured.map { "\($0)" }.sorted().joined(separator: ", "))
         }
-        if moved.isEmpty, unmeasured.isEmpty, drifts.isEmpty {
+        if !dropped.isEmpty {
+            parts.append("baselines that could not be read or resolved: "
+                + dropped.sorted().joined(separator: ", "))
+        }
+        if moved.isEmpty, unmeasured.isEmpty, dropped.isEmpty, drifts.isEmpty {
             parts.append("nothing was compared")
         }
         return parts.joined(separator: " — ")

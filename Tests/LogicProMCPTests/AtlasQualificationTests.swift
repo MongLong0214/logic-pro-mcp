@@ -111,6 +111,50 @@ struct AtlasQualificationTests {
         #expect(ko.axis != en.axis)
     }
 
+    @Test("a baseline that could not be read is named, and the run refuses")
+    func aDroppedBaselineFailsClosed() throws {
+        // Dropping an unreadable baseline is right — an empty current would diff as "every selector
+        // vanished", true-looking and about nothing. Dropping it SILENTLY is not: with the
+        // remaining pairs covering every selector, the case passed while a scope nobody could
+        // resolve went unmentioned. Named by review before merge, 2026-08-29.
+        let outcome = AtlasQualification.outcome(
+            armed: true, pairs: try pairs(), dropped: ["logic-12.x-desktop-en-track-headers.json"])
+        let emitted = try #require(AtlasQualification.caseFor(
+            outcome, axis: axis, binarySHA256: "abc", traceID: "t"))
+        #expect(emitted.status == .failed, "a dropped baseline was absorbed")
+        let reason = try #require(emitted.reason)
+        #expect(reason.contains("logic-12.x-desktop-en-track-headers.json"),
+                "the dropped baseline is not named: \(reason)")
+
+        // And the same pairs with nothing dropped still pass, or this case would be asserting that
+        // the fixtures are broken rather than that dropping is caught.
+        let clean = AtlasQualification.outcome(armed: true, pairs: try pairs())
+        #expect(try #require(AtlasQualification.caseFor(
+            clean, axis: axis, binarySHA256: "abc", traceID: "t")).status == .passed)
+    }
+
+    @Test("a refused atlas diff is not promotable")
+    func aRefusedDiffBlocksPromotion() throws {
+        // The defect this closes: `PromotionGate` rejects a FAILED case only when its id equals a
+        // required axis key, and `atlas.drift_diff` is not one — so the step reported a failure
+        // that stopped nothing, which is the "gate that does not gate" shape it exists to remove.
+        let failed = try #require(AtlasQualification.caseFor(
+            .diffed(verdict: .failClosedMutation,
+                    drifts: [SelectorDrift(
+                        selectorID: .trackHeaderVolumeFader, status: .missing,
+                        previousConfidence: 1, currentConfidence: 0,
+                        changedRoles: [], affectedOperations: [.mixerSetVolume])],
+                    unmeasured: [], dropped: []),
+            axis: axis, binarySHA256: "abc", traceID: "t"))
+        #expect(failed.status == .failed)
+        #expect(failed.id == "atlas.drift_diff")
+        // The gate looks the case up by exactly this id; the rejection lives in PromotionGate and
+        // is exercised there. What this pins is the contract between them — a rename on either
+        // side leaves the gate watching a name nothing produces.
+        let failedReason = try #require(failed.reason)
+        #expect(failedReason.contains("failClosedMutation"))
+    }
+
     @Test("the case id is the one the runner refuses to duplicate")
     func theCaseIdIsStable() throws {
         // The runner checks external-manifest ids for collisions BEFORE this step appends, so the
@@ -143,7 +187,7 @@ struct AtlasQualificationTests {
         // `describe` writes, so relaxing the decision to `verdict != .failClosedMutation` left it
         // green — the control could not see the mutation it was aimed at.
         let emitted = try #require(AtlasQualification.caseFor(
-            .diffed(verdict: .readOnlyOnly, drifts: [minor], unmeasured: []),
+            .diffed(verdict: .readOnlyOnly, drifts: [minor], unmeasured: [], dropped: []),
             axis: axis, binarySHA256: "abc", traceID: "t"))
         #expect(emitted.status == .failed, "readOnlyOnly was accepted as a pass")
         #expect(!emitted.verified)
