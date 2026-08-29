@@ -477,6 +477,83 @@ struct Issue290SnapshotRedactionTests {
                     == "len:6 non-latin+space")
     }
 
+    @Test("a scoped capture's root keeps the identity its scope already spells out")
+    func scopedRootKeepsARecognisedScope() {
+        // Tested on the FUNCTION, not on a fixture. The committed control-bar baseline has the
+        // description baked in, so reverting this rule leaves that file — and any test reading it —
+        // exactly as green as before. Only the producer can see the producer's defect.
+        let shaped = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil,
+            description: "len:6 non-latin+space", help: nil, identifier: nil,
+            valueRange: nil, children: [])
+
+        #expect(AXSnapshot.scopedRoot(shaped, readBackDescription: "컨트롤 막대").description == "컨트롤 막대")
+
+        // And only for a label the product recognises. An operator can aim a capture at any
+        // container by description, including one Logic named after a plugin — that string is
+        // theirs to type, and it is not one this code copies into a second field.
+        #expect(AXSnapshot.scopedRoot(shaped, readBackDescription: "Vintage Warmer").description
+                    == "len:6 non-latin+space")
+
+        // And only when the scope really WAS that description. A generic scope matches title or
+        // description, and `--ax-snapshot-scope window` matches neither — writing the scope in
+        // regardless puts a string into a field the element never held, which is manufacturing
+        // evidence for a selector to score against. The shape is the check: it reproduces only for
+        // the value that produced it.
+        let differentLength = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil,
+            description: "len:11 latin+space", help: nil, identifier: nil,
+            valueRange: nil, children: [])
+        #expect(AXSnapshot.scopedRoot(differentLength, readBackDescription: "컨트롤 막대").description
+                    == "len:11 latin+space")
+        let noDescription = AXSnapshot.Node(
+            role: kAXGroupRole as String, subrole: nil, description: nil, help: nil,
+            identifier: nil, valueRange: nil, children: [])
+        #expect(AXSnapshot.scopedRoot(noDescription, readBackDescription: "컨트롤 막대").description
+                    == nil)
+
+        // The shape is the SECOND lock, not the first, because on its own it is lossy: a title
+        // `Mixer` beside an unrelated description `Serum` both render `len:5 latin`. The parameter
+        // name carries the first lock — the value has to have been read back from this element's
+        // description, which only the `control-bar` capture can answer, so a generic scope never
+        // reaches here at all.
+        #expect(AXSnapshot.shape(of: "Mixer") == AXSnapshot.shape(of: "Serum"),
+                "the collision this argues about does not exist, so the argument is wrong")
+    }
+
+    @Test("only a scope the tool resolved itself may have its root description restored")
+    func onlyAPredicateResolvedScopeMayRestore() {
+        // The rule, tested where it is decided. Left as a call-site convention inside the capture
+        // command, widening it to every scope compiled, passed, and would only have shown up in the
+        // next fixture someone captured.
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "control-bar", resolvedDescription: "컨트롤 막대") == "컨트롤 막대")
+
+        // `트랙 헤더` is a recognised label whose shape matches the rail fixture's root exactly, so
+        // nothing downstream would have stopped it — the scope matched title OR description and the
+        // capture never recorded which.
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "트랙 헤더", resolvedDescription: "트랙 헤더") == nil)
+        #expect(AXSnapshot.restorableRootDescription(
+            scope: "window", resolvedDescription: nil) == nil)
+    }
+
+    @Test("only a capture that read the description back may restore it")
+    func onlyTheControlBarPathRestoresARootDescription() throws {
+        // The call site is the lock. Every committed baseline except the control bar was captured
+        // through a route that cannot say what the root's description was, and none of them carries
+        // a root description that is not a shape.
+        for name in Self.committedFixtures where !name.contains("control-bar") {
+            let document = try JSONDecoder().decode(
+                AXSnapshot.Document.self,
+                from: Data(contentsOf: Self.fixtureURL(name)))
+            if let description = document.root.description {
+                #expect(description.hasPrefix("len:"),
+                        "\(name) restored a root description on a route that cannot verify it")
+            }
+        }
+    }
+
     @Test("names the product does not recognise are reduced to a shape")
     func userNamesAreReducedToShape() throws {
         // Every one of these is a plausible thing a user types, and none is in any policy set.
@@ -552,6 +629,7 @@ struct Issue290SnapshotRedactionTests {
         "logic-12.x-desktop-ko-track-headers.json",
         "logic-12.x-desktop-en-track-headers.json",
         "logic-12.x-desktop-ko-window.json",
+        "logic-12.x-desktop-ko-control-bar.json",
     ]
 
     static func fixtureURL(_ name: String) -> URL {
@@ -587,16 +665,21 @@ struct Issue290SnapshotRedactionTests {
         ]
         var carried: [String] = []
         var shaped = 0
-        func walk(_ node: AXSnapshot.Node) {
+        func walk(_ node: AXSnapshot.Node, isRoot: Bool = false) {
             if nameBearing.contains(node.role) {
                 for value in [node.description, node.help, node.identifier].compactMap({ $0 }) {
+                    // The one exception, and it is arithmetic rather than judgement: a scoped
+                    // capture's root keeps the description that `scope` already spells out, so the
+                    // two fields together reveal exactly what `scope` alone does. Without it no
+                    // baseline could score `.controlBar`, whose entire identity is that string.
+                    if isRoot, value == document.scope { continue }
                     carried.append(value)
                     if value.hasPrefix("len:") { shaped += 1 }
                 }
             }
-            node.children.forEach(walk)
+            node.children.forEach { walk($0) }
         }
-        walk(document.root)
+        walk(document.root, isRoot: true)
         #expect(!carried.isEmpty, "nothing name-bearing in \(name) — nothing was tested")
         #expect(shaped == carried.count,
                 "\(name) kept \(carried.filter { !$0.hasPrefix("len:") })")
@@ -693,7 +776,8 @@ struct Issue290AtlasDiffTests {
         // Nothing in a track-header capture contradicts the control bar, so a verdict read off the
         // drift list alone called transport qualified on the strength of never having looked at it.
         let railOnly = AtlasDiff.uncovered(baseline: rail, current: rail)
-        #expect(railOnly == [.controlBar], "the rail's coverage gap moved: \(railOnly)")
+        #expect(railOnly == [.controlBar, .transportPlayButton],
+                "the rail's coverage gap moved: \(railOnly)")
         #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: railOnly) == .failClosedMutation)
 
         // The window baseline does not close it either, and that is a measured fact rather than an
@@ -704,6 +788,8 @@ struct Issue290AtlasDiffTests {
         let window = try windowBaseline()
         let both = railOnly.intersection(
             AtlasDiff.uncovered(baseline: window, current: window))
+        // Only the bar. The window capture DOES cover `.transportPlayButton` — a checkbox is a
+        // chrome role, so `재생` survives there while the bar's own group description does not.
         #expect(both == [.controlBar], "the coverage gap moved: \(both)")
         #expect(AtlasDiff.verdict(for: drifts, assumingCoverage: both) == .failClosedMutation)
 
@@ -837,6 +923,92 @@ struct Issue290AtlasDiffTests {
                     .contains(.trackHeaderVolumeFader),
                 "a selector scored but never measured for coverage counted as covered")
         #expect(AtlasDiff.verdict(baselines: [(single, single)]) == .failClosedMutation)
+    }
+
+    private func controlBarBaseline() throws -> AXSnapshot.Document {
+        try load("logic-12.x-desktop-ko-control-bar.json")
+    }
+
+    @Test("the rail and the control bar together cover every adopted selector")
+    func theBaselineSetIsComplete() throws {
+        // The gap this closes, and it took two things. The bar is identified by an `AXGroup`
+        // description and groups are shaped, so nothing could score `.controlBar` — a scoped
+        // capture's root now keeps the identity its `scope` field already spells out. And there is
+        // exactly ONE control bar, so requiring a repetition to measure coverage in made it
+        // permanently unmeasured whatever the fixture said.
+        let bar = try controlBarBaseline()
+        let scored = try #require(AtlasDiff.confidences(in: bar)[.controlBar],
+                                  "the control-bar baseline does not score .controlBar")
+        #expect(scored >= 0.6, ".controlBar scored \(scored), below its own threshold")
+        #expect(!AtlasDiff.uncovered(baseline: bar, current: bar).contains(.controlBar))
+
+        let rail = try baseline()
+        let unmeasured = AtlasDiff.uncovered(baseline: rail, current: rail)
+            .intersection(AtlasDiff.uncovered(baseline: bar, current: bar))
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, bar)]) == .reuseFull,
+                "unmeasured across the pair: \(unmeasured)")
+
+        // And the rail alone still is not enough, or the union above proved nothing.
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail)]) == .failClosedMutation)
+    }
+
+    @Test("the control bar losing its name stops a transport mutation")
+    func aRenamedControlBarFailsClosed() throws {
+        // The drift this baseline exists to catch, driven by removing the label rather than by
+        // editing an expected number.
+        let bar = try controlBarBaseline()
+        let renamed = AXSnapshot.Document(
+            logicVersion: bar.logicVersion, locale: bar.locale, scope: bar.scope,
+            capturedFrom: bar.capturedFrom,
+            root: AXSnapshot.Node(
+                role: bar.root.role, subrole: bar.root.subrole,
+                description: "len:6 non-latin+space", help: bar.root.help,
+                identifier: bar.root.identifier, valueRange: bar.root.valueRange,
+                children: bar.root.children))
+
+        let drifts = AtlasDiff.between(baseline: bar, current: renamed)
+        let control = try #require(drifts.first { $0.selectorID == .controlBar })
+        #expect(control.status == .missing, "a renamed control bar read as \(control.status)")
+        #expect(control.affectedOperations == [.transportPlay, .transportStop])
+        let rail = try baseline()
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, renamed)])
+                    == .failClosedMutation)
+    }
+
+    @Test("a control bar that keeps its name but loses the play control fails closed")
+    func aBarWithoutPlayFailsClosed() throws {
+        // The counterexample that made the first version of this baseline hollow. `.controlBar`
+        // reports `transport.play` and `transport.stop` as the operations its drift endangers, and
+        // it scores on the bar's own description — so deleting the play checkbox left every adopted
+        // selector at full confidence and the pair still read `.reuseFull`. A baseline claiming
+        // transport is qualified has to have looked at the thing transport uses.
+        let bar = try controlBarBaseline()
+        let play = AXLocalePolicy.transportPlayControl.labels.map { $0.lowercased() }
+        let withoutPlay = AXSnapshot.Document(
+            logicVersion: bar.logicVersion, locale: bar.locale, scope: bar.scope,
+            capturedFrom: bar.capturedFrom,
+            root: AXSnapshot.Node(
+                role: bar.root.role, subrole: bar.root.subrole,
+                description: bar.root.description, help: bar.root.help,
+                identifier: bar.root.identifier, valueRange: bar.root.valueRange,
+                children: bar.root.children.filter { child in
+                    !play.contains((child.description ?? "").lowercased())
+                }))
+        #expect(withoutPlay.root.children.count == bar.root.children.count - 1,
+                "no play control was removed, so this case is not testing what it says")
+
+        // The bar itself is untouched — that is the point.
+        #expect(AtlasDiff.confidences(in: withoutPlay)[.controlBar]
+                    == AtlasDiff.confidences(in: bar)[.controlBar])
+
+        let drifts = AtlasDiff.between(baseline: bar, current: withoutPlay)
+        let transport = try #require(drifts.first { $0.selectorID == .transportPlayButton })
+        #expect(transport.status == .missing, "a bar without play read as \(transport.status)")
+        #expect(transport.affectedOperations == [.transportPlay, .transportStop])
+
+        let rail = try baseline()
+        #expect(AtlasDiff.verdict(baselines: [(rail, rail), (bar, withoutPlay)])
+                    == .failClosedMutation)
     }
 
     @Test("a verdict taken from the documents cannot be told a coverage it did not measure")
