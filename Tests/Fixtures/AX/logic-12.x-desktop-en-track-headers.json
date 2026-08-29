@@ -1,6 +1,6 @@
 {
   "capturedFrom" : "ax",
-  "locale" : "ko",
+  "locale" : "en",
   "logicVersion" : "12.x",
   "root" : {
     "children" : [
@@ -10,8 +10,8 @@
             "children" : [
 
             ],
-            "description" : "len:6 non-latin+space",
-            "help" : "트랙 헤더 음소거 활성화 녹음 볼륨 솔로 채널 클릭 트랙 패닝 l | len:117 latin+non-latin+punct+space",
+            "description" : "len:9 latin+space",
+            "help" : "track header record volume click track mute solo pan rec ch l m | len:210 latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -19,8 +19,8 @@
             "children" : [
 
             ],
-            "description" : "트랙 확대 | len:11 non-latin+punct+space",
-            "help" : "기본 설정 클릭 트랙 확대 m | len:134 latin+non-latin+punct+space",
+            "description" : "track zoom l m | len:21 latin+space",
+            "help" : "default tracks click track zoom l m | len:218 latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -28,7 +28,7 @@
             "children" : [
 
             ],
-            "help" : "track 트랙 | len:84 latin+non-latin+punct+space",
+            "help" : "tracks track l m | len:134 latin+punct+space",
             "role" : "AXDisclosureTriangle",
             "valueRange" : "0...127"
           },
@@ -36,8 +36,8 @@
             "children" : [
 
             ],
-            "description" : "음소거",
-            "help" : "음소거 믹서 재생 채널 트랙 | len:96 non-latin+punct+space",
+            "description" : "Mute",
+            "help" : "mixer track mute play ch l m | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -45,8 +45,8 @@
             "children" : [
 
             ],
-            "description" : "솔로",
-            "help" : "aux 솔로 채널 출력 트랙 | len:92 latin+non-latin+punct+space",
+            "description" : "Solo",
+            "help" : "output tracks track solo aux ch l m | len:155 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -54,8 +54,8 @@
             "children" : [
 
             ],
-            "description" : "녹음 활성화",
-            "help" : "녹음 활성화 활성화 녹음 상태 트랙 | len:101 non-latin+punct+space",
+            "description" : "Record Enable",
+            "help" : "record enable record track read rec ch l | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -63,8 +63,8 @@
             "children" : [
 
             ],
-            "description" : "모니터링 입력 | len:7 non-latin+space",
-            "help" : "녹음 활성화 모니터링 오디오 활성화 녹음 설정 악기 입력 트랙 | len:98 non-latin+punct+space",
+            "description" : "monitor input m | len:16 latin+space",
+            "help" : "record enable instrument software monitor setting record tracks audio input track rec l m | len:187 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -74,11 +74,11 @@
                 "children" : [
 
                 ],
-                "description" : "len:4 digit+non-latin+space",
+                "description" : "len:5 digit+latin+space",
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "밸런스 위치 트랙 패닝 | len:51 non-latin+punct+space",
+            "help" : "position track pan l | len:84 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -88,12 +88,12 @@
                 "children" : [
 
                 ],
-                "description" : "len:2 non-latin",
+                "description" : "len:6 latin",
                 "role" : "AXValueIndicator"
               }
             ],
-            "description" : "볼륨",
-            "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:114 latin+non-latin+punct+space",
+            "description" : "Volume",
+            "help" : "output volume fader track play aux ch l m | len:195 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -102,13 +102,13 @@
 
             ],
             "description" : "len:13 latin+space",
-            "help" : "len:31 non-latin+punct+space",
+            "help" : "len:46 latin+punct+space",
             "role" : "AXTextField",
             "valueRange" : "0...1"
           }
         ],
-        "description" : "len:22 digit+latin+non-latin+punct+space",
-        "help" : "len:117 latin+non-latin+punct+space",
+        "description" : "len:23 digit+latin+punct+space",
+        "help" : "len:210 latin+punct+space",
         "role" : "AXLayoutItem",
         "valueRange" : "0...1"
       },
@@ -118,8 +118,8 @@
             "children" : [
 
             ],
-            "description" : "len:6 non-latin+space",
-            "help" : "트랙 헤더 음소거 활성화 녹음 볼륨 솔로 채널 클릭 트랙 패닝 l | len:117 latin+non-latin+punct+space",
+            "description" : "len:9 latin+space",
+            "help" : "track header record volume click track mute solo pan rec ch l m | len:210 latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -127,8 +127,8 @@
             "children" : [
 
             ],
-            "description" : "트랙 확대 | len:11 non-latin+punct+space",
-            "help" : "기본 설정 클릭 트랙 확대 m | len:134 latin+non-latin+punct+space",
+            "description" : "track zoom l m | len:21 latin+space",
+            "help" : "default tracks click track zoom l m | len:218 latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -136,8 +136,8 @@
             "children" : [
 
             ],
-            "description" : "음소거",
-            "help" : "음소거 믹서 재생 채널 트랙 | len:96 non-latin+punct+space",
+            "description" : "Mute",
+            "help" : "mixer track mute play ch l m | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -145,8 +145,8 @@
             "children" : [
 
             ],
-            "description" : "솔로",
-            "help" : "aux 솔로 채널 출력 트랙 | len:92 latin+non-latin+punct+space",
+            "description" : "Solo",
+            "help" : "output tracks track solo aux ch l m | len:155 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -154,8 +154,8 @@
             "children" : [
 
             ],
-            "description" : "녹음 활성화",
-            "help" : "녹음 활성화 활성화 녹음 상태 트랙 | len:101 non-latin+punct+space",
+            "description" : "Record Enable",
+            "help" : "record enable record track read rec ch l | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -163,8 +163,8 @@
             "children" : [
 
             ],
-            "description" : "모니터링 입력 | len:7 non-latin+space",
-            "help" : "녹음 활성화 모니터링 오디오 활성화 녹음 설정 악기 입력 트랙 | len:98 non-latin+punct+space",
+            "description" : "monitor input m | len:16 latin+space",
+            "help" : "record enable instrument software monitor setting record tracks audio input track rec l m | len:187 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -174,11 +174,11 @@
                 "children" : [
 
                 ],
-                "description" : "len:4 digit+non-latin+space",
+                "description" : "len:5 digit+latin+space",
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "밸런스 위치 트랙 패닝 | len:51 non-latin+punct+space",
+            "help" : "position track pan l | len:84 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -188,12 +188,12 @@
                 "children" : [
 
                 ],
-                "description" : "len:2 non-latin",
+                "description" : "len:6 latin",
                 "role" : "AXValueIndicator"
               }
             ],
-            "description" : "볼륨",
-            "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:114 latin+non-latin+punct+space",
+            "description" : "Volume",
+            "help" : "output volume fader track play aux ch l m | len:195 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -202,13 +202,13 @@
 
             ],
             "description" : "len:7 digit+latin+space",
-            "help" : "len:31 non-latin+punct+space",
+            "help" : "len:46 latin+punct+space",
             "role" : "AXTextField",
             "valueRange" : "0...1"
           }
         ],
-        "description" : "len:17 digit+latin+non-latin+punct+space",
-        "help" : "len:117 latin+non-latin+punct+space",
+        "description" : "len:18 digit+latin+punct+space",
+        "help" : "len:210 latin+punct+space",
         "role" : "AXLayoutItem",
         "valueRange" : "0...1"
       },
@@ -218,8 +218,8 @@
             "children" : [
 
             ],
-            "description" : "len:6 non-latin+space",
-            "help" : "트랙 헤더 음소거 활성화 녹음 볼륨 솔로 채널 클릭 트랙 패닝 l | len:117 latin+non-latin+punct+space",
+            "description" : "len:9 latin+space",
+            "help" : "track header record volume click track mute solo pan rec ch l m | len:210 latin+punct+space",
             "role" : "AXRadioButton",
             "valueRange" : "0...1"
           },
@@ -227,8 +227,8 @@
             "children" : [
 
             ],
-            "description" : "트랙 확대 | len:11 non-latin+punct+space",
-            "help" : "기본 설정 클릭 트랙 확대 m | len:134 latin+non-latin+punct+space",
+            "description" : "track zoom l m | len:21 latin+space",
+            "help" : "default tracks click track zoom l m | len:218 latin+punct+space",
             "role" : "AXSplitter",
             "valueRange" : "-50...50"
           },
@@ -236,8 +236,8 @@
             "children" : [
 
             ],
-            "description" : "음소거",
-            "help" : "음소거 믹서 재생 채널 트랙 | len:96 non-latin+punct+space",
+            "description" : "Mute",
+            "help" : "mixer track mute play ch l m | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -245,8 +245,8 @@
             "children" : [
 
             ],
-            "description" : "솔로",
-            "help" : "aux 솔로 채널 출력 트랙 | len:92 latin+non-latin+punct+space",
+            "description" : "Solo",
+            "help" : "output tracks track solo aux ch l m | len:155 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -254,8 +254,8 @@
             "children" : [
 
             ],
-            "description" : "녹음 활성화",
-            "help" : "녹음 활성화 활성화 녹음 상태 트랙 | len:101 non-latin+punct+space",
+            "description" : "Record Enable",
+            "help" : "record enable record track read rec ch l | len:193 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -263,8 +263,8 @@
             "children" : [
 
             ],
-            "description" : "모니터링 입력 | len:7 non-latin+space",
-            "help" : "녹음 활성화 모니터링 오디오 활성화 녹음 설정 악기 입력 트랙 | len:98 non-latin+punct+space",
+            "description" : "monitor input m | len:16 latin+space",
+            "help" : "record enable instrument software monitor setting record tracks audio input track rec l m | len:187 latin+punct+space",
             "role" : "AXCheckBox",
             "valueRange" : "0...1"
           },
@@ -274,11 +274,11 @@
                 "children" : [
 
                 ],
-                "description" : "len:4 digit+non-latin+space",
+                "description" : "len:5 digit+latin+space",
                 "role" : "AXValueIndicator"
               }
             ],
-            "help" : "밸런스 위치 트랙 패닝 | len:51 non-latin+punct+space",
+            "help" : "position track pan l | len:84 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...127"
           },
@@ -288,12 +288,12 @@
                 "children" : [
 
                 ],
-                "description" : "len:2 non-latin",
+                "description" : "len:6 latin",
                 "role" : "AXValueIndicator"
               }
             ],
-            "description" : "볼륨",
-            "help" : "aux 페이더 볼륨 설정 재생 채널 출력 트랙 | len:114 latin+non-latin+punct+space",
+            "description" : "Volume",
+            "help" : "output volume fader track play aux ch l m | len:195 latin+punct+space",
             "role" : "AXSlider",
             "valueRange" : "0...233"
           },
@@ -302,19 +302,19 @@
 
             ],
             "description" : "len:12 latin+space",
-            "help" : "len:31 non-latin+punct+space",
+            "help" : "len:46 latin+punct+space",
             "role" : "AXTextField",
             "valueRange" : "0...1"
           }
         ],
-        "description" : "len:22 digit+latin+non-latin+punct+space",
-        "help" : "len:117 latin+non-latin+punct+space",
+        "description" : "len:23 digit+latin+punct+space",
+        "help" : "len:210 latin+punct+space",
         "role" : "AXLayoutItem",
         "valueRange" : "0...1"
       }
     ],
-    "description" : "len:5 non-latin+space",
+    "description" : "len:13 latin+space",
     "role" : "AXGroup"
   },
-  "scope" : "트랙 헤더"
+  "scope" : "Tracks header"
 }
