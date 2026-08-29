@@ -72,6 +72,65 @@ _SETTLE_TRIES = 8
 _SETTLE_GAP = 0.35
 
 
+# Every AXDescription Logic uses for the control bar, in one place.
+#
+# Three harnesses passed the English spelling to `located_band`, and on a Logic running in Korean
+# the tool answered `no element with that exact AXDescription` — so each failed at a precondition
+# about the window frame, having nothing to do with its own subject. Measured 2026-08-29:
+# `"Control Bar"` finds nothing here, `"컨트롤 막대"` resolves to one candidate at (10, 24, 1900, 58).
+#
+# These are the variants `AXLocalePolicy.controlBarGroupLabel` declares, and
+# `Scripts/check-livekit-locale-aliases.py` fails when the two lists diverge. A second copy of a
+# label list is a copy that goes stale; a second copy with a check is a copy that cannot.
+CONTROL_BAR_NAMES = ["Control Bar", "컨트롤 막대", "コントロールバー"]
+
+# The track-header rail, same reason. Note the NOUN NUMBER differs between locales — English is
+# `Tracks header`, singular where the Korean `트랙 헤더` is not a plural of anything — so a
+# translation written from one side would have looked for `Track headers` and found nothing.
+TRACK_HEADER_NAMES = ["track headers", "track header", "tracks header", "tracks headers",
+                      "Tracks header", "트랙 헤더"]
+
+# The Event tab of the List Editors pane. Measured 2026-08-29 on a Korean Logic, where the four
+# list tabs describe themselves `이벤트`, `마커`, `템포`, `조표 및 박자표` — and where the
+# collector's own literal `== "Event"` meant it could not find the tab at all.
+EVENT_LIST_TAB_NAMES = ["event", "Event", "이벤트", "イベント"]
+# The Marker tab, needed only to point the pane somewhere else so a refusal can be observed.
+# Measured beside the others on 2026-08-29: `마커`.
+MARKER_LIST_TAB_NAMES = ["Marker", "마커", "マーカー"]
+
+
+def label_set(name, repo=None):
+    """`[canonical] + variants` for one `AXLocalePolicy` LabelSet, read from the Swift source.
+
+    PARSED, not imported — a harness cannot link the product, and shelling out to it would make the
+    thing under test supply the labels its own assertion is checked against.
+
+    The limit is worth stating: the harness and the product then read the SAME declaration, so a
+    declaration that is wrong for a locale is wrong in both and this comparison cannot see it. What
+    it does catch is the case it was written for — Logic rendering a different set of columns than
+    the product expects — and it catches it in every language, which a list of English literals in
+    a harness does not.
+    """
+    repo = repo or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(repo, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return None
+    m = re.search(r"static let " + re.escape(name) + r"\s*=\s*LabelSet\((.*?)\)\s*\n", text, re.S)
+    if not m:
+        return None
+    body = m.group(1)
+    canonical = re.search(r'canonical:\s*"((?:[^"\\]|\\.)*)"', body)
+    if not canonical:
+        return None
+    out = [canonical.group(1)]
+    variants = re.search(r"variants:\s*\[(.*?)\]", body, re.S)
+    if variants:
+        out += re.findall(r'"((?:[^"\\]|\\.)*)"', variants.group(1))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Window geometry
 # ---------------------------------------------------------------------------

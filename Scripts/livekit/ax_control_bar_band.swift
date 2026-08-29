@@ -71,7 +71,23 @@ func emit(_ o: [String: Any]) -> Never {
 // control bar is chrome rather than document, so it does not scroll with the arrange, and its clock
 // only advances while the transport is running — which the quiet probe checks before this is used.
 let argv = CommandLine.arguments
-let wanted = argv.count > 1 && !argv[1].isEmpty ? argv[1] : "Control Bar"
+// EVERY leading non-flag argument is an acceptable description, and any one of them matching is a
+// hit. A single English string is a locale bug wearing a parameter: measured 2026-08-29 on a Logic
+// running in Korean, `"Control Bar"` returned `no element with that exact AXDescription` while
+// `"컨트롤 막대"` resolved to exactly one candidate at (10, 24, 1900, 58). Three harnesses passed
+// the English spelling, so on this machine none of them could reach its own subject — and a harness
+// that cannot run proves nothing, whatever its checks say.
+//
+// The alternative — matching case- or diacritic-insensitively, or by substring — would widen what
+// counts as the bar. These are ALIASES, listed by the caller from `AXLocalePolicy`, and each is
+// still compared exactly.
+var wantedNames: [String] = []
+for a in argv.dropFirst() {
+    if a.hasPrefix("--") { break }
+    if !a.isEmpty { wantedNames.append(a) }
+}
+if wantedNames.isEmpty { wantedNames = ["Control Bar"] }
+let wanted = wantedNames.joined(separator: " | ")
 func flag(_ name: String) -> String? {
     guard let i = argv.firstIndex(of: name), argv.count > i + 1 else { return nil }
     return argv[i + 1]
@@ -124,7 +140,7 @@ var hits: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ d: Int) {
     guard d <= 18 else { return }
     for c in kids(e) {
-        if str(c, kAXDescriptionAttribute as String) == wanted,
+        if wantedNames.contains(str(c, kAXDescriptionAttribute as String)),
            let f = frame(c),
            f.2 >= minWidth, f.3 >= minHeight, f.2 <= maxWidth, f.3 <= maxHeight,
            wantRole == nil || str(c, kAXRoleAttribute as String) == wantRole {

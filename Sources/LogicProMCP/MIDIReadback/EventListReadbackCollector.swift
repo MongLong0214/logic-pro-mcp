@@ -234,7 +234,12 @@ enum EventListReadbackCollector {
             maxDepth: 20,
             runtime: runtime
         ).filter { tab in
-            AXHelpers.getDescription(tab, runtime: runtime) == "Event"
+            // Through the policy, not against the literal `"Event"`. That comparison meant the
+            // tab could only be found on an English Logic; everywhere else the collector threw
+            // `eventTabNotFound` before reading anything. Measured 2026-08-29 on a Korean Logic:
+            // the four list tabs describe themselves `이벤트`, `마커`, `템포`, `조표 및 박자표`.
+            AXLocalePolicy.eventListTab.matches(
+                AXHelpers.getDescription(tab, runtime: runtime) ?? "", mode: .exactStrict)
                 && (AXHelpers.getTitle(tab, runtime: runtime) ?? "").isEmpty
         }
         guard tabs.count == 1, let tab = tabs.first else {
