@@ -36,7 +36,7 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-08-30 at `9e2c08a8`
+## State — measured 2026-08-30 at `709a0178`
 
 ```
 open PRs 0 · v3.14.0 published · 16 open issues
@@ -52,23 +52,23 @@ open PRs 0 · v3.14.0 published · 16 open issues
 | ADR-006 | #289 | closed | shipped #674/#675, measured and closed |
 | ADR-007 | #290 | closed | all seven criteria met and measured; closed 2026-08-30. Criterion 1 was narrowed to Desktop by the owner — Creator left product scope on 2026-07-17, so the line predated the decision |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
-| ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
+| ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it. Measured 2026-08-30: Logic's Controls view renders a stock plug-in as an `AXTable`, one `AXRow` per parameter whose cell carries an `AXStaticText` label and a control. **Addressable, not yet written to.** It is NOT the shape `set_param_verified` drives — step 9 matches an `AXSlider` by its own `AXDescription`, and in this view the sliders have none; the name is on a sibling. A locator for row-labelled controls is new work |
 | ADR-010 | #293 | OPEN | the collector's shape was already right; measured 2026-08-29 it reads a real note table and returns both notes. It could not START in any language but English — the Event tab was matched against the literal `"Event"` — fixed in #712. What stays closed is ADR-010's body: `assessReadback` and the public provider |
-| ADR-011 | #299 | OPEN | behind #292 |
+| ADR-011 | #299 | OPEN | behind #292. Measured 2026-08-30: the Compressor's *native* editor exposes 22 sliders and names exactly one (`Threshold`), which is also the one parameter `set_param_verified` supports — consistent with step 9 matching on `AXDescription`, though the causal link is inferred from the code path rather than measured. Its Controls view carries a labelled row per parameter (`Ratio`, `Attack`, `Release`, `Make Up`, `Knee`, `Circuit Type`, …). No write attempted anywhere |
 | ADR-012 | #300 | closed | promoted and closed 2026-08-28; all seven acceptance criteria measured, four artifacts found and fixed on the way (#693-#697) |
-| ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
+| ADR-013 | #301 | OPEN | zero band operations registered, so no public surface. Measured 2026-08-30, the recorded wall is not where it was said to be: Channel EQ's native view exposes 8 named band enables and 24 `AXSlider`s, each named by band and parameter, each reporting `settable=yes`, each carrying `AXValueDescription` in Hz/dB. **No write was attempted, and AX settability lies** — what is established is that the controls are addressable and readable. The opacity claim came from a census that instantiates the AU *outside* Logic, which ADR-018's Important Boundary says cannot speak for the live instance. The ADR's C4 Decision was revised on the issue the same day |
 | ADR-014 | #302 | OPEN | R1 shipped. R2 is NOT STARTED rather than blocked: measured 2026-08-29, `kAXColumns` is present and returns 8 columns — what is absent is any title or description ON them, and the header's sort buttons carry the names the collector already binds. Next step is an R2 ticket, not another measurement |
 | ADR-015 | #303 | OPEN | behind #293, and measured 2026-08-29 the dependency is narrower than "transforms must not read their own plan" — `TransformVerification` already refuses a proof that shares the observed pipeline. What is missing is a MAKER: `IndependentExpectedSeam` is inside `#if QUALIFICATION_FAULT_SEAM`, so in a release build `independentPayload` is always nil and no positive match is possible. The three modules exist; the gap is the live ingestion boundary in front of them |
-| ADR-016 | #304 | OPEN | implementation; no measured AX wall in front of it |
-| ADR-017 | #305 | OPEN | AU parameter view observed AX-opaque; starts with a measurement |
-| ADR-018 | #306 | OPEN | same wall as #305 |
+| ADR-016 | #304 | OPEN | NOT STARTED. Nothing has been measured against this surface in either direction — the previous row asserted there was no obstacle, which is a claim about the world that nobody had dated |
+| ADR-017 | #305 | OPEN | NOT STARTED rather than blocked. Flex Pitch is in the Audio Track Editor, not a plug-in window, so the AU-parameter-view wall recorded here was never about this surface — it was inherited, not observed. The measurement it needs is aimed at note **identity stability** over a Flex-analysed region |
+| ADR-018 | #306 | OPEN | measured 2026-08-30: Tier B is **addressable** for stock plug-ins — the Controls view table above — which is weaker than "viable"; no write or readback was attempted, so viability is not established. The third-party plug-ins this ADR is named after are unmeasured. The earlier "same wall as #305" was wrong on the surface: #305 is a plug-in-window claim attached to a region editor |
 
 Also open, outside the ADR set:
 
 | issue | state | what it is waiting on |
 |---|---|---|
 | #308 | OPEN | index only; closes when the ADRs it indexes do |
-| #369 | OPEN | Export panel AX-opaque — no accessible path to per-track stems |
+| #369 | OPEN | re-measured 2026-08-30: the menu path IS reachable and enabled (`파일 > 내보내기 > 모든 트랙을 오디오 파일로…`, `AXEnabled=true`, no menu opening needed). The PANEL is still unmeasured, and no caller exists for a three-level menu path. The first reading of this was taken under a Logic modal that disables the whole File menu and was discarded |
 | #373 | OPEN | Phase B needs live readback; `logic://tracks` is cache-served, so a stale read passes the same equality check |
 | #448 | OPEN | layout readback is deliverable; colour and reorder need a definition of "verified" for a write nothing can read back |
 | #678 | closed | the drift guard and this file's update rule shipped in #684 |
@@ -82,8 +82,12 @@ The instruction that produced this file asked for these to be established, not g
 - **#293** — not absence. `Sources/LogicProMCP/MIDIReadback/` has ten modules including the
   provider. The recorded problem is that the fixture gave every Event-List cell a child, so the
   collector was written against a shape Logic does not produce.
-- **#301** — genuine absence. No band read or write is registered in `OperationRegistry`, which
-  matches "a measured wall" rather than contradicting it.
+- **#301** — genuine absence of the *operations*: no band read or write is registered in
+  `OperationRegistry`. What was inferred from that was wrong. The note read the absence as
+  consistent with "a measured wall", and consistency is not evidence — an unbuilt feature and a
+  blocked one look identical from the registry. Measured 2026-08-30 there is no wall: Channel EQ
+  names all 24 band sliders and every one is settable. The registry was empty because nobody had
+  written the operations, which is the ordinary reason a registry is empty.
 - **#300** — neither, and it is closed now. Four modules existed *and* two operations were
   registered; what was open was the promotion decision. Answering it took measuring what the flag
   was holding back, which turned up four artifacts nobody had recorded: three bands reporting the
@@ -114,7 +118,16 @@ attached — not a silent deferral.
    is a different fact from the one recorded; the header sort buttons supply the column map and
    `readHeaders` already reads them. The next step is an R2 ticket.
 5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
-6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement.
+6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement or a decision.
+   Measurements on 2026-08-30 covered #301, #306 and #369, and each moved its item rather than
+   confirming it: Channel EQ's controls are addressable, the Controls view carries a labelled row
+   per parameter, and the export menu path is reachable and enabled. **None of the three involved a
+   write**, so each establishes reachability and not verified control. #305 moved for a different
+   reason — its blocker named a plug-in window and Flex Pitch is a region editor, so it was never a
+   measurement about that surface, and one still has not been made. #291 and #448 turned out to
+   need decisions rather than measurements, and both were made and recorded on their issues. The
+   limit that held is the Compressor's native editor naming one slider of twenty-two: an *identity*
+   limit rather than a reachability one, and a different repair.
 7. **#373 → #284's `R-SEM`**, then **#308** closes as an index.
 
 ## What this file does not claim
