@@ -75,6 +75,7 @@ private func decode(_ json: String) -> [String: Any] {
         (.unsupportedParamReadback, "unsupported_param_readback"),
         (.incompleteInventory, "incomplete_inventory"),
         (.targetPluginMismatch, "target_plugin_mismatch"),
+        (.ambiguousPluginInstance, "ambiguous_plugin_instance"),
         (.slotOccupied, "slot_occupied"),
         (.trackSelectionFailed, "track_selection_failed"),
         (.staleSnapshot, "stale_snapshot"),
@@ -123,7 +124,8 @@ private func decode(_ json: String) -> [String: Any] {
     let mustBeTerminal: [HonestContract.FailureError] = [
         .unsupportedMode, .projectPathRequired, .projectIdentityMismatch,
         .unknownPluginIdentity, .unsupportedParamReadback, .incompleteInventory,
-        .targetPluginMismatch, .slotOccupied, .trackSelectionFailed, .staleSnapshot,
+        .targetPluginMismatch, .ambiguousPluginInstance, .slotOccupied,
+        .trackSelectionFailed, .staleSnapshot,
         .windowOpenFailed, .windowIdentityUnresolved, .paramControlNotFound,
         .readbackLostAfterWrite, .postInsertPluginMismatch,
         .postInsertReadbackUnavailable, .insertNotAxAutomatable,

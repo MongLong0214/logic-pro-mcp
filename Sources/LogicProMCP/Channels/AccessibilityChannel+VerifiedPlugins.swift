@@ -413,13 +413,19 @@ extension AccessibilityChannel {
     enum PluginPopupMenuCleanupOutcome: Sendable, Equatable {
         case noPopupObserved
         case dismissed
+        /// CoreGraphics did not provide a popup-window count. This is not
+        /// evidence that no popup exists, so the acquisition must not continue
+        /// as if the screen were known clean.
+        case popupCountUnavailable
         case couldNotDismiss(initialPopupCount: Int, remainingPopupCount: Int)
 
         var isClean: Bool {
-            if case .couldNotDismiss = self {
+            switch self {
+            case .noPopupObserved, .dismissed:
+                return true
+            case .popupCountUnavailable, .couldNotDismiss:
                 return false
             }
-            return true
         }
     }
 
@@ -520,7 +526,9 @@ extension AccessibilityChannel {
     ///      with `unsupported_param_readback` (AC10); only `.writeReadback`
     ///      proceeds.
     ///   6  track verified select (`track_selection_failed`)
-    ///   7  inventory complete + occupied at `insert` (`incomplete_inventory`)
+    ///   7  inventory complete + occupied, identity-matched, and unambiguous at
+    ///      `insert` (`incomplete_inventory` / `target_plugin_mismatch` /
+    ///      `ambiguous_plugin_instance`)
     ///   8  plugin window: resolve one candidate, then acquire it through the
     ///      target slot (`window_open_failed` / `window_identity_unresolved`)
     ///   9  slider match by AXDescription (`param_control_not_found`)
@@ -819,9 +827,15 @@ extension AccessibilityChannel {
                 "Channel EQ requires a declared 'unit' for \(paramAlias)"
             ))
         }
-        let effectiveUnit = normalizedUnit?.isEmpty == false ? normalizedUnit! : metadata.unit
-        guard let effectiveUnit,
-              declaredUnits.contains(where: { $0.caseInsensitiveCompare(effectiveUnit) == .orderedSame }) else {
+        let requestedUnit = normalizedUnit?.isEmpty == false ? normalizedUnit! : metadata.unit
+        // Validate case-insensitively, then keep the catalog spelling. The
+        // increment walk compares Logic's display rendering exactly, so an
+        // accepted caller `db` must target Logic's declared `dB`, never reuse
+        // the caller's casing verbatim.
+        guard let requestedUnit,
+              let effectiveUnit = declaredUnits.first(where: {
+                  $0.caseInsensitiveCompare(requestedUnit) == .orderedSame
+              }) else {
             let declared = declaredUnits.joined(separator: ", ")
             return .failure(invalidParamsStateC(
                 operation,
@@ -1090,6 +1104,39 @@ extension AccessibilityChannel {
                     "what_was_observed": observedPluginName.map {
                         "insert \(insert) contains '\($0)'"
                     } ?? "insert \(insert) plugin name was unreadable",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+
+        let conflictingInsertIndices = slots.compactMap { slot -> Int? in
+            guard slot.occupied,
+                  slot.readStatus == .occupiedReadable,
+                  let name = slot.name,
+                  VerifiedPluginCatalog.pluginID(forObservedName: name) == pluginID else {
+                return nil
+            }
+            return slot.index
+        }
+        guard conflictingInsertIndices.count <= 1 else {
+            // #726 measured on a real project: Absolute Zero had Compressor at
+            // inserts 0 and 2. set_param_verified for insert 0 = 40 and insert
+            // 2 = 70 both returned State A with their requested insert
+            // identities, yet readback was slot 0 Threshold = 0 % (both writes)
+            // and slot 1 Threshold = 56 % (never touched). The window match
+            // uses track name plus slider AXDescription, neither of which binds
+            // an editor to an insert. Refuse before any window is opened or
+            // pressed rather than guessing which identical instance is visible.
+            return .error(HonestContract.encodeV2StateC(
+                error: .ambiguousPluginInstance,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "requested_plugin_id": pluginID,
+                    "conflicting_insert_indices": conflictingInsertIndices,
+                    "what_was_attempted": "uniquely identify \(pluginID) at insert \(insert) before opening its window",
+                    "what_was_observed": "\(pluginID) appears at inserts \(conflictingInsertIndices.map(String.init).joined(separator: ", ")) on track \(track)",
                     "safe_to_retry": false,
                     "write_attempted": false,
                 ]
@@ -1824,6 +1871,11 @@ extension AccessibilityChannel {
         switch outcome {
         case .noPopupObserved, .dismissed:
             return [:]
+        case .popupCountUnavailable:
+            return [
+                "plugin_popup_menu_state": "window_count_unavailable",
+                "recovery_hint": "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying.",
+            ]
         case let .couldNotDismiss(initialPopupCount, remainingPopupCount):
             return [
                 "plugin_popup_menu_state": "could_not_be_dismissed",
@@ -1842,8 +1894,10 @@ extension AccessibilityChannel {
     private static func dismissLogicPopupMenuAfterPluginWindowAcquisition(
         runtime: AXLogicProElements.Runtime
     ) -> PluginPopupMenuCleanupOutcome {
-        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime),
-              initialPopupCount > 0 else {
+        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+            return .popupCountUnavailable
+        }
+        guard initialPopupCount > 0 else {
             return .noPopupObserved
         }
 
@@ -1855,10 +1909,7 @@ extension AccessibilityChannel {
 
         for attempt in 0..<3 {
             guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
-                return .couldNotDismiss(
-                    initialPopupCount: initialPopupCount,
-                    remainingPopupCount: initialPopupCount
-                )
+                return .popupCountUnavailable
             }
             if remainingPopupCount == 0 {
                 return .dismissed
@@ -1867,7 +1918,9 @@ extension AccessibilityChannel {
                 Thread.sleep(forTimeInterval: 0.05)
             }
         }
-        let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) ?? initialPopupCount
+        guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+            return .popupCountUnavailable
+        }
         return .couldNotDismiss(
             initialPopupCount: initialPopupCount,
             remainingPopupCount: remainingPopupCount

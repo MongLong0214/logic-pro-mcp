@@ -58,7 +58,7 @@ struct ChannelEQBandCatalogTests {
         #expect(ChannelEQBandCatalog.parameter(bandName: "Low Cut", parameterName: "Order")?.declaredUnits == ["raw_ax_value"])
     }
 
-    @Test func stockCatalogRecordsMeasurementWithoutClaimingAWriteRoundTrip() throws {
+    @Test func stockCatalogRecordsMeasuredIncrementWalkCapabilityAndNoRoundTripEvidence() throws {
         let channelEQ = try #require(StockPluginCatalog.entry(id: "logic.stock.effect.channel_eq"))
         #expect(channelEQ.safeWriteCapabilities == .parameterWriteReadback)
         #expect(channelEQ.parameters.count == 24)

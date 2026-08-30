@@ -57,10 +57,13 @@ private final class LiveFixture: @unchecked Sendable {
         forcedAfterValue: Double? = nil,
         otherTracks: Int = 0,
         duplicateTrackNameAt: Int? = nil,
+        pluginSlotNamesByTrack: [Int: [Int: String]] = [:],
         emptyInsertChain: Bool = false,
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
-        sliderWriteBehavior: SliderWriteBehavior = .direct
+        sliderWriteBehavior: SliderWriteBehavior = .direct,
+        sliderDisplayUnit: String = "%",
+        sliderUsesSignedPositiveDisplay: Bool = false
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -77,7 +80,8 @@ private final class LiveFixture: @unchecked Sendable {
 
         // --- Track headers: one row per track, selected-state on the target. ---
         var headerRows: [AXUIElement] = []
-        let rowCount = max(track + 1, otherTracks + 1)
+        let namedTrackCount = (pluginSlotNamesByTrack.keys.max() ?? -1) + 1
+        let rowCount = max(max(track + 1, otherTracks + 1), namedTrackCount)
         for i in 0..<rowCount {
             let row = b.element(1100 + i)
             b.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
@@ -109,7 +113,9 @@ private final class LiveFixture: @unchecked Sendable {
                 } else {
                     var slots: [AXUIElement] = []
                     for s in 0...insert {
-                        let slot = LiveFixture.occupiedSlot(b, 1300 + s, name: s == insert ? pluginSlotName : "Plugin \(s)")
+                        let name = pluginSlotNamesByTrack[i]?[s]
+                            ?? (s == insert ? pluginSlotName : "Plugin \(s)")
+                        let slot = LiveFixture.occupiedSlot(b, 1300 + s, name: name)
                         if s == insert {
                             targetSlot = slot
                             targetOpenButton = b.element((1300 + s) * 10 + 2)
@@ -118,6 +124,16 @@ private final class LiveFixture: @unchecked Sendable {
                     }
                     b.setChildren(strip, slots)
                 }
+            } else if let namedSlots = pluginSlotNamesByTrack[i],
+                      let lastInsert = namedSlots.keys.max() {
+                let slots = (0...lastInsert).map { s in
+                    LiveFixture.occupiedSlot(
+                        b,
+                        1400 + (i * 100) + s,
+                        name: namedSlots[s] ?? "Plugin \(s)"
+                    )
+                }
+                b.setChildren(strip, slots)
             } else {
                 b.setChildren(strip, [LiveFixture.emptySlot(b, 1400 + i)])
             }
@@ -138,7 +154,11 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(slider, kAXValueAttribute as String, beforeValue)
         b.setAttribute(slider, kAXMinValueAttribute as String, 0.0)
         b.setAttribute(slider, kAXMaxValueAttribute as String, 100.0)
-        b.setAttribute(slider, kAXValueDescriptionAttribute as String, "\(Int(beforeValue)) %")
+        let formatSliderDisplay: @Sendable (Double) -> String = { value in
+            let sign = sliderUsesSignedPositiveDisplay && value > 0 ? "+" : ""
+            return "\(sign)\(Int(value.rounded())) \(sliderDisplayUnit)"
+        }
+        b.setAttribute(slider, kAXValueDescriptionAttribute as String, formatSliderDisplay(beforeValue))
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
@@ -201,7 +221,7 @@ private final class LiveFixture: @unchecked Sendable {
                 }
                 b.setAttribute(el, kAXValueAttribute as String, landed ?? NSNull())
                 if let landed {
-                    b.setAttribute(el, kAXValueDescriptionAttribute as String, "\(Int(landed.rounded())) %")
+                    b.setAttribute(el, kAXValueDescriptionAttribute as String, formatSliderDisplay(landed))
                 }
                 return true
             },
@@ -480,6 +500,104 @@ private func namedEQBandParams(
     let obj = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
     #expect(obj["state"] as? String == "A")
     #expect(obj["observed_normalized"] as? Double == 60.7)
+}
+
+// MARK: - #726 per-track plug-in-instance ambiguity
+
+@Test func testDuplicatePluginInstancesOnTargetTrackRefuseBeforeWindowAcquisition() async throws {
+    // Mutation caught: counting only the target slot (or moving this guard
+    // after the opener) reintroduces the measured wrong-instance write.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let openerInvoked = MutableBox(false)
+    let obj = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _ in
+            openerInvoked.value = true
+            return nil
+        }
+    )
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "ambiguous_plugin_instance")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(obj["conflicting_insert_indices"] as? [Int] == [0, 6])
+    #expect(!openerInvoked.value, "the refusal must precede every window-open attempt")
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testDifferentPluginInstancesOnTargetTrackStillProceed() async {
+    // Mutation caught: treating every occupied insert as an ambiguity would
+    // block a Compressor merely because a different plug-in shares the track.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginSlotNamesByTrack: [0: [0: "Gain", 6: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testSamePluginOnDifferentTracksStillProceeds() async {
+    // Mutation caught: scanning the whole mixer instead of only the addressed
+    // track would reject independent Compressor instances on other tracks.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        otherTracks: 1,
+        pluginSlotNamesByTrack: [1: [0: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testSinglePluginInstanceStillProceeds() async {
+    // Mutation caught: an off-by-one ambiguity condition (`count >= 1`) would
+    // refuse the single insert that remains safely addressable.
+    let fixture = LiveFixture(insert: 0, beforeValue: 51)
+    let obj = await runLive(fixture: fixture, params: thresholdParams(insert: 0))
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testDuplicateChannelEQInstancesRefuseBeforeWindowAcquisition() async throws {
+    // Mutation caught: wiring the ambiguity refusal only into
+    // set_param_verified leaves set_eq_band_verified able to open an ambiguous
+    // Channel EQ editor and write the wrong insert.
+    let fixture = LiveFixture(
+        thresholdDescription: "Peak 1 Frequency",
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        pluginWindowPresent: false,
+        pluginSlotNamesByTrack: [0: [0: "Channel EQ", 6: "Channel EQ"]]
+    )
+    let openerInvoked = MutableBox(false)
+    let result = await AccessibilityChannel.defaultSetEQBandVerified(
+        params: namedEQBandParams(),
+        runtime: fixture.runtime,
+        frontDocumentPath: { expectedPath },
+        pluginWindowOpener: { _, _, _, _ in
+            openerInvoked.value = true
+            return nil
+        }
+    )
+    let data = try #require(result.message.data(using: .utf8))
+    let obj = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "ambiguous_plugin_instance")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(obj["conflicting_insert_indices"] as? [Int] == [0, 6])
+    #expect(!openerInvoked.value, "the refusal must precede every window-open attempt")
 }
 
 // MARK: - ADR-002 F1: live track-name cross-check for target_ref resolutions
@@ -762,6 +880,31 @@ private func namedEQBandParams(
     }
 }
 
+@Test func testNamedEQEngineeringUnitUsesCatalogCapitalizationInExactTarget() async throws {
+    // Mutation caught: accepting `db` case-insensitively but retaining it in
+    // the target rendering asks for `+3 db`, which can never equal Logic's
+    // measured `+3 dB` display.
+    let fixture = LiveFixture(
+        thresholdDescription: "Peak 1 Gain",
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .oneStepTowardRequest,
+        sliderDisplayUnit: "dB",
+        sliderUsesSignedPositiveDisplay: true
+    )
+    let result = await AccessibilityChannel.defaultSetEQBandVerified(
+        params: namedEQBandParams(parameter: "Gain", unit: "db"),
+        runtime: fixture.runtime,
+        frontDocumentPath: { expectedPath }
+    )
+    let data = try #require(result.message.data(using: .utf8))
+    let envelope = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+    #expect(envelope["state"] as? String == "A")
+    #expect(envelope["requested_display"] as? String == "+3 dB")
+    #expect(envelope["display_unit"] as? String == "dB")
+}
+
 // MARK: - State C: tolerance exceeded → readback_mismatch + rollback
 
 @Test func testOutsideToleranceIsReadbackMismatchAndRollsBack() async {
@@ -882,6 +1025,26 @@ private func namedEQBandParams(
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
     let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
     #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testUnreadablePluginPopupCountIsNotReportedAsClean() async throws {
+    // Mutation caught: collapsing a nil CoreGraphics popup count into
+    // noPopupObserved allows a write after the screen state became unknowable.
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        popupMenuCleaner: { _ in .popupCountUnavailable }
+    )
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["plugin_popup_menu_state"] as? String == "window_count_unavailable")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
     #expect(!safeToRetry)
     #expect(fixture.currentSliderValue == 51)
 }
