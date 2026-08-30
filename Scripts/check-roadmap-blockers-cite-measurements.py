@@ -32,13 +32,28 @@ So a row that mentions a wall must carry, in the same cell, either an ISO date o
 comment that recorded the measurement. That is a low bar deliberately — it is the bar that would
 have caught all three, and a higher one would be a bar on prose that nothing can enforce.
 
-It applies in BOTH directions, and that is not an accident of substring matching. "No measured AX
-wall in front of it" is as much a claim about the world as "AX-opaque", and it is the claim nobody
-asked #305 to date. When did you check there was no wall? is exactly the question whose absence
-cost three rows. A row denying a wall answers it the same way a row asserting one does.
+It applies in BOTH directions, and that is not an accident of substring matching. The row for #304
+said "no measured AX wall in front of it", and *when did you check there was no wall?* is exactly
+the question whose absence cost the three rows above. A row denying a wall answers it the same way
+a row asserting one does.
 
 It says nothing about rows that describe work as unstarted, behind a dependency, or waiting on a
 decision without mentioning a wall at all. Those are not claims about a surface.
+
+WHAT IT MISSES, so nobody reads a pass as coverage
+--------------------------------------------------
+It matches literal phrases in the LAST cell of a row whose cells include exactly `OPEN`. So it does
+not see:
+
+  * a wall described in words this list does not carry — "unreachable", "cannot be read",
+    "the tree returns nothing"
+  * a wall claim in a cell other than the last, or a table whose columns are ordered differently
+  * a state cell spelled anything but `OPEN`, or a row split across lines
+  * a pipe inside backticks, which splits one cell into two
+
+And a date is a pointer, not proof: `2026-08-30` typed into a cell satisfies this guard and
+measures nothing. It raises the floor from "a wall with nothing beside it" to "a wall with
+something a reader can go and check", and that is the whole of what it does.
 """
 import os
 import re
