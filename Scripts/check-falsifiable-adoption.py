@@ -22,10 +22,11 @@ promise: the count may rise and may not fall. Raising FLOOR is a reviewed edit i
 is where a ratchet's teeth are — a number that can be lowered by whoever is inconvenienced is a
 suggestion.
 
-It does not check that a counterexample is a GOOD one. `falsifiable` establishes that a predicate
-can distinguish the observation from one stated alternative, and no more; whether that alternative
-is the one that matters is the author's claim and a reviewer's job. Said here because a guard named
-"adoption" invites being read as "quality".
+It does not check that a counterexample is a GOOD one. It does reject one mechanically detectable
+hollow form: a constant dictionary counterexample paired with a lambda that only subscripts a
+boolean wrapper. That form proves lookup distinguishes true from false, not that the predicate
+examines its stated observation. Beyond that narrow case, whether the alternative is the one that
+matters remains the author's claim and a reviewer's job.
 """
 import ast
 import glob
@@ -37,8 +38,42 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
 FLOOR = 4
 
-def _calls_falsifiable(text):
-    """Whether the source contains an actual CALL to `falsifiable`, not a mention of the word.
+def _call_argument(call, position, keyword):
+    if len(call.args) > position:
+        return call.args[position]
+    return next((arg.value for arg in call.keywords if arg.arg == keyword), None)
+
+
+def _constant_literal(node):
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return all(_constant_literal(item) for item in node.elts)
+    if isinstance(node, ast.Dict):
+        return all((key is None or _constant_literal(key)) and _constant_literal(value)
+                   for key, value in zip(node.keys, node.values))
+    return False
+
+
+def _is_hollow_falsifiable(call):
+    """The known boolean-wrapper pattern, not a claim to judge arbitrary counterexamples."""
+    predicate = _call_argument(call, 1, "predicate")
+    counterexample = _call_argument(call, 3, "counterexample")
+    if not isinstance(predicate, ast.Lambda) or not isinstance(counterexample, ast.Dict):
+        return False
+    if not _constant_literal(counterexample):
+        return False
+    if len(predicate.args.args) != 1 or predicate.args.vararg or predicate.args.kwarg:
+        return False
+    parameter = predicate.args.args[0].arg
+    body = predicate.body
+    return (isinstance(body, ast.Subscript)
+            and isinstance(body.value, ast.Name)
+            and body.value.id == parameter)
+
+
+def _falsifiable_calls(text):
+    """`(has_real_call, hollow_lines)` for actual calls, never comments or strings.
 
     Parsed, because a regex counts `# falsifiable(` in a comment and a `"falsifiable("` in a
     string. Found by review, 2026-08-29, reproduced: a harness whose only occurrence was a comment
@@ -50,22 +85,33 @@ def _calls_falsifiable(text):
     try:
         tree = ast.parse(text)
     except SyntaxError:
-        return False
+        return False, []
+    has_real_call = False
+    hollow_lines = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
         if name == "falsifiable":
-            return True
-    return False
+            if _is_hollow_falsifiable(node):
+                hollow_lines.append(node.lineno)
+            else:
+                has_real_call = True
+    return has_real_call, hollow_lines
 
 
-def adoption(paths=None):
-    """`(adopters, total)` — harnesses calling `falsifiable(`, and how many there are."""
+def _calls_falsifiable(text):
+    """Whether this source has an actual, non-hollow call to `falsifiable`."""
+    return _falsifiable_calls(text)[0]
+
+
+def adoption(paths=None, include_hollow=False):
+    """Adopting harnesses and total; optionally include separately reported hollow call locations."""
     files = paths if paths is not None else sorted(
         glob.glob(os.path.join(REPO, "Scripts", "livekit", "live_*.py")))
     adopters = []
+    hollow = []
     for path in files:
         try:
             with open(path, encoding="utf-8") as fh:
@@ -74,13 +120,18 @@ def adoption(paths=None):
             # Unreadable is not adopted. Counting it either way would let a permissions accident
             # move the number, and this number is the whole point of the guard.
             continue
-        if _calls_falsifiable(text):
-            adopters.append(os.path.basename(path))
+        has_real_call, hollow_lines = _falsifiable_calls(text)
+        name = os.path.basename(path)
+        hollow.extend((name, line) for line in hollow_lines)
+        if has_real_call:
+            adopters.append(name)
+    if include_hollow:
+        return adopters, len(files), hollow
     return adopters, len(files)
 
 
 def main():
-    adopters, total = adoption()
+    adopters, total, hollow = adoption(include_hollow=True)
     if total == 0:
         print("-> FAIL: no live harnesses found — an empty set satisfies any floor")
         return 1
@@ -88,6 +139,8 @@ def main():
     print(f"   falsifiable() adoption: {len(adopters)} of {total} harnesses (floor {FLOOR})")
     for name in adopters:
         print(f"     uses it  {name}")
+    for name, line in hollow:
+        print(f"     hollow   {name}:{line} (constant counterexample + boolean-wrapper predicate)")
 
     if len(adopters) < FLOOR:
         print(f"-> FAIL: adoption fell to {len(adopters)}, below the recorded floor {FLOOR}")

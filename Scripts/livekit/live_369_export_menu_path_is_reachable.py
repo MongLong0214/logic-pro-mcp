@@ -103,6 +103,20 @@ def path_name(node):
     return node.get("title") or node.get("description") or ""
 
 
+def derived_witness(observation, **changes):
+    """Copy a raw witness before changing one fact for a same-shape counterexample."""
+    counterexample = dict(observation) if isinstance(observation, dict) else {}
+    counterexample.update(changes)
+    return counterexample
+
+
+def path_with_leaf_field(path, field, value):
+    counterexample = [dict(node) if isinstance(node, dict) else node for node in path] if isinstance(path, list) else []
+    if counterexample and isinstance(counterexample[-1], dict):
+        counterexample[-1][field] = value
+    return counterexample
+
+
 def export_path_resolves(path, leaf):
     return (
         isinstance(path, list)
@@ -111,6 +125,31 @@ def export_path_resolves(path, leaf):
         and path_name(path[0]) in FILE_LABELS
         and path_name(path[2]) == EXPORT
         and path_name(path[4]) == leaf
+    )
+
+
+def export_leaf_is_enabled(path, leaf):
+    return (export_path_resolves(path, leaf)
+            and isinstance(path[-1], dict)
+            and path[-1].get("enabled") is True)
+
+
+def both_export_leaves_are_enabled(witness):
+    if not isinstance(witness, dict):
+        return False
+    return (export_leaf_is_enabled(witness.get("all_tracks_path"), ALL_TRACKS)
+            and export_leaf_is_enabled(witness.get("one_track_path"), ONE_TRACK))
+
+
+def open_path_is_enabled(path):
+    return (
+        isinstance(path, list)
+        and [node.get("role") if isinstance(node, dict) else None for node in path] == EXPECTED_OPEN_ROLES
+        and len(path) == 3
+        and path_name(path[0]) in FILE_LABELS
+        and path_name(path[-1]) == OPEN
+        and isinstance(path[-1], dict)
+        and path[-1].get("enabled") is True
     )
 
 
@@ -172,8 +211,9 @@ before = ev.shot("369/before", settle_region=band, window_title=arrange["title"]
 
 driver = E.Driver()
 health = driver.tool("logic_system", "health", {})
+health_counterexample = derived_witness(health, _transport_error=None)
 ev.falsifiable("369/the-release-artifact-answers-a-read-only-wire-request",
-               lambda body: isinstance(body, dict) and bool(body), health, {},
+               E.artifact_answered, health, health_counterexample,
                "the built server answered a read-only health request during this evidence run",
                "start an artifact that cannot answer MCP: the empty/error response goes red")
 
@@ -184,51 +224,38 @@ ev.note("369/export-menu-raw-ax", result)
 
 all_tracks_path = result.get("all_tracks_path")
 one_track_path = result.get("one_track_path")
-all_tracks_resolves = export_path_resolves(all_tracks_path, ALL_TRACKS)
-one_track_resolves = export_path_resolves(one_track_path, ONE_TRACK)
 ev.falsifiable(
     "369/all-tracks-export-resolves-through-the-three-level-menu-path",
-    lambda observation: observation["ok"],
-    {"ok": all_tracks_resolves},
-    {"ok": False},
+    lambda path: export_path_resolves(path, ALL_TRACKS),
+    all_tracks_path,
+    path_with_leaf_field(all_tracks_path, "role", "AXButton"),
     "the named all-tracks export leaf resolves as AXMenuBarItem > AXMenu > AXMenuItem > AXMenu > AXMenuItem",
     "remove or re-parent the leaf: its role/name path no longer matches and this goes red",
 )
 ev.falsifiable(
     "369/one-track-export-resolves-through-the-three-level-menu-path",
-    lambda observation: observation["ok"],
-    {"ok": one_track_resolves},
-    {"ok": False},
+    lambda path: export_path_resolves(path, ONE_TRACK),
+    one_track_path,
+    path_with_leaf_field(one_track_path, "role", "AXButton"),
     "the named one-track export leaf resolves through the same five-node AX menu path",
     "remove or re-parent the leaf: its role/name path no longer matches and this goes red",
 )
 
-export_leaves_enabled = (all_tracks_resolves and one_track_resolves
-                         and all_tracks_path[-1].get("enabled") is True
-                         and one_track_path[-1].get("enabled") is True)
 ev.falsifiable(
     "369/both-export-leaves-read-axenabled-true-with-no-menu-opened",
-    lambda observation: observation["ok"],
-    {"ok": export_leaves_enabled},
-    {"ok": False},
+    both_export_leaves_are_enabled,
+    result,
+    derived_witness(result, all_tracks_path=path_with_leaf_field(all_tracks_path, "enabled", False)),
     "both resolved export leaves report raw AXEnabled=true while this run has opened no menu or panel",
     "make either leaf disabled: the combined availability assertion goes red",
 )
 
 open_path = result.get("open_path")
-open_is_enabled = (
-    isinstance(open_path, list)
-    and [node.get("role") if isinstance(node, dict) else None for node in open_path] == EXPECTED_OPEN_ROLES
-    and len(open_path) == 3
-    and path_name(open_path[0]) in FILE_LABELS
-    and path_name(open_path[-1]) == OPEN
-    and open_path[-1].get("enabled") is True
-)
 ev.falsifiable(
     "369/control-file-open-is-enabled-too",
-    lambda observation: observation["ok"],
-    {"ok": open_is_enabled},
-    {"ok": False},
+    open_path_is_enabled,
+    open_path,
+    path_with_leaf_field(open_path, "enabled", False),
     "File > Open… also reports AXEnabled=true. If Open is false, this run is measuring a blocked "
     "application, not the export items",
     "put Logic behind a blocking modal: Open reads false and this control rejects the confounded run",

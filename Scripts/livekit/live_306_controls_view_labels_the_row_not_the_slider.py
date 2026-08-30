@@ -13,11 +13,10 @@ but not the generic Controls view.
 
 WHAT IS MEASURED NOW, AND WHAT IS STILL NOT
 -------------------------------------------
-On Korean Logic 12.x, Compressor's native editor exposes 22 sliders on one instance and 20 on
-another in the same project - the count follows the instance's configuration. On both, only
-`Threshold` has a raw
-AXDescription, and 11 sliders claim their values are settable. The `보기` menu offers `컨트롤` and
-`편집기`. In Controls view, parameter names live in AXStaticText inside AXCells of AXRows; the
+On Korean Logic 12.x, Compressor's native editor exposes 22 sliders on one instance (11 settable)
+and 20 on another (10 settable) in the same project - the count follows the instance's
+configuration. On both, only `Threshold` has a raw AXDescription. The `보기` menu offers `컨트롤`
+and `편집기`. In Controls view, parameter names live in AXStaticText inside AXCells of AXRows; the
 controls beside them can be AXSlider, AXRadioButton, or AXPopUpButton. The measured Controls view
 has 26 sliders, and none has an AXDescription of its own.
 
@@ -83,6 +82,8 @@ PARAMETERS = [
     "Threshold:", "Ratio:", "Attack:", "Release:", "Make Up:", "Knee:", "Peak/RMS:",
     "Auto Gain:", "Distortion:", "Circuit Type:", "Side Chain Detection:",
 ]
+CONTROL_ROLES = {"AXSlider", "AXRadioButton", "AXPopUpButton"}
+DESCRIPTION_READ_SUCCEEDED = {"success_with_value", "success_without_value"}
 
 # This policy LabelSet names the View surface in measured locales. It is passed to the raw witness
 # rather than spelling a second, unmaintained candidate array here.
@@ -120,6 +121,101 @@ def slider_descriptions(sliders):
     return [slider.get("description", "") for slider in sliders if isinstance(slider, dict)]
 
 
+def derived_witness(observation, **changes):
+    """Copy a raw witness before changing one fact for a same-shape counterexample."""
+    counterexample = dict(observation) if isinstance(observation, dict) else {}
+    counterexample.update(changes)
+    return counterexample
+
+
+def copied_nodes(nodes):
+    return [dict(node) if isinstance(node, dict) else node for node in nodes] if isinstance(nodes, list) else []
+
+
+def descriptions_without(nodes, description):
+    counterexample = copied_nodes(nodes)
+    for node in counterexample:
+        if isinstance(node, dict) and node.get("description") == description:
+            node["description"] = ""
+    return counterexample
+
+
+def sliders_with_every_field(sliders, field, value):
+    counterexample = copied_nodes(sliders)
+    for slider in counterexample:
+        if isinstance(slider, dict):
+            slider[field] = value
+    return counterexample
+
+
+def one_slider_with_description(sliders, description):
+    counterexample = copied_nodes(sliders)
+    for slider in counterexample:
+        if isinstance(slider, dict):
+            slider["description"] = description
+            slider["description_status"] = "success_with_value"
+            break
+    return counterexample
+
+
+def mixer_layout_resolves_by_name_and_role(witness):
+    return (
+        isinstance(witness, dict)
+        and witness.get("mixer_layout_areas_seen") is not None
+        and witness.get("mixer_container_count") == 1
+        and witness.get("mixer_ancestor_search_bound_hit") is False
+    )
+
+
+def compressor_window_opened_through_named_button(opening):
+    if not isinstance(opening, dict):
+        return False
+    pressed = opening.get("pressed_children") if isinstance(opening.get("pressed_children"), list) else []
+    opened_windows = opening.get("opened_windows") if isinstance(opening.get("opened_windows"), list) else []
+    return (
+        opening.get("slot_count") == 1
+        and len(pressed) == 1
+        and pressed[0].get("role") == "AXButton"
+        and pressed[0].get("description") == OPEN
+        and len(opened_windows) == 1
+    )
+
+
+def native_editor_has_partly_settable_sliders(sliders):
+    if not isinstance(sliders, list):
+        return False
+    settable = sum(1 for slider in sliders
+                   if isinstance(slider, dict) and slider.get("value_settable") is True)
+    return len(sliders) > 0 and 0 < settable < len(sliders)
+
+
+def native_editor_has_only_threshold_named(sliders):
+    return isinstance(sliders, list) and [name for name in slider_descriptions(sliders) if name] == [THRESHOLD]
+
+
+def view_menu_offers_controls_and_editor(selection):
+    if not isinstance(selection, dict):
+        return False
+    items = selection.get("items") if isinstance(selection.get("items"), list) else []
+    names = {item.get("title") or item.get("description") for item in items if isinstance(item, dict)}
+    candidates = selection.get("button_candidates")
+    return isinstance(candidates, list) and len(candidates) == 1 and CONTROLS in names and EDITOR in names
+
+
+def view_menu_without_item(selection, label):
+    counterexample = derived_witness(selection)
+    items = copied_nodes(counterexample.get("items"))
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("title") == label:
+            item["title"] = ""
+        if item.get("description") == label:
+            item["description"] = ""
+    counterexample["items"] = items
+    return counterexample
+
+
 def row_static_texts(rows):
     texts = []
     named_rows = 0
@@ -136,8 +232,82 @@ def row_static_texts(rows):
 
 
 def all_parameters_are_row_labels(rows):
+    """Every expected name shares an AXCell with a reported control, not just any row text."""
     texts, named_rows = row_static_texts(rows)
-    return named_rows >= len(PARAMETERS) and all(name in texts for name in PARAMETERS)
+    def paired(name):
+        for row in rows if isinstance(rows, list) else []:
+            cells = row.get("cells") if isinstance(row, dict) else []
+            for cell in cells if isinstance(cells, list) else []:
+                if not isinstance(cell, dict):
+                    continue
+                cell_texts = cell.get("static_texts")
+                control_roles = cell.get("control_roles")
+                if (isinstance(cell_texts, list) and name in cell_texts
+                        and isinstance(control_roles, list)
+                        and any(role in CONTROL_ROLES for role in control_roles)):
+                    return True
+        return False
+    return named_rows >= len(PARAMETERS) and all(name in texts and paired(name) for name in PARAMETERS)
+
+
+def rows_without_parameter_pair(rows, parameter):
+    counterexample = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            counterexample.append(row)
+            continue
+        copied_row = dict(row)
+        cells = row.get("cells")
+        if isinstance(cells, list):
+            copied_cells = []
+            for cell in cells:
+                if not isinstance(cell, dict):
+                    copied_cells.append(cell)
+                    continue
+                copied_cell = dict(cell)
+                texts = cell.get("static_texts")
+                if isinstance(texts, list):
+                    copied_cell["static_texts"] = [text for text in texts if text != parameter]
+                copied_cells.append(copied_cell)
+            copied_row["cells"] = copied_cells
+        counterexample.append(copied_row)
+    return counterexample
+
+
+# Measured 2026-08-30 across the 26 Controls-view sliders: NONE returns an empty AXDescription.
+# The read FAILS, in two ways, and both are evidence that the element carries no name of its own:
+#
+#     kAXErrorAttributeUnsupported  -25212   x15   the element has no such attribute at all
+#     kAXErrorNoValue               -25205   x11   the attribute exists and holds no value
+#
+# This was invisible while the witness mapped every failure to "" — the reading looked like
+# "twenty-six empty names" when it is "twenty-six absences, of two different kinds". Any OTHER
+# failure code is a read that went wrong and proves nothing either way, so it is not accepted.
+AX_ABSENCE_ERRORS = frozenset({-25212, -25205})
+
+
+def controls_sliders_carry_no_name_of_their_own(sliders):
+    """No Controls-view slider has a name of its own, established rather than assumed.
+
+    Two observations satisfy that and nothing else does: the attribute read SUCCEEDED and came back
+    empty, or the read failed with `kAXErrorAttributeUnsupported`. A transient failure, a missing
+    status field, or any other error code is NOT evidence of absence — that substitution is exactly
+    how twenty-six failed reads could once have satisfied "no slider has a description".
+    """
+    if not isinstance(sliders, list) or len(sliders) != 26:
+        return False
+    for slider in sliders:
+        if not isinstance(slider, dict):
+            return False
+        status = slider.get("description_status")
+        if status in DESCRIPTION_READ_SUCCEEDED:
+            if slider.get("description", "") != "":
+                return False
+            continue
+        if status == "failed" and slider.get("description_error") in AX_ABSENCE_ERRORS:
+            continue
+        return False
+    return True
 
 
 # Automatic per-check modal receipts only reveal contamination after a check was made. Refuse before
@@ -192,19 +362,11 @@ slot_before = probe(tool, "plugin-slot", {
     "mixer_label": MIXER,
 })
 ev.note("306/compressor-slot-before-opening", slot_before)
-mixer_resolution = {
-    "mixer_layout_areas_seen": slot_before.get("mixer_layout_areas_seen"),
-    "mixer_container_count": slot_before.get("mixer_container_count"),
-    "mixer_ancestor_search_bound_hit": slot_before.get("mixer_ancestor_search_bound_hit"),
-}
 ev.falsifiable(
     "306/precondition-exactly-one-mixer-layout-area-resolves-by-name-and-role",
-    lambda observation: (observation.get("mixer_layout_areas_seen") is not None
-                         and observation.get("mixer_container_count") == 1
-                         and observation.get("mixer_ancestor_search_bound_hit") is False),
-    mixer_resolution,
-    {"mixer_layout_areas_seen": 0, "mixer_container_count": 0,
-     "mixer_ancestor_search_bound_hit": False},
+    mixer_layout_resolves_by_name_and_role,
+    slot_before,
+    derived_witness(slot_before, mixer_container_count=0),
     "exactly one AXLayoutArea with a measured mixer label has an AXGroup with that same label as "
     "an ancestor before the named channel-strip search is allowed to begin. The Inspector shows a "
     "channel strip for the selected track and it is also an AXLayoutArea described with the mixer "
@@ -213,16 +375,14 @@ ev.falsifiable(
     "the 12-level ancestor bound: the harness refuses instead of opening the mixer or choosing a "
     "container by position",
 )
-if not (mixer_resolution["mixer_layout_areas_seen"] is not None
-        and mixer_resolution["mixer_container_count"] == 1
-        and mixer_resolution["mixer_ancestor_search_bound_hit"] is False):
+if not mixer_layout_resolves_by_name_and_role(slot_before):
     finish()
 
 ev.falsifiable(
     "306/precondition-one-named-channel-strip-matches-the-track-label",
     lambda observation: observation.get("matching_strip_count") == 1,
     slot_before,
-    {"matching_strip_count": 0},
+    derived_witness(slot_before, matching_strip_count=0),
     f"exactly one AXLayoutItem in the resolved mixer matches the measured track name `{TRACK}` "
     "before the Compressor search, scoped to the mixer, is allowed to descend into it; the arrange "
     "area's track header carries the same name, and choosing between them by position is not allowed",
@@ -237,7 +397,7 @@ ev.falsifiable(
     "306/precondition-one-compressor-insert-slot-resolves-by-description",
     lambda observation: observation.get("slot_count") == 1,
     slot_before,
-    {"slot_count": 0},
+    derived_witness(slot_before, slot_count=0),
     f"exactly one AXGroup describes itself `Compressor` within the named `{TRACK}` channel strip; "
     "five Compressor inserts exist across channel strips, and choosing one by position is not allowed",
     "rename or remove the Compressor insert in the named strip: its scoped slot count becomes zero "
@@ -251,8 +411,9 @@ before = ev.shot("306/before", settle_region=band, window_title=arrange["title"]
 
 driver = E.Driver()
 health = driver.tool("logic_system", "health", {})
+health_counterexample = derived_witness(health, _transport_error=None)
 ev.falsifiable("306/the-release-artifact-answers-a-read-only-wire-request",
-               lambda body: isinstance(body, dict) and bool(body), health, {},
+               E.artifact_answered, health, health_counterexample,
                "the built server answered a read-only health request during this evidence run",
                "start an artifact that cannot answer MCP: the empty/error response goes red")
 
@@ -269,94 +430,79 @@ result = probe(tool, "compressor", {
 ev.note("306/compressor-raw-ax", result)
 
 opening = result.get("open") if isinstance(result.get("open"), dict) else {}
-pressed = opening.get("pressed_children") if isinstance(opening.get("pressed_children"), list) else []
-opened_windows = opening.get("opened_windows") if isinstance(opening.get("opened_windows"), list) else []
-opened = (opening.get("slot_count") == 1 and len(pressed) == 1
-          and pressed[0].get("role") == "AXButton" and pressed[0].get("description") == OPEN
-          and len(opened_windows) == 1)
 ev.falsifiable(
     "306/the-compressor-window-opened-through-the-named-open-button",
-    lambda observation: observation["opened"],
-    {"opened": opened},
-    {"opened": False},
+    compressor_window_opened_through_named_button,
+    opening,
+    derived_witness(opening, pressed_children=[], opened_windows=[]),
     "one Compressor window appeared after a single AXButton `열기` press",
     "press no Open button, or press another child: the observed opening path goes red",
 )
 
 native_sliders = result.get("native_editor_sliders") if isinstance(result.get("native_editor_sliders"), list) else []
-native_names = [name for name in slider_descriptions(native_sliders) if name]
-native_settable = sum(1 for slider in native_sliders
-                      if isinstance(slider, dict) and slider.get("value_settable") is True)
 # NOT an exact census. Measured 2026-08-30 on two different Compressor instances in one project:
 # the one on `Absolute Zero` exposes 22 sliders of which 11 claim settable values, the one on
 # `Studio Grand` exposes 20 and 10. The count is a property of the instance's configuration, and an
 # earlier draft asserted 22/11 because that is the pair I happened to write in an issue comment.
 # What holds across both, and is the fact this harness is about, is that MOST sliders are settable
 # and exactly ONE carries a name.
-native_census = (
-    len(native_sliders) > 0
-    and native_settable > 0
-    and native_settable < len(native_sliders)
-)
 ev.falsifiable(
     "306/native-editor-exposes-sliders-of-which-only-some-claim-settable-values",
-    lambda observation: observation["ok"],
-    {"ok": native_census},
-    {"ok": False},
+    native_editor_has_partly_settable_sliders,
+    native_sliders,
+    sliders_with_every_field(native_sliders, "value_settable", True),
     "the native Compressor editor exposes AXSliders and only SOME of them report AXValue "
     "settable=true; the exact counts follow the instance (22/11 on one strip, 20/10 on another) "
     "so they are not asserted",
     "return no sliders, or make every slider claim settable: the invariant goes red. Note this "
     "check cannot catch a count change, deliberately - that is the instance's business",
 )
-native_signature = len(native_names) == 1 and native_names[0] == THRESHOLD
 ev.falsifiable(
     "306/native-editor-has-exactly-one-named-slider-and-it-is-threshold",
-    lambda observation: observation["ok"],
-    {"ok": native_signature},
-    {"ok": False},
+    native_editor_has_only_threshold_named,
+    native_sliders,
+    descriptions_without(native_sliders, THRESHOLD),
     "among the native editor sliders, exactly one raw AXDescription is non-empty and it is `Threshold`",
     "give another native slider a description, or remove Threshold's: the exact-one signature goes red",
 )
 
 controls_selection = result.get("controls_selection") if isinstance(result.get("controls_selection"), dict) else {}
-offered = controls_selection.get("items") if isinstance(controls_selection.get("items"), list) else []
-offered_names = {item.get("title") or item.get("description") for item in offered if isinstance(item, dict)}
-view_offers_both = (len(controls_selection.get("button_candidates", [])) == 1
-                    and CONTROLS in offered_names and EDITOR in offered_names)
 ev.falsifiable(
     "306/the-view-menu-offers-named-controls-and-editor-items",
-    lambda observation: observation["ok"],
-    {"ok": view_offers_both},
-    {"ok": False},
+    view_menu_offers_controls_and_editor,
+    controls_selection,
+    view_menu_without_item(controls_selection, CONTROLS),
     "the AXMenuButton `보기` exposes both the named `컨트롤` and `편집기` AXMenuItems",
     "remove either menu item: the offering check goes red before a row label can be mistaken for a slider name",
 )
 
 controls_rows = result.get("controls_rows") if isinstance(result.get("controls_rows"), list) else []
-rows_label_every_parameter = all_parameters_are_row_labels(controls_rows)
 row_texts, named_row_count = row_static_texts(controls_rows)
 ev.falsifiable(
     "306/controls-view-puts-every-parameter-name-in-a-row-cell-static-text",
-    lambda observation: observation["ok"],
-    {"ok": rows_label_every_parameter},
-    {"ok": False},
-    "at least eleven AXRows carry cell AXStaticText, and every measured parameter name is among them",
-    f"remove one parameter row label: its specific name disappears and this goes red (rows with text={named_row_count})",
+    all_parameters_are_row_labels,
+    controls_rows,
+    rows_without_parameter_pair(controls_rows, "Threshold:"),
+    "at least eleven AXRows carry cell AXStaticText, and every measured parameter name shares a cell "
+    "with an AXSlider, AXRadioButton, or AXPopUpButton",
+    f"remove one parameter row label or its cell's control: its specific pairing disappears and this "
+    f"goes red (rows with text={named_row_count})",
 )
 
 controls_sliders = result.get("controls_sliders") if isinstance(result.get("controls_sliders"), list) else []
-controls_have_no_own_descriptions = (len(controls_sliders) == 26 and all(
-    isinstance(slider, dict) and slider.get("description", "") == "" for slider in controls_sliders
-))
 ev.falsifiable(
     "306/controls-view-sliders-have-no-own-axdescription",
-    lambda observation: observation["ok"],
-    {"ok": controls_have_no_own_descriptions},
-    {"ok": False},
-    "all 26 Controls-view sliders have an empty raw AXDescription. The name is on the row, so step 9 "
-    "of set_param_verified (AXSlider matched by its own AXDescription) does NOT reach these controls",
-    "attach a name to one slider, or return a non-26 census: this exact absence assertion goes red",
+    controls_sliders_carry_no_name_of_their_own,
+    controls_sliders,
+    one_slider_with_description(controls_sliders, "counterexample description"),
+    "no Controls-view slider carries a name of its own: each AXDescription read either succeeded "
+    "and came back empty, or failed with kAXErrorAttributeUnsupported (-25212, x15) or "
+    "kAXErrorNoValue (-25205, x11), which is what these sliders actually do. The name is on "
+    "the row, so step 9 of set_param_verified "
+    "(AXSlider matched by its own AXDescription) does NOT reach these controls",
+    "attach a name to one slider, return a non-26 census, or make one description read fail with "
+    "any code other than unsupported: the assertion goes red, because a read that went wrong is "
+    "not evidence that a name is absent",
 )
 
 editor_selection = result.get("editor_selection") if isinstance(result.get("editor_selection"), dict) else {}

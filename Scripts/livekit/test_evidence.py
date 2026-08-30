@@ -19,6 +19,8 @@ import evidence as E  # noqa: E402
 GOOD = {
     "checks": 1, "passed": 1, "mutation_claimed": 1, "operations_driven": 1,
     "checks_recorded_under_blocking_modal": 0,
+    "checks_missing_blocking_modal_snapshot": 0,
+    "checks_with_blocking_modal_unknown": 0,
     "checks_with_a_counterexample": 0, "counterexamples_not_rejected": 0,
     "captures": 1, "captures_unsettled": 0, "captures_straddling_displays": 0,
     "restorations_failed": 0, "cached_reads_used_as_live": 0,
@@ -39,6 +41,10 @@ CASES = [
      "a counterexample the assertion failed to reject"),
     (False, {**GOOD, "checks_recorded_under_blocking_modal": 1},
      "a check recorded while a blocking modal was present"),
+    (False, {**GOOD, "checks_missing_blocking_modal_snapshot": 1},
+     "a check whose modal snapshot field is absent"),
+    (False, {**GOOD, "checks_with_blocking_modal_unknown": 1},
+     "a check whose modal detector could not inspect its state"),
     (False, {**GOOD, "checks": 0, "passed": 0}, "no checks"),
     # Absence must never be clean, for EVERY key — the polarity used to depend on which one.
     *[(False, {k: v for k, v in GOOD.items() if k != key}, f"summary missing {key!r}")
@@ -64,7 +70,7 @@ for expected, summary, why in CASES:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} is_clean -> {got!s:<5} expected {expected!s:<5} {why}")
 
-# --- a modal panel is the window level, not every AXDialog-shaped window ----------------------
+# --- modal detection needs both the screen level and AX modality/sheet signals ----------------
 #
 # These are synthetic CoreGraphics records; this test never asks a live Logic for windows. Today's
 # measurement supplied the two level facts: the blocking audio-interface alert was at modal-panel
@@ -114,26 +120,48 @@ def _synthetic_window(owner, title, layer, number=41, bounds_type=dict):
 _old_quartz = sys.modules.get("Quartz")
 sys.modules["Quartz"] = _ModalQuartz
 try:
+    clear_ax = {"modal_windows": [], "sheets": []}
     modal_cases = [
-        (True, [_synthetic_window("Logic Pro", "Audio Interface", 8)],
-         "a Logic window at the derived modal-panel level is detected"),
-        (False, [_synthetic_window("Logic Pro", "Studio Grand", 3)],
+        ("modal_panel", [_synthetic_window("Logic Pro", "Audio Interface", 8)],
+         {"modal_windows": [{"title": "Audio Interface", "pid": 99}], "sheets": []},
+         "a modal-panel level is corroborated by AXModal rather than assumed modal"),
+        (None, [_synthetic_window("Logic Pro", "Modeless panel", 8)], clear_ax,
+         "a modeless panel assigned the modal level is not a false positive"),
+        (None, [_synthetic_window("Logic Pro", "Studio Grand", 3)], clear_ax,
          "the measured plug-in floating level is not a modal"),
-        (False, [_synthetic_window("Logic Pro", "Tracks", 0)],
+        (None, [_synthetic_window("Logic Pro", "Tracks", 0)], clear_ax,
          "a Logic standard-level window is not a modal"),
-        (False, [_synthetic_window("Finder", "A dialog", 8)],
+        (None, [_synthetic_window("Finder", "A dialog", 8)], clear_ax,
          "a non-Logic modal-panel window is not this application's modal"),
-        (True, [_synthetic_window("Logic Pro", "Korean alert", 8)],
+        ("modal_panel", [_synthetic_window("Logic Pro", "Korean alert", 8)],
+         {"modal_windows": [{"title": "Korean alert"}], "sheets": []},
          "a Korean Logic owner name with a NO-BREAK SPACE is normalized"),
-        (True, [_synthetic_window("Logic Pro", "NSDictionary bounds", 8, bounds_type=_NotADict)],
+        ("modal_panel", [_synthetic_window("Logic Pro", "NSDictionary bounds", 8, bounds_type=_NotADict)],
+         {"modal_windows": [{"title": "NSDictionary bounds"}], "sheets": []},
          "bounds that are subscriptable but not a dict are read, as CoreGraphics returns them"),
+        ("modal_window", [], {"modal_windows": [{"title": "Go To Position", "pid": 99}], "sheets": []},
+         "an AXModal window on another Space is still detected without an on-screen CG record"),
+        ("sheet", [], {"modal_windows": [], "sheets": [{"host_title": "Tracks", "pid": 99}]},
+         "an AXSheet is detected although its host itself is not AXModal"),
     ]
-    for expected, windows, why in modal_cases:
-        got = E.blocking_modal(lister=lambda windows=windows: windows)
-        ok = ((got is not None) is expected
-              and (not expected or got == {
-                  "id": 41, "title": windows[0]["kCGWindowName"],
-                  "x": 101, "y": 202, "w": 303, "h": 404, "layer": 8}))
+    for expected_kind, windows, signals, why in modal_cases:
+        got = E.blocking_modal(
+            lister=lambda windows=windows: windows,
+            ax_lister=lambda signals=signals: signals,
+        )
+        ok = ((got is None) if expected_kind is None else
+              (isinstance(got, dict) and got.get("state") == "detected"
+               and got.get("kind") == expected_kind))
+        failed += 0 if ok else 1
+        print(f"{'ok  ' if ok else 'FAIL'} blocking_modal -> {got!r} {why}")
+
+    for lister, ax_lister, why in [
+        (lambda: None, lambda: clear_ax, "an unreadable CoreGraphics list is not a clear desktop"),
+        (lambda: [], lambda: None, "an unreadable AX sheet/modal query is not an empty search"),
+    ]:
+        got = E.blocking_modal(lister=lister, ax_lister=ax_lister)
+        ok = (isinstance(got, dict) and got.get("state") == E.MODAL_CANNOT_TELL
+              and got.get("kind") == E.MODAL_CANNOT_TELL)
         failed += 0 if ok else 1
         print(f"{'ok  ' if ok else 'FAIL'} blocking_modal -> {got!r} {why}")
 finally:
@@ -142,19 +170,21 @@ finally:
     else:
         sys.modules["Quartz"] = _old_quartz
 
-# `check()` and `falsifiable()` take independent snapshots. This detector returns a modal, then
-# none, to prove the first receipt carries the full window and the summary counts that receipt
-# without smearing its state over the next check.
+# A caller's snapshot is from the observation instant. `check()` records it without sampling again;
+# `falsifiable()` below has no snapshot and exercises the record-time fallback. The two receipts
+# prove that recording one observation cannot smear its state over the next one.
 import tempfile as _tempfile_for_modal
 
-_modal_snapshot = {"id": 41, "title": "Audio Interface",
+_modal_snapshot = {"state": "detected", "kind": "modal_panel", "signal": "test",
+                   "id": 41, "title": "Audio Interface",
                    "x": 101, "y": 202, "w": 303, "h": 404, "layer": 8}
 _original_blocking_modal = E.blocking_modal
-_modal_reads = iter([_modal_snapshot, None])
+_modal_reads = iter([None])
 E.blocking_modal = lambda: next(_modal_reads)
 try:
     modal_receipts = E.Evidence("d" * 40, _tempfile_for_modal.mkdtemp())
-    modal_receipts.check("modal/ordinary", True, "expected", "observed", "a mutation")
+    modal_receipts.check("modal/ordinary", True, "expected", "observed", "a mutation",
+                        modal_snapshot=_modal_snapshot)
     modal_receipts.falsifiable("modal/falsifiable", lambda value: value == 1, 1, 0, "expected")
     modal_summary = E.summarize(modal_receipts.records)
 finally:
@@ -165,7 +195,36 @@ ok = (modal_records[0]["blocking_modal"] == _modal_snapshot
       and modal_records[1]["blocking_modal"] is None
       and modal_summary["checks_recorded_under_blocking_modal"] == 1)
 failed += 0 if ok else 1
-print(f"{'ok  ' if ok else 'FAIL'} each check records its own modal snapshot and summary count")
+print(f"{'ok  ' if ok else 'FAIL'} observation-time and fallback modal snapshots stay per-check")
+
+# A schema omission and an explicit failed detector are both different from None, which is the only
+# completed-clear answer. Drive summarize rather than copying its predicates so a future `.get()`
+# simplification cannot make either defect green again.
+unknown_snapshot = {"state": E.MODAL_CANNOT_TELL, "kind": E.MODAL_CANNOT_TELL,
+                    "signal": "test", "reason": "AX read failed"}
+modal_gap_summary = E.summarize([
+    {"kind": "check", "passed": True},
+    {"kind": "check", "passed": True, "blocking_modal": unknown_snapshot},
+])
+ok = (modal_gap_summary["checks_missing_blocking_modal_snapshot"] == 1
+      and modal_gap_summary["checks_with_blocking_modal_unknown"] == 1
+      and modal_gap_summary["checks_recorded_under_blocking_modal"] == 0
+      and E.is_clean({**GOOD,
+                      "checks_missing_blocking_modal_snapshot": 1}) is False
+      and E.is_clean({**GOOD,
+                      "checks_with_blocking_modal_unknown": 1}) is False)
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} absent and cannot-tell modal snapshots cannot count as clear")
+
+# `_body(None)` retains the dead transport in a non-empty dictionary for the receipt. The shared
+# predicate must reject that shape rather than let a caller's ordinary `if body:` call it answered.
+dead_transport = E._body(None)
+ok = (dead_transport == {"_transport_error": None}
+      and E.artifact_answered(dead_transport) is False
+      and E.artifact_answered({}) is True
+      and E.artifact_answered(None) is False)
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} artifact_answered rejects a truthy transport-error body")
 
 # The remaining contract drives exercise `check()` and `falsifiable()` for unrelated behavior. Keep
 # them headless: their clear modal snapshots are fixtures, not a read of whichever desktop runs CI.

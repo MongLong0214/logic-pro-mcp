@@ -66,6 +66,25 @@ for label, files, want in [
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} {label} -> {len(adopters)} of {total}")
 
+# This is the exact shape that made the ratchet lie: the predicate receives only a boolean wrapper
+# and the counterexample is a hand-authored constant dictionary. A real observation predicate beside
+# it must still count, while the hollow call is reported with the source location that needs repair.
+hollow = harness(
+    "live_hollow.py",
+    'E.falsifiable("hollow", lambda observation: observation["ok"], {"ok": True}, '
+    '{"ok": False}, "expected")\n',
+)
+real = harness(
+    "live_real.py",
+    'E.falsifiable("real", lambda sliders: all(slider["description"] for slider in sliders), '
+    '[{"description": "Peak 3 Q"}], [{"description": ""}], "expected")\n',
+)
+adopters, total, hollow_calls = G.adoption([hollow, real], include_hollow=True)
+ok = (adopters == ["live_real.py"] and total == 2 and hollow_calls == [("live_hollow.py", 1)])
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} hollow calls do not count but real predicates do -> "
+      f"adopters={adopters!r} hollow={hollow_calls!r}")
+
 # The floor is a constant in the guard, not a value read from the tree — a number the tree can
 # move is not a floor.
 ok = isinstance(G.FLOOR, int) and G.FLOOR >= 1

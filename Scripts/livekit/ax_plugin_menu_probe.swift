@@ -12,59 +12,156 @@ import Foundation
 
 typealias JSON = [String: Any]
 
-func attr<T>(_ element: AXUIElement, _ attribute: String) -> T? {
+enum AXRead<Value> {
+    case value(Value)
+    case absent
+    case failed(AXError)
+
+    var status: String {
+        switch self {
+        case .value: return "success_with_value"
+        case .absent: return "success_without_value"
+        case .failed: return "failed"
+        }
+    }
+
+    var errorCode: Any {
+        guard case .failed(let error) = self else { return NSNull() }
+        return error.rawValue
+    }
+
+    var value: Value? {
+        guard case let .value(value) = self else { return nil }
+        return value
+    }
+}
+
+var axReadFailures: [JSON] = []
+
+func recordReadFailure(_ attribute: String, _ error: AXError) {
+    axReadFailures.append(["attribute": attribute, "status": error.rawValue])
+}
+
+func trackRead<T>(_ read: AXRead<T>, attribute: String) -> AXRead<T> {
+    if case .failed(let error) = read { recordReadFailure(attribute, error) }
+    return read
+}
+
+// Preserve success-with-value, success-with-absent, and failed AX requests. A raw `nil` loses the
+// distinction and let failed slider reads masquerade as empty AXDescriptions or unsettable values.
+func attr<T>(_ element: AXUIElement, _ attribute: String) -> AXRead<T> {
     var value: AnyObject?
-    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
-        return nil
+    let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    guard result == .success else { return .failed(result) }
+    guard let value else { return .absent }
+    guard let typed = value as? T else { return .absent }
+    return .value(typed)
+}
+
+func role(_ element: AXUIElement) -> AXRead<String> {
+    attr(element, kAXRoleAttribute as String)
+}
+
+func description(_ element: AXUIElement) -> AXRead<String> {
+    attr(element, kAXDescriptionAttribute as String)
+}
+
+func title(_ element: AXUIElement) -> AXRead<String> {
+    attr(element, kAXTitleAttribute as String)
+}
+
+func valueDescription(_ element: AXUIElement) -> AXRead<String> {
+    attr(element, kAXValueDescriptionAttribute as String)
+}
+
+func textValue(_ element: AXUIElement) -> AXRead<String> {
+    attr(element, kAXValueAttribute as String)
+}
+
+func boolAttribute(_ element: AXUIElement, _ attribute: String) -> AXRead<Bool> {
+    switch attr(element, attribute) as AXRead<NSNumber> {
+    case .value(let value): return .value(value.boolValue)
+    case .absent: return .absent
+    case .failed(let error): return .failed(error)
     }
-    return value as? T
 }
 
-func role(_ element: AXUIElement) -> String {
-    attr(element, kAXRoleAttribute as String) ?? ""
-}
-
-func description(_ element: AXUIElement) -> String {
-    attr(element, kAXDescriptionAttribute as String) ?? ""
-}
-
-func title(_ element: AXUIElement) -> String {
-    attr(element, kAXTitleAttribute as String) ?? ""
-}
-
-func valueDescription(_ element: AXUIElement) -> String {
-    attr(element, kAXValueDescriptionAttribute as String) ?? ""
-}
-
-func textValue(_ element: AXUIElement) -> String {
-    attr(element, kAXValueAttribute as String) ?? ""
-}
-
-func boolAttribute(_ element: AXUIElement, _ attribute: String) -> Bool? {
-    guard let value: NSNumber = attr(element, attribute) else { return nil }
-    return value.boolValue
-}
-
-func scalarValue(_ element: AXUIElement, _ attribute: String) -> Any? {
-    if let value: String = attr(element, attribute) { return value }
-    if let value: NSNumber = attr(element, attribute) {
-        if CFGetTypeID(value) == CFBooleanGetTypeID() { return value.boolValue }
-        return value.doubleValue
+func scalarValue(_ element: AXUIElement, _ attribute: String) -> AXRead<Any> {
+    switch attr(element, attribute) as AXRead<AnyObject> {
+    case .value(let raw):
+        if let value = raw as? String { return .value(value) }
+        if let value = raw as? NSNumber {
+            if CFGetTypeID(value) == CFBooleanGetTypeID() { return .value(value.boolValue) }
+            return .value(value.doubleValue)
+        }
+        return .absent
+    case .absent:
+        return .absent
+    case .failed(let error):
+        return .failed(error)
     }
-    return nil
 }
 
-func valueIsSettable(_ element: AXUIElement) -> Bool {
+func valueIsSettable(_ element: AXUIElement) -> AXRead<Bool> {
     var settable = DarwinBoolean(false)
-    guard AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
-            == .success else {
-        return false
-    }
-    return settable.boolValue
+    let result = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
+    guard result == .success else { return .failed(result) }
+    return .value(settable.boolValue)
 }
 
-func children(_ element: AXUIElement) -> [AXUIElement] {
-    attr(element, kAXChildrenAttribute as String) ?? []
+func stringValue(_ read: AXRead<String>, attribute: String) -> String {
+    switch trackRead(read, attribute: attribute) {
+    case .value(let value): return value
+    case .absent, .failed: return ""
+    }
+}
+
+func roleText(_ element: AXUIElement) -> String {
+    stringValue(role(element), attribute: kAXRoleAttribute as String)
+}
+
+func descriptionText(_ element: AXUIElement) -> String {
+    stringValue(description(element), attribute: kAXDescriptionAttribute as String)
+}
+
+func titleText(_ element: AXUIElement) -> String {
+    stringValue(title(element), attribute: kAXTitleAttribute as String)
+}
+
+func textValueText(_ element: AXUIElement) -> String {
+    stringValue(textValue(element), attribute: kAXValueAttribute as String)
+}
+
+func scalarJSONValue(_ read: AXRead<Any>, attribute: String) -> Any {
+    switch trackRead(read, attribute: attribute) {
+    case .value(let value): return value
+    case .absent, .failed: return NSNull()
+    }
+}
+
+func boolJSONValue(_ read: AXRead<Bool>, attribute: String, absent: Any = NSNull()) -> Any {
+    switch trackRead(read, attribute: attribute) {
+    case .value(let value): return value
+    case .absent, .failed: return absent
+    }
+}
+
+func elementValue(_ read: AXRead<AXUIElement>, attribute: String) -> AXUIElement? {
+    switch trackRead(read, attribute: attribute) {
+    case .value(let value): return value
+    case .absent, .failed: return nil
+    }
+}
+
+func children(_ element: AXUIElement) -> AXRead<[AXUIElement]> {
+    attr(element, kAXChildrenAttribute as String)
+}
+
+func childElements(_ element: AXUIElement) -> [AXUIElement] {
+    switch trackRead(children(element), attribute: kAXChildrenAttribute as String) {
+    case .value(let value): return value
+    case .absent, .failed: return []
+    }
 }
 
 func descendants(_ root: AXUIElement, _ depth: Int = 18) -> [AXUIElement] {
@@ -72,10 +169,18 @@ func descendants(_ root: AXUIElement, _ depth: Int = 18) -> [AXUIElement] {
     func visit(_ element: AXUIElement, _ remaining: Int) {
         result.append(element)
         guard remaining > 0 else { return }
-        for child in children(element) { visit(child, remaining - 1) }
+        for child in childElements(element) { visit(child, remaining - 1) }
     }
     visit(root, depth)
     return result
+}
+
+func readStatus<Value>(_ read: AXRead<Value>) -> String {
+    read.status
+}
+
+func readError<Value>(_ read: AXRead<Value>) -> Any {
+    read.errorCode
 }
 
 func same(_ lhs: AXUIElement, _ rhs: AXUIElement) -> Bool {
@@ -83,26 +188,68 @@ func same(_ lhs: AXUIElement, _ rhs: AXUIElement) -> Bool {
 }
 
 func snapshot(_ element: AXUIElement) -> JSON {
+    let roleRead = role(element)
+    let descriptionRead = description(element)
+    let titleRead = title(element)
+    let valueDescriptionRead = valueDescription(element)
+    let settableRead = valueIsSettable(element)
+    let enabledRead = boolAttribute(element, kAXEnabledAttribute as String)
+    let valueRead = scalarValue(element, kAXValueAttribute as String)
     var out: JSON = [
-        "role": role(element),
-        "description": description(element),
-        "title": title(element),
-        "value_description": valueDescription(element),
-        "value_settable": valueIsSettable(element),
+        // The historic scalar fields remain for old callers. Their status/error siblings retain
+        // the AX result, so empty/false no longer silently means success-with-absent.
+        "role": stringValue(roleRead, attribute: kAXRoleAttribute as String),
+        "role_status": readStatus(roleRead),
+        "role_error": readError(roleRead),
+        "description": stringValue(descriptionRead, attribute: kAXDescriptionAttribute as String),
+        "description_status": readStatus(descriptionRead),
+        "description_error": readError(descriptionRead),
+        "title": stringValue(titleRead, attribute: kAXTitleAttribute as String),
+        "title_status": readStatus(titleRead),
+        "title_error": readError(titleRead),
+        "value_description": stringValue(valueDescriptionRead,
+                                         attribute: kAXValueDescriptionAttribute as String),
+        "value_description_status": readStatus(valueDescriptionRead),
+        "value_description_error": readError(valueDescriptionRead),
+        "value_settable": boolJSONValue(settableRead, attribute: kAXValueAttribute as String,
+                                          absent: false),
+        "value_settable_status": readStatus(settableRead),
+        "value_settable_error": readError(settableRead),
     ]
-    out["enabled"] = boolAttribute(element, kAXEnabledAttribute as String) ?? NSNull()
-    out["value"] = scalarValue(element, kAXValueAttribute as String) ?? NSNull()
+    out["enabled"] = boolJSONValue(enabledRead, attribute: kAXEnabledAttribute as String)
+    out["enabled_status"] = readStatus(enabledRead)
+    out["enabled_error"] = readError(enabledRead)
+    out["value"] = scalarJSONValue(valueRead, attribute: kAXValueAttribute as String)
+    out["value_status"] = readStatus(valueRead)
+    out["value_error"] = readError(valueRead)
     return out
 }
 
 func elementName(_ element: AXUIElement) -> String {
-    let fromTitle = title(element)
-    return fromTitle.isEmpty ? description(element) : fromTitle
+    let fromTitle = titleText(element)
+    return fromTitle.isEmpty ? descriptionText(element) : fromTitle
+}
+
+func candidateOutcome(_ count: Int) -> String {
+    if count == 0 { return "not_found" }
+    if count == 1 { return "searched" }
+    return "ambiguous"
 }
 
 func emit(_ body: JSON) {
-    guard JSONSerialization.isValidJSONObject(body),
-          let data = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys]),
+    var completed = body
+    // Zero candidates and a failed AX walk are different outcomes. The counts remain in the result,
+    // while this field lets a caller reject a partial success without parsing every nested witness.
+    if !axReadFailures.isEmpty {
+        completed["outcome"] = "could_not_search"
+        completed["ax_read_failures"] = axReadFailures
+    } else if completed["error"] != nil {
+        completed["outcome"] = "could_not_search"
+    } else if completed["outcome"] == nil {
+        completed["outcome"] = "searched"
+    }
+    guard JSONSerialization.isValidJSONObject(completed),
+          let data = try? JSONSerialization.data(withJSONObject: completed, options: [.sortedKeys]),
           let string = String(data: data, encoding: .utf8) else {
         print("{\"error\":\"could not encode probe result\"}")
         return
@@ -148,7 +295,11 @@ guard let logic = NSWorkspace.shared.runningApplications.first(
 let app = AXUIElementCreateApplication(logic.processIdentifier)
 
 func windows() -> [AXUIElement] {
-    attr(app, kAXWindowsAttribute as String) ?? []
+    switch trackRead(attr(app, kAXWindowsAttribute as String) as AXRead<[AXUIElement]>,
+                     attribute: kAXWindowsAttribute as String) {
+    case .value(let value): return value
+    case .absent, .failed: return []
+    }
 }
 
 func newWindows(since before: [AXUIElement]) -> [AXUIElement] {
@@ -161,7 +312,7 @@ func press(_ element: AXUIElement, _ action: String = kAXPressAction as String) 
 
 func closeWindow(_ window: AXUIElement, closeLabel: String) -> JSON {
     let buttons = descendants(window).filter {
-        role($0) == "AXButton" && description($0) == closeLabel
+        roleText($0) == "AXButton" && descriptionText($0) == closeLabel
     }
     var result: JSON = [
         "close_button_candidates": buttons.map(snapshot),
@@ -178,7 +329,7 @@ func closeWindow(_ window: AXUIElement, closeLabel: String) -> JSON {
 }
 
 func pluginSlots(in root: AXUIElement, named name: String) -> [AXUIElement] {
-    descendants(root).filter { role($0) == "AXGroup" && description($0) == name }
+    descendants(root).filter { roleText($0) == "AXGroup" && descriptionText($0) == name }
 }
 
 func pluginSlots(named name: String) -> [AXUIElement] {
@@ -207,11 +358,14 @@ func matchingGroupAncestor(
 ) -> AncestorGroupSearch {
     var current = element
     for _ in 0..<maximumDepth {
-        guard let parent: AXUIElement = attr(current, kAXParentAttribute as String) else {
+        guard let parent = elementValue(
+            attr(current, kAXParentAttribute as String) as AXRead<AXUIElement>,
+            attribute: kAXParentAttribute as String
+        ) else {
             return AncestorGroupSearch(found: false, boundHit: false)
         }
-        if role(parent) == (kAXGroupRole as String)
-            && trimmed(description(parent)) == expectedDescription {
+        if roleText(parent) == (kAXGroupRole as String)
+            && trimmed(descriptionText(parent)) == expectedDescription {
             return AncestorGroupSearch(found: true, boundHit: false)
         }
         current = parent
@@ -219,7 +373,10 @@ func matchingGroupAncestor(
 
     // We inspected the allowed number of ancestors. A further parent means the answer is unknown
     // at this bound (including in a cycle), so do not silently classify this layout area as out.
-    let hasMoreAncestors: AXUIElement? = attr(current, kAXParentAttribute as String)
+    let hasMoreAncestors = elementValue(
+        attr(current, kAXParentAttribute as String) as AXRead<AXUIElement>,
+        attribute: kAXParentAttribute as String
+    )
     return AncestorGroupSearch(found: false, boundHit: hasMoreAncestors != nil)
 }
 
@@ -242,8 +399,8 @@ func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
         descendants(window).filter { container in
             // Require the layout-area role first: Logic exposes an AXGroup with the same mixer
             // description, but channel strips are descendants of the AXLayoutArea.
-            role(container) == (kAXLayoutAreaRole as String)
-                && targets.contains(trimmed(description(container)))
+            roleText(container) == (kAXLayoutAreaRole as String)
+                && targets.contains(trimmed(descriptionText(container)))
         }
     }
     var ancestorSearchBoundHitCount = 0
@@ -252,7 +409,7 @@ func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
         // AXGroup ancestor prevents one configured synonym from admitting another by coincidence.
         let ancestor = matchingGroupAncestor(
             of: container,
-            named: trimmed(description(container))
+            named: trimmed(descriptionText(container))
         )
         if ancestor.boundHit { ancestorSearchBoundHitCount += 1 }
         return ancestor.found
@@ -267,7 +424,7 @@ func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
 func channelStrips(named trackLabel: String, in mixer: AXUIElement) -> [AXUIElement] {
     let target = trimmed(trackLabel)
     return descendants(mixer).filter { strip in
-        role(strip) == (kAXLayoutItemRole as String) && trimmed(description(strip)) == target
+        roleText(strip) == (kAXLayoutItemRole as String) && trimmed(descriptionText(strip)) == target
     }
 }
 
@@ -353,6 +510,7 @@ func slotSearchReport(_ search: PluginSlotSearch) -> JSON {
     var result: JSON = [
         "slot_count": search.slots.count,
         "slots": search.slots.map(snapshot),
+        "outcome": candidateOutcome(search.slots.count),
     ]
     guard let trackLabel = search.trackLabel else { return result }
 
@@ -402,12 +560,15 @@ func openPlugin(
     // that is the bypass value: reading it after the Open press would not catch an Open path that
     // toggled it and toggled it back before the witness looked.
     beforePress?(slot)
-    let buttons = children(slot).filter {
-        role($0) == "AXButton" && description($0) == openLabel
+    let buttons = childElements(slot).filter {
+        roleText($0) == "AXButton" && descriptionText($0) == openLabel
     }
-    result["slot_children"] = children(slot).map(snapshot)
+    result["slot_children"] = childElements(slot).map(snapshot)
     result["open_button_candidates"] = buttons.map(snapshot)
-    guard buttons.count == 1 else { return (result, slot, nil) }
+    guard buttons.count == 1 else {
+        result["outcome"] = candidateOutcome(buttons.count)
+        return (result, slot, nil)
+    }
 
     let before = windows()
     result["pressed_children"] = [snapshot(buttons[0])]
@@ -415,28 +576,29 @@ func openPlugin(
     usleep(1_400_000)
     let opened = newWindows(since: before)
     result["opened_windows"] = opened.map(snapshot)
+    result["outcome"] = candidateOutcome(opened.count)
     return (result, slot, opened.count == 1 ? opened[0] : nil)
 }
 
 func bandCheckboxes(in group: AXUIElement) -> [JSON] {
-    descendants(group).filter { role($0) == "AXCheckBox" }.map(snapshot)
+    descendants(group).filter { roleText($0) == "AXCheckBox" }.map(snapshot)
 }
 
 func sliders(in root: AXUIElement) -> [JSON] {
-    descendants(root).filter { role($0) == "AXSlider" }.map(snapshot)
+    descendants(root).filter { roleText($0) == "AXSlider" }.map(snapshot)
 }
 
 func rowCensus(in root: AXUIElement) -> [JSON] {
-    descendants(root).filter { role($0) == "AXRow" }.map { row in
-        let cells = descendants(row, 6).filter { role($0) == "AXCell" }
+    descendants(root).filter { roleText($0) == "AXRow" }.map { row in
+        let cells = descendants(row, 6).filter { roleText($0) == "AXCell" }
         let cellData: [JSON] = cells.map { cell in
-            let staticTexts = descendants(cell, 6).filter { role($0) == "AXStaticText" }
+            let staticTexts = descendants(cell, 6).filter { roleText($0) == "AXStaticText" }
             let controls = descendants(cell, 6).filter {
-                ["AXSlider", "AXRadioButton", "AXPopUpButton"].contains(role($0))
+                ["AXSlider", "AXRadioButton", "AXPopUpButton"].contains(roleText($0))
             }
             return [
-                "static_texts": staticTexts.map { textValue($0).isEmpty ? elementName($0) : textValue($0) },
-                "control_roles": controls.map(role),
+                "static_texts": staticTexts.map { textValueText($0).isEmpty ? elementName($0) : textValueText($0) },
+                "control_roles": controls.map(roleText),
             ]
         }
         return ["cells": cellData]
@@ -444,14 +606,15 @@ func rowCensus(in root: AXUIElement) -> [JSON] {
 }
 
 func menuItems(for button: AXUIElement) -> [AXUIElement] {
-    let nearby = descendants(button, 8).filter { role($0) == "AXMenuItem" }
-    if !nearby.isEmpty { return nearby }
-    return descendants(app, 10).filter { role($0) == "AXMenuItem" }
+    // The View button is the witness boundary. Falling back to every app menu item silently widened
+    // a failed local lookup into an unrelated menu match, exactly like the mixer search this file
+    // already keeps scoped. An empty local result stays empty and the caller's outcome says so.
+    descendants(button, 8).filter { roleText($0) == "AXMenuItem" }
 }
 
 func selectView(in window: AXUIElement, viewLabels: [String], wanted: String) -> JSON {
     let buttons = descendants(window).filter {
-        role($0) == "AXMenuButton" && viewLabels.contains(description($0))
+        roleText($0) == "AXMenuButton" && viewLabels.contains(descriptionText($0))
     }
     var result: JSON = [
         "button_candidates": buttons.map(snapshot),
@@ -460,6 +623,7 @@ func selectView(in window: AXUIElement, viewLabels: [String], wanted: String) ->
         "pressed": false,
         "show_menu_status": NSNull(),
         "press_status": NSNull(),
+        "outcome": candidateOutcome(buttons.count),
     ]
     guard buttons.count == 1 else { return result }
 
@@ -469,6 +633,7 @@ func selectView(in window: AXUIElement, viewLabels: [String], wanted: String) ->
     let selected = items.filter { elementName($0) == wanted }
     result["items"] = items.map(snapshot)
     result["item_candidates"] = selected.map(snapshot)
+    result["outcome"] = candidateOutcome(selected.count)
     guard selected.count == 1 else { return result }
 
     result["pressed"] = true
@@ -486,33 +651,44 @@ func runChannelEQ() {
     var bypasses: [AXUIElement] = []
     var bypassBefore: Any = NSNull()
     let (openResult, slot, opened) = openPlugin(slotName: slotName, openLabel: openLabel) { slot in
-        bypasses = children(slot).filter {
-            role($0) == "AXCheckBox" && bypassLabels.contains(description($0))
+        bypasses = childElements(slot).filter {
+            roleText($0) == "AXCheckBox" && bypassLabels.contains(descriptionText($0))
         }
         if bypasses.count == 1 {
-            bypassBefore = scalarValue(bypasses[0], kAXValueAttribute as String) ?? NSNull()
+            bypassBefore = scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
+                                           attribute: kAXValueAttribute as String)
         }
     }
     result["open"] = openResult
-    guard slot != nil else { emit(result); return }
+    guard slot != nil else {
+        result["outcome"] = openResult["outcome"] ?? "not_found"
+        emit(result)
+        return
+    }
 
     result["bypass_candidates"] = bypasses.map(snapshot)
     result["bypass_before"] = bypassBefore
 
     guard let opened else {
+        result["outcome"] = openResult["outcome"] ?? "not_found"
         result["bypass_after"] = bypasses.count == 1
-            ? (scalarValue(bypasses[0], kAXValueAttribute as String) ?? NSNull()) : NSNull()
+            ? scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
+                              attribute: kAXValueAttribute as String) : NSNull()
         emit(result)
         return
     }
 
-    let groups = descendants(opened).filter { role($0) == "AXGroup" && description($0) == "EQ" }
+    let groups = descendants(opened).filter {
+        roleText($0) == "AXGroup" && descriptionText($0) == "EQ"
+    }
     result["eq_group_count"] = groups.count
+    result["outcome"] = candidateOutcome(groups.count)
     result["band_checkboxes"] = groups.count == 1 ? bandCheckboxes(in: groups[0]) : []
     result["sliders"] = groups.count == 1 ? sliders(in: groups[0]) : []
     result["close"] = closeWindow(opened, closeLabel: closeLabel)
     result["bypass_after"] = bypasses.count == 1
-        ? (scalarValue(bypasses[0], kAXValueAttribute as String) ?? NSNull()) : NSNull()
+        ? scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
+                          attribute: kAXValueAttribute as String) : NSNull()
     emit(result)
 }
 
@@ -525,7 +701,7 @@ func runPluginSlot() {
     let slots = search.slots
     var result = slotSearchReport(search)
     result["frontmost_bundle_id"] = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-    result["slot_children"] = slots.count == 1 ? children(slots[0]).map(snapshot) : []
+    result["slot_children"] = slots.count == 1 ? childElements(slots[0]).map(snapshot) : []
     emit(result)
 }
 
@@ -544,15 +720,26 @@ func runCompressor() {
         mixerLabels: configuredStringFamily("mixer_label")
     )
     result["open"] = openResult
-    guard let opened else { emit(result); return }
+    guard let opened else {
+        result["outcome"] = openResult["outcome"] ?? "not_found"
+        emit(result)
+        return
+    }
 
     result["native_editor_sliders"] = sliders(in: opened)
     let controlsSelection = selectView(in: opened, viewLabels: viewLabels, wanted: controlsLabel)
     result["controls_selection"] = controlsSelection
+    if let outcome = controlsSelection["outcome"] as? String, outcome != "searched" {
+        result["outcome"] = outcome
+    }
     result["controls_rows"] = rowCensus(in: opened)
     result["controls_sliders"] = sliders(in: opened)
     let editorSelection = selectView(in: opened, viewLabels: viewLabels, wanted: editorLabel)
     result["editor_selection"] = editorSelection
+    if result["outcome"] == nil,
+       let outcome = editorSelection["outcome"] as? String, outcome != "searched" {
+        result["outcome"] = outcome
+    }
     result["editor_after_restore_sliders"] = sliders(in: opened)
     result["rows_after_restore"] = rowCensus(in: opened)
     result["close"] = closeWindow(opened, closeLabel: closeLabel)
@@ -564,7 +751,7 @@ func path(_ elements: [AXUIElement]) -> [JSON] {
 }
 
 func oneMenuChild(of element: AXUIElement) -> [AXUIElement] {
-    children(element).filter { role($0) == "AXMenu" }
+    childElements(element).filter { roleText($0) == "AXMenu" }
 }
 
 func runExportMenu() {
@@ -574,38 +761,57 @@ func runExportMenu() {
     let oneTrackLabel = configuredString("one_track_label")
     let openLabel = configuredString("open_label")
     var result: JSON = ["frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""]
-    guard let menuBar: AXUIElement = attr(app, kAXMenuBarAttribute as String) else {
+    guard let menuBar = elementValue(
+        attr(app, kAXMenuBarAttribute as String) as AXRead<AXUIElement>,
+        attribute: kAXMenuBarAttribute as String
+    ) else {
         result["error"] = "Logic has no AXMenuBar"
         emit(result)
         return
     }
-    let fileItems = children(menuBar).filter {
-        role($0) == "AXMenuBarItem" && fileLabels.contains(elementName($0))
+    let fileItems = childElements(menuBar).filter {
+        roleText($0) == "AXMenuBarItem" && fileLabels.contains(elementName($0))
     }
     result["file_candidates"] = fileItems.map(snapshot)
-    guard fileItems.count == 1 else { emit(result); return }
+    guard fileItems.count == 1 else {
+        result["outcome"] = candidateOutcome(fileItems.count)
+        emit(result)
+        return
+    }
 
     let menus = oneMenuChild(of: fileItems[0])
     result["file_menu_candidates"] = menus.map(snapshot)
-    guard menus.count == 1 else { emit(result); return }
+    guard menus.count == 1 else {
+        result["outcome"] = candidateOutcome(menus.count)
+        emit(result)
+        return
+    }
 
     let fileMenu = menus[0]
-    let exportItems = children(fileMenu).filter {
-        role($0) == "AXMenuItem" && elementName($0) == exportLabel
+    let exportItems = childElements(fileMenu).filter {
+        roleText($0) == "AXMenuItem" && elementName($0) == exportLabel
     }
-    let openItems = children(fileMenu).filter {
-        role($0) == "AXMenuItem" && elementName($0) == openLabel
+    let openItems = childElements(fileMenu).filter {
+        roleText($0) == "AXMenuItem" && elementName($0) == openLabel
     }
     result["export_candidates"] = exportItems.map(snapshot)
     result["open_candidates"] = openItems.map(snapshot)
     result["open_path"] = openItems.count == 1 ? path([fileItems[0], fileMenu, openItems[0]]) : []
-    guard exportItems.count == 1 else { emit(result); return }
+    guard exportItems.count == 1 else {
+        result["outcome"] = candidateOutcome(exportItems.count)
+        emit(result)
+        return
+    }
 
     let exportMenus = oneMenuChild(of: exportItems[0])
     result["export_menu_candidates"] = exportMenus.map(snapshot)
-    guard exportMenus.count == 1 else { emit(result); return }
+    guard exportMenus.count == 1 else {
+        result["outcome"] = candidateOutcome(exportMenus.count)
+        emit(result)
+        return
+    }
 
-    let leaves = children(exportMenus[0]).filter { role($0) == "AXMenuItem" }
+    let leaves = childElements(exportMenus[0]).filter { roleText($0) == "AXMenuItem" }
     let allTracks = leaves.filter { elementName($0) == allTracksLabel }
     let oneTrack = leaves.filter { elementName($0) == oneTrackLabel }
     result["all_tracks_candidates"] = allTracks.map(snapshot)
@@ -614,6 +820,11 @@ func runExportMenu() {
         ? path([fileItems[0], fileMenu, exportItems[0], exportMenus[0], allTracks[0]]) : []
     result["one_track_path"] = oneTrack.count == 1
         ? path([fileItems[0], fileMenu, exportItems[0], exportMenus[0], oneTrack[0]]) : []
+    if allTracks.count != 1 {
+        result["outcome"] = candidateOutcome(allTracks.count)
+    } else if oneTrack.count != 1 {
+        result["outcome"] = candidateOutcome(oneTrack.count)
+    }
     emit(result)
 }
 
