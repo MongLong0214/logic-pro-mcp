@@ -109,6 +109,12 @@ enum AXMouseHelper {
                     flags: flags,
                     clearModifiersAfter: true
                 ) else { return false }
+                // Three separate posts, and a process that dies between the second and the third
+                // leaves macOS holding a modifier no physical key is holding. The marker says a
+                // chord is in flight so the next start can post the clear this run owed; see
+                // `StuckModifierRecovery` for why a marker and not a blind clear at startup.
+                StuckModifierRecovery.arm(keyCode: keyCode, flags: flags)
+                defer { StuckModifierRecovery.disarm() }
                 events.down.post(tap: .cghidEventTap)
                 events.up.post(tap: .cghidEventTap)
                 events.modifierClear?.post(tap: .cghidEventTap)

@@ -1177,6 +1177,11 @@ actor LogicProServer {
             cleanupStartupArtifacts()
         } else {
             SMFWriter.cleanupStartupOrphanFiles()
+            // If a previous run died between a chord's key-up and its modifier-clear, macOS is
+            // still holding that modifier. This posts the clear that run owed, and posts nothing
+            // when nothing is owed — it cannot fire because of a key a user is holding. See
+            // `StuckModifierRecovery`; the symptom it addresses is discussion #458.
+            StuckModifierRecovery.recoverIfNeeded()
         }
         let plan = runtimePlan()
         try await plan.run()
