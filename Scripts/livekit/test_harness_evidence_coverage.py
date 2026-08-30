@@ -41,7 +41,7 @@ for paths, expected, why in [
 # Through the REAL `E.summarize` and `E.is_clean`, not a copy of the predicate: a test that
 # reimplements the rule agrees with itself no matter what the code says.
 CLEAN = {"records": [
-    {"kind": "check", "passed": True, "mutation_claimed": True},
+    {"kind": "check", "passed": True, "mutation_claimed": True, "blocking_modal": None},
     {"kind": "capture", "settled": True, "display": {"wholly_within": True}},
     {"kind": "visual", "passed": True, "subject": "Tracks header", "region": [0, 0, 1, 1]},
     {"kind": "recording"},
@@ -273,7 +273,8 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evr
         # evidence root and no Logic — and it is the same predicate either way, taken from the
         # trusted module rather than restated here.
         doc = {"name": stem, "records": [
-            {"kind": "check", "tag": "t", "passed": passed, "mutation_claimed": True},
+            {"kind": "check", "tag": "t", "passed": passed, "mutation_claimed": True,
+             "blocking_modal": None},
             {"kind": "capture", "tag": "c", "settled": True,
              "display": {"wholly_within": True}},
             {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
