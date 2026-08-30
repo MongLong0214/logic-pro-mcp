@@ -133,7 +133,7 @@ def raw_probe(tool):
     config = {
         "slot_label": SLOT_NAME,
         "track_label": TRACK_NAME,
-        "mixer_labels": MIXER_LABELS,
+        "mixer_label": MIXER_LABELS,
         "open_label": OPEN,
         "close_label": CLOSE,
         "bypass_labels": BYPASS_LABELS,

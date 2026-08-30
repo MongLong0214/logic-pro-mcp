@@ -771,7 +771,7 @@ func runChannelEQ() {
     // pass a track.
     let trackLabelRaw = configuredString("track_label")
     let trackLabel: String? = trackLabelRaw.isEmpty ? nil : trackLabelRaw
-    let mixerLabels = configuredStrings("mixer_labels")
+    let mixerLabels = configuredStringFamily("mixer_label")
     var result: JSON = ["frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""]
     var bypasses: [AXUIElement] = []
     var bypassBefore: AXRead<Any> = .absent
