@@ -37,7 +37,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
-FLOOR = 4
+FLOOR = 5
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

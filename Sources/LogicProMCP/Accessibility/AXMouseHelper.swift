@@ -13,6 +13,65 @@ import Foundation
 /// the double-click + keystroke sequence inside the server process
 /// eliminates the FD exhaustion path entirely.
 enum AXMouseHelper {
+    /// Coordinates the one marker file that this process uses for flagged chords.
+    ///
+    /// The first `begin` at depth zero calls `arm` with its payload; later begins do not call it.
+    /// If arming writes a marker, that payload remains until the depth returns to zero. This
+    /// intentionally does not record several in-flight chords. One marker could contain several
+    /// records, but recovery that posts several keystrokes is a broader action than this feature's
+    /// one best-effort clear attempt.
+    ///
+    /// Overlapping calls need not end LIFO, so the retained key code can name a call that has
+    /// already ended. The recovery event has zero flags: its flags release the modifier state,
+    /// not its virtual key code. A key-up naming a stale key still carries that zero-flags clear,
+    /// while a key-up for a key nobody holds releases nothing; the stale key makes the recovery
+    /// log less accurate, not the modifier-clear attempt less correct.
+    ///
+    /// `arm` and `disarm` run under this non-recursive `NSLock` and MUST NOT call back into the
+    /// chord path; the production `StuckModifierRecovery.arm` and `.disarm` callbacks are file
+    /// operations. Holding the lock across `arm` preserves the required arm-before-first-post
+    /// ordering.
+    final class ChordMarkerNesting: @unchecked Sendable {
+        private let lock = NSLock()
+        private var depth = 0
+
+        func begin(
+            keyCode: CGKeyCode,
+            flags: CGEventFlags,
+            arm: (CGKeyCode, CGEventFlags) -> Void
+        ) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            if depth == 0 {
+                arm(keyCode, flags)
+            }
+            depth += 1
+        }
+
+        func end(disarm: () -> Void) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            // A zero depth has no marker ownership to release. Logging and returning avoids
+            // clearing a marker that another caller wrote while still leaving the imbalance
+            // visible without terminating the server.
+            guard depth > 0 else {
+                Log.warn(
+                    "chord marker end without a matching begin — leaving the marker untouched",
+                    subsystem: "cgEvent")
+                return
+            }
+            depth -= 1
+            if depth == 0 {
+                disarm()
+            }
+        }
+    }
+
+    /// Process-wide because all `postFlaggedKeyEvent` calls use the same per-process marker path.
+    private static let chordMarkerNesting = ChordMarkerNesting()
+
     struct Runtime: @unchecked Sendable {
         let postMouseEvent: @Sendable (CGEventType, CGPoint, Int64) -> Bool
         let postKeyEvent: @Sendable (CGKeyCode) -> Bool
@@ -62,6 +121,31 @@ enum AXMouseHelper {
             return (down, up, modifierClear)
         }
 
+        /// Attempts to arm a best-effort marker before posting a flagged chord. Arming can fail,
+        /// so a marker need not exist; a later start can only use one that remains to attempt a
+        /// clear after an interruption. Event construction stays before `arm` so no marker is
+        /// attempted when there is no event sequence to post.
+        @discardableResult
+        static func postChord(
+            keyCode: CGKeyCode,
+            flags: CGEventFlags,
+            arm: (CGKeyCode, CGEventFlags) -> Void,
+            disarm: () -> Void,
+            post: (CGEvent) -> Void,
+            makeEvents: (CGKeyCode, CGEventFlags) -> (down: CGEvent, up: CGEvent, modifierClear: CGEvent?)?,
+            markerNesting: ChordMarkerNesting = AXMouseHelper.chordMarkerNesting
+        ) -> Bool {
+            guard let events = makeEvents(keyCode, flags) else { return false }
+            markerNesting.begin(keyCode: keyCode, flags: flags, arm: arm)
+            defer { markerNesting.end(disarm: disarm) }
+            post(events.down)
+            post(events.up)
+            if let modifierClear = events.modifierClear {
+                post(modifierClear)
+            }
+            return true
+        }
+
         static let production = Runtime(
             postMouseEvent: { type, point, clickCount in
                 let source = CGEventSource(stateID: .combinedSessionState)
@@ -103,16 +187,21 @@ enum AXMouseHelper {
             sleepMicros: { usleep($0) },
             postFlaggedKeyEvent: { keyCode, flags in
                 let source = CGEventSource(stateID: .combinedSessionState)
-                guard let events = keyboardEvents(
-                    source: source,
+                return postChord(
                     keyCode: keyCode,
                     flags: flags,
-                    clearModifiersAfter: true
-                ) else { return false }
-                events.down.post(tap: .cghidEventTap)
-                events.up.post(tap: .cghidEventTap)
-                events.modifierClear?.post(tap: .cghidEventTap)
-                return true
+                    arm: { StuckModifierRecovery.arm(keyCode: $0, flags: $1) },
+                    disarm: { StuckModifierRecovery.disarm() },
+                    post: { $0.post(tap: .cghidEventTap) },
+                    makeEvents: { keyCode, flags in
+                        keyboardEvents(
+                            source: source,
+                            keyCode: keyCode,
+                            flags: flags,
+                            clearModifiersAfter: true
+                        )
+                    }
+                )
             }
         )
     }
