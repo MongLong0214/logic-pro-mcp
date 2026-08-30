@@ -1170,13 +1170,30 @@ actor LogicProServer {
         ServerCatalog.snapshot(channelIDs: registeredChannels().map(\.id))
     }
 
+    /// Keeps the injected maintenance actions ordered: cleanup first, then modifier recovery.
+    /// The direct test verifies invocation and order of those callbacks only; it does not exercise
+    /// their production implementations or prove that `start()` remains wired to this helper.
+    static func performStartupMaintenance(
+        cleanupOrphans: () -> Void,
+        recoverModifier: () -> Void
+    ) {
+        cleanupOrphans()
+        recoverModifier()
+    }
+
     func start() async throws {
         await sagaJournal.clear()
         OperationHandlerRegistry.validate()
         if let cleanupStartupArtifacts = runtimeOverrides?.cleanupStartupArtifacts {
-            cleanupStartupArtifacts()
+            Self.performStartupMaintenance(
+                cleanupOrphans: cleanupStartupArtifacts,
+                recoverModifier: { StuckModifierRecovery.recoverIfNeeded() }
+            )
         } else {
-            SMFWriter.cleanupStartupOrphanFiles()
+            Self.performStartupMaintenance(
+                cleanupOrphans: { SMFWriter.cleanupStartupOrphanFiles() },
+                recoverModifier: { StuckModifierRecovery.recoverIfNeeded() }
+            )
         }
         let plan = runtimePlan()
         try await plan.run()

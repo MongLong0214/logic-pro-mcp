@@ -172,6 +172,17 @@ func testLogicProServerHandlersReadResourcesWithoutRegisteredTransport() async t
     ])
 }
 
+@Test func testLogicProServerStartupMaintenanceRunsCleanupAndModifierRecovery() {
+    var actions: [String] = []
+
+    LogicProServer.performStartupMaintenance(
+        cleanupOrphans: { actions.append("cleanup") },
+        recoverModifier: { actions.append("recoverModifier") }
+    )
+
+    #expect(actions == ["cleanup", "recoverModifier"])
+}
+
 @Test func testLogicProServerStartCleansOwnedAndLegacySMFArtifacts() async throws {
     let sandbox = FileManager.default.temporaryDirectory
         .appendingPathComponent("logic-pro-server-startup-cleanup-\(UUID().uuidString)", isDirectory: true)
