@@ -636,7 +636,13 @@ try:
         "301/a-db-request-lands-on-logics-own-rendered-string",
         display_request_landed,
         display_observation,
-        nested_witness(display_observation, "response", observed_display=before_display),
+        # NOT `before_display`. The dB request is chosen to be the value that is NOT currently
+        # rendered, but the raw write before it can leave the control showing exactly the string
+        # this request asks for — and then a counterexample built from `before_display` is IDENTICAL
+        # to the observation, changes nothing, and cannot be rejected. Derive the counterexample
+        # from the requested rendering instead, so it always differs from what the run asked for.
+        nested_witness(display_observation, "response",
+                       observed_display=f"not {wanted_display}"),
         "the dB request reaches State A only when Logic reports the exact requested AXValueDescription; "
         "the harness never supplies a Hz/dB raw mapping",
         "return a different AXValueDescription for the requested dB value: a value in the declared "

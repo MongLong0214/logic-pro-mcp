@@ -77,7 +77,7 @@ enum SliderIncrementWalk {
         }
     }
 
-    private enum Direction: Double {
+    private enum Direction: Double, Equatable {
         case down = -1
         case up = 1
     }
@@ -155,23 +155,16 @@ enum SliderIncrementWalk {
         budget: Int
     ) -> WalkOutcome {
         var current = initial
-        // The first request is a calibration nudge toward a higher raw value.
-        // Once Logic's display changes, raw readback—not a made-up Hz/dB
-        // mapping—tells us which raw direction produced that rendering.
-        var direction: Direction?
-        var rawWhenDisplayLastChanged = initial.value
-        var previous: Reading?
+        // The first request is an upward probe. A measured 302 / "+6.2 dB"
+        // walk took 179 upward steps to 480 / "+24.0 dB" for a "+2.2 dB"
+        // target, so the probe's raw direction must not be frozen. Logic's
+        // rendering is re-evaluated after every step to prove it is closer.
+        var direction = Direction.up
+        var isProbe = true
         var steps = 0
 
         while steps < budget {
-            let requestedRaw: Double
-            if let direction {
-                requestedRaw = current.value + direction.rawValue
-            } else {
-                requestedRaw = current.value + Direction.up.rawValue
-            }
-
-            guard nudge(requestedRaw) else {
+            guard nudge(current.value + direction.rawValue) else {
                 return .noProgress(steps: steps, last: current)
             }
             steps += 1
@@ -183,27 +176,35 @@ enum SliderIncrementWalk {
                 return .arrived(steps: steps, final: next)
             }
 
-            if next.value == current.value || previous?.value == next.value {
+            if next.display == current.display {
                 return .noProgress(steps: steps, last: next)
             }
 
-            if next.display != current.display {
-                guard let observedDirection = rawDirection(
-                    from: rawWhenDisplayLastChanged,
-                    to: next.value
-                ), direction == nil || direction == observedDirection else {
-                    return .noProgress(steps: steps, last: next)
+            guard let movedCloser = displayMovedCloser(
+                from: current.display,
+                to: next.display,
+                target: targetDisplay
+            ) else {
+                // An ordering we cannot establish is not a licence to pick a
+                // direction. In particular, parsing raw values or a dB/Hz
+                // mapping here would invent information Logic did not render.
+                return .noProgress(steps: steps, last: next)
+            }
+
+            if !movedCloser {
+                if isProbe {
+                    // The lone calibration probe moved away, so try its
+                    // opposite once. Later non-closer displays are no
+                    // progress, not a reason to walk into a control rail.
+                    direction = direction == .up ? .down : .up
+                    isProbe = false
+                    current = next
+                    continue
                 }
-                direction = observedDirection
-                rawWhenDisplayLastChanged = next.value
-            } else if direction == nil {
-                // A raw change with no display change cannot establish that the
-                // calibration nudge is moving toward the requested rendering.
-                // Stop rather than guessing an engineering-value mapping.
                 return .noProgress(steps: steps, last: next)
             }
 
-            previous = current
+            isProbe = false
             current = next
         }
 
@@ -227,10 +228,60 @@ enum SliderIncrementWalk {
         abs(value - target) <= tolerance
     }
 
-    private static func rawDirection(from oldValue: Double, to newValue: Double) -> Direction? {
-        if newValue > oldValue { return .up }
-        if newValue < oldValue { return .down }
-        return nil
+    /// Returns whether Logic's next rendering is numerically closer to the
+    /// requested rendering. The parsed suffix is intentionally compared
+    /// exactly: it is the unit text Logic supplied, not a unit conversion.
+    private static func displayMovedCloser(
+        from current: String,
+        to next: String,
+        target: String
+    ) -> Bool? {
+        guard let currentValue = leadingNumber(in: current),
+              let nextValue = leadingNumber(in: next),
+              let targetValue = leadingNumber(in: target),
+              currentValue.suffix == nextValue.suffix,
+              currentValue.suffix == targetValue.suffix else {
+            return nil
+        }
+
+        return abs(nextValue.number - targetValue.number)
+            < abs(currentValue.number - targetValue.number)
+    }
+
+    /// Splits only a leading signed decimal from Logic's rendering. Everything
+    /// after it remains opaque unit text; this core must not create a dB or Hz
+    /// parser just to choose a raw slider direction.
+    private static func leadingNumber(in display: String) -> (number: Double, suffix: String)? {
+        let bytes = Array(display.utf8)
+        guard !bytes.isEmpty else { return nil }
+
+        var end = 0
+        if bytes[end] == 43 || bytes[end] == 45 { // + or -
+            end += 1
+        }
+
+        var digits = 0
+        while end < bytes.count, isASCIIDigit(bytes[end]) {
+            end += 1
+            digits += 1
+        }
+        if end < bytes.count, bytes[end] == 46 { // .
+            end += 1
+            while end < bytes.count, isASCIIDigit(bytes[end]) {
+                end += 1
+                digits += 1
+            }
+        }
+
+        guard digits > 0,
+              let number = Double(String(decoding: bytes[..<end], as: UTF8.self)) else {
+            return nil
+        }
+        return (number, String(decoding: bytes[end...], as: UTF8.self))
+    }
+
+    private static func isASCIIDigit(_ byte: UInt8) -> Bool {
+        byte >= 48 && byte <= 57
     }
 
     private static func crossesTarget(

@@ -220,7 +220,7 @@ struct SliderIncrementWalkTests {
         ))
     }
 
-    @Test func displayTargetUsesRawChangeToContinueInTheObservedDirection() {
+    @Test func displayTargetAboveStartArrivesAfterProbeMovesToward() {
         var reads: [Reading?] = [
             Reading(value: 100, display: "100 Hz"),
             Reading(value: 103, display: "200 Hz"),
@@ -235,8 +235,9 @@ struct SliderIncrementWalkTests {
             budget: 3
         )
 
-        // Mutation caught: using a guessed Hz mapping instead of the observed
-        // raw direction sends the second request somewhere other than 104.
+        // Mutation caught: choosing a direction from an invented Hz mapping
+        // instead of Logic's rendered ordering sends the second request
+        // somewhere other than 104.
         #expect(outcome == .arrived(
             steps: 2,
             final: Reading(value: 107, display: "248 Hz")
@@ -244,7 +245,7 @@ struct SliderIncrementWalkTests {
         #expect(requestedRawValues == [101, 104])
     }
 
-    @Test func unchangedDisplayCannotEstablishADirection() {
+    @Test func displayStopsChangingBeforeTargetReportsNoProgress() {
         var reads: [Reading?] = [
             Reading(value: 100, display: "100 Hz"),
             Reading(value: 101, display: "100 Hz"),
@@ -258,13 +259,149 @@ struct SliderIncrementWalkTests {
             budget: 8
         )
 
-        // Mutation caught: continuing after an unchanged rendering invents a
-        // display-to-raw mapping the core does not have.
+        // Mutation caught: continuing after an unchanged rendering turns a
+        // saturated or stalled display into a budget-exhaustion walk.
         #expect(outcome == .noProgress(
             steps: 1,
             last: Reading(value: 101, display: "100 Hz")
         ))
         #expect(nudgeCalls == 1)
+    }
+
+    @Test func displayTargetBelowStartReversesAndArrivesNearRawDistance() {
+        var value = 302.0
+        var nudgeCalls = 0
+
+        func reading() -> Reading {
+            Reading(value: value, display: "+\((value - 240) / 10) dB")
+        }
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("+2.2 dB"),
+            read: { reading() },
+            nudge: { requestedRaw in
+                nudgeCalls += 1
+                value += requestedRaw > value ? 1 : -1
+                return true
+            },
+            budget: 64
+        )
+
+        // A +1 probe costs two extra accepted steps (up, then back down), but
+        // must not repeat the measured 302 -> 480 wrong-way rail walk.
+        #expect(outcome == .arrived(
+            steps: 42,
+            final: Reading(value: 262, display: "+2.2 dB")
+        ))
+        #expect(nudgeCalls == 42)
+    }
+
+    @Test func probeThatMovesAwayReversesAndArrives() {
+        var reads: [Reading?] = [
+            Reading(value: 100, display: "+4.0 dB"),
+            Reading(value: 101, display: "+4.1 dB"),
+            Reading(value: 100, display: "+4.0 dB"),
+            Reading(value: 99, display: "+3.8 dB"),
+        ]
+        var requestedRawValues: [Double] = []
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("+3.8 dB"),
+            read: { reads.removeFirst() },
+            nudge: { requestedRaw in requestedRawValues.append(requestedRaw); return true },
+            budget: 4
+        )
+
+        // Mutation caught: retaining the upward probe direction never lets
+        // the walk return toward a lower rendered target.
+        #expect(outcome == .arrived(
+            steps: 3,
+            final: Reading(value: 99, display: "+3.8 dB")
+        ))
+        #expect(requestedRawValues == [101, 100, 99])
+    }
+
+    @Test func displayUnitTextMismatchReportsNoProgress() {
+        var reads: [Reading?] = [
+            Reading(value: 100, display: "+2.2 dB"),
+            Reading(value: 101, display: "2.2"),
+        ]
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("+2.1 dB"),
+            read: { reads.removeFirst() },
+            nudge: { _ in true },
+            budget: 8
+        )
+
+        // Mutation caught: matching only the number treats a unit-less
+        // rendering as though it shared the target's dB ordering.
+        #expect(outcome == .noProgress(
+            steps: 1,
+            last: Reading(value: 101, display: "2.2")
+        ))
+    }
+
+    @Test func nonNumericDisplayReportsNoProgress() {
+        var reads: [Reading?] = [
+            Reading(value: 100, display: "Bypassed"),
+            Reading(value: 101, display: "Active"),
+        ]
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("Enabled"),
+            read: { reads.removeFirst() },
+            nudge: { _ in true },
+            budget: 8
+        )
+
+        // Mutation caught: an unordered rendering is not evidence that an
+        // arbitrary raw direction can reach the requested text.
+        #expect(outcome == .noProgress(
+            steps: 1,
+            last: Reading(value: 101, display: "Active")
+        ))
+    }
+
+    @Test func displayRailReportsNoProgressInsteadOfBudgetExhaustion() {
+        let rail = Reading(value: 480, display: "+24.0 dB")
+        var nudgeCalls = 0
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("+24.1 dB"),
+            read: { rail },
+            nudge: { _ in nudgeCalls += 1; return true },
+            budget: 8
+        )
+
+        // Mutation caught: a probe blocked by a real control rail must not
+        // consume the caller's entire budget.
+        #expect(outcome == .noProgress(steps: 1, last: rail))
+        #expect(nudgeCalls == 1)
+    }
+
+    @Test func displayBudgetIsAnExactNudgeLimit() {
+        var reads: [Reading?] = [
+            Reading(value: 100, display: "1.0"),
+            Reading(value: 101, display: "1.1"),
+            Reading(value: 102, display: "1.2"),
+        ]
+        var nudgeCalls = 0
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("1.4"),
+            read: { reads.removeFirst() },
+            nudge: { _ in nudgeCalls += 1; return true },
+            budget: 2
+        )
+
+        // Mutation caught: a display walk must honor the same accepted-write
+        // budget boundary as a raw-value walk.
+        #expect(outcome == .budgetExhausted(
+            steps: 2,
+            last: Reading(value: 102, display: "1.2")
+        ))
+        #expect(nudgeCalls == 2)
     }
 
     @Test func nonPositiveBudgetNeverNudges() {
