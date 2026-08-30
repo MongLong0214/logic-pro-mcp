@@ -1684,6 +1684,13 @@ extension AccessibilityChannel {
             guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
                 return nil
             }
+            // Live measurement: `열기` opens and fronts the editor; after
+            // demotion, pressing `열기` again removes it from AXWindows. The
+            // slot's open control is a toggle, so raise the known editor instead.
+            _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
+            if pluginWindowIsFront(window, runtime: runtime.ax) {
+                return AXUIElementSendable(window)
+            }
         case .none:
             break
         }
