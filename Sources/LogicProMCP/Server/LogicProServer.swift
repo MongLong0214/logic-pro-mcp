@@ -1170,18 +1170,30 @@ actor LogicProServer {
         ServerCatalog.snapshot(channelIDs: registeredChannels().map(\.id))
     }
 
+    /// Keeps startup cleanup together because both actions repair artifacts a prior process left
+    /// behind. The direct test covers the two actions here; it cannot catch deletion of this call
+    /// from `start()`, so that lifecycle link remains intentionally called out for review.
+    static func performStartupMaintenance(
+        cleanupOrphans: () -> Void,
+        recoverModifier: () -> Void
+    ) {
+        cleanupOrphans()
+        recoverModifier()
+    }
+
     func start() async throws {
         await sagaJournal.clear()
         OperationHandlerRegistry.validate()
         if let cleanupStartupArtifacts = runtimeOverrides?.cleanupStartupArtifacts {
-            cleanupStartupArtifacts()
+            Self.performStartupMaintenance(
+                cleanupOrphans: cleanupStartupArtifacts,
+                recoverModifier: { StuckModifierRecovery.recoverIfNeeded() }
+            )
         } else {
-            SMFWriter.cleanupStartupOrphanFiles()
-            // If a previous run died between a chord's key-up and its modifier-clear, macOS is
-            // still holding that modifier. This posts the clear that run owed, and posts nothing
-            // when nothing is owed — it cannot fire because of a key a user is holding. See
-            // `StuckModifierRecovery`; the symptom it addresses is discussion #458.
-            StuckModifierRecovery.recoverIfNeeded()
+            Self.performStartupMaintenance(
+                cleanupOrphans: { SMFWriter.cleanupStartupOrphanFiles() },
+                recoverModifier: { StuckModifierRecovery.recoverIfNeeded() }
+            )
         }
         let plan = runtimePlan()
         try await plan.run()

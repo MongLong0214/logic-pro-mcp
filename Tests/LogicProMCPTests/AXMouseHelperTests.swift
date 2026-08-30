@@ -126,3 +126,46 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(bare.up.flags == CGEventFlags(rawValue: 0))
     #expect(bare.modifierClear == nil)
 }
+
+@Test func axMouseHelperPostChordKeepsMarkerArmedAcrossEveryPost() throws {
+    let source = try #require(CGEventSource(stateID: .combinedSessionState))
+    let events = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x0E,
+        flags: [.maskControl, .maskShift],
+        clearModifiersAfter: true
+    ))
+    var order: [String] = []
+
+    let posted = AXMouseHelper.Runtime.postChord(
+        keyCode: 0x0E,
+        flags: [.maskControl, .maskShift],
+        arm: { _, _ in order.append("arm") },
+        disarm: { order.append("disarm") },
+        post: { _ in order.append("post") },
+        makeEvents: { _, _ in events }
+    )
+
+    #expect(posted)
+    #expect(order == ["arm", "post", "post", "post", "disarm"])
+}
+
+@Test func axMouseHelperPostChordDoesNotArmWhenItCannotBuildEvents() {
+    var armCount = 0
+    var disarmCount = 0
+    var postCount = 0
+
+    let posted = AXMouseHelper.Runtime.postChord(
+        keyCode: 0x0E,
+        flags: .maskControl,
+        arm: { _, _ in armCount += 1 },
+        disarm: { disarmCount += 1 },
+        post: { _ in postCount += 1 },
+        makeEvents: { _, _ in nil }
+    )
+
+    #expect(!posted)
+    #expect(armCount == 0)
+    #expect(disarmCount == 0)
+    #expect(postCount == 0)
+}

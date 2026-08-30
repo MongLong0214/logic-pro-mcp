@@ -62,6 +62,29 @@ enum AXMouseHelper {
             return (down, up, modifierClear)
         }
 
+        /// Posts a flagged chord inside the marker lifetime that makes an interrupted clear
+        /// recoverable. Event construction stays before `arm`: if nothing can be posted, there is
+        /// no modifier state to recover and no marker to clean up.
+        @discardableResult
+        static func postChord(
+            keyCode: CGKeyCode,
+            flags: CGEventFlags,
+            arm: (CGKeyCode, CGEventFlags) -> Void,
+            disarm: () -> Void,
+            post: (CGEvent) -> Void,
+            makeEvents: (CGKeyCode, CGEventFlags) -> (down: CGEvent, up: CGEvent, modifierClear: CGEvent?)?
+        ) -> Bool {
+            guard let events = makeEvents(keyCode, flags) else { return false }
+            arm(keyCode, flags)
+            defer { disarm() }
+            post(events.down)
+            post(events.up)
+            if let modifierClear = events.modifierClear {
+                post(modifierClear)
+            }
+            return true
+        }
+
         static let production = Runtime(
             postMouseEvent: { type, point, clickCount in
                 let source = CGEventSource(stateID: .combinedSessionState)
@@ -103,22 +126,21 @@ enum AXMouseHelper {
             sleepMicros: { usleep($0) },
             postFlaggedKeyEvent: { keyCode, flags in
                 let source = CGEventSource(stateID: .combinedSessionState)
-                guard let events = keyboardEvents(
-                    source: source,
+                return postChord(
                     keyCode: keyCode,
                     flags: flags,
-                    clearModifiersAfter: true
-                ) else { return false }
-                // Three separate posts, and a process that dies between the second and the third
-                // leaves macOS holding a modifier no physical key is holding. The marker says a
-                // chord is in flight so the next start can post the clear this run owed; see
-                // `StuckModifierRecovery` for why a marker and not a blind clear at startup.
-                StuckModifierRecovery.arm(keyCode: keyCode, flags: flags)
-                defer { StuckModifierRecovery.disarm() }
-                events.down.post(tap: .cghidEventTap)
-                events.up.post(tap: .cghidEventTap)
-                events.modifierClear?.post(tap: .cghidEventTap)
-                return true
+                    arm: { StuckModifierRecovery.arm(keyCode: $0, flags: $1) },
+                    disarm: { StuckModifierRecovery.disarm() },
+                    post: { $0.post(tap: .cghidEventTap) },
+                    makeEvents: { keyCode, flags in
+                        keyboardEvents(
+                            source: source,
+                            keyCode: keyCode,
+                            flags: flags,
+                            clearModifiersAfter: true
+                        )
+                    }
+                )
             }
         )
     }
