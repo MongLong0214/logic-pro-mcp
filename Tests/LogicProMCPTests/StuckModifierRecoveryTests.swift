@@ -8,13 +8,12 @@ private enum MarkerRemovalError: Error {
 }
 
 /// Discussion #458 — a user reported Logic becoming hard to use after running the integration:
-/// track volume moving 0.1 dB at a time, tracks and locators not draggable. That is the signature
-/// of a held Control during mouse interaction.
+/// track volume moving 0.1 dB at a time, tracks and locators not draggable. The report associated
+/// those symptoms with a held Control during mouse interaction.
 ///
-/// I could not reproduce it in normal use and still cannot. The only way the state appeared was by
-/// deliberately omitting the third event of a flagged chord — so these cases do not claim to
-/// reproduce that user's cause. They pin the window that omission proved exists: three separate
-/// posts, and a process that dies between the second and the third leaves the modifier held.
+/// These cases do not establish that report's cause. They exercise marker parsing, removal, and
+/// injected posting; they do not terminate a process, observe system modifier state, or verify
+/// event delivery.
 @Suite("StuckModifierRecovery")
 struct StuckModifierRecoveryTests {
 
@@ -27,8 +26,8 @@ struct StuckModifierRecoveryTests {
         StuckModifierRecovery.markerURL(for: pid, in: directory)
     }
 
-    @Test("markers are owned by their process in both name and payload")
-    func markerOwnershipIsPersisted() throws {
+    @Test("marker filename and payload both contain the supplied PID")
+    func markerPIDFieldsArePersisted() throws {
         let pid: Int32 = 4_242
         let directory = temporaryDirectory()
         let url = markerURL(pid, in: directory)
@@ -42,7 +41,7 @@ struct StuckModifierRecoveryTests {
     }
 
     @Test("only a known-dead marker from another process is recoverable")
-    func recoveryOwnershipDecisionIsConservative() {
+    func recoveryPIDDecisionIsConservative() {
         let selfPID: Int32 = 101
         let own = StuckModifierRecovery.Marker(keyCode: 14, flags: 0, pid: selfPID)
         let live = StuckModifierRecovery.Marker(keyCode: 14, flags: 0, pid: 102)
@@ -56,11 +55,10 @@ struct StuckModifierRecoveryTests {
             marker: dead, isAlive: { _ in false }, selfPID: selfPID))
     }
 
-    @Test("nothing is owed when no chord was in flight")
+    @Test("a no-marker scan invokes no injected post")
     func noMarkerPostsNothing() {
-        // The case that runs on every ordinary start. A recovery that posted here would fire while
-        // a user is genuinely holding Shift, which is the reason this is a marker and not a blind
-        // clear — `CGEventSource.flagsState` reports the combined state and cannot say who set it.
+        // Recovery runs on every start; this test exercises only its no-marker branch. Posting on
+        // that branch would be a blind clear while a user might be holding a physical modifier.
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         var posted: [CGKeyCode] = []
@@ -74,8 +72,8 @@ struct StuckModifierRecoveryTests {
         #expect(posted.isEmpty, "a start with no marker posted \(posted)")
     }
 
-    @Test("an armed chord that never disarmed is cleared on the next start")
-    func armedThenInterruptedIsRecovered() {
+    @Test("a stale marker reaches the injected recovery poster on the next scan")
+    func staleMarkerReachesInjectedPoster() {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let selfPID: Int32 = 101
@@ -97,7 +95,7 @@ struct StuckModifierRecoveryTests {
         )
 
         #expect(result == [14])
-        #expect(posted == [14], "the orphaned key-up was not posted")
+        #expect(posted == [14], "the injected poster did not receive the stale marker key code")
         #expect(FileManager.default.fileExists(atPath: ownURL.path),
                 "a process must retain its own in-flight marker")
         #expect(FileManager.default.fileExists(atPath: liveURL.path),
@@ -106,7 +104,7 @@ struct StuckModifierRecoveryTests {
                 "an orphaned marker survived its own recovery and will fire again next start")
     }
 
-    @Test("a completed chord owes nothing")
+    @Test("a disarmed marker does not reach the recovery poster")
     func armThenDisarmLeavesNothing() {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -126,11 +124,10 @@ struct StuckModifierRecoveryTests {
         #expect(posted.isEmpty)
     }
 
-    @Test("recovery runs once, even if the post itself brings the process down")
+    @Test("the marker is removed before the injected post callback")
     func theMarkerIsRemovedBeforeThePost() {
-        // The marker is removed BEFORE posting on purpose. If it were removed after, a crash inside
-        // the post would leave the file behind and every subsequent launch would try again — a
-        // recovery that repeats a keystroke on every start is worse than the state it recovers.
+        // Removal precedes the post by design. The untested interval between them is a loss window:
+        // if the process stops there, this marker's recovery attempt cannot happen on a later start.
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let pid: Int32 = 103
@@ -214,7 +211,7 @@ struct StuckModifierRecoveryTests {
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
 
-    @Test("a clear that cannot be built and posted is not reported as recovered")
+    @Test("an unsuccessful injected post is not reported as recovered")
     func failedClearPostIsNotReportedAsRecovered() {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -237,11 +234,10 @@ struct StuckModifierRecoveryTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
-    @Test("the recovery replays the CLEAR, never the chord")
+    @Test("marker flags are diagnostic data")
     func theMarkerCarriesFlagsForDiagnosisOnly() throws {
-        // A marker records the flags it was armed with, and the recovery must not put them back.
-        // The event it stands in for is the flag-CLEARING key-up; re-asserting Control and Shift
-        // would recreate the state this exists to remove.
+        // A marker records the requested flags. The default clear event is separately tested with
+        // zero flags; this injected-marker test does not constrain a replacement `post` closure.
         let data = try #require(
             StuckModifierRecovery.encode(
                 keyCode: 14,
@@ -250,12 +246,12 @@ struct StuckModifierRecoveryTests {
             ))
         let marker = try JSONDecoder().decode(StuckModifierRecovery.Marker.self, from: data)
         #expect(marker.flags == CGEventFlags([.maskControl, .maskShift]).rawValue,
-                "the flags were not recorded, so a reader cannot tell what was held")
+                "the requested flags were not recorded for diagnosis")
         #expect(StuckModifierRecovery.recoveryKeyCode(from: data) == 14)
         #expect(StuckModifierRecovery.recoveryKeyCode(from: Data("{}".utf8)) == nil)
     }
 
-    @Test("the production clear has no flags and retains the chord key code")
+    @Test("the default clear event has no flags and retains the supplied key code")
     func clearEventNeverReassertsTheChordFlags() throws {
         let keyCode: CGKeyCode = 14
         let event = try #require(StuckModifierRecovery.clearEvent(for: keyCode))

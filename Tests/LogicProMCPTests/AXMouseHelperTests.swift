@@ -170,6 +170,67 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(postCount == 0)
 }
 
+@Test func axMouseHelperUnmatchedMarkerEndLeavesTheMarkerAlone() {
+    let markerNesting = AXMouseHelper.ChordMarkerNesting()
+    var disarmCount = 0
+
+    markerNesting.end { disarmCount += 1 }
+
+    #expect(disarmCount == 0)
+}
+
+@Test func axMouseHelperMarkerCallbacksDoNotReenterTheChordPath() throws {
+    // `arm` and `disarm` run under a non-recursive NSLock, so calling postChord from either would
+    // hang the test. Exercise the production-safe shape instead: `arm` returns before a post
+    // callback re-enters the chord path, and `disarm` does not re-enter it.
+    let source = try #require(CGEventSource(stateID: .combinedSessionState))
+    let events = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x0E,
+        flags: .maskControl,
+        clearModifiersAfter: true
+    ))
+    let markerNesting = AXMouseHelper.ChordMarkerNesting()
+    var activeMarkerCallback: String?
+    var reentryWasOutsideMarkerCallback = false
+    var nested = false
+    var nestedChordPosted = false
+
+    let posted = AXMouseHelper.Runtime.postChord(
+        keyCode: 0x0E,
+        flags: .maskControl,
+        arm: { _, _ in
+            activeMarkerCallback = "arm"
+            defer { activeMarkerCallback = nil }
+        },
+        disarm: {
+            activeMarkerCallback = "disarm"
+            defer { activeMarkerCallback = nil }
+        },
+        post: { _ in
+            guard !nested else { return }
+            nested = true
+            reentryWasOutsideMarkerCallback = activeMarkerCallback == nil
+            nestedChordPosted = AXMouseHelper.Runtime.postChord(
+                keyCode: 0x0F,
+                flags: .maskShift,
+                arm: { _, _ in },
+                disarm: {},
+                post: { _ in },
+                makeEvents: { _, _ in events },
+                markerNesting: markerNesting
+            )
+        },
+        makeEvents: { _, _ in events },
+        markerNesting: markerNesting
+    )
+
+    #expect(posted)
+    #expect(nestedChordPosted)
+    #expect(reentryWasOutsideMarkerCallback)
+    #expect(activeMarkerCallback == nil)
+}
+
 @Test func axMouseHelperOverlappingChordsArmOnceAndDisarmAfterTheLastFinishes() throws {
     let source = try #require(CGEventSource(stateID: .combinedSessionState))
     let events = try #require(AXMouseHelper.Runtime.keyboardEvents(

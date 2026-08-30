@@ -2,22 +2,21 @@ import CoreGraphics
 import Darwin
 import Foundation
 
-/// Clears a synthetic modifier that an interrupted process left held.
+/// Attempts a zero-flags synthetic key-up from a stale chord marker; it neither establishes that
+/// a modifier remains held nor verifies event delivery.
 ///
 /// WHY THIS EXISTS
 /// ---------------
-/// A flagged chord is three posts: key-down with flags, key-up with flags, and a key-up with NO
-/// flags whose only job is to release the modifier. `AXMouseHelper.postFlaggedKeyEvent` sends all
-/// three back to back, so the sequence is correct — but it is three separate calls, and a process
-/// that dies between the second and the third leaves macOS believing Control or Shift is held while
-/// no physical key is down.
+/// `AXMouseHelper.postFlaggedKeyEvent` attempts three separate posts: key-down with the requested
+/// flags, key-up with those flags, and key-up with zero flags. The requested flags can be Control,
+/// Shift, Option, Command, or empty; this code does not observe physical key state or delivery.
+/// A process can terminate between those calls, leaving a marker that later startup code can use
+/// only as a reason to attempt a zero-flags key-up.
 ///
-/// That is not hypothetical. Discussion #458 reported Logic becoming hard to use after running the
-/// integration — track volume moving 0.1 dB at a time, tracks and locators not draggable — which is
-/// the signature of a held Control during mouse interaction. I could not reproduce it in normal use
-/// and still cannot; the only way I produced the state was by deliberately omitting the third event.
-/// So this does not claim to be that user's cause. It closes the window I found while looking,
-/// which was left open with only an acknowledgement.
+/// Discussion #458 reported Logic becoming hard to use after running the integration — track volume
+/// moving 0.1 dB at a time, tracks and locators not draggable. This code does not establish that
+/// report's cause. It narrows one possible interruption window by recording a best-effort marker,
+/// without proving that recovery is needed or reaches macOS.
 ///
 /// WHY A MARKER AND NOT A BLIND CLEAR
 /// ----------------------------------
@@ -25,28 +24,41 @@ import Foundation
 /// holding Shift, and nothing available here can tell a synthetic held flag from a physical one —
 /// `CGEventSource.flagsState` reports the combined state and cannot say who put a flag there.
 ///
-/// Each process attempts to write one PID-named marker before its outermost chord and removes it
-/// after. At startup, this code only attempts a clear after removing a parseable marker whose
-/// different PID does not currently appear live. That limits blind clears, but it does not prove a
-/// marker's provenance, its owner's lifetime, or that its modifier remains held: a PID can be
-/// reused, including across a reboot, and best-effort arming means a live process can lack its
-/// marker.
-/// A hard power loss can leave a marker but cannot leave the macOS event state held, so its
-/// surviving marker is not evidence that a clear is needed.
+/// Each process attempts to write one PID-named marker before the first tracked chord and attempts
+/// to remove it after the tracked depth returns to zero. At startup, this code attempts a clear
+/// only after removing a parseable marker whose payload PID is different and does not currently
+/// appear live. That limits blind clears, but it does not prove a marker's provenance, its owner's
+/// lifetime, or that its modifier remains held: a PID can be reused, including across a reboot,
+/// and best-effort arming means a live process can lack its marker.
+/// A marker can survive a hard power loss, but that survival is not evidence that a clear is needed.
 ///
-/// Residual limitations: PID reuse; reboot-stale markers; a marker written under a different UID
-/// or home; no proof that a modifier is still held at recovery time; and no test covering the
-/// production `kill`/`errno` behavior or actual `CGEvent` delivery. A marker that cannot be
-/// written (read-only home or sandbox) leaves the posting window as it was; the chord still runs
-/// because refusing its keystroke after a breadcrumb failure would break the feature.
+/// Residual limitations:
+/// - PID reuse; reboot-stale markers; and a marker written under a different UID or home.
+/// - Markers are unauthenticated, and the filename PID is never checked against the payload PID.
+/// - No proof that a modifier is still held at recovery time, and no test covering production
+///   `kill`/`errno` behavior or actual `CGEvent` delivery.
+/// - A marker that cannot be written leaves the posting window as it was; the chord still runs
+///   because refusing its keystroke after a breadcrumb failure would break the feature.
+/// - A failed `disarm` can leave a completed marker, and the deliberate remove-before-post window
+///   can lose a clear if the process stops after removal and before the post.
+/// - An unmatched `ChordMarkerNesting.end` is logged but does not remove a marker.
+/// - Two threads can overlap non-LIFO, leaving a marker key code from a chord that has ended. The
+///   recovery post uses zero flags, so that stale code affects the log's accuracy rather than the
+///   modifier-clear attempt: a zero-flags key-up clears modifier state independently of its key
+///   code, while a key-up for a key nobody holds releases nothing.
+/// - `ChordMarkerNesting` callbacks must not re-enter the chord path because they run under its
+///   non-recursive lock.
+/// - Production `AXMouseHelper.Runtime.postChord` and the `start()` wiring to recovery are not
+///   exercised by the injected tests.
 enum StuckModifierRecovery {
 
     /// Diagnostic data only: the chord's key code, flags, and PID. It records no UID, boot
     /// identity, process start time, or proof that the clear was not already posted.
     struct Marker: Codable, Equatable, Sendable {
         let keyCode: UInt16
-        /// Diagnostic only. The recovery always posts with NO flags, because the event it stands in
-        /// for is the flag-clearing key-up — replaying the chord's own flags would re-assert them.
+        /// Diagnostic only. The default recovery poster builds an event with zero flags, because
+        /// replaying the chord's own flags would re-assert them; an injected `post` closure is not
+        /// constrained to do so.
         let flags: UInt64
         let pid: Int32
     }
@@ -72,7 +84,8 @@ enum StuckModifierRecovery {
 
     // MARK: - Pure core
 
-    /// The key-up a recovery should post, or nil when the marker is not trustworthy.
+    /// Returns a decoded, in-range marker key code, or nil when decoding or key-width validation
+    /// fails. It does not establish the marker's provenance or trustworthiness.
     static func recoveryKeyCode(from data: Data?) -> CGKeyCode? {
         guard let marker = marker(from: data) else { return nil }
         return CGKeyCode(marker.keyCode)
@@ -97,8 +110,8 @@ enum StuckModifierRecovery {
         marker.pid != selfPID && !isAlive(marker.pid)
     }
 
-    /// Builds the final key-up without posting it, so its zero-flags contract is independently
-    /// testable and cannot drift behind the recovery tests that inject their own poster.
+    /// Builds the default zero-flags key-up without posting it. This construction can be tested
+    /// directly, but injected recovery tests do not constrain a replacement production poster.
     static func clearEvent(for keyCode: CGKeyCode) -> CGEvent? {
         let source = CGEventSource(stateID: .combinedSessionState)
         guard let clear = CGEvent(
@@ -123,9 +136,9 @@ enum StuckModifierRecovery {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// The chord finished, including its clearing event, so remove its marker. If the process dies
-    /// after the clear but before this removal, a completed marker can survive without a matching
-    /// log line and a later start cannot distinguish it from an interrupted chord.
+    /// Attempts to remove the marker after the chord path has attempted its posts. A failed removal
+    /// or a process stop before removal can leave a completed marker that later startup cannot
+    /// distinguish from an interrupted chord.
     static func disarm(at url: URL? = defaultURL) {
         guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
         _ = removeMarker(at: url)

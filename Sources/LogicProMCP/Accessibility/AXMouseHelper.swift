@@ -15,11 +15,22 @@ import Foundation
 enum AXMouseHelper {
     /// Coordinates the one marker file that this process uses for flagged chords.
     ///
-    /// A nested chord deliberately keeps the outer chord's key code and flags in that file: the
-    /// nested chord's clear is not recorded. The outer clear is the one still owed after the
-    /// nested work completes; recording both would require a marker per chord and recovery that
-    /// posts several keystrokes. Keep the lock held while changing the marker so another chord
-    /// cannot post in the gap between this decision and the corresponding file operation.
+    /// The first `begin` at depth zero calls `arm` with its payload; later begins do not call it.
+    /// If arming writes a marker, that payload remains until the depth returns to zero. This
+    /// intentionally does not record several in-flight chords. One marker could contain several
+    /// records, but recovery that posts several keystrokes is a broader action than this feature's
+    /// one best-effort clear attempt.
+    ///
+    /// Overlapping calls need not end LIFO, so the retained key code can name a call that has
+    /// already ended. The recovery event has zero flags: its flags release the modifier state,
+    /// not its virtual key code. A key-up naming a stale key still carries that zero-flags clear,
+    /// while a key-up for a key nobody holds releases nothing; the stale key makes the recovery
+    /// log less accurate, not the modifier-clear attempt less correct.
+    ///
+    /// `arm` and `disarm` run under this non-recursive `NSLock` and MUST NOT call back into the
+    /// chord path; the production `StuckModifierRecovery.arm` and `.disarm` callbacks are file
+    /// operations. Holding the lock across `arm` preserves the required arm-before-first-post
+    /// ordering.
     final class ChordMarkerNesting: @unchecked Sendable {
         private let lock = NSLock()
         private var depth = 0
@@ -42,16 +53,13 @@ enum AXMouseHelper {
             lock.lock()
             defer { lock.unlock() }
 
-            // Clamped rather than `precondition`. `end` is reached only from the `defer` that
-            // follows its own `begin`, so a zero depth here would be a programmer error — but the
-            // trap costs the whole server, and this module's own rule is that a bookkeeping
-            // failure must not take the feature down with it. Disarm and log instead: an
-            // unbalanced end is a bug worth seeing, not worth crashing a user's session over.
+            // A zero depth has no marker ownership to release. Logging and returning avoids
+            // clearing a marker that another caller wrote while still leaving the imbalance
+            // visible without terminating the server.
             guard depth > 0 else {
                 Log.warn(
-                    "chord marker disarmed without a matching arm — clearing it anyway",
+                    "chord marker end without a matching begin — leaving the marker untouched",
                     subsystem: "cgEvent")
-                disarm()
                 return
             }
             depth -= 1
@@ -113,10 +121,10 @@ enum AXMouseHelper {
             return (down, up, modifierClear)
         }
 
-        /// Posts a flagged chord while a best-effort marker is present. A later start can use that
-        /// marker to attempt a clear after an interruption, but arming can fail and recovery
-        /// deliberately removes the marker before posting. Event construction stays before `arm`
-        /// so no marker is written when there is no event sequence to post.
+        /// Attempts to arm a best-effort marker before posting a flagged chord. Arming can fail,
+        /// so a marker need not exist; a later start can only use one that remains to attempt a
+        /// clear after an interruption. Event construction stays before `arm` so no marker is
+        /// attempted when there is no event sequence to post.
         @discardableResult
         static func postChord(
             keyCode: CGKeyCode,
