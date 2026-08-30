@@ -73,6 +73,7 @@ Also open, outside the ADR set:
 | #448 | OPEN | layout readback is deliverable; colour and reorder need a definition of "verified" for a write nothing can read back |
 | #678 | closed | the drift guard and this file's update rule shipped in #684 |
 | #683 | OPEN | external report — MCU feedback from Logic Pro Creator Studio wedges the loop; four hypotheses refuted or weakened by measurement, blocked on a `sample` from the reporter's host |
+| #724 | OPEN | fixed in the pull request that adds this row — `plugins.set_param_verified` succeeded once per process, because acquisition pressed a menu-opening control, left a popup that blocks every AppleEvent, and re-pressed a TOGGLE that closed the window it was trying to re-acquire. Measured and fixed 2026-08-31; four consecutive calls of each verified write reach State A |
 | #685 | closed | fixed in this pull request — the nudge loop no longer abandons a write on one failed AX read |
 
 ### Three reopen reasons, checked rather than inferred
