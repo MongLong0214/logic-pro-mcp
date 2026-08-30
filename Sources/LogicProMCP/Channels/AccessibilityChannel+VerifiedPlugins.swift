@@ -1681,10 +1681,9 @@ extension AccessibilityChannel {
         case .ambiguous:
             return nil
         case let .unique(window):
-            // A verified unique editor is already the requested acquisition.
-            // Re-pressing the slot can surface its chooser menu, which leaves a
-            // popup that blocks Logic's AppleEvent handler; reuse the window.
-            return AXUIElementSendable(window)
+            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
+                return nil
+            }
         case .none:
             break
         }
@@ -1720,6 +1719,24 @@ extension AccessibilityChannel {
             }
         }
         return nil
+    }
+
+    private static func demotePluginWindowBeforeAcquisition(
+        _ window: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        let mainCleared = AXHelpers.setAttribute(
+            window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime.ax
+        )
+        let focusCleared = AXHelpers.setAttribute(
+            window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime.ax
+        )
+        if mainCleared, focusCleared, !pluginWindowIsFront(window, runtime: runtime.ax) {
+            return true
+        }
+        guard let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime),
+              AXHelpers.performAction(arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax) else { return false }
+        return !pluginWindowIsFront(window, runtime: runtime.ax)
     }
 
     private static func pluginWindowIsFront(
