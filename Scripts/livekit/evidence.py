@@ -520,7 +520,17 @@ def _same_modal_window(panel, window, panel_count, modal_count):
             or (panel_count == 1 and modal_count == 1))
 
 
-def blocking_modal(lister=None, ax_lister=None):
+# kAXErrorCannotComplete. Measured 2026-08-31: a scan taken while Logic was busy answering
+# `system.refresh_cache` came back cannot-tell with `AX status -25204`, and five scans a moment
+# later were all clean. That code means the request did not finish in time, which is a statement
+# about timing and not about the screen — so it is the ONE error worth asking again about. Every
+# other failure stays cannot-tell on the first answer: a scan that failed for a reason other than
+# a timeout has no reason to succeed on a retry, and retrying it would only blur a real refusal.
+AX_ERROR_CANNOT_COMPLETE = -25204
+_MODAL_RETRY_DELAY_SEC = 0.35
+
+
+def blocking_modal(lister=None, ax_lister=None, _attempt=0):
     """Describe a detected Logic blocker, `None` after a clear scan, or explicit cannot-tell.
 
     CoreGraphics is still the screen-side signal: it observes the rendered modal-panel level without
@@ -557,9 +567,12 @@ def blocking_modal(lister=None, ax_lister=None):
         raw_signals = ax_lister() if ax_lister is not None else _production_ax_modal_signals()
         signals = _normal_ax_modal_signals(raw_signals)
     except _ModalReadError as exc:
-        return _modal_cannot_tell("accessibility", str(exc))
+        return _modal_retry_or_give_up(
+            _modal_cannot_tell("accessibility", str(exc)), lister, ax_lister, _attempt)
     except Exception as exc:  # noqa: BLE001 - avoid making an AX outage look like no sheet
-        return _modal_cannot_tell("accessibility", f"AX modal query failed: {exc!r}")
+        return _modal_retry_or_give_up(
+            _modal_cannot_tell("accessibility", f"AX modal query failed: {exc!r}"),
+            lister, ax_lister, _attempt)
 
     if signals["sheets"]:
         sheet = signals["sheets"][0]
@@ -577,6 +590,26 @@ def blocking_modal(lister=None, ax_lister=None):
         return {"state": "detected", "kind": "modal_window", "signal": "ax_modal",
                 "title": window.get("title") or "", "pid": window.get("pid")}
     return None
+
+
+def _modal_retry_or_give_up(answer, lister, ax_lister, attempt):
+    """Ask once more, but ONLY when the scan timed out.
+
+    `kAXErrorCannotComplete` (-25204) means the AX request did not finish in time — a statement
+    about timing, not about the screen. Measured 2026-08-31: a scan taken while Logic was busy
+    answering `system.refresh_cache` returned cannot-tell with that code, and five scans a moment
+    later were all clean, so a run was marked unusable by a busy instant rather than by a blocker.
+
+    Every other failure keeps its first answer. A scan that failed for a reason other than a
+    timeout has no reason to succeed on a retry, and retrying it would blur a real refusal into a
+    pass. Test seams never retry: a seam's answer is the answer under test.
+    """
+    if attempt != 0 or lister is not None or ax_lister is not None:
+        return answer
+    if f"{AX_ERROR_CANNOT_COMPLETE}" not in str(answer.get("reason", "")):
+        return answer
+    time.sleep(_MODAL_RETRY_DELAY_SEC)
+    return blocking_modal(_attempt=1)
 
 
 def _displays():
