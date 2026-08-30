@@ -630,6 +630,7 @@ struct Issue290SnapshotRedactionTests {
         "logic-12.x-desktop-en-track-headers.json",
         "logic-12.x-desktop-ko-window.json",
         "logic-12.x-desktop-ko-control-bar.json",
+        "logic-12.x-desktop-en-control-bar.json",
     ]
 
     static func fixtureURL(_ name: String) -> URL {
@@ -950,6 +951,58 @@ struct Issue290AtlasDiffTests {
 
         // And the rail alone still is not enough, or the union above proved nothing.
         #expect(AtlasDiff.verdict(baselines: [(rail, rail)]) == .failClosedMutation)
+    }
+
+    @Test("the control bar is covered in both languages, and the pair is not drift")
+    func theControlBarCoversBothLocales() throws {
+        // The last criterion with an environment constraint: it needed Logic's language changed to
+        // capture. `Control Bar` in English against `컨트롤 막대` in Korean — the same bar, and the
+        // English one resolves through `getControlBar` exactly as the Korean one does, because the
+        // capture uses the product's own discriminator rather than a description match.
+        let en = try load("logic-12.x-desktop-en-control-bar.json")
+        let ko = try controlBarBaseline()
+        #expect(en.scope == "Control Bar")
+        #expect(ko.scope == "컨트롤 막대")
+
+        for (name, document) in [("en", en), ("ko", ko)] {
+            let scored = try #require(AtlasDiff.confidences(in: document)[.controlBar],
+                                      "\(name) control bar scored nothing")
+            #expect(scored >= 0.6, "\(name) scored \(scored)")
+            #expect(try #require(AtlasDiff.confidences(in: document)[.transportPlayButton]) >= 0.6,
+                    "\(name) does not cover the play control")
+        }
+
+        // And diffing the two must not read as UI drift — the same trap the rail pair pins. A gate
+        // that fires on its operator's language is not measuring Logic.
+        let drifts = AtlasDiff.between(baseline: ko, current: en)
+        let moved = drifts.filter { $0.status != .stable }
+            .map { "\($0.selectorID) \($0.status)" }.joined(separator: ", ")
+        #expect(moved.isEmpty, "changing Logic's language read as drift: \(moved)")
+    }
+
+    @Test("a selector is scored only in the container it addresses")
+    func selectorsAreScoredInTheirOwnScope() throws {
+        // Production supplies the scope at the call site — `findTrackArmButton` searches a track
+        // header, so the bar's global Record button is never a candidate. `confidences` scores a
+        // whole document, so it has to be told the same thing or it asks a selector a question it
+        // was not written for.
+        let bar = try controlBarBaseline()
+        let rail = try baseline()
+        #expect(Set(AtlasDiff.selectors(for: bar).map(\.id)) == [.controlBar, .transportPlayButton])
+        #expect(!AtlasDiff.selectors(for: rail).map(\.id).contains(.controlBar))
+
+        // A window capture holds both, so it scores everything.
+        let window = try windowBaseline()
+        #expect(AtlasDiff.selectors(for: window).count == AtlasDiff.adoptedSelectors.count)
+
+        // And a scope nothing recognises scores NOTHING. Scoring everything there would put the
+        // whole set back into a container this code has never identified — the widening this
+        // filter exists to stop, arriving through the door marked "unknown".
+        let unknown = AXSnapshot.Document(
+            logicVersion: "12.x", locale: "ko", scope: "Vintage Warmer",
+            capturedFrom: "ax", root: bar.root)
+        #expect(AtlasDiff.selectors(for: unknown).isEmpty)
+        #expect(AtlasDiff.confidences(in: unknown).isEmpty)
     }
 
     @Test("the control bar losing its name stops a transport mutation")

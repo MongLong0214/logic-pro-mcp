@@ -1,0 +1,258 @@
+{
+  "capturedFrom" : "ax",
+  "locale" : "en",
+  "logicVersion" : "12.x",
+  "root" : {
+    "children" : [
+      {
+        "children" : [
+          {
+            "children" : [
+
+            ],
+            "description" : "len:12 latin+space",
+            "help" : "len:181 latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+              {
+                "children" : [
+
+                ],
+                "description" : "bar",
+                "role" : "AXSlider",
+                "valueRange" : "4...6"
+              },
+              {
+                "children" : [
+
+                ],
+                "description" : "beat",
+                "role" : "AXSlider",
+                "valueRange" : "0...2"
+              }
+            ],
+            "description" : "len:17 latin+space",
+            "help" : "len:184 latin+punct+space",
+            "role" : "AXGroup"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "Tempo",
+            "help" : "record click tempo play new rec val l m | len:156 latin+punct+space",
+            "role" : "AXSlider",
+            "valueRange" : "5...990"
+          },
+          {
+            "children" : [
+
+            ],
+            "help" : "len:216 latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:14 latin+space",
+            "help" : "len:186 latin+punct+space",
+            "role" : "AXPopUpButton"
+          },
+          {
+            "children" : [
+
+            ],
+            "description" : "len:13 latin+space",
+            "help" : "len:142 latin+punct+space",
+            "role" : "AXPopUpButton"
+          }
+        ],
+        "description" : "len:11 latin+space",
+        "role" : "AXGroup"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Cycle",
+        "help" : "record cycle play rec l | len:147 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:17 latin+space",
+        "help" : "len:146 latin+punct+space",
+        "role" : "AXButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "record tempo rec m | len:20 latin+space",
+        "help" : "content record tempo mute rec l m | len:132 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Record",
+        "help" : "record tracks track read rec l m | len:93 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Play",
+        "help" : "playhead position position cycle play l m | len:130 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:15 latin+space",
+        "help" : "len:92 latin+punct+space",
+        "role" : "AXButton"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "l | len:7 latin",
+        "help" : "record new rec l | len:102 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:5 latin",
+        "help" : "instrument m | len:64 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Solo",
+        "help" : "region play solo l | len:63 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:8 latin+space",
+        "help" : "length record click open play rec ch l m | len:166 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "metronome click l m | len:15 latin+space",
+        "help" : "metronome record click tempo play rec l m | len:141 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Library",
+        "help" : "library preset play ch l m | len:181 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Inspector",
+        "help" : "inspector setting region volume track edit view pan ch l m | len:190 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "l | len:10 latin+space",
+        "help" : "inspector window open l | len:112 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "bar l | len:7 latin",
+        "help" : "bar ch l | len:92 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Smart Controls",
+        "help" : "smart controls edit ch l m | len:151 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Mixer",
+        "help" : "mixer track edit open ch l m | len:190 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "edit | len:7 latin",
+        "help" : "session player audio track edit file play l | len:154 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "edit list l | len:12 latin+space",
+        "help" : "marker event tempo edit list midi view ch l m | len:112 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:9 latin+space",
+        "help" : "create track edit view | len:88 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "Loop Browser",
+        "help" : "loop browser record loop rec l | len:78 latin+punct+space",
+        "role" : "AXCheckBox"
+      },
+      {
+        "children" : [
+
+        ],
+        "description" : "len:8 latin",
+        "help" : "setting import audio file l m | len:126 latin+punct+space",
+        "role" : "AXCheckBox"
+      }
+    ],
+    "description" : "Control Bar",
+    "help" : "len:168 latin+punct+space",
+    "role" : "AXGroup"
+  },
+  "scope" : "Control Bar"
+}

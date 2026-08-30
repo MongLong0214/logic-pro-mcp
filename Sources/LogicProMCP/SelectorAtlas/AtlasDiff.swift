@@ -28,6 +28,44 @@ enum AtlasDiff {
         ]
     }
 
+    /// Which container a selector addresses, so it is not scored outside it.
+    ///
+    /// A selector is written for a scope, and production supplies that scope at the call site:
+    /// `findTrackArmButton` searches a TRACK HEADER, so the control bar's global Record button is
+    /// never in its candidate set. #628 established the same thing for Solo — "Solo matches TWENTY
+    /// checkboxes, one in the Control Bar and nineteen track buttons; scoping to the bar makes it
+    /// unique."
+    ///
+    /// `confidences` scores across a whole document, so without this it asks a selector a question
+    /// it was not written for. Measured 2026-08-30 the moment an English control-bar baseline
+    /// existed: the arm toggle matches `Record` by prefix and the transport's Record button carries
+    /// exactly that description, so diffing the two locales' control bars reported
+    /// `trackHeaderArmToggle changed` — a drift in nothing, produced by scoring a track selector in
+    /// a bar. Korean hid it only because `녹음` is not a prefix of `녹음 활성화`.
+    static func scopeOf(_ id: SelectorID) -> ScopeKind {
+        switch id {
+        case .controlBar, .transportPlayButton: .controlBar
+        default: .trackHeaderRail
+        }
+    }
+
+    enum ScopeKind: Equatable, Sendable { case controlBar, trackHeaderRail }
+
+    /// The selectors a document may be scored against, from what it says its scope is.
+    ///
+    /// A `window` capture holds both, so it scores everything. A scope nothing recognises scores
+    /// nothing rather than everything — an unknown container is not a reason to ask every question.
+    static func selectors(for document: AXSnapshot.Document) -> [SemanticSelector] {
+        if document.scope == "window" { return adoptedSelectors }
+        let kind: ScopeKind? =
+            AXLocalePolicy.controlBarGroupLabel.matches(document.scope, mode: .exactStrict)
+                ? .controlBar
+                : (AXLocalePolicy.trackHeadersDescription.matches(document.scope, mode: .exactStrict)
+                    ? .trackHeaderRail : nil)
+        guard let kind else { return [] }
+        return adoptedSelectors.filter { scopeOf($0.id) == kind }
+    }
+
     /// Selectors that name ONE thing, not one-per-row.
     ///
     /// How many there should be is part of what a selector means, and coverage only asks a question
@@ -80,7 +118,7 @@ enum AtlasDiff {
     static func confidences(in document: AXSnapshot.Document) -> [SelectorID: Double] {
         let all = candidates(in: document.root)
         var out: [SelectorID: Double] = [:]
-        for selector in adoptedSelectors {
+        for selector in selectors(for: document) {
             let best = all.map { confidence(of: $0.candidate, against: selector) }.max() ?? 0
             // Absent, not zero. `drift` distinguishes "scored 0" from "not present at all", and the
             // second is what a selector that vanished from the tree looks like.
