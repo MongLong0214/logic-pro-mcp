@@ -68,6 +68,86 @@ MARKER_SUFFIX = ".json"
 MARKER_KEY_CODE = 56
 MARKER_FLAGS = 1 << 17
 
+# This is deliberately read from the product policy instead of spelling this host's Korean label
+# into the harness. The probe receives the entire exact-match family, so a localised run measures
+# the same control-bar identity the product uses without pretending English is universal.
+CONTROL_BAR_LABELS = E.label_set("controlBarGroupLabel")
+CONTROL_VALUES_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "ax_control_bar_control_values.swift")
+CONTROL_VALUES_TOOL = os.path.join(ev.dir, "ax_control_bar_control_values")
+control_values_build = None
+
+
+def control_bar_control_values():
+    """Read every control-bar AXCheckBox/AXButton as `AXDescription -> AXValue`, or fail closed."""
+    global control_values_build
+    if not (isinstance(CONTROL_BAR_LABELS, list) and CONTROL_BAR_LABELS
+            and all(isinstance(label, str) and label.strip() for label in CONTROL_BAR_LABELS)):
+        return {"ok": False, "error": "AXLocalePolicy.controlBarGroupLabel could not be read"}
+    if control_values_build is None:
+        control_values_build = subprocess.run(
+            ["swiftc", "-O", CONTROL_VALUES_SOURCE, "-o", CONTROL_VALUES_TOOL],
+            capture_output=True, text=True,
+        )
+    if control_values_build.returncode != 0:
+        return {
+            "ok": False,
+            "error": "the direct AX control-bar reader did not compile",
+            "stderr": (control_values_build.stderr or "")[:400],
+        }
+    result = subprocess.run([CONTROL_VALUES_TOOL, json.dumps(CONTROL_BAR_LABELS, ensure_ascii=False)],
+                            capture_output=True, text=True)
+    try:
+        read = json.loads(result.stdout or "{}")
+    except ValueError:
+        read = {"ok": False, "error": "the direct AX control-bar reader did not emit JSON",
+                "raw": (result.stdout or result.stderr)[:400]}
+    if not isinstance(read, dict):
+        read = {"ok": False, "error": "the direct AX control-bar reader emitted a non-object"}
+    read["returncode"] = result.returncode
+    return read
+
+
+def control_bar_values_are_unchanged(witness):
+    """The map is evidence only when both complete reads name a non-empty identical control set."""
+    if not isinstance(witness, dict):
+        return False
+    before = witness.get("before")
+    after = witness.get("after")
+    if not (isinstance(before, dict) and isinstance(after, dict)
+            and before.get("ok") is True and after.get("ok") is True
+            and before.get("returncode") == 0 and after.get("returncode") == 0):
+        return False
+    before_values = before.get("controls")
+    after_values = after.get("controls")
+    return (isinstance(before_values, dict) and isinstance(after_values, dict)
+            and bool(before_values) and bool(after_values)
+            and before.get("control_count") == len(before_values)
+            and after.get("control_count") == len(after_values)
+            and before_values == after_values)
+
+
+def a_real_control_value_changed(witness):
+    """Copy the raw AX observation and alter one read value, preserving the observed shape."""
+    counterexample = json.loads(json.dumps(witness, ensure_ascii=False))
+    after = counterexample.get("after") if isinstance(counterexample, dict) else None
+    values = after.get("controls") if isinstance(after, dict) else None
+    if not isinstance(values, dict) or not values:
+        return counterexample
+    description = next(iter(values))
+    value = values[description]
+    if isinstance(value, bool):
+        values[description] = not value
+    elif isinstance(value, (int, float)):
+        values[description] = value + 1
+    elif isinstance(value, str):
+        values[description] = value + " (changed)"
+    else:
+        # The direct reader only accepts JSON scalar AXValues. This is defensive: a new scalar
+        # shape must still differ in exactly one map entry rather than turn into a structural case.
+        values[description] = repr(value) + " (changed)"
+    return counterexample
+
 
 def marker_path(pid):
     """The same filename construction as `StuckModifierRecovery.markerURL(for:in:)`."""
@@ -213,9 +293,13 @@ ev.note("458/initial-marker-directory-state", initial_state)
 if not (no_modal and empty_marker_directory):
     sys.exit(finish())
 
-# A visual guard is required by the live-evidence format, but it is intentionally not the primary
-# witness.  The primary witness below is the actual marker file.  The quiet Control Bar is only a
-# narrow check that the zero-flags key-up did not make a visible UI change while this run was recorded.
+# The two captures and recording remain useful context: they show whether the control bar was idle
+# before this run.  They are not the recovery side-effect witness. Measured on the settled 10,24,
+# 1900,58 region, three idle captures were byte-identical, yet before/after recovery differed in
+# exactly 12 Retina columns (six points), window x=1065...1070, at the right edge of the LCD's
+# `박자표` / `조표` AXPopUpButton (frame 1012,63 63x23). That is a real chevron/focus-ring redraw,
+# but pixels cannot distinguish it from a pressed key, so the AX map below is the control for this
+# question. Do not reinstate a recovery `ev.visual(...)` comparison over this band.
 arrange_window = E.logic_window()
 window_ready = prove(
     "458/precondition-an-arrange-window-is-visible-for-the-recording",
@@ -259,16 +343,23 @@ quiet_control = prove(
                       and observed.get("first_hash") == observed.get("second_hash")),
     quiet,
     {"first_settled": True, "second_settled": True, "first_hash": "before", "second_hash": "after"},
-    "two idle captures of the Control Bar are identical, so a later visual difference is attributable",
-    "start transport playback: the control bar changes and this negative visual control turns red",
+    "two idle captures of the Control Bar are identical, so the recording starts from a quiescent UI",
+    "start transport playback: the transport readout genuinely moves and this idle precondition turns red",
 )
-if not quiet_control:
+# Evidence requires one visual assertion. This one is deliberately only the idle precondition: the
+# transport readout would genuinely move under playback, and it says nothing about startup recovery.
+quiet_visual = ev.visual(
+    "458/precondition-the-control-bar-is-visually-quiet-before-recovery",
+    quiet_before["file"], quiet_after["file"], band, expect_change=False, subject=band_subject,
+    why="the transport readout would move during playback; this establishes only that the retained "
+        "recording context is idle before the artifact starts",
+)
+if not (quiet_control and quiet_visual):
     sys.exit(finish())
 
 recording = ev.record_screen(seconds=45)
 visual_before = ev.shot("458/before-startup-recovery", settle_region=band,
                         window_title=arrange_window["title"])
-visual_after = None
 cleanup = []
 
 try:
@@ -292,8 +383,12 @@ try:
         raise RuntimeError("the waited-for child PID was live again before its marker could be planted")
 
     dead_marker = plant(marker_path(dead_pid), marker_data(dead_pid))
+    control_values_before = control_bar_control_values()
+    ev.note("458/control-bar-AXValues-before-startup-recovery", control_values_before)
     dead_result = start_release_artifact(dead_marker)
     dead_result.update(dead_owner)
+    control_values_after = control_bar_control_values()
+    ev.note("458/control-bar-AXValues-after-startup-recovery", control_values_after)
     prove(
         "458/a-marker-owned-by-a-dead-pid-is-cleared-on-artifact-start",
         lambda observed: (observed.get("health_responded") is True
@@ -305,6 +400,21 @@ try:
         "the release artifact removes a parseable marker whose different owner is no longer live",
         "remove `StuckModifierRecovery.recoverIfNeeded()` from `LogicProServer.start()`: the marker "
         "remains after startup",
+    )
+    control_value_observation = {"before": control_values_before, "after": control_values_after}
+    # This is a raw observation plus a same-shaped counterexample, as in #290: only one real
+    # AXValue is changed. The predicate therefore rejects a transport press because that map entry
+    # moved, not because a required field was removed or the reader was made structurally invalid.
+    prove(
+        "458/the-zero-flags-recovery-does-not-change-control-bar-controls",
+        control_bar_values_are_unchanged,
+        control_value_observation,
+        a_real_control_value_changed(control_value_observation),
+        "the recovery's only possible input is a zero-flags key-up; a key that pressed any transport "
+        "button or checkbox would change its AXDescription-to-AXValue map, which is identical before "
+        "and after the startup recovery",
+        "post a key-down or non-zero-flags event from recovery: a transport control's AXValue changes "
+        "and this map comparison turns red",
     )
     # Keep each case independent even on a broken binary.  This removes only the unchanged marker
     # `plant` recorded above; a replacement is left in place and makes restoration fail loudly.
@@ -378,15 +488,11 @@ finally:
     ev.restored("458/remove-only-harness-owned-markers", restored,
                 f"initial={initial_state!r} restored={restored_state!r} cleanup={cleanup!r}")
 
-    visual_after = ev.shot("458/after-startup-recovery", settle_region=band,
-                           window_title=arrange_window["title"])
-    ev.visual(
-        "458/the-zero-flags-recovery-does-not-visibly-alter-the-control-bar",
-        visual_before["file"], visual_after["file"], band, expect_change=False,
-        subject=band_subject,
-        why="the recovery's only possible input is a zero-flags key-up; it must not visibly press a "
-        "key or alter this already-proven-quiet control bar",
-    )
+    # Keep the pre/post captures in the evidence bundle, but intentionally do not compare them with
+    # `ev.visual`: the measured six-point LCD chevron/focus redraw is a real pixel difference that
+    # cannot answer whether recovery pressed a control. The AXValue map above is that control.
+    ev.shot("458/after-startup-recovery", settle_region=band,
+            window_title=arrange_window["title"])
     ev.stop_recording(recording)
 
 sys.exit(finish())
