@@ -32,6 +32,40 @@ A pure/CI core **cannot verify note-independence**; any positive `exactMatch` it
 ## E0 (CI, no Logic) — rejection-only + non-forgeability + no-positive-type
 Under the debug seam, build a `testFixture` and assert: all rejection cases (3a–f) + O→E-copy (4) + foreign-notes (5) yield non-matching verdicts (3e uses the seam-only corrupted-fixture maker; 3f is the PPQ guard); **plus** the type has no `.exactMatch` case (compile-level — positive match impossible); **plus** release DCE (0 seam symbols). **No positive-grant control** (removed by design — a note-identical fixture proves "the seam was called," not independence).
 
+## E1–E5 (live) — defined 2026-08-30
+
+Named in the GO lines below and nowhere else until now. A gate that exists only as a letter is a
+gate anyone can declare passed, so each is written here as something a run either did or did not
+do. The mapping is read off the two GO glosses, which agree where they overlap (E3, E5).
+
+- **E1 — a coordinate-free managed-temp export exists.** A `.mid` is produced at a path this
+  repository registered before the run, by a route that actuates no screen coordinate. Refuses on
+  an arbitrary user file: the artifact has to come from the surface under test.
+- **E2 — it round-trips.** `SMFReader.parse` of that file yields the notes the region holds. E1
+  says a file appeared; E2 says it means something.
+- **E2c — write-oracle fidelity.** The authored notes that reach the comparison are the SAME value
+  that was written, and they were sealed BEFORE the read began. Concretely: the
+  `[SMFWriter.NoteEvent]` used to build the imported `.mid` is the value bound into the proof, its
+  content binding is computed over that value, and the proof exists before the first AX read of the
+  region. A proof assembled after the read cannot satisfy this however equal its contents are —
+  temporal commitment is the property, not equality.
+- **E3 — observed acquisition completes.** The Event-List snapshot is `complete`: the number of
+  FULLY POPULATED rows equals `AXRows.count`. This is the hollow-row trap measured on
+  2026-08-10 — off-screen rows read `Status` only, so counting rows says 64 and dropping empties
+  says 32, and both are wrong. A run that verifies against an incomplete observation is comparing
+  against a subset it cannot name.
+- **E4 — manual-edit mismatch (non-tautology).** After a match, one note is changed in Logic and
+  the same comparison must return `.mismatch` naming it. Without this, a match proves the two sides
+  were computed, not that they could have disagreed — the control that makes the grant mean
+  something.
+- **E5 — region-identity negative.** A proof bound to region A, compared against an observation of
+  region B, is refused rather than matched. Guard (c) already implements this; E5 is the live
+  demonstration that the binding survives a real region swap.
+
+E4 and E5 are the two that can fail while everything looks right, and they are the reason
+`GO_write_oracle` is not simply "E2c". A run that cannot show its comparison failing has not shown
+it working.
+
 ## R2 acceptance criteria (live, later) — where the positive grant lives
 - **Named live-ingestion boundary** derives `E`'s notes from the independent source + a real temporal commitment (write-oracle: authored intent sealed before the AX read; dual-observation: distinct `C_alt` surface), making O→E structurally impossible; reintroduces `.exactMatch` and grants it only then, behind the qualified provider + public API.
 - **`GO_dual = E0 ∧ E1 ∧ E2 ∧ E3 ∧ E5`:** coordinate-free managed-temp export exists + round-trips + observed acquisition completes + region-identity negative.

@@ -44,6 +44,25 @@ The observed side needs a readback surface, not a public operation. `EventListRe
 is one and is measured reading a real note table (#293 / #712): ten checks clean on a Korean Logic,
 both recorded notes returned, eight columns bound.
 
+### The gate this ticket must pass
+
+The PRD states it directly, and it is not the export gate:
+
+```
+GO_write_oracle = E0 ∧ E2c ∧ E3 ∧ E4 ∧ E5      (no export needed)
+```
+
+| gate | what this run has to show |
+|------|---------------------------|
+| E0 | CI, no Logic: every rejection case still refuses, an O→E copy is still not a match, and release holds 0 seam symbols |
+| E2c | the authored `[SMFWriter.NoteEvent]` bound into the proof is the value that was WRITTEN, and the proof existed before the first AX read — temporal commitment, not equality |
+| E3 | the Event-List snapshot is `complete`: fully populated rows == `AXRows.count`, not row count alone |
+| E4 | after a match, change one note in Logic and the same comparison returns `.mismatch` naming it |
+| E5 | a proof bound to region A against an observation of region B is refused |
+
+E4 and E5 are the ones that can fail while everything looks right. A run that cannot show its
+comparison failing has not shown it working.
+
 ### What actually blocks T4
 
 `IndependentExpectedSeam` is inside `#if QUALIFICATION_FAULT_SEAM`, so a release build's
