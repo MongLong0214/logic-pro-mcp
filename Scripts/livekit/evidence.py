@@ -7,6 +7,10 @@ without it.
 
 What it refuses to let you record:
 
+- **A check made through a blocking modal.** `blocking_modal()` reads the CoreGraphics window list,
+  not the AX tree being exercised, and every check records whether such a window was present at the
+  instant the check entered the document. A modal blocks Logic as a whole, so AX values read through
+  it are not evidence about the affordance they appear to describe.
 - **An unsettled capture.** A screenshot taken while Logic is still redrawing shows a state nobody was
   ever in. `shot()` takes frames until two consecutive ones are byte-identical, and marks the record
   `settled: false` if they never converge.
@@ -167,6 +171,23 @@ def _running_harness_name():
 ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック"]
 
 
+def _is_logic_owned_window(window):
+    """Whether a CoreGraphics window belongs to Logic, including its measured Korean owner spelling."""
+    # Measured 2026-08-17: with Logic running in Korean, `kCGWindowOwnerName` comes back as
+    # "Logic Pro" — a NO-BREAK SPACE — while English and Japanese give an ordinary space.
+    # An exact compare therefore found ZERO Logic windows on a Korean Logic, and every capture
+    # in the run recorded `window: null` while Logic was plainly on screen.
+    owner = (window.get("kCGWindowOwnerName") or "").replace(" ", " ")
+    return owner == "Logic Pro"
+
+
+def _on_screen_windows(Quartz):
+    """The CoreGraphics window list both on-screen window readers use."""
+    return Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
+        Quartz.kCGNullWindowID)
+
+
 def logic_window(title_contains=None):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
 
@@ -186,16 +207,9 @@ def logic_window(title_contains=None):
         import Quartz
     except ImportError:
         return None
-    wins = Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
-        Quartz.kCGNullWindowID)
+    wins = _on_screen_windows(Quartz)
     for w in wins or []:
-        # Measured 2026-08-17: with Logic running in Korean, `kCGWindowOwnerName` comes back as
-        # "Logic Pro" — a NO-BREAK SPACE — while English and Japanese give an ordinary space.
-        # An exact compare therefore found ZERO Logic windows on a Korean Logic, and every capture
-        # in the run recorded `window: null` while Logic was plainly on screen.
-        owner = (w.get("kCGWindowOwnerName") or "").replace(" ", " ")
-        if owner != "Logic Pro":
+        if not _is_logic_owned_window(w):
             continue
         name = w.get("kCGWindowName") or ""
         if title_contains and title_contains not in name:
@@ -204,6 +218,50 @@ def logic_window(title_contains=None):
         return {"id": w["kCGWindowNumber"], "title": name,
                 "x": int(b["X"]), "y": int(b["Y"]),
                 "w": int(b["Width"]), "h": int(b["Height"])}
+    return None
+
+
+def blocking_modal(lister=None):
+    """The first Logic window at the CoreGraphics modal-panel level, or None.
+
+    This is deliberately a CoreGraphics read rather than an AX read. The AX tree can honestly say
+    that an enabled menu item is unavailable when a modal has blocked Logic, which is precisely the
+    state a check has to reject. `lister` is a test seam; production always uses the same on-screen
+    list and options as `logic_window`.
+    """
+    try:
+        import Quartz
+    except ImportError:
+        return None
+
+    modal_panel_level = Quartz.CGWindowLevelForKey(Quartz.kCGModalPanelWindowLevelKey)
+    wins = lister() if lister is not None else _on_screen_windows(Quartz)
+    for w in wins or []:
+        if not _is_logic_owned_window(w):
+            continue
+        layer = w.get(Quartz.kCGWindowLayer)
+        try:
+            is_modal_panel = int(layer) == int(modal_panel_level)
+        except (TypeError, ValueError):
+            is_modal_panel = False
+        if not is_modal_panel:
+            continue
+        # NOT `isinstance(b, dict)`. CoreGraphics hands back an NSDictionary proxy, not a Python
+        # dict, so that test is False on the real window list and this loop silently skipped a
+        # modal it had already identified — measured 2026-08-30 against a Logic alert sitting at
+        # layer 8 on screen. The drive did not catch it because its synthetic lister supplies real
+        # dicts, so the fixture was more permissive than the thing it stands for. `logic_window`
+        # right above subscripts the same value without a type test, which is why it never had
+        # this bug; read it the same way and let a missing key be the failure.
+        b = w.get(Quartz.kCGWindowBounds)
+        if b is None:
+            continue
+        try:
+            x, y, width, height = int(b["X"]), int(b["Y"]), int(b["Width"]), int(b["Height"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        return {"id": w.get(Quartz.kCGWindowNumber), "title": w.get(Quartz.kCGWindowName) or "",
+                "x": x, "y": y, "w": width, "h": height, "layer": int(layer)}
     return None
 
 
@@ -605,10 +663,14 @@ class Evidence:
 
         `falsifiable()` below is the cheap form that does establish something.
         """
+        # Read immediately before the record enters the document. An alert can be dismissed and
+        # reappear within one run, so a single up-front modal read would mislabel both checks.
+        modal = blocking_modal()
         self.records.append({
             "kind": "check", "tag": tag, "passed": bool(passed),
             "expected": expected, "observed": observed,
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
+            "blocking_modal": modal,
         })
         return bool(passed)
 
@@ -641,6 +703,9 @@ class Evidence:
             counter_ok, counterexample = True, f"predicate raised on the counterexample: {exc!r}"
 
         passed = live_ok and not counter_ok
+        # This is the same moment as `check()`: after the result exists, immediately before its
+        # receipt is appended. The predicate can take long enough for modal state to change.
+        modal = blocking_modal()
         self.records.append({
             "kind": "check", "tag": tag, "passed": passed,
             "expected": expected,
@@ -651,6 +716,7 @@ class Evidence:
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
             "has_counterexample": True,
             "counterexample_rejected": not counter_ok,
+            "blocking_modal": modal,
         })
         return passed
 
@@ -891,6 +957,10 @@ def summarize(recs, out=None):
         "file": out,
         "checks": len(checks),
         "passed": sum(1 for c in checks if c.get("passed")),
+        # A blocking modal makes the entire application unavailable. A check made while one was
+        # visible is therefore contaminated even when its own AX values and predicate look green.
+        "checks_recorded_under_blocking_modal":
+            sum(1 for c in checks if c.get("blocking_modal") is not None),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
         "checks_with_a_counterexample": sum(1 for c in checks if c.get("has_counterexample")),
         "counterexamples_not_rejected":
@@ -923,7 +993,7 @@ def summarize(recs, out=None):
 # was clean, and the newest condition was the one that vanished quietly. Listing the keys fixes the
 # shape of the bug rather than the one clause where it was noticed.
 _REQUIRED_SUMMARY_KEYS = (
-    "checks", "passed", "mutation_claimed", "operations_driven",
+    "checks", "passed", "checks_recorded_under_blocking_modal", "mutation_claimed", "operations_driven",
     "checks_with_a_counterexample", "counterexamples_not_rejected",
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
@@ -940,9 +1010,10 @@ def is_clean(summary):
     reported success. The only value that failed was zero, i.e. a run where NOTHING passed. A harness
     whose exit code cannot express failure is not an instrument.
 
-    Every dimension the evidence document tracks has to be clean, not just the check count: an unsettled
-    capture, a failed visual assertion, a restoration that did not happen, or a cached read presented as
-    live each invalidate the run on their own.
+    Every dimension the evidence document tracks has to be clean, not just the check count: a check
+    recorded while a blocking modal was present, an unsettled capture, a failed visual assertion, a
+    restoration that did not happen, or a cached read presented as live each invalidate the run on their
+    own.
 
     THE ZEROS HAVE TO BE EARNED. Every `== 0` clause below is satisfied by a run that never did the
     thing at all: no visual assertion means no visual can lack a subject, and no capture means none
@@ -986,6 +1057,9 @@ def is_clean(summary):
     return (
         summary["checks"] > 0
         and summary["passed"] == summary["checks"]
+        # A modal blocks the application, so the AX observations recorded through it are not
+        # evidence regardless of whether their individual checks happened to pass.
+        and summary["checks_recorded_under_blocking_modal"] == 0
         # Non-vacuity: the run has to have looked, driven, and recorded.
         and summary["captures"] > 0
         and summary["visual_assertions"] > 0

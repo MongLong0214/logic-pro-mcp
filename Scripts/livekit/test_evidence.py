@@ -18,6 +18,7 @@ import evidence as E  # noqa: E402
 # one visual with a subject, one recording, nothing gone wrong.
 GOOD = {
     "checks": 1, "passed": 1, "mutation_claimed": 1, "operations_driven": 1,
+    "checks_recorded_under_blocking_modal": 0,
     "checks_with_a_counterexample": 0, "counterexamples_not_rejected": 0,
     "captures": 1, "captures_unsettled": 0, "captures_straddling_displays": 0,
     "restorations_failed": 0, "cached_reads_used_as_live": 0,
@@ -36,6 +37,8 @@ CASES = [
     (False, {**GOOD, "mutation_claimed": 0}, "no check names a mutation"),
     (False, {**GOOD, "counterexamples_not_rejected": 1},
      "a counterexample the assertion failed to reject"),
+    (False, {**GOOD, "checks_recorded_under_blocking_modal": 1},
+     "a check recorded while a blocking modal was present"),
     (False, {**GOOD, "checks": 0, "passed": 0}, "no checks"),
     # Absence must never be clean, for EVERY key — the polarity used to depend on which one.
     *[(False, {k: v for k, v in GOOD.items() if k != key}, f"summary missing {key!r}")
@@ -60,6 +63,114 @@ for expected, summary, why in CASES:
     ok = got is expected
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} is_clean -> {got!s:<5} expected {expected!s:<5} {why}")
+
+# --- a modal panel is the window level, not every AXDialog-shaped window ----------------------
+#
+# These are synthetic CoreGraphics records; this test never asks a live Logic for windows. Today's
+# measurement supplied the two level facts: the blocking audio-interface alert was at modal-panel
+# level 8, and the "Studio Grand" plug-in was at floating level 3. The standard-level, non-Logic,
+# and NO-BREAK-SPACE cases below are constructed probes. (The owner spelling itself is separately
+# documented from the 2026-08-17 Korean measurement in `evidence.py`.)
+class _ModalQuartz:
+    kCGModalPanelWindowLevelKey = "modal-panel"
+    kCGWindowLayer = "kCGWindowLayer"
+    kCGWindowBounds = "kCGWindowBounds"
+    kCGWindowNumber = "kCGWindowNumber"
+    kCGWindowName = "kCGWindowName"
+
+    @staticmethod
+    def CGWindowLevelForKey(key):
+        assert key == _ModalQuartz.kCGModalPanelWindowLevelKey
+        return 8
+
+
+class _NotADict:
+    """Subscriptable, and not a `dict` — which is what CoreGraphics actually returns.
+
+    Measured 2026-08-30: `kCGWindowBounds` comes back as an NSDictionary proxy, so a guard written
+    as `isinstance(b, dict)` skipped a Logic alert that was on screen at layer 8 and had already
+    been identified as a modal. Every case here passed while it did, because the fixtures below
+    supplied real dicts — the fixture was more permissive than the thing it stood for, so it could
+    not fail. This class exists so it can.
+    """
+
+    def __init__(self, values):
+        self._values = values
+
+    def __getitem__(self, key):
+        return self._values[key]
+
+
+def _synthetic_window(owner, title, layer, number=41, bounds_type=dict):
+    return {
+        "kCGWindowOwnerName": owner,
+        "kCGWindowName": title,
+        "kCGWindowLayer": layer,
+        "kCGWindowNumber": number,
+        "kCGWindowBounds": bounds_type({"X": 101, "Y": 202, "Width": 303, "Height": 404}),
+    }
+
+
+_old_quartz = sys.modules.get("Quartz")
+sys.modules["Quartz"] = _ModalQuartz
+try:
+    modal_cases = [
+        (True, [_synthetic_window("Logic Pro", "Audio Interface", 8)],
+         "a Logic window at the derived modal-panel level is detected"),
+        (False, [_synthetic_window("Logic Pro", "Studio Grand", 3)],
+         "the measured plug-in floating level is not a modal"),
+        (False, [_synthetic_window("Logic Pro", "Tracks", 0)],
+         "a Logic standard-level window is not a modal"),
+        (False, [_synthetic_window("Finder", "A dialog", 8)],
+         "a non-Logic modal-panel window is not this application's modal"),
+        (True, [_synthetic_window("Logic Pro", "Korean alert", 8)],
+         "a Korean Logic owner name with a NO-BREAK SPACE is normalized"),
+        (True, [_synthetic_window("Logic Pro", "NSDictionary bounds", 8, bounds_type=_NotADict)],
+         "bounds that are subscriptable but not a dict are read, as CoreGraphics returns them"),
+    ]
+    for expected, windows, why in modal_cases:
+        got = E.blocking_modal(lister=lambda windows=windows: windows)
+        ok = ((got is not None) is expected
+              and (not expected or got == {
+                  "id": 41, "title": windows[0]["kCGWindowName"],
+                  "x": 101, "y": 202, "w": 303, "h": 404, "layer": 8}))
+        failed += 0 if ok else 1
+        print(f"{'ok  ' if ok else 'FAIL'} blocking_modal -> {got!r} {why}")
+finally:
+    if _old_quartz is None:
+        del sys.modules["Quartz"]
+    else:
+        sys.modules["Quartz"] = _old_quartz
+
+# `check()` and `falsifiable()` take independent snapshots. This detector returns a modal, then
+# none, to prove the first receipt carries the full window and the summary counts that receipt
+# without smearing its state over the next check.
+import tempfile as _tempfile_for_modal
+
+_modal_snapshot = {"id": 41, "title": "Audio Interface",
+                   "x": 101, "y": 202, "w": 303, "h": 404, "layer": 8}
+_original_blocking_modal = E.blocking_modal
+_modal_reads = iter([_modal_snapshot, None])
+E.blocking_modal = lambda: next(_modal_reads)
+try:
+    modal_receipts = E.Evidence("d" * 40, _tempfile_for_modal.mkdtemp())
+    modal_receipts.check("modal/ordinary", True, "expected", "observed", "a mutation")
+    modal_receipts.falsifiable("modal/falsifiable", lambda value: value == 1, 1, 0, "expected")
+    modal_summary = E.summarize(modal_receipts.records)
+finally:
+    E.blocking_modal = _original_blocking_modal
+
+modal_records = [r for r in modal_receipts.records if r["kind"] == "check"]
+ok = (modal_records[0]["blocking_modal"] == _modal_snapshot
+      and modal_records[1]["blocking_modal"] is None
+      and modal_summary["checks_recorded_under_blocking_modal"] == 1)
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} each check records its own modal snapshot and summary count")
+
+# The remaining contract drives exercise `check()` and `falsifiable()` for unrelated behavior. Keep
+# them headless: their clear modal snapshots are fixtures, not a read of whichever desktop runs CI.
+_headless_blocking_modal = E.blocking_modal
+E.blocking_modal = lambda: None
 
 # A subject has to be a non-empty STRING; truthy is not a name.
 #
@@ -370,5 +481,6 @@ for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
 
+E.blocking_modal = _headless_blocking_modal
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)

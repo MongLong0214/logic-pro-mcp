@@ -57,6 +57,24 @@ func isBlockingDialogWindow(_ element: AXUIElement) -> Bool {
     guard windowSubrole == kAXDialogSubrole as String || windowSubrole == kAXSystemDialogSubrole as String else {
         return false
     }
+    // Measured today on Logic 12.x (ko):
+    //
+    // window                          AX subrole  AXModal  CGWindowLayer
+    // Logic alert (audio interface)   AXDialog    true     8
+    // Plug-in window "Studio Grand"    AXDialog    false    3
+    // Arrange window                  AXStandard  false    0
+    //
+    // AXDialog describes a window class, not whether it blocks Logic. The plug-in's floating
+    // window is an AXDialog too, so treating the subrole alone as blocking makes an open editor
+    // refuse unrelated calls. AXModal is the measured distinction.
+    // An UNREADABLE AXModal is treated as blocking, not as permission. Measured, the attribute was
+    // present on all three window classes above, so a failed read means the AX tree is not
+    // answering — and a caller told "nothing is blocking" on the strength of a read that did not
+    // happen is exactly the shape this gate exists to refuse. That direction is not free: if the
+    // read fails transiently on a plug-in window, the caller is refused when nothing was wrong.
+    // Refusing when it cannot tell is the trade this repository takes everywhere else.
+    let modal: Bool? = axAttribute(element, kAXModalAttribute as String)
+    guard modal != false else { return false }
     return !isKeyboardLayoutOverlayWindow(element)
 }
 
