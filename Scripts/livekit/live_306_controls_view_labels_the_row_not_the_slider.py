@@ -13,11 +13,23 @@ but not the generic Controls view.
 
 WHAT IS MEASURED NOW, AND WHAT IS STILL NOT
 -------------------------------------------
-On Korean Logic 12.x, Compressor's native editor has 22 sliders; only `Threshold` has a raw
+On Korean Logic 12.x, Compressor's native editor exposes 22 sliders on one instance and 20 on
+another in the same project - the count follows the instance's configuration. On both, only
+`Threshold` has a raw
 AXDescription, and 11 sliders claim their values are settable. The `보기` menu offers `컨트롤` and
 `편집기`. In Controls view, parameter names live in AXStaticText inside AXCells of AXRows; the
 controls beside them can be AXSlider, AXRadioButton, or AXPopUpButton. The measured Controls view
 has 26 sliders, and none has an AXDescription of its own.
+
+This harness is bound to the measured project, which contains the Compressor on a channel strip
+named `Absolute Zero`. On another project that named strip can be absent or ambiguous, so the
+harness refuses rather than measuring a Compressor on the wrong track.
+
+The mixer must already be open. The named strip is resolved only inside the named mixer layout area
+whose ancestor chain contains an AXGroup with that same label. The Inspector also displays a
+selected track's channel strip as an AXLayoutArea with the mixer label, so name and role alone are
+ambiguous. If the mixer is closed, absent, ambiguous, or exceeds the bounded ancestor search, this
+harness refuses rather than opening it or choosing between elements by position.
 
 This harness changes only the plug-in view and window. It switches back to the editor, proves that
 switch happened from the editor's distinct AX signature, and closes the window. It does not attempt
@@ -48,6 +60,20 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # These labels were read on Korean Logic 12.x only. There is deliberately no translated fallback:
 # another locale records an absent element rather than asserting a plausible but unmeasured label.
 SLOT = "Compressor"
+# This harness depends on this measured track existing. Five Compressor inserts exist across the
+# mixer's channel strips, and selecting one by position would measure the wrong plug-in without
+# detecting it — so the search is scoped to a named strip and refuses if that strip does not hold
+# exactly one.
+#
+# Measured 2026-08-30, per strip: `Absolute Zero` carries TWO Compressors, `Studio Grand` carries
+# one, `Audio 1` none. An earlier draft named `Absolute Zero` and the harness refused with
+# slot_count 2, which was the refusal working: two inserts on one strip cannot be told apart by
+# name, and choosing between them is the thing this scoping exists to prevent.
+TRACK = "Studio Grand"
+# `mixerNamedElement` is the existing policy-owned, measured mixer label family. Passing it through
+# avoids a second Korean literal: a locale outside that measured family resolves no mixer and refuses
+# rather than treating a translation as the mixer label.
+MIXER = E.label_set("mixerNamedElement")
 OPEN = "열기"
 CLOSE = "닫기"
 CONTROLS = "컨트롤"
@@ -127,12 +153,14 @@ if modal is not None:
     finish()
 
 policy_ready = (isinstance(VIEW_LABELS, list) and bool(VIEW_LABELS)
-                and isinstance(OPEN_OR_LIST_LABELS, list) and OPEN in OPEN_OR_LIST_LABELS)
-ev.check("306/precondition-the-view-and-open-label-policies-are-readable",
+                and isinstance(OPEN_OR_LIST_LABELS, list) and OPEN in OPEN_OR_LIST_LABELS
+                and isinstance(MIXER, list) and "믹서" in MIXER)
+ev.check("306/precondition-the-view-open-and-mixer-label-policies-are-readable",
          policy_ready,
-         "the measured View and Open-or-List label families still parse from AXLocalePolicy",
-         f"view={VIEW_LABELS!r} open_or_list={OPEN_OR_LIST_LABELS!r}",
-         "remove a policy LabelSet or `열기`: this refuses instead of selecting from guessed labels")
+         "the measured View, Open-or-List, and mixer label families still parse from AXLocalePolicy",
+         f"view={VIEW_LABELS!r} open_or_list={OPEN_OR_LIST_LABELS!r} mixer={MIXER!r}",
+         "remove a policy LabelSet or the measured `열기`/`믹서` labels: this refuses instead of "
+         "selecting from guessed labels")
 if not policy_ready:
     finish()
 
@@ -158,15 +186,62 @@ ev.check("306/precondition-a-project-window-is-open",
 if band is None:
     finish()
 
-slot_before = probe(tool, "plugin-slot", {"slot_label": SLOT})
+slot_before = probe(tool, "plugin-slot", {
+    "slot_label": SLOT,
+    "track_label": TRACK,
+    "mixer_label": MIXER,
+})
 ev.note("306/compressor-slot-before-opening", slot_before)
+mixer_resolution = {
+    "mixer_layout_areas_seen": slot_before.get("mixer_layout_areas_seen"),
+    "mixer_container_count": slot_before.get("mixer_container_count"),
+    "mixer_ancestor_search_bound_hit": slot_before.get("mixer_ancestor_search_bound_hit"),
+}
+ev.falsifiable(
+    "306/precondition-exactly-one-mixer-layout-area-resolves-by-name-and-role",
+    lambda observation: (observation.get("mixer_layout_areas_seen") is not None
+                         and observation.get("mixer_container_count") == 1
+                         and observation.get("mixer_ancestor_search_bound_hit") is False),
+    mixer_resolution,
+    {"mixer_layout_areas_seen": 0, "mixer_container_count": 0,
+     "mixer_ancestor_search_bound_hit": False},
+    "exactly one AXLayoutArea with a measured mixer label has an AXGroup with that same label as "
+    "an ancestor before the named channel-strip search is allowed to begin. The Inspector shows a "
+    "channel strip for the selected track and it is also an AXLayoutArea described with the mixer "
+    "label, so the Mixer pane is identified by that AXGroup ancestor.",
+    "close the mixer, remove its measured label, expose another matching AXLayoutArea, or exceed "
+    "the 12-level ancestor bound: the harness refuses instead of opening the mixer or choosing a "
+    "container by position",
+)
+if not (mixer_resolution["mixer_layout_areas_seen"] is not None
+        and mixer_resolution["mixer_container_count"] == 1
+        and mixer_resolution["mixer_ancestor_search_bound_hit"] is False):
+    finish()
+
+ev.falsifiable(
+    "306/precondition-one-named-channel-strip-matches-the-track-label",
+    lambda observation: observation.get("matching_strip_count") == 1,
+    slot_before,
+    {"matching_strip_count": 0},
+    f"exactly one AXLayoutItem in the resolved mixer matches the measured track name `{TRACK}` "
+    "before the Compressor search, scoped to the mixer, is allowed to descend into it; the arrange "
+    "area's track header carries the same name, and choosing between them by position is not allowed",
+    f"rename, remove, or duplicate `{TRACK}` inside the mixer: the harness refuses rather than "
+    "guessing which channel strip owns the measured Compressor; the same-named arrange header is "
+    "outside this search by design",
+)
+if slot_before.get("matching_strip_count") != 1:
+    finish()
+
 ev.falsifiable(
     "306/precondition-one-compressor-insert-slot-resolves-by-description",
     lambda observation: observation.get("slot_count") == 1,
     slot_before,
     {"slot_count": 0},
-    "exactly one AXGroup describes itself `Compressor`, so the run never chooses a plug-in by tree order",
-    "rename or remove the Compressor insert: the slot count becomes zero and this goes red",
+    f"exactly one AXGroup describes itself `Compressor` within the named `{TRACK}` channel strip; "
+    "five Compressor inserts exist across channel strips, and choosing one by position is not allowed",
+    "rename or remove the Compressor insert in the named strip: its scoped slot count becomes zero "
+    "and this goes red",
 )
 if slot_before.get("slot_count") != 1:
     finish()
@@ -183,6 +258,8 @@ ev.falsifiable("306/the-release-artifact-answers-a-read-only-wire-request",
 
 result = probe(tool, "compressor", {
     "slot_label": SLOT,
+    "track_label": TRACK,
+    "mixer_label": MIXER,
     "open_label": OPEN,
     "close_label": CLOSE,
     "view_labels": VIEW_LABELS,
@@ -210,15 +287,27 @@ native_sliders = result.get("native_editor_sliders") if isinstance(result.get("n
 native_names = [name for name in slider_descriptions(native_sliders) if name]
 native_settable = sum(1 for slider in native_sliders
                       if isinstance(slider, dict) and slider.get("value_settable") is True)
-native_census = len(native_sliders) == 22 and native_settable == 11
+# NOT an exact census. Measured 2026-08-30 on two different Compressor instances in one project:
+# the one on `Absolute Zero` exposes 22 sliders of which 11 claim settable values, the one on
+# `Studio Grand` exposes 20 and 10. The count is a property of the instance's configuration, and an
+# earlier draft asserted 22/11 because that is the pair I happened to write in an issue comment.
+# What holds across both, and is the fact this harness is about, is that MOST sliders are settable
+# and exactly ONE carries a name.
+native_census = (
+    len(native_sliders) > 0
+    and native_settable > 0
+    and native_settable < len(native_sliders)
+)
 ev.falsifiable(
-    "306/native-editor-census-is-22-sliders-of-which-11-claim-settable-values",
+    "306/native-editor-exposes-sliders-of-which-only-some-claim-settable-values",
     lambda observation: observation["ok"],
     {"ok": native_census},
     {"ok": False},
-    "the native Compressor editor exposes the measured census of 22 AXSliders, with 11 reporting "
-    "AXValue settable=true",
-    "add or remove a slider, or change a slider's settability claim: the measured census goes red",
+    "the native Compressor editor exposes AXSliders and only SOME of them report AXValue "
+    "settable=true; the exact counts follow the instance (22/11 on one strip, 20/10 on another) "
+    "so they are not asserted",
+    "return no sliders, or make every slider claim settable: the invariant goes red. Note this "
+    "check cannot catch a count change, deliberately - that is the instance's business",
 )
 native_signature = len(native_names) == 1 and native_names[0] == THRESHOLD
 ev.falsifiable(

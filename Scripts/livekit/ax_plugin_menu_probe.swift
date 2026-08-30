@@ -124,8 +124,18 @@ func configuredString(_ key: String) -> String {
     config[key] as? String ?? ""
 }
 
+func configuredOptionalString(_ key: String) -> String? {
+    config[key] as? String
+}
+
 func configuredStrings(_ key: String) -> [String] {
     config[key] as? [String] ?? []
+}
+
+func configuredStringFamily(_ key: String) -> [String] {
+    if let values = config[key] as? [String] { return values }
+    if let value = config[key] as? String { return [value] }
+    return []
 }
 
 guard let logic = NSWorkspace.shared.runningApplications.first(
@@ -167,23 +177,224 @@ func closeWindow(_ window: AXUIElement, closeLabel: String) -> JSON {
     return result
 }
 
+func pluginSlots(in root: AXUIElement, named name: String) -> [AXUIElement] {
+    descendants(root).filter { role($0) == "AXGroup" && description($0) == name }
+}
+
 func pluginSlots(named name: String) -> [AXUIElement] {
     windows().flatMap { window in
-        descendants(window).filter { role($0) == "AXGroup" && description($0) == name }
+        pluginSlots(in: window, named: name)
     }
 }
 
-func openPlugin(slotName: String, openLabel: String,
-                beforePress: ((AXUIElement) -> Void)? = nil) -> (JSON, AXUIElement?, AXUIElement?) {
-    let slots = pluginSlots(named: slotName)
+func trimmed(_ text: String) -> String {
+    text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+struct AncestorGroupSearch {
+    let found: Bool
+    let boundHit: Bool
+}
+
+// The Inspector can expose a selected track's channel strip as another AXLayoutArea named
+// "믹서". Only the Mixer pane's layout area is contained by an AXGroup with that same label.
+// Keep the parent walk bounded so a malformed AX tree cannot make the witness hang; callers report
+// a bound hit as an unresolved observation rather than treating it as a definitive non-match.
+func matchingGroupAncestor(
+    of element: AXUIElement,
+    named expectedDescription: String,
+    maximumDepth: Int = 12
+) -> AncestorGroupSearch {
+    var current = element
+    for _ in 0..<maximumDepth {
+        guard let parent: AXUIElement = attr(current, kAXParentAttribute as String) else {
+            return AncestorGroupSearch(found: false, boundHit: false)
+        }
+        if role(parent) == (kAXGroupRole as String)
+            && trimmed(description(parent)) == expectedDescription {
+            return AncestorGroupSearch(found: true, boundHit: false)
+        }
+        current = parent
+    }
+
+    // We inspected the allowed number of ancestors. A further parent means the answer is unknown
+    // at this bound (including in a cycle), so do not silently classify this layout area as out.
+    let hasMoreAncestors: AXUIElement? = attr(current, kAXParentAttribute as String)
+    return AncestorGroupSearch(found: false, boundHit: hasMoreAncestors != nil)
+}
+
+struct MixerContainerSearch {
+    let layoutAreasSeen: [AXUIElement]
+    let containers: [AXUIElement]
+    let ancestorSearchBoundHitCount: Int
+}
+
+func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
+    let targets = Set(mixerLabels.map(trimmed))
+    guard !targets.isEmpty else {
+        return MixerContainerSearch(
+            layoutAreasSeen: [],
+            containers: [],
+            ancestorSearchBoundHitCount: 0
+        )
+    }
+    let layoutAreasSeen = windows().flatMap { window in
+        descendants(window).filter { container in
+            // Require the layout-area role first: Logic exposes an AXGroup with the same mixer
+            // description, but channel strips are descendants of the AXLayoutArea.
+            role(container) == (kAXLayoutAreaRole as String)
+                && targets.contains(trimmed(description(container)))
+        }
+    }
+    var ancestorSearchBoundHitCount = 0
+    let containers = layoutAreasSeen.filter { container in
+        // The container already matched a configured label, so matching that exact label on its
+        // AXGroup ancestor prevents one configured synonym from admitting another by coincidence.
+        let ancestor = matchingGroupAncestor(
+            of: container,
+            named: trimmed(description(container))
+        )
+        if ancestor.boundHit { ancestorSearchBoundHitCount += 1 }
+        return ancestor.found
+    }
+    return MixerContainerSearch(
+        layoutAreasSeen: layoutAreasSeen,
+        containers: containers,
+        ancestorSearchBoundHitCount: ancestorSearchBoundHitCount
+    )
+}
+
+func channelStrips(named trackLabel: String, in mixer: AXUIElement) -> [AXUIElement] {
+    let target = trimmed(trackLabel)
+    return descendants(mixer).filter { strip in
+        role(strip) == (kAXLayoutItemRole as String) && trimmed(description(strip)) == target
+    }
+}
+
+struct PluginSlotSearch {
+    let slots: [AXUIElement]
+    let unscopedSlots: [AXUIElement]
+    let trackLabel: String?
+    let mixerLayoutAreasSeen: [AXUIElement]?
+    let mixerContainers: [AXUIElement]?
+    let mixerAncestorSearchBoundHitCount: Int?
+    let matchingStrips: [AXUIElement]
+    let scopedSlots: [AXUIElement]?
+}
+
+func pluginSlotSearch(
+    named slotName: String,
+    trackLabel: String?,
+    mixerLabels: [String]? = nil
+) -> PluginSlotSearch {
+    let unscopedSlots = pluginSlots(named: slotName)
+    guard let trackLabel else {
+        return PluginSlotSearch(
+            slots: unscopedSlots,
+            unscopedSlots: unscopedSlots,
+            trackLabel: nil,
+            mixerLayoutAreasSeen: nil,
+            mixerContainers: nil,
+            mixerAncestorSearchBoundHitCount: nil,
+            matchingStrips: [],
+            scopedSlots: nil
+        )
+    }
+
+    let mixerSearch = mixerContainers(named: mixerLabels ?? [])
+    let mixerContainers = mixerSearch.containers
+    // Never widen this search back to the window: the arrange area's track header has the same
+    // AXLayoutItem role and track description as the mixer strip. An unresolved mixer is therefore
+    // a refusal condition, not permission to choose an identically named element by tree position.
+    guard mixerContainers.count == 1, let mixer = mixerContainers.first else {
+        return PluginSlotSearch(
+            slots: [],
+            unscopedSlots: unscopedSlots,
+            trackLabel: trackLabel,
+            mixerLayoutAreasSeen: mixerSearch.layoutAreasSeen,
+            mixerContainers: mixerContainers,
+            mixerAncestorSearchBoundHitCount: mixerSearch.ancestorSearchBoundHitCount,
+            matchingStrips: [],
+            scopedSlots: nil
+        )
+    }
+
+    let matchingStrips = channelStrips(named: trackLabel, in: mixer)
+    // Resolve the strip exactly before descending into it. The probe reports zero or many matching
+    // strips as a refusal condition; choosing one by tree order would open a plug-in on the wrong
+    // track when names are duplicated.
+    guard matchingStrips.count == 1, let strip = matchingStrips.first else {
+        return PluginSlotSearch(
+            slots: [],
+            unscopedSlots: unscopedSlots,
+            trackLabel: trackLabel,
+            mixerLayoutAreasSeen: mixerSearch.layoutAreasSeen,
+            mixerContainers: mixerContainers,
+            mixerAncestorSearchBoundHitCount: mixerSearch.ancestorSearchBoundHitCount,
+            matchingStrips: matchingStrips,
+            scopedSlots: nil
+        )
+    }
+
+    let scopedSlots = pluginSlots(in: strip, named: slotName)
+    return PluginSlotSearch(
+        slots: scopedSlots,
+        unscopedSlots: unscopedSlots,
+        trackLabel: trackLabel,
+        mixerLayoutAreasSeen: mixerSearch.layoutAreasSeen,
+        mixerContainers: mixerContainers,
+        mixerAncestorSearchBoundHitCount: mixerSearch.ancestorSearchBoundHitCount,
+        matchingStrips: matchingStrips,
+        scopedSlots: scopedSlots
+    )
+}
+
+func slotSearchReport(_ search: PluginSlotSearch) -> JSON {
     var result: JSON = [
-        "slot_count": slots.count,
-        "slots": slots.map(snapshot),
+        "slot_count": search.slots.count,
+        "slots": search.slots.map(snapshot),
+    ]
+    guard let trackLabel = search.trackLabel else { return result }
+
+    // Keep the full-window census beside the scoped one so evidence can show that the name
+    // narrowed the search, rather than merely reporting a convenient single result.
+    result["track_label"] = trackLabel
+    result["unscoped_slot_count"] = search.unscopedSlots.count
+    result["unscoped_slots"] = search.unscopedSlots.map(snapshot)
+    result["mixer_layout_areas_seen"] = search.mixerLayoutAreasSeen?.count ?? 0
+    result["mixer_layout_areas"] = search.mixerLayoutAreasSeen?.map(snapshot) ?? []
+    result["mixer_container_count"] = search.mixerContainers?.count ?? 0
+    result["mixer_containers"] = search.mixerContainers?.map(snapshot) ?? []
+    let mixerAncestorSearchBoundHitCount = search.mixerAncestorSearchBoundHitCount ?? 0
+    result["mixer_ancestor_search_bound_hit"] = mixerAncestorSearchBoundHitCount > 0
+    result["mixer_ancestor_search_bound_hit_count"] = mixerAncestorSearchBoundHitCount
+    result["matching_strip_count"] = search.matchingStrips.count
+    result["matching_strips"] = search.matchingStrips.map(snapshot)
+    result["scoped_slot_count"] = search.scopedSlots?.count ?? NSNull()
+    result["scoped_slots"] = search.scopedSlots?.map(snapshot) ?? []
+    return result
+}
+
+func openPlugin(
+    slotName: String,
+    openLabel: String,
+    trackLabel: String? = nil,
+    mixerLabels: [String]? = nil,
+    beforePress: ((AXUIElement) -> Void)? = nil
+) -> (JSON, AXUIElement?, AXUIElement?) {
+    let search = pluginSlotSearch(
+        named: slotName,
+        trackLabel: trackLabel,
+        mixerLabels: mixerLabels
+    )
+    let slots = search.slots
+    var result = slotSearchReport(search)
+    result.merge([
         "open_button_candidates": [],
         "pressed_children": [],
         "open_press_status": NSNull(),
         "opened_windows": [],
-    ]
+    ]) { _, new in new }
     guard slots.count == 1 else { return (result, nil, nil) }
 
     let slot = slots[0]
@@ -306,12 +517,14 @@ func runChannelEQ() {
 }
 
 func runPluginSlot() {
-    let slots = pluginSlots(named: configuredString("slot_label"))
-    var result: JSON = [
-        "frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "",
-        "slot_count": slots.count,
-        "slots": slots.map(snapshot),
-    ]
+    let search = pluginSlotSearch(
+        named: configuredString("slot_label"),
+        trackLabel: configuredOptionalString("track_label"),
+        mixerLabels: configuredStringFamily("mixer_label")
+    )
+    let slots = search.slots
+    var result = slotSearchReport(search)
+    result["frontmost_bundle_id"] = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
     result["slot_children"] = slots.count == 1 ? children(slots[0]).map(snapshot) : []
     emit(result)
 }
@@ -324,7 +537,12 @@ func runCompressor() {
     let controlsLabel = configuredString("controls_label")
     let editorLabel = configuredString("editor_label")
     var result: JSON = ["frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""]
-    let (openResult, _, opened) = openPlugin(slotName: slotName, openLabel: openLabel)
+    let (openResult, _, opened) = openPlugin(
+        slotName: slotName,
+        openLabel: openLabel,
+        trackLabel: configuredOptionalString("track_label"),
+        mixerLabels: configuredStringFamily("mixer_label")
+    )
     result["open"] = openResult
     guard let opened else { emit(result); return }
 

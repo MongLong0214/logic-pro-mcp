@@ -53,6 +53,26 @@ CLOSE = "닫기"
 EQ_GROUP = "EQ"
 BANDS = ["Low Cut", "Low Shelf", "Peak 1", "Peak 2", "Peak 3", "Peak 4", "High Shelf", "High Cut"]
 
+# The 24 band parameters by name. Low Cut and High Cut take an Order where the others take a Gain,
+# which is why this is a list and not a product of BANDS and three suffixes.
+BAND_PARAMETERS = [
+    "Low Cut Frequency", "Low Cut Order", "Low Cut Q",
+    "Low Shelf Frequency", "Low Shelf Gain", "Low Shelf Q",
+    "Peak 1 Frequency", "Peak 1 Gain", "Peak 1 Q",
+    "Peak 2 Frequency", "Peak 2 Gain", "Peak 2 Q",
+    "Peak 3 Frequency", "Peak 3 Gain", "Peak 3 Q",
+    "Peak 4 Frequency", "Peak 4 Gain", "Peak 4 Q",
+    "High Shelf Frequency", "High Shelf Gain", "High Shelf Q",
+    "High Cut Frequency", "High Cut Order", "High Cut Q",
+]
+
+# Measured 2026-08-30: the EQ group exposes 26 sliders, not 24. The 24 above plus TWO output `Gain`
+# sliders sharing one description. An earlier draft of this harness asserted `len(sliders) == 24`
+# because that is the number I wrote in the issue comment, counting band parameters and calling it
+# the group total. Every slider assertion below failed on a reading that was RIGHT. Assert the names
+# that must be present and the property that must hold of every slider; do not assert a total that
+# was arrived at by arithmetic rather than by counting what came back.
+
 # `pluginOpenOrListControl` is intentionally a combined LabelSet (`open` AND `list`). It is useful
 # for documenting the slot's known controls, but unsafe as an action selector because `목록` is also
 # an AXButton. The one safe action label observed here is the Korean `열기` above.
@@ -214,54 +234,62 @@ ev.falsifiable(
 
 checkboxes = result.get("band_checkboxes") if isinstance(result.get("band_checkboxes"), list) else []
 band_names = clean_texts(checkboxes)
-bands_resolve = (result.get("eq_group_count") == 1 and Counter(band_names) == Counter(BANDS))
+bands_resolve = (result.get("eq_group_count") == 1
+                 and all(band in band_names for band in BANDS))
 ev.falsifiable(
-    "301/eight-band-enables-resolve-by-name",
+    "301/each-of-the-eight-band-enables-resolves-by-name",
     lambda observation: observation["ok"],
     {"ok": bands_resolve},
     {"ok": False},
-    "the EQ group exposes exactly the eight observed enable names, one AXCheckBox per band",
-    "remove a band label or duplicate one: the exact name multiset stops matching and this goes red",
+    "the EQ group exposes an AXCheckBox for each of the eight measured band names; it carries "
+    "others too (Analyzer, Q-Couple, HQ), so this is containment and not equality",
+    "remove or rename a band label: the containment assertion goes red",
 )
 
 sliders = result.get("sliders") if isinstance(result.get("sliders"), list) else []
-all_slider_descriptions = len(sliders) == 24 and all(
+slider_descriptions = [
+    slider.get("description", "") for slider in sliders if isinstance(slider, dict)
+]
+all_slider_descriptions = all(p in slider_descriptions for p in BAND_PARAMETERS) and all(
     isinstance(slider, dict) and isinstance(slider.get("description"), str)
     and slider["description"].strip()
     for slider in sliders
 )
 ev.falsifiable(
-    "301/all-24-band-sliders-resolve-and-each-has-an-axdescription",
+    "301/every-band-parameter-resolves-by-name-and-every-slider-is-named",
     lambda observation: observation["ok"],
     {"ok": all_slider_descriptions},
     {"ok": False},
-    "exactly 24 EQ sliders resolve, and every one carries its own non-empty raw AXDescription",
-    "strip one description or return fewer sliders: the count/name assertion goes red",
+    "all 24 band parameters resolve by name, and every slider in the EQ group carries its own "
+    "non-empty raw AXDescription",
+    "strip one description, or rename a band parameter: the name assertion goes red",
 )
 
-all_settable = len(sliders) == 24 and all(
+all_settable = all(p in slider_descriptions for p in BAND_PARAMETERS) and all(
     isinstance(slider, dict) and slider.get("value_settable") is True for slider in sliders
 )
 ev.falsifiable(
-    "301/every-one-of-the-24-sliders-claims-its-value-is-settable",
+    "301/every-slider-in-the-eq-group-claims-its-value-is-settable",
     lambda observation: observation["ok"],
     {"ok": all_settable},
     {"ok": False},
-    "every one of the 24 named EQ sliders reports AXValue settable=true",
+    "all 24 band parameters are present and every slider in the EQ group reports AXValue "
+    "settable=true",
     "make any slider report settable=false: the universal assertion goes red",
 )
 
-all_value_descriptions = len(sliders) == 24 and all(
+all_value_descriptions = all(p in slider_descriptions for p in BAND_PARAMETERS) and all(
     isinstance(slider, dict) and isinstance(slider.get("value_description"), str)
     and slider["value_description"].strip()
     for slider in sliders
 )
 ev.falsifiable(
-    "301/every-one-of-the-24-sliders-has-an-engineering-value-description",
+    "301/every-slider-in-the-eq-group-has-an-engineering-value-description",
     lambda observation: observation["ok"],
     {"ok": all_value_descriptions},
     {"ok": False},
-    "every one of the 24 sliders carries a non-empty AXValueDescription such as Hz, dB, or Q",
+    "all 24 band parameters are present and every slider in the EQ group carries a non-empty "
+    "AXValueDescription such as Hz, dB, or Q",
     "clear one value description: this goes red while the description and settability checks can "
     "still pass",
 )
