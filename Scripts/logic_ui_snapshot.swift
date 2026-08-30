@@ -12,52 +12,133 @@ struct Snapshot: Encodable {
     let error: String?
 }
 
-func axAttribute<T>(_ element: AXUIElement, _ attribute: String) -> T? {
+enum AXRead<Value> {
+    case value(Value)
+    case absent
+    case failed(AXError)
+
+    var value: Value? {
+        guard case let .value(value) = self else { return nil }
+        return value
+    }
+}
+
+// A successful empty attribute and a failed AX request are different facts. The latter cannot
+// establish that no dialog blocks the caller, so isBlockingDialogWindow and its window-list caller
+// fail closed on `.failed`. The snapshot can distinguish the two at this API boundary; where it
+// cannot (a successful value of an unexpected type), that is recorded as `.absent`, not disguised
+// as a successful Boolean or child list.
+func axAttribute<T>(_ element: AXUIElement, _ attribute: String) -> AXRead<T> {
     var value: AnyObject?
     let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else { return nil }
-    return value as? T
+    guard result == .success else { return .failed(result) }
+    guard let value else { return .absent }
+    guard let typed = value as? T else { return .absent }
+    return .value(typed)
 }
 
-func title(of element: AXUIElement) -> String? {
-    let raw: String? = axAttribute(element, kAXTitleAttribute as String)
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return trimmed.isEmpty ? nil : trimmed
+func title(of element: AXUIElement) -> AXRead<String> {
+    switch axAttribute(element, kAXTitleAttribute as String) as AXRead<String> {
+    case .value(let raw):
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? .absent : .value(trimmed)
+    case .absent:
+        return .absent
+    case .failed(let error):
+        return .failed(error)
+    }
 }
 
-func role(of element: AXUIElement) -> String? {
+func role(of element: AXUIElement) -> AXRead<String> {
     axAttribute(element, kAXRoleAttribute as String)
 }
 
-func subrole(of element: AXUIElement) -> String? {
+func subrole(of element: AXUIElement) -> AXRead<String> {
     axAttribute(element, kAXSubroleAttribute as String)
 }
 
-func descriptionText(of element: AXUIElement) -> String {
-    let raw: String? = axAttribute(element, kAXDescriptionAttribute as String)
-    return raw ?? ""
+func descriptionText(of element: AXUIElement) -> AXRead<String> {
+    axAttribute(element, kAXDescriptionAttribute as String)
 }
 
-func children(of element: AXUIElement) -> [AXUIElement] {
-    let raw: [AXUIElement]? = axAttribute(element, kAXChildrenAttribute as String)
-    return raw ?? []
+func children(of element: AXUIElement) -> AXRead<[AXUIElement]> {
+    axAttribute(element, kAXChildrenAttribute as String)
 }
 
-func isKeyboardLayoutOverlayWindow(_ element: AXUIElement) -> Bool {
-    guard title(of: element) == nil else { return false }
-    let elementChildren = children(of: element)
-    guard elementChildren.count == 1 else { return false }
-    let child = elementChildren[0]
-    guard role(of: child) == kAXButtonRole as String else { return false }
-    return descriptionText(of: child).hasPrefix("com.apple.keylayout.")
+func isKeyboardLayoutOverlayWindow(_ element: AXUIElement) -> Bool? {
+    switch title(of: element) {
+    case .value:
+        return false
+    case .absent:
+        break
+    case .failed:
+        return nil
+    }
+
+    let child: AXUIElement
+    switch children(of: element) {
+    case .value(let elementChildren):
+        guard elementChildren.count == 1, let onlyChild = elementChildren.first else { return false }
+        child = onlyChild
+    case .absent:
+        return false
+    case .failed:
+        return nil
+    }
+
+    switch role(of: child) {
+    case .value(let childRole):
+        guard childRole == kAXButtonRole as String else { return false }
+    case .absent:
+        return false
+    case .failed:
+        return nil
+    }
+    switch descriptionText(of: child) {
+    case .value(let description):
+        return description.hasPrefix("com.apple.keylayout.")
+    case .absent:
+        return false
+    case .failed:
+        return nil
+    }
 }
 
 func isBlockingDialogWindow(_ element: AXUIElement) -> Bool {
-    guard let windowSubrole = subrole(of: element) else { return false }
-    guard windowSubrole == kAXDialogSubrole as String || windowSubrole == kAXSystemDialogSubrole as String else {
+    // Measured today on Logic 12.x (ko):
+    //
+    // window                          AX subrole  AXModal  CGWindowLayer
+    // Logic alert (audio interface)   AXDialog    true     8
+    // Plug-in window "Studio Grand"    AXDialog    false    3
+    // Arrange window                  AXStandard  false    0
+    // Go To Position                  AXFloating  true     3
+    //
+    // AXModal is modality, unlike a window's class. A true AXModal blocks regardless of subrole,
+    // which admits Go To Position without classifying the modeless plug-in AXDialog above. More
+    // importantly, an absent, wrong-typed, or failed AXModal is UNKNOWN for EVERY subrole, not a
+    // harmless optional value for AXFloatingWindow and an alert only for AXDialog. Fail closed on
+    // that unknown payload; `axAttribute` represents both a nil and a successful wrong type as
+    // `.absent`, so treating it as clear would turn an unreadable value into a clean snapshot.
+    let modal = axAttribute(element, kAXModalAttribute as String) as AXRead<Bool>
+    switch modal {
+    case .value(true):
+        break
+    case .value(false):
         return false
+    case .absent, .failed:
+        return true
     }
-    return !isKeyboardLayoutOverlayWindow(element)
+
+    // Do not turn the keyboard-layout overlay into a dialog. If its identifying reads fail, the
+    // answer is unknown rather than harmless, so fail closed just as the AXModal read does.
+    switch isKeyboardLayoutOverlayWindow(element) {
+    case true:
+        return false
+    case false:
+        return true
+    case nil:
+        return true
+    }
 }
 
 let logicProKnownBundleIDs = ["com.apple.logic10", "com.apple.mobilelogic"]
@@ -90,19 +171,41 @@ var blockingDialogPresent = false
 
 if !AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": false] as CFDictionary) {
     error = "accessibility_not_trusted"
+    // With no AX permission the window-list predicate never ran, so false would pretend a clean
+    // blocker set. This boolean cannot distinguish a blocking dialog from an unreadable list; the
+    // accompanying error is the distinction available to the Python caller.
+    blockingDialogPresent = true
 } else if let logicApp {
     let appElement = AXUIElementCreateApplication(logicApp.processIdentifier)
     AXUIElementSetMessagingTimeout(appElement, 2.5)
 
-    if let windows: [AXUIElement] = axAttribute(appElement, kAXWindowsAttribute as String) {
-        windowNames = windows.compactMap(title)
+    switch axAttribute(appElement, kAXWindowsAttribute as String) as AXRead<[AXUIElement]> {
+    case .value(let windows):
+        windowNames = windows.compactMap { title(of: $0).value }
         blockingDialogPresent = windows.contains(where: isBlockingDialogWindow)
+    case .absent:
+        // AX reported no usable window list. That is not a successful empty list for this gate.
+        blockingDialogPresent = true
+        error = "logic_windows_unavailable"
+    case .failed(let status):
+        blockingDialogPresent = true
+        error = "logic_windows_unreadable_\(status.rawValue)"
     }
 
-    if let menuBar: AXUIElement = axAttribute(appElement, kAXMenuBarAttribute as String) {
-        menuItems = children(of: menuBar).compactMap(title)
-    } else {
-        error = "logic_menu_bar_unavailable"
+    switch axAttribute(appElement, kAXMenuBarAttribute as String) as AXRead<AXUIElement> {
+    case .value(let menuBar):
+        switch children(of: menuBar) {
+        case .value(let menuBarChildren):
+            menuItems = menuBarChildren.compactMap { title(of: $0).value }
+        case .absent:
+            if error == nil { error = "logic_menu_bar_children_unavailable" }
+        case .failed(let status):
+            if error == nil { error = "logic_menu_bar_children_unreadable_\(status.rawValue)" }
+        }
+    case .absent:
+        if error == nil { error = "logic_menu_bar_unavailable" }
+    case .failed(let status):
+        if error == nil { error = "logic_menu_bar_unreadable_\(status.rawValue)" }
     }
 } else {
     error = "logic_not_running"

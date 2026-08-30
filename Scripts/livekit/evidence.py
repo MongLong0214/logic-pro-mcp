@@ -7,6 +7,16 @@ without it.
 
 What it refuses to let you record:
 
+- **A check made through a blocking modal.** `blocking_modal()` uses the CoreGraphics window list
+  plus the narrowly necessary AX modal/sheet reads. Its AX sheet scan is application-wide across
+  every window of every running Logic process: a sheet on another document makes this run refuse,
+  rather than claiming that the observed document is clear. That can be a conservative false
+  positive, but it cannot silently certify a different document while a sheet blocks it. A modal can
+  block the current document while leaving application-wide menu items enabled, so an AX value read
+  through it is not evidence about the affordance it appears to describe. Only `check()` and
+  `falsifiable()` receipts carry this snapshot; notes, captures, visuals, operations, and
+  restorations do not claim modal coverage. The summary gate invalidates those CHECK receipts rather
+  than preventing a caller from making one.
 - **An unsettled capture.** A screenshot taken while Logic is still redrawing shows a state nobody was
   ever in. `shot()` takes frames until two consecutive ones are byte-identical, and marks the record
   `settled: false` if they never converge.
@@ -63,6 +73,7 @@ import subprocess
 import tempfile
 import sys
 import time
+import ctypes
 
 # Set by the harness before use.
 REPO = ""
@@ -85,6 +96,14 @@ MARKER_LIST_TAB_NAMES = ["Marker", "마커", "マーカー"]
 OTHER_LIST_TAB_NAMES = ["Tempo", "템포", "テンポ",
                         "Signature", "조표 및 박자표", "調号と拍子記号"]
 ALL_LIST_TAB_NAMES = (EVENT_LIST_TAB_NAMES + MARKER_LIST_TAB_NAMES + OTHER_LIST_TAB_NAMES)
+
+
+# `None` from blocking_modal() means a completed scan found no blocker. A dictionary whose state is
+# `cannot_tell` means at least one required detector read did not answer; it is deliberately truthy
+# so existing precondition callers refuse it, and summarize() records it separately from a detected
+# blocker. Keep the string public: live harnesses can display the reason without guessing a shape.
+MODAL_CANNOT_TELL = "cannot_tell"
+_MODAL_SNAPSHOT_UNSET = object()
 
 
 def label_set(name, repo=None):
@@ -167,6 +186,23 @@ def _running_harness_name():
 ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック"]
 
 
+def _is_logic_owned_window(window):
+    """Whether a CoreGraphics window belongs to Logic, including its measured Korean owner spelling."""
+    # Measured 2026-08-17: with Logic running in Korean, `kCGWindowOwnerName` comes back as
+    # "Logic Pro" — a NO-BREAK SPACE — while English and Japanese give an ordinary space.
+    # An exact compare therefore found ZERO Logic windows on a Korean Logic, and every capture
+    # in the run recorded `window: null` while Logic was plainly on screen.
+    owner = (window.get("kCGWindowOwnerName") or "").replace(" ", " ")
+    return owner == "Logic Pro"
+
+
+def _on_screen_windows(Quartz):
+    """The CoreGraphics window list both on-screen window readers use."""
+    return Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
+        Quartz.kCGNullWindowID)
+
+
 def logic_window(title_contains=None):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
 
@@ -186,16 +222,9 @@ def logic_window(title_contains=None):
         import Quartz
     except ImportError:
         return None
-    wins = Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
-        Quartz.kCGNullWindowID)
+    wins = _on_screen_windows(Quartz)
     for w in wins or []:
-        # Measured 2026-08-17: with Logic running in Korean, `kCGWindowOwnerName` comes back as
-        # "Logic Pro" — a NO-BREAK SPACE — while English and Japanese give an ordinary space.
-        # An exact compare therefore found ZERO Logic windows on a Korean Logic, and every capture
-        # in the run recorded `window: null` while Logic was plainly on screen.
-        owner = (w.get("kCGWindowOwnerName") or "").replace(" ", " ")
-        if owner != "Logic Pro":
+        if not _is_logic_owned_window(w):
             continue
         name = w.get("kCGWindowName") or ""
         if title_contains and title_contains not in name:
@@ -204,6 +233,349 @@ def logic_window(title_contains=None):
         return {"id": w["kCGWindowNumber"], "title": name,
                 "x": int(b["X"]), "y": int(b["Y"]),
                 "w": int(b["Width"]), "h": int(b["Height"])}
+    return None
+
+
+class _ModalReadError(RuntimeError):
+    """An AX read that did not answer, kept separate from a completed empty search."""
+
+    def __init__(self, site, status=None):
+        self.site = site
+        self.status = status
+        suffix = "" if status is None else f" (AX status {status!r})"
+        super().__init__(site + suffix)
+
+
+def _modal_cannot_tell(signal, reason):
+    """The explicit third blocking_modal state; None is reserved for a completed clear scan."""
+    return {"state": MODAL_CANNOT_TELL, "kind": MODAL_CANNOT_TELL,
+            "signal": signal, "reason": reason}
+
+
+class _AXRuntime:
+    """The small C Accessibility bridge PyObjC does not vend through this Quartz installation."""
+
+    _UTF8 = 0x08000100
+    _ATTRIBUTE_UNSUPPORTED = -25205
+    _NO_VALUE = -25212
+
+    def __init__(self):
+        try:
+            self.ax = ctypes.CDLL(
+                "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+            self.cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        except OSError as exc:
+            raise _ModalReadError(f"could not load the Accessibility framework: {exc!r}") from exc
+
+        self.ax.AXUIElementCreateApplication.restype = ctypes.c_void_p
+        self.ax.AXUIElementCreateApplication.argtypes = (ctypes.c_int,)
+        self.ax.AXUIElementCopyAttributeValue.restype = ctypes.c_int
+        self.ax.AXUIElementCopyAttributeValue.argtypes = (
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
+        self.cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        self.cf.CFStringCreateWithCString.argtypes = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32)
+        self.cf.CFStringGetLength.restype = ctypes.c_long
+        self.cf.CFStringGetLength.argtypes = (ctypes.c_void_p,)
+        self.cf.CFStringGetTypeID.restype = ctypes.c_ulong
+        self.cf.CFStringGetMaximumSizeForEncoding.restype = ctypes.c_long
+        self.cf.CFStringGetMaximumSizeForEncoding.argtypes = (ctypes.c_long, ctypes.c_uint32)
+        self.cf.CFStringGetCString.restype = ctypes.c_bool
+        self.cf.CFStringGetCString.argtypes = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32)
+        self.cf.CFArrayGetCount.restype = ctypes.c_long
+        self.cf.CFArrayGetCount.argtypes = (ctypes.c_void_p,)
+        self.cf.CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+        self.cf.CFArrayGetValueAtIndex.argtypes = (ctypes.c_void_p, ctypes.c_long)
+        self.cf.CFGetTypeID.restype = ctypes.c_ulong
+        self.cf.CFGetTypeID.argtypes = (ctypes.c_void_p,)
+        self.cf.CFArrayGetTypeID.restype = ctypes.c_ulong
+        self.cf.CFBooleanGetTypeID.restype = ctypes.c_ulong
+        self.cf.CFBooleanGetValue.restype = ctypes.c_bool
+        self.cf.CFBooleanGetValue.argtypes = (ctypes.c_void_p,)
+        self.cf.CFRelease.argtypes = (ctypes.c_void_p,)
+        self._owned = []
+
+    def application(self, pid):
+        element = self.ax.AXUIElementCreateApplication(pid)
+        if not element:
+            raise _ModalReadError("could not create an AX application element")
+        self._owned.append(element)
+        return element
+
+    def attribute(self, element, attribute, site):
+        name = self.cf.CFStringCreateWithCString(None, attribute.encode("utf-8"), self._UTF8)
+        if not name:
+            raise _ModalReadError(f"{site}: could not create a CFString")
+        value = ctypes.c_void_p()
+        try:
+            status = self.ax.AXUIElementCopyAttributeValue(element, name, ctypes.byref(value))
+        finally:
+            self.cf.CFRelease(name)
+        if status != 0:
+            raise _ModalReadError(site, status)
+        if not value.value:
+            raise _ModalReadError(f"{site}: successful but empty payload")
+        self._owned.append(value.value)
+        return value.value
+
+    def elements(self, value, site):
+        if self.cf.CFGetTypeID(value) != self.cf.CFArrayGetTypeID():
+            raise _ModalReadError(f"{site}: successful but non-array payload")
+        return [self.cf.CFArrayGetValueAtIndex(value, index)
+                for index in range(self.cf.CFArrayGetCount(value))]
+
+    def text(self, value, site):
+        if self.cf.CFGetTypeID(value) != self.cf.CFStringGetTypeID():
+            raise _ModalReadError(f"{site}: successful but non-string payload")
+        length = self.cf.CFStringGetLength(value)
+        capacity = self.cf.CFStringGetMaximumSizeForEncoding(length, self._UTF8) + 1
+        if capacity <= 0:
+            raise _ModalReadError(f"{site}: invalid CFString length")
+        buffer = ctypes.create_string_buffer(capacity)
+        if not self.cf.CFStringGetCString(value, buffer, capacity, self._UTF8):
+            raise _ModalReadError(f"{site}: could not decode CFString")
+        return buffer.value.decode("utf-8", "replace")
+
+    def boolean(self, value, site):
+        if self.cf.CFGetTypeID(value) != self.cf.CFBooleanGetTypeID():
+            raise _ModalReadError(f"{site}: successful but non-boolean payload")
+        return bool(self.cf.CFBooleanGetValue(value))
+
+    def definitive_absence(self, status):
+        return status in {self._ATTRIBUTE_UNSUPPORTED, self._NO_VALUE}
+
+    def close(self):
+        for value in reversed(self._owned):
+            self.cf.CFRelease(value)
+        self._owned.clear()
+
+
+def _ax_optional_title(ax, element):
+    """A title helps correlate CG and AX records, but its absence does not veto a known blocker."""
+    try:
+        return ax.text(ax.attribute(element, "AXTitle", "AXTitle"), "AXTitle")
+    except _ModalReadError:
+        return ""
+
+
+def _first_ax_sheet(ax, window, max_depth=32):
+    """Find a sheet on one host through AXSheets or its descendant tree.
+
+    Logic can report AXSheets as unsupported even while New Track is visible. AXSheets is therefore a
+    cheap positive only; descendants are still searched for an AXSheet role. A direct AXSheets
+    candidate whose AXRole cannot be read, or a failed descendant read, is not changed into an empty
+    branch because that would certify a clear document without having searched it.
+    """
+    unreadable = None
+    try:
+        direct = ax.elements(ax.attribute(window, "AXSheets", "AXSheets"), "AXSheets")
+    except _ModalReadError:
+        # AXSheets is non-authoritative. Logic has measured it as unsupported even while the sheet
+        # is visible, so neither an AXSheets error nor a malformed AXSheets value may veto the
+        # descendant traversal that actually decides this detector's sheet signal.
+        direct = []
+
+    for candidate in direct:
+        try:
+            role = ax.text(ax.attribute(candidate, "AXRole", "AXSheets candidate AXRole"),
+                           "AXSheets candidate AXRole")
+        except _ModalReadError as exc:
+            # A direct sheet is not necessarily duplicated under AXChildren. Keep this unreadable
+            # candidate so a later clear scan returns cannot-tell instead of pretending it was not
+            # there. A positively identified sheet below still outranks an unreadable sibling.
+            if unreadable is None:
+                unreadable = exc
+            continue
+        if role == "AXSheet":
+            return candidate
+
+    stack = [(window, 0)]
+    while stack:
+        current, depth = stack.pop()
+        try:
+            children = ax.elements(ax.attribute(current, "AXChildren", "AXChildren"), "AXChildren")
+        except _ModalReadError as exc:
+            # A confirmed no-children status is a completed leaf. Any other status leaves this
+            # branch unreadable, but a later sibling can still positively identify a sheet.
+            if not ax.definitive_absence(exc.status) and unreadable is None:
+                unreadable = exc
+            continue
+        if depth >= max_depth:
+            if children:
+                raise _ModalReadError(f"AX sheet descendant search reached depth {max_depth}")
+            continue
+        for child in children:
+            try:
+                role = ax.text(ax.attribute(child, "AXRole", "AX descendant AXRole"),
+                               "AX descendant AXRole")
+            except _ModalReadError as exc:
+                if unreadable is None:
+                    unreadable = exc
+                continue
+            if role == "AXSheet":
+                return child
+            stack.append((child, depth + 1))
+    if unreadable is not None:
+        raise unreadable
+    return None
+
+
+def _production_ax_modal_signals():
+    """Return app-wide modal AX windows and sheets for every running Logic process.
+
+    This deliberately does not bind a sheet to the document a harness is about to inspect. Any sheet
+    on any Logic window therefore makes the detector report a blocker. The cost is a conservative
+    refusal when another document has a sheet; the benefit is that this generic precondition never
+    labels the application clear while its AX sheet enumeration is scoped to the wrong window.
+    """
+    try:
+        from AppKit import NSWorkspace
+        applications = NSWorkspace.sharedWorkspace().runningApplications()
+    except Exception as exc:  # noqa: BLE001 - no workspace means the off-screen check did not run
+        raise _ModalReadError(f"could not enumerate running Logic applications: {exc!r}") from exc
+
+    logic_apps = [app for app in applications
+                  if app.bundleIdentifier() in {"com.apple.logic10", "com.apple.mobilelogic"}]
+    ax = _AXRuntime()
+    try:
+        first_unreadable = None
+        for app in logic_apps:
+            app_element = ax.application(app.processIdentifier())
+            windows = ax.elements(ax.attribute(app_element, "AXWindows", "AXWindows"), "AXWindows")
+            for window in windows:
+                title = _ax_optional_title(ax, window)
+                # A positively identified sheet already proves this document is blocked. Do not
+                # discard that fact because AXModal on its ordinary host fails a later read: the
+                # product's reconciliation takes the same "found outranks unreadable sibling"
+                # direction for sheets.
+                try:
+                    sheet = _first_ax_sheet(ax, window)
+                except _ModalReadError as exc:
+                    sheet = None
+                    if first_unreadable is None:
+                        first_unreadable = exc
+                if sheet is not None:
+                    return {"modal_windows": [],
+                            "sheets": [{"host_title": title, "pid": app.processIdentifier()}]}
+                try:
+                    modal = ax.boolean(ax.attribute(window, "AXModal", "AXModal"), "AXModal")
+                except _ModalReadError as exc:
+                    if first_unreadable is None:
+                        first_unreadable = exc
+                    continue
+                if modal:
+                    return {"modal_windows": [{"title": title, "pid": app.processIdentifier()}],
+                            "sheets": []}
+        if first_unreadable is not None:
+            raise first_unreadable
+        return {"modal_windows": [], "sheets": []}
+    finally:
+        ax.close()
+
+
+def _normal_ax_modal_signals(signals):
+    """Validate the small test seam as strictly as production validates a completed AX scan."""
+    if not isinstance(signals, dict):
+        raise _ModalReadError("AX modal query returned no signal object")
+    modal_windows, sheets = signals.get("modal_windows"), signals.get("sheets")
+    if not isinstance(modal_windows, list) or not isinstance(sheets, list):
+        raise _ModalReadError("AX modal query returned malformed signal lists")
+    if not all(isinstance(item, dict) for item in modal_windows + sheets):
+        raise _ModalReadError("AX modal query returned malformed signal entries")
+    return signals
+
+
+def _coregraphics_modal_panels(Quartz, windows):
+    """The on-screen modal-panel-level candidates, before AX confirms that they are modal."""
+    modal_panel_level = Quartz.CGWindowLevelForKey(Quartz.kCGModalPanelWindowLevelKey)
+    out = []
+    for window in windows:
+        if not _is_logic_owned_window(window):
+            continue
+        layer = window.get(Quartz.kCGWindowLayer)
+        try:
+            if int(layer) != int(modal_panel_level):
+                continue
+        except (TypeError, ValueError):
+            continue
+        candidate = {"id": window.get(Quartz.kCGWindowNumber),
+                     "title": window.get(Quartz.kCGWindowName) or "", "layer": int(layer)}
+        # NOT `isinstance(b, dict)`: CoreGraphics returns an NSDictionary proxy, which is
+        # subscriptable but not a Python dict. Geometry identifies a detected panel more usefully,
+        # but cannot be allowed to erase the already-read level signal when it is malformed.
+        bounds = window.get(Quartz.kCGWindowBounds)
+        if bounds is not None:
+            try:
+                candidate.update({"x": int(bounds["X"]), "y": int(bounds["Y"]),
+                                  "w": int(bounds["Width"]), "h": int(bounds["Height"])})
+            except (KeyError, TypeError, ValueError):
+                pass
+        out.append(candidate)
+    return out
+
+
+def _same_modal_window(panel, window, panel_count, modal_count):
+    """Correlate the two APIs only when a title or unambiguous singleton makes it honest."""
+    panel_title, ax_title = panel.get("title") or "", window.get("title") or ""
+    return ((bool(panel_title) and panel_title == ax_title)
+            or (panel_count == 1 and modal_count == 1))
+
+
+def blocking_modal(lister=None, ax_lister=None):
+    """Describe a detected Logic blocker, `None` after a clear scan, or explicit cannot-tell.
+
+    CoreGraphics is still the screen-side signal: it observes the rendered modal-panel level without
+    relying on the AX tree under test. `kCGWindowListOptionOnScreenOnly` is deliberately retained.
+    Its known limitation is that it cannot see an inactive-Space/off-screen panel; widening it would
+    also report windows on other Spaces that are not blocking the current one. The AX window/sheet
+    signal covers a running process beyond that list, but is weaker exactly when AX itself is broken.
+    AX sheets are application-wide rather than bound to the document a harness will inspect, so a
+    sheet on another Logic document is a deliberate conservative refusal. An unreadable AXRole on a
+    directly enumerated sheet is likewise cannot-tell, not a completed clear scan.
+
+    A panel level is not modality — a modeless panel can occupy it — so AXModal confirms that a
+    CoreGraphics candidate actually blocks. Sheets need AX outright: their host reports AXModal=false,
+    while the AXSheet below it blocks that document. `lister` and `ax_lister` are test seams; a seam
+    must return an empty list/object for a completed clear scan, never None.
+    """
+    try:
+        import Quartz
+    except ImportError:
+        return _modal_cannot_tell("coregraphics", "could not import Quartz")
+
+    try:
+        windows = lister() if lister is not None else _on_screen_windows(Quartz)
+    except Exception as exc:  # noqa: BLE001 - an unread window list is not a clear desktop
+        return _modal_cannot_tell("coregraphics", f"could not read the window list: {exc!r}")
+    if windows is None:
+        return _modal_cannot_tell("coregraphics", "could not read the window list")
+    try:
+        panels = _coregraphics_modal_panels(Quartz, list(windows))
+    except Exception as exc:  # noqa: BLE001
+        return _modal_cannot_tell("coregraphics", f"could not interpret the window list: {exc!r}")
+
+    try:
+        raw_signals = ax_lister() if ax_lister is not None else _production_ax_modal_signals()
+        signals = _normal_ax_modal_signals(raw_signals)
+    except _ModalReadError as exc:
+        return _modal_cannot_tell("accessibility", str(exc))
+    except Exception as exc:  # noqa: BLE001 - avoid making an AX outage look like no sheet
+        return _modal_cannot_tell("accessibility", f"AX modal query failed: {exc!r}")
+
+    if signals["sheets"]:
+        sheet = signals["sheets"][0]
+        return {"state": "detected", "kind": "sheet", "signal": "ax_sheet",
+                "host_title": sheet.get("host_title") or "", "pid": sheet.get("pid")}
+
+    modal_windows = signals["modal_windows"]
+    for panel in panels:
+        for window in modal_windows:
+            if _same_modal_window(panel, window, len(panels), len(modal_windows)):
+                return {**panel, "state": "detected", "kind": "modal_panel",
+                        "signal": "coregraphics_modal_panel_level+ax_modal"}
+    if modal_windows:
+        window = modal_windows[0]
+        return {"state": "detected", "kind": "modal_window", "signal": "ax_modal",
+                "title": window.get("title") or "", "pid": window.get("pid")}
     return None
 
 
@@ -419,6 +791,16 @@ def _body(raw):
         return {"_text": text}
 
 
+def artifact_answered(body):
+    """Whether a parsed tool body came from an answered transport request.
+
+    `_body(None)` deliberately preserves the failed transport as a non-empty dictionary so a receipt
+    can show what went wrong. A bare truthiness check on that dictionary turns a dead transport into
+    an answered artifact, so harnesses must use this predicate for that question instead.
+    """
+    return isinstance(body, dict) and "_transport_error" not in body
+
+
 # ---------------------------------------------------------------------------
 # Evidence document
 # ---------------------------------------------------------------------------
@@ -586,7 +968,7 @@ class Evidence:
         """Record a reading that is context rather than a claim."""
         self.records.append({"kind": "observation", "tag": tag, "payload": payload})
 
-    def check(self, tag, passed, expected, observed, mutation):
+    def check(self, tag, passed, expected, observed, mutation, modal_snapshot=_MODAL_SNAPSHOT_UNSET):
         """Assert something about the run.
 
         `mutation` NAMES a change to the product the author believes would flip this check. The
@@ -605,14 +987,21 @@ class Evidence:
 
         `falsifiable()` below is the cheap form that does establish something.
         """
+        # The interesting instant is when `observed` was measured, not when this receipt happens to
+        # be appended. A caller that took a modal snapshot beside its AX read supplies it here; the
+        # fallback preserves the older convenience for callers that did not. The sentinel matters:
+        # explicit None is the completed-clear snapshot and must not trigger a second, later read.
+        modal = blocking_modal() if modal_snapshot is _MODAL_SNAPSHOT_UNSET else modal_snapshot
         self.records.append({
             "kind": "check", "tag": tag, "passed": bool(passed),
             "expected": expected, "observed": observed,
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
+            "blocking_modal": modal,
         })
         return bool(passed)
 
-    def falsifiable(self, tag, predicate, observation, counterexample, expected, mutation=None):
+    def falsifiable(self, tag, predicate, observation, counterexample, expected, mutation=None,
+                    modal_snapshot=_MODAL_SNAPSHOT_UNSET):
         """A check whose assertion is run against a state it MUST reject, in the same run.
 
         `check()` records whether the author's condition held. It cannot notice a condition that
@@ -641,6 +1030,10 @@ class Evidence:
             counter_ok, counterexample = True, f"predicate raised on the counterexample: {exc!r}"
 
         passed = live_ok and not counter_ok
+        # As with check(), prefer the state sampled beside `observation`; predicates can take long
+        # enough for a sheet to close before the receipt is written. Callers without a contemporaneous
+        # snapshot retain the old record-time fallback.
+        modal = blocking_modal() if modal_snapshot is _MODAL_SNAPSHOT_UNSET else modal_snapshot
         self.records.append({
             "kind": "check", "tag": tag, "passed": passed,
             "expected": expected,
@@ -651,6 +1044,7 @@ class Evidence:
             "mutation": mutation or None, "mutation_claimed": bool(mutation),
             "has_counterexample": True,
             "counterexample_rejected": not counter_ok,
+            "blocking_modal": modal,
         })
         return passed
 
@@ -878,8 +1272,9 @@ def summarize(recs, out=None):
 
     Indexed with `.get` rather than `[...]` throughout: a document read back off disk may predate a
     field or have been truncated, and every missing key here reads as the FAILING value — an absent
-    `passed` is not a pass, an absent `settled` is unsettled. Crashing on a malformed document would
-    turn "this evidence is unreadable" into a stack trace at the gate.
+    `passed` is not a pass, an absent `settled` is unsettled, and an absent `blocking_modal` is not a
+    clear modal scan. Crashing on a malformed document would turn "this evidence is unreadable" into
+    a stack trace at the gate.
     """
     if not isinstance(recs, list):
         return None
@@ -891,6 +1286,19 @@ def summarize(recs, out=None):
         "file": out,
         "checks": len(checks),
         "passed": sum(1 for c in checks if c.get("passed")),
+        # A detected document/application modal contaminates the check made through it, even where
+        # an application-wide menu remains enabled. None is the only completed-clear modal state.
+        "checks_recorded_under_blocking_modal":
+            sum(1 for c in checks
+                if "blocking_modal" in c
+                and c.get("blocking_modal") is not None
+                and not _modal_snapshot_is_unknown(c.get("blocking_modal"))),
+        # Do not collapse "we did not record a snapshot" or "the detector could not inspect AX/CG"
+        # into a clear check. They are different defects, counted independently for diagnostics.
+        "checks_missing_blocking_modal_snapshot":
+            sum(1 for c in checks if "blocking_modal" not in c),
+        "checks_with_blocking_modal_unknown":
+            sum(1 for c in checks if _modal_snapshot_is_unknown(c.get("blocking_modal"))),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
         "checks_with_a_counterexample": sum(1 for c in checks if c.get("has_counterexample")),
         "counterexamples_not_rejected":
@@ -915,6 +1323,13 @@ def summarize(recs, out=None):
     }
 
 
+def _modal_snapshot_is_unknown(snapshot):
+    """Whether a check carries the detector's explicit cannot-tell state rather than a blocker."""
+    return (isinstance(snapshot, dict)
+            and snapshot.get("state") == MODAL_CANNOT_TELL
+            and snapshot.get("kind") == MODAL_CANNOT_TELL)
+
+
 # Every counter `is_clean` reads. A summary missing any of them is not clean.
 #
 # The polarity used to depend on which key it was: `summary.get("visual_assertions_without_a_subject", 0) == 0`
@@ -923,7 +1338,9 @@ def summarize(recs, out=None):
 # was clean, and the newest condition was the one that vanished quietly. Listing the keys fixes the
 # shape of the bug rather than the one clause where it was noticed.
 _REQUIRED_SUMMARY_KEYS = (
-    "checks", "passed", "mutation_claimed", "operations_driven",
+    "checks", "passed", "checks_recorded_under_blocking_modal",
+    "checks_missing_blocking_modal_snapshot", "checks_with_blocking_modal_unknown",
+    "mutation_claimed", "operations_driven",
     "checks_with_a_counterexample", "counterexamples_not_rejected",
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
@@ -940,9 +1357,10 @@ def is_clean(summary):
     reported success. The only value that failed was zero, i.e. a run where NOTHING passed. A harness
     whose exit code cannot express failure is not an instrument.
 
-    Every dimension the evidence document tracks has to be clean, not just the check count: an unsettled
-    capture, a failed visual assertion, a restoration that did not happen, or a cached read presented as
-    live each invalidate the run on their own.
+    Every dimension the evidence document tracks has to be clean, not just the check count: a check
+    recorded while a blocker was present, a missing/unknown modal snapshot, an unsettled capture, a
+    failed visual assertion, a restoration that did not happen, or a cached read presented as live each
+    invalidate the run on their own.
 
     THE ZEROS HAVE TO BE EARNED. Every `== 0` clause below is satisfied by a run that never did the
     thing at all: no visual assertion means no visual can lack a subject, and no capture means none
@@ -986,6 +1404,12 @@ def is_clean(summary):
     return (
         summary["checks"] > 0
         and summary["passed"] == summary["checks"]
+        # A detected blocker, a missing snapshot, or a detector that could not inspect the state all
+        # retire a check. Only CHECK records carry modal snapshots; the other record kinds are not
+        # sampled and this condition deliberately makes no claim about them.
+        and summary["checks_recorded_under_blocking_modal"] == 0
+        and summary["checks_missing_blocking_modal_snapshot"] == 0
+        and summary["checks_with_blocking_modal_unknown"] == 0
         # Non-vacuity: the run has to have looked, driven, and recorded.
         and summary["captures"] > 0
         and summary["visual_assertions"] > 0

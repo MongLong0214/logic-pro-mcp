@@ -7,7 +7,8 @@ On 2026-08-30 four roadmap rows said an AX surface was opaque. Three of the four
 none of the three had ever been measured against the surface it named:
 
     #301  "the AX plane a readback needs is not exposed"
-          -> Channel EQ exposes all 24 band sliders, named and settable. The claim came from a
+          -> Channel EQ exposes 26 sliders total, including all 24 named band parameters; every
+             slider is named and settable. The claim came from a
              census that instantiates the Audio Unit OUTSIDE Logic, which ADR-018 itself says
              cannot speak for Logic's live instance.
     #305  "AU parameter view observed AX-opaque"
