@@ -121,7 +121,6 @@ def export_path_resolves(path, leaf):
     return (
         isinstance(path, list)
         and [node.get("role") if isinstance(node, dict) else None for node in path] == EXPECTED_EXPORT_ROLES
-        and len(path) == 5
         and path_name(path[0]) in FILE_LABELS
         and path_name(path[2]) == EXPORT
         and path_name(path[4]) == leaf
@@ -145,7 +144,6 @@ def open_path_is_enabled(path):
     return (
         isinstance(path, list)
         and [node.get("role") if isinstance(node, dict) else None for node in path] == EXPECTED_OPEN_ROLES
-        and len(path) == 3
         and path_name(path[0]) in FILE_LABELS
         and path_name(path[-1]) == OPEN
         and isinstance(path[-1], dict)
@@ -221,6 +219,17 @@ ev.falsifiable("369/the-release-artifact-answers-a-read-only-wire-request",
 # the File menu nor the export panel is opened by this harness.
 result = probe(tool)
 ev.note("369/export-menu-raw-ax", result)
+
+ev.falsifiable(
+    "369/raw-ax-probe-completed-its-search",
+    lambda observation: isinstance(observation, dict) and observation.get("outcome") == "searched",
+    result,
+    derived_witness(result, outcome="could_not_search"),
+    "the raw AX witness completed its search without an unreadable AX branch",
+    "make any raw AX read fail: the witness emits outcome=could_not_search and this goes red",
+)
+if result.get("outcome") != "searched":
+    finish()
 
 all_tracks_path = result.get("all_tracks_path")
 one_track_path = result.get("one_track_path")

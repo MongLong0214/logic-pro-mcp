@@ -113,38 +113,21 @@ func isBlockingDialogWindow(_ element: AXUIElement) -> Bool {
     // Arrange window                  AXStandard  false    0
     // Go To Position                  AXFloating  true     3
     //
-    // AXModal is modality, unlike AXDialog's window class. A true AXModal blocks regardless of
-    // subrole, which admits Go To Position without classifying the modeless plug-in AXDialog above.
-    // Dialog/SystemDialog remains an additional alert admission path only when AXModal is a
-    // successful-but-absent optional attribute. A failed AX read is not absence: every failed read
-    // in this predicate (including subrole and the keyboard-overlay exclusion) means blocking.
-    let windowSubrole = subrole(of: element)
+    // AXModal is modality, unlike a window's class. A true AXModal blocks regardless of subrole,
+    // which admits Go To Position without classifying the modeless plug-in AXDialog above. More
+    // importantly, an absent, wrong-typed, or failed AXModal is UNKNOWN for EVERY subrole, not a
+    // harmless optional value for AXFloatingWindow and an alert only for AXDialog. Fail closed on
+    // that unknown payload; `axAttribute` represents both a nil and a successful wrong type as
+    // `.absent`, so treating it as clear would turn an unreadable value into a clean snapshot.
     let modal = axAttribute(element, kAXModalAttribute as String) as AXRead<Bool>
-    if case .failed = windowSubrole { return true }
-    if case .failed = modal { return true }
-
-    let isAlertSubrole: Bool
-    switch windowSubrole {
-    case .value(let value):
-        isAlertSubrole = value == kAXDialogSubrole as String || value == kAXSystemDialogSubrole as String
-    case .absent:
-        isAlertSubrole = false
-    case .failed:
-        return true
-    }
-
-    let admitsBlocking: Bool
     switch modal {
     case .value(true):
-        admitsBlocking = true
+        break
     case .value(false):
-        admitsBlocking = false
-    case .absent:
-        admitsBlocking = isAlertSubrole
-    case .failed:
+        return false
+    case .absent, .failed:
         return true
     }
-    guard admitsBlocking else { return false }
 
     // Do not turn the keyboard-layout overlay into a dialog. If its identifying reads fail, the
     // answer is unknown rather than harmless, so fail closed just as the AXModal read does.

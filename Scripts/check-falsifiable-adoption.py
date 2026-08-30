@@ -23,10 +23,11 @@ is where a ratchet's teeth are — a number that can be lowered by whoever is in
 suggestion.
 
 It does not check that a counterexample is a GOOD one. It does reject one mechanically detectable
-hollow form: a constant dictionary counterexample paired with a lambda that only subscripts a
-boolean wrapper. That form proves lookup distinguishes true from false, not that the predicate
-examines its stated observation. Beyond that narrow case, whether the alternative is the one that
-matters remains the author's claim and a reviewer's job.
+hollow form: a constant dictionary counterexample paired with a lambda that only reads one
+attribute or subscript from its parameter, including `.get(...)`. That form proves lookup
+distinguishes true from false, not that the predicate examines its stated observation. Beyond that
+narrow case, whether the alternative is the one that matters remains the author's claim and a
+reviewer's job.
 """
 import ast
 import glob
@@ -37,6 +38,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
 FLOOR = 4
+_FALSIFIABLE_PARAMETERS = (
+    "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
+)
+_REQUIRED_FALSIFIABLE_PARAMETERS = _FALSIFIABLE_PARAMETERS[:5]
 
 def _call_argument(call, position, keyword):
     if len(call.args) > position:
@@ -55,6 +60,38 @@ def _constant_literal(node):
     return False
 
 
+def _has_plausible_falsifiable_arity(call):
+    """Whether a call supplies every required `Evidence.falsifiable` argument.
+
+    A name match alone is not adoption: `E.falsifiable(1)` cannot run the framework's predicate
+    contract and must not raise the floor. Positional and keyword calls are both valid forms.
+    """
+    if len(call.args) > len(_FALSIFIABLE_PARAMETERS) or any(
+            isinstance(argument, ast.Starred) for argument in call.args):
+        return False
+    supplied = {}
+    for position, argument in enumerate(call.args):
+        supplied[_FALSIFIABLE_PARAMETERS[position]] = argument
+    for keyword in call.keywords:
+        if (keyword.arg is None or keyword.arg not in _FALSIFIABLE_PARAMETERS
+                or keyword.arg in supplied):
+            return False
+        supplied[keyword.arg] = keyword.value
+    return all(name in supplied for name in _REQUIRED_FALSIFIABLE_PARAMETERS)
+
+
+def _is_single_parameter_access(body, parameter):
+    """Whether `body` only accesses the lambda parameter once, with no assertion around it."""
+    if isinstance(body, (ast.Attribute, ast.Subscript)):
+        base = body.value
+    elif isinstance(body, ast.Call) and isinstance(body.func, ast.Attribute):
+        # `.get(...)` is still a single access on the parameter, merely with call syntax.
+        base = body.func.value
+    else:
+        return False
+    return isinstance(base, ast.Name) and base.id == parameter
+
+
 def _is_hollow_falsifiable(call):
     """The known boolean-wrapper pattern, not a claim to judge arbitrary counterexamples."""
     predicate = _call_argument(call, 1, "predicate")
@@ -66,10 +103,7 @@ def _is_hollow_falsifiable(call):
     if len(predicate.args.args) != 1 or predicate.args.vararg or predicate.args.kwarg:
         return False
     parameter = predicate.args.args[0].arg
-    body = predicate.body
-    return (isinstance(body, ast.Subscript)
-            and isinstance(body.value, ast.Name)
-            and body.value.id == parameter)
+    return _is_single_parameter_access(predicate.body, parameter)
 
 
 def _falsifiable_calls(text):
@@ -93,7 +127,7 @@ def _falsifiable_calls(text):
             continue
         func = node.func
         name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-        if name == "falsifiable":
+        if name == "falsifiable" and _has_plausible_falsifiable_arity(node):
             if _is_hollow_falsifiable(node):
                 hollow_lines.append(node.lineno)
             else:

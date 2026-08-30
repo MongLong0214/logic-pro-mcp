@@ -31,9 +31,12 @@ def harness(name, body):
     return path
 
 
+VALID_CALL = 'E.falsifiable("tag", predicate, observation, counterexample, "expected")\n'
+
+
 for label, files, want in [
     ("a harness that calls it counts",
-     [harness("live_a.py", "E.falsifiable(tag, p, obs, cx, exp)\n")], 1),
+     [harness("live_a.py", VALID_CALL)], 1),
     ("a harness that does not, does not",
      [harness("live_b.py", "E.check(tag, True, 'x', 'y')\n")], 0),
     ("a mention in prose is not a call",
@@ -47,17 +50,22 @@ for label, files, want in [
     ("the word inside a string is not a call",
      [harness("live_i.py", "msg = 'use falsifiable(...) instead'\n")], 0),
     ("a call reached through the module still counts",
-     [harness("live_j.py", "import evidence\nevidence.falsifiable(1)\n")], 1),
+     [harness("live_j.py", "import evidence\nevidence.falsifiable(\"tag\", p, o, c, \"expected\")\n")], 1),
     ("a call nested inside a function body counts",
-     [harness("live_k.py", "def run():\n    if x:\n        E.falsifiable(1)\n")], 1),
+     [harness("live_k.py", "def run():\n    if x:\n        E.falsifiable(\"tag\", p, o, c, \"expected\")\n")], 1),
     ("a file that will not parse is not an adopter",
      [harness("live_l.py", "def (\n E.falsifiable(1)\n")], 0),
     ("whitespace before the paren still counts",
-     [harness("live_d.py", "E.falsifiable (tag, p, obs, cx, exp)\n")], 1),
+     [harness("live_d.py", "E.falsifiable (\"tag\", p, o, c, \"expected\")\n")], 1),
     ("a longer name is not this one",
      [harness("live_e.py", "unfalsifiable(x)\n")], 0),
     ("two adopters count as two",
-     [harness("live_f.py", "falsifiable(1)\n"), harness("live_g.py", "E.falsifiable(1)\n")], 2),
+     [harness("live_f.py", "falsifiable(\"tag\", p, o, c, \"expected\")\n"),
+      harness("live_g.py", VALID_CALL)], 2),
+    ("an incomplete call cannot adopt",
+     [harness("live_arity.py", 'E.falsifiable("tag", lambda o: o["ok"], {"ok": True}, {"ok": False})\n')], 0),
+    ("a call with an impossible extra argument cannot adopt",
+     [harness("live_too_many.py", 'E.falsifiable("tag", p, o, c, "expected", None, None, None)\n')], 0),
     ("an unreadable file is not adopted",
      [os.path.join(tmp, "live_missing.py")], 0),
 ]:
@@ -69,9 +77,19 @@ for label, files, want in [
 # This is the exact shape that made the ratchet lie: the predicate receives only a boolean wrapper
 # and the counterexample is a hand-authored constant dictionary. A real observation predicate beside
 # it must still count, while the hollow call is reported with the source location that needs repair.
-hollow = harness(
-    "live_hollow.py",
+hollow_subscript = harness(
+    "live_hollow_subscript.py",
     'E.falsifiable("hollow", lambda observation: observation["ok"], {"ok": True}, '
+    '{"ok": False}, "expected")\n',
+)
+hollow_get = harness(
+    "live_hollow_get.py",
+    'E.falsifiable("hollow", lambda observation: observation.get("ok"), {"ok": True}, '
+    '{"ok": False}, "expected")\n',
+)
+hollow_attribute = harness(
+    "live_hollow_attribute.py",
+    'E.falsifiable("hollow", lambda observation: observation.ok, {"ok": True}, '
     '{"ok": False}, "expected")\n',
 )
 real = harness(
@@ -79,8 +97,13 @@ real = harness(
     'E.falsifiable("real", lambda sliders: all(slider["description"] for slider in sliders), '
     '[{"description": "Peak 3 Q"}], [{"description": ""}], "expected")\n',
 )
-adopters, total, hollow_calls = G.adoption([hollow, real], include_hollow=True)
-ok = (adopters == ["live_real.py"] and total == 2 and hollow_calls == [("live_hollow.py", 1)])
+adopters, total, hollow_calls = G.adoption(
+    [hollow_subscript, hollow_get, hollow_attribute, real], include_hollow=True)
+ok = (adopters == ["live_real.py"] and total == 4 and hollow_calls == [
+    ("live_hollow_subscript.py", 1),
+    ("live_hollow_get.py", 1),
+    ("live_hollow_attribute.py", 1),
+])
 failed += 0 if ok else 1
 print(f"{'ok  ' if ok else 'FAIL'} hollow calls do not count but real predicates do -> "
       f"adopters={adopters!r} hollow={hollow_calls!r}")

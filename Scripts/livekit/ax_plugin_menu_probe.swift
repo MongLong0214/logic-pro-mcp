@@ -38,21 +38,76 @@ enum AXRead<Value> {
 
 var axReadFailures: [JSON] = []
 
-func recordReadFailure(_ attribute: String, _ error: AXError) {
-    axReadFailures.append(["attribute": attribute, "status": error.rawValue])
+func elementIdentity(_ element: AXUIElement) -> String {
+    "cfhash:\(String(CFHash(element), radix: 16))"
+}
+
+// Two AX errors are ANSWERS, not failures: the element has no such attribute, or the attribute
+// holds no value. A menu item legitimately has no AXDescription and reports one of these on every
+// read. Counting them as failures made `outcome` read `could_not_search` on a perfectly good walk,
+// which stopped all three harnesses at their first precondition. Verified against AXError.h:
+// kAXErrorAttributeUnsupported = -25205, kAXErrorNoValue = -25212.
+let axAbsenceErrors: Set<Int32> = [
+    AXError.attributeUnsupported.rawValue,
+    AXError.noValue.rawValue,
+]
+
+func recordReadFailure(
+    _ element: AXUIElement,
+    attribute: String,
+    error: AXError,
+    readSite: String
+) {
+    // An absence is recorded on the element itself (status/error siblings); it does not belong in
+    // the list that decides whether the search completed.
+    guard !axAbsenceErrors.contains(error.rawValue) else { return }
+    // Let the failing element identify itself. `read_site` is a function name, which is not enough
+    // to find a stale reference among several call paths — diagnosing one kAXErrorIllegalArgument
+    // took three runs because the receipt could say only "some description read failed". These
+    // reads are best effort and may fail too on a dead reference, which is itself informative.
+    var role = "<unreadable>"
+    var roleValue: AnyObject?
+    if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+       let text = roleValue as? String {
+        role = text
+    }
+    var title = "<unreadable>"
+    var titleValue: AnyObject?
+    if AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleValue) == .success,
+       let text = titleValue as? String {
+        title = text
+    }
+    axReadFailures.append([
+        "attribute": attribute,
+        "status": error.rawValue,
+        "code": error.rawValue,
+        "element_id": elementIdentity(element),
+        "element_role": role,
+        "element_title": title,
+        "read_site": readSite,
+    ])
 }
 
 func trackRead<T>(_ read: AXRead<T>, attribute: String) -> AXRead<T> {
-    if case .failed(let error) = read { recordReadFailure(attribute, error) }
+    // Record failures at the actual AX call, where the element identity and read site are still
+    // available. Recording only after a value conversion loses both and makes a JSON null
+    // impossible to locate in a raw-AX receipt.
     return read
 }
 
 // Preserve success-with-value, success-with-absent, and failed AX requests. A raw `nil` loses the
 // distinction and let failed slider reads masquerade as empty AXDescriptions or unsettable values.
-func attr<T>(_ element: AXUIElement, _ attribute: String) -> AXRead<T> {
+func attr<T>(
+    _ element: AXUIElement,
+    _ attribute: String,
+    readSite: String = #function
+) -> AXRead<T> {
     var value: AnyObject?
     let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
-    guard result == .success else { return .failed(result) }
+    guard result == .success else {
+        recordReadFailure(element, attribute: attribute, error: result, readSite: readSite)
+        return .failed(result)
+    }
     guard let value else { return .absent }
     guard let typed = value as? T else { return .absent }
     return .value(typed)
@@ -105,7 +160,15 @@ func scalarValue(_ element: AXUIElement, _ attribute: String) -> AXRead<Any> {
 func valueIsSettable(_ element: AXUIElement) -> AXRead<Bool> {
     var settable = DarwinBoolean(false)
     let result = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
-    guard result == .success else { return .failed(result) }
+    guard result == .success else {
+        recordReadFailure(
+            element,
+            attribute: kAXValueAttribute as String,
+            error: result,
+            readSite: "AXUIElementIsAttributeSettable"
+        )
+        return .failed(result)
+    }
     return .value(settable.boolValue)
 }
 
@@ -137,6 +200,14 @@ func scalarJSONValue(_ read: AXRead<Any>, attribute: String) -> Any {
     case .value(let value): return value
     case .absent, .failed: return NSNull()
     }
+}
+
+func scalarJSONWitness(_ read: AXRead<Any>, attribute: String) -> JSON {
+    [
+        "value": scalarJSONValue(read, attribute: attribute),
+        "status": readStatus(read),
+        "error": readError(read),
+    ]
 }
 
 func boolJSONValue(_ read: AXRead<Bool>, attribute: String, absent: Any = NSNull()) -> Any {
@@ -196,6 +267,9 @@ func snapshot(_ element: AXUIElement) -> JSON {
     let enabledRead = boolAttribute(element, kAXEnabledAttribute as String)
     let valueRead = scalarValue(element, kAXValueAttribute as String)
     var out: JSON = [
+        // The same identifier is carried by ax_read_failures, so a failed null can be located in
+        // this census instead of being attributed only to an attribute name shared by many nodes.
+        "element_id": elementIdentity(element),
         // The historic scalar fields remain for old callers. Their status/error siblings retain
         // the AX result, so empty/false no longer silently means success-with-absent.
         "role": stringValue(roleRead, attribute: kAXRoleAttribute as String),
@@ -303,7 +377,14 @@ func windows() -> [AXUIElement] {
 }
 
 func newWindows(since before: [AXUIElement]) -> [AXUIElement] {
+    // AX exposes no direct edge from an insert slot to the plug-in window its button opens. This is
+    // deliberately application-wide rather than a pretend binding; openPlugin emits that widening
+    // in its receipt so harnesses do not present the sole new Logic window as slot-proven.
     windows().filter { candidate in !before.contains(where: { same($0, candidate) }) }
+}
+
+func windows(titled expectedTitle: String) -> [AXUIElement] {
+    windows().filter { titleText($0) == expectedTitle }
 }
 
 func press(_ element: AXUIElement, _ action: String = kAXPressAction as String) -> Int {
@@ -344,6 +425,7 @@ func trimmed(_ text: String) -> String {
 
 struct AncestorGroupSearch {
     let found: Bool
+    let matchingDescription: String?
     let boundHit: Bool
 }
 
@@ -353,7 +435,7 @@ struct AncestorGroupSearch {
 // a bound hit as an unresolved observation rather than treating it as a definitive non-match.
 func matchingGroupAncestor(
     of element: AXUIElement,
-    named expectedDescription: String,
+    named expectedDescriptions: Set<String>,
     maximumDepth: Int = 12
 ) -> AncestorGroupSearch {
     var current = element
@@ -362,11 +444,17 @@ func matchingGroupAncestor(
             attr(current, kAXParentAttribute as String) as AXRead<AXUIElement>,
             attribute: kAXParentAttribute as String
         ) else {
-            return AncestorGroupSearch(found: false, boundHit: false)
+            return AncestorGroupSearch(found: false, matchingDescription: nil, boundHit: false)
         }
-        if roleText(parent) == (kAXGroupRole as String)
-            && trimmed(descriptionText(parent)) == expectedDescription {
-            return AncestorGroupSearch(found: true, boundHit: false)
+        if roleText(parent) == (kAXGroupRole as String) {
+            let parentDescription = trimmed(descriptionText(parent))
+            if expectedDescriptions.contains(parentDescription) {
+                return AncestorGroupSearch(
+                    found: true,
+                    matchingDescription: parentDescription,
+                    boundHit: false
+                )
+            }
         }
         current = parent
     }
@@ -377,7 +465,11 @@ func matchingGroupAncestor(
         attr(current, kAXParentAttribute as String) as AXRead<AXUIElement>,
         attribute: kAXParentAttribute as String
     )
-    return AncestorGroupSearch(found: false, boundHit: hasMoreAncestors != nil)
+    return AncestorGroupSearch(
+        found: false,
+        matchingDescription: nil,
+        boundHit: hasMoreAncestors != nil
+    )
 }
 
 struct MixerContainerSearch {
@@ -400,19 +492,42 @@ func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
             // Require the layout-area role first: Logic exposes an AXGroup with the same mixer
             // description, but channel strips are descendants of the AXLayoutArea.
             roleText(container) == (kAXLayoutAreaRole as String)
-                && targets.contains(trimmed(descriptionText(container)))
         }
     }
     var ancestorSearchBoundHitCount = 0
-    let containers = layoutAreasSeen.filter { container in
-        // The container already matched a configured label, so matching that exact label on its
-        // AXGroup ancestor prevents one configured synonym from admitting another by coincidence.
+    var containers: [AXUIElement] = []
+    for container in layoutAreasSeen {
+        // An AXLayoutArea outside a labelled AXGroup cannot be the Mixer pane, so resolve the
+        // ancestry before asking it for AXDescription. Live AXLayoutArea elements can answer that
+        // read with kAXErrorIllegalArgument even while their AXRole read succeeds.
         let ancestor = matchingGroupAncestor(
             of: container,
-            named: trimmed(descriptionText(container))
+            named: targets
         )
         if ancestor.boundHit { ancestorSearchBoundHitCount += 1 }
-        return ancestor.found
+        guard ancestor.found, let ancestorDescription = ancestor.matchingDescription else { continue }
+
+        // Only a layout area inside a labelled mixer group is a description candidate. Require
+        // the same exact label so one configured synonym cannot admit another by coincidence.
+        // Keep a failed read observable: descriptionText records it in ax_read_failures.
+        let layoutAreaDescription = trimmed(descriptionText(container))
+        if layoutAreaDescription == ancestorDescription {
+            containers.append(container)
+            continue
+        }
+
+        // A nearer ancestor can use a different configured synonym. The first ancestry walk has
+        // already proved this layout area is in the mixer branch; now preserve the exact-label
+        // rule by checking whether the layout area's own label occurs farther up that branch.
+        guard targets.contains(layoutAreaDescription) else { continue }
+        let exactAncestor = matchingGroupAncestor(
+            of: container,
+            named: [layoutAreaDescription]
+        )
+        if exactAncestor.boundHit { ancestorSearchBoundHitCount += 1 }
+        if exactAncestor.found {
+            containers.append(container)
+        }
     }
     return MixerContainerSearch(
         layoutAreasSeen: layoutAreasSeen,
@@ -520,7 +635,6 @@ func slotSearchReport(_ search: PluginSlotSearch) -> JSON {
     result["unscoped_slot_count"] = search.unscopedSlots.count
     result["unscoped_slots"] = search.unscopedSlots.map(snapshot)
     result["mixer_layout_areas_seen"] = search.mixerLayoutAreasSeen?.count ?? 0
-    result["mixer_layout_areas"] = search.mixerLayoutAreasSeen?.map(snapshot) ?? []
     result["mixer_container_count"] = search.mixerContainers?.count ?? 0
     result["mixer_containers"] = search.mixerContainers?.map(snapshot) ?? []
     let mixerAncestorSearchBoundHitCount = search.mixerAncestorSearchBoundHitCount ?? 0
@@ -575,6 +689,9 @@ func openPlugin(
     result["open_press_status"] = press(buttons[0])
     usleep(1_400_000)
     let opened = newWindows(since: before)
+    result["opened_windows_scope"] = "all_logic_application_windows"
+    result["opened_windows_scope_widened_from_pressed_slot"] = true
+    result["opened_windows_scope_note"] = "new windows are not bound to the pressed \(slotName) slot"
     result["opened_windows"] = opened.map(snapshot)
     result["outcome"] = candidateOutcome(opened.count)
     return (result, slot, opened.count == 1 ? opened[0] : nil)
@@ -649,14 +766,14 @@ func runChannelEQ() {
     let bypassLabels = configuredStrings("bypass_labels")
     var result: JSON = ["frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""]
     var bypasses: [AXUIElement] = []
-    var bypassBefore: Any = NSNull()
+    var bypassBefore: AXRead<Any> = .absent
+    var bypassAfter: AXRead<Any> = .absent
     let (openResult, slot, opened) = openPlugin(slotName: slotName, openLabel: openLabel) { slot in
         bypasses = childElements(slot).filter {
             roleText($0) == "AXCheckBox" && bypassLabels.contains(descriptionText($0))
         }
         if bypasses.count == 1 {
-            bypassBefore = scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
-                                           attribute: kAXValueAttribute as String)
+            bypassBefore = scalarValue(bypasses[0], kAXValueAttribute as String)
         }
     }
     result["open"] = openResult
@@ -667,13 +784,20 @@ func runChannelEQ() {
     }
 
     result["bypass_candidates"] = bypasses.map(snapshot)
-    result["bypass_before"] = bypassBefore
+    let bypassBeforeWitness = scalarJSONWitness(bypassBefore, attribute: kAXValueAttribute as String)
+    result["bypass_before"] = bypassBeforeWitness["value"]
+    result["bypass_before_status"] = bypassBeforeWitness["status"]
+    result["bypass_before_error"] = bypassBeforeWitness["error"]
 
     guard let opened else {
         result["outcome"] = openResult["outcome"] ?? "not_found"
-        result["bypass_after"] = bypasses.count == 1
-            ? scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
-                              attribute: kAXValueAttribute as String) : NSNull()
+        if bypasses.count == 1 {
+            bypassAfter = scalarValue(bypasses[0], kAXValueAttribute as String)
+        }
+        let bypassAfterWitness = scalarJSONWitness(bypassAfter, attribute: kAXValueAttribute as String)
+        result["bypass_after"] = bypassAfterWitness["value"]
+        result["bypass_after_status"] = bypassAfterWitness["status"]
+        result["bypass_after_error"] = bypassAfterWitness["error"]
         emit(result)
         return
     }
@@ -686,9 +810,13 @@ func runChannelEQ() {
     result["band_checkboxes"] = groups.count == 1 ? bandCheckboxes(in: groups[0]) : []
     result["sliders"] = groups.count == 1 ? sliders(in: groups[0]) : []
     result["close"] = closeWindow(opened, closeLabel: closeLabel)
-    result["bypass_after"] = bypasses.count == 1
-        ? scalarJSONValue(scalarValue(bypasses[0], kAXValueAttribute as String),
-                          attribute: kAXValueAttribute as String) : NSNull()
+    if bypasses.count == 1 {
+        bypassAfter = scalarValue(bypasses[0], kAXValueAttribute as String)
+    }
+    let bypassAfterWitness = scalarJSONWitness(bypassAfter, attribute: kAXValueAttribute as String)
+    result["bypass_after"] = bypassAfterWitness["value"]
+    result["bypass_after_status"] = bypassAfterWitness["status"]
+    result["bypass_after_error"] = bypassAfterWitness["error"]
     emit(result)
 }
 
@@ -727,22 +855,43 @@ func runCompressor() {
     }
 
     result["native_editor_sliders"] = sliders(in: opened)
+    let openedWindowTitle = titleText(opened)
     let controlsSelection = selectView(in: opened, viewLabels: viewLabels, wanted: controlsLabel)
     result["controls_selection"] = controlsSelection
     if let outcome = controlsSelection["outcome"] as? String, outcome != "searched" {
         result["outcome"] = outcome
     }
-    result["controls_rows"] = rowCensus(in: opened)
-    result["controls_sliders"] = sliders(in: opened)
-    let editorSelection = selectView(in: opened, viewLabels: viewLabels, wanted: editorLabel)
+
+    // `opened` belongs to the pre-switch editor tree. kAXErrorIllegalArgument on an AXDescription
+    // read is the signature of using that stale AXUIElement after the view rebuild, so enumerate a
+    // fresh window before taking the Controls census.
+    let controlsWindows = windows(titled: openedWindowTitle)
+    result["controls_window_count"] = controlsWindows.count
+    guard controlsWindows.count == 1, let controlsWindow = controlsWindows.first else {
+        result["outcome"] = candidateOutcome(controlsWindows.count)
+        emit(result)
+        return
+    }
+    result["controls_rows"] = rowCensus(in: controlsWindow)
+    result["controls_sliders"] = sliders(in: controlsWindow)
+    let editorSelection = selectView(in: controlsWindow, viewLabels: viewLabels, wanted: editorLabel)
     result["editor_selection"] = editorSelection
     if result["outcome"] == nil,
        let outcome = editorSelection["outcome"] as? String, outcome != "searched" {
         result["outcome"] = outcome
     }
-    result["editor_after_restore_sliders"] = sliders(in: opened)
-    result["rows_after_restore"] = rowCensus(in: opened)
-    result["close"] = closeWindow(opened, closeLabel: closeLabel)
+
+    // The Editor selection rebuilds the subtree again; this is a separate, fresh-tree census.
+    let editorWindows = windows(titled: openedWindowTitle)
+    result["editor_window_count"] = editorWindows.count
+    guard editorWindows.count == 1, let editorWindow = editorWindows.first else {
+        result["outcome"] = candidateOutcome(editorWindows.count)
+        emit(result)
+        return
+    }
+    result["editor_after_restore_sliders"] = sliders(in: editorWindow)
+    result["rows_after_restore"] = rowCensus(in: editorWindow)
+    result["close"] = closeWindow(editorWindow, closeLabel: closeLabel)
     emit(result)
 }
 

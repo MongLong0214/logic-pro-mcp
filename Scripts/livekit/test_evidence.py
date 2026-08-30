@@ -170,6 +170,42 @@ finally:
     else:
         sys.modules["Quartz"] = _old_quartz
 
+# A sheet enumerated directly through AXSheets need not also appear in AXChildren. Its unreadable
+# role used to be skipped, leaving a completed `None` scan when its host reported AXModal=false.
+# Drive `_first_ax_sheet` itself with that shape: the caller can turn this raised read error into
+# `cannot_tell`, but it must never receive an empty result from this unreadable enumeration.
+class _DirectSheetRoleUnreadableAX:
+    window = object()
+    candidate = object()
+
+    def attribute(self, element, attribute, site):
+        if element is self.window and attribute == "AXSheets":
+            return [self.candidate]
+        if element is self.window and attribute == "AXChildren":
+            return []
+        if element is self.candidate and attribute == "AXRole":
+            raise E._ModalReadError("AXSheets candidate AXRole", -25205)
+        raise AssertionError(f"unexpected AX read: {element!r} {attribute!r} at {site!r}")
+
+    def elements(self, value, site):
+        return value
+
+    def text(self, value, site):
+        raise AssertionError("the candidate AXRole read must fail before text conversion")
+
+    def definitive_absence(self, status):
+        return status in {-25205, -25212}
+
+
+sheet_ax = _DirectSheetRoleUnreadableAX()
+try:
+    E._first_ax_sheet(sheet_ax, sheet_ax.window)
+    unreadable_direct_sheet = False
+except E._ModalReadError:
+    unreadable_direct_sheet = True
+failed += 0 if unreadable_direct_sheet else 1
+print(f"{'ok  ' if unreadable_direct_sheet else 'FAIL'} an unreadable direct AXSheets role is cannot-tell, not clear")
+
 # A caller's snapshot is from the observation instant. `check()` records it without sampling again;
 # `falsifiable()` below has no snapshot and exercises the record-time fallback. The two receipts
 # prove that recording one observation cannot smear its state over the next one.

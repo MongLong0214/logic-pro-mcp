@@ -8,11 +8,15 @@ without it.
 What it refuses to let you record:
 
 - **A check made through a blocking modal.** `blocking_modal()` uses the CoreGraphics window list
-  plus the narrowly necessary AX modal/sheet reads. A modal can block the current document while
-  leaving application-wide menu items enabled, so an AX value read through it is not evidence about
-  the affordance it appears to describe. Only `check()` and `falsifiable()` receipts carry this
-  snapshot; notes, captures, visuals, operations, and restorations do not claim modal coverage.
-  The summary gate invalidates those CHECK receipts rather than preventing a caller from making one.
+  plus the narrowly necessary AX modal/sheet reads. Its AX sheet scan is application-wide across
+  every window of every running Logic process: a sheet on another document makes this run refuse,
+  rather than claiming that the observed document is clear. That can be a conservative false
+  positive, but it cannot silently certify a different document while a sheet blocks it. A modal can
+  block the current document while leaving application-wide menu items enabled, so an AX value read
+  through it is not evidence about the affordance it appears to describe. Only `check()` and
+  `falsifiable()` receipts carry this snapshot; notes, captures, visuals, operations, and
+  restorations do not claim modal coverage. The summary gate invalidates those CHECK receipts rather
+  than preventing a caller from making one.
 - **An unsettled capture.** A screenshot taken while Logic is still redrawing shows a state nobody was
   ever in. `shot()` takes frames until two consecutive ones are byte-identical, and marks the record
   `settled: false` if they never converge.
@@ -357,10 +361,11 @@ def _first_ax_sheet(ax, window, max_depth=32):
     """Find a sheet on one host through AXSheets or its descendant tree.
 
     Logic can report AXSheets as unsupported even while New Track is visible. AXSheets is therefore a
-    cheap positive only; descendants are still searched for an AXSheet role. A failed descendant read
-    is not changed into an empty branch, because that would certify a clear document without having
-    searched it.
+    cheap positive only; descendants are still searched for an AXSheet role. A direct AXSheets
+    candidate whose AXRole cannot be read, or a failed descendant read, is not changed into an empty
+    branch because that would certify a clear document without having searched it.
     """
+    unreadable = None
     try:
         direct = ax.elements(ax.attribute(window, "AXSheets", "AXSheets"), "AXSheets")
     except _ModalReadError:
@@ -373,13 +378,17 @@ def _first_ax_sheet(ax, window, max_depth=32):
         try:
             role = ax.text(ax.attribute(candidate, "AXRole", "AXSheets candidate AXRole"),
                            "AXSheets candidate AXRole")
-        except _ModalReadError:
+        except _ModalReadError as exc:
+            # A direct sheet is not necessarily duplicated under AXChildren. Keep this unreadable
+            # candidate so a later clear scan returns cannot-tell instead of pretending it was not
+            # there. A positively identified sheet below still outranks an unreadable sibling.
+            if unreadable is None:
+                unreadable = exc
             continue
         if role == "AXSheet":
             return candidate
 
     stack = [(window, 0)]
-    unreadable = None
     while stack:
         current, depth = stack.pop()
         try:
@@ -411,7 +420,13 @@ def _first_ax_sheet(ax, window, max_depth=32):
 
 
 def _production_ax_modal_signals():
-    """Return the modal AX windows and attached sheets for every running Logic process."""
+    """Return app-wide modal AX windows and sheets for every running Logic process.
+
+    This deliberately does not bind a sheet to the document a harness is about to inspect. Any sheet
+    on any Logic window therefore makes the detector report a blocker. The cost is a conservative
+    refusal when another document has a sheet; the benefit is that this generic precondition never
+    labels the application clear while its AX sheet enumeration is scoped to the wrong window.
+    """
     try:
         from AppKit import NSWorkspace
         applications = NSWorkspace.sharedWorkspace().runningApplications()
@@ -513,6 +528,9 @@ def blocking_modal(lister=None, ax_lister=None):
     Its known limitation is that it cannot see an inactive-Space/off-screen panel; widening it would
     also report windows on other Spaces that are not blocking the current one. The AX window/sheet
     signal covers a running process beyond that list, but is weaker exactly when AX itself is broken.
+    AX sheets are application-wide rather than bound to the document a harness will inspect, so a
+    sheet on another Logic document is a deliberate conservative refusal. An unreadable AXRole on a
+    directly enumerated sheet is likewise cannot-tell, not a completed clear scan.
 
     A panel level is not modality — a modeless panel can occupy it — so AXModal confirms that a
     CoreGraphics candidate actually blocks. Sheets need AX outright: their host reports AXModal=false,

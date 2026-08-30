@@ -36,7 +36,7 @@ UNCITED = HEADER + "\n".join([
 
 CITED_BY_DATE = HEADER + (
     "| ADR-013 | #301 | OPEN | measured 2026-08-30 — the AX plane a readback needs is not exposed "
-    "was wrong; Channel EQ exposes 24 named settable sliders |\n"
+    "was wrong; Channel EQ exposes 26 sliders total, including 24 named band parameters, all named and settable |\n"
 )
 # The cell must contain a phrase from WALL_CLAIMS or this case proves nothing about dates: an
 # earlier version said "opacity", which is in no list, so deleting DATE handling entirely left it

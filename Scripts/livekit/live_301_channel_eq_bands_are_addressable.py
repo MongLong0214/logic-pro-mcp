@@ -165,6 +165,16 @@ def opened_through_only_named_button(opening):
     )
 
 
+def opening_with_pressed_description(opening, description):
+    """Change the selected button's label while retaining the observed opening shape."""
+    counterexample = derived_witness(opening)
+    pressed = copied_nodes(counterexample.get("pressed_children"))
+    if len(pressed) == 1 and isinstance(pressed[0], dict):
+        pressed[0]["description"] = description
+    counterexample["pressed_children"] = pressed
+    return counterexample
+
+
 def band_enables_resolve_by_name(checkboxes):
     return isinstance(checkboxes, list) and all(band in clean_texts(checkboxes) for band in BANDS)
 
@@ -201,7 +211,14 @@ def bypass_value_is_unchanged(witness):
     candidates = witness.get("bypass_candidates") if isinstance(witness.get("bypass_candidates"), list) else []
     before = witness.get("bypass_before")
     after = witness.get("bypass_after")
-    return len(candidates) == 1 and before is not None and after is not None and after == before
+    return (
+        len(candidates) == 1
+        and witness.get("bypass_before_status") == "success_with_value"
+        and witness.get("bypass_after_status") == "success_with_value"
+        and before is not None
+        and after is not None
+        and after == before
+    )
 
 
 # `Evidence.check` records modal state per check, but that only marks contaminated observations red
@@ -298,16 +315,27 @@ result = probe(tool, "channel-eq", {
 })
 ev.note("301/channel-eq-raw-ax", result)
 
+ev.falsifiable(
+    "301/raw-ax-probe-completed-its-search",
+    lambda observation: isinstance(observation, dict) and observation.get("outcome") == "searched",
+    result,
+    derived_witness(result, outcome="could_not_search"),
+    "the raw AX witness completed its search without an unreadable AX branch",
+    "make any raw AX read fail: the witness emits outcome=could_not_search and this goes red",
+)
+if result.get("outcome") != "searched":
+    finish()
+
 opening = result.get("open") if isinstance(result.get("open"), dict) else {}
 ev.falsifiable(
     "301/the-plugin-window-opened-through-only-the-open-button",
     opened_through_only_named_button,
     opening,
-    derived_witness(opening, pressed_children=[], opened_windows=[]),
+    opening_with_pressed_description(opening, "not the Open label"),
     "one new plug-in window appeared after exactly one press, and that press was AXButton `열기`; "
     "no other pressable slot child was pressed",
-    "include every pressable child again: the bypass checkbox enters `pressed_children` and this "
-    "check goes red even if a window still opens",
+    "change the pressed AXButton's description while retaining the observed slot and window: the "
+    "named-open condition goes red",
 )
 
 checkboxes = result.get("band_checkboxes") if isinstance(result.get("band_checkboxes"), list) else []
@@ -376,7 +404,8 @@ close = result.get("close") if isinstance(result.get("close"), dict) else {}
 closed = (close.get("pressed") is True and close.get("window_still_present") is False)
 ev.check("301/the-plugin-window-opened-by-this-run-is-closed-again",
          closed,
-         "the exact plug-in window the Open button created was closed through its named close button",
+         "the sole new Logic window reported after the Open press was closed through its named close button; "
+         "the raw witness records that this new-window search is application-wide",
          f"close={close!r}",
          "make the close button absent or leave the window open: this restoration check goes red")
 ev.restored("301/the-channel-eq-window-is-back-where-it-started", closed,
