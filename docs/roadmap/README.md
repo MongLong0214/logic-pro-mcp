@@ -36,10 +36,10 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-08-29 at `b1e2c0ee`
+## State — measured 2026-08-30 at `9e2c08a8`
 
 ```
-open PRs 0 · v3.14.0 published · 17 open issues
+open PRs 0 · v3.14.0 published · 16 open issues
 ```
 
 | ADR | issue | state | what it is waiting on |
@@ -50,7 +50,7 @@ open PRs 0 · v3.14.0 published · 17 open issues
 | ADR-004 | #287 | closed | |
 | ADR-005 | #288 | closed | |
 | ADR-006 | #289 | closed | shipped #674/#675, measured and closed |
-| ADR-007 | #290 | OPEN | all seven criteria measured met as written for Desktop; five baselines cover both locales and leave `unmeasured []`. What is left is WORDING, not work: criterion 1 asks for Creator fixtures, and Creator left product scope on 2026-07-17 — narrowing that line closes the issue |
+| ADR-007 | #290 | closed | all seven criteria met and measured; closed 2026-08-30. Criterion 1 was narrowed to Desktop by the owner — Creator left product scope on 2026-07-17, so the line predated the decision |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
 | ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
 | ADR-010 | #293 | OPEN | the collector's shape was already right; measured 2026-08-29 it reads a real note table and returns both notes. It could not START in any language but English — the Event tab was matched against the literal `"Event"` — fixed in #712. What stays closed is ADR-010's body: `assessReadback` and the public provider |
@@ -103,11 +103,11 @@ attached — not a silent deferral.
    on 2026-08-24 moved its blocker: the 49 mutating operations with a verification plan are waiting
    on a write-and-readback qualification mode that does not exist, which the #284 matrix does not
    supply. #373 covers a smaller part of it than "depends on #373" suggested.
-2. **#290** — done bar a sentence. The diff runs at qualification time as a case and a refusal
+2. ~~**#290**~~ — closed 2026-08-30. The diff runs at qualification time as a case and a refusal
    rejects a promotion; five baselines cover en and ko and leave no adopted selector unmeasured.
    The English control bar earned its keep on capture, exposing a prefix match that let the
-   transport's Record button read as a track's arm toggle. What remains is criterion 1 still
-   asking for Creator fixtures after Creator left product scope.
+   transport's Record button read as a track's arm toggle — invisible in Korean, where `녹음` is
+   not a prefix of `녹음 활성화`.
 3. **#293 → #303** — readback before the transforms that must take their expected values from it.
    #293's collector is measured reading a live note table; what remains there is the ADR body.
 4. **#302** — re-measured. `kAXColumns` resolves 8 columns and none of them carries a name, which
