@@ -36,7 +36,7 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-08-30 at `9e2c08a8`
+## State — measured 2026-08-30 at `709a0178`
 
 ```
 open PRs 0 · v3.14.0 published · 16 open issues
@@ -52,16 +52,16 @@ open PRs 0 · v3.14.0 published · 16 open issues
 | ADR-006 | #289 | closed | shipped #674/#675, measured and closed |
 | ADR-007 | #290 | closed | all seven criteria met and measured; closed 2026-08-30. Criterion 1 was narrowed to Desktop by the owner — Creator left product scope on 2026-07-17, so the line predated the decision |
 | ADR-008 | #291 | OPEN | node identity cannot be the display string — needs a decision, not an attempt |
-| ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it |
+| ADR-009 | #292 | OPEN | apply-back expansion on Wave-0 insert work; #299 and #301 consume it. Measured 2026-08-30, the plane it needs exists: Logic's Controls view renders a stock plug-in as an `AXTable`, one named `AXRow` per parameter, read by row label rather than index — the shape `set_param_verified` steps 9-12 already drive |
 | ADR-010 | #293 | OPEN | the collector's shape was already right; measured 2026-08-29 it reads a real note table and returns both notes. It could not START in any language but English — the Event tab was matched against the literal `"Event"` — fixed in #712. What stays closed is ADR-010's body: `assessReadback` and the public provider |
-| ADR-011 | #299 | OPEN | behind #292 |
+| ADR-011 | #299 | OPEN | behind #292, and the reason only `threshold` is supported is now measured: the Compressor's *native* editor names 1 of its 22 sliders, so 21 have nothing to match on. Its Controls view names all of them — `Ratio`, `Attack`, `Release`, `Make Up`, `Knee`, `Circuit Type` and the rest. No write attempted |
 | ADR-012 | #300 | closed | promoted and closed 2026-08-28; all seven acceptance criteria measured, four artifacts found and fixed on the way (#693-#697) |
-| ADR-013 | #301 | OPEN | **zero band operations registered** — no public surface; the AX plane a readback needs is not exposed |
+| ADR-013 | #301 | OPEN | zero band operations registered, so no public surface — but the wall is gone. Measured 2026-08-30, Channel EQ's native view exposes all 8 bands as **24 named, settable sliders** with `AXValueDescription` in Hz/dB. The opacity claim came from a census that instantiates the AU *outside* Logic, which #306's Important Boundary says cannot speak for the live instance. The C4 Decision in the ADR body is superseded |
 | ADR-014 | #302 | OPEN | R1 shipped. R2 is NOT STARTED rather than blocked: measured 2026-08-29, `kAXColumns` is present and returns 8 columns — what is absent is any title or description ON them, and the header's sort buttons carry the names the collector already binds. Next step is an R2 ticket, not another measurement |
 | ADR-015 | #303 | OPEN | behind #293, and measured 2026-08-29 the dependency is narrower than "transforms must not read their own plan" — `TransformVerification` already refuses a proof that shares the observed pipeline. What is missing is a MAKER: `IndependentExpectedSeam` is inside `#if QUALIFICATION_FAULT_SEAM`, so in a release build `independentPayload` is always nil and no positive match is possible. The three modules exist; the gap is the live ingestion boundary in front of them |
 | ADR-016 | #304 | OPEN | implementation; no measured AX wall in front of it |
-| ADR-017 | #305 | OPEN | AU parameter view observed AX-opaque; starts with a measurement |
-| ADR-018 | #306 | OPEN | same wall as #305 |
+| ADR-017 | #305 | OPEN | NOT STARTED rather than blocked. Flex Pitch is in the Audio Track Editor, not a plug-in window, so the AU-parameter-view wall recorded here was never about this surface — it was inherited, not observed. The measurement it needs is aimed at note **identity stability** over a Flex-analysed region |
+| ADR-018 | #306 | OPEN | Tier B measured viable for **stock** plug-ins (the Controls view table above); the third-party plug-ins this ADR is named after are still unmeasured. "Same wall as #305" was wrong twice — #305 is a different surface, and the wall is not there |
 
 Also open, outside the ADR set:
 
@@ -82,8 +82,12 @@ The instruction that produced this file asked for these to be established, not g
 - **#293** — not absence. `Sources/LogicProMCP/MIDIReadback/` has ten modules including the
   provider. The recorded problem is that the fixture gave every Event-List cell a child, so the
   collector was written against a shape Logic does not produce.
-- **#301** — genuine absence. No band read or write is registered in `OperationRegistry`, which
-  matches "a measured wall" rather than contradicting it.
+- **#301** — genuine absence of the *operations*: no band read or write is registered in
+  `OperationRegistry`. What was inferred from that was wrong. The note read the absence as
+  consistent with "a measured wall", and consistency is not evidence — an unbuilt feature and a
+  blocked one look identical from the registry. Measured 2026-08-30 there is no wall: Channel EQ
+  names all 24 band sliders and every one is settable. The registry was empty because nobody had
+  written the operations, which is the ordinary reason a registry is empty.
 - **#300** — neither, and it is closed now. Four modules existed *and* two operations were
   registered; what was open was the promotion decision. Answering it took measuring what the flag
   was holding back, which turned up four artifacts nobody had recorded: three bands reporting the
@@ -114,7 +118,11 @@ attached — not a silent deferral.
    is a different fact from the one recorded; the header sort buttons supply the column map and
    `readHeaders` already reads them. The next step is an R2 ticket.
 5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
-6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement.
+6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement. Four were made on
+   2026-08-30 and three of the four moved the item rather than confirming it: #301's wall does not
+   exist, #305's wall was never about its own surface, and #306's Tier B works for stock plug-ins.
+   The one that held is the Compressor's native editor, which names one slider of twenty-two — and
+   that is an *identity* wall, not a reachability one, which is a different repair.
 7. **#373 → #284's `R-SEM`**, then **#308** closes as an index.
 
 ## What this file does not claim
