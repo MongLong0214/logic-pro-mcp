@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 111)   // #575 registered edit.move_to_playhead
+        #expect(OperationRegistry.specs.count == 112)   // #575 registered edit.move_to_playhead
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -86,7 +86,9 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 88)   // #575: move_to_playhead is a mutating edit verb
+        #expect(mutating.count == 89)   // #575: move_to_playhead is a mutating edit verb;
+                                        // #301 added plugins.set_eq_band_verified, which is
+                                        // target-bearing, so `targetless` is unchanged
         #expect(readOnly.count == 23)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
         #expect(targetless.count == 74)   // #575: it acts on the selection, so it bears no target
