@@ -35,7 +35,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
-FLOOR = 1
+FLOOR = 4
 
 def _calls_falsifiable(text):
     """Whether the source contains an actual CALL to `falsifiable`, not a mention of the word.
