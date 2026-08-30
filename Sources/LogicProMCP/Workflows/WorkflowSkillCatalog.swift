@@ -522,7 +522,7 @@ enum WorkflowSkillCatalog {
             "insert_plugin", "set_plugin_param",
         ],
         "logic_plugins": [
-            "get_inventory", "set_param_verified", "insert_verified",
+            "get_inventory", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         "logic_midi": [
             "send_note", "send_chord", "play_sequence", "send_cc",

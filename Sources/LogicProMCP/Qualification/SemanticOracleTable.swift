@@ -284,13 +284,19 @@ enum SemanticOracleTable {
         coveredSpecIDs.union(mutatingSpecIDs)
     }
 
-    /// Mutating ops AUDITED in B1 and found to have NO verifiable State-A envelope
-    /// — deliberately, STRUCTURALLY excluded from the verified-write oracle set
-    /// (not merely "not yet phased in"), each with the reason. Kept EXPLICIT so
-    /// the exclusion is a reviewed decision, not an accidental gap: the census
-    /// asserts each is a real mutating spec, is DISJOINT from the covered set, and
-    /// carries a reason — so the uncovered complement is never fully implicit.
+    /// Mutating ops deliberately excluded from the verified-write oracle set,
+    /// each with the reason. Most are structurally unable to reach State A. A
+    /// post-closure operation can also remain here while its live State-A
+    /// contract is expressly pending; it must not receive a fixture that would
+    /// imply an unrun live proof. Kept EXPLICIT so the exclusion is a reviewed
+    /// decision, not an accidental gap: the census asserts each is a real
+    /// mutating spec, is DISJOINT from the covered set, and carries a reason —
+    /// so the uncovered complement is never fully implicit.
     static let structurallyUnverifiedMutatingOperationIDs: [OperationID: String] = [
+        .pluginsSetEQBandVerified:
+            "live 2026-08-30 evidence establishes the Channel EQ raw AXValue ranges and "
+            + "one-step increment-walk behavior only; no end-to-end write/readback round "
+            + "trip has been run, so a State-A fixture would claim qualification not yet earned",
         .mixerSetPluginParam:
             "send-only State B — routes to [.scripter], whose handler emits only "
             + "readback_unavailable / scripter_send_only; there is no State A to verify",

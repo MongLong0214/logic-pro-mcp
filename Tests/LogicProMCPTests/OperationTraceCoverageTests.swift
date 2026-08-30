@@ -680,6 +680,14 @@ private func operationTraceCoverageParams(
             "mode": .string("duplicate_applyback"),
             "project_expected_path": .string(fixtures.projectPath),
         ]
+    case .pluginsSetEQBandVerified:
+        return [
+            "track": .int(0), "insert": .int(0),
+            "band": .string("Peak 1"), "parameter": .string("Frequency"),
+            "value": .double(250), "unit": .string("raw_ax_value"),
+            "mode": .string("duplicate_applyback"),
+            "project_expected_path": .string(fixtures.projectPath),
+        ]
     case .pluginsInsertVerified:
         return [
             "track": .int(0), "insert": .int(0), "plugin": .string("Gain"),

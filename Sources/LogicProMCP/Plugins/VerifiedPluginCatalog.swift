@@ -12,10 +12,10 @@ import Foundation
 ///      the verified public key (R5: "구현 전에 `gain -> gain_db` alias를 명시").
 ///   3. write/readback capability — does the resolved plugin/param actually
 ///      have a write method AND a display-readback parser? (R6 step 5 preflight;
-///      Compressor `threshold` is the first verified-writable parameter
-///      (`writeMethod`/`readbackMethod` both `ax_slider_axvalue`) → `.writeReadback`,
-///      while Gain still has neither — `writeMethod:nil, readbackMethod:nil` — so
-///      it stays the honest State C `unsupported_param_readback`.)
+///      Compressor `threshold` uses direct `ax_slider_axvalue`; named Channel
+///      EQ controls use the separately measured increment-walk metadata. Gain
+///      still has neither — `writeMethod:nil, readbackMethod:nil` — so it stays
+///      the honest State C `unsupported_param_readback`.)
 ///
 /// This module is deterministic and contains NO live AX interaction.
 enum VerifiedPluginCatalog {
@@ -27,9 +27,9 @@ enum VerifiedPluginCatalog {
 
     /// Display-name / alias → canonical `logic.stock.*` id table.
     ///
-    /// MVP scope (R5): the three allowlisted stock plugins. Compressor `threshold`
-    /// is the first verified parameter-write target (audit #28); the others
-    /// (including Gain) are identity/insert only. Display
+    /// MVP scope (R5): the three allowlisted stock plugins. Compressor
+    /// `threshold` and named Channel EQ parameters have distinct catalog write
+    /// methods; Gain remains identity/insert only. Display
     /// names are accepted as user-facing aliases but never become the identity
     /// themselves (requirements §5.2 "display name은 identity가 아니라 alias").
     private static let pluginAliases: [String: String] = [
@@ -107,8 +107,8 @@ enum VerifiedPluginCatalog {
         /// `unsupported_param_readback` BEFORE any write (R6, AC10).
         case unsupported
         /// Parameter has both a write method and a readback parser. Eligible for
-        /// a verified State A write. (Compressor `threshold` is the first MVP
-        /// parameter to reach this — see `StockPluginCatalog`; Gain does not.)
+        /// a verified State A write. The entry's provenance still determines
+        /// what live evidence has actually been established; Gain does not.)
         case writeReadback
     }
 

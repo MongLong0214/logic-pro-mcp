@@ -30,7 +30,8 @@ final class VerifiedOpGate: @unchecked Sendable {
 
 /// `logic_plugins` — verified plugin apply-back surface (R16 Plane 1).
 ///
-/// Commands: get_inventory, set_param_verified, insert_verified. The dispatcher
+/// Commands: get_inventory, set_param_verified, set_eq_band_verified,
+/// insert_verified. The dispatcher
 /// validates/normalizes input then routes through `ChannelRouter` to the
 /// AX-only verified operations (`plugin.*`). Verified ops never fall back
 /// (router chain is `[.accessibility]` alone) so a State C is always the honest
@@ -41,7 +42,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_plugins",
-        description: "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required), expected_name: String }. PRD-007 index binding: insert_verified is `corroborated` — a bare `track` index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique across the surface) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false and takes no verified-op gate. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_param_verified and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
+        description: "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, set_eq_band_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. set_eq_band_verified -> { track: Int, insert: Int, band: String (e.g. Peak 1), parameter: String (e.g. Frequency), value: Float, unit: raw_ax_value|Hz|dB|Q, mode: \"duplicate_applyback\", project_expected_path: String (required) }. Engineering-unit Channel EQ requests are checked against Logic's AXValueDescription; no Hz-to-raw mapping is used. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required), expected_name: String }. PRD-007 index binding: insert_verified is `corroborated` — a bare `track` index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique across the surface) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false and takes no verified-op gate. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_param_verified, set_eq_band_verified, and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
         commandDescription: "Verified plugin command to execute"
     )
 
@@ -149,6 +150,60 @@ struct PluginsDispatcher: OperationTraceDispatching {
                 return await withWriteBoundaryArmed(traceID) {
                     await routedTextResult(router, operation: "plugin.set_param_verified",
                                            params: writeParams)
+                }
+            }
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    fingerprint: resolvedFingerprint,
+                    to: result
+                ),
+                traceID: traceID
+            )
+
+        case "set_eq_band_verified":
+            let traceID = await startTraceIfEnabled(command: command)
+            var resolvedReference: TargetReference?
+            var resolvedFingerprint: String?
+            let result = await runVerified(operation: "plugin.set_eq_band_verified") {
+                var writeParams = eqBandVerifiedParams(params)
+                if params["target_ref"] != nil {
+                    switch await TargetRefResolver.resolveMutationIndex(
+                        params,
+                        targetRegistry: targetRegistry,
+                        cache: cache,
+                        operation: "logic_plugins.set_eq_band_verified",
+                        indexKeys: ["track"],
+                        invalidIndexResult: toolInvalidParamsResult(
+                            "set_eq_band_verified requires explicit 'track' (Int >= 0)"
+                        ),
+                        acceptedKinds: [.track, .pluginInsert]
+                    ) {
+                    case .success(let resolved):
+                        writeParams["track"] = String(resolved.index)
+                        resolvedReference = resolved.reference
+                        resolvedFingerprint = resolved.binding?.observedFingerprint
+                        if let boundTrackName = resolved.binding?.descriptor.trackName {
+                            writeParams["expected_track_name"] = boundTrackName
+                        }
+                        if let failure = applyPluginInsertBinding(
+                            resolved,
+                            params: params,
+                            writeParams: &writeParams,
+                            operation: "logic_plugins.set_eq_band_verified"
+                        ) {
+                            return failure
+                        }
+                    case .failure(let result):
+                        return result
+                    }
+                }
+                return await withWriteBoundaryArmed(traceID) {
+                    await routedTextResult(
+                        router,
+                        operation: "plugin.set_eq_band_verified",
+                        params: writeParams
+                    )
                 }
             }
             return await finalizeTrace(
@@ -281,6 +336,19 @@ struct PluginsDispatcher: OperationTraceDispatching {
         if let insert = intParamOrNil(params, "insert") { out["insert"] = String(insert) }
         if let plugin = nonEmptyString(params, "plugin", "plugin_id", "plugin_name") { out["plugin"] = plugin }
         if let param = nonEmptyString(params, "param") { out["param"] = param }
+        if let value = doubleParamOrNil(params, "value") { out["value"] = String(value) }
+        if let unit = nonEmptyString(params, "unit") { out["unit"] = unit }
+        if let mode = nonEmptyString(params, "mode") { out["mode"] = mode }
+        if let path = nonEmptyString(params, "project_expected_path") { out["project_expected_path"] = path }
+        return out
+    }
+
+    private static func eqBandVerifiedParams(_ params: [String: Value]) -> [String: String] {
+        var out: [String: String] = [:]
+        if let track = intParamOrNil(params, "track") { out["track"] = String(track) }
+        if let insert = intParamOrNil(params, "insert") { out["insert"] = String(insert) }
+        if let band = nonEmptyString(params, "band") { out["band"] = band }
+        if let parameter = nonEmptyString(params, "parameter") { out["parameter"] = parameter }
         if let value = doubleParamOrNil(params, "value") { out["value"] = String(value) }
         if let unit = nonEmptyString(params, "unit") { out["unit"] = unit }
         if let mode = nonEmptyString(params, "mode") { out["mode"] = mode }

@@ -145,6 +145,17 @@ enum HonestContract {
         case windowIdentityUnresolved = "window_identity_unresolved"
         case paramControlNotFound = "param_control_not_found"
         case readbackLostAfterWrite = "readback_lost_after_write"
+        /// An AXValue nudge was accepted but the readback did not establish
+        /// reliable progress toward the requested target. This is distinct from
+        /// `ax_write_failed`: the write may have been accepted.
+        case incrementWalkNoProgress = "increment_walk_no_progress"
+        /// The bounded AXValue-nudge loop reached its caller-owned cap without
+        /// arriving. It is not an operation timeout: the explicit write budget
+        /// is the fact a caller can change or diagnose.
+        case incrementWalkBudgetExhausted = "increment_walk_budget_exhausted"
+        /// The nudge loop crossed the target and then moved farther away on the
+        /// same side, so continuing would no longer be trustworthy.
+        case incrementWalkOvershot = "increment_walk_overshot"
         case postInsertPluginMismatch = "post_insert_plugin_mismatch"
         case postInsertReadbackUnavailable = "post_insert_readback_unavailable"
         /// `logic_plugins.insert_verified` reached its live-write boundary with
@@ -429,6 +440,9 @@ enum HonestContract {
         FailureError.windowIdentityUnresolved.rawValue,
         FailureError.paramControlNotFound.rawValue,
         FailureError.readbackLostAfterWrite.rawValue,
+        FailureError.incrementWalkNoProgress.rawValue,
+        FailureError.incrementWalkBudgetExhausted.rawValue,
+        FailureError.incrementWalkOvershot.rawValue,
         FailureError.postInsertPluginMismatch.rawValue,
         FailureError.postInsertReadbackUnavailable.rawValue,
         FailureError.insertNotAxAutomatable.rawValue,

@@ -41,11 +41,13 @@ struct OperationCatalogTests {
     private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
         .pluginsGetInventory: ["index", "track"],
         .pluginsSetParamVerified: ["track"],
+        .pluginsSetEQBandVerified: ["track"],
         .pluginsInsertVerified: ["track"],
     ]
     private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
         .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
         .pluginsSetParamVerified: "AX apply-back must expose target_identity after verified preflight",
+        .pluginsSetEQBandVerified: "AX named-band apply-back must expose target_identity after verified preflight",
         .pluginsInsertVerified: "AX insert readback must expose target_identity after verified preflight",
     ]
 
@@ -149,6 +151,9 @@ struct OperationCatalogTests {
         .pluginsSetParamVerified: [
             "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
             "project_expected_path", "unit", "value",
+        ],
+        .pluginsSetEQBandVerified: [
+            "band", "insert", "mode", "parameter", "project_expected_path", "unit", "value",
         ],
         .pluginsInsertVerified: [
             "insert", "mode", "plugin", "plugin_id", "plugin_name", "project_expected_path", "slot",
@@ -394,7 +399,7 @@ struct OperationCatalogTests {
                     ("get_trace", "system.get_trace", ["trace_id"], .none),
                     ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
                 ]
-                #expect(OperationRegistry.specs.count == 111)
+                #expect(OperationRegistry.specs.count == 112)
                 for (command, operationID, allowedParams, confirmation) in expectedSpecs {
                     let spec = OperationRegistry.spec(tool: "logic_system", command: command)
                     #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
@@ -543,12 +548,12 @@ struct OperationCatalogTests {
         }
 
         #expect(advertised.filter { $0.1 == "index" }.count == 17)
-        #expect(advertised.filter { $0.1 == "track" }.count == 16)
-        #expect(advertised.count == 33)
+        #expect(advertised.filter { $0.1 == "track" }.count == 17)
+        #expect(advertised.count == 34)
         #expect(probes.filter { $0.1 == "index" }.count == 16)
         #expect(probes.filter { $0.1 == "track" }.count == 13)
         #expect(probes.count == 29)
-        #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 4)
+        #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 5)
         #expect(
             Set(Self.selectorLiveQualificationReasonByOperation.keys)
                 == Set(Self.selectorsRequiringLiveQualificationByOperation.keys)
@@ -721,7 +726,7 @@ struct OperationCatalogTests {
 
     @Test("strict: every registered operation rejects unknown keys and accepts its pinned keys")
     func strictRegistryWideInvariant() throws {
-        #expect(OperationRegistry.specs.count == 111)
+        #expect(OperationRegistry.specs.count == 112)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
 
         for spec in OperationRegistry.specs {
@@ -802,9 +807,9 @@ struct OperationCatalogTests {
             $0.target == .acceptsStableTarget
         }.map(\.id))
         #expect(actualIndex.count == 17)
-        #expect(actualTrack.count == 16)
+        #expect(actualTrack.count == 17)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 14)
+        #expect(actualTargetRef.count == 15)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(
@@ -888,7 +893,7 @@ struct OperationCatalogTests {
         #expect(sharedToolText(trackRejected).contains("port parameter not supported for record_sequence"))
     }
 
-    @Test("catalog: exact URI reads the generated 111-operation catalog")
+    @Test("catalog: exact URI reads the generated 112-operation catalog")
     func catalogReadsRegistryProjection() async throws {
         let result = try await ResourceHandlers.read(
             uri: Self.uri,
@@ -901,7 +906,7 @@ struct OperationCatalogTests {
         #expect(body["generated_at"] as? String != nil)
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
-        #expect(operations.count == 111)
+        #expect(operations.count == 112)
         #expect(!text.contains("\n"))
 
         let ids = operations.compactMap { $0["id"] as? String }

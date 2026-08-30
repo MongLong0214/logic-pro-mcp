@@ -43,6 +43,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSetupArmKey = "system.setup_arm_key"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsSetParamVerified = "plugins.set_param_verified"
+    case pluginsSetEQBandVerified = "plugins.set_eq_band_verified"
     case pluginsInsertVerified = "plugins.insert_verified"
     case editUndo = "edit.undo"
     case editRedo = "edit.redo"
@@ -309,7 +310,7 @@ enum OperationRegistry {
             "system.setup_arm_key",
         ],
         ToolID.logicPlugins.rawValue: [
-            "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
+            "plugins.get_inventory", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
@@ -366,7 +367,7 @@ enum OperationRegistry {
             "setup_arm_key",
         ],
         ToolID.logicPlugins.rawValue: [
-            "get_inventory", "set_param_verified", "insert_verified",
+            "get_inventory", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
@@ -695,6 +696,18 @@ enum OperationRegistry {
             [
                 "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
                 "project_expected_path", "track", "unit", "value",
+            ]
+        ),
+        (
+            .pluginsSetEQBandVerified,
+            "set_eq_band_verified",
+            Mutability.`mutating`,
+            DeadlineClass.medium,
+            VerificationPolicy.readbackRequired,
+            TargetPolicy.acceptsStableTarget,
+            [
+                "band", "insert", "mode", "parameter", "project_expected_path",
+                "track", "unit", "value",
             ]
         ),
         (

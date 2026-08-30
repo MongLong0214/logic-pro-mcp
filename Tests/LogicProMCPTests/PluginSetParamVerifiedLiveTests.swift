@@ -26,6 +26,14 @@ private let trackName = "Acid Wash Bass"
 
 // MARK: - Fixture
 
+private enum SliderWriteBehavior: Sendable {
+    case direct
+    case oneStepTowardRequest
+    /// Each AXValue write uses the next readback. `nil` models a lost numeric
+    /// AXValue readback after an accepted write.
+    case scripted([Double?])
+}
+
 /// A live-path fixture. The slider's AXValueDescription is recomputed from its
 /// AXValue on every write so a write updates the readback the way Logic does
 /// ("60 %"). `forcedAfterValue` models a sticky/taper mismatch; `otherTracks`
@@ -34,6 +42,7 @@ private final class LiveFixture: @unchecked Sendable {
     let builder = FakeAXRuntimeBuilder()
     let app: AXUIElement
     let windowsAddedOnSlotPress: MutableBox<[AXUIElement]>
+    let sliderWriteCount: MutableBox<Int>
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -50,10 +59,12 @@ private final class LiveFixture: @unchecked Sendable {
         duplicateTrackNameAt: Int? = nil,
         emptyInsertChain: Bool = false,
         pluginWindowRejectsDirectDemotion: Bool = false,
-        slotPressReturnsFalse: Bool = false
+        slotPressReturnsFalse: Bool = false,
+        sliderWriteBehavior: SliderWriteBehavior = .direct
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
+        let sliderWriteCount = MutableBox(0)
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
         let headersGroup = b.element(1002)
@@ -153,6 +164,7 @@ private final class LiveFixture: @unchecked Sendable {
         let targetSlotKey = targetSlot.map { b.elementID($0) }
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let forced = forcedAfterValue
+        let writeBehavior = sliderWriteBehavior
         let runtime = b.makeLogicRuntime(
             appElement: app,
             setAttributeHandler: { [b] el, attribute, value in
@@ -167,9 +179,30 @@ private final class LiveFixture: @unchecked Sendable {
                     return true
                 }
                 let requested = (value as? NSNumber)?.doubleValue ?? 0
-                let landed = forced ?? requested
-                b.setAttribute(el, kAXValueAttribute as String, landed)
-                b.setAttribute(el, kAXValueDescriptionAttribute as String, "\(Int(landed.rounded())) %")
+                let current = (b.attributeValue(slider, kAXValueAttribute as String) as? NSNumber)?.doubleValue
+                    ?? (b.attributeValue(slider, kAXValueAttribute as String) as? Double)
+                    ?? 0
+                let writeIndex = sliderWriteCount.value
+                sliderWriteCount.value += 1
+                let landed: Double?
+                switch writeBehavior {
+                case .direct:
+                    landed = forced ?? requested
+                case .oneStepTowardRequest:
+                    if requested > current {
+                        landed = current + 1
+                    } else if requested < current {
+                        landed = current - 1
+                    } else {
+                        landed = current
+                    }
+                case let .scripted(readbacks):
+                    landed = readbacks.indices.contains(writeIndex) ? readbacks[writeIndex] : current
+                }
+                b.setAttribute(el, kAXValueAttribute as String, landed ?? NSNull())
+                if let landed {
+                    b.setAttribute(el, kAXValueDescriptionAttribute as String, "\(Int(landed.rounded())) %")
+                }
                 return true
             },
             performActionHandler: { [b] el, action in
@@ -204,6 +237,7 @@ private final class LiveFixture: @unchecked Sendable {
         )
         self.app = app
         self.windowsAddedOnSlotPress = windowsAddedOnSlotPress
+        self.sliderWriteCount = sliderWriteCount
         self.runtime = runtime
     }
 
@@ -281,51 +315,59 @@ private func thresholdParams(
 private let channelEQFixtureParamID = "__test_channel_eq_band_gain"
 private let channelEQFixtureAXDescription = "__TEST Channel EQ Band Gain"
 
-private func channelEQFixtureEntryLookup(pluginID: String) -> StockPluginCatalogEntry? {
-    guard pluginID == "logic.stock.effect.channel_eq" else {
-        return StockPluginCatalog.entry(id: pluginID)
+private func channelEQFixtureEntryLookup(
+    writeMethod: String = "ax_slider_axvalue",
+    unit: String = "dB",
+    acceptedUnits: [String]? = nil,
+    range: StockPluginValueRange = StockPluginValueRange(min: -24, max: 24, defaultValue: 0)
+) -> VerifiedPluginCatalog.EntryLookup {
+    { pluginID in
+        guard pluginID == "logic.stock.effect.channel_eq" else {
+            return StockPluginCatalog.entry(id: pluginID)
+        }
+        let provenance = StockPluginProvenance.verified(
+            source: "test_fixture",
+            method: "ax_plugin_window",
+            observedAt: "2026-07-07T00:00:00Z",
+            logicVersion: nil,
+            locale: "en_US",
+            evidence: ["parameter_readback", "test_fixture_only"]
+        )
+        return StockPluginCatalogEntry(
+            id: "logic.stock.effect.channel_eq",
+            displayName: "Channel EQ",
+            type: .effect,
+            category: "EQ",
+            availabilityState: .verified,
+            provenance: provenance,
+            insertPaths: [
+                StockPluginInsertPath(
+                    path: ["Audio FX", "EQ", "Channel EQ"],
+                    availabilityState: .verified,
+                    provenance: provenance
+                ),
+            ],
+            slotSupport: StockPluginSlotSupport(audio: true, instrument: false, midiFX: false, aux: true),
+            knownPresets: [],
+            parameters: [
+                StockPluginParameterMetadata(
+                    id: channelEQFixtureParamID,
+                    displayName: "Test Channel EQ Band Gain",
+                    unit: unit,
+                    acceptedUnits: acceptedUnits,
+                    valueRange: range,
+                    writeMethod: writeMethod,
+                    readbackMethod: "ax_slider_axvalue",
+                    tolerance: 0.5,
+                    axDescription: channelEQFixtureAXDescription,
+                    availabilityState: .verified,
+                    provenance: provenance
+                ),
+            ],
+            safeWriteCapabilities: .parameterWriteReadback,
+            limitations: ["test fixture only"]
+        )
     }
-    let provenance = StockPluginProvenance.verified(
-        source: "test_fixture",
-        method: "ax_plugin_window",
-        observedAt: "2026-07-07T00:00:00Z",
-        logicVersion: nil,
-        locale: "en_US",
-        evidence: ["parameter_readback", "test_fixture_only"]
-    )
-    return StockPluginCatalogEntry(
-        id: "logic.stock.effect.channel_eq",
-        displayName: "Channel EQ",
-        type: .effect,
-        category: "EQ",
-        availabilityState: .verified,
-        provenance: provenance,
-        insertPaths: [
-            StockPluginInsertPath(
-                path: ["Audio FX", "EQ", "Channel EQ"],
-                availabilityState: .verified,
-                provenance: provenance
-            ),
-        ],
-        slotSupport: StockPluginSlotSupport(audio: true, instrument: false, midiFX: false, aux: true),
-        knownPresets: [],
-        parameters: [
-            StockPluginParameterMetadata(
-                id: channelEQFixtureParamID,
-                displayName: "Test Channel EQ Band Gain",
-                unit: "dB",
-                valueRange: StockPluginValueRange(min: -24, max: 24, defaultValue: 0),
-                writeMethod: "ax_slider_axvalue",
-                readbackMethod: "ax_slider_axvalue",
-                tolerance: 0.5,
-                axDescription: channelEQFixtureAXDescription,
-                availabilityState: .verified,
-                provenance: provenance
-            ),
-        ],
-        safeWriteCapabilities: .parameterWriteReadback,
-        limitations: ["test fixture only; production Channel EQ registry is census-gated"]
-    )
 }
 
 private func channelEQFixtureParamAlias(pluginID: String, alias: String) -> String? {
@@ -366,12 +408,52 @@ private func runChannelEQFixture(
         params: params,
         runtime: fixture.runtime,
         frontDocumentPath: { expectedPath },
-        entryLookup: channelEQFixtureEntryLookup,
+        entryLookup: channelEQFixtureEntryLookup(),
         paramAliasLookup: channelEQFixtureParamAlias
     )
     let data = try #require(result.message.data(using: .utf8))
     let obj = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     return obj
+}
+
+private func runChannelEQFixture(
+    fixture: LiveFixture,
+    params: [String: String],
+    writeMethod: String,
+    incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+) async throws -> [String: Any] {
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: fixture.runtime,
+        frontDocumentPath: { expectedPath },
+        entryLookup: channelEQFixtureEntryLookup(
+            writeMethod: writeMethod,
+            unit: "raw_ax_value",
+            range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0)
+        ),
+        paramAliasLookup: channelEQFixtureParamAlias,
+        incrementWalkBudget: incrementWalkBudget
+    )
+    let data = try #require(result.message.data(using: .utf8))
+    return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+}
+
+private func namedEQBandParams(
+    band: String = "Peak 1",
+    parameter: String = "Frequency",
+    value: String = "3",
+    unit: String = "raw_ax_value"
+) -> [String: String] {
+    [
+        "track": "0",
+        "insert": "6",
+        "band": band,
+        "parameter": parameter,
+        "value": value,
+        "unit": unit,
+        "mode": "duplicate_applyback",
+        "project_expected_path": expectedPath,
+    ]
 }
 
 // MARK: - State A: full round-trip (before 51 → set 60 → after 60)
@@ -479,7 +561,7 @@ private func runChannelEQFixture(
     #expect(VerifiedPluginCatalog.paramCapability(
         pluginID: "logic.stock.effect.channel_eq",
         paramKey: channelEQFixtureParamID,
-        entryLookup: channelEQFixtureEntryLookup
+        entryLookup: channelEQFixtureEntryLookup()
     ) == .writeReadback)
 
     let obj = try await runChannelEQFixture(forcedAfterValue: 3.4)
@@ -511,6 +593,180 @@ private func runChannelEQFixture(
     #expect(obj["error"] as? String == "unsupported_param_readback")
     let v1 = try #require(obj["write_attempted"] as? Bool)
     #expect(!v1)
+}
+
+// MARK: - #301 Channel EQ increment-walk dispatch
+
+@Test func testVerifiedPluginDeclaredWriteMethodSelectsWalkOrSingleAXValueSet() async throws {
+    let walkFixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .oneStepTowardRequest
+    )
+    let walk = try await runChannelEQFixture(
+        fixture: walkFixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_increment_walk"
+    )
+    #expect(walk["state"] as? String == "A")
+    #expect(walkFixture.sliderWriteCount.value == 3)
+
+    let singleSetFixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0
+    )
+    let singleSet = try await runChannelEQFixture(
+        fixture: singleSetFixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_axvalue"
+    )
+    #expect(singleSet["state"] as? String == "A")
+    #expect(singleSetFixture.sliderWriteCount.value == 1)
+}
+
+@Test func testVerifiedPluginIncrementWalkFailuresAreDistinctStateCEnvelopes() async throws {
+    struct Scenario {
+        let initial: Double
+        let requested: String
+        let writes: [Double?]
+        let budget: Int
+        let error: String
+        let outcome: String
+    }
+    let scenarios = [
+        Scenario(
+            initial: 0,
+            requested: "3",
+            writes: [0],
+            budget: 4,
+            error: "increment_walk_no_progress",
+            outcome: "noProgress"
+        ),
+        Scenario(
+            initial: 0,
+            requested: "3",
+            writes: [1, 2],
+            budget: 2,
+            error: "increment_walk_budget_exhausted",
+            outcome: "budgetExhausted"
+        ),
+        Scenario(
+            initial: 4,
+            requested: "5",
+            writes: [7, 8],
+            budget: 4,
+            error: "increment_walk_overshot",
+            outcome: "overshot"
+        ),
+        Scenario(
+            initial: 0,
+            requested: "3",
+            writes: [nil],
+            budget: 4,
+            error: "readback_lost_after_write",
+            outcome: "readbackLost"
+        ),
+    ]
+
+    for scenario in scenarios {
+        let fixture = LiveFixture(
+            thresholdDescription: channelEQFixtureAXDescription,
+            pluginSlotName: "Channel EQ",
+            beforeValue: scenario.initial,
+            sliderWriteBehavior: .scripted(scenario.writes)
+        )
+        let result = try await runChannelEQFixture(
+            fixture: fixture,
+            params: channelEQFixtureParams(value: scenario.requested, unit: "raw_ax_value"),
+            writeMethod: "ax_slider_increment_walk",
+            incrementWalkBudget: scenario.budget
+        )
+        #expect(result["state"] as? String == "C")
+        #expect(result["error"] as? String == scenario.error)
+        #expect(result["walk_outcome"] as? String == scenario.outcome)
+        let writeAttempted = try #require(result["write_attempted"] as? Bool)
+        #expect(writeAttempted)
+    }
+}
+
+@Test func testVerifiedPluginIncrementWalkRollbackUsesTheWalkAndReportsFailure() async throws {
+    let rollbackFixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        // Forward: 0 → 1 → 2 → 2 (no progress). Rollback: 2 → 1 → 0.
+        sliderWriteBehavior: .scripted([1, 2, 2, 1, 0])
+    )
+    let rolledBack = try await runChannelEQFixture(
+        fixture: rollbackFixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_increment_walk"
+    )
+    #expect(rolledBack["error"] as? String == "increment_walk_no_progress")
+    let rollbackSucceeded = try #require(rolledBack["rollback_succeeded"] as? Bool)
+    #expect(rollbackSucceeded)
+    #expect(rolledBack["rollback_outcome"] as? String == "arrived")
+    #expect(rollbackFixture.sliderWriteCount.value == 5)
+
+    let failedRollbackFixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .scripted([1, 1, 1])
+    )
+    let failedRollback = try await runChannelEQFixture(
+        fixture: failedRollbackFixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_increment_walk"
+    )
+    let rollbackFailed = try #require(failedRollback["rollback_succeeded"] as? Bool)
+    #expect(!rollbackFailed)
+    #expect(failedRollback["rollback_outcome"] as? String == "noProgress")
+}
+
+@Test func testVerifiedPluginNamedEQBandHonorsUnitsAndRefusesUnresolvedNamesBeforeWindowOpen() async throws {
+    let validFixture = LiveFixture(
+        thresholdDescription: "Peak 1 Frequency",
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .oneStepTowardRequest
+    )
+    let validResult = await AccessibilityChannel.defaultSetEQBandVerified(
+        params: namedEQBandParams(),
+        runtime: validFixture.runtime,
+        frontDocumentPath: { expectedPath }
+    )
+    let validData = try #require(validResult.message.data(using: .utf8))
+    let valid = try #require(try JSONSerialization.jsonObject(with: validData) as? [String: Any])
+    #expect(valid["state"] as? String == "A")
+    #expect(validFixture.sliderWriteCount.value == 3)
+
+    for params in [
+        namedEQBandParams(unit: "dB"),
+        namedEQBandParams(band: "Peak 9"),
+        namedEQBandParams(parameter: "Resonance"),
+    ] {
+        let fixture = LiveFixture(
+            thresholdDescription: "Peak 1 Frequency",
+            pluginSlotName: "Channel EQ",
+            beforeValue: 0,
+            pluginWindowPresent: false
+        )
+        let result = await AccessibilityChannel.defaultSetEQBandVerified(
+            params: params,
+            runtime: fixture.runtime,
+            frontDocumentPath: { expectedPath }
+        )
+        let data = try #require(result.message.data(using: .utf8))
+        let envelope = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "invalid_params")
+        let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(fixture.sliderWriteCount.value == 0)
+    }
 }
 
 // MARK: - State C: tolerance exceeded → readback_mismatch + rollback

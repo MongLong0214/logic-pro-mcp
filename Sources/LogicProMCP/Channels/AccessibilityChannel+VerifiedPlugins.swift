@@ -482,9 +482,10 @@ extension AccessibilityChannel {
         return nil
     }
 
-    // MARK: - set_param_verified (R6 single precedence; AC10/AC11/AC17/AC19/AC23)
+    // MARK: - verified parameter writes (R6 single precedence; AC10/AC11/AC17/AC19/AC23)
 
-    /// Verified parameter write entry. The R6 single precedence, in order:
+    /// Verified parameter-write engine. Both `set_param_verified` and the
+    /// named-band Channel EQ operation take this R6 precedence, in order:
     ///
     ///   1  schema/params (`invalid_params`)
     ///   2  mode          (`unsupported_mode`)
@@ -499,27 +500,123 @@ extension AccessibilityChannel {
     ///      target slot (`window_open_failed` / `window_identity_unresolved`)
     ///   9  slider match by AXDescription (`param_control_not_found`)
     ///  10  before `AXValue` read
-    ///  11  set `AXValue` (`ax_write_failed`)
-    ///  12  after `AXValue` + `AXValueDescription` read (`readback_lost_after_write`)
-    ///  13  tolerance: |after - requested| <= tolerance ⇒ State A; else State C
-    ///      `readback_mismatch` + rollback to the before value.
+    ///  11  dispatch the catalog's AX write method
+    ///  12  read back the declared raw or display target
+    ///  13  direct-set tolerance or increment-walk outcome; failures roll back
+    ///      with the same declared write method.
     ///
     /// Step 4 runs BEFORE step 5 so a display-name/alias input still reaches the
     /// capability lookup (canonical id is required to query capability — AC23).
     ///
-    /// T5 wires the live write/readback path for the FIRST verified-writable
-    /// parameter, Compressor `threshold` (normalized %, T0 spike). Every other
-    /// parameter has no write/readback method, so step 5 still fail-closes it
-    /// with `unsupported_param_readback` and no write is attempted.
+    /// Compressor threshold uses direct `AXValue` assignment. Channel EQ's
+    /// named controls use the separately measured increment walk; their catalog
+    /// provenance intentionally does not claim an end-to-end live round trip.
     static func defaultSetParamVerified(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
         frontDocumentPath: FrontDocumentPathProvider = liveFrontDocumentPath,
         entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
         paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup = VerifiedPluginCatalog.canonicalParamKey,
-        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener
+        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) async -> ChannelResult {
-        let operation = "logic_plugins.set_param_verified"
+        await defaultVerifiedParameterWrite(
+            operation: "logic_plugins.set_param_verified",
+            params: params,
+            selector: .plugin(
+                pluginAlias: params["plugin"] ?? "",
+                paramAlias: params["param"] ?? ""
+            ),
+            runtime: runtime,
+            frontDocumentPath: frontDocumentPath,
+            entryLookup: entryLookup,
+            paramAliasLookup: paramAliasLookup,
+            pluginWindowOpener: pluginWindowOpener,
+            incrementWalkBudget: incrementWalkBudget
+        )
+    }
+
+    /// Named-band Channel EQ variant of `set_param_verified`. It enters the
+    /// same R6 engine at step 1; only the step-4 selector differs. The public
+    /// surface never accepts a band ordinal or a slider position.
+    static func defaultSetEQBandVerified(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        frontDocumentPath: FrontDocumentPathProvider = liveFrontDocumentPath,
+        entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
+        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    ) async -> ChannelResult {
+        await defaultVerifiedParameterWrite(
+            operation: "logic_plugins.set_eq_band_verified",
+            params: params,
+            selector: .channelEQ(
+                bandName: params["band"] ?? "",
+                parameterName: params["parameter"] ?? ""
+            ),
+            runtime: runtime,
+            frontDocumentPath: frontDocumentPath,
+            entryLookup: entryLookup,
+            paramAliasLookup: VerifiedPluginCatalog.canonicalParamKey,
+            pluginWindowOpener: pluginWindowOpener,
+            incrementWalkBudget: incrementWalkBudget
+        )
+    }
+
+    private enum VerifiedParameterSelector {
+        case plugin(pluginAlias: String, paramAlias: String)
+        case channelEQ(bandName: String, parameterName: String)
+
+        var preResolutionIdentity: [String: Any] {
+            switch self {
+            case let .plugin(pluginAlias, _):
+                ["plugin_id_requested": pluginAlias]
+            case let .channelEQ(bandName, parameterName):
+                [
+                    "plugin_id_requested": "logic.stock.effect.channel_eq",
+                    "band_requested": bandName,
+                    "parameter_requested": parameterName,
+                ]
+            }
+        }
+
+        var parameterLabel: String {
+            switch self {
+            case let .plugin(_, paramAlias): paramAlias
+            case let .channelEQ(bandName, parameterName): "\(bandName) \(parameterName)"
+            }
+        }
+    }
+
+    private struct ResolvedVerifiedParameter {
+        let pluginID: String
+        let paramKey: String
+        let paramAlias: String
+        let metadata: StockPluginParameterMetadata
+        let walkTarget: SliderIncrementWalk.Target?
+        let responseDisplayUnit: String
+    }
+
+    private enum VerifiedParameterResolution {
+        case success(ResolvedVerifiedParameter)
+        case failure(String)
+    }
+
+    /// R6's single precedence implementation, shared by generic verified
+    /// parameters and named Channel EQ bands. The selector resolution belongs at
+    /// step 4, after mode/path/target-reference gates, so the two public
+    /// operations cannot drift into different precedence rules.
+    private static func defaultVerifiedParameterWrite(
+        operation: String,
+        params: [String: String],
+        selector: VerifiedParameterSelector,
+        runtime: AXLogicProElements.Runtime,
+        frontDocumentPath: FrontDocumentPathProvider,
+        entryLookup: VerifiedPluginCatalog.EntryLookup,
+        paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup,
+        pluginWindowOpener: PluginWindowOpener,
+        incrementWalkBudget: Int
+    ) async -> ChannelResult {
 
         // Step 1 — schema / params (presence, type, range, unit).
         guard let trackRaw = params["track"], let track = Int(trackRaw), track >= 0 else {
@@ -528,13 +625,21 @@ extension AccessibilityChannel {
         guard let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0 else {
             return .error(invalidParamsStateC(operation, "missing or invalid 'insert' (Int >= 0)"))
         }
-        let pluginAlias = params["plugin"] ?? ""
-        guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
-        }
-        let paramAlias = params["param"] ?? ""
-        guard !paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .error(invalidParamsStateC(operation, "missing 'param' key"))
+        switch selector {
+        case let .plugin(pluginAlias, paramAlias):
+            guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
+            }
+            guard !paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing 'param' key"))
+            }
+        case let .channelEQ(bandName, parameterName):
+            guard !bandName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing Channel EQ 'band' name"))
+            }
+            guard !parameterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing Channel EQ 'parameter' name"))
+            }
         }
         guard let valueRaw = params["value"], let value = Double(valueRaw), value.isFinite else {
             return .error(invalidParamsStateC(operation, "missing or non-finite 'value'"))
@@ -542,10 +647,8 @@ extension AccessibilityChannel {
         let unit = params["unit"]
         let mode = params["mode"] ?? ""
 
-        let preResolutionIdentity: [String: Any] = [
-            "track_index": track,
-            "plugin_id_requested": pluginAlias,
-        ]
+        var preResolutionIdentity = selector.preResolutionIdentity
+        preResolutionIdentity["track_index"] = track
 
         // Steps 2-3 — mode + project path gate (precedence: path-mismatch wins
         // over a later unsupported-param, AC23).
@@ -577,80 +680,181 @@ extension AccessibilityChannel {
             return guardResult
         }
 
-        // Step 4 — identity alias resolution (canonical id needed for step 5).
-        guard let pluginID = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .unknownPluginIdentity,
-                extras: [
-                    "operation": operation,
-                    "target_identity": preResolutionIdentity,
-                    "what_was_attempted": "resolve plugin identity '\(pluginAlias)' to a canonical catalog id",
-                    "what_was_observed": "no alias mapping to a logic.stock.* id",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
-        }
-        let paramKey = VerifiedPluginCatalog.canonicalParamKey(
-            pluginID: pluginID,
-            alias: paramAlias,
-            paramAliasLookup: paramAliasLookup
-        ) ?? paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        // Unit honesty (R8): a caller unit that disagrees with the declared
-        // canonical unit is invalid_params.
-        if let unit,
-           let expectedUnit = VerifiedPluginCatalog.paramUnit(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup),
-           unit.caseInsensitiveCompare(expectedUnit) != .orderedSame {
-            return .error(invalidParamsStateC(
-                operation,
-                "unit '\(unit)' does not match the declared unit '\(expectedUnit)' for \(pluginID).\(paramAlias)"
-            ))
-        }
-        // Range validation (R6 step 1) against the declared display range.
-        if let range = VerifiedPluginCatalog.paramRange(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup),
-           value < range.min || value > range.max {
-            return .error(invalidParamsStateC(
-                operation,
-                "value \(value) is outside the valid range [\(range.min), \(range.max)] for \(pluginID).\(paramAlias)"
-            ))
-        }
-
-        // Step 5 — capability preflight. Only `.writeReadback` (Compressor
-        // threshold, T0 spike) proceeds to the live write; every other parameter
-        // has no write/readback method and fail-closes BEFORE any write (AC10).
-        let capability = VerifiedPluginCatalog.paramCapability(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup)
-        switch capability {
-        case .unknownParameter, .unsupported:
-            return .error(HonestContract.encodeV2StateC(
-                error: .unsupportedParamReadback,
-                extras: [
-                    "operation": operation,
-                    "target_identity": resolvedIdentity(track: track, insert: insert, pluginID: pluginID),
-                    "param": paramAlias,
-                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
-                    "what_was_observed": capability == .unknownParameter
-                        ? "parameter is not in the verified allowlist"
-                        : "no display-readback parser / write method is available for this parameter",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
-        case .writeReadback:
-            // Steps 6-13 — the live AX write/readback round-trip.
+        // Steps 4-5 — selector resolution, unit/range honesty, and capability
+        // preflight. This remains before any track/window AX mutation.
+        switch resolveVerifiedParameter(
+            selector: selector,
+            requested: value,
+            unit: unit,
+            operation: operation,
+            track: track,
+            insert: insert,
+            entryLookup: entryLookup,
+            paramAliasLookup: paramAliasLookup,
+            preResolutionIdentity: preResolutionIdentity
+        ) {
+        case let .failure(error):
+            return .error(error)
+        case let .success(target):
             return await performVerifiedParamWrite(
                 operation: operation,
                 track: track,
                 insert: insert,
-                pluginID: pluginID,
-                paramKey: paramKey,
-                paramAlias: paramAlias,
+                pluginID: target.pluginID,
+                paramKey: target.paramKey,
+                paramAlias: target.paramAlias,
                 requested: value,
+                writeMethod: target.metadata.writeMethod ?? "",
+                walkTarget: target.walkTarget,
+                responseDisplayUnit: target.responseDisplayUnit,
                 runtime: runtime,
                 entryLookup: entryLookup,
-                pluginWindowOpener: pluginWindowOpener
+                pluginWindowOpener: pluginWindowOpener,
+                incrementWalkBudget: incrementWalkBudget
             )
         }
+    }
+
+    private static func resolveVerifiedParameter(
+        selector: VerifiedParameterSelector,
+        requested: Double,
+        unit: String?,
+        operation: String,
+        track: Int,
+        insert: Int,
+        entryLookup: VerifiedPluginCatalog.EntryLookup,
+        paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup,
+        preResolutionIdentity: [String: Any]
+    ) -> VerifiedParameterResolution {
+        let pluginID: String
+        let paramKey: String
+        let paramAlias = selector.parameterLabel
+        switch selector {
+        case let .plugin(pluginAlias, suppliedParamAlias):
+            guard let resolved = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
+                return .failure(HonestContract.encodeV2StateC(
+                    error: .unknownPluginIdentity,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": preResolutionIdentity,
+                        "what_was_attempted": "resolve plugin identity '\(pluginAlias)' to a canonical catalog id",
+                        "what_was_observed": "no alias mapping to a logic.stock.* id",
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            pluginID = resolved
+            paramKey = VerifiedPluginCatalog.canonicalParamKey(
+                pluginID: pluginID,
+                alias: suppliedParamAlias,
+                paramAliasLookup: paramAliasLookup
+            ) ?? suppliedParamAlias.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        case let .channelEQ(bandName, parameterName):
+            guard let catalogParameter = ChannelEQBandCatalog.parameter(
+                bandName: bandName,
+                parameterName: parameterName
+            ) else {
+                return .failure(invalidParamsStateC(
+                    operation,
+                    "unknown Channel EQ band/parameter name '\(bandName)' / '\(parameterName)'"
+                ))
+            }
+            pluginID = "logic.stock.effect.channel_eq"
+            paramKey = catalogParameter.id
+        }
+
+        let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
+        guard let metadata = entryLookup(pluginID)?.parameters.first(where: { $0.id == paramKey }) else {
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "parameter is not in the verified allowlist",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+
+        let declaredUnits = metadata.acceptedUnits ?? metadata.unit.map { [$0] } ?? []
+        let normalizedUnit = unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case .channelEQ = selector, normalizedUnit?.isEmpty ?? true {
+            return .failure(invalidParamsStateC(
+                operation,
+                "Channel EQ requires a declared 'unit' for \(paramAlias)"
+            ))
+        }
+        let effectiveUnit = normalizedUnit?.isEmpty == false ? normalizedUnit! : metadata.unit
+        guard let effectiveUnit,
+              declaredUnits.contains(where: { $0.caseInsensitiveCompare(effectiveUnit) == .orderedSame }) else {
+            let declared = declaredUnits.joined(separator: ", ")
+            return .failure(invalidParamsStateC(
+                operation,
+                "unit '\(unit ?? "")' is not declared for \(pluginID).\(paramAlias); declared units: \(declared)"
+            ))
+        }
+
+        let isIncrementWalk = metadata.writeMethod == "ax_slider_increment_walk"
+        let rawUnit = metadata.unit
+        let isRawRequest = rawUnit.map {
+            $0.caseInsensitiveCompare(effectiveUnit) == .orderedSame
+        } ?? false
+        if !isIncrementWalk || isRawRequest,
+           let range = metadata.valueRange,
+           requested < range.min || requested > range.max {
+            return .failure(invalidParamsStateC(
+                operation,
+                "value \(requested) is outside the valid range [\(range.min), \(range.max)] for \(pluginID).\(paramAlias)"
+            ))
+        }
+
+        let hasWrite = !(metadata.writeMethod?.isEmpty ?? true)
+        let hasReadback = !(metadata.readbackMethod?.isEmpty ?? true)
+        guard hasWrite, hasReadback else {
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "no display-readback parser / write method is available for this parameter",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+
+        let walkTarget: SliderIncrementWalk.Target?
+        if isIncrementWalk {
+            if isRawRequest {
+                walkTarget = .rawValue(requested, tolerance: metadata.tolerance ?? 0)
+            } else {
+                // This is formatting only, not a display-to-raw conversion. The
+                // walk stops only when Logic reports this exact description.
+                let displayValue = displayTargetValueText(requested)
+                let signedValue = effectiveUnit.caseInsensitiveCompare("dB") == .orderedSame
+                    && requested > 0
+                    ? "+\(displayValue)"
+                    : displayValue
+                walkTarget = .display("\(signedValue) \(effectiveUnit)")
+            }
+        } else {
+            walkTarget = nil
+        }
+
+        return .success(ResolvedVerifiedParameter(
+            pluginID: pluginID,
+            paramKey: paramKey,
+            paramAlias: paramAlias,
+            metadata: metadata,
+            walkTarget: walkTarget,
+            responseDisplayUnit: metadata.unit == "normalized" ? "%" : effectiveUnit
+        ))
     }
 
     /// ADR-002 F1 — live track-identity cross-check for `target_ref`-resolved
@@ -744,9 +948,13 @@ extension AccessibilityChannel {
         paramKey: String,
         paramAlias: String,
         requested: Double,
+        writeMethod: String,
+        walkTarget: SliderIncrementWalk.Target?,
+        responseDisplayUnit: String,
         runtime: AXLogicProElements.Runtime,
         entryLookup: VerifiedPluginCatalog.EntryLookup,
-        pluginWindowOpener: PluginWindowOpener
+        pluginWindowOpener: PluginWindowOpener,
+        incrementWalkBudget: Int
     ) async -> ChannelResult {
         let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
         guard let axDescription = VerifiedPluginCatalog.paramAXDescription(
@@ -1016,99 +1224,311 @@ extension AccessibilityChannel {
             ))
         }
 
-        // Step 11 — set AXValue (the actual write).
-        guard AXValueExtractors.setSliderValue(slider, requested, runtime: runtime.ax) else {
+        // Step 11 — choose the declared AX write method. Compressor threshold
+        // remains a single AXValue assignment; Channel EQ's measured controls
+        // require readback-driven AXValue nudges.
+        switch writeMethod {
+        case "ax_slider_axvalue":
+            guard AXValueExtractors.setSliderValue(slider, requested, runtime: runtime.ax) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .axWriteFailed,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "requested_normalized": requested,
+                        "what_was_attempted": "set AXValue \(requested) on the '\(axDescription)' slider",
+                        "what_was_observed": "the AX value write was rejected",
+                        "safe_to_retry": true,
+                        "write_attempted": true,
+                    ]
+                ))
+            }
+
+            // Step 12 — read the after value (+ value description). A write
+            // that cannot be read back is uncertain, not confirmed — fail closed.
+            guard let after = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .readbackLostAfterWrite,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "requested_normalized": requested,
+                        "what_was_attempted": "read back the '\(axDescription)' slider value after writing",
+                        "what_was_observed": "the slider value could not be read after the write",
+                        "safe_to_retry": true,
+                        "write_attempted": true,
+                    ]
+                ))
+            }
+            let observedDisplay = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
+
+            // Step 13 — tolerance gate.
+            if abs(after - requested) <= tolerance {
+                return .success(HonestContract.encodeV2StateA(extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "requested_normalized": requested,
+                    "observed_normalized": after,
+                    "observed_display": observedDisplay ?? NSNull(),
+                    "display_unit": responseDisplayUnit,
+                    "tolerance": tolerance,
+                    "write_source": "ax_plugin_window",
+                    "verify_source": "ax_plugin_window",
+                ]))
+            }
+
+            // Mismatch — roll back to the before value (re-set + re-read) so a
+            // failed verified write does not leave the parameter changed.
+            let rollback = rollbackSliderValue(
+                slider,
+                to: before,
+                writeMethod: writeMethod,
+                runtime: runtime.ax
+            )
             return .error(HonestContract.encodeV2StateC(
-                error: .axWriteFailed,
+                error: .readbackMismatch,
                 extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
                     "requested_normalized": requested,
-                    "what_was_attempted": "set AXValue \(requested) on the '\(axDescription)' slider",
-                    "what_was_observed": "the AX value write was rejected",
-                    "safe_to_retry": true,
+                    "observed_normalized": after,
+                    "observed_display": observedDisplay ?? NSNull(),
+                    "display_unit": responseDisplayUnit,
+                    "tolerance": tolerance,
+                    "rollback_attempted": rollback.attempted,
+                    "rollback_succeeded": rollback.succeeded,
+                    "rollback_outcome": rollback.walkOutcome ?? NSNull(),
+                    "rollback_to": before ?? NSNull(),
+                    "what_was_attempted": "verify the '\(axDescription)' write within tolerance \(tolerance)",
+                    "what_was_observed": "observed \(after) differs from requested \(requested) beyond tolerance",
+                    "safe_to_retry": false,
                     "write_attempted": true,
                 ]
             ))
-        }
 
-        // Step 12 — read the after value (+ value description). A write that
-        // cannot be read back is uncertain, not confirmed — fail closed.
-        guard let after = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .readbackLostAfterWrite,
-                extras: [
+        case "ax_slider_increment_walk":
+            guard let walkTarget else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .unsupportedParamReadback,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "what_was_attempted": "select the declared increment-walk target for '\(axDescription)'",
+                        "what_was_observed": "the parameter declares ax_slider_increment_walk without a raw or display target",
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            let needsDisplay: Bool
+            if case .display(_) = walkTarget {
+                needsDisplay = true
+            } else {
+                needsDisplay = false
+            }
+            let outcome = SliderIncrementWalk.walk(
+                to: walkTarget,
+                read: {
+                    guard let value = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+                        return nil
+                    }
+                    let display = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
+                    guard !needsDisplay || display != nil else { return nil }
+                    return SliderIncrementWalk.Reading(value: value, display: display ?? "")
+                },
+                nudge: { rawTarget in
+                    AXValueExtractors.setSliderValue(slider, rawTarget, runtime: runtime.ax)
+                },
+                budget: incrementWalkBudget
+            )
+            switch outcome {
+            case let .arrived(steps, final):
+                var extras: [String: Any] = [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
                     "requested_normalized": requested,
-                    "what_was_attempted": "read back the '\(axDescription)' slider value after writing",
-                    "what_was_observed": "the slider value could not be read after the write",
-                    "safe_to_retry": true,
-                    "write_attempted": true,
+                    "observed_normalized": final.value,
+                    "observed_display": final.display,
+                    "display_unit": responseDisplayUnit,
+                    "walk_steps": steps,
+                    "write_source": "ax_plugin_window",
+                    "verify_source": "ax_plugin_window",
+                ]
+                if case let .display(targetDisplay) = walkTarget {
+                    extras["requested_display"] = targetDisplay
+                } else {
+                    extras["tolerance"] = tolerance
+                }
+                return .success(HonestContract.encodeV2StateA(extras: extras))
+            case .noProgress(_, _), .budgetExhausted(_, _), .overshot(_, _), .readbackLost(_):
+                let rollback = rollbackSliderValue(
+                    slider,
+                    to: before,
+                    writeMethod: writeMethod,
+                    runtime: runtime.ax,
+                    incrementWalkBudget: incrementWalkBudget
+                )
+                return .error(incrementWalkFailureStateC(
+                    operation: operation,
+                    identity: identity,
+                    paramAlias: paramAlias,
+                    requested: requested,
+                    axDescription: axDescription,
+                    outcome: outcome,
+                    rollback: rollback,
+                    before: before
+                ))
+            }
+
+        default:
+            return .error(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "select the declared write method for '\(axDescription)'",
+                    "what_was_observed": "unsupported write method '\(writeMethod)'",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
                 ]
             ))
         }
-        let observedDisplay = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
-
-        // Step 13 — tolerance gate.
-        if abs(after - requested) <= tolerance {
-            return .success(HonestContract.encodeV2StateA(extras: [
-                "operation": operation,
-                "target_identity": identity,
-                "param": paramAlias,
-                "requested_normalized": requested,
-                "observed_normalized": after,
-                "observed_display": observedDisplay ?? NSNull(),
-                "display_unit": "%",
-                "tolerance": tolerance,
-                "write_source": "ax_plugin_window",
-                "verify_source": "ax_plugin_window",
-            ]))
-        }
-
-        // Mismatch — roll back to the before value (re-set + re-read) so a failed
-        // verified write does not leave the parameter changed.
-        let rollback = rollbackSliderValue(slider, to: before, runtime: runtime.ax)
-        return .error(HonestContract.encodeV2StateC(
-            error: .readbackMismatch,
-            extras: [
-                "operation": operation,
-                "target_identity": identity,
-                "param": paramAlias,
-                "requested_normalized": requested,
-                "observed_normalized": after,
-                "observed_display": observedDisplay ?? NSNull(),
-                "display_unit": "%",
-                "tolerance": tolerance,
-                "rollback_attempted": rollback.attempted,
-                "rollback_succeeded": rollback.succeeded,
-                "rollback_to": before ?? NSNull(),
-                "what_was_attempted": "verify the '\(axDescription)' write within tolerance \(tolerance)",
-                "what_was_observed": "observed \(after) differs from requested \(requested) beyond tolerance",
-                "safe_to_retry": false,
-                "write_attempted": true,
-            ]
-        ))
     }
 
-    /// Roll a slider back to its pre-write value (re-set then re-read to confirm).
-    /// Returns whether a rollback was attempted (only when a before value exists)
-    /// and whether the re-read confirms it landed within a tight epsilon.
+    private struct SliderRollback {
+        let attempted: Bool
+        let succeeded: Bool
+        let walkOutcome: String?
+    }
+
+    /// Roll a slider back to its pre-write value. A slider that required an
+    /// increment walk for the forward write gets the same walk for rollback;
+    /// using one AXValue set there would only leave it one step closer.
     private static func rollbackSliderValue(
         _ slider: AXUIElement,
         to before: Double?,
-        runtime: AXHelpers.Runtime
-    ) -> (attempted: Bool, succeeded: Bool) {
-        guard let before else { return (false, false) }
-        guard AXValueExtractors.setSliderValue(slider, before, runtime: runtime) else {
-            return (true, false)
+        writeMethod: String,
+        runtime: AXHelpers.Runtime,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    ) -> SliderRollback {
+        guard let before else { return SliderRollback(attempted: false, succeeded: false, walkOutcome: nil) }
+        switch writeMethod {
+        case "ax_slider_increment_walk":
+            let outcome = SliderIncrementWalk.walk(
+                to: .rawValue(before, tolerance: 0),
+                read: {
+                    AXValueExtractors.extractSliderValue(slider, runtime: runtime).map {
+                        SliderIncrementWalk.Reading(value: $0, display: "")
+                    }
+                },
+                nudge: { rawTarget in
+                    AXValueExtractors.setSliderValue(slider, rawTarget, runtime: runtime)
+                },
+                budget: incrementWalkBudget
+            )
+            if case .arrived(_, _) = outcome {
+                return SliderRollback(attempted: true, succeeded: true, walkOutcome: "arrived")
+            }
+            return SliderRollback(
+                attempted: true,
+                succeeded: false,
+                walkOutcome: incrementWalkOutcomeName(outcome)
+            )
+        default:
+            guard AXValueExtractors.setSliderValue(slider, before, runtime: runtime) else {
+                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+            }
+            guard let restored = AXValueExtractors.extractSliderValue(slider, runtime: runtime) else {
+                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+            }
+            return SliderRollback(
+                attempted: true,
+                succeeded: abs(restored - before) <= 0.5,
+                walkOutcome: nil
+            )
         }
-        guard let restored = AXValueExtractors.extractSliderValue(slider, runtime: runtime) else {
-            return (true, false)
+    }
+
+    private static func incrementWalkFailureStateC(
+        operation: String,
+        identity: [String: Any],
+        paramAlias: String,
+        requested: Double,
+        axDescription: String,
+        outcome: SliderIncrementWalk.WalkOutcome,
+        rollback: SliderRollback,
+        before: Double?
+    ) -> String {
+        let error: HonestContract.FailureError
+        var extras: [String: Any] = [
+            "operation": operation,
+            "target_identity": identity,
+            "param": paramAlias,
+            "requested_normalized": requested,
+            "walk_outcome": incrementWalkOutcomeName(outcome),
+            "rollback_attempted": rollback.attempted,
+            "rollback_succeeded": rollback.succeeded,
+            "rollback_outcome": rollback.walkOutcome ?? NSNull(),
+            "rollback_to": before ?? NSNull(),
+            "what_was_attempted": "walk the '\(axDescription)' slider to its requested value",
+            "safe_to_retry": false,
+            "write_attempted": true,
+        ]
+        switch outcome {
+        case let .noProgress(steps, last):
+            error = .incrementWalkNoProgress
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the slider made no reliable progress toward the requested target"
+        case let .budgetExhausted(steps, last):
+            error = .incrementWalkBudgetExhausted
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the bounded slider walk exhausted its accepted-write budget"
+        case let .overshot(steps, last):
+            error = .incrementWalkOvershot
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the slider crossed the target then moved farther away on the same side"
+        case let .readbackLost(steps):
+            error = .readbackLostAfterWrite
+            extras["walk_steps"] = steps
+            extras["what_was_observed"] = "the slider readback was unavailable during the increment walk"
+        case .arrived(_, _):
+            fatalError("arrived must not be encoded as an increment-walk failure")
         }
-        return (true, abs(restored - before) <= 0.5)
+        return HonestContract.encodeV2StateC(error: error, extras: extras)
+    }
+
+    private static func incrementWalkOutcomeName(_ outcome: SliderIncrementWalk.WalkOutcome) -> String {
+        switch outcome {
+        case .arrived(_, _): "arrived"
+        case .noProgress(_, _): "noProgress"
+        case .budgetExhausted(_, _): "budgetExhausted"
+        case .overshot(_, _): "overshot"
+        case .readbackLost(_): "readbackLost"
+        }
+    }
+
+    /// Formats a caller's engineering value for the exact string comparison
+    /// against Logic's `AXValueDescription`. This normalizes only numeric text
+    /// (`100.0` → `100`); it does not derive or imply a raw slider position.
+    private static func displayTargetValueText(_ value: Double) -> String {
+        if value.rounded() == value,
+           value >= Double(Int.min), value <= Double(Int.max) {
+            return String(Int(value))
+        }
+        return String(value)
     }
 
     private static func trackSelectionFailedStateC(_ operation: String, _ identity: [String: Any], _ detail: String) -> String {

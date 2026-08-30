@@ -72,6 +72,7 @@ struct OperationRegistryCoverageTests {
             .mixerSetVolume,
             .mixerSetPan,
             .pluginsSetParamVerified,
+            .pluginsSetEQBandVerified,
             .pluginsInsertVerified,
             .tracksSelect,
             .tracksDelete,

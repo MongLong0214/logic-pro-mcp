@@ -171,6 +171,10 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
     let id: String
     let displayName: String
     let unit: String?
+    /// Every unit callers may request. `unit` remains the canonical/raw unit
+    /// for compatibility; this list adds display units when a control can only
+    /// be verified through Logic's own rendering.
+    let acceptedUnits: [String]?
     let valueRange: StockPluginValueRange?
     let writeMethod: String?
     let readbackMethod: String?
@@ -179,10 +183,10 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
     /// parameter declares no verified write path (display/readback methods nil).
     let tolerance: Double?
     /// AX `AXDescription` string that uniquely identifies this parameter's
-    /// control inside the live plugin window (T0 evidence). For Compressor only
-    /// `threshold` carries a stable description ("Threshold"); other params show
-    /// the locale word for "slider" with no name, so they get no matcher and
-    /// stay write-unsupported. nil ⇒ not AX-addressable by description.
+    /// control inside the live plugin window. Compressor `threshold` and the
+    /// named Channel EQ catalog entries carry description matchers; other
+    /// parameters without one stay write-unsupported. nil ⇒ not
+    /// AX-addressable by description.
     let axDescription: String?
     let availabilityState: StockPluginTruthState
     let provenance: StockPluginProvenance
@@ -191,6 +195,7 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         case id
         case displayName = "display_name"
         case unit
+        case acceptedUnits = "accepted_units"
         case valueRange = "value_range"
         case writeMethod = "write_method"
         case readbackMethod = "readback_method"
@@ -204,6 +209,7 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         id: String,
         displayName: String,
         unit: String?,
+        acceptedUnits: [String]? = nil,
         valueRange: StockPluginValueRange?,
         writeMethod: String?,
         readbackMethod: String?,
@@ -215,6 +221,7 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         self.id = id
         self.displayName = displayName
         self.unit = unit
+        self.acceptedUnits = acceptedUnits
         self.valueRange = valueRange
         self.writeMethod = writeMethod
         self.readbackMethod = readbackMethod
@@ -848,7 +855,41 @@ enum StockPluginCatalog {
         ),
     ]
 
-    private static let channelEQParameters: [StockPluginParameterMetadata] = []
+    /// Measured live on 2026-08-30: the ranges are raw `AXValue` bounds and an
+    /// apparent AXValue assignment advances this slider by a single increment
+    /// toward its target. This records neither a verified write/readback round
+    /// trip nor an engineering-value-to-raw conversion; both remain explicitly
+    /// outside this evidence packet.
+    private static let channelEQParameters: [StockPluginParameterMetadata] =
+        ChannelEQBandCatalog.parameters.map { parameter in
+            StockPluginParameterMetadata(
+                id: parameter.id,
+                displayName: parameter.displayName,
+                unit: parameter.rawUnit,
+                acceptedUnits: parameter.declaredUnits,
+                valueRange: StockPluginValueRange(
+                    min: parameter.range.lowerBound,
+                    max: parameter.range.upperBound,
+                    defaultValue: nil
+                ),
+                writeMethod: "ax_slider_increment_walk",
+                readbackMethod: "ax_slider_axvalue",
+                tolerance: 0,
+                axDescription: parameter.axDescription,
+                availabilityState: .observed,
+                provenance: .observed(
+                    method: "ax_slider_range_and_increment_measurement",
+                    observedAt: "2026-08-30T00:00:00Z",
+                    logicVersion: nil,
+                    locale: nil,
+                    evidence: [
+                        "raw_axvalue_range_measured_live_2026-08-30",
+                        "axvalue_increment_walk_measured_live_2026-08-30",
+                        "no_write_round_trip_claimed",
+                    ]
+                )
+            )
+        }
 
     /// Compressor `threshold` — the first verified-writable stock parameter.
     /// Current public release evidence records the AX write/readback boundary:
@@ -891,9 +932,14 @@ enum StockPluginCatalog {
             "channel_eq",
             "Channel EQ",
             "EQ",
-            write: .insertOnly,
+            // Removing the isolated `channelEQParameters` evidence block also
+            // returns Channel EQ to insert-only capability in this same edit.
+            write: channelEQParameters.isEmpty ? .insertOnly : .parameterWriteReadback,
             parameters: channelEQParameters,
-            notes: ["Channel EQ parameter registry is census-gated; no writable params are registered until live evidence is added"]
+            notes: [
+                "Channel EQ ranges and increment-walk behavior were measured live on 2026-08-30.",
+                "No Channel EQ write/readback round trip is claimed by this catalog evidence."
+            ]
         ),
         fx("linear_phase_eq", "Linear Phase EQ", "EQ"),
         fx("match_eq", "Match EQ", "EQ"),

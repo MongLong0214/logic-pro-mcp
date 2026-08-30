@@ -690,6 +690,8 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.defaultGetPluginInventory(params: params, runtime: runtime.logicRuntime)
         case "plugin.set_param_verified":
             return await AccessibilityChannel.defaultSetParamVerified(params: params, runtime: runtime.logicRuntime)
+        case "plugin.set_eq_band_verified":
+            return await AccessibilityChannel.defaultSetEQBandVerified(params: params, runtime: runtime.logicRuntime)
         case "plugin.insert_verified":
             return await AccessibilityChannel.defaultInsertVerified(params: params, runtime: runtime.logicRuntime)
 
