@@ -1170,9 +1170,11 @@ actor LogicProServer {
         ServerCatalog.snapshot(channelIDs: registeredChannels().map(\.id))
     }
 
-    /// Keeps startup cleanup together because both actions repair artifacts a prior process left
-    /// behind. The direct test covers the two actions here; it cannot catch deletion of this call
-    /// from `start()`, so that lifecycle link remains intentionally called out for review.
+    /// Keeps startup maintenance together. `cleanupOrphans` removes filesystem artifacts, while
+    /// modifier recovery examines markers and may attempt a zero-flags key-up without establishing
+    /// their provenance or that a modifier is still held. The direct test covers the two actions
+    /// here; it cannot catch deletion of this call from `start()`, so that lifecycle link remains
+    /// intentionally called out for review.
     static func performStartupMaintenance(
         cleanupOrphans: () -> Void,
         recoverModifier: () -> Void

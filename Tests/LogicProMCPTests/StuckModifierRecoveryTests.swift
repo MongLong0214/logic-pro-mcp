@@ -68,7 +68,7 @@ struct StuckModifierRecoveryTests {
             in: directory,
             selfPID: 101,
             isAlive: { _ in false },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
         #expect(result.isEmpty)
         #expect(posted.isEmpty, "a start with no marker posted \(posted)")
@@ -93,7 +93,7 @@ struct StuckModifierRecoveryTests {
             in: directory,
             selfPID: selfPID,
             isAlive: { $0 == livePID },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
 
         #expect(result == [14])
@@ -120,7 +120,7 @@ struct StuckModifierRecoveryTests {
             in: directory,
             selfPID: 101,
             isAlive: { _ in false },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
         #expect(result.isEmpty)
         #expect(posted.isEmpty)
@@ -141,7 +141,10 @@ struct StuckModifierRecoveryTests {
             in: directory,
             selfPID: 101,
             isAlive: { _ in false },
-            post: { _ in gone = !FileManager.default.fileExists(atPath: url.path) }
+            post: { _ in
+                gone = !FileManager.default.fileExists(atPath: url.path)
+                return true
+            }
         )
         #expect(result == [14])
         #expect(gone, "the marker still existed while the post ran")
@@ -164,7 +167,7 @@ struct StuckModifierRecoveryTests {
             in: directory,
             selfPID: 101,
             isAlive: { _ in false },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
         #expect(result.isEmpty)
         #expect(posted.isEmpty)
@@ -184,7 +187,7 @@ struct StuckModifierRecoveryTests {
             selfPID: 101,
             isAlive: { _ in false },
             remove: { _ in throw MarkerRemovalError.failed },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
         #expect(result.isEmpty)
         #expect(posted.isEmpty)
@@ -204,11 +207,34 @@ struct StuckModifierRecoveryTests {
             selfPID: 101,
             isAlive: { _ in false },
             remove: { _ in },
-            post: { posted.append($0) }
+            post: { posted.append($0); return true }
         )
         #expect(result.isEmpty)
         #expect(posted.isEmpty)
         #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test("a clear that cannot be built and posted is not reported as recovered")
+    func failedClearPostIsNotReportedAsRecovered() {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = markerURL(103, in: directory)
+        StuckModifierRecovery.arm(keyCode: 14, flags: .maskControl, at: url, pid: 103)
+        var attempted: [CGKeyCode] = []
+
+        let result = StuckModifierRecovery.recoverIfNeeded(
+            in: directory,
+            selfPID: 101,
+            isAlive: { _ in false },
+            post: {
+                attempted.append($0)
+                return false
+            }
+        )
+
+        #expect(attempted == [14])
+        #expect(result.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
     @Test("the recovery replays the CLEAR, never the chord")

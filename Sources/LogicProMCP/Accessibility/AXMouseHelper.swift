@@ -13,6 +13,57 @@ import Foundation
 /// the double-click + keystroke sequence inside the server process
 /// eliminates the FD exhaustion path entirely.
 enum AXMouseHelper {
+    /// Coordinates the one marker file that this process uses for flagged chords.
+    ///
+    /// A nested chord deliberately keeps the outer chord's key code and flags in that file: the
+    /// nested chord's clear is not recorded. The outer clear is the one still owed after the
+    /// nested work completes; recording both would require a marker per chord and recovery that
+    /// posts several keystrokes. Keep the lock held while changing the marker so another chord
+    /// cannot post in the gap between this decision and the corresponding file operation.
+    final class ChordMarkerNesting: @unchecked Sendable {
+        private let lock = NSLock()
+        private var depth = 0
+
+        func begin(
+            keyCode: CGKeyCode,
+            flags: CGEventFlags,
+            arm: (CGKeyCode, CGEventFlags) -> Void
+        ) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            if depth == 0 {
+                arm(keyCode, flags)
+            }
+            depth += 1
+        }
+
+        func end(disarm: () -> Void) {
+            lock.lock()
+            defer { lock.unlock() }
+
+            // Clamped rather than `precondition`. `end` is reached only from the `defer` that
+            // follows its own `begin`, so a zero depth here would be a programmer error — but the
+            // trap costs the whole server, and this module's own rule is that a bookkeeping
+            // failure must not take the feature down with it. Disarm and log instead: an
+            // unbalanced end is a bug worth seeing, not worth crashing a user's session over.
+            guard depth > 0 else {
+                Log.warn(
+                    "chord marker disarmed without a matching arm — clearing it anyway",
+                    subsystem: "cgEvent")
+                disarm()
+                return
+            }
+            depth -= 1
+            if depth == 0 {
+                disarm()
+            }
+        }
+    }
+
+    /// Process-wide because all `postFlaggedKeyEvent` calls use the same per-process marker path.
+    private static let chordMarkerNesting = ChordMarkerNesting()
+
     struct Runtime: @unchecked Sendable {
         let postMouseEvent: @Sendable (CGEventType, CGPoint, Int64) -> Bool
         let postKeyEvent: @Sendable (CGKeyCode) -> Bool
@@ -62,9 +113,10 @@ enum AXMouseHelper {
             return (down, up, modifierClear)
         }
 
-        /// Posts a flagged chord inside the marker lifetime that makes an interrupted clear
-        /// recoverable. Event construction stays before `arm`: if nothing can be posted, there is
-        /// no modifier state to recover and no marker to clean up.
+        /// Posts a flagged chord while a best-effort marker is present. A later start can use that
+        /// marker to attempt a clear after an interruption, but arming can fail and recovery
+        /// deliberately removes the marker before posting. Event construction stays before `arm`
+        /// so no marker is written when there is no event sequence to post.
         @discardableResult
         static func postChord(
             keyCode: CGKeyCode,
@@ -72,11 +124,12 @@ enum AXMouseHelper {
             arm: (CGKeyCode, CGEventFlags) -> Void,
             disarm: () -> Void,
             post: (CGEvent) -> Void,
-            makeEvents: (CGKeyCode, CGEventFlags) -> (down: CGEvent, up: CGEvent, modifierClear: CGEvent?)?
+            makeEvents: (CGKeyCode, CGEventFlags) -> (down: CGEvent, up: CGEvent, modifierClear: CGEvent?)?,
+            markerNesting: ChordMarkerNesting = AXMouseHelper.chordMarkerNesting
         ) -> Bool {
             guard let events = makeEvents(keyCode, flags) else { return false }
-            arm(keyCode, flags)
-            defer { disarm() }
+            markerNesting.begin(keyCode: keyCode, flags: flags, arm: arm)
+            defer { markerNesting.end(disarm: disarm) }
             post(events.down)
             post(events.up)
             if let modifierClear = events.modifierClear {

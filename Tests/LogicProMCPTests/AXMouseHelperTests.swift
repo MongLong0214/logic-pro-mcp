@@ -169,3 +169,105 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(disarmCount == 0)
     #expect(postCount == 0)
 }
+
+@Test func axMouseHelperOverlappingChordsArmOnceAndDisarmAfterTheLastFinishes() throws {
+    let source = try #require(CGEventSource(stateID: .combinedSessionState))
+    let events = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x0E,
+        flags: .maskControl,
+        clearModifiersAfter: true
+    ))
+    let markerNesting = AXMouseHelper.ChordMarkerNesting()
+    var armCount = 0
+    var disarmCount = 0
+    var markerExists = false
+    var markerSurvivedInnerChord = false
+    var nested = false
+    var nestedChordPosted = false
+
+    let posted = AXMouseHelper.Runtime.postChord(
+        keyCode: 0x0E,
+        flags: .maskControl,
+        arm: { _, _ in
+            armCount += 1
+            markerExists = true
+        },
+        disarm: {
+            disarmCount += 1
+            markerExists = false
+        },
+        post: { _ in
+            guard !nested else { return }
+            nested = true
+            nestedChordPosted = AXMouseHelper.Runtime.postChord(
+                keyCode: 0x0F,
+                flags: .maskShift,
+                arm: { _, _ in
+                    armCount += 1
+                    markerExists = true
+                },
+                disarm: {
+                    disarmCount += 1
+                    markerExists = false
+                },
+                post: { _ in },
+                makeEvents: { _, _ in events },
+                markerNesting: markerNesting
+            )
+            markerSurvivedInnerChord = markerExists
+        },
+        makeEvents: { _, _ in events },
+        markerNesting: markerNesting
+    )
+
+    #expect(posted)
+    #expect(nestedChordPosted)
+    #expect(armCount == 1)
+    #expect(disarmCount == 1)
+    #expect(markerSurvivedInnerChord)
+    #expect(!markerExists)
+}
+
+@Test func axMouseHelperNestedChordKeepsTheOuterMarkerKeyCode() throws {
+    let source = try #require(CGEventSource(stateID: .combinedSessionState))
+    let events = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x0E,
+        flags: .maskControl,
+        clearModifiersAfter: true
+    ))
+    let outerKeyCode: CGKeyCode = 0x0E
+    let markerNesting = AXMouseHelper.ChordMarkerNesting()
+    var recordedKeyCode: CGKeyCode?
+    var keyCodeAfterNestedChord: CGKeyCode?
+    var nested = false
+    var nestedChordPosted = false
+
+    _ = AXMouseHelper.Runtime.postChord(
+        keyCode: outerKeyCode,
+        flags: .maskControl,
+        arm: { keyCode, _ in recordedKeyCode = keyCode },
+        disarm: { recordedKeyCode = nil },
+        post: { _ in
+            guard !nested else { return }
+            nested = true
+            nestedChordPosted = AXMouseHelper.Runtime.postChord(
+                keyCode: 0x0F,
+                flags: .maskShift,
+                arm: { keyCode, _ in recordedKeyCode = keyCode },
+                disarm: { recordedKeyCode = nil },
+                post: { _ in },
+                makeEvents: { _, _ in events },
+                markerNesting: markerNesting
+            )
+            keyCodeAfterNestedChord = recordedKeyCode
+        },
+        makeEvents: { _, _ in events },
+        markerNesting: markerNesting
+    )
+
+    #expect(nestedChordPosted)
+    let retainedKeyCode = try #require(keyCodeAfterNestedChord)
+    #expect(retainedKeyCode == outerKeyCode)
+}

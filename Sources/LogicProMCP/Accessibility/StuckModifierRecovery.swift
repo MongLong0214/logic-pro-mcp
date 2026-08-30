@@ -25,21 +25,24 @@ import Foundation
 /// holding Shift, and nothing available here can tell a synthetic held flag from a physical one —
 /// `CGEventSource.flagsState` reports the combined state and cannot say who put a flag there.
 ///
-/// Each process writes its own PID-bearing marker before its chord and removes it after. Startup
-/// only clears a marker whose owner is gone, and only after removing that marker. A live process
-/// keeps its marker, so another ordinary MCP launch does not post into its in-flight chord. PID
-/// reuse is the remaining ambiguity: an unrelated process can inherit a dead marker's PID, making
-/// that marker look live. Recovery then skips it, leaving the stuck modifier in the same state as
-/// before this feature; it never posts a keystroke the user did not ask for.
+/// Each process attempts to write one PID-named marker before its outermost chord and removes it
+/// after. At startup, this code only attempts a clear after removing a parseable marker whose
+/// different PID does not currently appear live. That limits blind clears, but it does not prove a
+/// marker's provenance, its owner's lifetime, or that its modifier remains held: a PID can be
+/// reused, including across a reboot, and best-effort arming means a live process can lack its
+/// marker.
+/// A hard power loss can leave a marker but cannot leave the macOS event state held, so its
+/// surviving marker is not evidence that a clear is needed.
 ///
-/// WHAT IT DOES NOT COVER, stated rather than implied: `SIGKILL` and a hard power loss remove the
-/// process without removing the marker, which is the case this recovers; a marker that cannot be
-/// written (read-only home, sandbox) leaves the window exactly as wide as it is today, and the
-/// chord still runs — refusing to send a keystroke because a breadcrumb failed would trade a rare
-/// stuck modifier for a broken feature.
+/// Residual limitations: PID reuse; reboot-stale markers; a marker written under a different UID
+/// or home; no proof that a modifier is still held at recovery time; and no test covering the
+/// production `kill`/`errno` behavior or actual `CGEvent` delivery. A marker that cannot be
+/// written (read-only home or sandbox) leaves the posting window as it was; the chord still runs
+/// because refusing its keystroke after a breadcrumb failure would break the feature.
 enum StuckModifierRecovery {
 
-    /// What a marker records: enough to identify its owner and post the clear it owed, and no more.
+    /// Diagnostic data only: the chord's key code, flags, and PID. It records no UID, boot
+    /// identity, process start time, or proof that the clear was not already posted.
     struct Marker: Codable, Equatable, Sendable {
         let keyCode: UInt16
         /// Diagnostic only. The recovery always posts with NO flags, because the event it stands in
@@ -83,8 +86,9 @@ enum StuckModifierRecovery {
         try? JSONEncoder().encode(Marker(keyCode: UInt16(keyCode), flags: flags.rawValue, pid: pid))
     }
 
-    /// Keep every liveness uncertainty on the safe side: only a known-dead, other process is owed
-    /// a clear. Injecting the check leaves this decision testable without creating processes.
+    /// Returns true only when a different PID currently has no process. `ESRCH` establishes that
+    /// current PID state, not the original marker owner or that a clear is still needed. Injecting
+    /// the check leaves this decision testable without creating processes.
     static func shouldRecover(
         marker: Marker,
         isAlive: (Int32) -> Bool,
@@ -119,18 +123,26 @@ enum StuckModifierRecovery {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// The chord finished, including its clearing event. A surviving marker must be visible in logs
-    /// because another start would otherwise mistake this completed chord for an interrupted one.
+    /// The chord finished, including its clearing event, so remove its marker. If the process dies
+    /// after the clear but before this removal, a completed marker can survive without a matching
+    /// log line and a later start cannot distinguish it from an interrupted chord.
     static func disarm(at url: URL? = defaultURL) {
         guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
         _ = removeMarker(at: url)
     }
 
-    /// Post every orphaned clear a previous process owed, if any. Safe to call on every start.
+    /// Attempts a clear for each removable, parseable marker whose different PID currently has no
+    /// process. It is not proven safe on every start: a reboot-stale marker can cause a post even
+    /// though no modifier remains held.
     ///
-    /// A remove must both return normally and leave no file behind before a clear is posted. That
-    /// makes concurrent starts race safely: only the process that actually removed a marker can
-    /// recover it.
+    /// The marker is deliberately removed before posting, so a crash during posting cannot retry
+    /// the same clear on every later start. Between successful removal and the post, another writer
+    /// can recreate the file, and a kill in that window permanently loses the clear represented by
+    /// the removed marker. The latter is the deliberate trade for avoiding a crashing post loop.
+    ///
+    /// The return value contains only key codes for which the poster reports constructing an event
+    /// and calling `CGEvent.post`. A normal return from `CGEvent.post` is not proof that macOS
+    /// delivered the event.
     @discardableResult
     static func recoverIfNeeded(
         in directory: URL? = defaultDirectoryURL,
@@ -138,9 +150,10 @@ enum StuckModifierRecovery {
         isAlive: (Int32) -> Bool = processIsAlive,
         remove: (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) },
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
-        post: (CGKeyCode) -> Void = { keyCode in
-            guard let clear = clearEvent(for: keyCode) else { return }
+        post: (CGKeyCode) -> Bool = { keyCode in
+            guard let clear = clearEvent(for: keyCode) else { return false }
             clear.post(tap: .cghidEventTap)
+            return true
         }
     ) -> [CGKeyCode] {
         guard let directory,
@@ -160,11 +173,16 @@ enum StuckModifierRecovery {
             guard removeMarker(at: url, remove: remove, fileExists: fileExists) else { continue }
 
             let keyCode = CGKeyCode(marker.keyCode)
-            post(keyCode)
-            recovered.append(keyCode)
-            Log.info(
-                "cleared a modifier left held by an interrupted chord (key \(keyCode))",
-                subsystem: "cgEvent")
+            if post(keyCode) {
+                recovered.append(keyCode)
+                Log.info(
+                    "posted a modifier-clear event for a recovery marker (key \(keyCode)); delivery is not verified",
+                    subsystem: "cgEvent")
+            } else {
+                Log.warn(
+                    "modifier recovery marker was found, but its clear event could not be built and posted (key \(keyCode))",
+                    subsystem: "cgEvent")
+            }
         }
         return recovered
     }
