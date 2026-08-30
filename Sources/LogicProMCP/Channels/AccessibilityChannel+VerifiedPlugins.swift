@@ -406,6 +406,27 @@ extension AccessibilityChannel {
         _ runtime: AXLogicProElements.Runtime
     ) async -> AXUIElementSendable?
 
+    /// Result of the CoreGraphics-backed popup cleanup that follows plug-in
+    /// window acquisition. A remaining popup is unsafe: Logic stops servicing
+    /// AppleEvents while it is open, so the next verified write would fail for
+    /// an unrelated-looking reason.
+    enum PluginPopupMenuCleanupOutcome: Sendable, Equatable {
+        case noPopupObserved
+        case dismissed
+        case couldNotDismiss(initialPopupCount: Int, remainingPopupCount: Int)
+
+        var isClean: Bool {
+            if case .couldNotDismiss = self {
+                return false
+            }
+            return true
+        }
+    }
+
+    typealias PluginPopupMenuCleaner = @Sendable (
+        _ runtime: AXLogicProElements.Runtime
+    ) -> PluginPopupMenuCleanupOutcome
+
     static let livePluginWindowOpener: PluginWindowOpener = { targetSlot, trackName, axDescription, runtime in
         await openPluginWindowFromTargetSlot(
             targetSlot.element,
@@ -416,6 +437,10 @@ extension AccessibilityChannel {
     }
 
     static let liveNoOpPluginWindowOpener: PluginWindowOpener = { _, _, _, _ in nil }
+
+    static let livePluginPopupMenuCleaner: PluginPopupMenuCleaner = { runtime in
+        dismissLogicPopupMenuAfterPluginWindowAcquisition(runtime: runtime)
+    }
 
     /// Steps 2-3 of the R6 precedence shared by both mutating verified ops:
     /// mode validation then the project path gate. Returns a State C envelope to
@@ -518,6 +543,7 @@ extension AccessibilityChannel {
         entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
         paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup = VerifiedPluginCatalog.canonicalParamKey,
         pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner = livePluginPopupMenuCleaner,
         incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) async -> ChannelResult {
         await defaultVerifiedParameterWrite(
@@ -532,6 +558,7 @@ extension AccessibilityChannel {
             entryLookup: entryLookup,
             paramAliasLookup: paramAliasLookup,
             pluginWindowOpener: pluginWindowOpener,
+            pluginPopupMenuCleaner: pluginPopupMenuCleaner,
             incrementWalkBudget: incrementWalkBudget
         )
     }
@@ -545,6 +572,7 @@ extension AccessibilityChannel {
         frontDocumentPath: FrontDocumentPathProvider = liveFrontDocumentPath,
         entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
         pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner = livePluginPopupMenuCleaner,
         incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) async -> ChannelResult {
         await defaultVerifiedParameterWrite(
@@ -559,6 +587,7 @@ extension AccessibilityChannel {
             entryLookup: entryLookup,
             paramAliasLookup: VerifiedPluginCatalog.canonicalParamKey,
             pluginWindowOpener: pluginWindowOpener,
+            pluginPopupMenuCleaner: pluginPopupMenuCleaner,
             incrementWalkBudget: incrementWalkBudget
         )
     }
@@ -615,6 +644,7 @@ extension AccessibilityChannel {
         entryLookup: VerifiedPluginCatalog.EntryLookup,
         paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup,
         pluginWindowOpener: PluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner,
         incrementWalkBudget: Int
     ) async -> ChannelResult {
 
@@ -710,6 +740,7 @@ extension AccessibilityChannel {
                 runtime: runtime,
                 entryLookup: entryLookup,
                 pluginWindowOpener: pluginWindowOpener,
+                pluginPopupMenuCleaner: pluginPopupMenuCleaner,
                 incrementWalkBudget: incrementWalkBudget
             )
         }
@@ -954,6 +985,7 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         entryLookup: VerifiedPluginCatalog.EntryLookup,
         pluginWindowOpener: PluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner,
         incrementWalkBudget: Int
     ) async -> ChannelResult {
         let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
@@ -1081,6 +1113,7 @@ extension AccessibilityChannel {
                 runtime: runtime
             )
             diagnostics["opener_action_attempted"] = false
+            diagnostics.merge(pluginPopupMenuCleanupDiagnostics(pluginPopupMenuCleaner(runtime))) { _, new in new }
             return .error(windowIdentityUnresolvedStateC(
                 operation,
                 identity,
@@ -1096,6 +1129,22 @@ extension AccessibilityChannel {
             axDescription,
             runtime
         ) else {
+            let popupCleanup = pluginPopupMenuCleaner(runtime)
+            if !popupCleanup.isClean {
+                var diagnostics = pluginWindowAcquisitionDiagnostics(
+                    trackName: trackName,
+                    axDescription: axDescription,
+                    runtime: runtime
+                )
+                diagnostics.merge(pluginPopupMenuCleanupDiagnostics(popupCleanup)) { _, new in new }
+                return .error(windowOpenFailedStateC(
+                    operation,
+                    identity,
+                    "a Logic popup menu remained open after plugin-window acquisition",
+                    diagnostics: diagnostics,
+                    safeToRetry: false
+                ))
+            }
             if case .ambiguous = AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingSliderDescription: axDescription,
@@ -1122,6 +1171,22 @@ extension AccessibilityChannel {
                     axDescription: axDescription,
                     runtime: runtime
                 )
+            ))
+        }
+        let popupCleanup = pluginPopupMenuCleaner(runtime)
+        guard popupCleanup.isClean else {
+            var diagnostics = pluginWindowAcquisitionDiagnostics(
+                trackName: trackName,
+                axDescription: axDescription,
+                runtime: runtime
+            )
+            diagnostics.merge(pluginPopupMenuCleanupDiagnostics(popupCleanup)) { _, new in new }
+            return .error(windowOpenFailedStateC(
+                operation,
+                identity,
+                "a Logic popup menu remained open after plugin-window acquisition",
+                diagnostics: diagnostics,
+                safeToRetry: false
             ))
         }
         let window = opened.element
@@ -1563,14 +1628,15 @@ extension AccessibilityChannel {
         _ operation: String,
         _ identity: [String: Any],
         _ detail: String,
-        diagnostics: [String: Any] = [:]
+        diagnostics: [String: Any] = [:],
+        safeToRetry: Bool = true
     ) -> String {
         var extras: [String: Any] = [
             "operation": operation,
             "target_identity": identity,
             "what_was_attempted": "acquire the plugin window before writing",
             "what_was_observed": detail,
-            "safe_to_retry": true,
+            "safe_to_retry": safeToRetry,
             "write_attempted": false,
         ]
         extras.merge(diagnostics) { current, _ in current }
@@ -1615,9 +1681,10 @@ extension AccessibilityChannel {
         case .ambiguous:
             return nil
         case let .unique(window):
-            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
-                return nil
-            }
+            // A verified unique editor is already the requested acquisition.
+            // Re-pressing the slot can surface its chooser menu, which leaves a
+            // popup that blocks Logic's AppleEvent handler; reuse the window.
+            return AXUIElementSendable(window)
         case .none:
             break
         }
@@ -1655,24 +1722,6 @@ extension AccessibilityChannel {
         return nil
     }
 
-    private static func demotePluginWindowBeforeAcquisition(
-        _ window: AXUIElement,
-        runtime: AXLogicProElements.Runtime
-    ) -> Bool {
-        let mainCleared = AXHelpers.setAttribute(
-            window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime.ax
-        )
-        let focusCleared = AXHelpers.setAttribute(
-            window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime.ax
-        )
-        if mainCleared, focusCleared, !pluginWindowIsFront(window, runtime: runtime.ax) {
-            return true
-        }
-        guard let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime),
-              AXHelpers.performAction(arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax) else { return false }
-        return !pluginWindowIsFront(window, runtime: runtime.ax)
-    }
-
     private static func pluginWindowIsFront(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -1706,7 +1755,7 @@ extension AccessibilityChannel {
         return CFEqual(slots[insert].element, originalSlot)
     }
 
-    private static func rankedPluginSlotOpenControls(
+    static func rankedPluginSlotOpenControls(
         in targetSlot: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [(rank: Int, element: AXUIElement)] {
@@ -1717,6 +1766,10 @@ extension AccessibilityChannel {
         return buttons.compactMap { button -> (rank: Int, element: AXUIElement)? in
             let text = AXLogicProElements.elementSearchText(button, runtime: runtime)
             guard !AXLocalePolicy.pluginBypassControl.containsAny(in: text) else { return nil }
+            guard case let .success(actionNames) = AXHelpers.getActionNamesResult(button, runtime: runtime),
+                  !pluginSlotControlOpensMenu(actionNames: actionNames) else {
+                return nil
+            }
             if text.range(of: "open", options: [.caseInsensitive]) != nil || text.contains("열기") {
                 return (0, button)
             }
@@ -1729,6 +1782,126 @@ extension AccessibilityChannel {
             return (2, button)
         }
         .sorted { lhs, rhs in lhs.rank < rhs.rank }
+    }
+
+    /// Action names are the stable capability signal; a localised button label
+    /// cannot say whether AXPress opens an editor or a menu.
+    static func pluginSlotControlOpensMenu(actionNames: [String]) -> Bool {
+        actionNames.contains(kAXShowMenuAction as String) || actionNames.contains { actionName in
+            let normalized = actionName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalized.hasPrefix("name:") else { return false }
+            return normalized.contains("menu") || normalized.contains("메뉴")
+        }
+    }
+
+    private static func pluginPopupMenuCleanupDiagnostics(
+        _ outcome: PluginPopupMenuCleanupOutcome
+    ) -> [String: Any] {
+        switch outcome {
+        case .noPopupObserved, .dismissed:
+            return [:]
+        case let .couldNotDismiss(initialPopupCount, remainingPopupCount):
+            return [
+                "plugin_popup_menu_state": "could_not_be_dismissed",
+                "plugin_popup_menu_initial_window_count": initialPopupCount,
+                "plugin_popup_menu_remaining_window_count": remainingPopupCount,
+                "recovery_hint": "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler.",
+            ]
+        }
+    }
+
+    /// The live failure was one Logic-owned 230x593 CoreGraphics window at
+    /// layer 101 — the popup-menu level. Querying
+    /// `CGWindowLevelForKey(.popUpMenuWindow)` rather than baking in 101 keeps
+    /// the signal tied to macOS's popup-menu level while avoiding the AppleEvent
+    /// path that the stuck menu itself blocks.
+    private static func dismissLogicPopupMenuAfterPluginWindowAcquisition(
+        runtime: AXLogicProElements.Runtime
+    ) -> PluginPopupMenuCleanupOutcome {
+        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime),
+              initialPopupCount > 0 else {
+            return .noPopupObserved
+        }
+
+        cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
+        if logicOwnedPopupMenuWindowCount(runtime: runtime) == 0 {
+            return .dismissed
+        }
+        postEscapeForPluginPopupMenuDismissal()
+
+        for attempt in 0..<3 {
+            guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+                return .couldNotDismiss(
+                    initialPopupCount: initialPopupCount,
+                    remainingPopupCount: initialPopupCount
+                )
+            }
+            if remainingPopupCount == 0 {
+                return .dismissed
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) ?? initialPopupCount
+        return .couldNotDismiss(
+            initialPopupCount: initialPopupCount,
+            remainingPopupCount: remainingPopupCount
+        )
+    }
+
+    private static func logicOwnedPopupMenuWindowCount(
+        runtime: AXLogicProElements.Runtime
+    ) -> Int? {
+        guard let logicPID = runtime.logicProPID(),
+              let windows = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+              ) as? [[String: Any]] else {
+            return nil
+        }
+        let popupMenuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
+        return windows.reduce(into: 0) { count, window in
+            guard let ownerPID = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                  let level = (window[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  ownerPID == logicPID,
+                  level == popupMenuLevel else {
+                return
+            }
+            count += 1
+        }
+    }
+
+    private static func cancelVisibleLogicPopupMenusViaAX(
+        runtime: AXLogicProElements.Runtime
+    ) {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        var menus: [AXUIElement] = []
+        let roots = [app] + windows
+        for root in roots {
+            if AXHelpers.getRole(root, runtime: runtime.ax) == (kAXMenuRole as String) {
+                menus.append(root)
+            }
+            for menu in AXHelpers.findAllDescendants(
+                of: root, role: kAXMenuRole, maxDepth: 8, runtime: runtime.ax
+            ) where !menus.contains(where: { CFEqual($0, menu) }) {
+                menus.append(menu)
+            }
+        }
+        for menu in menus where AXHelpers.getActionNames(menu, runtime: runtime.ax)
+            .contains(kAXCancelAction as String) {
+            _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime.ax)
+        }
+    }
+
+    private static func postEscapeForPluginPopupMenuDismissal() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let down = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
     }
 
     private static func pollOpenPluginWindow(

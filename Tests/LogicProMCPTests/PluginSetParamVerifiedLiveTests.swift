@@ -273,23 +273,16 @@ private func runLive(
     fixture: LiveFixture,
     params: [String: String],
     frontDoc: String? = expectedPath,
-    opener: AccessibilityChannel.PluginWindowOpener? = nil
+    opener: AccessibilityChannel.PluginWindowOpener? = nil,
+    popupMenuCleaner: AccessibilityChannel.PluginPopupMenuCleaner? = nil
 ) async -> [String: Any] {
-    let result: ChannelResult
-    if let opener {
-        result = await AccessibilityChannel.defaultSetParamVerified(
-            params: params,
-            runtime: fixture.runtime,
-            frontDocumentPath: { frontDoc },
-            pluginWindowOpener: opener
-        )
-    } else {
-        result = await AccessibilityChannel.defaultSetParamVerified(
-            params: params,
-            runtime: fixture.runtime,
-            frontDocumentPath: { frontDoc }
-        )
-    }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: fixture.runtime,
+        frontDocumentPath: { frontDoc },
+        pluginWindowOpener: opener ?? AccessibilityChannel.livePluginWindowOpener,
+        pluginPopupMenuCleaner: popupMenuCleaner ?? AccessibilityChannel.livePluginPopupMenuCleaner
+    )
     return try! JSONSerialization.jsonObject(
         with: result.message.data(using: .utf8)!, options: []
     ) as! [String: Any]
@@ -838,6 +831,94 @@ private func namedEQBandParams(
     #expect(obj["state"] as? String == "A")
     #expect(obj["observed_normalized"] as? Double == 60)
     #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testPluginWindowAcquisitionLadderExcludesMenuOpenersByAction() {
+    let builder = FakeAXRuntimeBuilder()
+    let slot = builder.element(40_100)
+    let ordinaryButton = builder.element(40_101)
+    let menuButton = builder.element(40_102)
+    builder.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(ordinaryButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(menuButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(ordinaryButton, kAXDescriptionAttribute as String, "Open editor")
+    builder.setAttribute(menuButton, kAXDescriptionAttribute as String, "Anything")
+    builder.setActionNames(ordinaryButton, [kAXPressAction as String])
+    builder.setActionNames(menuButton, [kAXPressAction as String, kAXShowMenuAction as String])
+    builder.setChildren(slot, [ordinaryButton, menuButton])
+
+    let ranked = AccessibilityChannel.rankedPluginSlotOpenControls(
+        in: slot, runtime: builder.makeAXRuntime()
+    )
+
+    #expect(ranked.contains { CFEqual($0.element, ordinaryButton) })
+    #expect(!ranked.contains { CFEqual($0.element, menuButton) })
+}
+
+@Test func testPluginSlotMenuOpenerDecisionUsesAdvertisedActions() {
+    #expect(AccessibilityChannel.pluginSlotControlOpensMenu(
+        actionNames: [kAXPressAction as String, kAXShowMenuAction as String]
+    ))
+    #expect(AccessibilityChannel.pluginSlotControlOpensMenu(
+        actionNames: ["AXPress", "Name:Legacy open plug-in menu"]
+    ))
+    #expect(!AccessibilityChannel.pluginSlotControlOpensMenu(actionNames: [kAXPressAction as String]))
+}
+
+@Test func testStuckPluginPopupIsReportedInTheVerifiedWriteEnvelope() async throws {
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        popupMenuCleaner: { _ in
+            .couldNotDismiss(initialPopupCount: 1, remainingPopupCount: 1)
+        }
+    )
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["plugin_popup_menu_state"] as? String == "could_not_be_dismissed")
+    #expect(obj["plugin_popup_menu_remaining_window_count"] as? Int == 1)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testConsecutiveEQBandWritesReuseTheVerifiedOpenEditor() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Peak 1 Frequency",
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .oneStepTowardRequest
+    )
+    let params = namedEQBandParams(value: "3")
+    let cleaner: AccessibilityChannel.PluginPopupMenuCleaner = { _ in .noPopupObserved }
+
+    let first = await AccessibilityChannel.defaultSetEQBandVerified(
+        params: params,
+        runtime: fixture.runtime,
+        frontDocumentPath: { expectedPath },
+        pluginPopupMenuCleaner: cleaner
+    )
+    let second = await AccessibilityChannel.defaultSetEQBandVerified(
+        params: params,
+        runtime: fixture.runtime,
+        frontDocumentPath: { expectedPath },
+        pluginPopupMenuCleaner: cleaner
+    )
+    let firstData = try #require(first.message.data(using: .utf8))
+    let secondData = try #require(second.message.data(using: .utf8))
+    let firstEnvelope = try #require(try JSONSerialization.jsonObject(
+        with: firstData
+    ) as? [String: Any])
+    let secondEnvelope = try #require(try JSONSerialization.jsonObject(
+        with: secondData
+    ) as? [String: Any])
+
+    #expect(firstEnvelope["state"] as? String == "A")
+    #expect(secondEnvelope["state"] as? String == "A")
 }
 
 @Test func testOpenerReachesStateAWhenSlotPressReturnsFalseButWindowOpens() async {

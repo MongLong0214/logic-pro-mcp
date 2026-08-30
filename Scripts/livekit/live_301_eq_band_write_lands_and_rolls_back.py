@@ -57,6 +57,8 @@ driver = None
 
 TRACK_NAME = "Studio Grand"
 SLOT_NAME = "Channel EQ"
+# The mixer label family the policy already owns, so this is not a second Korean literal.
+MIXER_LABELS = E.label_set("mixerNamedElement")
 BAND = "Peak 1"
 PARAMETER = "Gain"
 PEAK_1_GAIN = "Peak 1 Gain"
@@ -124,8 +126,14 @@ def raw_probe(tool):
     It seeds the exact raw value supplied to the subsequent zero-step MCP read; it never drives the
     operation under test.
     """
+    # Scoped by track and mixer. Unscoped, a `Channel EQ` search finds TWO — the mixer strip's
+    # insert and the Inspector's copy of the same strip for the selected track — and the witness
+    # refuses on the ambiguity, correctly but uselessly. `Studio Grand` is the strip that carries
+    # the Channel EQ; `Absolute Zero` carries two Compressors and none.
     config = {
         "slot_label": SLOT_NAME,
+        "track_label": TRACK_NAME,
+        "mixer_labels": MIXER_LABELS,
         "open_label": OPEN,
         "close_label": CLOSE,
         "bypass_labels": BYPASS_LABELS,
@@ -182,8 +190,8 @@ def project_is_open(project):
     data = project.get("data") if isinstance(project, dict) else None
     return (
         isinstance(data, dict)
-        and isinstance(data.get("file_path"), str)
-        and bool(data["file_path"].strip())
+        and isinstance(data.get("filePath"), str)
+        and bool(data["filePath"].strip())
     )
 
 
@@ -406,14 +414,29 @@ ev.falsifiable(
     "301/precondition-a-saved-project-is-open",
     project_is_open,
     project,
-    nested_witness(project, "data", file_path=""),
-    "logic://project/info supplies a non-empty current-document file_path for the write boundary",
-    "close the project or open an unsaved one: file_path is absent and the write cannot be bounded",
+    nested_witness(project, "data", filePath=""),
+    "logic://project/info supplies a non-empty current-document filePath for the write boundary",
+    "close the project or open an unsaved one: filePath is absent and the write cannot be bounded",
 )
 if not project_is_open(project):
     finish()
-project_path = project["data"]["file_path"].strip()
+project_path = project["data"]["filePath"].strip()
 
+# `logic://tracks` is cache-served and reports `readable: False` with placeholder names until a
+# live AX track read has happened — measured today, it answers `Track 1…26` with
+# `reason: track_names_synthesised_from_project_file` on a project whose tracks are named
+# `Absolute Zero`, `Audio 1`, `Studio Grand`. That is the resource being honest, not a defect, and
+# it means a harness that reads it cold is reading synthesised names. Prime it the way a caller
+# would, and record that the priming happened so a reader can see the read is live.
+refresh = driver.tool("logic_system", "refresh_cache", {}) or {}
+ev.check(
+    "301/precondition-the-live-track-read-was-primed",
+    isinstance(refresh, dict) and refresh.get("refreshed") is True,
+    "system.refresh_cache reports a completed refresh before any track name is trusted",
+    f"refresh={refresh!r}",
+    "skip the refresh: logic://tracks answers synthesised placeholder names and the strip cannot be "
+    "resolved by name",
+)
 tracks = driver.resource("logic://tracks") or {}
 track_counterexample = derived_witness(tracks)
 counter_rows = copy.deepcopy(track_counterexample.get("data")) if isinstance(track_counterexample.get("data"), list) else []
