@@ -114,7 +114,20 @@ import Testing
     #expect(!track.isSoloed)
     #expect(track.isArmed)
     #expect(track.isSelected)
-    #expect(track.color == "Audio color blue")
+    // Colour is not readable through Accessibility (#448). This fixture's header
+    // description contains the English word "color", which is exactly what the old
+    // speculative extractor keyed on — it returned the whole description as a colour.
+    // A real localized Logic never produces that string, and a track NAMED
+    // "Colorful Bass" would have produced a sentence about track count instead.
+    #expect(colourIsUnread(track))
+}
+
+/// `track.color` must be absent, whatever the header says.
+///
+/// Computed outside the macro deliberately: on this toolchain `#expect(x == nil)` is dead in
+/// both directions for an Optional, so the comparison has to produce a plain Bool first.
+private func colourIsUnread(_ track: TrackState) -> Bool {
+    track.color == nil
 }
 
 @Test func testAXValueExtractorsMarksUnreadableTrackIdentity() {
@@ -233,10 +246,10 @@ import Testing
     #expect(track.name == "808 Rack")
     #expect(track.type == .externalMIDI)
     #expect(track.isMuted)
-    #expect(track.color == "External MIDI color green")
+    #expect(colourIsUnread(track))
     #expect(unknownTrack.name == "Mystery Track")
     #expect(unknownTrack.type == .unknown)
-    #expect(unknownTrack.color == nil)
+    #expect(colourIsUnread(unknownTrack))
 }
 
 @Test func testAXValueExtractorsClassifiesGMDeviceStripAsExternalMIDI() {
