@@ -22,13 +22,16 @@ func publicParameters(
     else {
         return []
     }
-    return manifest.parameters.filter { $0.valueKind != .unsupported }
+    // A readable normalized value is not a write/readback qualification. Keep
+    // it out of the host-write surface even after a manifest is approved.
+    return manifest.parameters.filter { $0.valueKind == .exactWriteReadback }
 }
 
 enum HostWriteRejection: Equatable, Sendable {
     case manifestNotApproved
     case manifestInvalidated(reason: String)
     case providerNotHostVerified
+    case readbackOnlyParameter(TargetReference)
     case unsupportedParameter(TargetReference)
 }
 
@@ -60,7 +63,12 @@ func validateHostWrite(
     let valueKind = manifest.parameters.first {
         $0.parameterRef == parameterRef
     }?.valueKind
-    if valueKind == nil || valueKind == .unsupported {
+    switch valueKind {
+    case .exactWriteReadback:
+        break
+    case .normalizedReadbackOnly:
+        rejections.append(.readbackOnlyParameter(parameterRef))
+    case .unsupported, nil:
         rejections.append(.unsupportedParameter(parameterRef))
     }
     return rejections

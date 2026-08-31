@@ -199,9 +199,17 @@ if present.get("editor_count") != 1:
     driver.close()
     finish()
 
+# Logic REWRITES this item's title with its own state — it reads
+# «모든 플러그인 윈도우 가리기» (hide) when windows are showing and
+# «모든 플러그인 윈도우 보기» (show) when they are hidden. A fixed string
+# matches in one state and raises -1728 in the other, and the harness then
+# hid nothing while believing it had. Resolve by the stable stem instead.
 subprocess.run(["osascript", "-e",
-                'tell application "System Events" to tell process "Logic Pro" to click menu item '
-                '"모든 플러그인 윈도우" of menu 1 of menu bar item "윈도우" of menu bar 1'],
+                'tell application "System Events" to tell process "Logic Pro"\n'
+                '  set m to first menu item of menu 1 of menu bar item "윈도우" of menu bar 1 '
+                'whose name contains "모든 플러그인 윈도우"\n'
+                '  click m\n'
+                'end tell'],
                capture_output=True)
 time.sleep(1.5)
 hidden = editors(probe_tool)
