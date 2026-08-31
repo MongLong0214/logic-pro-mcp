@@ -7,6 +7,9 @@ enum AXHelpers {
     struct Runtime: @unchecked Sendable {
         let axApp: @Sendable (pid_t) -> AXUIElement
         let attributeValue: @Sendable (AXUIElement, String) -> AnyObject?
+        /// Whether AX reports an attribute as settable. This is an observed
+        /// claim, not a successful set operation.
+        let attributeIsSettable: @Sendable (AXUIElement, String) -> Bool?
         let setAttributeValue: @Sendable (AXUIElement, String, CFTypeRef) -> Bool
         let children: @Sendable (AXUIElement) -> [AXUIElement]
         let performAction: @Sendable (AXUIElement, String) -> Bool
@@ -32,6 +35,7 @@ enum AXHelpers {
         init(
             axApp: @escaping @Sendable (pid_t) -> AXUIElement,
             attributeValue: @escaping @Sendable (AXUIElement, String) -> AnyObject?,
+            attributeIsSettable: @escaping @Sendable (AXUIElement, String) -> Bool? = { _, _ in nil },
             setAttributeValue: @escaping @Sendable (AXUIElement, String, CFTypeRef) -> Bool,
             children: @escaping @Sendable (AXUIElement) -> [AXUIElement],
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
@@ -44,6 +48,7 @@ enum AXHelpers {
         ) {
             self.axApp = axApp
             self.attributeValue = attributeValue
+            self.attributeIsSettable = attributeIsSettable
             self.setAttributeValue = setAttributeValue
             self.children = children
             self.performAction = performAction
@@ -70,6 +75,17 @@ enum AXHelpers {
                 let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
                 guard result == .success else { return nil }
                 return value
+            },
+            attributeIsSettable: { element, attribute in
+                var isSettable: DarwinBoolean = false
+                guard AXUIElementIsAttributeSettable(
+                    element,
+                    attribute as CFString,
+                    &isSettable
+                ) == .success else {
+                    return nil
+                }
+                return isSettable.boolValue
             },
             setAttributeValue: { element, attribute, value in
                 AXUIElementSetAttributeValue(element, attribute as CFString, value) == .success
@@ -209,6 +225,16 @@ enum AXHelpers {
         runtime: Runtime = .production
     ) -> Bool {
         runtime.setAttributeValue(element, attribute, value)
+    }
+
+    /// Read AX's claim about whether an attribute is settable without
+    /// attempting to change it. A failed status remains unknown (`nil`).
+    static func isAttributeSettable(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: Runtime = .production
+    ) -> Bool? {
+        runtime.attributeIsSettable(element, attribute)
     }
 
     /// Get the children of an AX element.

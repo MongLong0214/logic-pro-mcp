@@ -242,13 +242,32 @@ func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
         portName: "LogicProMCP-KeyCmd-Smoke-\(UUID().uuidString)"
     )
 
+    // The THIRD instance of the same defect, found by the ship gate after the
+    // other two were fixed: a hardcoded -50 excuses exactly one environmental
+    // status, so every other CoreMIDI refusal reads as a product failure. This
+    // host returns -2 while MIDIServer is between launches.
+    //
+    // Same treatment as the other production smoke tests: probe BEFORE the
+    // product path and again after a failure, and excuse only a refusal that
+    // predated the product's own start. A refusal that appears only afterwards
+    // may have been caused by the product and is never excused.
+    let preflightProbe = coreMIDIRefusesAClientRightNow()
     do {
         try await manager.start()
     } catch let error as MIDIPortError {
-        if case .clientCreationFailed(let status) = error, [-50].contains(status) {
-            return
+        guard case .clientCreationFailed(let startStatus) = error else { throw error }
+        let postFailureProbe = coreMIDIRefusesAClientRightNow()
+        guard coreMIDIRefusalPredatedProductStart(before: preflightProbe, after: postFailureProbe),
+              let preflight = preflightProbe, let postFailure = postFailureProbe else {
+            throw error
         }
-        throw error
+        reportCoreMIDIUnavailable(
+            "testProductionKeyCmdTransportDefaultPacketSinkSmoke",
+            startStatus: startStatus,
+            preflightProbeStatus: preflight,
+            postFailureProbeStatus: postFailure
+        )
+        return
     }
     try await transport.send([0x90, 0x3C, 0x64])
 

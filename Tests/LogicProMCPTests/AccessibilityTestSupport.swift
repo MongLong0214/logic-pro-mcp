@@ -5,6 +5,7 @@ import Foundation
 final class FakeAXRuntimeBuilder: @unchecked Sendable {
     private var elements: [Int: AXUIElement] = [:]
     private var attributes: [Int: [String: Any]] = [:]
+    private var settableAttributes: [Int: Set<String>] = [:]
     private var children: [Int: [AXUIElement]] = [:]
     private var actionNames: [Int: [String]] = [:]
     private(set) var setCalls: [(elementID: Int, attribute: String)] = []
@@ -22,6 +23,15 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
 
     func setAttribute(_ element: AXUIElement, _ attribute: String, _ value: Any) {
         attributes[key(for: element), default: [:]][attribute] = value
+    }
+
+    func setAttributeSettable(_ element: AXUIElement, _ attribute: String, _ isSettable: Bool) {
+        let elementKey = key(for: element)
+        if isSettable {
+            settableAttributes[elementKey, default: []].insert(attribute)
+        } else {
+            settableAttributes[elementKey, default: []].remove(attribute)
+        }
     }
 
     /// Wires AXParent on each child as well. A real AX tree always has it, and code that walks
@@ -76,6 +86,9 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                     return NSArray()
                 }
                 return bridge(attributes[key(for: element)]?[attribute])
+            },
+            attributeIsSettable: { [self] element, attribute in
+                settableAttributes[key(for: element)]?.contains(attribute) ?? false
             },
             setAttributeValue: { [self] element, attribute, value in
                 if let setAttributeHandler {

@@ -119,6 +119,31 @@ struct HostParameterTests {
         )
     }
 
+    @Test func approvedReadbackOnlyParameterCannotBecomeAHostWrite() {
+        let readbackOnly = makeParameter("ins_observed", .normalizedReadbackOnly)
+        let subject = makeManifest(
+            provider: .controlsViewAX,
+            approved: true,
+            parameters: [readbackOnly]
+        )
+
+        let exposed = publicParameters(
+            subject,
+            currentBuildFingerprint: "build-1",
+            currentUISignature: "ui-1"
+        )
+        let hidesReadbackOnlyParameter = exposed.isEmpty
+        #expect(hidesReadbackOnlyParameter)
+        #expect(
+            validateHostWrite(
+                manifest: subject,
+                parameterRef: readbackOnly.parameterRef,
+                currentBuildFingerprint: "build-1",
+                currentUISignature: "ui-1"
+            ) == [.readbackOnlyParameter(readbackOnly.parameterRef)]
+        )
+    }
+
     @Test func nonHostedProviderCannotExposeOrValidateWrite() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
