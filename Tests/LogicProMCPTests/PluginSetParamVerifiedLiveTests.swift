@@ -43,6 +43,7 @@ private final class LiveFixture: @unchecked Sendable {
     let app: AXUIElement
     let windowsAddedOnSlotPress: MutableBox<[AXUIElement]>
     let targetOpenControlPressCount: MutableBox<Int>
+    let pluginCloseControlPressCount: MutableBox<Int>
     let sliderWriteCount: MutableBox<Int>
     let runtime: AXLogicProElements.Runtime
 
@@ -65,11 +66,16 @@ private final class LiveFixture: @unchecked Sendable {
         sliderWriteBehavior: SliderWriteBehavior = .direct,
         sliderDisplayUnit: String = "%",
         sliderUsesSignedPositiveDisplay: Bool = false,
-        pluginWindowStaticTextValues: [String]? = nil
+        pluginWindowStaticTextValues: [String]? = nil,
+        // Model an editor whose close control is pressed but which stays in
+        // AXWindows. The close must be judged by the observed window list, not
+        // by the press returning true.
+        pluginCloseControlFailsToClose: Bool = false
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
         let targetOpenControlPressCount = MutableBox(0)
+        let pluginCloseControlPressCount = MutableBox(0)
         let sliderWriteCount = MutableBox(0)
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
@@ -195,6 +201,7 @@ private final class LiveFixture: @unchecked Sendable {
         let sliderKey = b.elementID(slider)
         let targetSlotKey = targetSlot.map { b.elementID($0) }
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
+        let pluginCloseKey = b.elementID(pluginClose)
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
         let runtime = b.makeLogicRuntime(
@@ -249,6 +256,13 @@ private final class LiveFixture: @unchecked Sendable {
                     return true
                 }
                 let key = b.elementID(el)
+                if key == pluginCloseKey {
+                    pluginCloseControlPressCount.value += 1
+                    if !pluginCloseControlFailsToClose {
+                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
+                    }
+                    return true
+                }
                 guard key == targetSlotKey || key == targetOpenButtonKey else {
                     return true
                 }
@@ -273,6 +287,7 @@ private final class LiveFixture: @unchecked Sendable {
         self.app = app
         self.windowsAddedOnSlotPress = windowsAddedOnSlotPress
         self.targetOpenControlPressCount = targetOpenControlPressCount
+        self.pluginCloseControlPressCount = pluginCloseControlPressCount
         self.sliderWriteCount = sliderWriteCount
         self.runtime = runtime
     }
@@ -1780,4 +1795,77 @@ private final class Counter: @unchecked Sendable {
         n += 1
         return n
     }
+}
+
+// MARK: - #726 the operation closes the editor it opened
+
+@Test func testDuplicateAcquisitionClosesTheEditorItOpened() async {
+    // Measured live: writing insert 0 then insert 2 on a two-Compressor track
+    // failed on the second call with duplicate_plugin_editor_already_open,
+    // because the first call left its editor open. The operation opened that
+    // window from a known-empty state, so it owns closing it.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    #expect(AXLogicProElements.matchingPluginEditorWindows(
+        forTrackName: trackName,
+        matchingPluginID: "logic.stock.effect.compressor",
+        runtime: fixture.runtime
+    ).isEmpty)
+}
+
+@Test func testReusedEditorIsNotClosedByTheOperation() async {
+    // The single-instance path reuses an editor the caller already had open.
+    // Closing it would destroy state this operation never created — a worse
+    // defect than the one the close exists to fix.
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+    #expect(!AXLogicProElements.matchingPluginEditorWindows(
+        forTrackName: trackName,
+        matchingPluginID: "logic.stock.effect.compressor",
+        runtime: fixture.runtime
+    ).isEmpty)
+}
+
+@Test func testAnUnverifiableCloseDoesNotChangeTheWriteVerdict() async throws {
+    // The write's verdict is established before the close is attempted. A close
+    // that cannot be observed must not turn a verified write into a failure —
+    // the leftover editor announces itself on the NEXT call as
+    // duplicate_plugin_editor_already_open, which carries the recovery hint.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginCloseControlFailsToClose: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    // Tried, and retried, rather than giving up after one press.
+    #expect(fixture.pluginCloseControlPressCount.value == 3)
+}
+
+@Test func testAlreadyOpenDuplicateRefusalCarriesARecoveryHint() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_already_open")
+    let hint = try #require(obj["recovery_hint"] as? String)
+    #expect(hint.contains("Close the open"))
 }

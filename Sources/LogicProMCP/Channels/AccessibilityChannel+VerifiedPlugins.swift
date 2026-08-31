@@ -1221,6 +1221,24 @@ extension AccessibilityChannel {
             constructedWindow = AXUIElementSendable(matchingEditorsAfterPress[0])
         }
 
+        // This operation opened that editor from a known-empty state, so it owns
+        // it. Leaving it open would make the NEXT duplicate-insert write refuse
+        // with `duplicate_plugin_editor_already_open` — measured live: writing
+        // insert 0 then insert 2 on a two-Compressor track failed on the second
+        // call until the first editor was closed by hand. Only ever close a
+        // window this operation created; an editor the caller already had open
+        // is reused, never constructed, and must be left exactly as found.
+        defer {
+            if let constructedWindow {
+                closePluginEditorOpenedByThisOperation(
+                    constructedWindow.element,
+                    trackName: trackName,
+                    pluginID: pluginID,
+                    runtime: runtime
+                )
+            }
+        }
+
         // Step 8 — normal single-instance acquisition retains the original
         // name/parameter resolution and opener behaviour. For a duplicated
         // instance, `constructedWindow` above is already proven by the one
@@ -1870,6 +1888,14 @@ extension AccessibilityChannel {
                 "matching_editor_count_before_press": matchingEditorCount,
                 "what_was_attempted": "confirm no \(pluginID) editor was already open before pressing insert \(insert)",
                 "what_was_observed": "\(matchingEditorCount) matching \(pluginID) editor(s) were already open on track \(track)",
+                // A duplicated plug-in can only be bound by opening its editor
+                // from a known-empty state, so an already-open editor is the one
+                // thing the caller must clear. This operation closes the editors
+                // it opens, so reaching here means either a human opened one or a
+                // previous close could not be verified.
+                "recovery_hint": "Close the open \(pluginID) editor(s) on track \(track), then retry. "
+                    + "While the plug-in occupies more than one insert, its editor must be "
+                    + "opened by this operation for the write to be attributable to insert \(insert).",
                 "safe_to_retry": false,
                 "write_attempted": false,
             ]
@@ -2280,6 +2306,49 @@ extension AccessibilityChannel {
     /// when no ranked control responds to AXPress, never a coordinate click.
     private static func pressElement(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
         AXHelpers.performAction(element, kAXPressAction as String, runtime: runtime)
+    }
+
+    /// Close an editor this operation opened from a known-empty state.
+    ///
+    /// Uses `kAXCloseButtonAttribute` rather than a titled button: the visible
+    /// close control is localized («닫기» on a Korean system), and the slot's own
+    /// open control is a toggle whose press would be indistinguishable from a
+    /// user reopening the editor.
+    ///
+    /// The AX return status is deliberately ignored. Logic reports non-zero from
+    /// presses that did work, so the observed editor count decides — the same
+    /// rule the acquisition itself follows.
+    ///
+    /// Returns whether the close was OBSERVED. A false return is not raised into
+    /// the envelope here: the write's own verdict is already established by then,
+    /// and a leftover editor announces itself on the next call as
+    /// `duplicate_plugin_editor_already_open`, which carries the recovery hint.
+    @discardableResult
+    private static func closePluginEditorOpenedByThisOperation(
+        _ window: AXUIElement,
+        trackName: String,
+        pluginID: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard let closeButton: AXUIElement = AXHelpers.getAttribute(
+            window, kAXCloseButtonAttribute, runtime: runtime.ax
+        ) else {
+            return false
+        }
+        for attempt in 0..<3 {
+            _ = pressElement(closeButton, runtime: runtime.ax)
+            if AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            ).isEmpty {
+                return true
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+        }
+        return false
     }
 
     private static func pluginWindowAcquisitionDiagnostics(
