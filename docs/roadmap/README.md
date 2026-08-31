@@ -39,7 +39,7 @@ claims dated by the "measured" line, and only issue numbers and open/closed are 
 ## State — measured 2026-08-30 at `709a0178`
 
 ```
-open PRs 0 · v3.14.0 published · 16 open issues
+open PRs 0 · v3.15.0 published · 17 open issues
 ```
 
 | ADR | issue | state | what it is waiting on |

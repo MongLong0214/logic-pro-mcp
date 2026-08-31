@@ -12,6 +12,124 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [3.15.0] — 2026-08-31
+
+### Changed — BREAKING
+
+- **`logic_audio.recommend_eq` now names its level gate honestly (#300).** The
+  request key is `minimum_level`, not `minimum_confidence`; a refusal is now
+  `level_below_minimum`; and analysis JSON emits `levelConfidence`, not
+  `confidence`. The renamed field is loudness, not classification certainty.
+  Decoding still accepts the old stored `confidence` key, but clients that read
+  emitted JSON or send the old request key must migrate. This only affects
+  clients that had enabled the previously flag-gated spectral surface.
+
+- **`logic_system.refresh_cache` now means that its cache advanced (#668).**
+  `refreshed: true` is returned only when at least one section was actually
+  written, rather than whenever a read decoded or a conditional write lost a
+  race. Concurrent refreshes are coalesced, but a caller arriving during a poll
+  waits for a subsequent fresh poll rather than receiving observations that
+  predate its request. Clients that treated a `true` receipt as merely
+  "the refresh call returned" must adjust.
+
+- **Ambiguous AX selection now fails closed instead of choosing a control by
+  tree position (#290).** The volume, pan, and transport-bar paths can now
+  refuse where they previously selected the first matching control (or slider
+  zero). That replaces possible wrong-target State A answers with a refusal.
+  Header-pan identity is measured for the Korean help text and range; on an
+  unmeasured label it retains the previous elimination fallback rather than
+  claiming broader locale support.
+
+- **Verified plug-in writes now refuse an editor whose identity or insert cannot
+  be proved (#726).** `logic_plugins.set_param_verified` can return
+  `plugin_window_plugin_mismatch`, `duplicate_plugin_editor_already_open`, or
+  `duplicate_plugin_editor_count_mismatch` before writing, rather than report
+  State A for a same-track, same-control editor that might belong to another
+  plug-in or insert.
+
+### Added
+
+- **`logic_plugins.set_eq_band_verified` writes named Channel EQ controls
+  (#301).** It addresses a named band and parameter rather than a slider
+  position, accepts `raw_ax_value` or Logic-rendered `Hz`, `dB`, and `Q` values,
+  and walks the AX control until readback reaches the exact requested rendering.
+  It returns distinct State C outcomes for no progress, exhausted budget,
+  overshoot, and lost readback, and uses the same walk to roll back a failed
+  write. The catalog records measured ranges and walk behavior; it does not
+  itself claim a Channel EQ write/readback round trip.
+
+- **`logic_audio.analyze_spectrum` and `logic_audio.recommend_eq` are exposed
+  without `LOGIC_MCP_ADR012_SPECTRAL_EQ`.** Spectrum bands now carry
+  `measured`; `false` means `energyDb` is the FFT floor sentinel rather than a
+  reading. EQ recommendations now include `prominenceDb`,
+  `resolutionLimited`, and a recommendation confidence derived from those
+  values.
+
+- **`mixer.set_volume` and `mixer.set_pan` receipts now state whether the
+  fader reached the requested detent.** `detents_to_target` and
+  `reached_target` make a partial write observable without requiring a second
+  read.
+
+### Fixed
+
+- **Verified plug-in writes no longer land on a different plug-in and still
+  report success (#724, #726).** A window must name the requested plug-in in
+  its direct header text, excluding the track-name text that previously let a
+  track named after another plug-in authenticate the wrong editor. Duplicate
+  inserts are bound by opening exactly one new editor from the requested slot;
+  the operation closes only the editor it opened. Successful duplicate-insert
+  writes disclose `editor_close_observed`, and name a recovery when that close
+  could not be observed.
+
+- **Verified plug-in window acquisition no longer leaves Logic's popup menu
+  open (#301).** A popup previously poisoned later AppleEvent-dependent calls;
+  acquisition now dismisses and rechecks it, and tells the caller to press
+  Escape when the popup state cannot be read or cleared.
+
+- **Channel EQ display-value walks now choose their direction from Logic's
+  rendered value (#301).** A request whose target was below the current display
+  could previously walk upward to the rail and fail after many steps.
+
+- **Spectrum and EQ advice no longer treat absent measurements or edge
+  accumulators as audio facts (#300).** Bands with no FFT bin are not reported
+  as silence or used in the resonance baseline; the below-grid accumulator is
+  excluded from resonances, frequency peaks, and the spectral centroid. This
+  removes the spurious 20 Hz cut observed on pink noise while preserving an
+  injected resonance.
+
+- **First-call mixer fader writes retry intermittent AX reads instead of
+  stopping short (#685).** `mixer.set_volume` and `mixer.set_pan` previously
+  returned a successful envelope after an early read failure had left the
+  fader partway to its requested value; both the nudge loop and the final
+  verification read now tolerate transient read loss.
+
+- **Flagged Key Command chords get best-effort restart recovery (#458).** If
+  this server dies between the flagged key-up and its modifier-clear event, a
+  later server start can clear the marker it left, without blindly clearing a
+  modifier a user is holding. This closes the demonstrated interruption window;
+  it does not establish the reported user's original cause, and actual event
+  delivery remains unverified.
+
+- **MCU feedback now reports loss rather than silently continuing from it
+  (#683).** An ingress overflow makes the MCU channel unavailable until restart
+  and `logic_system.health` reports the dropped-event count; a valid oversized
+  callback processes its bounded prefix and reports only the omitted suffix.
+  The valid-oversized-list branch was not reachable from the wire on the
+  measured macOS host, where CoreMIDI chunked lists before delivery.
+
+### Known
+
+- **Spectral classification is advisory, not a certainty estimate (#300).**
+  On the measured implementation, white noise classifies as `drums` and a pure
+  tone as `vocal`.
+
+- **Plug-in-editor identity evidence is measured for stock Logic editors.**
+  The collision refusal is pinned with injected AX because the test project has
+  no two plug-ins sharing a slider description; third-party editors remain
+  unmeasured (#726).
+
+---
+
 ## [3.14.0] — 2026-08-22
 
 **These changes remove several ways the server could report that it had verified something it had not.**
