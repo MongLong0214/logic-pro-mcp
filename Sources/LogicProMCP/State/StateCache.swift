@@ -11,6 +11,15 @@ actor StateCache {
         let sectionRevision: UInt64
     }
 
+    /// A cache observation is useful to a stem plan only when it names the
+    /// project to which it belongs.  Track indexes repeat from zero after a
+    /// project switch, so timestamps and index subsets alone cannot establish
+    /// that a region inventory and a track list describe the same document.
+    struct ProjectIdentity: Sendable, Equatable {
+        let epoch: UInt64
+        let path: String
+    }
+
     private(set) var transport = TransportState()
     private(set) var tracks: [TrackState] = []
     private(set) var channelStrips: [ChannelStripState] = []
@@ -29,6 +38,8 @@ actor StateCache {
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
     private var projectEpoch: UInt64 = 0
+    private var tracksProjectIdentity: ProjectIdentity?
+    private var regionsProjectIdentity: ProjectIdentity?
     private var sectionRevisions: [CacheSectionID: UInt64] = [:]
     private var droppedStaleWriteCounts: [CacheSectionID: UInt64] = [:]
 
@@ -167,14 +178,17 @@ actor StateCache {
     func auditSnapshot() -> (
         hasDocument: Bool,
         axOccluded: Bool,
+        projectEpoch: UInt64,
         project: ProjectInfo,
         projectFetchedAt: Date,
         transport: TransportState,
         tracks: [TrackState],
         tracksFetchedAt: Date,
+        tracksProjectIdentity: ProjectIdentity?,
         regions: [RegionState],
         regionsFetchedAt: Date,
         regionsComplete: Bool,
+        regionsProjectIdentity: ProjectIdentity?,
         markers: [MarkerState],
         markersFetchedAt: Date,
         channelStrips: [ChannelStripState],
@@ -183,14 +197,17 @@ actor StateCache {
         (
             hasDocument: hasDocument,
             axOccluded: axOccluded,
+            projectEpoch: projectEpoch,
             project: project,
             projectFetchedAt: projectFetchedAt,
             transport: transport,
             tracks: tracks,
             tracksFetchedAt: tracksFetchedAt,
+            tracksProjectIdentity: tracksProjectIdentity,
             regions: regions,
             regionsFetchedAt: regionsFetchedAt,
             regionsComplete: regionsComplete,
+            regionsProjectIdentity: regionsProjectIdentity,
             markers: markers,
             markersFetchedAt: markersFetchedAt,
             channelStrips: channelStrips,
@@ -223,23 +240,50 @@ actor StateCache {
 
     func clearProjectState() {
         project = ProjectInfo()
+        advanceProjectEpoch()
+        clearProjectDependentState()
+        advanceSectionRevision(.project)
+    }
+
+    /// A validated project path is the cross-section discriminator for cache
+    /// observations.  Keep this deliberately strict: an empty or relative
+    /// value is not an identity a stem plan may use.
+    func currentProjectIdentity() -> ProjectIdentity? {
+        guard let path = Self.canonicalProjectPath(project.filePath) else { return nil }
+        return ProjectIdentity(epoch: projectEpoch, path: path)
+    }
+
+    private static func canonicalProjectPath(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              raw.hasPrefix("/") else {
+            return nil
+        }
+        return URL(fileURLWithPath: raw).standardizedFileURL.path
+    }
+
+    private func clearProjectDependentState() {
         tracks = []
         channelStrips = []
         regions = []
         regionsComplete = false
+        tracksProjectIdentity = nil
+        regionsProjectIdentity = nil
         markers = []
         markersReadable = false
+        markersPollAttempted = false
         // Re-initialising transport picks up its default `lastUpdated =
         // .distantPast`, which is how snapshot() signals "stale" to readers
         // (transport_age_sec becomes astronomically large). Clients can
         // combine hasDocument with transport_age_sec to distinguish
         // "no project open" from "project open, idle playback".
         transport = TransportState()
-        advanceProjectEpoch()
+        tracksFetchedAt = .distantPast
+        mixerFetchedAt = .distantPast
+        regionsFetchedAt = .distantPast
+        markersFetchedAt = .distantPast
         advanceSectionRevision(.transport)
         advanceSectionRevision(.tracks)
         advanceSectionRevision(.mixer)
-        advanceSectionRevision(.project)
     }
 
     // MARK: - Write access (poller calls these)
@@ -335,6 +379,7 @@ actor StateCache {
         }
         tracks = newTracks
         tracksFetchedAt = Date()
+        tracksProjectIdentity = currentProjectIdentity()
         advanceSectionRevision(.tracks)
     }
 
@@ -443,6 +488,27 @@ actor StateCache {
         regions = newRegions
         regionsComplete = complete
         regionsFetchedAt = Date()
+        regionsProjectIdentity = currentProjectIdentity()
+    }
+
+    /// Applies a region inventory only when the project identity observed
+    /// before the asynchronous region read is still current.  A project switch
+    /// while that read is in flight must not attach the old document's regions
+    /// to the new document.
+    @discardableResult
+    func updateRegions(
+        _ newRegions: [RegionState],
+        complete: Bool,
+        ifCurrent observed: ProjectIdentity?
+    ) -> Bool {
+        guard currentProjectIdentity() == observed else {
+            return false
+        }
+        regions = newRegions
+        regionsComplete = complete
+        regionsFetchedAt = Date()
+        regionsProjectIdentity = observed
+        return true
     }
 
     func updateMarkers(_ newMarkers: [MarkerState]) {
@@ -469,6 +535,17 @@ actor StateCache {
     }
 
     func updateProject(_ info: ProjectInfo) {
+        let previousIdentity = currentProjectIdentity()
+        let incomingIdentity = Self.canonicalProjectPath(info.filePath)
+        // A positive identity change (including losing a previously known
+        // identity) invalidates every project-scoped observation.  This is the
+        // boundary that prevents a fresh new-project track list from borrowing
+        // a recent region inventory whose track indexes happened to overlap.
+        if previousIdentity?.path != incomingIdentity,
+           previousIdentity != nil || incomingIdentity != nil {
+            advanceProjectEpoch()
+            clearProjectDependentState()
+        }
         project = info
         projectFetchedAt = Date()
         advanceSectionRevision(.project)

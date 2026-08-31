@@ -66,6 +66,18 @@ struct ProjectExportPlanArtifact: Codable, Sendable, Equatable {
     let status: String
     let verification: ProjectExportArtifactVerification
     let analysis: [String: String]
+    /// Present only for `stem`: Logic writes an unknown number of files into
+    /// this directory, rather than the one known `path` the other kinds use.
+    let destination: String?
+    /// The identity-backed populated-track subjects this stem request
+    /// addresses. Stem planning refuses rather than emitting a degraded plan
+    /// when the fresh complete region inventory cannot establish this list.
+    let subjects: [ProjectExportStemSubject]?
+    /// `true` for stems. Logic, not the planner, assigns the eventual file
+    /// names, so callers must not interpret `path` as a file path in that case.
+    let filenamesLateBound: Bool?
+    /// Human-readable explanation for a late-bound planning refusal.
+    let planningReason: String?
 
     enum CodingKeys: String, CodingKey {
         case kind
@@ -73,7 +85,19 @@ struct ProjectExportPlanArtifact: Codable, Sendable, Equatable {
         case status
         case verification
         case analysis
+        case destination
+        case subjects
+        case filenamesLateBound = "filenames_late_bound"
+        case planningReason = "planning_reason"
     }
+}
+
+/// A stem-export subject deliberately identifies the track, not a predicted
+/// output filename. Logic's filename disambiguation is not measured enough to
+/// make a filename promise at plan time.
+struct ProjectExportStemSubject: Codable, Sendable, Equatable {
+    let index: Int
+    let name: String
 }
 
 struct ProjectExportArtifactVerification: Codable, Sendable, Equatable {
@@ -83,6 +107,9 @@ struct ProjectExportArtifactVerification: Codable, Sendable, Equatable {
     let pathUnderOutputRoot: Bool
     let wouldOverwrite: Bool
     let issues: [String]
+    /// For late-bound stems, this is the number of existing audio files in the
+    /// destination directory. It is nil for ordinary one-path artifacts.
+    let existingAudioFileCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case exists
@@ -91,6 +118,7 @@ struct ProjectExportArtifactVerification: Codable, Sendable, Equatable {
         case pathUnderOutputRoot = "path_under_output_root"
         case wouldOverwrite = "would_overwrite"
         case issues
+        case existingAudioFileCount = "existing_audio_file_count"
     }
 }
 

@@ -62,14 +62,14 @@ struct ProjectExportExecutionTests {
         let outputRoot = try makeExecTempDir()
         let project = try makeLogicxProject(in: projDir, named: "Resume Song")
         let bouncePath = plannedArtifactPath(outputRoot: outputRoot, displayName: "Resume Song", kind: "bounce")
-        let stemPath = plannedArtifactPath(outputRoot: outputRoot, displayName: "Resume Song", kind: "stem")
+        let previewPath = plannedArtifactPath(outputRoot: outputRoot, displayName: "Resume Song", kind: "preview")
 
         // Pre-stage the bounce artifact as a verifiable file — it must be SKIPPED.
         try writeToneWav(at: URL(fileURLWithPath: bouncePath))
 
-        // The bounce route writes whichever artifact is still missing (the stem).
+        // The bounce route writes whichever known-path artifact is still missing (the preview).
         let router = await makeExportRouter(bounceSideEffect: {
-            _ = try? writeToneWav(at: URL(fileURLWithPath: stemPath))
+            _ = try? writeToneWav(at: URL(fileURLWithPath: previewPath))
         })
         let options = fastOptions(identity: { project.path })
 
@@ -79,7 +79,7 @@ struct ProjectExportExecutionTests {
                 "output_root": .string(outputRoot.path),
                 // skip_existing so the already-present bounce is not a fail_if_exists collision.
                 "collision_policy": .string("skip_existing"),
-                "artifacts": .array([.string("bounce"), .string("stem")]),
+                "artifacts": .array([.string("bounce"), .string("preview")]),
                 "confirmed": .bool(true),
             ],
             router: router,
@@ -95,16 +95,16 @@ struct ProjectExportExecutionTests {
 
         let artifacts = try #require(run.projects.first?.artifacts)
         let bounce = try #require(artifacts.first { $0.kind == "bounce" })
-        let stem = try #require(artifacts.first { $0.kind == "stem" })
+        let preview = try #require(artifacts.first { $0.kind == "preview" })
         // The already-present bounce was skipped (State A, no bounce fired).
         #expect(bounce.state == "A")
         #expect(bounce.verified)
         #expect(!bounce.bounceFired)
         #expect(bounce.reason == "skipped_already_verified")
-        // The missing stem was produced (State A, bounce fired).
-        #expect(stem.state == "A")
-        #expect(stem.verified)
-        #expect(stem.bounceFired)
+        // The missing preview was produced (State A, bounce fired).
+        #expect(preview.state == "A")
+        #expect(preview.verified)
+        #expect(preview.bounceFired)
     }
 
     @Test("identity mismatch fails closed and never bounces the wrong project")
@@ -176,7 +176,7 @@ struct ProjectExportExecutionTests {
             options: options
         )
 
-        #expect(run.status == "failed") // nothing reached State A
+        #expect(run.status == "uncertain") // State B evidence is not a hard failure
         #expect(run.artifactsUncertain == 1)
         #expect(run.artifactsVerified == 0)
         let artifact = try #require(run.projects.first?.artifacts.first)

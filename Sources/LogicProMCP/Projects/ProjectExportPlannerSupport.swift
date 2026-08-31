@@ -2,8 +2,11 @@ import Foundation
 import MCP
 
 extension ProjectExportPlanner {
-    static func workflowSteps(for index: Int) -> [ProjectExportWorkflowStep] {
-        [
+    static func workflowSteps(
+        for index: Int,
+        artifactKinds: [String]
+    ) -> [ProjectExportWorkflowStep] {
+        var steps = [
             ProjectExportWorkflowStep(
                 id: "project_\(index)_open",
                 title: "Open project after confirming expected path",
@@ -13,9 +16,11 @@ extension ProjectExportPlanner {
                 executed: false,
                 requiresConfirmationLevel: confirmationLabel(for: "open"),
                 stopConditions: ["wrong_project_observed", "open_failed", "ambiguous_save_state"]
-            ),
-            ProjectExportWorkflowStep(
-                id: "project_\(index)_export",
+            )
+        ]
+        if artifactKinds.contains(where: { $0 != "stem" }) {
+            steps.append(ProjectExportWorkflowStep(
+                id: "project_\(index)_bounce_export",
                 title: "Trigger approved bounce/export operation",
                 tool: "logic_project",
                 command: "bounce",
@@ -23,12 +28,48 @@ extension ProjectExportPlanner {
                 executed: false,
                 requiresConfirmationLevel: confirmationLabel(for: "bounce"),
                 stopConditions: ["missing_output", "stale_output", "overwrite_risk"]
-            ),
-        ]
+            ))
+        }
+        if artifactKinds.contains("stem") {
+            steps.append(ProjectExportWorkflowStep(
+                id: "project_\(index)_stem_export",
+                title: "Run the per-track export-panel phase inside export_run (no standalone stem command)",
+                tool: "logic_project",
+                command: nil,
+                mutates: true,
+                executed: false,
+                requiresConfirmationLevel: confirmationLabel(for: "export_run"),
+                stopConditions: [
+                    "destination_not_visible_in_export_browser",
+                    "missing_output",
+                    "unbound_stem_subject_result",
+                    "overwrite_risk",
+                ]
+            ))
+        }
+        return steps
     }
 
     static func confirmationLabel(for command: String) -> String {
         DestructivePolicy.level(for: command) == .l3 ? "L3" : "L2"
+    }
+
+    static func requiredConfirmations(artifactKinds: [String]) -> [ProjectExportConfirmation] {
+        var boundaries = ["open"]
+        if artifactKinds.contains(where: { $0 != "stem" }) {
+            boundaries.append("bounce")
+        }
+        if artifactKinds.contains("stem") {
+            // Per-track export is an internal phase of the registered
+            // `logic_project export_run` command.  There is no public `stem`
+            // command to advertise as an independently invocable step.
+            boundaries.append("export_run")
+        }
+        return [ProjectExportConfirmation(
+            level: "L2",
+            requiredFor: boundaries,
+            message: "Batch export execution must confirm every project open and each selected export boundary before mutation."
+        )]
     }
 
     static func flagIntraPlanCollisions(
@@ -45,6 +86,10 @@ extension ProjectExportPlanner {
 
         return plans.map { project in
             let arts = project.expectedArtifacts.map { art -> ProjectExportPlanArtifact in
+                // A late-bound stem path is its destination directory, not an
+                // eventual filename. Two stems therefore cannot be diagnosed
+                // as a same-path collision before Logic has named either file.
+                guard art.filenamesLateBound != true else { return art }
                 guard collidingPaths.contains(art.path.lowercased()) else { return art }
                 let verification = art.verification
                 return ProjectExportPlanArtifact(
@@ -57,9 +102,14 @@ extension ProjectExportPlanner {
                         mtime: verification.mtime,
                         pathUnderOutputRoot: verification.pathUnderOutputRoot,
                         wouldOverwrite: verification.wouldOverwrite,
-                        issues: verification.issues + ["artifact_path_collides_in_plan"]
+                        issues: verification.issues + ["artifact_path_collides_in_plan"],
+                        existingAudioFileCount: verification.existingAudioFileCount
                     ),
-                    analysis: art.analysis
+                    analysis: art.analysis,
+                    destination: art.destination,
+                    subjects: art.subjects,
+                    filenamesLateBound: art.filenamesLateBound,
+                    planningReason: art.planningReason
                 )
             }
             return ProjectExportPlanProject(
@@ -75,14 +125,22 @@ extension ProjectExportPlanner {
         }
     }
 
-    static func unsupportedOrBlockedSteps() -> [ProjectExportBlockedStep] {
-        [
+    static func unsupportedOrBlockedSteps(artifactKinds: [String]) -> [ProjectExportBlockedStep] {
+        var steps = [
             ProjectExportBlockedStep(
                 operation: "cloud_delivery",
                 reason: "Cloud upload, email, and external sharing are explicitly out of scope.",
                 safeAlternative: "Write artifacts only under the approved local output root."
             ),
         ]
+        if artifactKinds.contains("stem") {
+            steps.append(ProjectExportBlockedStep(
+                operation: "export_resume",
+                reason: "Stem filenames are assigned by Logic after export, so existing artifact identity cannot be established before a run.",
+                safeAlternative: "Re-run stem export into a clean destination; partial stem export cannot be resumed."
+            ))
+        }
+        return steps
     }
 
     /// #369: the bounce/export step's real execution dependencies, so the manifest
@@ -91,8 +149,10 @@ extension ProjectExportPlanner {
     /// dialog out-of-process (the bundled `logic_bounce.py` helper) — it is NOT
     /// gated on the MIDIKeyCommands MIDI-Learn binding, which the correction in
     /// the `automation_permission` detail spells out.
-    static func executionPreconditions() -> [ProjectExportPrecondition] {
-        [
+    static func executionPreconditions(artifactKinds: [String]) -> [ProjectExportPrecondition] {
+        var preconditions: [ProjectExportPrecondition] = []
+        if artifactKinds.contains(where: { $0 != "stem" }) {
+            preconditions += [
             ProjectExportPrecondition(
                 requirement: "automation_permission",
                 appliesToCommands: ["bounce"],
@@ -132,7 +192,17 @@ extension ProjectExportPlanner {
                     + "keystroke automation on a non-ABC/US layout would type the wrong characters into the filename.",
                 verifyWith: "LogicProMCP doctor (bundled logic_input_source.py helper)"
             ),
-        ]
+            ]
+        }
+        if artifactKinds.contains("stem") {
+            preconditions.append(ProjectExportPrecondition(
+                requirement: "accessibility_export_panel",
+                appliesToCommands: ["export_run"],
+                detail: "The stem phase is executed only inside logic_project export_run; there is no standalone stem command. It opens Logic's File > Export > All Tracks as Audio Files panel through Accessibility, selects an existing destination folder that is visible in the panel browser, requires the observed One File per Track value, and waits for the progress window to disappear. A dry plan validates only the filesystem directory: browser visibility is an execution-time precondition that can be observed only after the panel opens, where an unreachable folder is refused before Export is pressed. It does not use project.bounce or the keyboard-driven bounce helper. Eligible outputs are only top-level non-directory entries with suffix wav, wave, aif, aiff, aifc, m4a, or mp3; no output format is selected or promised by this driver.",
+                verifyWith: "LogicProMCP --check-permissions"
+            ))
+        }
+        return preconditions
     }
 
     static func projectPaths(from params: [String: Value]) throws -> [String] {

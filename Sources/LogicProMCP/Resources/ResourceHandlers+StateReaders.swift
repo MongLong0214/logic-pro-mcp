@@ -656,11 +656,13 @@ extension ResourceHandlers {
         // track-count short-circuit: the cache can hold regions for a track whose
         // header isn't in the track array, so track_count is not a reliable
         // existence proxy here.
+        let observedProject = await cache.currentProjectIdentity()
         if case .success(let payload) = await router.route(operation: "region.get_regions"),
            let inventory = try? RegionInfo.decodeInventoryPayload(payload) {
-            await cache.updateRegions(
+            _ = await cache.updateRegions(
                 inventory.regions.map { $0.asRegionState() },
-                complete: inventory.isComplete
+                complete: inventory.isComplete,
+                ifCurrent: observedProject
             )
         }
         let regions = await cache.getRegions().filter { $0.trackIndex == index }
