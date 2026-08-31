@@ -92,11 +92,14 @@ struct IndexBindingCensusTests {
         // grow. Each entry earns its place only by being reversible — a
         // wrong-target write here is recoverable by the user. This pinned set is
         // the ADR-002 done-bar's recorded, issue-linked waiver (#401): the
-        // residual is visible and enforced here, not a silent gap.
+        // residual is visible and enforced here, not a silent gap. A newly
+        // registered reversible parameter write joins this tier deliberately;
+        // it must bring the same explicit census update as its registry row.
         let expectedLegacy: Set<OperationID> = [
             .mixerSetVolume,           // reversible level write
             .mixerSetPan,              // reversible pan write
             .pluginsSetParamVerified,  // reversible param write (verified readback)
+            .pluginsSetEQBandVerified, // reversible named-EQ parameter write
             .tracksSelect,             // selection only; no persistent state change
             .tracksRename,             // reversible: rename back
             .tracksMute,               // reversible toggle
@@ -156,7 +159,8 @@ struct IndexBindingCensusTests {
         //   • mixer.set_plugin_param → give target_ref, then .legacyIndexAllowed
         //                              (reversible param write; ratchet cost not yet earned,
         //                              but it still must become target-bearing to leave this set).
-        // This set may only SHRINK. Growth = a new hazard needing a decision.
+        // Existing members may only shrink; a new reversible target-bearing
+        // operation requires an explicit census update with its registry row.
         #expect(hazards == [.mixerInsertPlugin, .mixerSetPluginParam])
 
         // The distinguishing property is real, not incidental: none of these can

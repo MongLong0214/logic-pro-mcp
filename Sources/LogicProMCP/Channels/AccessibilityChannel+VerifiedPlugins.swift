@@ -401,21 +401,54 @@ extension AccessibilityChannel {
 
     typealias PluginWindowOpener = @Sendable (
         _ targetSlot: AXUIElementSendable,
+        _ pluginID: String,
         _ trackName: String,
         _ axDescription: String,
         _ runtime: AXLogicProElements.Runtime
     ) async -> AXUIElementSendable?
 
-    static let livePluginWindowOpener: PluginWindowOpener = { targetSlot, trackName, axDescription, runtime in
+    /// Result of the CoreGraphics-backed popup cleanup that follows plug-in
+    /// window acquisition. A remaining popup is unsafe: Logic stops servicing
+    /// AppleEvents while it is open, so the next verified write would fail for
+    /// an unrelated-looking reason.
+    enum PluginPopupMenuCleanupOutcome: Sendable, Equatable {
+        case noPopupObserved
+        case dismissed
+        /// CoreGraphics did not provide a popup-window count. This is not
+        /// evidence that no popup exists, so the acquisition must not continue
+        /// as if the screen were known clean.
+        case popupCountUnavailable
+        case couldNotDismiss(initialPopupCount: Int, remainingPopupCount: Int)
+
+        var isClean: Bool {
+            switch self {
+            case .noPopupObserved, .dismissed:
+                return true
+            case .popupCountUnavailable, .couldNotDismiss:
+                return false
+            }
+        }
+    }
+
+    typealias PluginPopupMenuCleaner = @Sendable (
+        _ runtime: AXLogicProElements.Runtime
+    ) -> PluginPopupMenuCleanupOutcome
+
+    static let livePluginWindowOpener: PluginWindowOpener = { targetSlot, pluginID, trackName, axDescription, runtime in
         await openPluginWindowFromTargetSlot(
             targetSlot.element,
+            pluginID: pluginID,
             trackName: trackName,
             axDescription: axDescription,
             runtime: runtime
         )
     }
 
-    static let liveNoOpPluginWindowOpener: PluginWindowOpener = { _, _, _, _ in nil }
+    static let liveNoOpPluginWindowOpener: PluginWindowOpener = { _, _, _, _, _ in nil }
+
+    static let livePluginPopupMenuCleaner: PluginPopupMenuCleaner = { runtime in
+        dismissLogicPopupMenuAfterPluginWindowAcquisition(runtime: runtime)
+    }
 
     /// Steps 2-3 of the R6 precedence shared by both mutating verified ops:
     /// mode validation then the project path gate. Returns a State C envelope to
@@ -482,9 +515,10 @@ extension AccessibilityChannel {
         return nil
     }
 
-    // MARK: - set_param_verified (R6 single precedence; AC10/AC11/AC17/AC19/AC23)
+    // MARK: - verified parameter writes (R6 single precedence; AC10/AC11/AC17/AC19/AC23)
 
-    /// Verified parameter write entry. The R6 single precedence, in order:
+    /// Verified parameter-write engine. Both `set_param_verified` and the
+    /// named-band Channel EQ operation take this R6 precedence, in order:
     ///
     ///   1  schema/params (`invalid_params`)
     ///   2  mode          (`unsupported_mode`)
@@ -494,32 +528,135 @@ extension AccessibilityChannel {
     ///      with `unsupported_param_readback` (AC10); only `.writeReadback`
     ///      proceeds.
     ///   6  track verified select (`track_selection_failed`)
-    ///   7  inventory complete + occupied at `insert` (`incomplete_inventory`)
-    ///   8  plugin window: resolve one candidate, then acquire it through the
-    ///      target slot (`window_open_failed` / `window_identity_unresolved`)
+    ///   7  inventory complete + occupied and identity-matched at `insert`
+    ///      (`incomplete_inventory` / `target_plugin_mismatch`)
+    ///   8  plugin window: a single plug-in instance uses the existing opener;
+    ///      duplicate instances require zero header-proven editors before one
+    ///      target-slot open press and exactly one afterward
     ///   9  slider match by AXDescription (`param_control_not_found`)
     ///  10  before `AXValue` read
-    ///  11  set `AXValue` (`ax_write_failed`)
-    ///  12  after `AXValue` + `AXValueDescription` read (`readback_lost_after_write`)
-    ///  13  tolerance: |after - requested| <= tolerance ⇒ State A; else State C
-    ///      `readback_mismatch` + rollback to the before value.
+    ///  11  dispatch the catalog's AX write method
+    ///  12  read back the declared raw or display target
+    ///  13  direct-set tolerance or increment-walk outcome; failures roll back
+    ///      with the same declared write method.
     ///
     /// Step 4 runs BEFORE step 5 so a display-name/alias input still reaches the
     /// capability lookup (canonical id is required to query capability — AC23).
     ///
-    /// T5 wires the live write/readback path for the FIRST verified-writable
-    /// parameter, Compressor `threshold` (normalized %, T0 spike). Every other
-    /// parameter has no write/readback method, so step 5 still fail-closes it
-    /// with `unsupported_param_readback` and no write is attempted.
+    /// Compressor threshold uses direct `AXValue` assignment. Channel EQ's
+    /// named controls use the separately measured increment walk; their catalog
+    /// provenance intentionally does not claim an end-to-end live round trip.
     static func defaultSetParamVerified(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
         frontDocumentPath: FrontDocumentPathProvider = liveFrontDocumentPath,
         entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
         paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup = VerifiedPluginCatalog.canonicalParamKey,
-        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener
+        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner = livePluginPopupMenuCleaner,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) async -> ChannelResult {
-        let operation = "logic_plugins.set_param_verified"
+        await defaultVerifiedParameterWrite(
+            operation: "logic_plugins.set_param_verified",
+            params: params,
+            selector: .plugin(
+                pluginAlias: params["plugin"] ?? "",
+                paramAlias: params["param"] ?? ""
+            ),
+            runtime: runtime,
+            frontDocumentPath: frontDocumentPath,
+            entryLookup: entryLookup,
+            paramAliasLookup: paramAliasLookup,
+            pluginWindowOpener: pluginWindowOpener,
+            pluginPopupMenuCleaner: pluginPopupMenuCleaner,
+            incrementWalkBudget: incrementWalkBudget
+        )
+    }
+
+    /// Named-band Channel EQ variant of `set_param_verified`. It enters the
+    /// same R6 engine at step 1; only the step-4 selector differs. The public
+    /// surface never accepts a band ordinal or a slider position.
+    static func defaultSetEQBandVerified(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        frontDocumentPath: FrontDocumentPathProvider = liveFrontDocumentPath,
+        entryLookup: VerifiedPluginCatalog.EntryLookup = VerifiedPluginCatalog.productionEntryLookup,
+        pluginWindowOpener: PluginWindowOpener = livePluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner = livePluginPopupMenuCleaner,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    ) async -> ChannelResult {
+        await defaultVerifiedParameterWrite(
+            operation: "logic_plugins.set_eq_band_verified",
+            params: params,
+            selector: .channelEQ(
+                bandName: params["band"] ?? "",
+                parameterName: params["parameter"] ?? ""
+            ),
+            runtime: runtime,
+            frontDocumentPath: frontDocumentPath,
+            entryLookup: entryLookup,
+            paramAliasLookup: VerifiedPluginCatalog.canonicalParamKey,
+            pluginWindowOpener: pluginWindowOpener,
+            pluginPopupMenuCleaner: pluginPopupMenuCleaner,
+            incrementWalkBudget: incrementWalkBudget
+        )
+    }
+
+    private enum VerifiedParameterSelector {
+        case plugin(pluginAlias: String, paramAlias: String)
+        case channelEQ(bandName: String, parameterName: String)
+
+        var preResolutionIdentity: [String: Any] {
+            switch self {
+            case let .plugin(pluginAlias, _):
+                ["plugin_id_requested": pluginAlias]
+            case let .channelEQ(bandName, parameterName):
+                [
+                    "plugin_id_requested": "logic.stock.effect.channel_eq",
+                    "band_requested": bandName,
+                    "parameter_requested": parameterName,
+                ]
+            }
+        }
+
+        var parameterLabel: String {
+            switch self {
+            case let .plugin(_, paramAlias): paramAlias
+            case let .channelEQ(bandName, parameterName): "\(bandName) \(parameterName)"
+            }
+        }
+    }
+
+    private struct ResolvedVerifiedParameter {
+        let pluginID: String
+        let paramKey: String
+        let paramAlias: String
+        let metadata: StockPluginParameterMetadata
+        let walkTarget: SliderIncrementWalk.Target?
+        let responseDisplayUnit: String
+    }
+
+    private enum VerifiedParameterResolution {
+        case success(ResolvedVerifiedParameter)
+        case failure(String)
+    }
+
+    /// R6's single precedence implementation, shared by generic verified
+    /// parameters and named Channel EQ bands. The selector resolution belongs at
+    /// step 4, after mode/path/target-reference gates, so the two public
+    /// operations cannot drift into different precedence rules.
+    private static func defaultVerifiedParameterWrite(
+        operation: String,
+        params: [String: String],
+        selector: VerifiedParameterSelector,
+        runtime: AXLogicProElements.Runtime,
+        frontDocumentPath: FrontDocumentPathProvider,
+        entryLookup: VerifiedPluginCatalog.EntryLookup,
+        paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup,
+        pluginWindowOpener: PluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner,
+        incrementWalkBudget: Int
+    ) async -> ChannelResult {
 
         // Step 1 — schema / params (presence, type, range, unit).
         guard let trackRaw = params["track"], let track = Int(trackRaw), track >= 0 else {
@@ -528,13 +665,21 @@ extension AccessibilityChannel {
         guard let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0 else {
             return .error(invalidParamsStateC(operation, "missing or invalid 'insert' (Int >= 0)"))
         }
-        let pluginAlias = params["plugin"] ?? ""
-        guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
-        }
-        let paramAlias = params["param"] ?? ""
-        guard !paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .error(invalidParamsStateC(operation, "missing 'param' key"))
+        switch selector {
+        case let .plugin(pluginAlias, paramAlias):
+            guard !pluginAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing 'plugin' identity"))
+            }
+            guard !paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing 'param' key"))
+            }
+        case let .channelEQ(bandName, parameterName):
+            guard !bandName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing Channel EQ 'band' name"))
+            }
+            guard !parameterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .error(invalidParamsStateC(operation, "missing Channel EQ 'parameter' name"))
+            }
         }
         guard let valueRaw = params["value"], let value = Double(valueRaw), value.isFinite else {
             return .error(invalidParamsStateC(operation, "missing or non-finite 'value'"))
@@ -542,10 +687,8 @@ extension AccessibilityChannel {
         let unit = params["unit"]
         let mode = params["mode"] ?? ""
 
-        let preResolutionIdentity: [String: Any] = [
-            "track_index": track,
-            "plugin_id_requested": pluginAlias,
-        ]
+        var preResolutionIdentity = selector.preResolutionIdentity
+        preResolutionIdentity["track_index"] = track
 
         // Steps 2-3 — mode + project path gate (precedence: path-mismatch wins
         // over a later unsupported-param, AC23).
@@ -577,80 +720,188 @@ extension AccessibilityChannel {
             return guardResult
         }
 
-        // Step 4 — identity alias resolution (canonical id needed for step 5).
-        guard let pluginID = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .unknownPluginIdentity,
-                extras: [
-                    "operation": operation,
-                    "target_identity": preResolutionIdentity,
-                    "what_was_attempted": "resolve plugin identity '\(pluginAlias)' to a canonical catalog id",
-                    "what_was_observed": "no alias mapping to a logic.stock.* id",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
-        }
-        let paramKey = VerifiedPluginCatalog.canonicalParamKey(
-            pluginID: pluginID,
-            alias: paramAlias,
-            paramAliasLookup: paramAliasLookup
-        ) ?? paramAlias.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        // Unit honesty (R8): a caller unit that disagrees with the declared
-        // canonical unit is invalid_params.
-        if let unit,
-           let expectedUnit = VerifiedPluginCatalog.paramUnit(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup),
-           unit.caseInsensitiveCompare(expectedUnit) != .orderedSame {
-            return .error(invalidParamsStateC(
-                operation,
-                "unit '\(unit)' does not match the declared unit '\(expectedUnit)' for \(pluginID).\(paramAlias)"
-            ))
-        }
-        // Range validation (R6 step 1) against the declared display range.
-        if let range = VerifiedPluginCatalog.paramRange(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup),
-           value < range.min || value > range.max {
-            return .error(invalidParamsStateC(
-                operation,
-                "value \(value) is outside the valid range [\(range.min), \(range.max)] for \(pluginID).\(paramAlias)"
-            ))
-        }
-
-        // Step 5 — capability preflight. Only `.writeReadback` (Compressor
-        // threshold, T0 spike) proceeds to the live write; every other parameter
-        // has no write/readback method and fail-closes BEFORE any write (AC10).
-        let capability = VerifiedPluginCatalog.paramCapability(pluginID: pluginID, paramKey: paramKey, entryLookup: entryLookup)
-        switch capability {
-        case .unknownParameter, .unsupported:
-            return .error(HonestContract.encodeV2StateC(
-                error: .unsupportedParamReadback,
-                extras: [
-                    "operation": operation,
-                    "target_identity": resolvedIdentity(track: track, insert: insert, pluginID: pluginID),
-                    "param": paramAlias,
-                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
-                    "what_was_observed": capability == .unknownParameter
-                        ? "parameter is not in the verified allowlist"
-                        : "no display-readback parser / write method is available for this parameter",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
-        case .writeReadback:
-            // Steps 6-13 — the live AX write/readback round-trip.
+        // Steps 4-5 — selector resolution, unit/range honesty, and capability
+        // preflight. This remains before any track/window AX mutation.
+        switch resolveVerifiedParameter(
+            selector: selector,
+            requested: value,
+            unit: unit,
+            operation: operation,
+            track: track,
+            insert: insert,
+            entryLookup: entryLookup,
+            paramAliasLookup: paramAliasLookup,
+            preResolutionIdentity: preResolutionIdentity
+        ) {
+        case let .failure(error):
+            return .error(error)
+        case let .success(target):
             return await performVerifiedParamWrite(
                 operation: operation,
                 track: track,
                 insert: insert,
-                pluginID: pluginID,
-                paramKey: paramKey,
-                paramAlias: paramAlias,
+                pluginID: target.pluginID,
+                paramKey: target.paramKey,
+                paramAlias: target.paramAlias,
                 requested: value,
+                writeMethod: target.metadata.writeMethod ?? "",
+                walkTarget: target.walkTarget,
+                responseDisplayUnit: target.responseDisplayUnit,
                 runtime: runtime,
                 entryLookup: entryLookup,
-                pluginWindowOpener: pluginWindowOpener
+                pluginWindowOpener: pluginWindowOpener,
+                pluginPopupMenuCleaner: pluginPopupMenuCleaner,
+                incrementWalkBudget: incrementWalkBudget
             )
         }
+    }
+
+    private static func resolveVerifiedParameter(
+        selector: VerifiedParameterSelector,
+        requested: Double,
+        unit: String?,
+        operation: String,
+        track: Int,
+        insert: Int,
+        entryLookup: VerifiedPluginCatalog.EntryLookup,
+        paramAliasLookup: VerifiedPluginCatalog.ParamAliasLookup,
+        preResolutionIdentity: [String: Any]
+    ) -> VerifiedParameterResolution {
+        let pluginID: String
+        let paramKey: String
+        let paramAlias = selector.parameterLabel
+        switch selector {
+        case let .plugin(pluginAlias, suppliedParamAlias):
+            guard let resolved = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
+                return .failure(HonestContract.encodeV2StateC(
+                    error: .unknownPluginIdentity,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": preResolutionIdentity,
+                        "what_was_attempted": "resolve plugin identity '\(pluginAlias)' to a canonical catalog id",
+                        "what_was_observed": "no alias mapping to a logic.stock.* id",
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            pluginID = resolved
+            paramKey = VerifiedPluginCatalog.canonicalParamKey(
+                pluginID: pluginID,
+                alias: suppliedParamAlias,
+                paramAliasLookup: paramAliasLookup
+            ) ?? suppliedParamAlias.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        case let .channelEQ(bandName, parameterName):
+            guard let catalogParameter = ChannelEQBandCatalog.parameter(
+                bandName: bandName,
+                parameterName: parameterName
+            ) else {
+                return .failure(invalidParamsStateC(
+                    operation,
+                    "unknown Channel EQ band/parameter name '\(bandName)' / '\(parameterName)'"
+                ))
+            }
+            pluginID = "logic.stock.effect.channel_eq"
+            paramKey = catalogParameter.id
+        }
+
+        let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
+        guard let metadata = entryLookup(pluginID)?.parameters.first(where: { $0.id == paramKey }) else {
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "parameter is not in the verified allowlist",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+
+        let declaredUnits = metadata.acceptedUnits ?? metadata.unit.map { [$0] } ?? []
+        let normalizedUnit = unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case .channelEQ = selector, normalizedUnit?.isEmpty ?? true {
+            return .failure(invalidParamsStateC(
+                operation,
+                "Channel EQ requires a declared 'unit' for \(paramAlias)"
+            ))
+        }
+        let requestedUnit = normalizedUnit?.isEmpty == false ? normalizedUnit! : metadata.unit
+        // Validate case-insensitively, then keep the catalog spelling. The
+        // increment walk compares Logic's display rendering exactly, so an
+        // accepted caller `db` must target Logic's declared `dB`, never reuse
+        // the caller's casing verbatim.
+        guard let requestedUnit,
+              let effectiveUnit = declaredUnits.first(where: {
+                  $0.caseInsensitiveCompare(requestedUnit) == .orderedSame
+              }) else {
+            let declared = declaredUnits.joined(separator: ", ")
+            return .failure(invalidParamsStateC(
+                operation,
+                "unit '\(unit ?? "")' is not declared for \(pluginID).\(paramAlias); declared units: \(declared)"
+            ))
+        }
+
+        let isIncrementWalk = metadata.writeMethod == "ax_slider_increment_walk"
+        let rawUnit = metadata.unit
+        let isRawRequest = rawUnit.map {
+            $0.caseInsensitiveCompare(effectiveUnit) == .orderedSame
+        } ?? false
+        if !isIncrementWalk || isRawRequest,
+           let range = metadata.valueRange,
+           requested < range.min || requested > range.max {
+            return .failure(invalidParamsStateC(
+                operation,
+                "value \(requested) is outside the valid range [\(range.min), \(range.max)] for \(pluginID).\(paramAlias)"
+            ))
+        }
+
+        let hasWrite = !(metadata.writeMethod?.isEmpty ?? true)
+        let hasReadback = !(metadata.readbackMethod?.isEmpty ?? true)
+        guard hasWrite, hasReadback else {
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight write/readback capability for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "no display-readback parser / write method is available for this parameter",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+
+        let walkTarget: SliderIncrementWalk.Target?
+        if isIncrementWalk {
+            if isRawRequest {
+                walkTarget = .rawValue(requested, tolerance: metadata.tolerance ?? 0)
+            } else {
+                // This is formatting only, not a display-to-raw conversion. The
+                // walk stops only when Logic reports this exact description.
+                let displayValue = displayTargetValueText(requested)
+                let signedValue = effectiveUnit.caseInsensitiveCompare("dB") == .orderedSame
+                    && requested > 0
+                    ? "+\(displayValue)"
+                    : displayValue
+                walkTarget = .display("\(signedValue) \(effectiveUnit)")
+            }
+        } else {
+            walkTarget = nil
+        }
+
+        return .success(ResolvedVerifiedParameter(
+            pluginID: pluginID,
+            paramKey: paramKey,
+            paramAlias: paramAlias,
+            metadata: metadata,
+            walkTarget: walkTarget,
+            responseDisplayUnit: metadata.unit == "normalized" ? "%" : effectiveUnit
+        ))
     }
 
     /// ADR-002 F1 — live track-identity cross-check for `target_ref`-resolved
@@ -744,9 +995,14 @@ extension AccessibilityChannel {
         paramKey: String,
         paramAlias: String,
         requested: Double,
+        writeMethod: String,
+        walkTarget: SliderIncrementWalk.Target?,
+        responseDisplayUnit: String,
         runtime: AXLogicProElements.Runtime,
         entryLookup: VerifiedPluginCatalog.EntryLookup,
-        pluginWindowOpener: PluginWindowOpener
+        pluginWindowOpener: PluginWindowOpener,
+        pluginPopupMenuCleaner: PluginPopupMenuCleaner,
+        incrementWalkBudget: Int
     ) async -> ChannelResult {
         let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
         guard let axDescription = VerifiedPluginCatalog.paramAXDescription(
@@ -856,13 +1112,140 @@ extension AccessibilityChannel {
             ))
         }
 
-        // Step 8 — plugin window: reject ambiguity, then acquire through the
-        // target slot so the slot is the provenance for the selected editor.
+        let conflictingInsertIndices = slots.compactMap { slot -> Int? in
+            guard slot.occupied,
+                  slot.readStatus == .occupiedReadable,
+                  let name = slot.name,
+                  VerifiedPluginCatalog.pluginID(forObservedName: name) == pluginID else {
+                return nil
+            }
+            return slot.index
+        }
+        let duplicatedPluginInstance = conflictingInsertIndices.count > 1
         guard let trackName = AXLogicProElements.trackName(at: track, runtime: runtime) else {
             return .error(windowOpenFailedStateC(operation, identity, "the target track name could not be resolved for window matching"))
         }
+        var constructedWindow: AXUIElementSendable?
+        if duplicatedPluginInstance {
+            // #726 follow-up measurement: when no matching editor is open, one
+            // target-slot `열기` press creates the target editor. A pre-existing
+            // editor makes the result indistinguishable, and a hidden sibling can
+            // make one press restore two editors. These header-proven counts are
+            // therefore the provenance proof; neither geometry nor name-only
+            // reuse chooses the editor in this branch.
+            let matchingEditorsBeforePress = AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            )
+            guard matchingEditorsBeforePress.isEmpty else {
+                return .error(duplicatePluginEditorAlreadyOpenStateC(
+                    operation: operation,
+                    identity: identity,
+                    pluginID: pluginID,
+                    track: track,
+                    insert: insert,
+                    conflictingInsertIndices: conflictingInsertIndices,
+                    matchingEditorCount: matchingEditorsBeforePress.count
+                ))
+            }
+
+            // Retain the existing static-header guard: an editor that exposes
+            // this track and parameter but cannot prove the requested plug-in is
+            // not evidence of a clean, matching pre-count.
+            if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                matchingSliderDescription: axDescription,
+                runtime: runtime
+            ) {
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            }
+
+            guard let targetOpenControl = rankedPluginSlotOpenControls(
+                in: slots[insert].element,
+                runtime: runtime.ax
+            ).first(where: { $0.rank == 0 })?.element else {
+                return .error(windowOpenFailedStateC(
+                    operation,
+                    identity,
+                    "the target insert exposes no AXPress-capable open control",
+                    diagnostics: pluginWindowAcquisitionDiagnostics(
+                        trackName: trackName,
+                        axDescription: axDescription,
+                        runtime: runtime
+                    )
+                ))
+            }
+
+            // Real Logic can report a non-zero AX status after opening the
+            // editor, so the observed post-count—not that status—decides.
+            _ = pressElement(targetOpenControl, runtime: runtime.ax)
+            let matchingEditorsAfterPress = await pollMatchingPluginEditorWindows(
+                trackName: trackName,
+                pluginID: pluginID,
+                runtime: runtime,
+                timeoutMs: 1_250
+            )
+            guard matchingEditorsAfterPress.count == 1 else {
+                if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
+                    forTrackName: trackName,
+                    matchingPluginID: pluginID,
+                    matchingSliderDescription: axDescription,
+                    runtime: runtime
+                ) {
+                    return .error(pluginWindowPluginMismatchStateC(
+                        operation,
+                        identity,
+                        pluginID: pluginID,
+                        observedNames: observedNames
+                    ))
+                }
+                return .error(duplicatePluginEditorCountMismatchStateC(
+                    operation: operation,
+                    identity: identity,
+                    pluginID: pluginID,
+                    track: track,
+                    insert: insert,
+                    conflictingInsertIndices: conflictingInsertIndices,
+                    matchingEditorCount: matchingEditorsAfterPress.count
+                ))
+            }
+            // `matchingPluginEditorWindows` accepts a window only after its
+            // direct static-text header maps to the requested plug-in id.
+            constructedWindow = AXUIElementSendable(matchingEditorsAfterPress[0])
+        }
+
+        // This operation opened that editor from a known-empty state, so it owns
+        // it. Leaving it open would make the NEXT duplicate-insert write refuse
+        // with `duplicate_plugin_editor_already_open` — measured live: writing
+        // insert 0 then insert 2 on a two-Compressor track failed on the second
+        // call until the first editor was closed by hand. Only ever close a
+        // window this operation created; an editor the caller already had open
+        // is reused, never constructed, and must be left exactly as found.
+        defer {
+            if let constructedWindow {
+                closePluginEditorOpenedByThisOperation(
+                    constructedWindow.element,
+                    trackName: trackName,
+                    pluginID: pluginID,
+                    runtime: runtime
+                )
+            }
+        }
+
+        // Step 8 — normal single-instance acquisition retains the original
+        // name/parameter resolution and opener behaviour. For a duplicated
+        // instance, `constructedWindow` above is already proven by the one
+        // target-slot press and the two editor counts.
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
+            matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
             runtime: runtime
         ) {
@@ -873,26 +1256,76 @@ extension AccessibilityChannel {
                 runtime: runtime
             )
             diagnostics["opener_action_attempted"] = false
+            diagnostics.merge(pluginPopupMenuCleanupDiagnostics(pluginPopupMenuCleaner(runtime))) { _, new in new }
             return .error(windowIdentityUnresolvedStateC(
                 operation,
                 identity,
                 "more than one plugin-editor window exposes the requested track and parameter identity",
                 diagnostics: diagnostics
             ))
+        case let .pluginIdentityMismatch(observedNames):
+            return .error(pluginWindowPluginMismatchStateC(
+                operation,
+                identity,
+                pluginID: pluginID,
+                observedNames: observedNames
+            ))
         case .none, .unique:
             break
         }
-        guard let opened = await pluginWindowOpener(
-            AXUIElementSendable(slots[insert].element),
-            trackName,
-            axDescription,
-            runtime
-        ) else {
-            if case .ambiguous = AXLogicProElements.pluginWindowMatch(
+        let openedCandidate: AXUIElementSendable?
+        if let constructedWindow {
+            openedCandidate = constructedWindow
+        } else {
+            openedCandidate = await pluginWindowOpener(
+                AXUIElementSendable(slots[insert].element),
+                pluginID,
+                trackName,
+                axDescription,
+                runtime
+            )
+        }
+        guard let opened = openedCandidate else {
+            // A polling attempt may have observed a same-track editor with the
+            // requested control but the wrong (or unreadable) header. Report
+            // that identity failure directly; a concurrent popup-cleanup issue
+            // must not hide the reason the editor was refused.
+            if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
+                matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
                 runtime: runtime
             ) {
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            }
+            let popupCleanup = pluginPopupMenuCleaner(runtime)
+            if !popupCleanup.isClean {
+                var diagnostics = pluginWindowAcquisitionDiagnostics(
+                    trackName: trackName,
+                    axDescription: axDescription,
+                    runtime: runtime
+                )
+                diagnostics.merge(pluginPopupMenuCleanupDiagnostics(popupCleanup)) { _, new in new }
+                return .error(windowOpenFailedStateC(
+                    operation,
+                    identity,
+                    "a Logic popup menu remained open after plugin-window acquisition",
+                    diagnostics: diagnostics,
+                    safeToRetry: false
+                ))
+            }
+            switch AXLogicProElements.pluginWindowMatch(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                matchingSliderDescription: axDescription,
+                runtime: runtime
+            ) {
+            case .ambiguous:
                 var diagnostics = pluginWindowAcquisitionDiagnostics(
                     trackName: trackName,
                     axDescription: axDescription,
@@ -905,6 +1338,15 @@ extension AccessibilityChannel {
                     "more than one plugin-editor window exposed the requested track and parameter identity after acquisition",
                     diagnostics: diagnostics
                 ))
+            case let .pluginIdentityMismatch(observedNames):
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            case .none, .unique:
+                break
             }
             return .error(windowOpenFailedStateC(
                 operation, identity,
@@ -914,6 +1356,22 @@ extension AccessibilityChannel {
                     axDescription: axDescription,
                     runtime: runtime
                 )
+            ))
+        }
+        let popupCleanup = pluginPopupMenuCleaner(runtime)
+        guard popupCleanup.isClean else {
+            var diagnostics = pluginWindowAcquisitionDiagnostics(
+                trackName: trackName,
+                axDescription: axDescription,
+                runtime: runtime
+            )
+            diagnostics.merge(pluginPopupMenuCleanupDiagnostics(popupCleanup)) { _, new in new }
+            return .error(windowOpenFailedStateC(
+                operation,
+                identity,
+                "a Logic popup menu remained open after plugin-window acquisition",
+                diagnostics: diagnostics,
+                safeToRetry: false
             ))
         }
         let window = opened.element
@@ -936,41 +1394,33 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was no longer the unique matching window before the write",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was no longer the unique matching window before the write",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         // Step 10 — read the before value (for rollback + provenance).
         let before = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was no longer the unique matching window immediately before the write",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was no longer the unique matching window immediately before the write",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         guard targetPluginIdentityIsStable(
@@ -987,21 +1437,17 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was not unique after target-slot revalidation",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was not unique after target-slot revalidation",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         guard let currentSlider = AXLogicProElements.pluginWindowSlider(
@@ -1016,99 +1462,311 @@ extension AccessibilityChannel {
             ))
         }
 
-        // Step 11 — set AXValue (the actual write).
-        guard AXValueExtractors.setSliderValue(slider, requested, runtime: runtime.ax) else {
+        // Step 11 — choose the declared AX write method. Compressor threshold
+        // remains a single AXValue assignment; Channel EQ's measured controls
+        // require readback-driven AXValue nudges.
+        switch writeMethod {
+        case "ax_slider_axvalue":
+            guard AXValueExtractors.setSliderValue(slider, requested, runtime: runtime.ax) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .axWriteFailed,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "requested_normalized": requested,
+                        "what_was_attempted": "set AXValue \(requested) on the '\(axDescription)' slider",
+                        "what_was_observed": "the AX value write was rejected",
+                        "safe_to_retry": true,
+                        "write_attempted": true,
+                    ]
+                ))
+            }
+
+            // Step 12 — read the after value (+ value description). A write
+            // that cannot be read back is uncertain, not confirmed — fail closed.
+            guard let after = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .readbackLostAfterWrite,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "requested_normalized": requested,
+                        "what_was_attempted": "read back the '\(axDescription)' slider value after writing",
+                        "what_was_observed": "the slider value could not be read after the write",
+                        "safe_to_retry": true,
+                        "write_attempted": true,
+                    ]
+                ))
+            }
+            let observedDisplay = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
+
+            // Step 13 — tolerance gate.
+            if abs(after - requested) <= tolerance {
+                return .success(HonestContract.encodeV2StateA(extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "requested_normalized": requested,
+                    "observed_normalized": after,
+                    "observed_display": observedDisplay ?? NSNull(),
+                    "display_unit": responseDisplayUnit,
+                    "tolerance": tolerance,
+                    "write_source": "ax_plugin_window",
+                    "verify_source": "ax_plugin_window",
+                ]))
+            }
+
+            // Mismatch — roll back to the before value (re-set + re-read) so a
+            // failed verified write does not leave the parameter changed.
+            let rollback = rollbackSliderValue(
+                slider,
+                to: before,
+                writeMethod: writeMethod,
+                runtime: runtime.ax
+            )
             return .error(HonestContract.encodeV2StateC(
-                error: .axWriteFailed,
+                error: .readbackMismatch,
                 extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
                     "requested_normalized": requested,
-                    "what_was_attempted": "set AXValue \(requested) on the '\(axDescription)' slider",
-                    "what_was_observed": "the AX value write was rejected",
-                    "safe_to_retry": true,
+                    "observed_normalized": after,
+                    "observed_display": observedDisplay ?? NSNull(),
+                    "display_unit": responseDisplayUnit,
+                    "tolerance": tolerance,
+                    "rollback_attempted": rollback.attempted,
+                    "rollback_succeeded": rollback.succeeded,
+                    "rollback_outcome": rollback.walkOutcome ?? NSNull(),
+                    "rollback_to": before ?? NSNull(),
+                    "what_was_attempted": "verify the '\(axDescription)' write within tolerance \(tolerance)",
+                    "what_was_observed": "observed \(after) differs from requested \(requested) beyond tolerance",
+                    "safe_to_retry": false,
                     "write_attempted": true,
                 ]
             ))
-        }
 
-        // Step 12 — read the after value (+ value description). A write that
-        // cannot be read back is uncertain, not confirmed — fail closed.
-        guard let after = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .readbackLostAfterWrite,
-                extras: [
+        case "ax_slider_increment_walk":
+            guard let walkTarget else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .unsupportedParamReadback,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "what_was_attempted": "select the declared increment-walk target for '\(axDescription)'",
+                        "what_was_observed": "the parameter declares ax_slider_increment_walk without a raw or display target",
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            let needsDisplay: Bool
+            if case .display(_) = walkTarget {
+                needsDisplay = true
+            } else {
+                needsDisplay = false
+            }
+            let outcome = SliderIncrementWalk.walk(
+                to: walkTarget,
+                read: {
+                    guard let value = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+                        return nil
+                    }
+                    let display = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
+                    guard !needsDisplay || display != nil else { return nil }
+                    return SliderIncrementWalk.Reading(value: value, display: display ?? "")
+                },
+                nudge: { rawTarget in
+                    AXValueExtractors.setSliderValue(slider, rawTarget, runtime: runtime.ax)
+                },
+                budget: incrementWalkBudget
+            )
+            switch outcome {
+            case let .arrived(steps, final):
+                var extras: [String: Any] = [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
                     "requested_normalized": requested,
-                    "what_was_attempted": "read back the '\(axDescription)' slider value after writing",
-                    "what_was_observed": "the slider value could not be read after the write",
-                    "safe_to_retry": true,
-                    "write_attempted": true,
+                    "observed_normalized": final.value,
+                    "observed_display": final.display,
+                    "display_unit": responseDisplayUnit,
+                    "walk_steps": steps,
+                    "write_source": "ax_plugin_window",
+                    "verify_source": "ax_plugin_window",
+                ]
+                if case let .display(targetDisplay) = walkTarget {
+                    extras["requested_display"] = targetDisplay
+                } else {
+                    extras["tolerance"] = tolerance
+                }
+                return .success(HonestContract.encodeV2StateA(extras: extras))
+            case .noProgress(_, _), .budgetExhausted(_, _), .overshot(_, _), .readbackLost(_):
+                let rollback = rollbackSliderValue(
+                    slider,
+                    to: before,
+                    writeMethod: writeMethod,
+                    runtime: runtime.ax,
+                    incrementWalkBudget: incrementWalkBudget
+                )
+                return .error(incrementWalkFailureStateC(
+                    operation: operation,
+                    identity: identity,
+                    paramAlias: paramAlias,
+                    requested: requested,
+                    axDescription: axDescription,
+                    outcome: outcome,
+                    rollback: rollback,
+                    before: before
+                ))
+            }
+
+        default:
+            return .error(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "select the declared write method for '\(axDescription)'",
+                    "what_was_observed": "unsupported write method '\(writeMethod)'",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
                 ]
             ))
         }
-        let observedDisplay = AXValueExtractors.extractValueDescription(slider, runtime: runtime.ax)
-
-        // Step 13 — tolerance gate.
-        if abs(after - requested) <= tolerance {
-            return .success(HonestContract.encodeV2StateA(extras: [
-                "operation": operation,
-                "target_identity": identity,
-                "param": paramAlias,
-                "requested_normalized": requested,
-                "observed_normalized": after,
-                "observed_display": observedDisplay ?? NSNull(),
-                "display_unit": "%",
-                "tolerance": tolerance,
-                "write_source": "ax_plugin_window",
-                "verify_source": "ax_plugin_window",
-            ]))
-        }
-
-        // Mismatch — roll back to the before value (re-set + re-read) so a failed
-        // verified write does not leave the parameter changed.
-        let rollback = rollbackSliderValue(slider, to: before, runtime: runtime.ax)
-        return .error(HonestContract.encodeV2StateC(
-            error: .readbackMismatch,
-            extras: [
-                "operation": operation,
-                "target_identity": identity,
-                "param": paramAlias,
-                "requested_normalized": requested,
-                "observed_normalized": after,
-                "observed_display": observedDisplay ?? NSNull(),
-                "display_unit": "%",
-                "tolerance": tolerance,
-                "rollback_attempted": rollback.attempted,
-                "rollback_succeeded": rollback.succeeded,
-                "rollback_to": before ?? NSNull(),
-                "what_was_attempted": "verify the '\(axDescription)' write within tolerance \(tolerance)",
-                "what_was_observed": "observed \(after) differs from requested \(requested) beyond tolerance",
-                "safe_to_retry": false,
-                "write_attempted": true,
-            ]
-        ))
     }
 
-    /// Roll a slider back to its pre-write value (re-set then re-read to confirm).
-    /// Returns whether a rollback was attempted (only when a before value exists)
-    /// and whether the re-read confirms it landed within a tight epsilon.
+    private struct SliderRollback {
+        let attempted: Bool
+        let succeeded: Bool
+        let walkOutcome: String?
+    }
+
+    /// Roll a slider back to its pre-write value. A slider that required an
+    /// increment walk for the forward write gets the same walk for rollback;
+    /// using one AXValue set there would only leave it one step closer.
     private static func rollbackSliderValue(
         _ slider: AXUIElement,
         to before: Double?,
-        runtime: AXHelpers.Runtime
-    ) -> (attempted: Bool, succeeded: Bool) {
-        guard let before else { return (false, false) }
-        guard AXValueExtractors.setSliderValue(slider, before, runtime: runtime) else {
-            return (true, false)
+        writeMethod: String,
+        runtime: AXHelpers.Runtime,
+        incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    ) -> SliderRollback {
+        guard let before else { return SliderRollback(attempted: false, succeeded: false, walkOutcome: nil) }
+        switch writeMethod {
+        case "ax_slider_increment_walk":
+            let outcome = SliderIncrementWalk.walk(
+                to: .rawValue(before, tolerance: 0),
+                read: {
+                    AXValueExtractors.extractSliderValue(slider, runtime: runtime).map {
+                        SliderIncrementWalk.Reading(value: $0, display: "")
+                    }
+                },
+                nudge: { rawTarget in
+                    AXValueExtractors.setSliderValue(slider, rawTarget, runtime: runtime)
+                },
+                budget: incrementWalkBudget
+            )
+            if case .arrived(_, _) = outcome {
+                return SliderRollback(attempted: true, succeeded: true, walkOutcome: "arrived")
+            }
+            return SliderRollback(
+                attempted: true,
+                succeeded: false,
+                walkOutcome: incrementWalkOutcomeName(outcome)
+            )
+        default:
+            guard AXValueExtractors.setSliderValue(slider, before, runtime: runtime) else {
+                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+            }
+            guard let restored = AXValueExtractors.extractSliderValue(slider, runtime: runtime) else {
+                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+            }
+            return SliderRollback(
+                attempted: true,
+                succeeded: abs(restored - before) <= 0.5,
+                walkOutcome: nil
+            )
         }
-        guard let restored = AXValueExtractors.extractSliderValue(slider, runtime: runtime) else {
-            return (true, false)
+    }
+
+    private static func incrementWalkFailureStateC(
+        operation: String,
+        identity: [String: Any],
+        paramAlias: String,
+        requested: Double,
+        axDescription: String,
+        outcome: SliderIncrementWalk.WalkOutcome,
+        rollback: SliderRollback,
+        before: Double?
+    ) -> String {
+        let error: HonestContract.FailureError
+        var extras: [String: Any] = [
+            "operation": operation,
+            "target_identity": identity,
+            "param": paramAlias,
+            "requested_normalized": requested,
+            "walk_outcome": incrementWalkOutcomeName(outcome),
+            "rollback_attempted": rollback.attempted,
+            "rollback_succeeded": rollback.succeeded,
+            "rollback_outcome": rollback.walkOutcome ?? NSNull(),
+            "rollback_to": before ?? NSNull(),
+            "what_was_attempted": "walk the '\(axDescription)' slider to its requested value",
+            "safe_to_retry": false,
+            "write_attempted": true,
+        ]
+        switch outcome {
+        case let .noProgress(steps, last):
+            error = .incrementWalkNoProgress
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the slider made no reliable progress toward the requested target"
+        case let .budgetExhausted(steps, last):
+            error = .incrementWalkBudgetExhausted
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the bounded slider walk exhausted its accepted-write budget"
+        case let .overshot(steps, last):
+            error = .incrementWalkOvershot
+            extras["walk_steps"] = steps
+            extras["last_observed_normalized"] = last.value
+            extras["last_observed_display"] = last.display
+            extras["what_was_observed"] = "the slider crossed the target then moved farther away on the same side"
+        case let .readbackLost(steps):
+            error = .readbackLostAfterWrite
+            extras["walk_steps"] = steps
+            extras["what_was_observed"] = "the slider readback was unavailable during the increment walk"
+        case .arrived(_, _):
+            fatalError("arrived must not be encoded as an increment-walk failure")
         }
-        return (true, abs(restored - before) <= 0.5)
+        return HonestContract.encodeV2StateC(error: error, extras: extras)
+    }
+
+    private static func incrementWalkOutcomeName(_ outcome: SliderIncrementWalk.WalkOutcome) -> String {
+        switch outcome {
+        case .arrived(_, _): "arrived"
+        case .noProgress(_, _): "noProgress"
+        case .budgetExhausted(_, _): "budgetExhausted"
+        case .overshot(_, _): "overshot"
+        case .readbackLost(_): "readbackLost"
+        }
+    }
+
+    /// Formats a caller's engineering value for the exact string comparison
+    /// against Logic's `AXValueDescription`. This normalizes only numeric text
+    /// (`100.0` → `100`); it does not derive or imply a raw slider position.
+    private static func displayTargetValueText(_ value: Double) -> String {
+        if value.rounded() == value,
+           value >= Double(Int.min), value <= Double(Int.max) {
+            return String(Int(value))
+        }
+        return String(value)
     }
 
     private static func trackSelectionFailedStateC(_ operation: String, _ identity: [String: Any], _ detail: String) -> String {
@@ -1143,14 +1801,15 @@ extension AccessibilityChannel {
         _ operation: String,
         _ identity: [String: Any],
         _ detail: String,
-        diagnostics: [String: Any] = [:]
+        diagnostics: [String: Any] = [:],
+        safeToRetry: Bool = true
     ) -> String {
         var extras: [String: Any] = [
             "operation": operation,
             "target_identity": identity,
             "what_was_attempted": "acquire the plugin window before writing",
             "what_was_observed": detail,
-            "safe_to_retry": true,
+            "safe_to_retry": safeToRetry,
             "write_attempted": false,
         ]
         extras.merge(diagnostics) { current, _ in current }
@@ -1181,22 +1840,159 @@ extension AccessibilityChannel {
         )
     }
 
+    private static func pluginWindowPluginMismatchStateC(
+        _ operation: String,
+        _ identity: [String: Any],
+        pluginID: String,
+        observedNames: [String]
+    ) -> String {
+        let observation: String
+        if observedNames.isEmpty {
+            observation = "the candidate plugin window exposed no readable direct AXStaticText values, so its plugin identity could not be verified"
+        } else {
+            observation = "the candidate plugin window's direct AXStaticText values were "
+                + observedNames.map { "'\($0)'" }.joined(separator: ", ")
+                + "; none mapped to requested plugin id '\(pluginID)'"
+        }
+        return HonestContract.encodeV2StateC(
+            error: .pluginWindowPluginMismatch,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "observed_plugin_window_static_texts": observedNames,
+                "what_was_attempted": "verify the plugin-window header identifies \(pluginID) before writing",
+                "what_was_observed": observation,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func duplicatePluginEditorAlreadyOpenStateC(
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        track: Int,
+        insert: Int,
+        conflictingInsertIndices: [Int],
+        matchingEditorCount: Int
+    ) -> String {
+        HonestContract.encodeV2StateC(
+            error: .duplicatePluginEditorAlreadyOpen,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "conflicting_insert_indices": conflictingInsertIndices,
+                "matching_editor_count_before_press": matchingEditorCount,
+                "what_was_attempted": "confirm no \(pluginID) editor was already open before pressing insert \(insert)",
+                "what_was_observed": "\(matchingEditorCount) matching \(pluginID) editor(s) were already open on track \(track)",
+                // A duplicated plug-in can only be bound by opening its editor
+                // from a known-empty state, so an already-open editor is the one
+                // thing the caller must clear. This operation closes the editors
+                // it opens, so reaching here means either a human opened one or a
+                // previous close could not be verified.
+                "recovery_hint": "Close the open \(pluginID) editor(s) on track \(track), then retry. "
+                    + "While the plug-in occupies more than one insert, its editor must be "
+                    + "opened by this operation for the write to be attributable to insert \(insert).",
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func duplicatePluginEditorCountMismatchStateC(
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        track: Int,
+        insert: Int,
+        conflictingInsertIndices: [Int],
+        matchingEditorCount: Int
+    ) -> String {
+        HonestContract.encodeV2StateC(
+            error: .duplicatePluginEditorCountMismatch,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "conflicting_insert_indices": conflictingInsertIndices,
+                "matching_editor_count_after_press": matchingEditorCount,
+                "what_was_attempted": "press insert \(insert)'s open control once and observe exactly one \(pluginID) editor",
+                "what_was_observed": "the one target-slot press left \(matchingEditorCount) matching \(pluginID) editor(s) visible on track \(track)",
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func acquiredPluginWindowFailureStateC(
+        acquiredWindow: AXUIElement,
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        trackName: String,
+        axDescription: String,
+        detail: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> String? {
+        switch AXLogicProElements.pluginWindowMatch(
+            forTrackName: trackName,
+            matchingPluginID: pluginID,
+            matchingSliderDescription: axDescription,
+            runtime: runtime
+        ) {
+        case let .unique(currentWindow) where CFEqual(currentWindow, acquiredWindow):
+            return nil
+        case let .pluginIdentityMismatch(observedNames):
+            return pluginWindowPluginMismatchStateC(
+                operation,
+                identity,
+                pluginID: pluginID,
+                observedNames: observedNames
+            )
+        case .none, .ambiguous, .unique:
+            return windowIdentityUnresolvedStateC(
+                operation,
+                identity,
+                detail,
+                diagnostics: pluginWindowAcquisitionDiagnostics(
+                    trackName: trackName,
+                    axDescription: axDescription,
+                    runtime: runtime
+                )
+            )
+        }
+    }
+
     private static func openPluginWindowFromTargetSlot(
         _ targetSlot: AXUIElement,
+        pluginID: String,
         trackName: String,
         axDescription: String,
         runtime: AXLogicProElements.Runtime
     ) async -> AXUIElementSendable? {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
+            matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
             runtime: runtime
         ) {
         case .ambiguous:
             return nil
+        case .pluginIdentityMismatch:
+            return nil
         case let .unique(window):
             guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
                 return nil
+            }
+            // Live measurement: `열기` opens and fronts the editor; after
+            // demotion, pressing `열기` again removes it from AXWindows. The
+            // slot's open control is a toggle, so raise the known editor instead.
+            _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
+            if pluginWindowIsFront(window, runtime: runtime.ax) {
+                return AXUIElementSendable(window)
             }
         case .none:
             break
@@ -1216,6 +2012,7 @@ extension AccessibilityChannel {
             // only advance to the next ranked control if the poll shows no window.
             _ = pressElement(element, runtime: runtime.ax)
             switch await pollOpenPluginWindow(
+                pluginID: pluginID,
                 trackName: trackName,
                 axDescription: axDescription,
                 runtime: runtime,
@@ -1227,6 +2024,8 @@ extension AccessibilityChannel {
                 }
                 return AXUIElementSendable(window)
             case .ambiguous:
+                return nil
+            case .pluginIdentityMismatch:
                 return nil
             case .none:
                 continue
@@ -1286,7 +2085,7 @@ extension AccessibilityChannel {
         return CFEqual(slots[insert].element, originalSlot)
     }
 
-    private static func rankedPluginSlotOpenControls(
+    static func rankedPluginSlotOpenControls(
         in targetSlot: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [(rank: Int, element: AXUIElement)] {
@@ -1297,6 +2096,10 @@ extension AccessibilityChannel {
         return buttons.compactMap { button -> (rank: Int, element: AXUIElement)? in
             let text = AXLogicProElements.elementSearchText(button, runtime: runtime)
             guard !AXLocalePolicy.pluginBypassControl.containsAny(in: text) else { return nil }
+            guard case let .success(actionNames) = AXHelpers.getActionNamesResult(button, runtime: runtime),
+                  !pluginSlotControlOpensMenu(actionNames: actionNames) else {
+                return nil
+            }
             if text.range(of: "open", options: [.caseInsensitive]) != nil || text.contains("열기") {
                 return (0, button)
             }
@@ -1311,7 +2114,134 @@ extension AccessibilityChannel {
         .sorted { lhs, rhs in lhs.rank < rhs.rank }
     }
 
+    /// Action names are the stable capability signal; a localised button label
+    /// cannot say whether AXPress opens an editor or a menu.
+    static func pluginSlotControlOpensMenu(actionNames: [String]) -> Bool {
+        actionNames.contains(kAXShowMenuAction as String) || actionNames.contains { actionName in
+            let normalized = actionName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalized.hasPrefix("name:") else { return false }
+            return normalized.contains("menu") || normalized.contains("메뉴")
+        }
+    }
+
+    private static func pluginPopupMenuCleanupDiagnostics(
+        _ outcome: PluginPopupMenuCleanupOutcome
+    ) -> [String: Any] {
+        switch outcome {
+        case .noPopupObserved, .dismissed:
+            return [:]
+        case .popupCountUnavailable:
+            return [
+                "plugin_popup_menu_state": "window_count_unavailable",
+                "recovery_hint": "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying.",
+            ]
+        case let .couldNotDismiss(initialPopupCount, remainingPopupCount):
+            return [
+                "plugin_popup_menu_state": "could_not_be_dismissed",
+                "plugin_popup_menu_initial_window_count": initialPopupCount,
+                "plugin_popup_menu_remaining_window_count": remainingPopupCount,
+                "recovery_hint": "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler.",
+            ]
+        }
+    }
+
+    /// The live failure was one Logic-owned 230x593 CoreGraphics window at
+    /// layer 101 — the popup-menu level. Querying
+    /// `CGWindowLevelForKey(.popUpMenuWindow)` rather than baking in 101 keeps
+    /// the signal tied to macOS's popup-menu level while avoiding the AppleEvent
+    /// path that the stuck menu itself blocks.
+    private static func dismissLogicPopupMenuAfterPluginWindowAcquisition(
+        runtime: AXLogicProElements.Runtime
+    ) -> PluginPopupMenuCleanupOutcome {
+        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+            return .popupCountUnavailable
+        }
+        guard initialPopupCount > 0 else {
+            return .noPopupObserved
+        }
+
+        cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
+        if logicOwnedPopupMenuWindowCount(runtime: runtime) == 0 {
+            return .dismissed
+        }
+        postEscapeForPluginPopupMenuDismissal()
+
+        for attempt in 0..<3 {
+            guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+                return .popupCountUnavailable
+            }
+            if remainingPopupCount == 0 {
+                return .dismissed
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+            return .popupCountUnavailable
+        }
+        return .couldNotDismiss(
+            initialPopupCount: initialPopupCount,
+            remainingPopupCount: remainingPopupCount
+        )
+    }
+
+    private static func logicOwnedPopupMenuWindowCount(
+        runtime: AXLogicProElements.Runtime
+    ) -> Int? {
+        guard let logicPID = runtime.logicProPID(),
+              let windows = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+              ) as? [[String: Any]] else {
+            return nil
+        }
+        let popupMenuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
+        return windows.reduce(into: 0) { count, window in
+            guard let ownerPID = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                  let level = (window[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  ownerPID == logicPID,
+                  level == popupMenuLevel else {
+                return
+            }
+            count += 1
+        }
+    }
+
+    private static func cancelVisibleLogicPopupMenusViaAX(
+        runtime: AXLogicProElements.Runtime
+    ) {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        var menus: [AXUIElement] = []
+        let roots = [app] + windows
+        for root in roots {
+            if AXHelpers.getRole(root, runtime: runtime.ax) == (kAXMenuRole as String) {
+                menus.append(root)
+            }
+            for menu in AXHelpers.findAllDescendants(
+                of: root, role: kAXMenuRole, maxDepth: 8, runtime: runtime.ax
+            ) where !menus.contains(where: { CFEqual($0, menu) }) {
+                menus.append(menu)
+            }
+        }
+        for menu in menus where AXHelpers.getActionNames(menu, runtime: runtime.ax)
+            .contains(kAXCancelAction as String) {
+            _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime.ax)
+        }
+    }
+
+    private static func postEscapeForPluginPopupMenuDismissal() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let down = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true)
+        let up = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
     private static func pollOpenPluginWindow(
+        pluginID: String,
         trackName: String,
         axDescription: String,
         runtime: AXLogicProElements.Runtime,
@@ -1322,6 +2252,7 @@ extension AccessibilityChannel {
         repeat {
             switch AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
+                matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
                 runtime: runtime
             ) {
@@ -1329,6 +2260,8 @@ extension AccessibilityChannel {
                 lastUniqueWindow = window
             case .ambiguous:
                 return .ambiguous
+            case let .pluginIdentityMismatch(observedNames):
+                return .pluginIdentityMismatch(observedNames: observedNames)
             case .none:
                 lastUniqueWindow = nil
             }
@@ -1341,12 +2274,81 @@ extension AccessibilityChannel {
         return .none
     }
 
+    /// Wait only for a nonzero header-proven editor count after the one allowed
+    /// duplicate-instance slot press. A count of two or more returns immediately
+    /// so a hidden sibling can never be mistaken for the requested insert.
+    private static func pollMatchingPluginEditorWindows(
+        trackName: String,
+        pluginID: String,
+        runtime: AXLogicProElements.Runtime,
+        timeoutMs: Int
+    ) async -> [AXUIElement] {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
+        var matchingEditors: [AXUIElement] = []
+        repeat {
+            matchingEditors = AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            )
+            if !matchingEditors.isEmpty {
+                return matchingEditors
+            }
+            guard Date() < deadline else { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        } while Date() < deadline
+        return matchingEditors
+    }
+
     /// ADR-001 coordinate ban: open the plugin window from its slot control via
     /// AXPress only. The former element-derived `clickElementCenter` fallback is
     /// removed; `openPluginWindowFromTargetSlot` fails closed (`window_open_failed`)
     /// when no ranked control responds to AXPress, never a coordinate click.
     private static func pressElement(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
         AXHelpers.performAction(element, kAXPressAction as String, runtime: runtime)
+    }
+
+    /// Close an editor this operation opened from a known-empty state.
+    ///
+    /// Uses `kAXCloseButtonAttribute` rather than a titled button: the visible
+    /// close control is localized («닫기» on a Korean system), and the slot's own
+    /// open control is a toggle whose press would be indistinguishable from a
+    /// user reopening the editor.
+    ///
+    /// The AX return status is deliberately ignored. Logic reports non-zero from
+    /// presses that did work, so the observed editor count decides — the same
+    /// rule the acquisition itself follows.
+    ///
+    /// Returns whether the close was OBSERVED. A false return is not raised into
+    /// the envelope here: the write's own verdict is already established by then,
+    /// and a leftover editor announces itself on the next call as
+    /// `duplicate_plugin_editor_already_open`, which carries the recovery hint.
+    @discardableResult
+    private static func closePluginEditorOpenedByThisOperation(
+        _ window: AXUIElement,
+        trackName: String,
+        pluginID: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard let closeButton: AXUIElement = AXHelpers.getAttribute(
+            window, kAXCloseButtonAttribute, runtime: runtime.ax
+        ) else {
+            return false
+        }
+        for attempt in 0..<3 {
+            _ = pressElement(closeButton, runtime: runtime.ax)
+            if AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            ).isEmpty {
+                return true
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+        }
+        return false
     }
 
     private static func pluginWindowAcquisitionDiagnostics(

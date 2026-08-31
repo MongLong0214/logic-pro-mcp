@@ -48,6 +48,13 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # These labels were read on Korean Logic 12.x only. There is deliberately no translated fallback:
 # a run on another Logic locale yields an absent element instead of pressing or naming the wrong one.
 SLOT = "Channel EQ"
+# Scope the search. Unscoped, `Channel EQ` resolves TWICE — the mixer strip's insert and the
+# Inspector's copy of the same strip for the selected track. They are one plug-in seen twice, and
+# refusing on the ambiguity is right but leaves the harness unable to run. `Studio Grand` is the
+# strip that carries the Channel EQ. Korean labels are what was measured; another locale resolves
+# nothing and the run refuses rather than measuring the wrong element.
+TRACK = "Studio Grand"
+MIXER_LABELS = E.label_set("mixerNamedElement")
 OPEN = "열기"
 CLOSE = "닫기"
 EQ_GROUP = "EQ"
@@ -267,7 +274,8 @@ ev.check("301/precondition-a-project-window-is-open",
 if band is None:
     finish()
 
-slot_before = probe(tool, "plugin-slot", {"slot_label": SLOT})
+slot_before = probe(tool, "plugin-slot", {"slot_label": SLOT, "track_label": TRACK,
+                                          "mixer_label": MIXER_LABELS})
 ev.note("301/channel-eq-slot-before-opening", slot_before)
 slot_count_counterexample = derived_witness(slot_before, slot_count=0)
 ev.falsifiable(
@@ -309,6 +317,8 @@ ev.falsifiable("301/the-release-artifact-answers-a-read-only-wire-request",
 
 result = probe(tool, "channel-eq", {
     "slot_label": SLOT,
+    "track_label": TRACK,
+    "mixer_label": MIXER_LABELS,
     "open_label": OPEN,
     "close_label": CLOSE,
     "bypass_labels": BYPASS_LABELS,

@@ -186,8 +186,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 111)
-        #expect(mutatingSpecs.count == 88)   // #575 registered edit.move_to_playhead
+        #expect(OperationRegistry.specs.count == 112)
+        #expect(mutatingSpecs.count == 89)   // #575 registered edit.move_to_playhead
 
         // A mutating op that refuses BEFORE dispatch starts its trace (the
         // consent-first setup_arm_key, #413) starts no trace with the coverage
@@ -297,7 +297,7 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 111)
+        #expect(OperationRegistry.specs.count == 112)
         #expect(readOnlySpecs.count == 23)
         // Mutability is total: the mutating census (87) and this inverse gate
         // (23) together account for every registered spec, so a new operation
@@ -677,6 +677,14 @@ private func operationTraceCoverageParams(
         return [
             "track": .int(0), "insert": .int(0), "plugin": .string("logic.stock.gain"),
             "param": .string("gain_db"), "value": .double(0), "unit": .string("dB"),
+            "mode": .string("duplicate_applyback"),
+            "project_expected_path": .string(fixtures.projectPath),
+        ]
+    case .pluginsSetEQBandVerified:
+        return [
+            "track": .int(0), "insert": .int(0),
+            "band": .string("Peak 1"), "parameter": .string("Frequency"),
+            "value": .double(250), "unit": .string("raw_ax_value"),
             "mode": .string("duplicate_applyback"),
             "project_expected_path": .string(fixtures.projectPath),
         ]

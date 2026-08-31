@@ -600,7 +600,7 @@ struct WorkflowCommandCensusTests {
         // These were missing before #111 and let the census claim to be the
         // pinned public surface while omitting real production commands.
         #expect(WorkflowSkillCatalog.publicCommands["logic_plugins"]
-            == ["get_inventory", "set_param_verified", "insert_verified"])
+            == ["get_inventory", "set_param_verified", "set_eq_band_verified", "insert_verified"])
         let transport = try #require(WorkflowSkillCatalog.publicCommands["logic_transport"])
         #expect(transport.contains("toggle_autopunch"))
         let project = WorkflowSkillCatalog.publicCommands["logic_project"] ?? []

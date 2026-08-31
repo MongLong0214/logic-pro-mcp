@@ -764,11 +764,24 @@ func runChannelEQ() {
     let openLabel = configuredString("open_label")
     let closeLabel = configuredString("close_label")
     let bypassLabels = configuredStrings("bypass_labels")
+    // Scope the slot search the way every other mode here does. Without it a `Channel EQ` search
+    // finds TWO: the mixer strip's insert and the Inspector's copy of the same strip for the
+    // selected track. They are the same plug-in seen twice, and refusing on `slot_count == 2` is
+    // correct but unusable. Optional so the unscoped behaviour is unchanged for callers that do not
+    // pass a track.
+    let trackLabelRaw = configuredString("track_label")
+    let trackLabel: String? = trackLabelRaw.isEmpty ? nil : trackLabelRaw
+    let mixerLabels = configuredStringFamily("mixer_label")
     var result: JSON = ["frontmost_bundle_id": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""]
     var bypasses: [AXUIElement] = []
     var bypassBefore: AXRead<Any> = .absent
     var bypassAfter: AXRead<Any> = .absent
-    let (openResult, slot, opened) = openPlugin(slotName: slotName, openLabel: openLabel) { slot in
+    let (openResult, slot, opened) = openPlugin(
+        slotName: slotName,
+        openLabel: openLabel,
+        trackLabel: trackLabel,
+        mixerLabels: mixerLabels.isEmpty ? nil : mixerLabels
+    ) { slot in
         bypasses = childElements(slot).filter {
             roleText($0) == "AXCheckBox" && bypassLabels.contains(descriptionText($0))
         }

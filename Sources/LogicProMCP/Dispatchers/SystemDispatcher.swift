@@ -1913,6 +1913,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",
                                           project_expected_path: String }
+                  set_eq_band_verified -> { track: Int, insert: Int, band: String,
+                                             parameter: String, value: Float,
+                                             unit: "raw_ax_value"|"Hz"|"dB"|"Q",
+                                             mode: "duplicate_applyback",
+                                             project_expected_path: String }
                   insert_verified   -> { track: Int, insert: Int,
                                          plugin: "Gain"|"Channel EQ"|"Compressor",
                                          mode: "duplicate_applyback",
@@ -1969,7 +1974,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin apply-back (inventory, set_param_verified, insert_verified)
+                  logic_plugins    — Verified plugin apply-back (inventory, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health

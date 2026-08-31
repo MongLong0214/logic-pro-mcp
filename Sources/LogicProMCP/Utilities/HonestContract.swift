@@ -99,6 +99,23 @@ enum HonestContract {
         case unsupportedParamReadback = "unsupported_param_readback"
         case incompleteInventory = "incomplete_inventory"
         case targetPluginMismatch = "target_plugin_mismatch"
+        /// A candidate editor had the requested track and parameter control, but
+        /// its direct static-text header did not map to the requested canonical
+        /// plug-in id. Refused before an AX value write.
+        case pluginWindowPluginMismatch = "plugin_window_plugin_mismatch"
+        /// More than one insert on the addressed track carries the requested
+        /// canonical plug-in identity. Logic's accessible editor identity
+        /// cannot distinguish those instances, so opening one could write the
+        /// wrong insert. Refuse before window acquisition.
+        case ambiguousPluginInstance = "ambiguous_plugin_instance"
+        /// The requested plug-in occupies multiple inserts and a matching
+        /// header-proven editor was already visible before the target slot could
+        /// establish provenance by opening one editor from a zero-editor state.
+        case duplicatePluginEditorAlreadyOpen = "duplicate_plugin_editor_already_open"
+        /// The requested plug-in occupies multiple inserts, but one target-slot
+        /// open press did not leave exactly one header-proven matching editor.
+        /// This includes a hidden sibling restored by the press.
+        case duplicatePluginEditorCountMismatch = "duplicate_plugin_editor_count_mismatch"
         case slotOccupied = "slot_occupied"
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
@@ -145,6 +162,17 @@ enum HonestContract {
         case windowIdentityUnresolved = "window_identity_unresolved"
         case paramControlNotFound = "param_control_not_found"
         case readbackLostAfterWrite = "readback_lost_after_write"
+        /// An AXValue nudge was accepted but the readback did not establish
+        /// reliable progress toward the requested target. This is distinct from
+        /// `ax_write_failed`: the write may have been accepted.
+        case incrementWalkNoProgress = "increment_walk_no_progress"
+        /// The bounded AXValue-nudge loop reached its caller-owned cap without
+        /// arriving. It is not an operation timeout: the explicit write budget
+        /// is the fact a caller can change or diagnose.
+        case incrementWalkBudgetExhausted = "increment_walk_budget_exhausted"
+        /// The nudge loop crossed the target and then moved farther away on the
+        /// same side, so continuing would no longer be trustworthy.
+        case incrementWalkOvershot = "increment_walk_overshot"
         case postInsertPluginMismatch = "post_insert_plugin_mismatch"
         case postInsertReadbackUnavailable = "post_insert_readback_unavailable"
         /// `logic_plugins.insert_verified` reached its live-write boundary with
@@ -421,6 +449,10 @@ enum HonestContract {
         FailureError.unsupportedParamReadback.rawValue,
         FailureError.incompleteInventory.rawValue,
         FailureError.targetPluginMismatch.rawValue,
+        FailureError.pluginWindowPluginMismatch.rawValue,
+        FailureError.ambiguousPluginInstance.rawValue,
+        FailureError.duplicatePluginEditorAlreadyOpen.rawValue,
+        FailureError.duplicatePluginEditorCountMismatch.rawValue,
         FailureError.slotOccupied.rawValue,
         FailureError.trackSelectionFailed.rawValue,
         FailureError.staleSnapshot.rawValue,
@@ -429,6 +461,9 @@ enum HonestContract {
         FailureError.windowIdentityUnresolved.rawValue,
         FailureError.paramControlNotFound.rawValue,
         FailureError.readbackLostAfterWrite.rawValue,
+        FailureError.incrementWalkNoProgress.rawValue,
+        FailureError.incrementWalkBudgetExhausted.rawValue,
+        FailureError.incrementWalkOvershot.rawValue,
         FailureError.postInsertPluginMismatch.rawValue,
         FailureError.postInsertReadbackUnavailable.rawValue,
         FailureError.insertNotAxAutomatable.rawValue,

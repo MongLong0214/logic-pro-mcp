@@ -375,21 +375,27 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
 func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
     let engine = MIDIEngine()
 
-    // v3.4.4 (CI hotfix): GitHub Actions macos-15-arm64 runners do not
-    // expose a working CoreMIDI server in the sandboxed runner image,
-    // so `MIDIClientCreate` returns OSStatus -50 (`kMIDINotPermitted`).
-    // The smoke test still exercises the production path on real macOS
-    // hosts; on a runner where MIDI client creation is denied we treat
-    // it as a precondition-not-met and return cleanly. The error is
-    // logged so a regression that breaks `start()` for a different
-    // reason still surfaces.
+    // A client-creation failure has two causes and only one is a defect: the
+    // environment refusing CoreMIDI, or start() being broken. `coreMIDIRefuses
+    // AClientRightNow` separates them by asking CoreMIDI directly, so this can
+    // still fail when the product path is the broken half. It replaced a check
+    // for one hardcoded status (-50, what a CI runner returns), which read every
+    // OTHER environmental refusal as a product failure.
     do {
         try await engine.start()
     } catch let error as MIDIEngineError {
-        if case .clientCreationFailed(let status) = error, status == -50 {
-            return
+        guard case .clientCreationFailed(let startStatus) = error,
+              let probeStatus = coreMIDIRefusesAClientRightNow() else {
+            // Either a different failure, or CoreMIDI WILL hand this process a
+            // client — in which case start() is the broken half and must fail.
+            throw error
         }
-        throw error
+        reportCoreMIDIUnavailable(
+            "testMIDIEngineProductionRuntimeStartStopSmoke",
+            startStatus: startStatus,
+            probeStatus: probeStatus
+        )
+        return
     }
     #expect(await engine.isActive)
 
@@ -398,4 +404,25 @@ func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
 
     await engine.stop()
     #expect(!(await engine.isActive))
+}
+
+@Test(coreMIDIUnavailableInSandbox)
+func testCoreMIDIAvailabilityProbeAnswersForItselfRatherThanExcusingAnything() {
+    // The probe is what keeps the production smoke tests from excusing a real
+    // defect. If it ever reported a refusal on a host where CoreMIDI is fine,
+    // those tests would pass no matter how broken start() became.
+    //
+    // On a host that CAN create a client this must be nil. On a host that
+    // cannot, the smoke tests are skipped and so is this — the trait and the
+    // probe agree about what "unavailable" means.
+    let refusal = coreMIDIRefusesAClientRightNow()
+    if let refusal {
+        // Not a failure: the environment genuinely refuses. Say so loudly so a
+        // green run is never mistaken for one that exercised CoreMIDI.
+        print("SKIPPED probe self-check: CoreMIDI refused a client (status \(refusal)).")
+        return
+    }
+    // The probe must also leave nothing behind: a leaked client would change
+    // MIDIServer's lifecycle for every later test in this process.
+    #expect(coreMIDIRefusesAClientRightNow() == nil)
 }

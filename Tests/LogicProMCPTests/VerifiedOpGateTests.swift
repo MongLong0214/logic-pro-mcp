@@ -95,14 +95,14 @@ struct VerifiedOpGateSharedTests {
 
 // Lives in this serialized suite (moved from PluginsDispatcherReachabilityTests)
 // because it drives the shared VerifiedOpGate via
-// callTool(set_param_verified/insert_verified) → runVerified.tryAcquire/release.
+// callTool(set_param_verified/set_eq_band_verified/insert_verified) → runVerified.tryAcquire/release.
 // Run in parallel with the gate tests above it could free a peer's claim, since
 // VerifiedOpGate.release() is token-less. This is a Plane-1 reachability check.
 @Test func testPluginsToolReachesRouterNotUnknownTool() async {
     let server = LogicProServer()
     let handlers = await server.makeHandlers()
 
-    for command in ["get_inventory", "set_param_verified", "insert_verified"] {
+    for command in ["get_inventory", "set_param_verified", "set_eq_band_verified", "insert_verified"] {
         let r = await handlers.callTool(CallTool.Parameters(
             name: "logic_plugins",
             arguments: ["command": .string(command), "params": .object(["track": .int(0)])]

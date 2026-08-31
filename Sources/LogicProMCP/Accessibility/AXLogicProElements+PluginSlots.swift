@@ -347,6 +347,11 @@ extension AXLogicProElements {
         case none
         case unique(AXUIElement)
         case ambiguous
+        /// A candidate has the requested track and parameter control, but its
+        /// direct static-text header does not prove the requested plug-in.
+        /// `observedNames` is empty when those children exposed no readable
+        /// values, which is deliberately not accepted as identity evidence.
+        case pluginIdentityMismatch(observedNames: [String])
     }
 
     /// Resolve the display name of the track header at `index` (0-based), or nil
@@ -380,33 +385,19 @@ extension AXLogicProElements {
         return names
     }
 
-    /// Find an OPEN plugin window whose AX title equals `trackName` AND which
-    /// exposes a 1-level `AXSlider` matching `axDescription`. T0 evidence: a
-    /// stock-effect plugin window is a separate `AXWindow`/`AXDialog` titled with
-    /// the track name; its parameter controls are flat `AXSlider`s at the
-    /// window's first child level, and only `AXDescription` is a stable matcher.
+    /// Find an OPEN plug-in editor whose title equals `trackName`, whose direct
+    /// `AXStaticText` children name `pluginID` through the verified catalog's
+    /// observed-name aliases, and which exposes exactly one matching slider.
     ///
-    /// Returns nil when no such window is open or when more than one candidate
-    /// matches (the caller then attempts to open one, or fails closed). Both the
-    /// window role/title and slider presence are required so an unrelated or
-    /// ambiguous same-titled window is never mistaken for the plugin window.
-    static func openPluginWindow(
-        forTrackName trackName: String,
-        matchingSliderDescription axDescription: String,
-        runtime: Runtime = .production
-    ) -> AXUIElement? {
-        if case let .unique(window) = pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
-            runtime: runtime
-        ) {
-            return window
-        }
-        return nil
-    }
-
+    /// Measured for stock Logic editors only: their direct static-text children
+    /// contain the English plug-in display name in both editor and Controls
+    /// views, but its position varies and other labels are localized. Third-party
+    /// editors and catalog/display-name differences remain unmeasured, so their
+    /// observed names must resolve through `VerifiedPluginCatalog` rather than
+    /// being accepted by raw string comparison.
     static func pluginWindowMatch(
         forTrackName trackName: String,
+        matchingPluginID pluginID: String,
         matchingSliderDescription axDescription: String,
         runtime: Runtime = .production
     ) -> PluginWindowMatch {
@@ -416,6 +407,8 @@ extension AXLogicProElements {
         ) ?? []
         let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
         var match: AXUIElement?
+        var mismatchedObservedNames: [String] = []
+        var foundMismatchedCandidate = false
         for window in windows {
             guard isPluginEditorWindow(window, runtime: runtime.ax) else { continue }
             guard AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else { continue }
@@ -428,12 +421,75 @@ extension AXLogicProElements {
             case .ambiguous:
                 return .ambiguous
             case .unique:
+                let observedNames = pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax)
+                guard observedNames.contains(where: {
+                    VerifiedPluginCatalog.pluginID(forObservedName: $0) == pluginID
+                }) else {
+                    foundMismatchedCandidate = true
+                    mismatchedObservedNames.append(contentsOf: observedNames)
+                    continue
+                }
                 guard match == nil else { return .ambiguous }
                 match = window
             }
         }
-        guard let match else { return .none }
-        return .unique(match)
+        if let match {
+            return .unique(match)
+        }
+        if foundMismatchedCandidate {
+            return .pluginIdentityMismatch(observedNames: Array(Set(mismatchedObservedNames)).sorted())
+        }
+        return .none
+    }
+
+    /// Return every OPEN plug-in editor whose title identifies `trackName` and
+    /// whose direct static-text header maps to `pluginID`. This deliberately
+    /// does not require a parameter control: duplicate-insert acquisition uses
+    /// it to prove which editor the slot's open control created *before* the
+    /// parameter-specific slider match runs.
+    ///
+    /// The same direct-header rule as `pluginWindowMatch` is retained here; a
+    /// window title, descendant text, or geometry is not evidence of plug-in
+    /// identity.
+    static func matchingPluginEditorWindows(
+        forTrackName trackName: String,
+        matchingPluginID pluginID: String,
+        runtime: Runtime = .production
+    ) -> [AXUIElement] {
+        guard let app = appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return windows.filter { window in
+            guard isPluginEditorWindow(window, runtime: runtime.ax),
+                  AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else {
+                return false
+            }
+            let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title == target else { return false }
+            return pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax).contains {
+                VerifiedPluginCatalog.pluginID(forObservedName: $0) == pluginID
+            }
+        }
+    }
+
+    /// Return only readable values of direct static-text children. Do not fall
+    /// back to a title, a descendant, or a fixed child index: neither identifies
+    /// the plug-in editor reliably.
+    private static func pluginWindowHeaderStaticTextValues(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [String] {
+        AXHelpers.getChildren(window, runtime: runtime).compactMap { child in
+            guard AXHelpers.getRole(child, runtime: runtime) == (kAXStaticTextRole as String),
+                  let value = AXHelpers.getValue(child, runtime: runtime) as? String else {
+                return nil
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
     }
 
     /// Find the parameter `AXSlider` inside a plugin window by its

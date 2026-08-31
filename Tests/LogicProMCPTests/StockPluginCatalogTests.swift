@@ -408,9 +408,10 @@ struct StockPluginCatalogTests {
     @Test("insertable write capabilities match the live insert allowlist")
     func insertOnlyMatchesInsertAllowlist() {
         let snapshot = StockPluginCatalog.defaultSnapshot(census: .deterministic())
-        // T5: Compressor is now `parameter_write_readback` (its `threshold` is
-        // verified-writable via AX), while still being insertable. Gain and
-        // Channel EQ remain `insert_only`. The insert allowlist is the union.
+        // Compressor and Channel EQ expose `parameter_write_readback` catalog
+        // entries while remaining insertable. Channel EQ's entry records only
+        // raw-range/nudge evidence; it does not claim a completed live round
+        // trip. The insert allowlist is the union.
         let insertable = snapshot.entries.filter {
             $0.safeWriteCapabilities == .insertOnly || $0.safeWriteCapabilities == .parameterWriteReadback
         }
@@ -429,6 +430,8 @@ struct StockPluginCatalogTests {
         let compressor = snapshot.entries.first { $0.id == "logic.stock.effect.compressor" }
         #expect(compressor?.safeWriteCapabilities == .parameterWriteReadback,
                 "Compressor threshold is verified-writable (T5)")
+        let channelEQ = snapshot.entries.first { $0.id == "logic.stock.effect.channel_eq" }
+        #expect(channelEQ?.safeWriteCapabilities == .parameterWriteReadback)
         let nonInsertable = snapshot.entries.first { $0.id == "logic.stock.effect.chromaverb" }
         #expect(nonInsertable?.safeWriteCapabilities == StockPluginSafeWriteCapability.none)
         #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaVerb") == nil)

@@ -42,7 +42,7 @@ private func sharedObject(_ result: ChannelResult) -> [String: Any]? {
     // With no channels registered the router returns channels_exhausted — which
     // proves the op IS in the table (it got past the routingTable lookup).
     let router = ChannelRouter()
-    for operation in ["plugin.get_inventory", "plugin.set_param_verified", "plugin.insert_verified"] {
+    for operation in ["plugin.get_inventory", "plugin.set_param_verified", "plugin.set_eq_band_verified", "plugin.insert_verified"] {
         let result = await router.route(operation: operation, params: ["track": "0"])
         let msg = result.message
         #expect(!msg.contains("Unknown operation"), "\(operation): Plane 2 — not in routing table")
@@ -52,7 +52,7 @@ private func sharedObject(_ result: ChannelResult) -> [String: Any]? {
 @Test func testPluginsVerifiedOpsRouteAXOnlyNoFallback() async {
     // R16: verified ops must be AX-only (single-channel chain) so a failure
     // never falls back to Scripter/MCU and fabricates a false verified result.
-    for operation in ["plugin.get_inventory", "plugin.set_param_verified", "plugin.insert_verified"] {
+    for operation in ["plugin.get_inventory", "plugin.set_param_verified", "plugin.set_eq_band_verified", "plugin.insert_verified"] {
         let chain = ChannelRouter.routingTable[operation]
         #expect(chain == [.accessibility], "\(operation) must route through .accessibility alone")
     }
@@ -113,6 +113,20 @@ private func makeFakeAXChannel() -> (AccessibilityChannel, FakeAXRuntimeBuilder)
     let obj = sharedObject(result)
     #expect(obj?["hc_schema"] as? Int == 2)
     #expect(obj?["operation"] as? String == "logic_plugins.set_param_verified")
+}
+
+@Test func testPluginSetEQBandVerifiedReachesChannelExecute() async {
+    let (channel, _) = makeFakeAXChannel()
+    let result = await channel.execute(operation: "plugin.set_eq_band_verified", params: [
+        "track": "0", "insert": "0", "band": "Peak 1", "parameter": "Frequency",
+        "value": "250", "unit": "raw_ax_value", "mode": "duplicate_applyback",
+        "project_expected_path": "/tmp/x.logicx",
+    ])
+    let text = result.message
+    #expect(!text.contains("Unsupported AX operation"), "Plane 3 — set_eq_band_verified not handled in execute")
+    let obj = sharedObject(result)
+    #expect(obj?["hc_schema"] as? Int == 2)
+    #expect(obj?["operation"] as? String == "logic_plugins.set_eq_band_verified")
 }
 
 @Test func testPluginInsertVerifiedReachesChannelExecute() async {

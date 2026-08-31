@@ -325,18 +325,21 @@ func testMIDIPortManagerProductionRuntimeSmokeCreatesAndStopsPorts() async throw
     let sendOnlyName = "LogicProMCP-Smoke-\(UUID().uuidString)"
     let bidirectionalName = "LogicProMCP-Smoke-Bidi-\(UUID().uuidString)"
 
-    // v3.4.4 (CI hotfix): GitHub Actions macos-15-arm64 runners cannot
-    // create CoreMIDI clients (`MIDIClientCreate` returns OSStatus -50).
-    // The production smoke test still runs on real macOS hosts; CI
-    // skips with a clean return rather than failing on a precondition
-    // we can't satisfy in the sandbox.
+    // See the note on the MIDIEngine production smoke test: the refusal is
+    // confirmed against CoreMIDI directly rather than matched to one status.
     do {
         try await manager.start()
     } catch let error as MIDIPortError {
-        if case .clientCreationFailed(let status) = error, status == -50 {
-            return
+        guard case .clientCreationFailed(let startStatus) = error,
+              let probeStatus = coreMIDIRefusesAClientRightNow() else {
+            throw error
         }
-        throw error
+        reportCoreMIDIUnavailable(
+            "testMIDIPortManagerProductionRuntimeSmokeCreatesAndStopsPorts",
+            startStatus: startStatus,
+            probeStatus: probeStatus
+        )
+        return
     }
 
     let sendOnly = try await manager.createSendOnlyPort(name: sendOnlyName)

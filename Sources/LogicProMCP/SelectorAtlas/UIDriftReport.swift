@@ -53,7 +53,7 @@ private let operationsBySelector: [SelectorID: [OperationID]] = [
     .mixerStripVolumeFader: [.mixerSetVolume],
     .mixerStripSendSlot: [],
     .pluginWindowTitle: [.pluginsGetInventory, .pluginsInsertVerified],
-    .pluginParameterControl: [.pluginsSetParamVerified, .mixerSetPluginParam],
+    .pluginParameterControl: [.pluginsSetParamVerified, .pluginsSetEQBandVerified, .mixerSetPluginParam],
     .projectSaveFilenameField: [.projectSaveAs],
 ]
 
