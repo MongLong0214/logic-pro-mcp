@@ -743,12 +743,24 @@ enum AXValueExtractors {
         return nil
     }
 
+    /// Track colour is NOT readable through Accessibility. Measured, not assumed (#448).
+    ///
+    /// A sweep of every element in every Logic window for any attribute whose name contains
+    /// `color` or `colour` returned **zero** on Logic 12.x. Not one element in the tree carries
+    /// one, so there is nothing for this to read and `nil` is the only honest answer.
+    ///
+    /// What stood here before guessed: it lower-cased the header's `AXDescription` and, if that
+    /// contained the English word "color", returned the WHOLE description as the colour. Two
+    /// things were wrong with it. On a localized Logic the description is a sentence like
+    /// `1개의 'Absolute Zero' 트랙`, which never contains that word, so the branch was dead and
+    /// the comment's "may expose" was a hypothesis nobody had tested. And on any Logic, a track
+    /// NAMED something like "Colorful Bass" WOULD match, and the caller would receive a
+    /// localized sentence about track count as a colour value.
+    ///
+    /// Kept as a named function rather than deleting the field so the wall is stated where
+    /// somebody looks for it. `set_color_verified` cannot reach State A by readback while this
+    /// holds: there is nothing to read back, and AX settability has lied in this codebase before.
     private static func extractTrackColor(from header: AXUIElement, runtime: AXHelpers.Runtime) -> String? {
-        // Logic Pro may expose color via a custom attribute or the element's description
-        let desc = AXHelpers.getDescription(header, runtime: runtime) ?? ""
-        if desc.lowercased().contains("color") {
-            return desc
-        }
-        return nil
+        nil
     }
 }
