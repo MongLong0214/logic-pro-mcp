@@ -1,9 +1,9 @@
 // CoreMIDI half of Scripts/test_mcu_feedback_jsonrpc_liveness.py.
 //
-// It deliberately creates a virtual *source*, routes it to the server's
-// LogicProMCP-MCU-Internal destination with a MIDI Thru connection, and emits
-// the MCU frames observed from Logic Pro.  This keeps the Python driver free
-// of CoreMIDI bindings while exercising the same endpoint direction as Logic.
+// It opens an output port and sends the MCU frames observed from Logic Pro
+// straight to the server's LogicProMCP-MCU-Internal destination, the way Logic
+// delivers to a bound control surface.  This keeps the Python driver free of
+// CoreMIDI bindings while exercising the same endpoint direction as Logic.
 
 #include <CoreMIDI/CoreMIDI.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -41,13 +41,22 @@ static MIDIEndpointRef findDestination(const char *targetName) {
     return found;
 }
 
-static OSStatus sendPacket(MIDIEndpointRef source, const Byte *bytes, UInt16 count) {
+// Send straight to the server's destination through an output port, the way a
+// real MIDI application (Logic included) delivers to a bound surface.
+//
+// An earlier version created a virtual source and a MIDIThruConnection instead.
+// That routed through `MIDISource::AddThruConnection`, and MIDIServer segfaulted
+// there twice on a developer host — EXC_BAD_ACCESS inside
+// `MIDIDestination::SendPacketsNow`, with crash reports to show for it. A dead
+// MIDIServer takes every CoreMIDI client in every process down with it, so a
+// harness must not reach that path.
+static OSStatus sendPacket(MIDIPortRef port, MIDIEndpointRef destination, const Byte *bytes, UInt16 count) {
     Byte storage[1024];
     if (count > sizeof(storage) - sizeof(MIDIPacketList)) return -50;  // paramErr
     MIDIPacketList *list = (MIDIPacketList *)storage;
     MIDIPacket *packet = MIDIPacketListInit(list);
     if (MIDIPacketListAdd(list, sizeof(storage), packet, 0, count, bytes) == NULL) return -50;
-    return MIDIReceived(source, list);
+    return MIDISend(port, destination, list);
 }
 
 int main(int argc, const char *argv[]) {
@@ -67,37 +76,12 @@ int main(int argc, const char *argv[]) {
         return kDestinationNotFound;
     }
 
-    MIDIEndpointRef source = 0;
-    status = MIDISourceCreate(client, CFSTR("LogicProMCP-Issue683-Feedback"), &source);
+    MIDIPortRef outputPort = 0;
+    status = MIDIOutputPortCreate(client, CFSTR("LogicProMCP-Issue683-Out"), &outputPort);
     if (status != noErr) {
-        fprintf(stderr, "CoreMIDI unavailable: MIDISourceCreate status %d\n", (int)status);
+        fprintf(stderr, "CoreMIDI unavailable: MIDIOutputPortCreate status %d\n", (int)status);
         MIDIClientDispose(client);
         return kCoreMIDIUnavailable;
-    }
-
-    MIDIThruConnectionParams params;
-    MIDIThruConnectionParamsInitialize(&params);
-    params.numSources = 1;
-    params.sources[0].endpointRef = source;
-    params.numDestinations = 1;
-    params.destinations[0].endpointRef = destination;
-
-    MIDIThruConnectionRef connection = 0;
-    CFDataRef paramsData = CFDataCreate(
-        NULL, (const UInt8 *)&params, (CFIndex)MIDIThruConnectionParamsSize(&params)
-    );
-    if (paramsData == NULL) {
-        MIDIEndpointDispose(source);
-        MIDIClientDispose(client);
-        return kConnectionFailed;
-    }
-    status = MIDIThruConnectionCreate(CFSTR("LogicProMCP-Issue683-Route"), paramsData, &connection);
-    CFRelease(paramsData);
-    if (status != noErr) {
-        fprintf(stderr, "Could not connect virtual source to server destination: status %d\n", (int)status);
-        MIDIEndpointDispose(source);
-        MIDIClientDispose(client);
-        return kConnectionFailed;
     }
 
     // Device queries include ids that this server does not own, followed by a
@@ -127,11 +111,9 @@ int main(int argc, const char *argv[]) {
     // Confirm a packet has entered the route before the Python driver sends
     // tools/list. The remaining packets stay in flight concurrently with that
     // protocol-local request.
-    status = sendPacket(source, packets[0], lengths[0]);
+    status = sendPacket(outputPort, destination, packets[0], lengths[0]);
     if (status != noErr) {
-        fprintf(stderr, "MIDIReceived failed: status %d\n", (int)status);
-        MIDIThruConnectionDispose(connection);
-        MIDIEndpointDispose(source);
+        fprintf(stderr, "MIDISend failed: status %d\n", (int)status);
         MIDIClientDispose(client);
         return kSendFailed;
     }
@@ -141,19 +123,15 @@ int main(int argc, const char *argv[]) {
     // Same cardinality as the captured 15-second exchange, but paced at 10ms
     // so this remains a liveness check rather than a throughput benchmark.
     for (size_t index = 1; index < 142; index++) {
-        status = sendPacket(source, packets[index % packetCount], lengths[index % packetCount]);
+        status = sendPacket(outputPort, destination, packets[index % packetCount], lengths[index % packetCount]);
         if (status != noErr) {
-            fprintf(stderr, "MIDIReceived failed: status %d\n", (int)status);
-            MIDIThruConnectionDispose(connection);
-            MIDIEndpointDispose(source);
+            fprintf(stderr, "MIDISend failed: status %d\n", (int)status);
             MIDIClientDispose(client);
             return kSendFailed;
         }
         usleep(10 * 1000);
     }
 
-    MIDIThruConnectionDispose(connection);
-    MIDIEndpointDispose(source);
     MIDIClientDispose(client);
     return 0;
 }

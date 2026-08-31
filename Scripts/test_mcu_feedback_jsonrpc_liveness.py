@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import Optional
 import time
 from pathlib import Path
 
@@ -126,8 +127,35 @@ def start_feedback_driver(driver: Path) -> subprocess.Popen[str]:
     )
 
 
+def core_midi_refuses_a_client(driver: Path) -> Optional[str]:
+    """Ask CoreMIDI directly whether it will serve this host right now.
+
+    Without this the check reports FAIL for a condition it cannot do anything
+    about. MIDIServer is an on-demand daemon: it exits when idle, relaunches on
+    the next connection, and can die outright — measured on a developer host,
+    with crash reports, after which every `MIDIClientCreate` in every process
+    returns -2 until it comes back. A run started inside that window fails for
+    a reason that has nothing to do with the server under test.
+
+    It probes with the same driver binary, which returns CORE_MIDI_UNAVAILABLE
+    when it cannot get a client or an output port, so the probe cannot disagree
+    with what the real run would hit. It is not vacuous: when CoreMIDI IS
+    serving, this returns None and every later failure is reported as a failure.
+    """
+    probe = subprocess.run(
+        [str(driver), "LogicProMCP-CoreMIDI-Availability-Probe"],
+        cwd=REPO, text=True, capture_output=True, timeout=20,
+    )
+    if probe.returncode == CORE_MIDI_UNAVAILABLE:
+        return probe.stderr.strip() or "CoreMIDI refused this process a client"
+    return None
+
+
 def main() -> None:
     server, driver = build_paths()
+    refusal = core_midi_refuses_a_client(driver)
+    if refusal is not None:
+        skip(f"CoreMIDI is not serving this host: {refusal}")
     process = subprocess.Popen(
         [str(server)],
         cwd=REPO,
