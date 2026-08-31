@@ -109,6 +109,13 @@ grep -v '| #300 |' "$TMP/roadmap-ok.md" > "$TMP/roadmap-dropped.md"
 expect_exit 1 "the closing PR must still list the issue"  "$TMP/roadmap-dropped.md" "$TMP/issues-ok.json" \
   "Closes #300"
 
+# The row this PR closes must be flipped IN this PR. Leaving it OPEN agrees with GitHub while
+# the PR is open — both say open — and then the merge closes the issue and strands the row, so
+# `main` fails for a state no PR was ever told about. Measured twice: #684 closing #678, and
+# #725 closing #301. This is the only place the fix is cheap.
+expect_exit 1 "a row this PR closes may not stay OPEN"    "$TMP/roadmap-ok.md" "$TMP/issues-ok.json" \
+  "Closes #284"
+
 # The failing cases must name the issue they are about, or the report is unusable in CI.
 OUT="$(python3 "$GUARD" --roadmap "$TMP/roadmap-ok.md" --issues-json "$TMP/issues-extra-open.json" 2>&1)" || true
 if printf '%s' "$OUT" | grep -q '#683'; then

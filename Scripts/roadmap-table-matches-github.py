@@ -141,6 +141,13 @@ def main():
 
     wrong_state = []
     not_an_issue = []
+    # A row this pull request will close but which still says OPEN. It AGREES with
+    # GitHub right now — both say open — and then merging closes the issue and
+    # leaves the row behind, so `main` fails for a state no pull request was ever
+    # told about. Measured: #725 said "Closes #301", left that row OPEN, went
+    # green, and broke `main` the moment it merged. Checking it here is the only
+    # place the fix is cheap; on `main` it is already too late.
+    will_close_but_says_open = []
     for number, claimed in sorted(table.items()):
         actual = issues.get(number)
         if actual is None:
@@ -150,13 +157,15 @@ def main():
             if claimed == "CLOSED" and actual == "OPEN" and number in pending:
                 continue
             wrong_state.append((number, claimed, actual))
+        elif claimed == "OPEN" and number in pending:
+            will_close_but_says_open.append(number)
 
     # No exemption here, deliberately. A pull request that closes an issue still has to LIST it —
     # marked closed — and exempting it from this direction would let the closing PR delete the row
     # instead, which is the drift this half exists to catch.
     open_and_absent = sorted(n for n, s in issues.items() if s == "OPEN" and n not in table)
 
-    if not (wrong_state or not_an_issue or open_and_absent):
+    if not (wrong_state or not_an_issue or open_and_absent or will_close_but_says_open):
         print(f"roadmap table agrees with GitHub: {len(table)} rows, "
               f"{sum(1 for s in issues.values() if s == 'OPEN')} open issues all listed")
         return OK
@@ -168,6 +177,9 @@ def main():
         print(f"  #{number}: listed in the table, but GitHub has no such issue")
     for number in open_and_absent:
         print(f"  #{number}: open on GitHub, absent from the table")
+    for number in will_close_but_says_open:
+        print(f"  #{number}: this pull request closes it, but the row still says OPEN. "
+              f"Merging would close the issue and leave the row, failing main.")
     print("\nThe table is the source of truth for what is open. Update it in this PR.")
     return DRIFT
 
