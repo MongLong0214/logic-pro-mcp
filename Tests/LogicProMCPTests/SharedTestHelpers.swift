@@ -40,10 +40,10 @@ let coreMIDIUnavailableInSandbox: ConditionTrait = .disabled(
 /// die outright, with a crash report to show for it, after which every client
 /// creation in every process fails until it comes back.
 ///
-/// This probe is deliberately NOT vacuous. It uses CoreMIDI directly rather than
-/// the code under test, so when the product's own start path is the broken half
-/// this returns nil and the caller rethrows. It can only excuse a failure that
-/// the bare framework reproduces.
+/// A post-failure probe alone is not independent causation: a broken product
+/// start can poison the shared service and make that immediate probe fail too.
+/// Production smoke tests therefore retain this result *before* their product
+/// path and compare it with a second probe after a client-creation failure.
 func coreMIDIRefusesAClientRightNow() -> OSStatus? {
     var client = MIDIClientRef()
     let status = MIDIClientCreate("LogicProMCP-availability-probe" as CFString, nil, nil, &client)
@@ -54,14 +54,30 @@ func coreMIDIRefusesAClientRightNow() -> OSStatus? {
     return status
 }
 
+/// An environmental refusal may excuse a smoke-test client-creation failure
+/// only when a CoreMIDI refusal was already observable before the product start
+/// ran and remains observable after it. A healthy preflight that turns into a
+/// refusal is never excused: the product path may have caused it (or the host
+/// changed underneath it), and either way the smoke test did not establish a
+/// pre-existing environmental limitation.
+func coreMIDIRefusalPredatedProductStart(before: OSStatus?, after: OSStatus?) -> Bool {
+    before != nil && after != nil
+}
+
 /// Report a production smoke test that could not run because CoreMIDI refused
 /// this process a client. Loud on stdout: a silent return is indistinguishable
 /// from a test that actually exercised the path.
-func reportCoreMIDIUnavailable(_ test: String, startStatus: OSStatus, probeStatus: OSStatus) {
+func reportCoreMIDIUnavailable(
+    _ test: String,
+    startStatus: OSStatus,
+    preflightProbeStatus: OSStatus,
+    postFailureProbeStatus: OSStatus
+) {
     print(
         "SKIPPED \(test): CoreMIDI refused a client to this process "
-            + "(start status \(startStatus), independent probe \(probeStatus)). "
-            + "The production path was NOT exercised."
+            + "before and after the product path (preflight \(preflightProbeStatus), "
+            + "start status \(startStatus), post-failure probe \(postFailureProbeStatus)). "
+            + "The path could not be qualified on this host."
     )
 }
 

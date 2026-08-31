@@ -8,6 +8,11 @@ protocol MCUTransportProtocol: Actor {
         onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
         onIngressDrop: @escaping @Sendable (UInt64) -> Void
     ) async throws
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void,
+        onCallbackWorkBudgetDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws
     func stop() async
 }
 
@@ -22,6 +27,19 @@ extension MCUTransportProtocol {
         _ = onIngressDrop
         try await start(onReceive: onReceive)
     }
+
+    /// A valid event list can exceed one callback's bounded work budget. That
+    /// is lossy and must be reported, but unlike malformed packet structure it
+    /// must not finish the MCU ingress. Test transports retain their original
+    /// two-sink implementation unless they need to model this distinction.
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void,
+        onCallbackWorkBudgetDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws {
+        _ = onCallbackWorkBudgetDrop
+        try await start(onReceive: onReceive, onIngressDrop: onIngressDrop)
+    }
 }
 
 /// Snapshot of the MCU callback-to-actor hand-off.
@@ -30,10 +48,18 @@ extension MCUTransportProtocol {
 /// CoreMIDI callback must be able to reject an overload without awaiting an
 /// actor or touching a JSON-RPC-owned queue.
 struct MCUFeedbackIngressSnapshot: Sendable, Equatable {
+    /// Every parsed or declared event that could not reach the ingress.
     let droppedEventCount: UInt64
+    /// Subset of `droppedEventCount` omitted solely to keep one CoreMIDI
+    /// callback bounded. This is observable but not fatal to the channel.
+    let callbackWorkBudgetDroppedEventCount: UInt64
     let overflowed: Bool
 
-    static let empty = MCUFeedbackIngressSnapshot(droppedEventCount: 0, overflowed: false)
+    static let empty = MCUFeedbackIngressSnapshot(
+        droppedEventCount: 0,
+        callbackWorkBudgetDroppedEventCount: 0,
+        overflowed: false
+    )
 }
 
 /// Bounded, callback-safe ingress for MCU feedback.
@@ -56,6 +82,7 @@ final class MCUFeedbackIngress: @unchecked Sendable {
     private let lock = NSLock()
     private var state: State = .active
     private var droppedEventCount: UInt64 = 0
+    private var callbackWorkBudgetDroppedEventCount: UInt64 = 0
 
     init(capacity: Int = 256) {
         let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream(
@@ -74,16 +101,18 @@ final class MCUFeedbackIngress: @unchecked Sendable {
         case .dropped:
             recordDrop(count: 1)
         case .terminated:
-            break
+            // A stream terminated by its first overflow has already rejected
+            // this event. Count it too; otherwise every later callback event
+            // disappears from the health total.
+            recordDrop(count: 1)
         @unknown default:
             recordDrop(count: 1)
         }
     }
 
-    /// Called by the CoreMIDI transport when a packet list's declared shape is
-    /// beyond the callback's fixed work budget. The packet is intentionally not
-    /// traversed: an untrusted `wordCount` must never be used to advance a raw
-    /// pointer merely to preserve feedback.
+    /// Called for malformed ingress or a bounded-stream overflow. These are
+    /// fatal because continuing would either traverse untrusted packet memory
+    /// or silently run a lossy feedback channel.
     func recordDrop(count: UInt64) {
         guard count > 0 else { return }
         lock.lock()
@@ -100,6 +129,19 @@ final class MCUFeedbackIngress: @unchecked Sendable {
         }
     }
 
+    /// Record events omitted only because a valid CoreMIDI list exceeded this
+    /// callback's work allowance. The callback still processes its bounded
+    /// prefix and the ingress stays active for later callbacks.
+    func recordCallbackWorkBudgetDrop(count: UInt64) {
+        guard count > 0 else { return }
+        lock.lock()
+        if state != .stopped {
+            droppedEventCount &+= count
+            callbackWorkBudgetDroppedEventCount &+= count
+        }
+        lock.unlock()
+    }
+
     func finish() {
         lock.lock()
         if state == .active {
@@ -114,6 +156,7 @@ final class MCUFeedbackIngress: @unchecked Sendable {
         defer { lock.unlock() }
         return MCUFeedbackIngressSnapshot(
             droppedEventCount: droppedEventCount,
+            callbackWorkBudgetDroppedEventCount: callbackWorkBudgetDroppedEventCount,
             overflowed: state == .overflowed
         )
     }
@@ -314,10 +357,13 @@ actor MCUChannel: Channel {
 
         // The transport invokes this sink synchronously on its CoreMIDI receive
         // thread. `yield` neither awaits an actor nor waits for the consumer;
-        // on overflow it records the drop and finishes the bounded ingress.
+        // a malformed packet or ingress overflow records a fatal drop and
+        // finishes the bounded ingress. A valid callback that exceeds its
+        // work budget records the omitted suffix without killing MCU.
         try await transport.start(
             onReceive: { event in ingress.yield(event) },
-            onIngressDrop: { count in ingress.recordDrop(count: count) }
+            onIngressDrop: { count in ingress.recordDrop(count: count) },
+            onCallbackWorkBudgetDrop: { count in ingress.recordCallbackWorkBudgetDrop(count: count) }
         )
 
         // Handshake: send Device Query
@@ -397,11 +443,15 @@ actor MCUChannel: Channel {
                     + "MCU is unavailable until the server restarts"
             )
         }
+        let workBudgetDetail = ingress.callbackWorkBudgetDroppedEventCount > 0
+            ? "; callback work budget dropped \(ingress.callbackWorkBudgetDroppedEventCount) event(s)"
+            : ""
         let conn = await cache.getMCUConnection()
         if !conn.isConnected {
             let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
             return .unavailable(
                 "MCU feedback not detected. Register '\(portName)' in Logic Pro > Control Surfaces > Setup"
+                    + workBudgetDetail
             )
         }
         let age = conn.lastFeedbackAt.map { Date().timeIntervalSince($0) } ?? .infinity
@@ -410,7 +460,7 @@ actor MCUChannel: Channel {
         let detail = stale
             ? "MCU \(registered), feedback stale (\(Int(age))s)"
             : "MCU \(registered), feedback active"
-        return .healthy(latencyMs: nil, detail: detail)
+        return .healthy(latencyMs: nil, detail: detail + workBudgetDetail)
     }
 
     /// Handle incoming feedback event (called from tests or transport callback).

@@ -64,6 +64,17 @@ private actor ReusingPortManager: VirtualPortManaging {
         list.packet.words.0 = word
         withUnsafePointer(to: &list) { installedCallback($0, nil) }
     }
+
+    /// The transport must refuse this before calling `MIDIEventPacketNext`, so
+    /// the one-word backing storage is sufficient to drive the malformed-input
+    /// callback path without traversing untrusted packet memory.
+    func fireOversizedWordCount() {
+        guard let installedCallback else { return }
+        var list = MIDIEventList()
+        list.numPackets = 1
+        list.packet.wordCount = 65
+        withUnsafePointer(to: &list) { installedCallback($0, nil) }
+    }
 }
 
 /// Thread-safe recorder for the pitch-bend values a sink observed — the sink is
@@ -80,6 +91,26 @@ private final class SinkRecorder: @unchecked Sendable {
     }
 
     var pitchBends: [UInt16] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+}
+
+/// Thread-safe recorder for malformed-ingress drops routed from the CoreMIDI
+/// callback. It deliberately shares no state with the event sink so a stale
+/// callback capture cannot accidentally look current through normal feedback.
+private final class DropSinkRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [UInt64] = []
+
+    func record(_ count: UInt64) {
+        lock.lock()
+        values.append(count)
+        lock.unlock()
+    }
+
+    var drops: [UInt64] {
         lock.lock()
         defer { lock.unlock() }
         return values
@@ -115,6 +146,33 @@ private final class SinkRecorder: @unchecked Sendable {
     #expect(secondSink.pitchBends == [8000])
     // And the stale sink must NOT receive the post-restart event.
     #expect(firstSink.pitchBends == [4000])
+
+    await transport.stop()
+}
+
+@Test func testRestartReusedPortRoutesIngressDropsToFreshSink() async throws {
+    let portManager = ReusingPortManager()
+    let transport = ProductionMCUTransport(portManager: portManager)
+    let firstDrops = DropSinkRecorder()
+    let secondDrops = DropSinkRecorder()
+
+    try await transport.start(
+        onReceive: { _ in },
+        onIngressDrop: { firstDrops.record($0) }
+    )
+    await transport.stop()
+    try await transport.start(
+        onReceive: { _ in },
+        onIngressDrop: { secondDrops.record($0) }
+    )
+
+    // The fake retains the FIRST callback. A by-value onIngressDrop capture
+    // reports to the stopped session; the stable sink box must instead route
+    // this malformed packet's loss to the fresh session.
+    await portManager.fireOversizedWordCount()
+
+    #expect(firstDrops.drops.isEmpty)
+    #expect(secondDrops.drops == [1])
 
     await transport.stop()
 }

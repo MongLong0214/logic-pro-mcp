@@ -376,24 +376,33 @@ func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
     let engine = MIDIEngine()
 
     // A client-creation failure has two causes and only one is a defect: the
-    // environment refusing CoreMIDI, or start() being broken. `coreMIDIRefuses
-    // AClientRightNow` separates them by asking CoreMIDI directly, so this can
-    // still fail when the product path is the broken half. It replaced a check
-    // for one hardcoded status (-50, what a CI runner returns), which read every
-    // OTHER environmental refusal as a product failure.
+    // environment already refusing CoreMIDI, or start() being broken. Keep a
+    // direct preflight probe, then compare it with a post-failure probe; asking
+    // only after start() could excuse a product path that poisoned MIDIServer.
+    // This replaced a check for one hardcoded status (-50, what a CI runner
+    // returns), which read every OTHER environmental refusal as a product
+    // failure.
+    let preflightProbeStatus = coreMIDIRefusesAClientRightNow()
     do {
         try await engine.start()
     } catch let error as MIDIEngineError {
+        let postFailureProbeStatus = coreMIDIRefusesAClientRightNow()
         guard case .clientCreationFailed(let startStatus) = error,
-              let probeStatus = coreMIDIRefusesAClientRightNow() else {
-            // Either a different failure, or CoreMIDI WILL hand this process a
-            // client — in which case start() is the broken half and must fail.
+              let preflightProbeStatus,
+              let postFailureProbeStatus,
+              coreMIDIRefusalPredatedProductStart(
+                  before: preflightProbeStatus,
+                  after: postFailureProbeStatus
+              ) else {
+            // A different failure, healthy preflight, or recovered post-failure
+            // probe leaves the product start as the failing path.
             throw error
         }
         reportCoreMIDIUnavailable(
             "testMIDIEngineProductionRuntimeStartStopSmoke",
             startStatus: startStatus,
-            probeStatus: probeStatus
+            preflightProbeStatus: preflightProbeStatus,
+            postFailureProbeStatus: postFailureProbeStatus
         )
         return
     }
@@ -404,6 +413,16 @@ func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
 
     await engine.stop()
     #expect(!(await engine.isActive))
+}
+
+@Test func testCoreMIDIRefusalMustPredateProductStartToExcuseSmokeFailure() {
+    let unavailableBeforeAndAfter = coreMIDIRefusalPredatedProductStart(before: -2, after: -2)
+    let healthyBeforeThenUnavailable = coreMIDIRefusalPredatedProductStart(before: nil, after: -2)
+
+    #expect(unavailableBeforeAndAfter)
+    // This is the mutation guard: accepting a post-failure probe by itself
+    // makes a broken product start on a healthy host silently pass.
+    #expect(!healthyBeforeThenUnavailable)
 }
 
 @Test(coreMIDIUnavailableInSandbox)

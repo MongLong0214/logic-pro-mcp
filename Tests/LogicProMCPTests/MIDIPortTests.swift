@@ -325,19 +325,28 @@ func testMIDIPortManagerProductionRuntimeSmokeCreatesAndStopsPorts() async throw
     let sendOnlyName = "LogicProMCP-Smoke-\(UUID().uuidString)"
     let bidirectionalName = "LogicProMCP-Smoke-Bidi-\(UUID().uuidString)"
 
-    // See the note on the MIDIEngine production smoke test: the refusal is
-    // confirmed against CoreMIDI directly rather than matched to one status.
+    // See the MIDIEngine smoke test: only a refusal seen before AND after this
+    // product path is environmental. A post-start probe alone could describe a
+    // service this very start() call broke.
+    let preflightProbeStatus = coreMIDIRefusesAClientRightNow()
     do {
         try await manager.start()
     } catch let error as MIDIPortError {
+        let postFailureProbeStatus = coreMIDIRefusesAClientRightNow()
         guard case .clientCreationFailed(let startStatus) = error,
-              let probeStatus = coreMIDIRefusesAClientRightNow() else {
+              let preflightProbeStatus,
+              let postFailureProbeStatus,
+              coreMIDIRefusalPredatedProductStart(
+                  before: preflightProbeStatus,
+                  after: postFailureProbeStatus
+              ) else {
             throw error
         }
         reportCoreMIDIUnavailable(
             "testMIDIPortManagerProductionRuntimeSmokeCreatesAndStopsPorts",
             startStatus: startStatus,
-            probeStatus: probeStatus
+            preflightProbeStatus: preflightProbeStatus,
+            postFailureProbeStatus: postFailureProbeStatus
         )
         return
     }

@@ -1381,40 +1381,64 @@ actor LogicProServer {
 /// Real MIDI transport for MCU channel using MIDIPortManager.
 actor ProductionMCUTransport: MCUTransportProtocol {
     /// A callback must finish promptly even if a source presents a large valid
-    /// event list.  This is a work bound, not a performance throttle: normal
-    /// MCU traffic is one packet per callback and the #683 harness sends 142
-    /// packets over 1.42 seconds. Exceeding it fails MCU closed and is reported
-    /// by `logic_system.health` through `MCUFeedbackIngressSnapshot`.
+    /// event list. This is a work bound, not malformed input: normal MCU
+    /// traffic is one packet per callback and the #683 harness sends 142
+    /// packets over 1.42 seconds. A valid list above this count delivers its
+    /// bounded prefix and reports only its omitted suffix; malformed packet
+    /// structure still fails MCU closed through `MCUFeedbackIngressSnapshot`.
     private static let maximumPacketsPerReceiveCallback = 64
     private static let maximumWordsPerPacket = 64
 
-    // v3.8.0 (P1 restart fix) — the CURRENT feedback sink, held in a stable
+    // v3.8.0 (P1 restart fix) — the CURRENT callback sinks, held in a stable
     // lock-guarded box rather than captured by value inside the CoreMIDI
     // callback. `MIDIPortManager.createBidirectionalPort` REUSES an existing
     // destination on restart WITHOUT re-registering the callback, so the
     // closure installed by the FIRST start() is the one CoreMIDI keeps firing.
-    // If that closure captured the sink by value it would forever yield into
+    // If that closure captured any sink by value it would forever route into
     // the first (now-finished) AsyncStream continuation — every feedback event
-    // after any stop→start silently dropped. Holding the sink in a box that
-    // the callback dereferences per event lets a restart's fresh continuation
-    // yield be picked up by the reused callback. The box is read on the
+    // or ingress-drop report after any stop→start silently dropped. Holding
+    // every callback output in a box that the callback dereferences per event
+    // lets a restart's fresh continuation and health sink be picked up by the
+    // reused callback. The box is read on the
     // CoreMIDI real-time thread, so access is NSLock-guarded and lock-light:
     // the lock spans only the pointer read/write, never the delivery call.
     private final class FeedbackSink: @unchecked Sendable {
         private let lock = NSLock()
-        private var sink: (@Sendable (MIDIFeedback.Event) -> Void)?
+        private var eventSink: (@Sendable (MIDIFeedback.Event) -> Void)?
+        private var ingressDropSink: (@Sendable (UInt64) -> Void)?
+        private var callbackWorkBudgetDropSink: (@Sendable (UInt64) -> Void)?
 
-        func set(_ newSink: (@Sendable (MIDIFeedback.Event) -> Void)?) {
+        func set(
+            onReceive: (@Sendable (MIDIFeedback.Event) -> Void)?,
+            onIngressDrop: (@Sendable (UInt64) -> Void)?,
+            onCallbackWorkBudgetDrop: (@Sendable (UInt64) -> Void)?
+        ) {
             lock.lock()
-            sink = newSink
+            eventSink = onReceive
+            ingressDropSink = onIngressDrop
+            callbackWorkBudgetDropSink = onCallbackWorkBudgetDrop
             lock.unlock()
         }
 
         func deliver(_ event: MIDIFeedback.Event) {
             lock.lock()
-            let current = sink
+            let current = eventSink
             lock.unlock()
             current?(event)
+        }
+
+        func recordIngressDrop(_ count: UInt64) {
+            lock.lock()
+            let current = ingressDropSink
+            lock.unlock()
+            current?(count)
+        }
+
+        func recordCallbackWorkBudgetDrop(_ count: UInt64) {
+            lock.lock()
+            let current = callbackWorkBudgetDropSink
+            lock.unlock()
+            current?(count)
         }
     }
 
@@ -1441,20 +1465,40 @@ actor ProductionMCUTransport: MCUTransportProtocol {
     }
 
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {
-        try await start(onReceive: onReceive, onIngressDrop: { _ in })
+        try await start(
+            onReceive: onReceive,
+            onIngressDrop: { _ in },
+            onCallbackWorkBudgetDrop: { _ in }
+        )
     }
 
     func start(
         onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
         onIngressDrop: @escaping @Sendable (UInt64) -> Void
     ) async throws {
+        try await start(
+            onReceive: onReceive,
+            onIngressDrop: onIngressDrop,
+            onCallbackWorkBudgetDrop: { _ in }
+        )
+    }
+
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void,
+        onCallbackWorkBudgetDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws {
         // Publish the new sink BEFORE (re)creating the port so a reused
         // destination's already-registered callback immediately routes feedback
         // into this start()'s AsyncStream continuation.
-        feedbackSink.set(onReceive)
-        // Capture the stable box (NOT `onReceive` by value, NOT `self`): the
-        // callback registered here may be reused verbatim across restarts, so
-        // it must dereference whatever sink is current at delivery time.
+        feedbackSink.set(
+            onReceive: onReceive,
+            onIngressDrop: onIngressDrop,
+            onCallbackWorkBudgetDrop: onCallbackWorkBudgetDrop
+        )
+        // Capture the stable box (NOT callback closures by value, NOT `self`):
+        // the callback registered here may be reused verbatim across restarts,
+        // so it must dereference whichever sinks are current at delivery time.
         let sink = feedbackSink
         do {
             port = try await portManager.createBidirectionalPort(name: "LogicProMCP-MCU-Internal") { eventList, _ in
@@ -1463,21 +1507,17 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                 let declaredPackets = Int(eventList.pointee.numPackets)
                 guard declaredPackets > 0 else { return }
                 let packetsToRead = min(declaredPackets, Self.maximumPacketsPerReceiveCallback)
-                if declaredPackets > packetsToRead {
-                    onIngressDrop(UInt64(declaredPackets - packetsToRead))
-                    return
-                }
                 var packetPtr = UnsafeRawPointer(eventList)
                     .advanced(by: MemoryLayout.offset(of: \MIDIEventList.packet)!)
                     .assumingMemoryBound(to: MIDIEventPacket.self)
-                for _ in 0..<packetsToRead {
+                for packetIndex in 0..<packetsToRead {
                     let declaredWords = Int(packetPtr.pointee.wordCount)
                     // Do not call MIDIEventPacketNext after a word-count
                     // violation: that macro advances by the untrusted declared
-                    // count. Reporting the drop and returning is bounded and
-                    // leaves the JSON-RPC loop independent of this callback.
+                    // count. Every unprocessed declared packet is actually
+                    // lost, so report that exact suffix rather than one token.
                     guard declaredWords <= Self.maximumWordsPerPacket else {
-                        onIngressDrop(1)
+                        sink.recordIngressDrop(UInt64(declaredPackets - packetIndex))
                         return
                     }
                     let wordCount = declaredWords
@@ -1499,7 +1539,16 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                             sink.deliver(event)
                         }
                     }
-                    packetPtr = UnsafePointer(MIDIEventPacketNext(packetPtr))
+                    if packetIndex + 1 < packetsToRead {
+                        packetPtr = UnsafePointer(MIDIEventPacketNext(packetPtr))
+                    }
+                }
+                if declaredPackets > packetsToRead {
+                    // The list's declared shape was valid enough to traverse a
+                    // bounded prefix. Its suffix is intentionally omitted to
+                    // keep this callback finite, reported non-fatally as the
+                    // exact number of events that did not reach the ingress.
+                    sink.recordCallbackWorkBudgetDrop(UInt64(declaredPackets - packetsToRead))
                 }
             }
         } catch {
@@ -1512,7 +1561,7 @@ actor ProductionMCUTransport: MCUTransportProtocol {
         // Clear the sink first so any packet delivered on a reused destination
         // after stop() reads nil and is dropped (post-stop-ignored contract),
         // then release the port reference.
-        feedbackSink.set(nil)
+        feedbackSink.set(onReceive: nil, onIngressDrop: nil, onCallbackWorkBudgetDrop: nil)
         port = nil
     }
 }

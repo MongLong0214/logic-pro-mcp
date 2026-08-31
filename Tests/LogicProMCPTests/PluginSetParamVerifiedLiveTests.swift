@@ -50,6 +50,7 @@ private final class LiveFixture: @unchecked Sendable {
     init(
         track: Int = 0,
         insert: Int = 6,
+        trackDisplayName: String = trackName,
         trackSelected: Bool = true,
         thresholdDescription: String = "Threshold",
         pluginSlotName: String = "Compressor",
@@ -67,6 +68,11 @@ private final class LiveFixture: @unchecked Sendable {
         sliderDisplayUnit: String = "%",
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
+        // An already-visible editor whose title becomes the target track only
+        // after the slot press. This models an existing AX element being
+        // retargeted by an unrelated UI transition; duplicate acquisition must
+        // refuse it because the press did not create a new window element.
+        pluginWindowTitleBeforeSlotPress: String? = nil,
         // Model an editor whose close control is pressed but which stays in
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
@@ -96,7 +102,7 @@ private final class LiveFixture: @unchecked Sendable {
             b.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
             // Track name is surfaced via the header's AXDescription (quoted),
             // matching how extractTrackName reads live Logic headers.
-            let name = i == track || i == duplicateTrackNameAt ? trackName : "Other \(i)"
+            let name = i == track || i == duplicateTrackNameAt ? trackDisplayName : "Other \(i)"
             b.setAttribute(row, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
             b.setAttribute(row, kAXSelectedAttribute as String, (i == track && trackSelected))
             headerRows.append(row)
@@ -176,11 +182,15 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
         b.setAttribute(pluginWindow, kAXRoleAttribute as String, kAXWindowRole as String)
         b.setAttribute(pluginWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
-        b.setAttribute(pluginWindow, kAXTitleAttribute as String, trackName)
+        b.setAttribute(
+            pluginWindow,
+            kAXTitleAttribute as String,
+            pluginWindowTitleBeforeSlotPress ?? trackDisplayName
+        )
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, pluginWindowPresent)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, pluginWindowPresent)
-        let staticTexts = (pluginWindowStaticTextValues ?? ["보기:", pluginSlotName, trackName])
+        let staticTexts = (pluginWindowStaticTextValues ?? ["보기:", pluginSlotName, trackDisplayName])
             .enumerated()
             .map { offset, value -> AXUIElement in
                 let text = b.element(1010 + offset)
@@ -269,6 +279,9 @@ private final class LiveFixture: @unchecked Sendable {
                 if key == targetOpenButtonKey {
                     targetOpenControlPressCount.value += 1
                 }
+                if pluginWindowTitleBeforeSlotPress != nil {
+                    b.setAttribute(pluginWindow, kAXTitleAttribute as String, trackDisplayName)
+                }
                 if openWindowOnSlotPress {
                     b.setAttribute(
                         app,
@@ -332,7 +345,10 @@ private func runLive(
         runtime: fixture.runtime,
         frontDocumentPath: { frontDoc },
         pluginWindowOpener: opener ?? AccessibilityChannel.livePluginWindowOpener,
-        pluginPopupMenuCleaner: popupMenuCleaner ?? AccessibilityChannel.livePluginPopupMenuCleaner
+        // These are AX-tree fixtures, not a live CoreGraphics qualification.
+        // Keep their default deterministic; popup-cleanup regressions inject
+        // the exact non-clean outcome they need to exercise.
+        pluginPopupMenuCleaner: popupMenuCleaner ?? { _ in .noPopupObserved }
     )
     return try! JSONSerialization.jsonObject(
         with: result.message.data(using: .utf8)!, options: []
@@ -485,7 +501,8 @@ private func runChannelEQFixture(
         runtime: fixture.runtime,
         frontDocumentPath: { expectedPath },
         entryLookup: channelEQFixtureEntryLookup(),
-        paramAliasLookup: channelEQFixtureParamAlias
+        paramAliasLookup: channelEQFixtureParamAlias,
+        pluginPopupMenuCleaner: { _ in .noPopupObserved }
     )
     let data = try #require(result.message.data(using: .utf8))
     let obj = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -508,6 +525,7 @@ private func runChannelEQFixture(
             range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0)
         ),
         paramAliasLookup: channelEQFixtureParamAlias,
+        pluginPopupMenuCleaner: { _ in .noPopupObserved },
         incrementWalkBudget: incrementWalkBudget
     )
     let data = try #require(result.message.data(using: .utf8))
@@ -591,7 +609,6 @@ private func namedEQBandParams(
         pluginWindowStaticTextValues: ["보기:", "Compressor", trackName]
     )
     let obj = await runLive(fixture: fixture, params: thresholdParams())
-
     #expect(obj["state"] as? String == "A")
     #expect(fixture.currentSliderValue == 60)
 }
@@ -654,13 +671,16 @@ private func namedEQBandParams(
 
 @Test func testLadderPollRefusesNewlyOpenedDifferentPluginHeader() async throws {
     // No editor is present for the preflight scan. The slot press reveals a
-    // same-track Noise Gate editor, so every poll result must reject it rather
-    // than accepting its Threshold as a Compressor window.
+    // Noise Gate editor on a track NAMED Compressor. The title and its matching
+    // direct static-text value are the track, not the plug-in, so every poll
+    // result must reject the shared Threshold slider. This would write State A
+    // before the header check excludes the track name.
     let fixture = LiveFixture(
+        trackDisplayName: "Compressor",
         beforeValue: 51,
         pluginWindowPresent: false,
         openWindowOnSlotPress: true,
-        pluginWindowStaticTextValues: ["보기:", "Noise Gate", trackName]
+        pluginWindowStaticTextValues: ["보기:", "Noise Gate", "Compressor"]
     )
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
@@ -725,6 +745,38 @@ private func namedEQBandParams(
     #expect(fixture.targetOpenControlPressCount.value == 1)
     #expect(fixture.currentSliderValue == 51)
     #expect(fixture.builder.attributeValue(sibling.slider, kAXValueAttribute as String) as? Double == 51)
+    // Count-mismatch is an early return, but both editors were newly observed
+    // after this operation's press and must not be stranded for the next call.
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    #expect(AXLogicProElements.matchingPluginEditorWindows(
+        forTrackName: trackName,
+        matchingPluginID: "logic.stock.effect.compressor",
+        runtime: fixture.runtime
+    ).isEmpty)
+}
+
+@Test func testDuplicateAcquisitionRejectsAnExistingEditorThatOnlyBecomesAMatchAfterPress() async throws {
+    // The pre-press AX window list already contains this editor, but it does
+    // not identify the target track until the target control is pressed. A
+    // count-only implementation accepts it and writes; provenance requires a
+    // newly observed AX element as well as exactly one matching editor.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowTitleBeforeSlotPress: "Other Track"
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_count_mismatch")
+    #expect(obj["matching_editor_count_after_press"] as? Int == 1)
+    #expect(obj["new_matching_editor_count_after_press"] as? Int == 0)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(fixture.targetOpenControlPressCount.value == 1)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
 }
 
 @Test func testDuplicatePluginWithNoEditorAfterOnePressRefuses() async throws {
@@ -1070,7 +1122,8 @@ private func namedEQBandParams(
     let validResult = await AccessibilityChannel.defaultSetEQBandVerified(
         params: namedEQBandParams(),
         runtime: validFixture.runtime,
-        frontDocumentPath: { expectedPath }
+        frontDocumentPath: { expectedPath },
+        pluginPopupMenuCleaner: { _ in .noPopupObserved }
     )
     let validData = try #require(validResult.message.data(using: .utf8))
     let valid = try #require(try JSONSerialization.jsonObject(with: validData) as? [String: Any])
@@ -1118,7 +1171,8 @@ private func namedEQBandParams(
     let result = await AccessibilityChannel.defaultSetEQBandVerified(
         params: namedEQBandParams(parameter: "Gain", unit: "db"),
         runtime: fixture.runtime,
-        frontDocumentPath: { expectedPath }
+        frontDocumentPath: { expectedPath },
+        pluginPopupMenuCleaner: { _ in .noPopupObserved }
     )
     let data = try #require(result.message.data(using: .utf8))
     let envelope = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -1161,7 +1215,8 @@ private func namedEQBandParams(
     let result = await AccessibilityChannel.defaultSetParamVerified(
         params: thresholdParams(value: "60"),
         runtime: fixture.runtime,
-        frontDocumentPath: { expectedPath }
+        frontDocumentPath: { expectedPath },
+        pluginPopupMenuCleaner: { _ in .noPopupObserved }
     )
     let obj = try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
     #expect(obj["error"] as? String == "readback_mismatch")
@@ -1799,7 +1854,7 @@ private final class Counter: @unchecked Sendable {
 
 // MARK: - #726 the operation closes the editor it opened
 
-@Test func testDuplicateAcquisitionClosesTheEditorItOpened() async {
+@Test func testDuplicateAcquisitionClosesTheEditorItOpened() async throws {
     // Measured live: writing insert 0 then insert 2 on a two-Compressor track
     // failed on the second call with duplicate_plugin_editor_already_open,
     // because the first call left its editor open. The operation opened that
@@ -1814,6 +1869,8 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["state"] as? String == "A")
     #expect(fixture.currentSliderValue == 60)
+    let closeObserved = try #require(obj["editor_close_observed"] as? Bool)
+    #expect(closeObserved)
     #expect(fixture.pluginCloseControlPressCount.value == 1)
     #expect(AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
@@ -1854,6 +1911,12 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["state"] as? String == "A")
     #expect(fixture.currentSliderValue == 60)
+    let closeObserved = try #require(obj["editor_close_observed"] as? Bool)
+    let editorStillOpen = try #require(obj["editor_still_open"] as? Bool)
+    #expect(!closeObserved)
+    #expect(editorStillOpen)
+    let recoveryHint = try #require(obj["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("Close it before another duplicate-instance write"))
     // Tried, and retried, rather than giving up after one press.
     #expect(fixture.pluginCloseControlPressCount.value == 3)
 }
