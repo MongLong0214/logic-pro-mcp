@@ -1380,6 +1380,14 @@ actor LogicProServer {
 
 /// Real MIDI transport for MCU channel using MIDIPortManager.
 actor ProductionMCUTransport: MCUTransportProtocol {
+    /// A callback must finish promptly even if a source presents a large valid
+    /// event list.  This is a work bound, not a performance throttle: normal
+    /// MCU traffic is one packet per callback and the #683 harness sends 142
+    /// packets over 1.42 seconds. Exceeding it fails MCU closed and is reported
+    /// by `logic_system.health` through `MCUFeedbackIngressSnapshot`.
+    private static let maximumPacketsPerReceiveCallback = 64
+    private static let maximumWordsPerPacket = 64
+
     // v3.8.0 (P1 restart fix) — the CURRENT feedback sink, held in a stable
     // lock-guarded box rather than captured by value inside the CoreMIDI
     // callback. `MIDIPortManager.createBidirectionalPort` REUSES an existing
@@ -1433,6 +1441,13 @@ actor ProductionMCUTransport: MCUTransportProtocol {
     }
 
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {
+        try await start(onReceive: onReceive, onIngressDrop: { _ in })
+    }
+
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws {
         // Publish the new sink BEFORE (re)creating the port so a reused
         // destination's already-registered callback immediately routes feedback
         // into this start()'s AsyncStream continuation.
@@ -1445,13 +1460,27 @@ actor ProductionMCUTransport: MCUTransportProtocol {
             port = try await portManager.createBidirectionalPort(name: "LogicProMCP-MCU-Internal") { eventList, _ in
                 // Parse UMP event list → MIDI 1.0 bytes → MIDIFeedback.Event
                 // Use original eventList pointer (not a stack copy) for safe traversal
-                let numPackets = Int(eventList.pointee.numPackets)
-                guard numPackets > 0 else { return }
+                let declaredPackets = Int(eventList.pointee.numPackets)
+                guard declaredPackets > 0 else { return }
+                let packetsToRead = min(declaredPackets, Self.maximumPacketsPerReceiveCallback)
+                if declaredPackets > packetsToRead {
+                    onIngressDrop(UInt64(declaredPackets - packetsToRead))
+                    return
+                }
                 var packetPtr = UnsafeRawPointer(eventList)
                     .advanced(by: MemoryLayout.offset(of: \MIDIEventList.packet)!)
                     .assumingMemoryBound(to: MIDIEventPacket.self)
-                for _ in 0..<numPackets {
-                    let wordCount = min(Int(packetPtr.pointee.wordCount), 64)
+                for _ in 0..<packetsToRead {
+                    let declaredWords = Int(packetPtr.pointee.wordCount)
+                    // Do not call MIDIEventPacketNext after a word-count
+                    // violation: that macro advances by the untrusted declared
+                    // count. Reporting the drop and returning is bounded and
+                    // leaves the JSON-RPC loop independent of this callback.
+                    guard declaredWords <= Self.maximumWordsPerPacket else {
+                        onIngressDrop(1)
+                        return
+                    }
+                    let wordCount = declaredWords
                     if wordCount > 0 {
                         let bytes: [UInt8] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
                             Array(raw.prefix(wordCount * 4))
