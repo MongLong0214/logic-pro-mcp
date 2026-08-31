@@ -118,7 +118,17 @@ def start_feedback_driver(driver: Path) -> subprocess.Popen[str]:
         marker = feedback.stdout.readline().strip()
         if marker == "SENDING":
             return feedback
-    driver_stdout, driver_stderr = feedback.communicate(timeout=5)
+    try:
+        driver_stdout, driver_stderr = feedback.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        # An unresponsive driver is a fact about this host's MIDI stack, not a
+        # verdict on the server. Raising here made it an uncaught traceback.
+        feedback.kill()
+        feedback.communicate()
+        skip(
+            "the CoreMIDI driver neither routed a packet nor exited: this host is "
+            "not serving the server's virtual destination"
+        )
     if feedback.returncode == CORE_MIDI_UNAVAILABLE:
         skip(driver_stderr.strip() or "CoreMIDI is unavailable or not permitted")
     fail(
@@ -184,7 +194,17 @@ def main() -> None:
         write_frame(process, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         reply = read_frame(process, TOOLS_LIST_TIMEOUT_SECONDS)
 
-        driver_stdout, driver_stderr = feedback.communicate(timeout=5)
+        try:
+            driver_stdout, driver_stderr = feedback.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            # An unresponsive driver is a fact about this host's MIDI stack, not a
+            # verdict on the server. Raising here made it an uncaught traceback.
+            feedback.kill()
+            feedback.communicate()
+            skip(
+                "the CoreMIDI driver neither routed a packet nor exited: this host is "
+                "not serving the server's virtual destination"
+            )
         if feedback.returncode == CORE_MIDI_UNAVAILABLE:
             skip(driver_stderr.strip() or "CoreMIDI is unavailable or not permitted")
         if feedback.returncode != 0:

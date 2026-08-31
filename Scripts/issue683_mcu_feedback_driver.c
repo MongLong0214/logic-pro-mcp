@@ -1,4 +1,4 @@
-// CoreMIDI half of Scripts/test_mcu_feedback_jsonrpc_liveness.py.
+// CoreMIDI half of Scripts/diagnose-mcu-feedback-jsonrpc-liveness.py.
 //
 // It opens an output port and sends the MCU frames observed from Logic Pro
 // straight to the server's LogicProMCP-MCU-Internal destination, the way Logic
