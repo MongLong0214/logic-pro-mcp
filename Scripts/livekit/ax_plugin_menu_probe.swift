@@ -349,6 +349,10 @@ func configuredOptionalString(_ key: String) -> String? {
     config[key] as? String
 }
 
+func configuredInt(_ key: String) -> Int? {
+    config[key] as? Int
+}
+
 func configuredStrings(_ key: String) -> [String] {
     config[key] as? [String] ?? []
 }
@@ -652,6 +656,12 @@ func openPlugin(
     openLabel: String,
     trackLabel: String? = nil,
     mixerLabels: [String]? = nil,
+    // Pick one of several identically named slots by AX child order within the
+    // named strip. This is the ordering the product's own `insert` parameter
+    // uses; it is NOT a screen coordinate. Only a harness that must BUILD a
+    // duplicate-instance state should pass it — leaving it nil keeps the
+    // refuse-on-ambiguity behaviour every other caller relies on.
+    slotOrdinal: Int? = nil,
     beforePress: ((AXUIElement) -> Void)? = nil
 ) -> (JSON, AXUIElement?, AXUIElement?) {
     let search = pluginSlotSearch(
@@ -667,9 +677,15 @@ func openPlugin(
         "open_press_status": NSNull(),
         "opened_windows": [],
     ]) { _, new in new }
-    guard slots.count == 1 else { return (result, nil, nil) }
-
-    let slot = slots[0]
+    let chosen: AXUIElement?
+    if let slotOrdinal {
+        result["slot_ordinal_requested"] = slotOrdinal
+        result["slot_ordinal_available"] = slots.count
+        chosen = slotOrdinal < slots.count ? slots[slotOrdinal] : nil
+    } else {
+        chosen = slots.count == 1 ? slots[0] : nil
+    }
+    guard let slot = chosen else { return (result, nil, nil) }
     // The caller can take a negative-control reading before this helper mutates anything. In #301
     // that is the bypass value: reading it after the Open press would not catch an Open path that
     // toggled it and toggled it back before the witness looked.
@@ -990,11 +1006,72 @@ func runExportMenu() {
     emit(result)
 }
 
+/// Count Logic's open plug-in editor windows, with the direct static-text values
+/// that identify each.
+///
+/// #726 needs this from OUTSIDE the product. The invariant is that
+/// `set_param_verified` leaves behind no editor it opened, on every exit path
+/// INCLUDING its refusals — and the product cannot witness that about itself,
+/// because it is the thing under test. Measured 2026-08-31: the count-mismatch
+/// refusal left two editors open, and no unit test saw it because the assertion
+/// lived on the same side as the bug.
+func runPluginEditors() {
+    var editors: [JSON] = []
+    for window in windows() {
+        let subrole = stringValue(attr(window, kAXSubroleAttribute as String), attribute: kAXSubroleAttribute as String)
+        guard subrole == "AXDialog" else { continue }
+        let texts = childElements(window).compactMap { child -> String? in
+            let role = stringValue(attr(child, kAXRoleAttribute as String), attribute: kAXRoleAttribute as String)
+            guard role == (kAXStaticTextRole as String) else { return nil }
+            let value = stringValue(attr(child, kAXValueAttribute as String), attribute: kAXValueAttribute as String)
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        // A plug-in editor is an AXDialog carrying direct static text. An alert
+        // is an AXDialog too, so the text requirement is what separates them.
+        guard !texts.isEmpty else { continue }
+        editors.append([
+            "title": stringValue(attr(window, kAXTitleAttribute as String), attribute: kAXTitleAttribute as String),
+            "static_texts": texts,
+        ])
+    }
+    emit(["outcome": "searched", "editor_count": editors.count, "editors": editors])
+}
+
+/// Open ONE insert slot's editor and leave it open.
+///
+/// The #726 cleanup harness needs a plug-in editor it did not obtain through the
+/// product, because the product now closes the editors it opens. Without this the
+/// hidden-sibling state cannot be built at all, and a harness that cannot build
+/// its own precondition passes vacuously — measured: a "hiding empties the AX
+/// list" check read 0 == 0 when nothing had been open to hide.
+func runOpenPluginEditor() {
+    let slotName = configuredString("slot_label")
+    let openLabel = configuredString("open_label")
+    let trackLabel = configuredOptionalString("track_label")
+    let mixerLabels = configuredStrings("mixer_label")
+    let before = windows().count
+    let (openResult, slot, opened) = openPlugin(
+        slotName: slotName,
+        openLabel: openLabel,
+        trackLabel: trackLabel,
+        mixerLabels: mixerLabels.isEmpty ? nil : mixerLabels,
+        slotOrdinal: configuredInt("slot_ordinal")
+    )
+    var result: JSON = ["open": openResult, "windows_before": before, "windows_after": windows().count]
+    result["slot_found"] = slot != nil
+    result["editor_opened"] = opened != nil
+    result["outcome"] = opened != nil ? "opened" : (openResult["outcome"] ?? "not_found")
+    emit(result)
+}
+
 switch mode {
 case "channel-eq": runChannelEQ()
 case "compressor": runCompressor()
 case "plugin-slot": runPluginSlot()
 case "export-menu": runExportMenu()
+case "plugin-editors": runPluginEditors()
+case "open-plugin-editor": runOpenPluginEditor()
 default:
     emit(["error": "unknown mode: \(mode)"])
     exit(2)
