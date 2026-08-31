@@ -34,8 +34,10 @@ private func withTestMIDIEventList(
         if padded.count < paddedByteCount {
             padded.append(contentsOf: repeatElement(0, count: paddedByteCount - padded.count))
         }
-        withUnsafeMutableBytes(of: &packet.pointee.words) { words in
-            words.copyBytes(from: padded)
+        padded.withUnsafeBytes { source in
+            raw.advanced(
+                by: packetOffset + (MemoryLayout<MIDIEventPacket>.offset(of: \MIDIEventPacket.words) ?? 0)
+            ).copyMemory(from: source.baseAddress!, byteCount: paddedByteCount)
         }
     }
 
@@ -105,6 +107,23 @@ private final class PacketSinkRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return packets
+    }
+}
+
+private final class IngressDropRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var drops: [UInt64] = []
+
+    func record(_ count: UInt64) {
+        lock.lock()
+        drops.append(count)
+        lock.unlock()
+    }
+
+    func snapshot() -> [UInt64] {
+        lock.lock()
+        defer { lock.unlock() }
+        return drops
     }
 }
 
@@ -317,6 +336,26 @@ func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
 
     let events = await recorder.snapshot()
     #expect(events.isEmpty)
+}
+
+@Test func testProductionMCUTransportRejectsOversizedWordCountWithoutTraversal() async throws {
+    let manager = MockServerPortManager()
+    let drops = IngressDropRecorder()
+    let transport = ProductionMCUTransport(portManager: manager)
+
+    try await transport.start(
+        onReceive: { _ in Issue.record("oversized packet must not be parsed") },
+        onIngressDrop: { count in drops.record(count) }
+    )
+    // `MIDIEventPacketNext` uses the declared word count to advance its raw
+    // pointer. The production callback must reject this structure before it
+    // traverses it, then report the drop to MCU health.
+    await manager.emitBidirectionalBytes([0x90, 0x40, 0x7F], wordCountOverride: 65)
+    // Likewise, the event-list count is checked before the callback derives
+    // the first packet pointer, so a malformed oversized list has fixed work.
+    await manager.emitBidirectionalBytes([0x90, 0x40, 0x7F], numPackets: 65)
+
+    #expect(drops.snapshot() == [1, 1])
 }
 
 @Test func testProductionMCUTransportSendUsesPacketSinkAfterStart() async throws {

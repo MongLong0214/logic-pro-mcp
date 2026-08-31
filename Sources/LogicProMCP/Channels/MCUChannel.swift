@@ -4,7 +4,119 @@ import Foundation
 protocol MCUTransportProtocol: Actor {
     func send(_ bytes: [UInt8]) async
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws
     func stop() async
+}
+
+extension MCUTransportProtocol {
+    /// Test and non-CoreMIDI transports do not need a packet-structure budget;
+    /// they retain the original receive-only contract. Production overrides this
+    /// to report a CoreMIDI callback budget violation without awaiting an actor.
+    func start(
+        onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void,
+        onIngressDrop: @escaping @Sendable (UInt64) -> Void
+    ) async throws {
+        _ = onIngressDrop
+        try await start(onReceive: onReceive)
+    }
+}
+
+/// Snapshot of the MCU callback-to-actor hand-off.
+///
+/// The value is intentionally small and independent of `StateCache`: the
+/// CoreMIDI callback must be able to reject an overload without awaiting an
+/// actor or touching a JSON-RPC-owned queue.
+struct MCUFeedbackIngressSnapshot: Sendable, Equatable {
+    let droppedEventCount: UInt64
+    let overflowed: Bool
+
+    static let empty = MCUFeedbackIngressSnapshot(droppedEventCount: 0, overflowed: false)
+}
+
+/// Bounded, callback-safe ingress for MCU feedback.
+///
+/// `AsyncStream.Continuation.yield` is thread safe and returns immediately.
+/// That makes this safe to call from CoreMIDI's receive thread, unlike awaiting
+/// an actor or dispatching synchronously back to one.  The stream is bounded:
+/// after its first overflow it is finished, making the MCU channel fail closed
+/// rather than letting a malformed or runaway feedback source grow memory
+/// without limit.  The drop count is surfaced by `MCUChannel.healthCheck()`.
+final class MCUFeedbackIngress: @unchecked Sendable {
+    private enum State {
+        case active
+        case overflowed
+        case stopped
+    }
+
+    let stream: AsyncStream<MIDIFeedback.Event>
+    private let continuation: AsyncStream<MIDIFeedback.Event>.Continuation
+    private let lock = NSLock()
+    private var state: State = .active
+    private var droppedEventCount: UInt64 = 0
+
+    init(capacity: Int = 256) {
+        let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream(
+            bufferingPolicy: .bufferingNewest(capacity)
+        )
+        self.stream = stream
+        self.continuation = continuation
+    }
+
+    /// Enqueue one parsed event without suspension. Once full, finish the
+    /// ingress so the MCU channel cannot continue from a lossy state.
+    func yield(_ event: MIDIFeedback.Event) {
+        switch continuation.yield(event) {
+        case .enqueued:
+            break
+        case .dropped:
+            recordDrop(count: 1)
+        case .terminated:
+            break
+        @unknown default:
+            recordDrop(count: 1)
+        }
+    }
+
+    /// Called by the CoreMIDI transport when a packet list's declared shape is
+    /// beyond the callback's fixed work budget. The packet is intentionally not
+    /// traversed: an untrusted `wordCount` must never be used to advance a raw
+    /// pointer merely to preserve feedback.
+    func recordDrop(count: UInt64) {
+        guard count > 0 else { return }
+        lock.lock()
+        let shouldFinish = state == .active
+        if shouldFinish {
+            state = .overflowed
+        }
+        if state == .overflowed {
+            droppedEventCount &+= count
+        }
+        lock.unlock()
+        if shouldFinish {
+            continuation.finish()
+        }
+    }
+
+    func finish() {
+        lock.lock()
+        if state == .active {
+            state = .stopped
+        }
+        lock.unlock()
+        continuation.finish()
+    }
+
+    func snapshot() -> MCUFeedbackIngressSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return MCUFeedbackIngressSnapshot(
+            droppedEventCount: droppedEventCount,
+            overflowed: state == .overflowed
+        )
+    }
 }
 
 /// MCU (Mackie Control Universal) channel for bidirectional Logic Pro control.
@@ -42,13 +154,10 @@ actor MCUChannel: Channel {
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
 
-    // v3.8.0 (WS6 / AC1) — the single ordered feedback consumer. Feedback is
-    // yielded synchronously (FIFO) into `feedbackContinuation` by the
-    // transport's receive callback and drained in arrival order by exactly one
-    // long-lived `feedbackTask` created in start() and cancelled in stop().
-    // This replaces the two per-event `Task {}` fan-outs (this channel +
-    // ProductionMCUTransport) that let an actor admit events out of order.
-    private var feedbackContinuation: AsyncStream<MIDIFeedback.Event>.Continuation?
+    // The CoreMIDI callback only calls `MCUFeedbackIngress.yield`, which is a
+    // non-suspending bounded hand-off. A single task drains it in arrival order;
+    // it never shares the stdio transport or the MCP Server actor.
+    private var feedbackIngress: MCUFeedbackIngress?
     private var feedbackTask: Task<Void, Never>?
 
     // v3.1.0 (T4) — configurable echo-timeout for fader/V-Pot read-back.
@@ -187,7 +296,7 @@ actor MCUChannel: Channel {
     func start() async throws {
         // Defensively tear down any prior session so start-stop-start (and an
         // accidental double-start) always runs on a fresh ordered stream.
-        feedbackContinuation?.finish()
+        feedbackIngress?.finish()
         feedbackTask?.cancel()
 
         // Pass bank offset getter to feedback parser
@@ -195,28 +304,21 @@ actor MCUChannel: Channel {
             await self?.currentBank ?? 0
         }
 
-        // v3.8.0 (WS6 / AC1) — one ordered, single-consumer AsyncStream
-        // replaces the two per-event `Task {}` fan-outs. `.unbounded` so no
-        // echo is dropped under a burst; the drain task processes events
-        // strictly in arrival order. Mirrors MIDIEngine.inboundMessages.
-        let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream(
-            bufferingPolicy: .unbounded
-        )
-        feedbackContinuation = continuation
+        let ingress = MCUFeedbackIngress()
+        feedbackIngress = ingress
         feedbackTask = Task { [weak self] in
-            for await event in stream {
+            for await event in ingress.stream {
                 await self?.receiveFeedback(event)
             }
         }
 
-        // The transport hands each parsed event to this sink synchronously in
-        // arrival order — a plain `continuation.yield` with NO per-event Task,
-        // so FIFO is preserved end-to-end. `continuation` is captured by value;
-        // once stop() finishes it, any late yield is a no-op (post-stop
-        // feedback is dropped rather than mutating the cache).
-        try await transport.start { event in
-            continuation.yield(event)
-        }
+        // The transport invokes this sink synchronously on its CoreMIDI receive
+        // thread. `yield` neither awaits an actor nor waits for the consumer;
+        // on overflow it records the drop and finishes the bounded ingress.
+        try await transport.start(
+            onReceive: { event in ingress.yield(event) },
+            onIngressDrop: { count in ingress.recordDrop(count: count) }
+        )
 
         // Handshake: send Device Query
         let query = MCUProtocol.encodeDeviceQuery()
@@ -238,9 +340,9 @@ actor MCUChannel: Channel {
         // drain loop once its buffer empties; cancel() stops it promptly and
         // guarantees any feedback arriving after stop() is dropped, not
         // applied to the cache.
-        feedbackContinuation?.finish()
+        feedbackIngress?.finish()
         feedbackTask?.cancel()
-        feedbackContinuation = nil
+        feedbackIngress = nil
         feedbackTask = nil
         await cache.updateMCUConnection { conn in
             conn.isConnected = false
@@ -288,6 +390,13 @@ actor MCUChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
+        let ingress = feedbackIngress?.snapshot() ?? .empty
+        if ingress.overflowed {
+            return .unavailable(
+                "MCU feedback overflow: dropped \(ingress.droppedEventCount) event(s); "
+                    + "MCU is unavailable until the server restarts"
+            )
+        }
         let conn = await cache.getMCUConnection()
         if !conn.isConnected {
             let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
@@ -307,6 +416,12 @@ actor MCUChannel: Channel {
     /// Handle incoming feedback event (called from tests or transport callback).
     func handleFeedback(_ event: MIDIFeedback.Event) async {
         await receiveFeedback(event)
+    }
+
+    /// Test-only observation of the callback ingress. Production callers get
+    /// the same count in `logic_system.health`'s MCU channel detail.
+    func feedbackIngressSnapshot() -> MCUFeedbackIngressSnapshot {
+        feedbackIngress?.snapshot() ?? .empty
     }
 
     // MARK: - Feedback Reception
