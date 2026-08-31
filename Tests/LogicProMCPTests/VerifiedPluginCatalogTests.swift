@@ -105,3 +105,72 @@ import Testing
     #expect(range?.min == -96)
     #expect(range?.max == 24)
 }
+
+// MARK: - ADR-009 (#292): a declared write capability must rest on measured evidence
+
+/// A parameter that claims a write path must not carry INFERRED provenance.
+///
+/// ADR-009's decision is "expose only plugin parameters with independent write/readback
+/// evidence … do not treat generic AX control movement as public parameter support". The
+/// catalog was built to express that — every parameter carries `writeMethod`, `readbackMethod`
+/// and a `provenance` — but nothing enforced it. Gain is the shape the rule protects:
+/// `writeMethod: nil` with the reason "no write/readback path is claimed" written out.
+///
+/// Without this, the cheapest way to make a parameter writable is to fill in a `writeMethod`
+/// and leave the provenance saying it was inferred from documentation. That is exactly the
+/// claim the ADR exists to refuse, and it would ship as State A.
+private func writeCapabilityRestsOnInference(_ param: StockPluginParameterMetadata) -> Bool {
+    let claimsWrite = !(param.writeMethod?.isEmpty ?? true)
+    guard claimsWrite else { return false }
+    // EMPTY EVIDENCE is the disqualifier, not the presence of an inference reason. A first
+    // version of this predicate rejected any `inferenceReason`, and it immediately failed on
+    // Compressor's Threshold — which carries BOTH a reason and
+    // `evidence: ["parameter_write_readback", "CHANGELOG.md"]`. That reason is a scoping
+    // caveat ("proven on a duplicate, not census-verified in this response"), not a statement
+    // that the capability is a guess. Rejecting it would have pushed toward deleting the
+    // caveat to pass the check, which is the wrong direction: a caveat is information.
+    //
+    // `.inferred(reason:)` is the constructor that leaves evidence empty, so this catches the
+    // shape the ADR refuses without matching on a case the catalog keeps private.
+    return param.provenance.evidence.isEmpty
+}
+
+@Test func testEveryDeclaredWriteMethodRestsOnMeasuredEvidence() {
+    let offenders = StockPluginCatalog.productionSnapshot.entries.flatMap { entry in
+        entry.parameters
+            .filter(writeCapabilityRestsOnInference)
+            .map { "\(entry.id).\($0.id) writeMethod=\($0.writeMethod ?? "-")" }
+    }
+    #expect(
+        offenders.isEmpty,
+        "a parameter may not declare a write path on inferred provenance: \(offenders)"
+    )
+}
+
+@Test func testTheEvidenceInvariantCanFail() {
+    // The check above is only worth having if a violation trips it. Build the shape it exists
+    // to refuse — a write path with the provenance Gain carries — and confirm it is caught.
+    let fabricated = StockPluginParameterMetadata(
+        id: "fabricated",
+        displayName: "Fabricated",
+        unit: "dB",
+        valueRange: StockPluginValueRange(min: 0, max: 1, defaultValue: 0),
+        writeMethod: "ax_slider_axvalue",
+        readbackMethod: "ax_slider_axvalue",
+        availabilityState: .inferred,
+        provenance: .inferred(reason: "documented range only")
+    )
+    #expect(writeCapabilityRestsOnInference(fabricated))
+
+    let honest = StockPluginParameterMetadata(
+        id: "honest",
+        displayName: "Honest",
+        unit: "dB",
+        valueRange: StockPluginValueRange(min: 0, max: 1, defaultValue: 0),
+        writeMethod: nil,
+        readbackMethod: nil,
+        availabilityState: .inferred,
+        provenance: .inferred(reason: "no write/readback path is claimed")
+    )
+    #expect(!writeCapabilityRestsOnInference(honest))
+}
