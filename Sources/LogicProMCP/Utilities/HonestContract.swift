@@ -99,6 +99,10 @@ enum HonestContract {
         case unsupportedParamReadback = "unsupported_param_readback"
         case incompleteInventory = "incomplete_inventory"
         case targetPluginMismatch = "target_plugin_mismatch"
+        /// A candidate editor had the requested track and parameter control, but
+        /// its direct static-text header did not map to the requested canonical
+        /// plug-in id. Refused before an AX value write.
+        case pluginWindowPluginMismatch = "plugin_window_plugin_mismatch"
         /// More than one insert on the addressed track carries the requested
         /// canonical plug-in identity. Logic's accessible editor identity
         /// cannot distinguish those instances, so opening one could write the
@@ -437,6 +441,7 @@ enum HonestContract {
         FailureError.unsupportedParamReadback.rawValue,
         FailureError.incompleteInventory.rawValue,
         FailureError.targetPluginMismatch.rawValue,
+        FailureError.pluginWindowPluginMismatch.rawValue,
         FailureError.ambiguousPluginInstance.rawValue,
         FailureError.slotOccupied.rawValue,
         FailureError.trackSelectionFailed.rawValue,

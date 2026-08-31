@@ -401,6 +401,7 @@ extension AccessibilityChannel {
 
     typealias PluginWindowOpener = @Sendable (
         _ targetSlot: AXUIElementSendable,
+        _ pluginID: String,
         _ trackName: String,
         _ axDescription: String,
         _ runtime: AXLogicProElements.Runtime
@@ -433,16 +434,17 @@ extension AccessibilityChannel {
         _ runtime: AXLogicProElements.Runtime
     ) -> PluginPopupMenuCleanupOutcome
 
-    static let livePluginWindowOpener: PluginWindowOpener = { targetSlot, trackName, axDescription, runtime in
+    static let livePluginWindowOpener: PluginWindowOpener = { targetSlot, pluginID, trackName, axDescription, runtime in
         await openPluginWindowFromTargetSlot(
             targetSlot.element,
+            pluginID: pluginID,
             trackName: trackName,
             axDescription: axDescription,
             runtime: runtime
         )
     }
 
-    static let liveNoOpPluginWindowOpener: PluginWindowOpener = { _, _, _, _ in nil }
+    static let liveNoOpPluginWindowOpener: PluginWindowOpener = { _, _, _, _, _ in nil }
 
     static let livePluginPopupMenuCleaner: PluginPopupMenuCleaner = { runtime in
         dismissLogicPopupMenuAfterPluginWindowAcquisition(runtime: runtime)
@@ -1150,6 +1152,7 @@ extension AccessibilityChannel {
         }
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
+            matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
             runtime: runtime
         ) {
@@ -1167,15 +1170,40 @@ extension AccessibilityChannel {
                 "more than one plugin-editor window exposes the requested track and parameter identity",
                 diagnostics: diagnostics
             ))
+        case let .pluginIdentityMismatch(observedNames):
+            return .error(pluginWindowPluginMismatchStateC(
+                operation,
+                identity,
+                pluginID: pluginID,
+                observedNames: observedNames
+            ))
         case .none, .unique:
             break
         }
         guard let opened = await pluginWindowOpener(
             AXUIElementSendable(slots[insert].element),
+            pluginID,
             trackName,
             axDescription,
             runtime
         ) else {
+            // A polling attempt may have observed a same-track editor with the
+            // requested control but the wrong (or unreadable) header. Report
+            // that identity failure directly; a concurrent popup-cleanup issue
+            // must not hide the reason the editor was refused.
+            if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                matchingSliderDescription: axDescription,
+                runtime: runtime
+            ) {
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            }
             let popupCleanup = pluginPopupMenuCleaner(runtime)
             if !popupCleanup.isClean {
                 var diagnostics = pluginWindowAcquisitionDiagnostics(
@@ -1192,11 +1220,13 @@ extension AccessibilityChannel {
                     safeToRetry: false
                 ))
             }
-            if case .ambiguous = AXLogicProElements.pluginWindowMatch(
+            switch AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
+                matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
                 runtime: runtime
             ) {
+            case .ambiguous:
                 var diagnostics = pluginWindowAcquisitionDiagnostics(
                     trackName: trackName,
                     axDescription: axDescription,
@@ -1209,6 +1239,15 @@ extension AccessibilityChannel {
                     "more than one plugin-editor window exposed the requested track and parameter identity after acquisition",
                     diagnostics: diagnostics
                 ))
+            case let .pluginIdentityMismatch(observedNames):
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            case .none, .unique:
+                break
             }
             return .error(windowOpenFailedStateC(
                 operation, identity,
@@ -1256,41 +1295,33 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was no longer the unique matching window before the write",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was no longer the unique matching window before the write",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         // Step 10 — read the before value (for rollback + provenance).
         let before = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was no longer the unique matching window immediately before the write",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was no longer the unique matching window immediately before the write",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         guard targetPluginIdentityIsStable(
@@ -1307,21 +1338,17 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard case let .unique(currentWindow) = AXLogicProElements.pluginWindowMatch(
-            forTrackName: trackName,
-            matchingSliderDescription: axDescription,
+        if let failure = acquiredPluginWindowFailureStateC(
+            acquiredWindow: window,
+            operation: operation,
+            identity: identity,
+            pluginID: pluginID,
+            trackName: trackName,
+            axDescription: axDescription,
+            detail: "the acquired plugin window was not unique after target-slot revalidation",
             runtime: runtime
-        ), CFEqual(currentWindow, window) else {
-            return .error(windowIdentityUnresolvedStateC(
-                operation,
-                identity,
-                "the acquired plugin window was not unique after target-slot revalidation",
-                diagnostics: pluginWindowAcquisitionDiagnostics(
-                    trackName: trackName,
-                    axDescription: axDescription,
-                    runtime: runtime
-                )
-            ))
+        ) {
+            return .error(failure)
         }
 
         guard let currentSlider = AXLogicProElements.pluginWindowSlider(
@@ -1714,18 +1741,90 @@ extension AccessibilityChannel {
         )
     }
 
+    private static func pluginWindowPluginMismatchStateC(
+        _ operation: String,
+        _ identity: [String: Any],
+        pluginID: String,
+        observedNames: [String]
+    ) -> String {
+        let observation: String
+        if observedNames.isEmpty {
+            observation = "the candidate plugin window exposed no readable direct AXStaticText values, so its plugin identity could not be verified"
+        } else {
+            observation = "the candidate plugin window's direct AXStaticText values were "
+                + observedNames.map { "'\($0)'" }.joined(separator: ", ")
+                + "; none mapped to requested plugin id '\(pluginID)'"
+        }
+        return HonestContract.encodeV2StateC(
+            error: .pluginWindowPluginMismatch,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "observed_plugin_window_static_texts": observedNames,
+                "what_was_attempted": "verify the plugin-window header identifies \(pluginID) before writing",
+                "what_was_observed": observation,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func acquiredPluginWindowFailureStateC(
+        acquiredWindow: AXUIElement,
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        trackName: String,
+        axDescription: String,
+        detail: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> String? {
+        switch AXLogicProElements.pluginWindowMatch(
+            forTrackName: trackName,
+            matchingPluginID: pluginID,
+            matchingSliderDescription: axDescription,
+            runtime: runtime
+        ) {
+        case let .unique(currentWindow) where CFEqual(currentWindow, acquiredWindow):
+            return nil
+        case let .pluginIdentityMismatch(observedNames):
+            return pluginWindowPluginMismatchStateC(
+                operation,
+                identity,
+                pluginID: pluginID,
+                observedNames: observedNames
+            )
+        case .none, .ambiguous, .unique:
+            return windowIdentityUnresolvedStateC(
+                operation,
+                identity,
+                detail,
+                diagnostics: pluginWindowAcquisitionDiagnostics(
+                    trackName: trackName,
+                    axDescription: axDescription,
+                    runtime: runtime
+                )
+            )
+        }
+    }
+
     private static func openPluginWindowFromTargetSlot(
         _ targetSlot: AXUIElement,
+        pluginID: String,
         trackName: String,
         axDescription: String,
         runtime: AXLogicProElements.Runtime
     ) async -> AXUIElementSendable? {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
+            matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
             runtime: runtime
         ) {
         case .ambiguous:
+            return nil
+        case .pluginIdentityMismatch:
             return nil
         case let .unique(window):
             guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
@@ -1756,6 +1855,7 @@ extension AccessibilityChannel {
             // only advance to the next ranked control if the poll shows no window.
             _ = pressElement(element, runtime: runtime.ax)
             switch await pollOpenPluginWindow(
+                pluginID: pluginID,
                 trackName: trackName,
                 axDescription: axDescription,
                 runtime: runtime,
@@ -1767,6 +1867,8 @@ extension AccessibilityChannel {
                 }
                 return AXUIElementSendable(window)
             case .ambiguous:
+                return nil
+            case .pluginIdentityMismatch:
                 return nil
             case .none:
                 continue
@@ -1982,6 +2084,7 @@ extension AccessibilityChannel {
     }
 
     private static func pollOpenPluginWindow(
+        pluginID: String,
         trackName: String,
         axDescription: String,
         runtime: AXLogicProElements.Runtime,
@@ -1992,6 +2095,7 @@ extension AccessibilityChannel {
         repeat {
             switch AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
+                matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
                 runtime: runtime
             ) {
@@ -1999,6 +2103,8 @@ extension AccessibilityChannel {
                 lastUniqueWindow = window
             case .ambiguous:
                 return .ambiguous
+            case let .pluginIdentityMismatch(observedNames):
+                return .pluginIdentityMismatch(observedNames: observedNames)
             case .none:
                 lastUniqueWindow = nil
             }

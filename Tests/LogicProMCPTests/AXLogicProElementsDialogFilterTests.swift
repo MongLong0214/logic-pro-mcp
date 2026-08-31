@@ -691,6 +691,7 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     let closeButton = builder.element(101)
     let bypass = builder.element(102)
     let gainSlider = builder.element(103)
+    let pluginName = builder.element(104)
 
     builder.setAttribute(editor, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(editor, kAXSubroleAttribute as String, kAXDialogSubrole as String)
@@ -701,13 +702,16 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     builder.setAttribute(bypass, kAXTitleAttribute as String, "바이패스")
     builder.setAttribute(gainSlider, kAXRoleAttribute as String, kAXSliderRole as String)
     builder.setAttribute(gainSlider, kAXDescriptionAttribute as String, "Gain")
-    builder.setChildren(editor, [bypass, gainSlider])
+    builder.setAttribute(pluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(pluginName, kAXValueAttribute as String, "Gain")
+    builder.setChildren(editor, [bypass, gainSlider, pluginName])
 
     builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
     let match = AXLogicProElements.pluginWindowMatch(
         forTrackName: "오디오 1",
+        matchingPluginID: "logic.stock.effect.gain",
         matchingSliderDescription: "Gain",
         runtime: runtime
     )

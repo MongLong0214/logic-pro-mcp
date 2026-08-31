@@ -63,7 +63,8 @@ private final class LiveFixture: @unchecked Sendable {
         slotPressReturnsFalse: Bool = false,
         sliderWriteBehavior: SliderWriteBehavior = .direct,
         sliderDisplayUnit: String = "%",
-        sliderUsesSignedPositiveDisplay: Bool = false
+        sliderUsesSignedPositiveDisplay: Bool = false,
+        pluginWindowStaticTextValues: [String]? = nil
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -148,7 +149,8 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(arrangeWindow, kAXTitleAttribute as String, "AcidWashBass — Tracks")
         b.setChildren(arrangeWindow, [headersGroup, mixer])
 
-        // --- Plugin window: title == track name; one Threshold AXSlider. ---
+        // --- Plug-in window: title == track name; direct AXStaticText children
+        //     include the plug-in display name at no fixed index. ---
         b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
         b.setAttribute(slider, kAXDescriptionAttribute as String, thresholdDescription)
         b.setAttribute(slider, kAXValueAttribute as String, beforeValue)
@@ -170,7 +172,15 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, pluginWindowPresent)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, pluginWindowPresent)
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider])
+        let staticTexts = (pluginWindowStaticTextValues ?? ["보기:", pluginSlotName, trackName])
+            .enumerated()
+            .map { offset, value -> AXUIElement in
+                let text = b.element(1010 + offset)
+                b.setAttribute(text, kAXRoleAttribute as String, kAXStaticTextRole as String)
+                b.setAttribute(text, kAXValueAttribute as String, value)
+                return text
+            }
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider] + staticTexts)
 
         let windows = pluginWindowPresent ? [arrangeWindow, pluginWindow] : [arrangeWindow]
         b.setAttribute(app, kAXWindowsAttribute as String, windows)
@@ -502,6 +512,110 @@ private func namedEQBandParams(
     #expect(obj["observed_normalized"] as? Double == 60.7)
 }
 
+// MARK: - Plug-in editor header identity
+
+@Test func testPreopenedDifferentPluginHeaderIsRefusedBeforeWrite() async throws {
+    // The reuse path must not adopt a same-track, same-parameter Noise Gate
+    // editor for a Compressor request merely because both expose Threshold.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValues: ["보기:", "Noise Gate", trackName]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
+    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    #expect((try #require(obj["what_was_observed"] as? String)).contains("Noise Gate"))
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testRequestedPluginHeaderAllowsPreopenedReuseToReachStateA() async {
+    // This takes the production opener's pre-existing-window reuse branch.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValues: ["보기:", "Compressor", trackName]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testPluginHeaderAliasMapsToRequestedCanonicalID() async throws {
+    // The observed spelling intentionally differs from the catalog display
+    // name. Raw string equality would reject it; catalog alias resolution must
+    // accept it as Channel EQ.
+    let fixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        pluginWindowStaticTextValues: ["보기:", "ChannelEQ", trackName]
+    )
+    let obj = try await runChannelEQFixture(
+        fixture: fixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_axvalue"
+    )
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 3)
+}
+
+@Test func testPluginWindowWithoutReadableStaticTextIsRefused() async throws {
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowStaticTextValues: [])
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
+    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    #expect((try #require(obj["what_was_observed"] as? String)).contains("no readable direct AXStaticText"))
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testPluginHeaderNameIsFoundAtAnyDirectStaticTextIndex() async {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValues: ["보기:", "unused label", trackName, "Compressor", "status"]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testControlsViewHeaderWithoutLocalizedViewLabelStillPasses() async {
+    // Logic's Controls view drops the localized 보기: label but keeps the
+    // plug-in display name. The check must not depend on the label's presence.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValues: ["Compressor", trackName]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testLadderPollRefusesNewlyOpenedDifferentPluginHeader() async throws {
+    // No editor is present for the preflight scan. The slot press reveals a
+    // same-track Noise Gate editor, so every poll result must reject it rather
+    // than accepting its Threshold as a Compressor window.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginWindowStaticTextValues: ["보기:", "Noise Gate", trackName]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
+    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    #expect((try #require(obj["what_was_observed"] as? String)).contains("Noise Gate"))
+    #expect(fixture.currentSliderValue == 51)
+}
+
 // MARK: - #726 per-track plug-in-instance ambiguity
 
 @Test func testDuplicatePluginInstancesOnTargetTrackRefuseBeforeWindowAcquisition() async throws {
@@ -516,7 +630,7 @@ private func namedEQBandParams(
     let obj = await runLive(
         fixture: fixture,
         params: thresholdParams(),
-        opener: { _, _, _, _ in
+        opener: { _, _, _, _, _ in
             openerInvoked.value = true
             return nil
         }
@@ -584,7 +698,7 @@ private func namedEQBandParams(
         params: namedEQBandParams(),
         runtime: fixture.runtime,
         frontDocumentPath: { expectedPath },
-        pluginWindowOpener: { _, _, _, _ in
+        pluginWindowOpener: { _, _, _, _, _ in
             openerInvoked.value = true
             return nil
         }
@@ -1183,13 +1297,16 @@ private func namedEQBandParams(
     let duplicateClose = b.element(3002)
     let duplicateBypass = b.element(3003)
     let duplicateLink = b.element(3004)
+    let duplicatePluginName = b.element(3005)
     b.setAttribute(duplicateClose, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(duplicateBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(duplicateBypass, kAXDescriptionAttribute as String, "bypass")
     b.setAttribute(duplicateLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(duplicateLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(duplicatePluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    b.setAttribute(duplicatePluginName, kAXValueAttribute as String, "Compressor")
     b.setAttribute(duplicateWindow, kAXCloseButtonAttribute as String, duplicateClose)
-    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider])
+    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider, duplicatePluginName])
     b.setAttribute(fixture.app, kAXWindowsAttribute as String, [
         b.element(1001), b.element(1004), duplicateWindow,
     ])
@@ -1231,7 +1348,7 @@ private func namedEQBandParams(
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
     let v1 = try #require(obj["write_attempted"] as? Bool)
     #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
@@ -1246,6 +1363,7 @@ private func namedEQBandParams(
     let duplicateClose = b.element(3302)
     let duplicateBypass = b.element(3303)
     let duplicateLink = b.element(3304)
+    let duplicatePluginName = b.element(3305)
     b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
     b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
     b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
@@ -1254,13 +1372,15 @@ private func namedEQBandParams(
     b.setAttribute(duplicateBypass, kAXDescriptionAttribute as String, "bypass")
     b.setAttribute(duplicateLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(duplicateLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(duplicatePluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    b.setAttribute(duplicatePluginName, kAXValueAttribute as String, "Compressor")
     b.setAttribute(duplicateWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(duplicateWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     b.setAttribute(duplicateWindow, kAXTitleAttribute as String, trackName)
     b.setAttribute(duplicateWindow, kAXCloseButtonAttribute as String, duplicateClose)
     b.setAttribute(duplicateWindow, kAXMainAttribute as String, true)
     b.setAttribute(duplicateWindow, kAXFocusedAttribute as String, true)
-    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider])
+    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider, duplicatePluginName])
     fixture.windowsAddedOnSlotPress.value = [duplicateWindow]
 
     let obj = await runLive(fixture: fixture, params: thresholdParams())
@@ -1306,26 +1426,31 @@ private func namedEQBandParams(
     let openedClose = b.element(2002)
     let openedBypass = b.element(2003)
     let openedLink = b.element(2004)
+    let openedPluginName = b.element(2005)
     b.setAttribute(openedClose, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(openedBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(openedBypass, kAXDescriptionAttribute as String, "bypass")
     b.setAttribute(openedLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(openedLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(openedPluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    b.setAttribute(openedPluginName, kAXValueAttribute as String, "Compressor")
     b.setAttribute(openedWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(openedWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     b.setAttribute(openedWindow, kAXTitleAttribute as String, trackName)
     b.setAttribute(openedWindow, kAXCloseButtonAttribute as String, openedClose)
     b.setAttribute(openedWindow, kAXMainAttribute as String, true)
     b.setAttribute(openedWindow, kAXFocusedAttribute as String, true)
-    b.setChildren(openedWindow, [openedBypass, openedLink, openedSlider])
+    b.setChildren(openedWindow, [openedBypass, openedLink, openedSlider, openedPluginName])
     b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), openedWindow])
     let sendable = AXUIElementSendable(openedWindow)
 
     let obj = await runLive(
         fixture: fixture,
         params: thresholdParams(),
-        opener: { _, name, desc, _ in
-            (name == trackName && desc == "Threshold") ? sendable : nil
+        opener: { _, pluginID, name, desc, _ in
+            (pluginID == "logic.stock.effect.compressor" && name == trackName && desc == "Threshold")
+                ? sendable
+                : nil
         }
     )
     #expect(obj["state"] as? String == "A", "opener-supplied window must allow the write")
@@ -1355,7 +1480,7 @@ private func namedEQBandParams(
     let obj = await runLive(
         fixture: fixture,
         params: thresholdParams(),
-        opener: { _, _, _, _ in sendable }
+        opener: { _, _, _, _, _ in sendable }
     )
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "param_control_not_found")
@@ -1505,15 +1630,18 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         let pluginClose = b.element(3006)
         let pluginBypass = b.element(3007)
         let pluginLink = b.element(3008)
+        let pluginName = b.element(3009)
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
         b.setAttribute(pluginLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
+        b.setAttribute(pluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider])
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider, pluginName])
 
         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow, pluginWindow])
         b.setAttribute(app, kAXMainWindowAttribute as String, arrangeWindow)
