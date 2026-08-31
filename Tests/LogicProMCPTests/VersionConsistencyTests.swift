@@ -47,7 +47,7 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 @Test func testServerVersionMatchesPackagingArtefacts() throws {
     let sourceVersion = ServerConfig.serverVersion
     #expect(
-        sourceVersion == "3.14.0",
+        sourceVersion == "3.15.0",
         "version surfaces must match the published stable release — bump all packaging artefacts together"
     )
 
