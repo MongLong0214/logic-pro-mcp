@@ -1,3 +1,4 @@
+import CoreMIDI
 import Foundation
 import MCP
 import Testing
@@ -23,6 +24,46 @@ let coreMIDIUnavailableInSandbox: ConditionTrait = .disabled(
     if: restrictedSandboxActive,
     "This sandbox denies the CoreMIDI service connection; the behaviour remains live qualification."
 )
+
+/// Independently ask whether CoreMIDI will hand THIS process a client right now,
+/// returning the refusal status or nil when it will.
+///
+/// The production smoke tests need this because a client-creation failure has two
+/// very different causes and only one of them is a defect. A sandbox trait cannot
+/// separate them: it is evaluated before the test and only knows about sandboxes.
+///
+/// Those tests used to accept a single hardcoded status (-50, what a CI runner
+/// returns) as "the environment cannot answer". That named one instance of the
+/// condition rather than the condition, so any other environmental refusal read as
+/// a product failure. Measured on a developer host: `MIDIClientCreate` returns -2
+/// during a full suite run while MIDIServer is cycling — and MIDIServer can also
+/// die outright, with a crash report to show for it, after which every client
+/// creation in every process fails until it comes back.
+///
+/// This probe is deliberately NOT vacuous. It uses CoreMIDI directly rather than
+/// the code under test, so when the product's own start path is the broken half
+/// this returns nil and the caller rethrows. It can only excuse a failure that
+/// the bare framework reproduces.
+func coreMIDIRefusesAClientRightNow() -> OSStatus? {
+    var client = MIDIClientRef()
+    let status = MIDIClientCreate("LogicProMCP-availability-probe" as CFString, nil, nil, &client)
+    guard status != noErr else {
+        MIDIClientDispose(client)
+        return nil
+    }
+    return status
+}
+
+/// Report a production smoke test that could not run because CoreMIDI refused
+/// this process a client. Loud on stdout: a silent return is indistinguishable
+/// from a test that actually exercised the path.
+func reportCoreMIDIUnavailable(_ test: String, startStatus: OSStatus, probeStatus: OSStatus) {
+    print(
+        "SKIPPED \(test): CoreMIDI refused a client to this process "
+            + "(start status \(startStatus), independent probe \(probeStatus)). "
+            + "The production path was NOT exercised."
+    )
+}
 
 /// PRD-007 — live AX header-scan fixture for `.corroborated` ops.
 ///
