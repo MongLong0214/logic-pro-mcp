@@ -528,11 +528,11 @@ extension AccessibilityChannel {
     ///      with `unsupported_param_readback` (AC10); only `.writeReadback`
     ///      proceeds.
     ///   6  track verified select (`track_selection_failed`)
-    ///   7  inventory complete + occupied, identity-matched, and unambiguous at
-    ///      `insert` (`incomplete_inventory` / `target_plugin_mismatch` /
-    ///      `ambiguous_plugin_instance`)
-    ///   8  plugin window: resolve one candidate, then acquire it through the
-    ///      target slot (`window_open_failed` / `window_identity_unresolved`)
+    ///   7  inventory complete + occupied and identity-matched at `insert`
+    ///      (`incomplete_inventory` / `target_plugin_mismatch`)
+    ///   8  plugin window: a single plug-in instance uses the existing opener;
+    ///      duplicate instances require zero header-proven editors before one
+    ///      target-slot open press and exactly one afterward
     ///   9  slider match by AXDescription (`param_control_not_found`)
     ///  10  before `AXValue` read
     ///  11  dispatch the catalog's AX write method
@@ -1121,35 +1121,110 @@ extension AccessibilityChannel {
             }
             return slot.index
         }
-        guard conflictingInsertIndices.count <= 1 else {
-            // #726 measured on a real project: Absolute Zero had Compressor at
-            // inserts 0 and 2. set_param_verified for insert 0 = 40 and insert
-            // 2 = 70 both returned State A with their requested insert
-            // identities, yet readback was slot 0 Threshold = 0 % (both writes)
-            // and slot 1 Threshold = 56 % (never touched). The window match
-            // uses track name plus slider AXDescription, neither of which binds
-            // an editor to an insert. Refuse before any window is opened or
-            // pressed rather than guessing which identical instance is visible.
-            return .error(HonestContract.encodeV2StateC(
-                error: .ambiguousPluginInstance,
-                extras: [
-                    "operation": operation,
-                    "target_identity": identity,
-                    "requested_plugin_id": pluginID,
-                    "conflicting_insert_indices": conflictingInsertIndices,
-                    "what_was_attempted": "uniquely identify \(pluginID) at insert \(insert) before opening its window",
-                    "what_was_observed": "\(pluginID) appears at inserts \(conflictingInsertIndices.map(String.init).joined(separator: ", ")) on track \(track)",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
-        }
-
-        // Step 8 — plugin window: reject ambiguity, then acquire through the
-        // target slot so the slot is the provenance for the selected editor.
+        let duplicatedPluginInstance = conflictingInsertIndices.count > 1
         guard let trackName = AXLogicProElements.trackName(at: track, runtime: runtime) else {
             return .error(windowOpenFailedStateC(operation, identity, "the target track name could not be resolved for window matching"))
         }
+        var constructedWindow: AXUIElementSendable?
+        if duplicatedPluginInstance {
+            // #726 follow-up measurement: when no matching editor is open, one
+            // target-slot `열기` press creates the target editor. A pre-existing
+            // editor makes the result indistinguishable, and a hidden sibling can
+            // make one press restore two editors. These header-proven counts are
+            // therefore the provenance proof; neither geometry nor name-only
+            // reuse chooses the editor in this branch.
+            let matchingEditorsBeforePress = AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            )
+            guard matchingEditorsBeforePress.isEmpty else {
+                return .error(duplicatePluginEditorAlreadyOpenStateC(
+                    operation: operation,
+                    identity: identity,
+                    pluginID: pluginID,
+                    track: track,
+                    insert: insert,
+                    conflictingInsertIndices: conflictingInsertIndices,
+                    matchingEditorCount: matchingEditorsBeforePress.count
+                ))
+            }
+
+            // Retain the existing static-header guard: an editor that exposes
+            // this track and parameter but cannot prove the requested plug-in is
+            // not evidence of a clean, matching pre-count.
+            if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                matchingSliderDescription: axDescription,
+                runtime: runtime
+            ) {
+                return .error(pluginWindowPluginMismatchStateC(
+                    operation,
+                    identity,
+                    pluginID: pluginID,
+                    observedNames: observedNames
+                ))
+            }
+
+            guard let targetOpenControl = rankedPluginSlotOpenControls(
+                in: slots[insert].element,
+                runtime: runtime.ax
+            ).first(where: { $0.rank == 0 })?.element else {
+                return .error(windowOpenFailedStateC(
+                    operation,
+                    identity,
+                    "the target insert exposes no AXPress-capable open control",
+                    diagnostics: pluginWindowAcquisitionDiagnostics(
+                        trackName: trackName,
+                        axDescription: axDescription,
+                        runtime: runtime
+                    )
+                ))
+            }
+
+            // Real Logic can report a non-zero AX status after opening the
+            // editor, so the observed post-count—not that status—decides.
+            _ = pressElement(targetOpenControl, runtime: runtime.ax)
+            let matchingEditorsAfterPress = await pollMatchingPluginEditorWindows(
+                trackName: trackName,
+                pluginID: pluginID,
+                runtime: runtime,
+                timeoutMs: 1_250
+            )
+            guard matchingEditorsAfterPress.count == 1 else {
+                if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
+                    forTrackName: trackName,
+                    matchingPluginID: pluginID,
+                    matchingSliderDescription: axDescription,
+                    runtime: runtime
+                ) {
+                    return .error(pluginWindowPluginMismatchStateC(
+                        operation,
+                        identity,
+                        pluginID: pluginID,
+                        observedNames: observedNames
+                    ))
+                }
+                return .error(duplicatePluginEditorCountMismatchStateC(
+                    operation: operation,
+                    identity: identity,
+                    pluginID: pluginID,
+                    track: track,
+                    insert: insert,
+                    conflictingInsertIndices: conflictingInsertIndices,
+                    matchingEditorCount: matchingEditorsAfterPress.count
+                ))
+            }
+            // `matchingPluginEditorWindows` accepts a window only after its
+            // direct static-text header maps to the requested plug-in id.
+            constructedWindow = AXUIElementSendable(matchingEditorsAfterPress[0])
+        }
+
+        // Step 8 — normal single-instance acquisition retains the original
+        // name/parameter resolution and opener behaviour. For a duplicated
+        // instance, `constructedWindow` above is already proven by the one
+        // target-slot press and the two editor counts.
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
             matchingPluginID: pluginID,
@@ -1180,13 +1255,19 @@ extension AccessibilityChannel {
         case .none, .unique:
             break
         }
-        guard let opened = await pluginWindowOpener(
-            AXUIElementSendable(slots[insert].element),
-            pluginID,
-            trackName,
-            axDescription,
-            runtime
-        ) else {
+        let openedCandidate: AXUIElementSendable?
+        if let constructedWindow {
+            openedCandidate = constructedWindow
+        } else {
+            openedCandidate = await pluginWindowOpener(
+                AXUIElementSendable(slots[insert].element),
+                pluginID,
+                trackName,
+                axDescription,
+                runtime
+            )
+        }
+        guard let opened = openedCandidate else {
             // A polling attempt may have observed a same-track editor with the
             // requested control but the wrong (or unreadable) header. Report
             // that identity failure directly; a concurrent popup-cleanup issue
@@ -1770,6 +1851,56 @@ extension AccessibilityChannel {
         )
     }
 
+    private static func duplicatePluginEditorAlreadyOpenStateC(
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        track: Int,
+        insert: Int,
+        conflictingInsertIndices: [Int],
+        matchingEditorCount: Int
+    ) -> String {
+        HonestContract.encodeV2StateC(
+            error: .duplicatePluginEditorAlreadyOpen,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "conflicting_insert_indices": conflictingInsertIndices,
+                "matching_editor_count_before_press": matchingEditorCount,
+                "what_was_attempted": "confirm no \(pluginID) editor was already open before pressing insert \(insert)",
+                "what_was_observed": "\(matchingEditorCount) matching \(pluginID) editor(s) were already open on track \(track)",
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func duplicatePluginEditorCountMismatchStateC(
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        track: Int,
+        insert: Int,
+        conflictingInsertIndices: [Int],
+        matchingEditorCount: Int
+    ) -> String {
+        HonestContract.encodeV2StateC(
+            error: .duplicatePluginEditorCountMismatch,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "requested_plugin_id": pluginID,
+                "conflicting_insert_indices": conflictingInsertIndices,
+                "matching_editor_count_after_press": matchingEditorCount,
+                "what_was_attempted": "press insert \(insert)'s open control once and observe exactly one \(pluginID) editor",
+                "what_was_observed": "the one target-slot press left \(matchingEditorCount) matching \(pluginID) editor(s) visible on track \(track)",
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
     private static func acquiredPluginWindowFailureStateC(
         acquiredWindow: AXUIElement,
         operation: String,
@@ -2115,6 +2246,32 @@ extension AccessibilityChannel {
             return .unique(lastUniqueWindow)
         }
         return .none
+    }
+
+    /// Wait only for a nonzero header-proven editor count after the one allowed
+    /// duplicate-instance slot press. A count of two or more returns immediately
+    /// so a hidden sibling can never be mistaken for the requested insert.
+    private static func pollMatchingPluginEditorWindows(
+        trackName: String,
+        pluginID: String,
+        runtime: AXLogicProElements.Runtime,
+        timeoutMs: Int
+    ) async -> [AXUIElement] {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
+        var matchingEditors: [AXUIElement] = []
+        repeat {
+            matchingEditors = AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            )
+            if !matchingEditors.isEmpty {
+                return matchingEditors
+            }
+            guard Date() < deadline else { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        } while Date() < deadline
+        return matchingEditors
     }
 
     /// ADR-001 coordinate ban: open the plugin window from its slot control via

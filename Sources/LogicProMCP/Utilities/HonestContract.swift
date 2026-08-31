@@ -108,6 +108,14 @@ enum HonestContract {
         /// cannot distinguish those instances, so opening one could write the
         /// wrong insert. Refuse before window acquisition.
         case ambiguousPluginInstance = "ambiguous_plugin_instance"
+        /// The requested plug-in occupies multiple inserts and a matching
+        /// header-proven editor was already visible before the target slot could
+        /// establish provenance by opening one editor from a zero-editor state.
+        case duplicatePluginEditorAlreadyOpen = "duplicate_plugin_editor_already_open"
+        /// The requested plug-in occupies multiple inserts, but one target-slot
+        /// open press did not leave exactly one header-proven matching editor.
+        /// This includes a hidden sibling restored by the press.
+        case duplicatePluginEditorCountMismatch = "duplicate_plugin_editor_count_mismatch"
         case slotOccupied = "slot_occupied"
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
@@ -443,6 +451,8 @@ enum HonestContract {
         FailureError.targetPluginMismatch.rawValue,
         FailureError.pluginWindowPluginMismatch.rawValue,
         FailureError.ambiguousPluginInstance.rawValue,
+        FailureError.duplicatePluginEditorAlreadyOpen.rawValue,
+        FailureError.duplicatePluginEditorCountMismatch.rawValue,
         FailureError.slotOccupied.rawValue,
         FailureError.trackSelectionFailed.rawValue,
         FailureError.staleSnapshot.rawValue,

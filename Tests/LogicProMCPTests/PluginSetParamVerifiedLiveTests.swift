@@ -42,6 +42,7 @@ private final class LiveFixture: @unchecked Sendable {
     let builder = FakeAXRuntimeBuilder()
     let app: AXUIElement
     let windowsAddedOnSlotPress: MutableBox<[AXUIElement]>
+    let targetOpenControlPressCount: MutableBox<Int>
     let sliderWriteCount: MutableBox<Int>
     let runtime: AXLogicProElements.Runtime
 
@@ -68,6 +69,7 @@ private final class LiveFixture: @unchecked Sendable {
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
+        let targetOpenControlPressCount = MutableBox(0)
         let sliderWriteCount = MutableBox(0)
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
@@ -250,6 +252,9 @@ private final class LiveFixture: @unchecked Sendable {
                 guard key == targetSlotKey || key == targetOpenButtonKey else {
                     return true
                 }
+                if key == targetOpenButtonKey {
+                    targetOpenControlPressCount.value += 1
+                }
                 if openWindowOnSlotPress {
                     b.setAttribute(
                         app,
@@ -267,6 +272,7 @@ private final class LiveFixture: @unchecked Sendable {
         )
         self.app = app
         self.windowsAddedOnSlotPress = windowsAddedOnSlotPress
+        self.targetOpenControlPressCount = targetOpenControlPressCount
         self.sliderWriteCount = sliderWriteCount
         self.runtime = runtime
     }
@@ -316,6 +322,38 @@ private func runLive(
     return try! JSONSerialization.jsonObject(
         with: result.message.data(using: .utf8)!, options: []
     ) as! [String: Any]
+}
+
+/// A second same-track Compressor editor for the duplicate-insert post-count
+/// case. Its distinct AX elements intentionally share every non-geometry
+/// identity attribute the live editors share.
+private func matchingCompressorEditorWindow(
+    fixture: LiveFixture,
+    baseID: Int
+) -> (window: AXUIElement, slider: AXUIElement) {
+    let b = fixture.builder
+    let window = b.element(baseID)
+    let slider = b.element(baseID + 1)
+    let close = b.element(baseID + 2)
+    let bypass = b.element(baseID + 3)
+    let link = b.element(baseID + 4)
+    let pluginName = b.element(baseID + 5)
+    b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(slider, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(slider, kAXValueAttribute as String, 51.0)
+    b.setAttribute(close, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+    b.setAttribute(link, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(link, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(pluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
+    b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(window, kAXTitleAttribute as String, trackName)
+    b.setAttribute(window, kAXCloseButtonAttribute as String, close)
+    b.setChildren(window, [bypass, link, slider, pluginName])
+    return (window, slider)
 }
 
 private func thresholdParams(
@@ -525,7 +563,8 @@ private func namedEQBandParams(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
-    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
     #expect((try #require(obj["what_was_observed"] as? String)).contains("Noise Gate"))
     #expect(fixture.currentSliderValue == 51)
 }
@@ -568,7 +607,8 @@ private func namedEQBandParams(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
-    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
     #expect((try #require(obj["what_was_observed"] as? String)).contains("no readable direct AXStaticText"))
     #expect(fixture.currentSliderValue == 51)
 }
@@ -611,38 +651,90 @@ private func namedEQBandParams(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "plugin_window_plugin_mismatch")
-    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
     #expect((try #require(obj["what_was_observed"] as? String)).contains("Noise Gate"))
     #expect(fixture.currentSliderValue == 51)
 }
 
 // MARK: - #726 per-track plug-in-instance ambiguity
 
-@Test func testDuplicatePluginInstancesOnTargetTrackRefuseBeforeWindowAcquisition() async throws {
-    // Mutation caught: counting only the target slot (or moving this guard
-    // after the opener) reintroduces the measured wrong-instance write.
+@Test func testDuplicatePluginInstancesAcquireByOneTargetOpenPress() async {
+    // Mutation caught: reusing the name-only opener (or taking an unproven
+    // editor) would make this fail before State A or press another control.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    #expect(fixture.targetOpenControlPressCount.value == 1)
+}
+
+@Test func testDuplicatePluginWithAnAlreadyOpenEditorRefusesBeforePress() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_already_open")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(obj["matching_editor_count_before_press"] as? Int == 1)
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testDuplicatePluginWithTwoEditorsAfterOnePressRefuses() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
+    )
+    let sibling = matchingCompressorEditorWindow(fixture: fixture, baseID: 3_500)
+    fixture.windowsAddedOnSlotPress.value = [sibling.window]
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_count_mismatch")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(obj["matching_editor_count_after_press"] as? Int == 2)
+    #expect(fixture.targetOpenControlPressCount.value == 1)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(fixture.builder.attributeValue(sibling.slider, kAXValueAttribute as String) as? Double == 51)
+}
+
+@Test func testDuplicatePluginWithNoEditorAfterOnePressRefuses() async throws {
     let fixture = LiveFixture(
         beforeValue: 51,
         pluginWindowPresent: false,
         pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]]
     )
-    let openerInvoked = MutableBox(false)
-    let obj = await runLive(
-        fixture: fixture,
-        params: thresholdParams(),
-        opener: { _, _, _, _, _ in
-            openerInvoked.value = true
-            return nil
-        }
-    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "ambiguous_plugin_instance")
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_count_mismatch")
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
     #expect(!writeAttempted)
-    #expect(obj["conflicting_insert_indices"] as? [Int] == [0, 6])
-    #expect(!openerInvoked.value, "the refusal must precede every window-open attempt")
+    #expect(obj["matching_editor_count_after_press"] as? Int == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 1)
     #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testSinglePluginWithAnAlreadyOpenEditorKeepsExistingBehaviour() async {
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
 }
 
 @Test func testDifferentPluginInstancesOnTargetTrackStillProceed() async {
@@ -682,10 +774,10 @@ private func namedEQBandParams(
     #expect(fixture.currentSliderValue == 60)
 }
 
-@Test func testDuplicateChannelEQInstancesRefuseBeforeWindowAcquisition() async throws {
-    // Mutation caught: wiring the ambiguity refusal only into
-    // set_param_verified leaves set_eq_band_verified able to open an ambiguous
-    // Channel EQ editor and write the wrong insert.
+@Test func testDuplicateChannelEQInstancesAlsoRequireAProvenPostCount() async throws {
+    // The shared verified-write engine must not let the named-band route escape
+    // duplicate-instance construction. The injected opener cannot supply a
+    // window here: this branch must use exactly one slot-control press instead.
     let fixture = LiveFixture(
         thresholdDescription: "Peak 1 Frequency",
         pluginSlotName: "Channel EQ",
@@ -707,11 +799,13 @@ private func namedEQBandParams(
     let obj = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "ambiguous_plugin_instance")
+    #expect(obj["error"] as? String == "duplicate_plugin_editor_count_mismatch")
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     #expect(obj["conflicting_insert_indices"] as? [Int] == [0, 6])
-    #expect(!openerInvoked.value, "the refusal must precede every window-open attempt")
+    #expect(obj["matching_editor_count_after_press"] as? Int == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 1)
+    #expect(!openerInvoked.value, "the duplicate branch must not reuse the generic opener")
 }
 
 // MARK: - ADR-002 F1: live track-name cross-check for target_ref resolutions

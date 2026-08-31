@@ -442,6 +442,39 @@ extension AXLogicProElements {
         return .none
     }
 
+    /// Return every OPEN plug-in editor whose title identifies `trackName` and
+    /// whose direct static-text header maps to `pluginID`. This deliberately
+    /// does not require a parameter control: duplicate-insert acquisition uses
+    /// it to prove which editor the slot's open control created *before* the
+    /// parameter-specific slider match runs.
+    ///
+    /// The same direct-header rule as `pluginWindowMatch` is retained here; a
+    /// window title, descendant text, or geometry is not evidence of plug-in
+    /// identity.
+    static func matchingPluginEditorWindows(
+        forTrackName trackName: String,
+        matchingPluginID pluginID: String,
+        runtime: Runtime = .production
+    ) -> [AXUIElement] {
+        guard let app = appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return windows.filter { window in
+            guard isPluginEditorWindow(window, runtime: runtime.ax),
+                  AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else {
+                return false
+            }
+            let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title == target else { return false }
+            return pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax).contains {
+                VerifiedPluginCatalog.pluginID(forObservedName: $0) == pluginID
+            }
+        }
+    }
+
     /// Return only readable values of direct static-text children. Do not fall
     /// back to a title, a descendant, or a fixed child index: neither identifies
     /// the plug-in editor reliably.
