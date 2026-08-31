@@ -62,6 +62,18 @@ enum LogicProjectFileReader {
             },
             sleep: { nanos in try? await Task.sleep(nanoseconds: nanos) }
         )
+
+        /// A deliberately inert dependency for headless cache tests.  The
+        /// poller opts into `.production` explicitly; ordinary injected poller
+        /// runtimes must not spawn an AppleScript read merely because a test
+        /// refreshed its synthetic AX cache.
+        static let unavailable: Runtime = .init(
+            currentDocumentPath: { nil },
+            now: Date.init,
+            readPlistData: { _ in nil },
+            mtime: { _ in nil },
+            sleep: { _ in }
+        )
     }
 
     /// Top-level entry: query the current Logic document path via AppleScript,

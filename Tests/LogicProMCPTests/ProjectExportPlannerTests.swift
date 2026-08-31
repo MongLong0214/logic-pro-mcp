@@ -18,7 +18,10 @@ struct ProjectExportPlannerTests {
             "projects": .array([.string(project.path)]),
             "output_root": .string(outputRoot.path),
             "artifacts": .array([.string("stem"), .string("bounce")]),
-        ])
+        ], stemSubjects: .scanned(
+            projectPath: project.path,
+            subjects: [ProjectExportStemSubject(index: 0, name: "Planner Piano")]
+        ))
 
         let after = Set(try FileManager.default.contentsOfDirectory(atPath: outputRoot.path))
         #expect(before == after)
@@ -36,11 +39,12 @@ struct ProjectExportPlannerTests {
         let l2 = try #require(plan.requiredConfirmations.first { $0.level == "L2" })
         #expect(l2.requiredFor.contains("open"))
         #expect(l2.requiredFor.contains("bounce"))
+        #expect(l2.requiredFor.contains("export_run"))
         #expect(!l2.requiredFor.contains("close"))
         #expect(!plan.requiredConfirmations.contains { $0.requiredFor.contains("close") })
         #expect(!plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_run"))
-        #expect(!plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_resume"))
-        #expect(plan.unsupportedOrBlockedSteps.map(\.operation) == ["cloud_delivery"])
+        #expect(plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_resume"))
+        #expect(plan.unsupportedOrBlockedSteps.map(\.operation) == ["cloud_delivery", "export_resume"])
         #expect(plan.baselineVerification.contains("artifact_exists"))
         #expect(plan.baselineVerification.contains("no_silent_overwrite"))
 
@@ -57,10 +61,14 @@ struct ProjectExportPlannerTests {
         #expect(steps.allSatisfy { !$0.executed })
         let openStep = try #require(steps.first { $0.command == "open" })
         let bounceStep = try #require(steps.first { $0.command == "bounce" })
+        let stemStep = try #require(steps.first { $0.id == "project_0_stem_export" })
         #expect(openStep.requiresConfirmationLevel == "L2")
         #expect(bounceStep.requiresConfirmationLevel == "L2")
+        #expect(stemStep.requiresConfirmationLevel == "L2")
         #expect(!steps.contains { $0.command == "close" })
-        #expect(steps.map(\.command) == ["open", "bounce"])
+        #expect(stemStep.command == nil)
+        #expect(stemStep.title.contains("no standalone stem command"))
+        #expect(steps.map(\.command) == ["open", "bounce", nil])
     }
 
     @Test("#369: surfaces the bounce step's execution preconditions in the manifest")
@@ -72,38 +80,26 @@ struct ProjectExportPlannerTests {
             "projects": .array([.string(project.path)]),
             "output_root": .string(outputRoot.path),
             "artifacts": .array([.string("stem")]),
-        ])
+        ], stemSubjects: .scanned(
+            projectPath: project.path,
+            subjects: [ProjectExportStemSubject(index: 0, name: "Populated Piano")]
+        ))
 
         // The plan must no longer be silent about what the run needs: every
-        // precondition names the bounce command it gates.
+        // precondition names the execution command it gates.
         #expect(plan.executionPreconditions.map(\.requirement)
-            == ["automation_permission", "post_event_access", "bounce_helper_available", "input_source_available"])
-        #expect(plan.executionPreconditions.allSatisfy { $0.appliesToCommands == ["bounce"] })
+            == ["accessibility_export_panel"])
+        #expect(plan.executionPreconditions.allSatisfy { $0.appliesToCommands == ["export_run"] })
         #expect(plan.executionPreconditions.allSatisfy { !$0.verifyWith.isEmpty })
 
-        // The MIDI-Learn misconception is corrected in-context (the issue's
-        // "Related question"): the dialog-driven export path does NOT need the
-        // MIDIKeyCommands manual binding.
-        let automation = try #require(
-            plan.executionPreconditions.first { $0.requirement == "automation_permission" }
+        let panel = try #require(
+            plan.executionPreconditions.first { $0.requirement == "accessibility_export_panel" }
         )
-        #expect(automation.detail.contains("System Events"))
-        #expect(automation.detail.contains("does NOT require"))
-        #expect(automation.detail.contains("MIDIKeyCommands"))
-
-        // #427 follow-up: the keyboard-driven bounce/save panel needs an ABC or
-        // US input source. The bundled helper fails closed with
-        // `input_source_switch_failed` on a non-ABC/US layout (a real French/AZERTY
-        // user report), so the manifest must surface it as a bounce precondition.
-        let inputSource = try #require(
-            plan.executionPreconditions.first { $0.requirement == "input_source_available" }
-        )
-        #expect(inputSource.appliesToCommands == ["bounce"])
-        #expect(inputSource.detail.contains("com.apple.keylayout.ABC"))
-        #expect(inputSource.detail.contains("com.apple.keylayout.US"))
-        #expect(inputSource.detail.contains("input_source_switch_failed"))
-        #expect(inputSource.detail.contains("Input Sources"))
-        #expect(!inputSource.verifyWith.isEmpty)
+        #expect(panel.detail.contains("One File per Track"))
+        #expect(panel.detail.contains("does not use project.bounce"))
+        #expect(panel.detail.contains("keyboard-driven bounce helper"))
+        #expect(panel.detail.contains("no output format is selected or promised"))
+        #expect(panel.detail.contains("execution-time precondition"))
     }
 
     @Test("#369: execution preconditions encode with snake_case keys and survive round-trip")

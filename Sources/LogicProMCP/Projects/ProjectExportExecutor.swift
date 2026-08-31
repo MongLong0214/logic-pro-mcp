@@ -59,6 +59,10 @@ enum ProjectExportExecutor {
 
     typealias BounceHelperResult = ProjectExportBounceHelperResult
     typealias BounceToPath = @Sendable (_ artifactPath: String) async -> BounceHelperResult
+    /// Late-bound, panel-driven stem export. The drive reports its observed UI
+    /// terminal state; on-disk enumeration and audio analysis remain here in
+    /// the executor, alongside every other artifact verification.
+    typealias StemExportDrive = @Sendable (_ destination: String) async -> ProjectStemExportPanelDriver.Outcome
     typealias BounceHelperProcessRunner = @Sendable (_ executable: String, _ arguments: [String], _ timeout: TimeInterval) -> BoundedProcessRunner.Result
     typealias RunResult = ProjectExportRunResult
     typealias RunProject = ProjectExportRunProject
@@ -86,6 +90,10 @@ enum ProjectExportExecutor {
         /// Defaults to `{ false }` so hermetic unit tests never trip the preflight;
         /// `.live()` wires it to the real AX dialog probe.
         var dialogPresent: @Sendable () -> Bool = { false }
+        /// nil means the stem panel route is unavailable. The ordinary bounce
+        /// seam is intentionally never reused for stems: it would produce the
+        /// old project-level artifact behind the word "stem".
+        var driveStemExport: StemExportDrive? = nil
 
         static func live() -> Options {
             Options(
@@ -97,23 +105,26 @@ enum ProjectExportExecutor {
                 sleep: { try? await Task.sleep(nanoseconds: $0) },
                 minimumDurationSeconds: 0.05,
                 bounceToPath: { artifactPath in await ProjectExportExecutor.runBounceHelper(artifactPath: artifactPath) },
-                dialogPresent: { AXLogicProElements.dialogPresent() }
+                dialogPresent: { AXLogicProElements.dialogPresent() },
+                driveStemExport: { destination in
+                    await ProjectStemExportPanelDriver.live(destination: destination)
+                }
             )
         }
     }
 
     // MARK: - Entry point
 
-    /// Execute (or resume) the guarded export. `resume` only changes the
-    /// surfaced `mode` string and `next_safe_action` wording — the artifact
-    /// state machine is identical: both skip already-present+verified artifacts
-    /// and produce the rest. That shared path is what makes `export_run`
-    /// re-entrant and `export_resume` idempotent.
+    /// Execute (or resume) the guarded export. Ordinary known-path artifacts
+    /// share the idempotent skip/produce state machine. A late-bound stem is
+    /// deliberately excluded from `export_resume`: before Logic exports it,
+    /// there is no filename identity to compare or skip safely.
     static func run(
         params: [String: Value],
         router: ChannelRouter,
         resume: Bool,
-        options: Options
+        options: Options,
+        stemSubjects: ProjectExportStemSubjectInventory? = nil
     ) async -> RunResult {
         // (1) Re-run the planner. Caller-facing param errors are surfaced by the
         // dispatcher's planner call BEFORE this executor is reached, so a throw
@@ -121,7 +132,11 @@ enum ProjectExportExecutor {
         // crash.
         let plan: ProjectExportPlan
         do {
-            plan = try ProjectExportPlanner.plan(params: params, fileManager: options.fileManager)
+            plan = try ProjectExportPlanner.plan(
+                params: params,
+                fileManager: options.fileManager,
+                stemSubjects: stemSubjects
+            )
         } catch {
             return failedRun(
                 runID: "export-unplanned",
@@ -143,6 +158,14 @@ enum ProjectExportExecutor {
         }
         guard confirmed else {
             return confirmationRequiredRun(plan: plan, resume: resume)
+        }
+
+        // The per-file idempotency contract has no truthful implementation for
+        // late-bound stems. Refuse before opening a project or pressing Export.
+        guard !(resume && plan.projects.contains { project in
+            project.expectedArtifacts.contains { $0.filenamesLateBound == true }
+        }) else {
+            return unsupportedStemResumeRun(plan: plan)
         }
 
         let firstWriteNotifier = FirstWriteNotifier(action: options.onFirstWrite)
@@ -174,8 +197,11 @@ enum ProjectExportExecutor {
         // overwrite under fail_if_exists) never gets opened — every artifact
         // fails closed with the plan's own reason.
         guard project.validationStatus == "valid" else {
-            let arts = project.expectedArtifacts.map { artifact in
-                failedArtifact(artifact, error: "project_invalid: \(project.validationIssues.joined(separator: ","))")
+            let arts = project.expectedArtifacts.flatMap { artifact in
+                subjectScopedArtifacts(
+                    failedArtifact(artifact, error: "project_invalid: \(project.validationIssues.joined(separator: ","))"),
+                    for: artifact
+                )
             }
             return RunProject(
                 index: project.index,
@@ -194,6 +220,11 @@ enum ProjectExportExecutor {
         let needsOpen = preflightArtifacts.contains { $0 == nil }
 
         guard needsOpen else {
+            let preflightResults = zip(project.expectedArtifacts, preflightArtifacts).reduce(into: [RunArtifact]()) { results, pair in
+                let (artifact, preflight) = pair
+                guard let preflight else { return }
+                results.append(contentsOf: subjectScopedArtifacts(preflight, for: artifact))
+            }
             return RunProject(
                 index: project.index,
                 projectPath: project.projectPath,
@@ -201,7 +232,7 @@ enum ProjectExportExecutor {
                 observedProjectPath: nil,
                 identityVerified: false,
                 opened: false,
-                artifacts: preflightArtifacts.compactMap(\.self)
+                artifacts: preflightResults
             )
         }
 
@@ -212,12 +243,15 @@ enum ProjectExportExecutor {
         // pending artifact instead — mirrors the project_invalid / open_failed
         // fail-closed shape below.
         if options.dialogPresent() {
-            let arts = zip(project.expectedArtifacts, preflightArtifacts).map { pair -> RunArtifact in
+            let arts = zip(project.expectedArtifacts, preflightArtifacts).flatMap { pair -> [RunArtifact] in
                 let (artifact, preflight) = pair
-                if let preflight { return preflight }
-                return failedArtifact(
-                    artifact,
-                    error: "blocking_dialog_present: refused project.open while a modal Logic dialog/sheet is present"
+                if let preflight { return subjectScopedArtifacts(preflight, for: artifact) }
+                return subjectScopedArtifacts(
+                    failedArtifact(
+                        artifact,
+                        error: "blocking_dialog_present: refused project.open while a modal Logic dialog/sheet is present"
+                    ),
+                    for: artifact
                 )
             }
             return RunProject(
@@ -242,10 +276,13 @@ enum ProjectExportExecutor {
             params: ["path": project.projectPath]
         )
         guard openResult.isSuccess else {
-            let arts = zip(project.expectedArtifacts, preflightArtifacts).map { pair -> RunArtifact in
+            let arts = zip(project.expectedArtifacts, preflightArtifacts).flatMap { pair -> [RunArtifact] in
                 let (artifact, preflight) = pair
-                if let preflight { return preflight }
-                return failedArtifact(artifact, error: "open_failed: \(openResult.message)")
+                if let preflight { return subjectScopedArtifacts(preflight, for: artifact) }
+                return subjectScopedArtifacts(
+                    failedArtifact(artifact, error: "open_failed: \(openResult.message)"),
+                    for: artifact
+                )
             }
             return RunProject(
                 index: project.index,
@@ -266,14 +303,17 @@ enum ProjectExportExecutor {
             AppleScriptChannel.projectPathsMatch(project.projectPath, $0)
         } ?? false
         guard identityVerified else {
-            let arts = zip(project.expectedArtifacts, preflightArtifacts).map { pair -> RunArtifact in
+            let arts = zip(project.expectedArtifacts, preflightArtifacts).flatMap { pair -> [RunArtifact] in
                 let (artifact, preflight) = pair
-                if let preflight { return preflight }
-                return failedArtifact(
-                    artifact,
-                    error: observedPath == nil
-                        ? "project_identity_mismatch: no front document path could be read"
-                        : "project_identity_mismatch: observed=\(observedPath ?? "")"
+                if let preflight { return subjectScopedArtifacts(preflight, for: artifact) }
+                return subjectScopedArtifacts(
+                    failedArtifact(
+                        artifact,
+                        error: observedPath == nil
+                            ? "project_identity_mismatch: no front document path could be read"
+                            : "project_identity_mismatch: observed=\(observedPath ?? "")"
+                    ),
+                    for: artifact
                 )
             }
             return RunProject(
@@ -291,16 +331,16 @@ enum ProjectExportExecutor {
         var arts: [RunArtifact] = []
         for (artifact, preflight) in zip(project.expectedArtifacts, preflightArtifacts) {
             if let preflight {
-                arts.append(preflight)
+                arts.append(contentsOf: subjectScopedArtifacts(preflight, for: artifact))
                 continue
             }
-            let produced = await produce(
+            let produced = await produceArtifacts(
                 artifact: artifact,
                 plan: plan,
                 router: router,
                 options: options
             )
-            arts.append(produced)
+            arts.append(contentsOf: produced)
         }
 
         return RunProject(

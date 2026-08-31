@@ -47,24 +47,35 @@ actor StatePoller {
         /// `blockingDialogInfo` defaults to `{ nil }` so existing tests (which
         /// only override `hasVisibleWindow` / `dialogPresent`) behave exactly as
         /// before — they exercise the no-blocking-dialog path.
+        /// `projectFileReader` is inert by default for the same reason: only
+        /// the production poller should ask Logic for a live document path.
         init(
             hasVisibleWindow: @Sendable @escaping () -> Bool,
             dialogPresent: @Sendable @escaping () -> Bool = { false },
             sleep: @Sendable @escaping (UInt64) async throws -> Void = { ns in
                 try await Task.sleep(nanoseconds: ns)
             },
-            blockingDialogInfo: @Sendable @escaping () -> AXLogicProElements.BlockingDialogInfo? = { nil }
+            blockingDialogInfo: @Sendable @escaping () -> AXLogicProElements.BlockingDialogInfo? = { nil },
+            projectFileReader: LogicProjectFileReader.Runtime = .unavailable
         ) {
             self.hasVisibleWindow = hasVisibleWindow
             self.dialogPresent = dialogPresent
             self.sleep = sleep
             self.blockingDialogInfo = blockingDialogInfo
+            self.projectFileReader = projectFileReader
         }
+
+        /// The AX project reader supplies a title but cannot provide a trusted
+        /// absolute bundle path.  This reader is the same validated
+        /// current-document source used by `logic://project/info`; unlike the
+        /// resource, the poller is allowed to persist it in the cache.
+        let projectFileReader: LogicProjectFileReader.Runtime
 
         static let production = Runtime(
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() },
             dialogPresent: { AXLogicProElements.dialogPresent() },
-            blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() }
+            blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() },
+            projectFileReader: .production
         )
 
         /// Test-friendly runtime for lifecycle-only coverage. Short-circuits
@@ -366,7 +377,12 @@ actor StatePoller {
             section: .project,
             axChannel: axChannel, cache: cache, as: ProjectInfo.self
         ) { cache, info, observed in
-            await cache.updateProject(info, ifCurrent: observed)
+            var identityBacked = info
+            if (identityBacked.filePath ?? "").isEmpty,
+               let metadata = await LogicProjectFileReader.read(runtime: runtime.projectFileReader) {
+                identityBacked.filePath = metadata.bundlePath.path
+            }
+            return await cache.updateProject(identityBacked, ifCurrent: observed)
         }
         // #668: readability drives `hasDocument`; only an APPLIED write is reported as refreshed.
         if projectReady.applied { cacheKeys.append(.project) }

@@ -4,6 +4,10 @@ import MCP
 struct ProjectDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicProject)
+    /// A stem plan may only reuse a recent, complete project/track/region
+    /// snapshot. The scanner is deliberately cache-only: dry-run planning
+    /// does not open a requested project merely to manufacture subjects.
+    private static let stemSubjectInventoryMaximumAge: TimeInterval = 10
 
     struct LifecycleExecution: Sendable {
         let executionError: String?
@@ -14,7 +18,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only; export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, bounces, verifies each artifact on disk via logic_audio, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume (skips already-present+verified artifacts, produces the rest); audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only. Stem is narrower than the generic projects shape: it refuses unless exactly one currently scanned project has a fresh complete region inventory proving its populated tracks, and output_root is an existing directory; the Export panel must also expose that folder in its browser at execution. Stem filenames and output format are late-bound and unpromised. fail_if_exists examines only top-level non-directory entries with suffix wav|wave|aif|aiff|aifc|m4a|mp3, and it refuses if enumeration fails; skip_existing is refused for stem. export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, drives the stem Export panel or bounces as appropriate, analyzes before/after-observed eligible stem outputs without guessing filename-to-track associations, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume for known-path artifacts; it refuses stem runs because Logic assigns filenames only after export; audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -96,7 +100,11 @@ struct ProjectDispatcher: OperationTraceDispatching {
         switch command {
         case "export_plan":
             do {
-                let plan = try ProjectExportPlanner.plan(params: params)
+                let stemSubjects = await stemSubjectInventory(params: params, cache: cache)
+                let plan = try ProjectExportPlanner.plan(
+                    params: params,
+                    stemSubjects: stemSubjects
+                )
                 // PR99-C5 / C2-nit (HC): use the throwing encoder so an encode
                 // failure fails closed (isError=true) via the catch below instead
                 // of returning an error-shaped, non-manifest body as a success.
@@ -116,8 +124,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // executor. The executor then re-runs the planner itself for the
             // authoritative manifest — the dispatcher's call is purely the
             // caller-input gate.
+            let stemSubjects = await stemSubjectInventory(params: params, cache: cache)
             do {
-                _ = try ProjectExportPlanner.plan(params: params)
+                _ = try ProjectExportPlanner.plan(
+                    params: params,
+                    stemSubjects: stemSubjects
+                )
             } catch {
                 audit(command, phase: .rejected, reason: "invalid export plan")
                 return toolInvalidParamsResult(
@@ -160,7 +172,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     params: params,
                     router: router,
                     resume: command == "export_resume",
-                    options: tracedExportOptions
+                    options: tracedExportOptions,
+                    stemSubjects: stemSubjects
                 )
             case .value(true):
                 audit(command, phase: .executed)
@@ -168,7 +181,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     params: params,
                     router: router,
                     resume: command == "export_resume",
-                    options: tracedExportOptions
+                    options: tracedExportOptions,
+                    stemSubjects: stemSubjects
                 )
             }
             // Lifecycle cache invalidation: a guarded run opens projects, so the
@@ -399,8 +413,13 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // Read-only arrange-area inspection. Necessary for programmatic
             // verification of record_sequence region placement — without this
             // the only feedback loop was visual screenshots.
+            let observedProject = await cache.currentProjectIdentity()
             let result = await router.route(operation: "region.get_regions")
-            await refreshRegionCache(from: result, cache: cache)
+            await refreshRegionCache(
+                from: result,
+                cache: cache,
+                ifCurrent: observedProject
+            )
             return toolTextResult(result)
 
         case "audit":
@@ -934,14 +953,101 @@ struct ProjectDispatcher: OperationTraceDispatching {
         }
     }
 
-    private static func refreshRegionCache(from result: ChannelResult, cache: StateCache) async {
+    private static func refreshRegionCache(
+        from result: ChannelResult,
+        cache: StateCache,
+        ifCurrent observedProject: StateCache.ProjectIdentity?
+    ) async {
         guard result.isSuccess,
               let payload = try? RegionInfo.decodeInventoryPayload(result.message) else {
             return
         }
-        await cache.updateRegions(
+        _ = await cache.updateRegions(
             payload.regions.map { $0.asRegionState() },
-            complete: payload.isComplete
+            complete: payload.isComplete,
+            ifCurrent: observedProject
+        )
+    }
+
+    /// Capture the exact identity-backed, populated-track scan that a stem dry
+    /// run publishes. Placeholder/project-file rows are intentionally rejected:
+    /// a count is not the index-and-name subject list the plan promises. A
+    /// track is a stem subject only when a fresh, complete region inventory
+    /// proves that the track contains at least one region.
+    private static func stemSubjectInventory(
+        params: [String: Value],
+        cache: StateCache
+    ) async -> ProjectExportStemSubjectInventory? {
+        guard let kinds = try? ProjectExportPlanner.artifactKinds(from: params),
+              kinds.contains("stem") else {
+            return nil
+        }
+        guard let projects = try? ProjectExportPlanner.projectPaths(from: params),
+              projects.count == 1 else {
+            return .unavailable(
+                reason: "stem export plans one currently scanned project at a time; a batch has no per-project live subject scan"
+            )
+        }
+
+        let snapshot = await cache.auditSnapshot()
+        let now = Date()
+        guard !snapshot.axOccluded else {
+            return .unavailable(reason: "the live track scan is occluded by a Logic panel or dialog")
+        }
+        guard snapshot.projectFetchedAt > .distantPast,
+              now.timeIntervalSince(snapshot.projectFetchedAt) <= stemSubjectInventoryMaximumAge else {
+            return .unavailable(reason: "the observed project identity is stale or has not been read within \(Int(stemSubjectInventoryMaximumAge)) seconds")
+        }
+        guard snapshot.tracksFetchedAt > .distantPast,
+              now.timeIntervalSince(snapshot.tracksFetchedAt) <= stemSubjectInventoryMaximumAge else {
+            return .unavailable(reason: "the live track scan is stale or has not completed within \(Int(stemSubjectInventoryMaximumAge)) seconds")
+        }
+        guard snapshot.regionsFetchedAt > .distantPast,
+              now.timeIntervalSince(snapshot.regionsFetchedAt) <= stemSubjectInventoryMaximumAge,
+              snapshot.regionsComplete else {
+            return .unavailable(reason: "a fresh complete region inventory is required to prove which tracks are populated")
+        }
+        let project = snapshot.project
+        guard let observedPath = project.filePath, !observedPath.isEmpty else {
+            return .unavailable(reason: "the live scan has no observed project identity")
+        }
+        let expectedPath = URL(fileURLWithPath: projects[0]).standardizedFileURL.path
+        let scannedPath = URL(fileURLWithPath: observedPath).standardizedFileURL.path
+        guard expectedPath == scannedPath else {
+            return .unavailable(
+                reason: "the live scan belongs to \(scannedPath), not planned project \(expectedPath)"
+            )
+        }
+
+        guard snapshot.tracksProjectIdentity?.epoch == snapshot.projectEpoch,
+              snapshot.tracksProjectIdentity?.path == scannedPath else {
+            return .unavailable(
+                reason: "the live track scan is not coherently associated with the observed project identity"
+            )
+        }
+        guard snapshot.regionsProjectIdentity?.epoch == snapshot.projectEpoch,
+              snapshot.regionsProjectIdentity?.path == scannedPath else {
+            return .unavailable(
+                reason: "the complete region inventory is not coherently associated with the observed project identity"
+            )
+        }
+
+        let tracks = snapshot.tracks
+        guard tracks.allSatisfy({ $0.liveIdentityBacked && $0.placeholder != true }) else {
+            return .unavailable(
+                reason: "the live track scan contains placeholder or identity-unbacked rows"
+            )
+        }
+        let populatedTrackIDs = Set(snapshot.regions.map(\.trackIndex))
+        let knownTrackIDs = Set(tracks.map(\.id))
+        guard populatedTrackIDs.isSubset(of: knownTrackIDs) else {
+            return .unavailable(reason: "the complete region inventory refers to a track absent from the live track scan")
+        }
+        return .scanned(
+            projectPath: scannedPath,
+            subjects: tracks
+                .filter { populatedTrackIDs.contains($0.id) }
+                .map { ProjectExportStemSubject(index: $0.id, name: $0.name) }
         )
     }
 

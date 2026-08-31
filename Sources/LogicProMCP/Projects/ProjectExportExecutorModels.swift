@@ -62,9 +62,22 @@ struct ProjectExportRunArtifact: Codable, Sendable, Equatable {
     let state: String
     let verified: Bool
     let bounceFired: Bool
+    /// Whether the export actuator was reached. State-C panel refusals keep
+    /// this false so callers can distinguish a safe refusal from a failed
+    /// post-click verification.
+    let writeAttempted: Bool
     let error: String?
     let reason: String?
     let evidence: ProjectExportArtifactEvidence?
+    /// Present for a late-bound stem result. This is the requested populated
+    /// track, not an inference from an output filename.
+    let subject: ProjectExportStemSubject?
+    /// Files observed in the before/after directory delta and analyzed after
+    /// export. They are intentionally separate from `subject`: the current AX
+    /// route has no evidence that a particular filename belongs to a track or
+    /// that an entry created after the before snapshot was produced by Logic
+    /// rather than a concurrent writer.
+    let observedStemOutputs: [ProjectExportObservedStemOutput]?
 
     enum CodingKeys: String, CodingKey {
         case kind
@@ -72,10 +85,46 @@ struct ProjectExportRunArtifact: Codable, Sendable, Equatable {
         case state
         case verified
         case bounceFired = "bounce_fired"
+        case writeAttempted = "write_attempted"
         case error
         case reason
         case evidence
+        case subject
+        case observedStemOutputs = "observed_stem_outputs"
     }
+
+    init(
+        kind: String,
+        path: String,
+        state: String,
+        verified: Bool,
+        bounceFired: Bool,
+        writeAttempted: Bool,
+        error: String?,
+        reason: String?,
+        evidence: ProjectExportArtifactEvidence?,
+        subject: ProjectExportStemSubject? = nil,
+        observedStemOutputs: [ProjectExportObservedStemOutput]? = nil
+    ) {
+        self.kind = kind
+        self.path = path
+        self.state = state
+        self.verified = verified
+        self.bounceFired = bounceFired
+        self.writeAttempted = writeAttempted
+        self.error = error
+        self.reason = reason
+        self.evidence = evidence
+        self.subject = subject
+        self.observedStemOutputs = observedStemOutputs
+    }
+}
+
+struct ProjectExportObservedStemOutput: Codable, Sendable, Equatable {
+    let path: String
+    let verified: Bool
+    let reason: String?
+    let evidence: ProjectExportArtifactEvidence
 }
 
 struct ProjectExportArtifactEvidence: Codable, Sendable, Equatable {

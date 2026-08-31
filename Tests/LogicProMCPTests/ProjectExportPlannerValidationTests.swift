@@ -12,7 +12,7 @@ struct ProjectExportPlannerValidationTests {
         let params: [String: Value] = [
             "projects": .array([.string(project.path)]),
             "output_root": .string(outputRoot.path),
-            "artifacts": .array([.string("stem"), .string("bounce")]),
+            "artifacts": .array([.string("bounce"), .string("preview")]),
         ]
 
         let a = try ProjectExportPlanner.plan(params: params)
@@ -25,7 +25,7 @@ struct ProjectExportPlannerValidationTests {
         let c = try ProjectExportPlanner.plan(params: [
             "projects": .array([.string(project.path)]),
             "output_root": .string(otherRoot.path),
-            "artifacts": .array([.string("stem"), .string("bounce")]),
+            "artifacts": .array([.string("bounce"), .string("preview")]),
         ])
         #expect(c.runID != a.runID)
 
@@ -33,7 +33,7 @@ struct ProjectExportPlannerValidationTests {
         let d = try ProjectExportPlanner.plan(params: [
             "projects": .array([.string(otherProject.path)]),
             "output_root": .string(outputRoot.path),
-            "artifacts": .array([.string("stem"), .string("bounce")]),
+            "artifacts": .array([.string("bounce"), .string("preview")]),
         ])
         #expect(d.runID != a.runID)
     }

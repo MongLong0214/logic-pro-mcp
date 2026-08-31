@@ -132,6 +132,43 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(!(await poller.isRunning))
 }
 
+@Test func testStatePollerPersistsValidatedCurrentDocumentPath() async throws {
+    let cache = StateCache()
+    let projectRoot = try makeExecTempDir()
+    let project = try makeLogicxProject(in: projectRoot, named: "Poller Identity")
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Poller Identity","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-12T00:00:00Z"}"#)
+        )
+    )
+    let metadataData = try PropertyListSerialization.data(
+        fromPropertyList: ["NumberOfTracks": 1],
+        format: .binary,
+        options: 0
+    )
+    let reader = LogicProjectFileReader.Runtime(
+        currentDocumentPath: { project.path },
+        now: Date.init,
+        readPlistData: { _ in metadataData },
+        mtime: { _ in Date(timeIntervalSince1970: 1_700_000_000) },
+        sleep: { _ in }
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { true },
+            projectFileReader: reader
+        )
+    )
+
+    let refreshed = await poller.refreshNow()
+    let cachedPath = await cache.getProject().filePath
+
+    #expect(refreshed)
+    #expect(cachedPath == project.path)
+}
+
 @Test func testStatePollerCachesBlockingDialogSignalFromRuntime() async throws {
     // #432 — every visible-window poll the poller samples the authoritative
     // AXLogicProElements.blockingDialogInfo() signal and caches its button titles,

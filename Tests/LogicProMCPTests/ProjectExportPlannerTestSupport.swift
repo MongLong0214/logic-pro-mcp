@@ -19,3 +19,19 @@ final class UnreadableAttributesFileManager: FileManager {
         throw CocoaError(.fileReadUnknown)
     }
 }
+
+final class UnreadableDirectoryFileManager: FileManager {
+    private let unreadablePath: String
+
+    init(unreadablePath: String) {
+        self.unreadablePath = unreadablePath
+        super.init()
+    }
+
+    override func contentsOfDirectory(atPath path: String) throws -> [String] {
+        if path == unreadablePath {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        return try super.contentsOfDirectory(atPath: path)
+    }
+}
