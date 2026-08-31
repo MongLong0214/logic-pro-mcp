@@ -116,6 +116,19 @@ expect_exit 1 "the closing PR must still list the issue"  "$TMP/roadmap-dropped.
 expect_exit 1 "a row this PR closes may not stay OPEN"    "$TMP/roadmap-ok.md" "$TMP/issues-ok.json" \
   "Closes #284"
 
+# GitHub can disable automatic closing of linked issues. The guard may enforce
+# this repository's convention, but its failure must say why an OPEN row can be
+# correct when that setting is off; otherwise maintainers get a false direction.
+OUT="$(python3 "$GUARD" --roadmap "$TMP/roadmap-ok.md" --issues-json "$TMP/issues-ok.json" \
+      --pr 1 --pr-body 'Closes #284' 2>&1)" || true
+if printf '%s' "$OUT" | grep -q 'automatically close linked issues'; then
+  printf 'ok    %-46s names the auto-close assumption\n' "auto-close setting disclosure"
+else
+  printf 'FAIL  %-46s did not name the auto-close assumption:\n%s\n' \
+    "auto-close setting disclosure" "$OUT"
+  FAILURES=$((FAILURES + 1))
+fi
+
 # The failing cases must name the issue they are about, or the report is unusable in CI.
 OUT="$(python3 "$GUARD" --roadmap "$TMP/roadmap-ok.md" --issues-json "$TMP/issues-extra-open.json" 2>&1)" || true
 if printf '%s' "$OUT" | grep -q '#683'; then

@@ -386,15 +386,18 @@ extension AXLogicProElements {
     }
 
     /// Find an OPEN plug-in editor whose title equals `trackName`, whose direct
-    /// `AXStaticText` children name `pluginID` through the verified catalog's
-    /// observed-name aliases, and which exposes exactly one matching slider.
+    /// `AXStaticText` children contain a plug-in name for `pluginID` through the
+    /// verified catalog's observed-name aliases, and which exposes exactly one
+    /// matching slider.
     ///
     /// Measured for stock Logic editors only: their direct static-text children
     /// contain the English plug-in display name in both editor and Controls
-    /// views, but its position varies and other labels are localized. Third-party
-    /// editors and catalog/display-name differences remain unmeasured, so their
-    /// observed names must resolve through `VerifiedPluginCatalog` rather than
-    /// being accepted by raw string comparison.
+    /// views, but its position varies and other labels are localized. The AX
+    /// title and one direct static-text value are the *track* name, so that
+    /// value is excluded before catalog lookup. Third-party editors and
+    /// catalog/display-name differences remain unmeasured, so their observed
+    /// names must resolve through `VerifiedPluginCatalog` rather than being
+    /// accepted by raw string comparison.
     static func pluginWindowMatch(
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
@@ -422,9 +425,12 @@ extension AXLogicProElements {
                 return .ambiguous
             case .unique:
                 let observedNames = pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax)
-                guard observedNames.contains(where: {
-                    VerifiedPluginCatalog.pluginID(forObservedName: $0) == pluginID
-                }) else {
+                guard pluginWindowHeaderNames(
+                    observedNames,
+                    containPluginID: pluginID,
+                    excludingTrackName: title,
+                    callerTrackName: target
+                ) else {
                     foundMismatchedCandidate = true
                     mismatchedObservedNames.append(contentsOf: observedNames)
                     continue
@@ -450,7 +456,8 @@ extension AXLogicProElements {
     ///
     /// The same direct-header rule as `pluginWindowMatch` is retained here; a
     /// window title, descendant text, or geometry is not evidence of plug-in
-    /// identity.
+    /// identity. The direct static-text value equal to the window title is the
+    /// track name and is explicitly not a plug-in-name candidate.
     static func matchingPluginEditorWindows(
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
@@ -469,9 +476,59 @@ extension AXLogicProElements {
             let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard title == target else { return false }
-            return pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax).contains {
-                VerifiedPluginCatalog.pluginID(forObservedName: $0) == pluginID
-            }
+            return pluginWindowHeaderNames(
+                pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax),
+                containPluginID: pluginID,
+                excludingTrackName: title,
+                callerTrackName: target
+            )
+        }
+    }
+
+    /// Every currently open plug-in editor window. Duplicate-instance
+    /// acquisition snapshots this before it presses an insert control, then
+    /// requires its accepted candidate to be a newly observed AX element.
+    static func pluginEditorWindows(runtime: Runtime = .production) -> [AXUIElement] {
+        guard let app = appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        return windows.filter {
+            isPluginEditorWindow($0, runtime: runtime.ax)
+                && AXHelpers.getRole($0, runtime: runtime.ax) == (kAXWindowRole as String)
+        }
+    }
+
+    /// Whether the exact AX window element remains in the application's
+    /// observed window list. `nil` means the list itself could not be read, so
+    /// a caller must not claim that a close was observed.
+    static func pluginEditorWindowIsOpen(
+        _ window: AXUIElement,
+        runtime: Runtime = .production
+    ) -> Bool? {
+        guard let app = appRoot(runtime: runtime),
+              let windows: [AXUIElement] = AXHelpers.getAttribute(
+                  app, kAXWindowsAttribute, runtime: runtime.ax
+              ) else {
+            return nil
+        }
+        return windows.contains { CFEqual($0, window) }
+    }
+
+    private static func pluginWindowHeaderNames(
+        _ observedNames: [String],
+        containPluginID pluginID: String,
+        excludingTrackName title: String,
+        callerTrackName target: String
+    ) -> Bool {
+        observedNames.contains { observedName in
+            // Logic exposes the track name in both AXTitle and a direct static
+            // text child. A track called "Compressor" must not authenticate a
+            // Noise Gate window as Compressor merely because both have a
+            // Threshold slider. Keep both values here: the caller-resolved
+            // track name is a second defense if Logic normalizes AXTitle.
+            guard observedName != title, observedName != target else { return false }
+            return VerifiedPluginCatalog.pluginID(forObservedName: observedName) == pluginID
         }
     }
 

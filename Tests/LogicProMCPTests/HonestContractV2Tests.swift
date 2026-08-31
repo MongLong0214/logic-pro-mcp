@@ -76,7 +76,6 @@ private func decode(_ json: String) -> [String: Any] {
         (.incompleteInventory, "incomplete_inventory"),
         (.targetPluginMismatch, "target_plugin_mismatch"),
         (.pluginWindowPluginMismatch, "plugin_window_plugin_mismatch"),
-        (.ambiguousPluginInstance, "ambiguous_plugin_instance"),
         (.duplicatePluginEditorAlreadyOpen, "duplicate_plugin_editor_already_open"),
         (.duplicatePluginEditorCountMismatch, "duplicate_plugin_editor_count_mismatch"),
         (.slotOccupied, "slot_occupied"),
@@ -99,6 +98,13 @@ private func decode(_ json: String) -> [String: Any] {
     for (err, raw) in expected {
         #expect(err.rawValue == raw)
     }
+}
+
+@Test func testRetiredAmbiguousPluginInstanceErrorCannotBeDecoded() {
+    // The duplicate-editor outcomes replaced this pre-acquisition error.
+    // Keeping its raw value would make an unproducible error externally visible.
+    let retired = HonestContract.FailureError(rawValue: "ambiguous_plugin_instance")
+    #expect(retired == nil)
 }
 
 // MARK: - Detector / router compatibility (AC13)
@@ -127,7 +133,7 @@ private func decode(_ json: String) -> [String: Any] {
     let mustBeTerminal: [HonestContract.FailureError] = [
         .unsupportedMode, .projectPathRequired, .projectIdentityMismatch,
         .unknownPluginIdentity, .unsupportedParamReadback, .incompleteInventory,
-        .targetPluginMismatch, .pluginWindowPluginMismatch, .ambiguousPluginInstance,
+        .targetPluginMismatch, .pluginWindowPluginMismatch,
         .duplicatePluginEditorAlreadyOpen, .duplicatePluginEditorCountMismatch, .slotOccupied,
         .trackSelectionFailed, .staleSnapshot,
         .windowOpenFailed, .windowIdentityUnresolved, .paramControlNotFound,

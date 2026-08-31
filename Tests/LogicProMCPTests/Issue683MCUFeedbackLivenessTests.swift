@@ -96,11 +96,15 @@ struct Issue683MCUFeedbackLivenessTests {
         let ingress = MCUFeedbackIngress(capacity: 1)
         ingress.yield(.noteOn(channel: 0, note: 0x12, velocity: 0x7F))
         ingress.yield(.pitchBend(channel: 0, value: 8192))
+        // Once the second yield overflows and finishes the stream, every later
+        // parsed event gets `.terminated`. It was still lost and must count.
+        ingress.yield(.noteOff(channel: 0, note: 0x12, velocity: 0))
         ingress.recordDrop(count: 3)
 
         let snapshot = ingress.snapshot()
         #expect(snapshot.overflowed)
-        #expect(snapshot.droppedEventCount == 4)
+        #expect(snapshot.droppedEventCount == 5)
+        #expect(snapshot.callbackWorkBudgetDroppedEventCount == 0)
     }
 
     @Test("MCU health exposes CoreMIDI callback drops")
@@ -111,7 +115,11 @@ struct Issue683MCUFeedbackLivenessTests {
 
         let snapshot = await channel.feedbackIngressSnapshot()
         let health = await channel.healthCheck()
-        #expect(snapshot == MCUFeedbackIngressSnapshot(droppedEventCount: 3, overflowed: true))
+        #expect(snapshot == MCUFeedbackIngressSnapshot(
+            droppedEventCount: 3,
+            callbackWorkBudgetDroppedEventCount: 0,
+            overflowed: true
+        ))
         #expect(!health.available)
         #expect(health.detail.contains("dropped 3 event(s)"))
     }

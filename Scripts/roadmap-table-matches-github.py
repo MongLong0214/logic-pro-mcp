@@ -179,7 +179,9 @@ def main():
         print(f"  #{number}: open on GitHub, absent from the table")
     for number in will_close_but_says_open:
         print(f"  #{number}: this pull request closes it, but the row still says OPEN. "
-              f"Merging would close the issue and leave the row, failing main.")
+              f"This guard assumes GitHub is configured to automatically close linked issues "
+              f"when pull requests merge; with that repository setting disabled, OPEN is correct. "
+              f"Enable automatic issue closing or remove the closing keyword before changing the row.")
     print("\nThe table is the source of truth for what is open. Update it in this PR.")
     return DRIFT
 

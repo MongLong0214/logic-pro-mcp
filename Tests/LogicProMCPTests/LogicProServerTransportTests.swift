@@ -14,9 +14,11 @@ private func withTestMIDIEventList(
     _ body: (UnsafePointer<MIDIEventList>) -> Void
 ) {
     let packetOffset = MemoryLayout<MIDIEventList>.offset(of: \MIDIEventList.packet) ?? 0
+    let packetWordsOffset = MemoryLayout<MIDIEventPacket>.offset(of: \MIDIEventPacket.words) ?? 0
     let wordCount = Int(wordCountOverride ?? UInt32((bytes.count + 3) / 4))
     let paddedByteCount = max(0, wordCount * MemoryLayout<UInt32>.size)
-    let bufferSize = packetOffset + MemoryLayout<MIDIEventPacket>.size + max(0, paddedByteCount - MemoryLayout<UInt32>.size)
+    let packetSize = packetWordsOffset + paddedByteCount
+    let bufferSize = packetOffset + Int(numPackets) * packetSize
     let raw = UnsafeMutableRawPointer.allocate(
         byteCount: max(bufferSize, MemoryLayout<MIDIEventList>.size),
         alignment: MemoryLayout<MIDIEventList>.alignment
@@ -28,16 +30,20 @@ private func withTestMIDIEventList(
     list.pointee.numPackets = numPackets
 
     if numPackets > 0 {
-        let packet = raw.advanced(by: packetOffset).assumingMemoryBound(to: MIDIEventPacket.self)
-        packet.pointee.wordCount = UInt32(wordCount)
         var padded = bytes
         if padded.count < paddedByteCount {
             padded.append(contentsOf: repeatElement(0, count: paddedByteCount - padded.count))
         }
-        padded.withUnsafeBytes { source in
-            raw.advanced(
-                by: packetOffset + (MemoryLayout<MIDIEventPacket>.offset(of: \MIDIEventPacket.words) ?? 0)
-            ).copyMemory(from: source.baseAddress!, byteCount: paddedByteCount)
+        for packetIndex in 0..<Int(numPackets) {
+            let packetBase = raw.advanced(by: packetOffset + packetIndex * packetSize)
+            let packet = packetBase.assumingMemoryBound(to: MIDIEventPacket.self)
+            packet.pointee.wordCount = UInt32(wordCount)
+            padded.withUnsafeBytes { source in
+                packetBase.advanced(by: packetWordsOffset).copyMemory(
+                    from: source.baseAddress!,
+                    byteCount: paddedByteCount
+                )
+            }
         }
     }
 
@@ -351,11 +357,32 @@ func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
     // pointer. The production callback must reject this structure before it
     // traverses it, then report the drop to MCU health.
     await manager.emitBidirectionalBytes([0x90, 0x40, 0x7F], wordCountOverride: 65)
-    // Likewise, the event-list count is checked before the callback derives
-    // the first packet pointer, so a malformed oversized list has fixed work.
+
+    #expect(drops.snapshot() == [1])
+}
+
+@Test func testProductionMCUTransportBoundsLargeValidPacketListWithoutFailingIngress() async throws {
+    let manager = MockServerPortManager()
+    let events = FeedbackEventRecorder()
+    let malformedDrops = IngressDropRecorder()
+    let workBudgetDrops = IngressDropRecorder()
+    let transport = ProductionMCUTransport(portManager: manager)
+
+    try await transport.start(
+        onReceive: { event in Task { await events.record(event) } },
+        onIngressDrop: { count in malformedDrops.record(count) },
+        onCallbackWorkBudgetDrop: { count in workBudgetDrops.record(count) }
+    )
+    // This allocates and initializes every declared packet. It is a valid list
+    // of 65 one-word note-ons, not the prior one-packet buffer with a forged
+    // count. The callback may process only 64, but it must keep the ingress
+    // alive and report exactly the one event it did not process.
     await manager.emitBidirectionalBytes([0x90, 0x40, 0x7F], numPackets: 65)
 
-    #expect(drops.snapshot() == [1, 1])
+    let observed = await waitForFeedbackEvents(events, expectedCount: 64)
+    #expect(observed.count == 64)
+    #expect(malformedDrops.snapshot().isEmpty)
+    #expect(workBudgetDrops.snapshot() == [1])
 }
 
 @Test func testProductionMCUTransportSendUsesPacketSinkAfterStart() async throws {

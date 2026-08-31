@@ -1126,6 +1126,48 @@ extension AccessibilityChannel {
             return .error(windowOpenFailedStateC(operation, identity, "the target track name could not be resolved for window matching"))
         }
         var constructedWindow: AXUIElementSendable?
+        // Set immediately after the target-slot press observes windows. It is
+        // deliberately outside the success-only branch: a hidden sibling can
+        // make acquisition fail with two editors, and every newly observed
+        // editor from that failed attempt still needs best-effort cleanup.
+        var constructedWindowsNeedingCleanup: [AXUIElement] = []
+        defer {
+            if !constructedWindowsNeedingCleanup.isEmpty {
+                _ = closePluginEditorsOpenedByThisOperation(
+                    constructedWindowsNeedingCleanup,
+                    trackName: trackName,
+                    pluginID: pluginID,
+                    runtime: runtime
+                )
+            }
+        }
+
+        /// A write may be fully verified before this operation's editor closes.
+        /// Keep State A for the established write verdict, while making a
+        /// failed observed close actionable rather than deferring that surprise
+        /// to the next duplicate-instance call.
+        func verifiedWriteEnvelope(extras: [String: Any]) -> String {
+            var completedExtras = extras
+            guard !constructedWindowsNeedingCleanup.isEmpty else {
+                return HonestContract.encodeV2StateA(extras: completedExtras)
+            }
+            let closeObserved = closePluginEditorsOpenedByThisOperation(
+                constructedWindowsNeedingCleanup,
+                trackName: trackName,
+                pluginID: pluginID,
+                runtime: runtime
+            )
+            // The explicit attempt above owns cleanup for the successful
+            // envelope. Prevent `defer` from pressing close controls again.
+            constructedWindowsNeedingCleanup.removeAll()
+            completedExtras["editor_close_observed"] = closeObserved
+            if !closeObserved {
+                completedExtras["editor_still_open"] = true
+                completedExtras["recovery_hint"] = "The \(pluginID) editor opened for this write is still visible on track \(track). Close it before another duplicate-instance write."
+            }
+            return HonestContract.encodeV2StateA(extras: completedExtras)
+        }
+
         if duplicatedPluginInstance {
             // #726 follow-up measurement: when no matching editor is open, one
             // target-slot `열기` press creates the target editor. A pre-existing
@@ -1184,7 +1226,15 @@ extension AccessibilityChannel {
             }
 
             // Real Logic can report a non-zero AX status after opening the
-            // editor, so the observed post-count—not that status—decides.
+            // editor, so that status cannot authenticate the action. Instead,
+            // retain the complete pre-press editor set and require the accepted
+            // candidate to be a new AX element. This is the strongest evidence
+            // AX exposes here: we rely on Logic UI actions being serialized for
+            // this operation. AX has no causal event token, so a concurrent
+            // human or other automation opening the same-track sibling between
+            // the snapshot and poll remains unprovable; the one-new-window rule
+            // makes that uncertainty refuse rather than reuse an old editor.
+            let pluginEditorWindowsBeforePress = AXLogicProElements.pluginEditorWindows(runtime: runtime)
             _ = pressElement(targetOpenControl, runtime: runtime.ax)
             let matchingEditorsAfterPress = await pollMatchingPluginEditorWindows(
                 trackName: trackName,
@@ -1192,7 +1242,16 @@ extension AccessibilityChannel {
                 runtime: runtime,
                 timeoutMs: 1_250
             )
-            guard matchingEditorsAfterPress.count == 1 else {
+            let newlyObservedMatchingEditors = matchingEditorsAfterPress.filter { candidate in
+                !pluginEditorWindowsBeforePress.contains { CFEqual($0, candidate) }
+            }
+            // A target press may have restored a hidden sibling as well. These
+            // are newly observed during this operation's acquisition window;
+            // install best-effort cleanup before any mismatch return can leave
+            // an editor that this attempt may have opened behind.
+            constructedWindowsNeedingCleanup = newlyObservedMatchingEditors
+            guard matchingEditorsAfterPress.count == 1,
+                  newlyObservedMatchingEditors.count == 1 else {
                 if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
                     forTrackName: trackName,
                     matchingPluginID: pluginID,
@@ -1213,30 +1272,13 @@ extension AccessibilityChannel {
                     track: track,
                     insert: insert,
                     conflictingInsertIndices: conflictingInsertIndices,
-                    matchingEditorCount: matchingEditorsAfterPress.count
+                    matchingEditorCount: matchingEditorsAfterPress.count,
+                    newlyObservedMatchingEditorCount: newlyObservedMatchingEditors.count
                 ))
             }
             // `matchingPluginEditorWindows` accepts a window only after its
             // direct static-text header maps to the requested plug-in id.
-            constructedWindow = AXUIElementSendable(matchingEditorsAfterPress[0])
-        }
-
-        // This operation opened that editor from a known-empty state, so it owns
-        // it. Leaving it open would make the NEXT duplicate-insert write refuse
-        // with `duplicate_plugin_editor_already_open` — measured live: writing
-        // insert 0 then insert 2 on a two-Compressor track failed on the second
-        // call until the first editor was closed by hand. Only ever close a
-        // window this operation created; an editor the caller already had open
-        // is reused, never constructed, and must be left exactly as found.
-        defer {
-            if let constructedWindow {
-                closePluginEditorOpenedByThisOperation(
-                    constructedWindow.element,
-                    trackName: trackName,
-                    pluginID: pluginID,
-                    runtime: runtime
-                )
-            }
+            constructedWindow = AXUIElementSendable(newlyObservedMatchingEditors[0])
         }
 
         // Step 8 — normal single-instance acquisition retains the original
@@ -1504,7 +1546,7 @@ extension AccessibilityChannel {
 
             // Step 13 — tolerance gate.
             if abs(after - requested) <= tolerance {
-                return .success(HonestContract.encodeV2StateA(extras: [
+                return .success(verifiedWriteEnvelope(extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
@@ -1603,7 +1645,7 @@ extension AccessibilityChannel {
                 } else {
                     extras["tolerance"] = tolerance
                 }
-                return .success(HonestContract.encodeV2StateA(extras: extras))
+                return .success(verifiedWriteEnvelope(extras: extras))
             case .noProgress(_, _), .budgetExhausted(_, _), .overshot(_, _), .readbackLost(_):
                 let rollback = rollbackSliderValue(
                     slider,
@@ -1909,7 +1951,8 @@ extension AccessibilityChannel {
         track: Int,
         insert: Int,
         conflictingInsertIndices: [Int],
-        matchingEditorCount: Int
+        matchingEditorCount: Int,
+        newlyObservedMatchingEditorCount: Int
     ) -> String {
         HonestContract.encodeV2StateC(
             error: .duplicatePluginEditorCountMismatch,
@@ -1919,8 +1962,9 @@ extension AccessibilityChannel {
                 "requested_plugin_id": pluginID,
                 "conflicting_insert_indices": conflictingInsertIndices,
                 "matching_editor_count_after_press": matchingEditorCount,
-                "what_was_attempted": "press insert \(insert)'s open control once and observe exactly one \(pluginID) editor",
-                "what_was_observed": "the one target-slot press left \(matchingEditorCount) matching \(pluginID) editor(s) visible on track \(track)",
+                "new_matching_editor_count_after_press": newlyObservedMatchingEditorCount,
+                "what_was_attempted": "press insert \(insert)'s open control once and observe exactly one newly created \(pluginID) editor",
+                "what_was_observed": "the one target-slot press left \(matchingEditorCount) matching \(pluginID) editor(s), \(newlyObservedMatchingEditorCount) newly observed, visible on track \(track)",
                 "safe_to_retry": false,
                 "write_attempted": false,
             ]
@@ -2316,13 +2360,12 @@ extension AccessibilityChannel {
     /// user reopening the editor.
     ///
     /// The AX return status is deliberately ignored. Logic reports non-zero from
-    /// presses that did work, so the observed editor count decides — the same
-    /// rule the acquisition itself follows.
+    /// presses that did work, so the exact window element's absence from
+    /// `AXWindows` decides — the same observed-state rule used for acquisition.
     ///
-    /// Returns whether the close was OBSERVED. A false return is not raised into
-    /// the envelope here: the write's own verdict is already established by then,
-    /// and a leftover editor announces itself on the next call as
-    /// `duplicate_plugin_editor_already_open`, which carries the recovery hint.
+    /// Returns whether the close was OBSERVED. A false return leaves the write
+    /// verdict alone, but successful verified-write envelopes disclose the
+    /// leftover editor and tell the caller how to recover.
     @discardableResult
     private static func closePluginEditorOpenedByThisOperation(
         _ window: AXUIElement,
@@ -2337,11 +2380,7 @@ extension AccessibilityChannel {
         }
         for attempt in 0..<3 {
             _ = pressElement(closeButton, runtime: runtime.ax)
-            if AXLogicProElements.matchingPluginEditorWindows(
-                forTrackName: trackName,
-                matchingPluginID: pluginID,
-                runtime: runtime
-            ).isEmpty {
+            if AXLogicProElements.pluginEditorWindowIsOpen(window, runtime: runtime) == false {
                 return true
             }
             if attempt < 2 {
@@ -2349,6 +2388,31 @@ extension AccessibilityChannel {
             }
         }
         return false
+    }
+
+    /// Best-effort cleanup for every editor element newly observed after this
+    /// operation's duplicate-instance slot press. The normal success path has
+    /// one element; the count-mismatch path can have the target plus a hidden
+    /// sibling restored by the same press. Return true only if each exact
+    /// element was observed to leave AXWindows.
+    private static func closePluginEditorsOpenedByThisOperation(
+        _ windows: [AXUIElement],
+        trackName: String,
+        pluginID: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        var everyCloseObserved = true
+        for window in windows {
+            if !closePluginEditorOpenedByThisOperation(
+                window,
+                trackName: trackName,
+                pluginID: pluginID,
+                runtime: runtime
+            ) {
+                everyCloseObserved = false
+            }
+        }
+        return everyCloseObserved
     }
 
     private static func pluginWindowAcquisitionDiagnostics(
