@@ -11,11 +11,15 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
     var clientStatus: OSStatus = noErr
     var sourceStatuses: [String: OSStatus] = [:]
     var destinationStatuses: [String: OSStatus] = [:]
+    var uniqueIDStatus: OSStatus = noErr
+    var foreignEndpointsByName: [String: [MIDIEndpointRef]] = [:]
     private(set) var createdClients: [String] = []
     private(set) var createdSources: [String] = []
     private(set) var createdDestinations: [String] = []
     private(set) var disposedEndpoints: [MIDIEndpointRef] = []
     private(set) var disposedClients: [MIDIClientRef] = []
+    private(set) var assignedUniqueIDs: [MIDIEndpointRef: Int32] = [:]
+    private var endpointNames: [MIDIEndpointRef: String] = [:]
 
     func runtime() -> MIDIPortManager.Runtime {
         MIDIPortManager.Runtime(
@@ -33,7 +37,11 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
             },
             disposeClient: { client in
                 self.disposeClient(client)
-            }
+            },
+            endpointRuntime: .init(
+                endpointsNamed: { name in self.endpointsNamed(name) },
+                setUniqueID: { endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) }
+            )
         )
     }
 
@@ -59,6 +67,7 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
         }
         source = nextEndpointRef
         nextEndpointRef += 1
+        endpointNames[source] = name
         return noErr
     }
 
@@ -77,6 +86,7 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
         }
         destination = nextEndpointRef
         nextEndpointRef += 1
+        endpointNames[destination] = name
         return noErr
     }
 
@@ -84,6 +94,7 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         disposedEndpoints.append(endpoint)
+        endpointNames.removeValue(forKey: endpoint)
         return noErr
     }
 
@@ -91,6 +102,21 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         disposedClients.append(client)
+        return noErr
+    }
+
+    func endpointsNamed(_ name: String) -> [MIDIEndpointRef] {
+        lock.lock()
+        defer { lock.unlock() }
+        let local = endpointNames.compactMap { $0.value == name ? $0.key : nil }
+        return (foreignEndpointsByName[name] ?? []) + local
+    }
+
+    func setUniqueID(_ endpoint: MIDIEndpointRef, uniqueID: Int32) -> OSStatus {
+        lock.lock()
+        defer { lock.unlock() }
+        guard uniqueIDStatus == noErr else { return uniqueIDStatus }
+        assignedUniqueIDs[endpoint] = uniqueID
         return noErr
     }
 }
@@ -317,6 +343,137 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
         harness.disposedEndpoints.sorted() == [sendOnly.source, bidirectional.source, bidirectional.destination!].sorted()
     )
     #expect(harness.disposedClients == [100])
+}
+
+@Test func issue736ForeignEndpointSkipsCreationAndHealthReportsOwnershipConflict() async throws {
+    let harness = MIDIPortRuntimeHarness()
+    let name = "LogicProMCP-MCU-Internal"
+    harness.foreignEndpointsByName[name] = [999]
+    let manager = MIDIPortManager(runtime: harness.runtime())
+    try await manager.start()
+
+    let cache = StateCache()
+    let channel = MCUChannel(
+        transport: ProductionMCUTransport(portManager: manager),
+        cache: cache
+    )
+
+    var conflictWasReported = false
+    do {
+        try await channel.start()
+        Issue.record("Expected foreign endpoint conflict")
+    } catch MIDIPortError.foreignEndpointConflict(let conflictingName, let census) {
+        conflictWasReported = conflictingName == name
+            && census.endpointCount == 1
+            && census.hasForeignEndpoint
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+    #expect(conflictWasReported)
+
+    let createdSources = harness.createdSources
+    #expect(createdSources.isEmpty)
+    let channelHealth = await channel.healthCheck()
+    let conflictDiagnostic = channelHealth.detail.contains("did not create")
+    #expect(conflictDiagnostic)
+
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: ChannelRouter(),
+        cache: cache
+    )
+    let json = try #require(sharedParseJSON(sharedToolText(result)) as? [String: Any])
+    let mcu = try #require(json["mcu"] as? [String: Any])
+    let census = try #require(mcu["port_census"] as? [String: Any])
+    let endpointCount = try #require(census["endpoint_count"] as? Int)
+    let hasForeignEndpoint = try #require(census["has_foreign_endpoint"] as? Bool)
+    #expect(endpointCount == 1)
+    #expect(hasForeignEndpoint)
+
+    await channel.stop()
+    await manager.stop()
+}
+
+@Test func issue736CleanMCUPortHealthReportsNoForeignEndpoint() async throws {
+    let harness = MIDIPortRuntimeHarness()
+    let manager = MIDIPortManager(runtime: harness.runtime())
+    try await manager.start()
+
+    let cache = StateCache()
+    let channel = MCUChannel(
+        transport: ProductionMCUTransport(portManager: manager),
+        cache: cache
+    )
+    try await channel.start()
+
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: ChannelRouter(),
+        cache: cache
+    )
+    let json = try #require(sharedParseJSON(sharedToolText(result)) as? [String: Any])
+    let mcu = try #require(json["mcu"] as? [String: Any])
+    let census = try #require(mcu["port_census"] as? [String: Any])
+    let endpointCount = try #require(census["endpoint_count"] as? Int)
+    let hasForeignEndpoint = try #require(census["has_foreign_endpoint"] as? Bool)
+    #expect(endpointCount == 2)
+    #expect(!hasForeignEndpoint)
+
+    await channel.stop()
+    await manager.stop()
+}
+
+@Test func issue736UniqueIDCollisionIsReportedInsteadOfUsingRandomIdentity() async throws {
+    let harness = MIDIPortRuntimeHarness()
+    harness.uniqueIDStatus = kMIDIIDNotUnique
+    let manager = MIDIPortManager(runtime: harness.runtime())
+    try await manager.start()
+
+    var collisionWasReported = false
+    do {
+        _ = try await manager.createSendOnlyPort(name: "LogicProMCP-KeyCmd-Internal")
+        Issue.record("Expected stable unique ID collision")
+    } catch MIDIPortError.uniqueIDCollision(let name, let kind, let uniqueID) {
+        collisionWasReported = name == "LogicProMCP-KeyCmd-Internal"
+            && kind == .source
+            && uniqueID == VirtualMIDIEndpointIdentity.uniqueID(
+                forPortNamed: "LogicProMCP-KeyCmd-Internal",
+                kind: .source
+            )
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+    #expect(collisionWasReported)
+    #expect(harness.disposedEndpoints == [200])
+    #expect(await manager.portCount == 0)
+}
+
+@Test func issue736StableUniqueIDsAreRepeatableAndPortSpecific() {
+    let first = VirtualMIDIEndpointIdentity.uniqueID(
+        forPortNamed: "LogicProMCP-MCU-Internal",
+        kind: .source
+    )
+    let again = VirtualMIDIEndpointIdentity.uniqueID(
+        forPortNamed: "LogicProMCP-MCU-Internal",
+        kind: .source
+    )
+    let anotherPort = VirtualMIDIEndpointIdentity.uniqueID(
+        forPortNamed: "LogicProMCP-KeyCmd-Internal",
+        kind: .source
+    )
+    let destination = VirtualMIDIEndpointIdentity.uniqueID(
+        forPortNamed: "LogicProMCP-MCU-Internal",
+        kind: .destination
+    )
+
+    let isStable = first == again
+    let isPortSpecific = first != anotherPort
+    let isDirectionSpecific = first != destination
+    #expect(isStable)
+    #expect(isPortSpecific)
+    #expect(isDirectionSpecific)
 }
 
 @Test(coreMIDIUnavailableInSandbox)

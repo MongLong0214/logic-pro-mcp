@@ -28,6 +28,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         let disposeEndpoint: @Sendable (_ endpoint: MIDIEndpointRef) -> Void
         let disposeClient: @Sendable (_ client: MIDIClientRef) -> Void
         let sendMessage: @Sendable (_ source: MIDIEndpointRef, _ bytes: [UInt8]) -> OSStatus
+        let endpointRuntime: VirtualMIDIEndpointRuntime
 
         static let production = Runtime(
             createClient: { name, onNotification in
@@ -89,13 +90,15 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
                         return MIDIReceived(source, packetList)
                     }
                 }
-            }
+            },
+            endpointRuntime: .production
         )
     }
 
     private var client: MIDIClientRef = 0
     private var virtualSource: MIDIEndpointRef = 0
     private var virtualDestination: MIDIEndpointRef = 0
+    private var ownedEndpoints: Set<MIDIEndpointRef> = []
     private var isRunning = false
     private let runtime: Runtime
 
@@ -128,10 +131,38 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             throw MIDIEngineError.clientCreationFailed(clientStatus)
         }
 
+        do {
+            try rejectForeignEndpoint(named: ServerConfig.virtualMIDISourceName)
+        } catch {
+            runtime.disposeClient(createdClient)
+            throw error
+        }
+
         let (sourceStatus, createdSource) = runtime.createSource(createdClient, ServerConfig.virtualMIDISourceName)
         guard sourceStatus == noErr else {
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.sourceCreationFailed(sourceStatus)
+        }
+        do {
+            try assignStableUniqueID(
+                to: createdSource,
+                name: ServerConfig.virtualMIDISourceName,
+                kind: .source
+            )
+        } catch {
+            runtime.disposeEndpoint(createdSource)
+            runtime.disposeClient(createdClient)
+            throw error
+        }
+        ownedEndpoints.insert(createdSource)
+
+        do {
+            try rejectForeignEndpoint(named: ServerConfig.virtualMIDISinkName)
+        } catch {
+            ownedEndpoints.remove(createdSource)
+            runtime.disposeEndpoint(createdSource)
+            runtime.disposeClient(createdClient)
+            throw error
         }
 
         let continuation = self.inboundContinuation
@@ -144,10 +175,25 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             }
         }
         guard destinationStatus == noErr else {
+            ownedEndpoints.remove(createdSource)
             runtime.disposeEndpoint(createdSource)
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.destinationCreationFailed(destinationStatus)
         }
+        do {
+            try assignStableUniqueID(
+                to: createdDestination,
+                name: ServerConfig.virtualMIDISinkName,
+                kind: .destination
+            )
+        } catch {
+            ownedEndpoints.remove(createdSource)
+            runtime.disposeEndpoint(createdDestination)
+            runtime.disposeEndpoint(createdSource)
+            runtime.disposeClient(createdClient)
+            throw error
+        }
+        ownedEndpoints.insert(createdDestination)
 
         client = createdClient
         virtualSource = createdSource
@@ -164,6 +210,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         runtime.disposeClient(client)
         virtualSource = 0
         virtualDestination = 0
+        ownedEndpoints.removeAll()
         client = 0
         isRunning = false
         // v3.4.5 (H1 / P1-6): do NOT finish the inbound stream here. The
@@ -258,6 +305,41 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         Log.debug("MIDI out: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))", subsystem: "midi")
     }
 
+    private func rejectForeignEndpoint(named name: String) throws {
+        let census = runtime.endpointRuntime.census(named: name, ownedEndpoints: ownedEndpoints)
+        guard !census.hasForeignEndpoint else {
+            Log.warn(
+                "Virtual MIDI endpoint '\(name)' is owned by another instance or is stale; skipping creation "
+                    + "(\(census.endpointCount) matching endpoint(s))",
+                subsystem: "midi"
+            )
+            throw MIDIEngineError.foreignEndpointConflict(name: name, census: census)
+        }
+    }
+
+    private func assignStableUniqueID(
+        to endpoint: MIDIEndpointRef,
+        name: String,
+        kind: VirtualMIDIEndpointKind
+    ) throws {
+        let uniqueID = VirtualMIDIEndpointIdentity.uniqueID(forPortNamed: name, kind: kind)
+        let status = runtime.endpointRuntime.setUniqueID(endpoint, uniqueID)
+        guard status == noErr else {
+            if status == kMIDIIDNotUnique {
+                Log.warn(
+                    "Stable unique ID \(uniqueID) for virtual MIDI \(kind.rawValue) '\(name)' is already held by another endpoint",
+                    subsystem: "midi"
+                )
+                throw MIDIEngineError.uniqueIDCollision(name: name, kind: kind, uniqueID: uniqueID)
+            }
+            Log.warn(
+                "Could not assign stable unique ID \(uniqueID) to virtual MIDI \(kind.rawValue) '\(name)': \(status)",
+                subsystem: "midi"
+            )
+            throw MIDIEngineError.uniqueIDAssignmentFailed(name: name, kind: kind, status: status)
+        }
+    }
+
     private static func logMIDINotification(_ rawValue: Int32) {
         let id = MIDINotificationMessageID(rawValue: rawValue)
         switch id {
@@ -275,11 +357,37 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
 
 // MARK: - Errors
 
-enum MIDIEngineError: Error, Sendable {
+enum MIDIEngineError: Error, Sendable, CustomStringConvertible {
     case clientCreationFailed(OSStatus)
     case sourceCreationFailed(OSStatus)
     case destinationCreationFailed(OSStatus)
     case notRunning
     case sendFailed(OSStatus)
     case invalidSysEx
+    case foreignEndpointConflict(name: String, census: VirtualMIDIEndpointCensus)
+    case uniqueIDCollision(name: String, kind: VirtualMIDIEndpointKind, uniqueID: Int32)
+    case uniqueIDAssignmentFailed(name: String, kind: VirtualMIDIEndpointKind, status: OSStatus)
+
+    var description: String {
+        switch self {
+        case .clientCreationFailed(let status):
+            return "MIDI client creation failed (\(status))"
+        case .sourceCreationFailed(let status):
+            return "MIDI source creation failed (\(status))"
+        case .destinationCreationFailed(let status):
+            return "MIDI destination creation failed (\(status))"
+        case .notRunning:
+            return "MIDI engine is not running"
+        case .sendFailed(let status):
+            return "MIDI send failed (\(status))"
+        case .invalidSysEx:
+            return "Invalid SysEx"
+        case .foreignEndpointConflict(let name, let census):
+            return "MIDI endpoint '\(name)' has \(census.endpointCount) foreign matching endpoint(s)"
+        case .uniqueIDCollision(let name, let kind, let uniqueID):
+            return "MIDI \(kind.rawValue) '\(name)' cannot claim stable unique ID \(uniqueID): another endpoint already holds it"
+        case .uniqueIDAssignmentFailed(let name, let kind, let status):
+            return "MIDI \(kind.rawValue) '\(name)' could not claim its stable unique ID (\(status))"
+        }
+    }
 }

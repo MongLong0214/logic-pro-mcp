@@ -245,10 +245,42 @@ enum AutomationMode: String, Sendable, Codable {
 /// Codable (audit P2 #25) so `ResourceHandlers.readMCUState` can serialize it
 /// directly instead of hand-mapping into a duplicate wire DTO.
 struct MCUConnectionState: Sendable, Codable {
-    var isConnected: Bool = false
-    var registeredAsDevice: Bool = false
-    var lastFeedbackAt: Date? = nil
-    var portName: String = ""
+    var isConnected: Bool
+    var registeredAsDevice: Bool
+    var lastFeedbackAt: Date?
+    var portName: String
+    var portCensus: VirtualMIDIEndpointCensus
+
+    init(
+        isConnected: Bool = false,
+        registeredAsDevice: Bool = false,
+        lastFeedbackAt: Date? = nil,
+        portName: String = "",
+        portCensus: VirtualMIDIEndpointCensus = .none
+    ) {
+        self.isConnected = isConnected
+        self.registeredAsDevice = registeredAsDevice
+        self.lastFeedbackAt = lastFeedbackAt
+        self.portName = portName
+        self.portCensus = portCensus
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case isConnected
+        case registeredAsDevice
+        case lastFeedbackAt
+        case portName
+        case portCensus
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        isConnected = try values.decodeIfPresent(Bool.self, forKey: .isConnected) ?? false
+        registeredAsDevice = try values.decodeIfPresent(Bool.self, forKey: .registeredAsDevice) ?? false
+        lastFeedbackAt = try values.decodeIfPresent(Date.self, forKey: .lastFeedbackAt)
+        portName = try values.decodeIfPresent(String.self, forKey: .portName) ?? ""
+        portCensus = try values.decodeIfPresent(VirtualMIDIEndpointCensus.self, forKey: .portCensus) ?? .none
+    }
 }
 
 extension MCUConnectionState {

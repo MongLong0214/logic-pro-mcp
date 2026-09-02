@@ -14,6 +14,7 @@ private struct MIDIEngineRuntimeSnapshot: Sendable {
     let disposedClients: [MIDIClientRef]
     let sentSources: [MIDIEndpointRef]
     let sentMessages: [[UInt8]]
+    let assignedUniqueIDs: [MIDIEndpointRef: Int32]
 }
 
 private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
@@ -23,6 +24,8 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     var sourceStatus: OSStatus = noErr
     var destinationStatus: OSStatus = noErr
     var sendStatus: OSStatus = noErr
+    var uniqueIDStatus: OSStatus = noErr
+    var foreignEndpointsByName: [String: [MIDIEndpointRef]] = [:]
     var createdClient: MIDIClientRef = 101
     var createdSource: MIDIEndpointRef = 202
     var createdDestination: MIDIEndpointRef = 303
@@ -37,6 +40,8 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     private var disposedClients: [MIDIClientRef] = []
     private var sentSources: [MIDIEndpointRef] = []
     private var sentMessages: [[UInt8]] = []
+    private var endpointNames: [MIDIEndpointRef: String] = [:]
+    private var assignedUniqueIDs: [MIDIEndpointRef: Int32] = [:]
     private var inboundHandler: (@Sendable ([UInt8]) -> Void)?
     private var notificationHandler: (@Sendable (Int32) -> Void)?
 
@@ -54,6 +59,9 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                 withLock {
                     createSourceCalls += 1
                     lastSourceName = name
+                    if sourceStatus == noErr {
+                        endpointNames[createdSource] = name
+                    }
                     return (sourceStatus, createdSource)
                 }
             },
@@ -62,12 +70,16 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                     createDestinationCalls += 1
                     lastDestinationName = name
                     inboundHandler = onBytes
+                    if destinationStatus == noErr {
+                        endpointNames[createdDestination] = name
+                    }
                     return (destinationStatus, createdDestination)
                 }
             },
             disposeEndpoint: { [self] endpoint in
                 withLock {
                     disposedEndpoints.append(endpoint)
+                    endpointNames.removeValue(forKey: endpoint)
                 }
             },
             disposeClient: { [self] client in
@@ -81,7 +93,11 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                     sentMessages.append(bytes)
                     return sendStatus
                 }
-            }
+            },
+            endpointRuntime: .init(
+                endpointsNamed: { [self] name in endpointsNamed(name) },
+                setUniqueID: { [self] endpoint, uniqueID in setUniqueID(endpoint, uniqueID: uniqueID) }
+            )
         )
     }
 
@@ -107,8 +123,24 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                 disposedEndpoints: disposedEndpoints,
                 disposedClients: disposedClients,
                 sentSources: sentSources,
-                sentMessages: sentMessages
+                sentMessages: sentMessages,
+                assignedUniqueIDs: assignedUniqueIDs
             )
+        }
+    }
+
+    private func endpointsNamed(_ name: String) -> [MIDIEndpointRef] {
+        withLock {
+            let local = endpointNames.compactMap { $0.value == name ? $0.key : nil }
+            return (foreignEndpointsByName[name] ?? []) + local
+        }
+    }
+
+    private func setUniqueID(_ endpoint: MIDIEndpointRef, uniqueID: Int32) -> OSStatus {
+        withLock {
+            guard uniqueIDStatus == noErr else { return uniqueIDStatus }
+            assignedUniqueIDs[endpoint] = uniqueID
+            return noErr
         }
     }
 
@@ -139,6 +171,20 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     #expect(started.lastClientName == ServerConfig.virtualMIDISourceName)
     #expect(started.lastSourceName == ServerConfig.virtualMIDISourceName)
     #expect(started.lastDestinationName == ServerConfig.virtualMIDISinkName)
+    #expect(
+        started.assignedUniqueIDs[harness.createdSource]
+            == VirtualMIDIEndpointIdentity.uniqueID(
+                forPortNamed: ServerConfig.virtualMIDISourceName,
+                kind: .source
+            )
+    )
+    #expect(
+        started.assignedUniqueIDs[harness.createdDestination]
+            == VirtualMIDIEndpointIdentity.uniqueID(
+                forPortNamed: ServerConfig.virtualMIDISinkName,
+                kind: .destination
+            )
+    )
 
     await engine.stop()
     await engine.stop()
@@ -373,6 +419,21 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
 
 @Test(coreMIDIUnavailableInSandbox)
 func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
+    let endpointRuntime = VirtualMIDIEndpointRuntime.production
+    let preexistingSources = endpointRuntime.endpointsNamed(ServerConfig.virtualMIDISourceName)
+    let preexistingDestinations = endpointRuntime.endpointsNamed(ServerConfig.virtualMIDISinkName)
+    guard preexistingSources.isEmpty, preexistingDestinations.isEmpty else {
+        // This smoke test cannot safely exercise fixed production names when a
+        // prior process owns them: creation must now refuse that conflict rather
+        // than publishing a second endpoint. A clean preflight still requires a
+        // successful product start below.
+        print(
+            "SKIPPED testMIDIEngineProductionRuntimeStartStopSmoke: pre-existing virtual endpoint(s) "
+                + "(sources \(preexistingSources.count), destinations \(preexistingDestinations.count))."
+        )
+        return
+    }
+
     let engine = MIDIEngine()
 
     // A client-creation failure has two causes and only one is a defect: the

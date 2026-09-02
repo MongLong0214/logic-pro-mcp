@@ -102,11 +102,22 @@ struct SystemDispatcher: OperationTraceDispatching {
         }
 
         struct MCUSection: Encodable {
+            struct PortCensus: Encodable {
+                let endpointCount: Int
+                let hasForeignEndpoint: Bool
+
+                enum CodingKeys: String, CodingKey {
+                    case endpointCount = "endpoint_count"
+                    case hasForeignEndpoint = "has_foreign_endpoint"
+                }
+            }
+
             let connected: Bool
             let registeredAsDevice: Bool
             let lastFeedbackAt: Date?
             let feedbackStale: Bool
             let portName: String
+            let portCensus: PortCensus
 
             enum CodingKeys: String, CodingKey {
                 case connected
@@ -114,6 +125,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 case lastFeedbackAt = "last_feedback_at"
                 case feedbackStale = "feedback_stale"
                 case portName = "port_name"
+                case portCensus = "port_census"
             }
         }
 
@@ -393,7 +405,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                     registeredAsDevice: mcu.registeredAsDevice,
                     lastFeedbackAt: mcu.lastFeedbackAt,
                     feedbackStale: mcu.isConnected && (lastFeedbackAge ?? .infinity) > 5.0,
-                    portName: mcu.portName
+                    portName: mcu.portName,
+                    portCensus: .init(
+                        endpointCount: mcu.portCensus.endpointCount,
+                        hasForeignEndpoint: mcu.portCensus.hasForeignEndpoint
+                    )
                 ),
                 channels: entries,
                 cache: .init(
