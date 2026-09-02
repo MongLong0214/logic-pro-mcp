@@ -1,5 +1,6 @@
 import CoreMIDI
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -14,15 +15,28 @@ private struct MIDIEngineRuntimeSnapshot: Sendable {
     let disposedClients: [MIDIClientRef]
     let sentSources: [MIDIEndpointRef]
     let sentMessages: [[UInt8]]
+    let assignedUniqueIDs: [MIDIEndpointRef: Int32]
 }
 
 private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
+    enum OwnershipLockMode: Sendable {
+        case acquired
+        case held
+        case unavailable(String)
+    }
+
     private let lock = NSLock()
 
     var clientStatus: OSStatus = noErr
     var sourceStatus: OSStatus = noErr
     var destinationStatus: OSStatus = noErr
     var sendStatus: OSStatus = noErr
+    var uniqueIDStatus: OSStatus = noErr
+    var endpointDisposalStatuses: [MIDIEndpointRef: OSStatus] = [:]
+    var foreignEndpointsByName: [String: [MIDIEndpointRef]] = [:]
+    var catalogReadOverride: VirtualMIDIEndpointCatalogRead?
+    var unreadableEndpointNames: Set<MIDIEndpointRef> = []
+    var ownershipLockMode: OwnershipLockMode = .acquired
     var createdClient: MIDIClientRef = 101
     var createdSource: MIDIEndpointRef = 202
     var createdDestination: MIDIEndpointRef = 303
@@ -37,8 +51,11 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     private var disposedClients: [MIDIClientRef] = []
     private var sentSources: [MIDIEndpointRef] = []
     private var sentMessages: [[UInt8]] = []
+    private var endpointNames: [MIDIEndpointRef: String] = [:]
+    private var assignedUniqueIDs: [MIDIEndpointRef: Int32] = [:]
     private var inboundHandler: (@Sendable ([UInt8]) -> Void)?
     private var notificationHandler: (@Sendable (Int32) -> Void)?
+    private var lifecycleEvents: [String] = []
 
     func makeRuntime() -> MIDIEngine.Runtime {
         MIDIEngine.Runtime(
@@ -53,21 +70,33 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
             createSource: { [self] client, name in
                 withLock {
                     createSourceCalls += 1
+                    lifecycleEvents.append("source creation")
                     lastSourceName = name
+                    if sourceStatus == noErr {
+                        endpointNames[createdSource] = name
+                    }
                     return (sourceStatus, createdSource)
                 }
             },
             createDestination: { [self] client, name, onBytes in
                 withLock {
                     createDestinationCalls += 1
+                    lifecycleEvents.append("destination creation")
                     lastDestinationName = name
                     inboundHandler = onBytes
+                    if destinationStatus == noErr {
+                        endpointNames[createdDestination] = name
+                    }
                     return (destinationStatus, createdDestination)
                 }
             },
             disposeEndpoint: { [self] endpoint in
                 withLock {
                     disposedEndpoints.append(endpoint)
+                    let status = endpointDisposalStatuses[endpoint] ?? noErr
+                    guard status == noErr else { return status }
+                    endpointNames.removeValue(forKey: endpoint)
+                    return noErr
                 }
             },
             disposeClient: { [self] client in
@@ -81,7 +110,13 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                     sentMessages.append(bytes)
                     return sendStatus
                 }
-            }
+            },
+            endpointRuntime: .init(
+                allEndpoints: { [self] in self.allEndpoints() },
+                endpointName: { [self] endpoint in self.endpointName(endpoint) },
+                setUniqueID: { [self] endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) }
+            ),
+            acquireOwnershipLock: { [self] in acquireOwnershipLock() }
         )
     }
 
@@ -107,9 +142,68 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
                 disposedEndpoints: disposedEndpoints,
                 disposedClients: disposedClients,
                 sentSources: sentSources,
-                sentMessages: sentMessages
+                sentMessages: sentMessages,
+                assignedUniqueIDs: assignedUniqueIDs
             )
         }
+    }
+
+    private func allEndpoints() -> VirtualMIDIEndpointCatalogRead {
+        withLock {
+            lifecycleEvents.append("census")
+            if let catalogReadOverride {
+                return catalogReadOverride
+            }
+            let foreign = foreignEndpointsByName.values.flatMap { $0 }
+            return .endpoints(Array(Set(endpointNames.keys).union(foreign)))
+        }
+    }
+
+    private func endpointName(_ endpoint: MIDIEndpointRef) -> VirtualMIDIEndpointNameRead {
+        withLock {
+            if unreadableEndpointNames.contains(endpoint) {
+                return .unknown("test endpoint name read failed")
+            }
+            if let name = endpointNames[endpoint] {
+                return .name(name)
+            }
+            for (name, endpoints) in foreignEndpointsByName where endpoints.contains(endpoint) {
+                return .name(name)
+            }
+            return .unknown("test endpoint has no name")
+        }
+    }
+
+    private func setUniqueID(_ endpoint: MIDIEndpointRef, uniqueID: Int32) -> OSStatus {
+        withLock {
+            guard uniqueIDStatus == noErr else { return uniqueIDStatus }
+            assignedUniqueIDs[endpoint] = uniqueID
+            return noErr
+        }
+    }
+
+    private func acquireOwnershipLock() -> VirtualMIDIEndpointOwnershipLock.Acquisition {
+        lock.lock()
+        switch ownershipLockMode {
+        case .acquired:
+            lifecycleEvents.append("lock acquired")
+            lock.unlock()
+            return .acquired(.testing { [self] in
+                lock.lock()
+                lifecycleEvents.append("lock released")
+                lock.unlock()
+            })
+        case .held:
+            lock.unlock()
+            return .held
+        case .unavailable(let reason):
+            lock.unlock()
+            return .unavailable(reason)
+        }
+    }
+
+    func snapshotLifecycleEvents() -> [String] {
+        withLock { lifecycleEvents }
     }
 
     private func withLock<T>(_ body: () -> T) -> T {
@@ -139,6 +233,20 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     #expect(started.lastClientName == ServerConfig.virtualMIDISourceName)
     #expect(started.lastSourceName == ServerConfig.virtualMIDISourceName)
     #expect(started.lastDestinationName == ServerConfig.virtualMIDISinkName)
+    #expect(
+        started.assignedUniqueIDs[harness.createdSource]
+            == VirtualMIDIEndpointIdentity.uniqueID(
+                forPortNamed: ServerConfig.virtualMIDISourceName,
+                kind: .source
+            )
+    )
+    #expect(
+        started.assignedUniqueIDs[harness.createdDestination]
+            == VirtualMIDIEndpointIdentity.uniqueID(
+                forPortNamed: ServerConfig.virtualMIDISinkName,
+                kind: .destination
+            )
+    )
 
     await engine.stop()
     await engine.stop()
@@ -228,6 +336,133 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     #expect(snapshot.disposedEndpoints == [harness.createdSource])
     #expect(snapshot.disposedClients == [harness.createdClient])
     #expect(!(await engine.isActive))
+}
+
+@Test func issue736HeldOwnershipLockRefusesMIDIEngineBeforeEndpointCreation() async {
+    let harness = MIDIEngineRuntimeHarness()
+    harness.ownershipLockMode = .held
+    let engine = MIDIEngine(runtime: harness.makeRuntime())
+
+    var refusedPortName: String?
+    do {
+        try await engine.start()
+        Issue.record("Expected MIDIEngine ownership-lock refusal")
+    } catch MIDIEngineError.ownershipLockHeld(name: let name) {
+        refusedPortName = name
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(refusedPortName == ServerConfig.virtualMIDISourceName)
+    let snapshot = harness.snapshot()
+    #expect(snapshot.createSourceCalls == 0)
+    #expect(snapshot.createDestinationCalls == 0)
+    #expect(snapshot.disposedClients == [harness.createdClient])
+}
+
+@Test func issue736MIDIEngineOwnershipLockCoversBothCensusesAndCreations() async throws {
+    let harness = MIDIEngineRuntimeHarness()
+    let engine = MIDIEngine(runtime: harness.makeRuntime())
+
+    try await engine.start()
+
+    let observedEvents = harness.snapshotLifecycleEvents()
+    #expect(observedEvents == [
+        "lock acquired",
+        "census",
+        "source creation",
+        "census",
+        "destination creation",
+        "lock released",
+    ])
+
+    await engine.stop()
+}
+
+@Test func issue736MIDIEngineUnknownCensusRefusesEndpointCreation() async throws {
+    let harness = MIDIEngineRuntimeHarness()
+    harness.catalogReadOverride = .unknown("test catalog read failed")
+    let engine = MIDIEngine(runtime: harness.makeRuntime())
+
+    var unknownCensus: VirtualMIDIEndpointCensus?
+    do {
+        try await engine.start()
+        Issue.record("Expected MIDIEngine unknown-census refusal")
+    } catch MIDIEngineError.censusUnknown(_, census: let census) {
+        unknownCensus = census
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let observedCensus = try #require(unknownCensus)
+    #expect(observedCensus.state == .unknown)
+    #expect(observedCensus.endpointCount == nil)
+    let snapshot = harness.snapshot()
+    #expect(snapshot.createSourceCalls == 0)
+    #expect(snapshot.createDestinationCalls == 0)
+}
+
+@Test func issue736MIDIEngineOwnershipIsSharedWithPortManager() async throws {
+    let engineHarness = MIDIEngineRuntimeHarness()
+    let engine = MIDIEngine(runtime: engineHarness.makeRuntime())
+    try await engine.start()
+
+    let managerHarness = MIDIPortRuntimeHarness()
+    managerHarness.foreignEndpointsByName[ServerConfig.virtualMIDISourceName] = [engineHarness.createdSource]
+    let manager = MIDIPortManager(runtime: managerHarness.runtime())
+    try await manager.start()
+
+    let channel = CoreMIDIChannel(engine: engine, portManager: manager)
+    let router = ChannelRouter()
+    await router.register(channel)
+    let response = await MIDIDispatcher.handle(
+        command: "create_virtual_port",
+        params: ["name": .string(ServerConfig.virtualMIDISourceName)],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!(response.isError!), "our MIDIEngine endpoint must not be reported as foreign: \(sharedToolText(response))")
+    let envelope = try #require(sharedJSONObject(sharedToolText(response)))
+    #expect(envelope["port_name"] as? String == ServerConfig.virtualMIDISourceName)
+    let createdSources = managerHarness.createdSources
+    #expect(createdSources == [ServerConfig.virtualMIDISourceName])
+
+    await manager.stop()
+    await engine.stop()
+}
+
+@Test func issue736OwnershipConflictSurvivesToCoreMIDIOperationResponse() async throws {
+    let harness = MIDIEngineRuntimeHarness()
+    harness.foreignEndpointsByName[ServerConfig.virtualMIDISourceName] = [999]
+    let engine = MIDIEngine(runtime: harness.makeRuntime())
+    let channel = CoreMIDIChannel(engine: engine)
+
+    do {
+        try await channel.start()
+        Issue.record("Expected CoreMIDI startup ownership conflict")
+    } catch MIDIEngineError.foreignEndpointConflict {
+        // The engine records this cause for subsequent health and routing reads.
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let router = ChannelRouter()
+    await router.register(channel)
+    let response = await MIDIDispatcher.handle(
+        command: "send_cc",
+        params: ["controller": .int(74), "value": .int(80), "channel": .int(3)],
+        router: router,
+        cache: StateCache()
+    )
+    #expect(response.isError!)
+    let envelope = try #require(sharedJSONObject(sharedToolText(response)))
+    #expect(envelope["error"] as? String == "channels_exhausted")
+    let hint = try #require(envelope["hint"] as? String)
+    let namesOwnershipConflict = hint.contains("held by another process")
+    let namesConflictingPort = hint.contains(ServerConfig.virtualMIDISourceName)
+    #expect(namesOwnershipConflict)
+    #expect(namesConflictingPort)
 }
 
 @Test func testMIDIEngineSendMethodsEncodeExpectedBytes() async throws {
@@ -373,6 +608,28 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
 
 @Test(coreMIDIUnavailableInSandbox)
 func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
+    let endpointRuntime = VirtualMIDIEndpointRuntime.production
+    let sourceCensus = endpointRuntime.census(named: ServerConfig.virtualMIDISourceName)
+    let destinationCensus = endpointRuntime.census(named: ServerConfig.virtualMIDISinkName)
+    guard sourceCensus.isObserved,
+          destinationCensus.isObserved,
+          let sourceCount = sourceCensus.endpointCount,
+          let destinationCount = destinationCensus.endpointCount else {
+        print("SKIPPED testMIDIEngineProductionRuntimeStartStopSmoke: CoreMIDI endpoint census is unknown.")
+        return
+    }
+    guard sourceCount == 0, destinationCount == 0 else {
+        // This smoke test cannot safely exercise fixed production names when a
+        // prior process owns them: creation must now refuse that conflict rather
+        // than publishing a second endpoint. A clean preflight still requires a
+        // successful product start below.
+        print(
+            "SKIPPED testMIDIEngineProductionRuntimeStartStopSmoke: pre-existing virtual endpoint(s) "
+                + "(sources \(sourceCount), destinations \(destinationCount))."
+        )
+        return
+    }
+
     let engine = MIDIEngine()
 
     // A client-creation failure has two causes and only one is a defect: the

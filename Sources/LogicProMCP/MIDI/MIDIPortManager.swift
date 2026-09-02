@@ -7,6 +7,15 @@ protocol VirtualPortManaging: Actor {
         name: String,
         onReceive: @escaping @Sendable (UnsafePointer<MIDIEventList>, UnsafeMutableRawPointer?) -> Void
     ) throws -> MIDIPortManager.MIDIPortPair
+    func endpointCensus(name: String) -> VirtualMIDIEndpointCensus
+}
+
+extension VirtualPortManaging {
+    /// Test-only and non-CoreMIDI implementations have no endpoint catalog.
+    func endpointCensus(name: String) -> VirtualMIDIEndpointCensus {
+        _ = name
+        return .none
+    }
 }
 
 enum MIDIPortMode: String, Sendable {
@@ -28,6 +37,33 @@ actor MIDIPortManager: VirtualPortManaging {
         ) -> OSStatus
         let disposeEndpoint: @Sendable (_ endpoint: MIDIEndpointRef) -> OSStatus
         let disposeClient: @Sendable (_ client: MIDIClientRef) -> OSStatus
+        let endpointRuntime: VirtualMIDIEndpointRuntime
+        let acquireOwnershipLock: @Sendable () -> VirtualMIDIEndpointOwnershipLock.Acquisition
+
+        init(
+            createClient: @escaping @Sendable (_ name: String, _ client: inout MIDIClientRef) -> OSStatus,
+            createSource: @escaping @Sendable (_ client: MIDIClientRef, _ name: String, _ source: inout MIDIEndpointRef) -> OSStatus,
+            createDestination: @escaping @Sendable (
+                _ client: MIDIClientRef,
+                _ name: String,
+                _ destination: inout MIDIEndpointRef,
+                _ onReceive: @escaping @Sendable (UnsafePointer<MIDIEventList>, UnsafeMutableRawPointer?) -> Void
+            ) -> OSStatus,
+            disposeEndpoint: @escaping @Sendable (_ endpoint: MIDIEndpointRef) -> OSStatus,
+            disposeClient: @escaping @Sendable (_ client: MIDIClientRef) -> OSStatus,
+            endpointRuntime: VirtualMIDIEndpointRuntime,
+            acquireOwnershipLock: @escaping @Sendable () -> VirtualMIDIEndpointOwnershipLock.Acquisition = {
+                VirtualMIDIEndpointOwnershipLock.acquire()
+            }
+        ) {
+            self.createClient = createClient
+            self.createSource = createSource
+            self.createDestination = createDestination
+            self.disposeEndpoint = disposeEndpoint
+            self.disposeClient = disposeClient
+            self.endpointRuntime = endpointRuntime
+            self.acquireOwnershipLock = acquireOwnershipLock
+        }
 
         static let production = Runtime(
             createClient: { name, client in
@@ -49,7 +85,8 @@ actor MIDIPortManager: VirtualPortManaging {
             },
             disposeClient: { client in
                 MIDIClientDispose(client)
-            }
+            },
+            endpointRuntime: .production
         )
     }
 
@@ -103,17 +140,36 @@ actor MIDIPortManager: VirtualPortManaging {
             return existing
         }
 
+        let ownershipLock = try acquireOwnershipLock(named: name)
+        defer { ownershipLock.release() }
+        try rejectForeignEndpoint(named: name)
+
         var source: MIDIEndpointRef = 0
         var status = runtime.createSource(client, name, &source)
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
         }
+        VirtualMIDIEndpointProcessOwnership.shared.claim(source)
+        do {
+            try assignStableUniqueID(to: source, name: name, kind: .source)
+        } catch {
+            _ = disposeOwnedEndpoint(source)
+            throw error
+        }
 
         var dest: MIDIEndpointRef = 0
         status = runtime.createDestination(client, name, &dest, onReceive)
         guard status == noErr else {
-            _ = runtime.disposeEndpoint(source)
+            _ = disposeOwnedEndpoint(source)
             throw MIDIPortError.destinationCreationFailed(name, status)
+        }
+        VirtualMIDIEndpointProcessOwnership.shared.claim(dest)
+        do {
+            try assignStableUniqueID(to: dest, name: name, kind: .destination)
+        } catch {
+            _ = disposeOwnedEndpoint(dest)
+            _ = disposeOwnedEndpoint(source)
+            throw error
         }
 
         let pair = MIDIPortPair(name: name, source: source, destination: dest, mode: .bidirectional)
@@ -130,10 +186,21 @@ actor MIDIPortManager: VirtualPortManaging {
             return existing
         }
 
+        let ownershipLock = try acquireOwnershipLock(named: name)
+        defer { ownershipLock.release() }
+        try rejectForeignEndpoint(named: name)
+
         var source: MIDIEndpointRef = 0
         let status = runtime.createSource(client, name, &source)
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
+        }
+        VirtualMIDIEndpointProcessOwnership.shared.claim(source)
+        do {
+            try assignStableUniqueID(to: source, name: name, kind: .source)
+        } catch {
+            _ = disposeOwnedEndpoint(source)
+            throw error
         }
 
         let pair = MIDIPortPair(name: name, source: source, destination: nil, mode: .sendOnly)
@@ -156,15 +223,27 @@ actor MIDIPortManager: VirtualPortManaging {
         ports[name]
     }
 
+    /// Report a new CoreMIDI observation for every caller. A past conflict or
+    /// past empty read is not returned as if it were current endpoint state.
+    func endpointCensus(name: String) -> VirtualMIDIEndpointCensus {
+        currentCensus(named: name)
+    }
+
     /// Number of active ports.
     var portCount: Int { ports.count }
 
     /// Stop and dispose all ports.
     func stop() {
         for (name, pair) in ports {
-            _ = runtime.disposeEndpoint(pair.source)
+            let sourceDisposed = disposeOwnedEndpoint(pair.source)
             if let dest = pair.destination {
-                _ = runtime.disposeEndpoint(dest)
+                _ = disposeOwnedEndpoint(dest)
+            }
+            if !sourceDisposed {
+                Log.warn(
+                    "Could not dispose source for port '\(name)'; retaining process ownership until a successful disposal",
+                    subsystem: "midi"
+                )
             }
             Log.info("Disposed port: \(name)", subsystem: "midi")
         }
@@ -176,12 +255,129 @@ actor MIDIPortManager: VirtualPortManaging {
         isRunning = false
         Log.info("MIDIPortManager stopped", subsystem: "midi")
     }
+
+    private func currentCensus(named name: String) -> VirtualMIDIEndpointCensus {
+        runtime.endpointRuntime.census(named: name)
+    }
+
+    private func rejectForeignEndpoint(named name: String) throws {
+        let census = currentCensus(named: name)
+        guard census.isObserved,
+              let endpointCount = census.endpointCount,
+              let hasForeignEndpoint = census.hasForeignEndpoint else {
+            Log.warn(
+                "Virtual MIDI port '\(name)' census is unknown; skipping creation (\(census.reason ?? "no reason supplied"))",
+                subsystem: "midi"
+            )
+            throw MIDIPortError.censusUnknown(name: name, census: census)
+        }
+        guard !hasForeignEndpoint else {
+            // The first instance to start owns the ports. A later instance runs
+            // degraded and cannot use this MIDI port; if the owner exits, this
+            // process does not take over because it created nothing. Restart it.
+            Log.warn(
+                "Virtual MIDI port '\(name)' is owned by another instance or is stale; skipping creation "
+                    + "(\(endpointCount) matching endpoint(s))",
+                subsystem: "midi"
+            )
+            throw MIDIPortError.foreignEndpointConflict(name: name, census: census)
+        }
+    }
+
+    private func acquireOwnershipLock(named name: String) throws -> VirtualMIDIEndpointOwnershipLock {
+        switch runtime.acquireOwnershipLock() {
+        case .acquired(let lock):
+            return lock
+        case .held:
+            Log.warn(
+                "Virtual MIDI port '\(name)' ownership lock is held by another process; skipping creation",
+                subsystem: "midi"
+            )
+            throw MIDIPortError.ownershipLockHeld(name: name)
+        case .unavailable(let reason):
+            Log.warn(
+                "Virtual MIDI port '\(name)' ownership lock is unavailable; skipping creation (\(reason))",
+                subsystem: "midi"
+            )
+            throw MIDIPortError.ownershipLockUnavailable(name: name, reason: reason)
+        }
+    }
+
+    @discardableResult
+    private func disposeOwnedEndpoint(_ endpoint: MIDIEndpointRef) -> Bool {
+        let status = runtime.disposeEndpoint(endpoint)
+        guard status == noErr else {
+            Log.warn(
+                "Could not dispose virtual MIDI endpoint \(endpoint) (\(status)); retaining process ownership",
+                subsystem: "midi"
+            )
+            return false
+        }
+        VirtualMIDIEndpointProcessOwnership.shared.release(endpoint)
+        return true
+    }
+
+    private func assignStableUniqueID(
+        to endpoint: MIDIEndpointRef,
+        name: String,
+        kind: VirtualMIDIEndpointKind
+    ) throws {
+        let uniqueID = VirtualMIDIEndpointIdentity.uniqueID(forPortNamed: name, kind: kind)
+        let status = runtime.endpointRuntime.setUniqueID(endpoint, uniqueID)
+        guard status == noErr else {
+            if status == kMIDIIDNotUnique {
+                Log.warn(
+                    "Stable unique ID \(uniqueID) for virtual MIDI \(kind.rawValue) '\(name)' is already held by another endpoint",
+                    subsystem: "midi"
+                )
+                throw MIDIPortError.uniqueIDCollision(name: name, kind: kind, uniqueID: uniqueID)
+            }
+            Log.warn(
+                "Could not assign stable unique ID \(uniqueID) to virtual MIDI \(kind.rawValue) '\(name)': \(status)",
+                subsystem: "midi"
+            )
+            throw MIDIPortError.uniqueIDAssignmentFailed(name: name, kind: kind, status: status)
+        }
+    }
 }
 
-enum MIDIPortError: Error {
+enum MIDIPortError: Error, CustomStringConvertible {
     case clientCreationFailed(OSStatus)
     case notRunning
     case sourceCreationFailed(String, OSStatus)
     case destinationCreationFailed(String, OSStatus)
     case modeConflict(name: String, existing: MIDIPortMode, requested: MIDIPortMode)
+    case foreignEndpointConflict(name: String, census: VirtualMIDIEndpointCensus)
+    case censusUnknown(name: String, census: VirtualMIDIEndpointCensus)
+    case ownershipLockHeld(name: String)
+    case ownershipLockUnavailable(name: String, reason: String)
+    case uniqueIDCollision(name: String, kind: VirtualMIDIEndpointKind, uniqueID: Int32)
+    case uniqueIDAssignmentFailed(name: String, kind: VirtualMIDIEndpointKind, status: OSStatus)
+
+    var description: String {
+        switch self {
+        case .clientCreationFailed(let status):
+            return "MIDI client creation failed (\(status))"
+        case .notRunning:
+            return "MIDI port manager is not running"
+        case .sourceCreationFailed(let name, let status):
+            return "MIDI source '\(name)' creation failed (\(status))"
+        case .destinationCreationFailed(let name, let status):
+            return "MIDI destination '\(name)' creation failed (\(status))"
+        case .modeConflict(let name, let existing, let requested):
+            return "MIDI port '\(name)' already exists as \(existing.rawValue), not \(requested.rawValue)"
+        case .foreignEndpointConflict(let name, let census):
+            return "MIDI port '\(name)' ownership conflict: \(census.endpointCount ?? 0) matching endpoint(s) are held by another process or left by a stale endpoint"
+        case .censusUnknown(let name, let census):
+            return "MIDI port '\(name)' was not created because its CoreMIDI endpoint census is unknown: \(census.reason ?? "no reason supplied")"
+        case .ownershipLockHeld(let name):
+            return "MIDI port '\(name)' was not created because another process is checking or creating virtual MIDI endpoints"
+        case .ownershipLockUnavailable(let name, let reason):
+            return "MIDI port '\(name)' was not created because cross-process ownership locking is unavailable: \(reason)"
+        case .uniqueIDCollision(let name, let kind, let uniqueID):
+            return "MIDI \(kind.rawValue) '\(name)' cannot claim stable unique ID \(uniqueID): another endpoint already holds it"
+        case .uniqueIDAssignmentFailed(let name, let kind, let status):
+            return "MIDI \(kind.rawValue) '\(name)' could not claim its stable unique ID (\(status))"
+        }
+    }
 }

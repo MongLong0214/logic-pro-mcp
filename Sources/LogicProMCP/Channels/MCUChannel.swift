@@ -13,6 +13,7 @@ protocol MCUTransportProtocol: Actor {
         onIngressDrop: @escaping @Sendable (UInt64) -> Void,
         onCallbackWorkBudgetDrop: @escaping @Sendable (UInt64) -> Void
     ) async throws
+    func endpointCensus() async -> VirtualMIDIEndpointCensus
     func stop() async
 }
 
@@ -40,6 +41,9 @@ extension MCUTransportProtocol {
         _ = onCallbackWorkBudgetDrop
         try await start(onReceive: onReceive, onIngressDrop: onIngressDrop)
     }
+
+    /// Non-CoreMIDI test transports have no endpoint catalog to inspect.
+    func endpointCensus() async -> VirtualMIDIEndpointCensus { .none }
 }
 
 /// Snapshot of the MCU callback-to-actor hand-off.
@@ -360,21 +364,35 @@ actor MCUChannel: Channel {
         // a malformed packet or ingress overflow records a fatal drop and
         // finishes the bounded ingress. A valid callback that exceeds its
         // work budget records the omitted suffix without killing MCU.
-        try await transport.start(
-            onReceive: { event in ingress.yield(event) },
-            onIngressDrop: { count in ingress.recordDrop(count: count) },
-            onCallbackWorkBudgetDrop: { count in ingress.recordCallbackWorkBudgetDrop(count: count) }
-        )
+        do {
+            try await transport.start(
+                onReceive: { event in ingress.yield(event) },
+                onIngressDrop: { count in ingress.recordDrop(count: count) },
+                onCallbackWorkBudgetDrop: { count in ingress.recordCallbackWorkBudgetDrop(count: count) }
+            )
+        } catch {
+            let census = await transport.endpointCensus()
+            await cache.updateMCUConnection { conn in
+                conn.isConnected = false
+                conn.registeredAsDevice = false
+                conn.lastFeedbackAt = nil
+                conn.portName = "LogicProMCP-MCU-Internal"
+                conn.portCensus = census
+            }
+            throw error
+        }
 
         // Handshake: send Device Query
         let query = MCUProtocol.encodeDeviceQuery()
         await transport.send(query)
 
+        let census = await transport.endpointCensus()
         await cache.updateMCUConnection { conn in
             conn.isConnected = false
             conn.registeredAsDevice = false
             conn.lastFeedbackAt = nil
             conn.portName = "LogicProMCP-MCU-Internal"
+            conn.portCensus = census
         }
 
         Log.info("MCU Channel started, handshake query sent; waiting for feedback", subsystem: "mcu")
@@ -436,6 +454,12 @@ actor MCUChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
+        // Health is a read-time CoreMIDI observation. Do not republish the
+        // startup census as though it still described current endpoint state.
+        let census = await transport.endpointCensus()
+        await cache.updateMCUConnection { conn in
+            conn.portCensus = census
+        }
         let ingress = feedbackIngress?.snapshot() ?? .empty
         if ingress.overflowed {
             return .unavailable(
@@ -449,8 +473,27 @@ actor MCUChannel: Channel {
         let conn = await cache.getMCUConnection()
         if !conn.isConnected {
             let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
+            guard census.isObserved,
+                  let endpointCount = census.endpointCount,
+                  let hasForeignEndpoint = census.hasForeignEndpoint else {
+                return .unavailable(
+                    "MCU feedback not detected: CoreMIDI endpoint census for '\(portName)' is unknown; "
+                        + "this server refused to infer port ownership or publish a duplicate (\(census.reason ?? "no reason supplied"))."
+                        + workBudgetDetail
+                )
+            }
+            if hasForeignEndpoint {
+                return .unavailable(
+                    "MCU feedback not detected: \(endpointCount) endpoint(s) named "
+                        + "'\(portName)' include one this server did not create. Another server instance "
+                        + "or a stale endpoint owns this name; this server did not publish a duplicate."
+                        + workBudgetDetail
+                )
+            }
             return .unavailable(
-                "MCU feedback not detected. Register '\(portName)' in Logic Pro > Control Surfaces > Setup"
+                "MCU feedback not detected: no feedback has been received on '\(portName)' (\(endpointCount) "
+                    + "endpoint(s) visible, all owned by this server). Check the Logic Pro > Control "
+                    + "Surfaces > Setup binding."
                     + workBudgetDetail
             )
         }
