@@ -741,9 +741,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                     ]
                 )
             }
-            // A successful press may reorder the rail even when the following
-            // read is State B. Existing index/name target bindings must never
-            // survive that possible topology change.
+            // A sent press may reorder the rail even when AX reports the press
+            // as failed or the following read is State B. Existing index/name
+            // target bindings must never survive that possible topology change.
             if FeatureFlags.adr002TargetRef,
                channelResultIsVerified(result) || channelResultIsUnverified(result) {
                 await targetRegistry?.bumpTopologyGeneration()
@@ -1016,6 +1016,10 @@ struct TrackDispatcher: OperationTraceDispatching {
                 missing.append(rawReference)
                 continue
             }
+            // TargetDescriptor has no per-track identity beyond this index/name
+            // pair. The channel therefore rejects a duplicate-name live rail
+            // before pressing: preserving the pair here must not be mistaken for
+            // evidence that a same-named replacement is the issued track.
             tracks.append(TrackSortExpectedTrack(
                 reference: rawReference,
                 beforeIndex: binding.descriptor.trackIndex,

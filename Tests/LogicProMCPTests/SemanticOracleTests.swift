@@ -682,6 +682,20 @@ struct SemanticOracleStrengthTests {
 
 @Suite("#373 semantic oracle fixtures and mutation")
 struct SemanticOracleMutationTests {
+    @Test("#448 sort State A rejects a response whose actuated criterion differs from the request")
+    func trackSortOracleRejectsWrongActuatedCriterion() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSortVerified])
+        let wrongCriterionStateA = Data(
+            #"{"success":true,"verified":true,"state":"A","operation":"track.sort_verified","criterion":"track_name","actuated_criterion":"instrument_name","actuated_menu_item_label":"악기 이름","expected_order":["trk_bass","trk_kick"],"before_order":["trk_kick","trk_bass"],"after_order":["trk_bass","trk_kick"]}"#.utf8
+        )
+        let wrongCriterionWasAccepted: Bool = oracle.evaluate(
+            responseData: wrongCriterionStateA,
+            readbackData: Data("{}".utf8)
+        ) == true
+
+        #expect(!wrongCriterionWasAccepted)
+    }
+
     @Test func pluginSetParamVerifiedOracleAcceptsCheckboxStateAWithoutWeakeningSliderStateA() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsSetParamVerified])
         let sliderFixture = try #require(SemanticOracleFixtures.byOperationID[.pluginsSetParamVerified])

@@ -10,16 +10,21 @@ import Testing
 private actor TrackSortStateBChannel: Channel {
     nonisolated let id: ChannelID = .accessibility
     private(set) var calls: [(operation: String, params: [String: String])] = []
+    private let result: ChannelResult
+
+    init(result: ChannelResult = .success(HonestContract.encodeStateB(
+        reason: .readbackMismatch,
+        extras: ["operation": "track.sort_verified"]
+    ))) {
+        self.result = result
+    }
 
     func start() async throws {}
     func stop() async {}
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         calls.append((operation, params))
-        return .success(HonestContract.encodeStateB(
-            reason: .readbackMismatch,
-            extras: ["operation": operation]
-        ))
+        return result
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -27,12 +32,58 @@ private actor TrackSortStateBChannel: Channel {
     }
 }
 
+private final class TrackSortActionProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    private var postPressRailReadCount = 0
+
+    func recordPress() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    var pressCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func nextPostPressRailRead() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = postPressRailReadCount
+        postPressRailReadCount += 1
+        return current
+    }
+}
+
+private let trackNameActuation = TrackSortVerifier.ActuatedMenuItem(
+    localizedLabel: "트랙 이름",
+    criterion: .trackName
+)
+
 private struct TrackSortAXFixture {
     let runtime: AXLogicProElements.Runtime
     let expectedOrderJSON: String
+    let actionProbe: TrackSortActionProbe
 
-    init(orderAfterPress: [Int], expectedReferenceOrder: [Int]? = nil) {
+    init(
+        orderAfterPress: [Int],
+        expectedReferenceOrder: [Int]? = nil,
+        names: [String] = ["Kick", "Bass", "Piano"],
+        pressReturnsSuccess: Bool = true,
+        collapsedStackAt: Int? = nil,
+        railUnreadableAfterPress: Bool = false,
+        postPressOrders: [[Int]]? = nil,
+        windowsReadStatus: AXHelpers.AXStatusError? = nil,
+        railRoleReadStatus: AXHelpers.AXStatusError? = nil,
+        menuEnabledReadStatus: AXHelpers.AXStatusError? = nil
+    ) {
+        precondition(names.count == 3)
         let builder = FakeAXRuntimeBuilder()
+        let probe = TrackSortActionProbe()
+        actionProbe = probe
         let app = builder.element(448_000)
         let arrange = builder.element(448_001)
         let rail = builder.element(448_002)
@@ -52,8 +103,15 @@ private struct TrackSortAXFixture {
         let headers = (0..<3).map { offset -> AXUIElement in
             let header = builder.element(448_100 + offset)
             builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
-            builder.setAttribute(header, kAXTitleAttribute as String, "Studio Grand")
-            builder.setChildren(header, [])
+            builder.setAttribute(header, kAXTitleAttribute as String, names[offset])
+            if collapsedStackAt == offset {
+                let disclosure = builder.element(448_200 + offset)
+                builder.setAttribute(disclosure, kAXRoleAttribute as String, kAXDisclosureTriangleRole as String)
+                builder.setAttribute(disclosure, kAXValueAttribute as String, 0)
+                builder.setChildren(header, [disclosure])
+            } else {
+                builder.setChildren(header, [])
+            }
             return header
         }
         builder.setChildren(rail, headers)
@@ -70,21 +128,59 @@ private struct TrackSortAXFixture {
 
         runtime = builder.makeLogicRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if let windowsReadStatus,
+                   builder.elementID(element) == builder.elementID(app),
+                   attribute == (kAXWindowsAttribute as String) {
+                    return .failure(windowsReadStatus)
+                }
+                if let railRoleReadStatus,
+                   builder.elementID(element) == builder.elementID(rail),
+                   attribute == (kAXRoleAttribute as String) {
+                    return .failure(railRoleReadStatus)
+                }
+                if let menuEnabledReadStatus,
+                   builder.elementID(element) == builder.elementID(sortByName),
+                   attribute == (kAXEnabledAttribute as String) {
+                    return .failure(menuEnabledReadStatus)
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                guard builder.elementID(element) == builder.elementID(rail),
+                      probe.pressCount > 0 else {
+                    return nil
+                }
+                if railUnreadableAfterPress {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
+                if let postPressOrders, !postPressOrders.isEmpty {
+                    // The strict rail scan reads the candidate and then its rows,
+                    // so each observation consumes two rail-children reads.
+                    let observation = min(
+                        probe.nextPostPressRailRead() / 2,
+                        postPressOrders.count - 1
+                    )
+                    return .success(postPressOrders[observation].map { headers[$0] })
+                }
+                return nil
+            },
             setAttributeHandler: nil,
             performActionHandler: { element, action in
                 guard action == kAXPressAction as String,
                       builder.elementID(element) == builder.elementID(sortByName) else {
                     return false
                 }
+                probe.recordPress()
                 builder.setChildren(rail, orderAfterPress.map { headers[$0] })
-                return true
+                return pressReturnsSuccess
             }
         )
         let expected = (expectedReferenceOrder ?? orderAfterPress).map {
             TrackSortExpectedTrack(
-                reference: "trk_studio_grand_\($0)",
+                reference: "trk_\($0)",
                 beforeIndex: $0,
-                beforeName: "Studio Grand"
+                beforeName: names[$0]
             )
         }
         expectedOrderJSON = String(
@@ -169,23 +265,29 @@ struct Issue448TrackSortVerifiedTests {
         #expect(refusedForAbsentMeasuredLabel)
     }
 
-    @Test("an order changed by the wrong criterion is refused, not reported verified")
-    func postSortMismatchRefuses() {
+    @Test("an order matching expectation under the wrong actuated criterion is refused")
+    func wrongActuatedCriterionRefuses() {
+        let instrumentNameActuation = TrackSortVerifier.ActuatedMenuItem(
+            localizedLabel: "악기 이름",
+            criterion: .instrumentName
+        )
         let outcome = TrackSortVerifier.execute(
             criterion: .trackName,
             expectedOrder: ["trk_bass", "trk_kick"],
             before: { .read(["trk_kick", "trk_bass"]) },
-            actuate: { .actuated },
-            after: { .read(["trk_kick", "trk_bass"]) }
+            actuate: { .actuated(instrumentNameActuation) },
+            // The wrong sort happens to produce the requested permutation. This
+            // test fails if the production criterion-binding guard is removed.
+            after: { .read(["trk_bass", "trk_kick"]) }
         )
 
-        let rejectedMismatch: Bool
-        if case .uncertain(.afterOrderMismatch) = outcome {
-            rejectedMismatch = true
+        let rejectedWrongActuatedCriterion: Bool
+        if case .refused(.criterionMismatch(let actual, let label)) = outcome {
+            rejectedWrongActuatedCriterion = actual == .instrumentName && label == "악기 이름"
         } else {
-            rejectedMismatch = false
+            rejectedWrongActuatedCriterion = false
         }
-        #expect(rejectedMismatch)
+        #expect(rejectedWrongActuatedCriterion)
     }
 
     @Test("an unreadable before or after order is never assumed")
@@ -194,14 +296,14 @@ struct Issue448TrackSortVerifiedTests {
             criterion: .trackName,
             expectedOrder: ["trk_bass", "trk_kick"],
             before: { .unavailable },
-            actuate: { .actuated },
+            actuate: { .actuated(trackNameActuation) },
             after: { .read(["trk_bass", "trk_kick"]) }
         )
         let afterUnreadable = TrackSortVerifier.execute(
             criterion: .trackName,
             expectedOrder: ["trk_bass", "trk_kick"],
             before: { .read(["trk_kick", "trk_bass"]) },
-            actuate: { .actuated },
+            actuate: { .actuated(trackNameActuation) },
             after: { .unavailable }
         )
 
@@ -222,8 +324,31 @@ struct Issue448TrackSortVerifiedTests {
         #expect(afterUncertain)
     }
 
-    @Test("three same-named tracks sort and verify by their issued references")
-    func duplicateNamesSortAndVerify() throws {
+    @Test("duplicate names refuse before AX work because no per-track identity was issued")
+    func duplicateNamesRefuseBeforePress() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            names: ["Studio Grand", "Studio Grand", "Studio Grand"]
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let duplicateNamesWerePresent = Set(["Studio Grand", "Studio Grand", "Studio Grand"]).count == 1
+        let refusedWithoutAXPress = result.isSuccess == false
+            && body["reason"] as? String == "duplicate_name_reference_identity_unprovable"
+            && fixture.actionProbe.pressCount == 0
+
+        #expect(duplicateNamesWerePresent)
+        #expect(refusedWithoutAXPress)
+    }
+
+    @Test("State A carries the exact pressed leaf and its measured criterion")
+    func verifiedSortCarriesActuatedCriterionEvidence() throws {
         let fixture = TrackSortAXFixture(orderAfterPress: [2, 1, 0])
         let result = AccessibilityChannel.defaultSortTracks(
             params: [
@@ -233,15 +358,126 @@ struct Issue448TrackSortVerifiedTests {
             runtime: fixture.runtime
         )
         let body = try #require(sharedJSONObject(result.message))
-        let expected = ["trk_studio_grand_2", "trk_studio_grand_1", "trk_studio_grand_0"]
-        let allDisplayNamesAreDuplicates = Set(["Studio Grand", "Studio Grand", "Studio Grand"]).count == 1
-        let verifiedUnambiguously = result.isSuccess
+        let includesActualLeafEvidence = result.isSuccess
             && body["state"] as? String == "A"
-            && body["expected_order"] as? [String] == expected
-            && body["after_order"] as? [String] == expected
+            && body["criterion"] as? String == "track_name"
+            && body["actuated_criterion"] as? String == "track_name"
+            && body["actuated_menu_item_label"] as? String == "트랙 이름"
+            && fixture.actionProbe.pressCount == 1
 
-        #expect(allDisplayNamesAreDuplicates)
-        #expect(verifiedUnambiguously)
+        #expect(includesActualLeafEvidence)
+    }
+
+    @Test("a collapsed stack refuses before its hidden tracks can be sorted")
+    func collapsedStackRefusesBeforePress() throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [2, 1, 0], collapsedStackAt: 1)
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let collapsedScopeWasRejected = result.isSuccess == false
+            && body["reason"] as? String == "collapsed_track_stack"
+            && (body["collapsed_stack"] as? [String: Any])?["index"] as? Int == 1
+            && fixture.actionProbe.pressCount == 0
+
+        #expect(collapsedScopeWasRejected)
+    }
+
+    @Test("a failed AXPress still reads back and reports a verified observed order")
+    func failedPressStillReadsBack() throws {
+        let fixture = TrackSortAXFixture(orderAfterPress: [2, 1, 0], pressReturnsSuccess: false)
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let failedReceiptDidNotEraseTheWrite = result.isSuccess
+            && body["state"] as? String == "A"
+            && body["menu_press_reported_success"] as? Bool == false
+            && body["write_attempted"] as? Bool == true
+            && body["after_order"] as? [String] == ["trk_2", "trk_1", "trk_0"]
+            && fixture.actionProbe.pressCount == 1
+
+        #expect(failedReceiptDidNotEraseTheWrite)
+    }
+
+    @Test("a failed AXPress with unreadable order marks project state unknown and invalidates refs")
+    func failedPressUnreadableOrderInvalidatesReferences() async throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            pressReturnsSuccess: false,
+            railUnreadableAfterPress: true
+        )
+        let channelResult = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let channelBody = try #require(sharedJSONObject(channelResult.message))
+
+        let registry = TargetRegistry()
+        let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Kick")
+        let reference = await registry.bind(
+            kind: .track,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint
+        )
+        let router = ChannelRouter()
+        await router.register(TrackSortStateBChannel(result: channelResult))
+        _ = await FeatureFlags.withAdr002TargetRefForTests(true) {
+            await TrackDispatcher.handle(
+                command: "sort_verified",
+                params: [
+                    "criterion": .string("track_name"),
+                    "expected_order": .array([.string(reference.rawValue)]),
+                    "confirmed": .bool(true),
+                ],
+                router: router,
+                cache: StateCache(),
+                targetRegistry: registry
+            )
+        }
+        let referenceWasInvalidated = await registry.resolve(reference) == nil
+        let unknownStateWasHonest = channelResult.isSuccess
+            && channelBody["state"] as? String == "B"
+            && channelBody["write_attempted"] as? Bool == true
+            && channelBody["project_state"] as? String == "unknown"
+            && channelBody["safe_to_retry"] as? Bool == false
+            && fixture.actionProbe.pressCount == 1
+
+        #expect(unknownStateWasHonest)
+        #expect(referenceWasInvalidated)
+    }
+
+    @Test("a transient matching order cannot reach State A before the second matching observation")
+    func transientOrderDoesNotPassSettleWitness() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            postPressOrders: [[2, 1, 0], [1, 0, 2]]
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let transientWasNotPromoted = result.isSuccess
+            && body["state"] as? String == "B"
+            && body["reason"] as? String == HonestContract.UncertainReason.readbackMismatch.rawValue
+            && body["after_order"] as? [String] == ["trk_1", "trk_0", "trk_2"]
+
+        #expect(transientWasNotPromoted)
     }
 
     @Test("an already-sorted reference order is State B with an observable reason")
@@ -355,6 +591,94 @@ struct Issue448TrackSortVerifiedTests {
             && noWriteWasRouted
 
         #expect(namedAbsentReference)
+    }
+
+    @Test("an AXWindows read failure refuses instead of falling through a legacy empty list")
+    func windowsReadFailureRefusesBeforePress() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            windowsReadStatus: AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let failedWindowReadWasNotAnEmptyWindowList = result.isSuccess == false
+            && body["reason"] as? String == "before_order_read_failed"
+            && body["read_failure_stage"] as? String == "AXWindows"
+            && body["read_failure_status"] as? String == String(AXError.cannotComplete.rawValue)
+            && fixture.actionProbe.pressCount == 0
+
+        #expect(failedWindowReadWasNotAnEmptyWindowList)
+    }
+
+    @Test("the two definitive-absence AX statuses still permit the direct arrange-window read")
+    func windowsDefinitiveAbsenceIsNotAReadFailure() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            windowsReadStatus: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let definitiveAbsenceWasHandledAsAbsence = result.isSuccess
+            && body["state"] as? String == "A"
+            && fixture.actionProbe.pressCount == 1
+
+        #expect(definitiveAbsenceWasHandledAsAbsence)
+    }
+
+    @Test("an unreadable rail role refuses instead of being flattened to no rail")
+    func railRoleReadFailureRefusesBeforePress() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            railRoleReadStatus: AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let unreadableRoleWasNotReportedAsAbsentRail = result.isSuccess == false
+            && body["reason"] as? String == "before_order_read_failed"
+            && body["read_failure_stage"] as? String == "track_header_candidate_role"
+            && body["read_failure_status"] as? String == String(AXError.cannotComplete.rawValue)
+            && fixture.actionProbe.pressCount == 0
+
+        #expect(unreadableRoleWasNotReportedAsAbsentRail)
+    }
+
+    @Test("an unreadable AXEnabled status is not misreported as a disabled menu item")
+    func menuEnabledReadFailureRefusesBeforePress() throws {
+        let fixture = TrackSortAXFixture(
+            orderAfterPress: [2, 1, 0],
+            menuEnabledReadStatus: AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        )
+        let result = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": fixture.expectedOrderJSON,
+            ],
+            runtime: fixture.runtime
+        )
+        let body = try #require(sharedJSONObject(result.message))
+        let enabledReadFailureWasNamed = result.isSuccess == false
+            && body["reason"] as? String == "sort_menu_read_failed"
+            && fixture.actionProbe.pressCount == 0
+
+        #expect(enabledReadFailureWasNamed)
     }
 
     @Test("a disabled measured menu item is refused before it is pressed")

@@ -1306,13 +1306,17 @@ enum SemanticOracleTable {
 
     // #448: `defaultSortTracks` publishes State A only after a fresh complete
     // arrangement-rail read matches the caller's complete criterion-implied
-    // `trk_` reference order. A changed order is intentionally insufficient, so
-    // this exact array equality is the load-bearing response invariant.
+    // `trk_` reference order AND the title read from the pressed menu leaf maps
+    // back to that same criterion. A changed order is intentionally insufficient,
+    // so these two equalities are the load-bearing response invariants.
     static let tracksSortVerified = SafeMutationOracle.oracle(
         .tracksSortVerified,
         semantics: [
             .valueEquals(key: "operation", expected: .string("track.sort_verified")),
             .enumMember(key: "criterion", allowed: TrackSortCriterion.allCases.map(\.rawValue)),
+            .enumMember(key: "actuated_criterion", allowed: TrackSortCriterion.allCases.map(\.rawValue)),
+            .fieldsEqual(keyA: "criterion", keyB: "actuated_criterion"),
+            .typedField(key: "actuated_menu_item_label", type: .string),
             .fieldsEqual(keyA: "expected_order", keyB: "after_order"),
             .nonEmptyArray(key: "before_order"),
             .nonEmptyArray(key: "after_order"),

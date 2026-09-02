@@ -54,6 +54,15 @@ enum AXLogicProElements {
         case unreadable
     }
 
+    /// Status-carrying arrange-window resolution for a mutation verdict. This
+    /// sits beside the established `ArrangeWindowRead` so existing callers do
+    /// not lose their deliberately compact best-effort shape.
+    enum ArrangeWindowVerifiedRead {
+        case found(AXUIElement)
+        case absent
+        case unreadable(stage: String, status: String)
+    }
+
     /// Get the root AX element for Logic Pro. Returns nil if not running.
     static func appRoot(runtime: Runtime = .production) -> AXUIElement? {
         guard let pid = runtime.logicProPID() else { return nil }
@@ -147,6 +156,36 @@ enum AXLogicProElements {
         }
     }
 
+    /// The status-preserving arrange-window variant used when an unreadable
+    /// window list must be reported as a refusal rather than treated like the
+    /// legacy `mainWindow()` empty-list fallback. Only AX's definitive absence
+    /// statuses (-25205/-25212) permit the direct main-window fallback.
+    static func arrangeWindowVerifiedRead(runtime: Runtime = .production) -> ArrangeWindowVerifiedRead {
+        guard let app = appRoot(runtime: runtime) else {
+            return .unreadable(stage: "app_root", status: "unavailable")
+        }
+
+        switch AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(.some(let windows)) where !windows.isEmpty:
+            let nonDialogs = windows.filter { !isDialogWindow($0, runtime: runtime.ax) }
+            guard !nonDialogs.isEmpty else { return .absent }
+            if let arrange = nonDialogs.first(where: {
+                hasTrackHeadersGroup($0, runtime: runtime.ax)
+            }) {
+                return .found(arrange)
+            }
+            return .found(nonDialogs[0])
+        case .success:
+            return directArrangeWindowVerifiedRead(app: app, runtime: runtime.ax)
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return directArrangeWindowVerifiedRead(app: app, runtime: runtime.ax)
+        case .failure(let error):
+            return .unreadable(stage: "AXWindows", status: error.diagnosticLabel)
+        }
+    }
+
     private static func directArrangeWindowRead(
         app: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -162,6 +201,24 @@ enum AXLogicProElements {
             return .absent
         case .failure:
             return .unreadable
+        }
+    }
+
+    private static func directArrangeWindowVerifiedRead(
+        app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ArrangeWindowVerifiedRead {
+        switch AXHelpers.getAttributeResult(
+            app, kAXMainWindowAttribute as String, runtime: runtime
+        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(.some(let window)):
+            return .found(window)
+        case .success(.none):
+            return .absent
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return .absent
+        case .failure(let error):
+            return .unreadable(stage: "AXMainWindow", status: error.diagnosticLabel)
         }
     }
 

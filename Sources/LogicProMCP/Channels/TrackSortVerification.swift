@@ -37,6 +37,18 @@ enum TrackSortCriterion: String, CaseIterable, Sendable, Hashable {
         guard localeIdentifier == "ko_KR" || localeIdentifier == "ko-KR" else { return nil }
         return label.canonical
     }
+
+    /// Maps the title read from the menu leaf itself back to its stable API
+    /// identity. The sort transaction uses this after locating the leaf: the
+    /// request tells us what to look for, while this value tells us what was
+    /// actually about to be pressed.
+    static func measuredCriterion(
+        forObservedMenuItemLabel label: String,
+        localeIdentifier: String?
+    ) -> TrackSortCriterion? {
+        let matches = allCases.filter { $0.measuredLabel(for: localeIdentifier) == label }
+        return matches.count == 1 ? matches[0] : nil
+    }
 }
 
 /// An issued track reference together with the pre-sort rail location it named.
@@ -70,12 +82,25 @@ enum TrackSortVerifier {
         case unavailable
     }
 
+    struct ActuatedMenuItem: Equatable, Sendable {
+        /// These are read from the exact AX menu leaf that will receive
+        /// `AXPress`, not copied from the request or from the lookup path.
+        let localizedLabel: String
+        let criterion: TrackSortCriterion
+    }
+
     enum Actuation: Equatable, Sendable {
-        case actuated
+        /// The action call was sent. AX's Boolean return is not used as an
+        /// effect witness; both cases require post-write order readback.
+        case actuated(ActuatedMenuItem)
+        case pressReportedFailure(ActuatedMenuItem)
         case unmeasuredLocale(String)
         case criterionLabelMissing(String)
+        case criterionUnverified(String)
+        case criterionMismatch(ActuatedMenuItem)
         case disabledMenuItem(String)
-        case pressFailed(String)
+        case enabledStateUnavailable(String)
+        case menuReadFailed(stage: String, status: String)
     }
 
     enum Refusal: Equatable, Sendable {
@@ -83,8 +108,11 @@ enum TrackSortVerifier {
         case expectedOrderIsNotBeforeOrder
         case unmeasuredLocale(String)
         case criterionLabelMissing(String)
+        case criterionUnverified(String)
+        case criterionMismatch(actual: TrackSortCriterion, label: String)
         case disabledMenuItem(String)
-        case menuPressFailed(String)
+        case enabledStateUnavailable(String)
+        case menuReadFailed(stage: String, status: String)
     }
 
     enum Uncertainty: Equatable, Sendable {
@@ -102,8 +130,8 @@ enum TrackSortVerifier {
     /// A changed order is not a verifier: another criterion could produce it.
     /// The caller supplies the complete expected *track-reference* order
     /// derived from the requested criterion, and it must be a permutation of
-    /// the pre-write order. State A therefore requires an exact post-write
-    /// match.
+    /// the pre-write order. State A therefore requires both an exact post-write
+    /// match and the criterion mapped from the exact menu leaf that was pressed.
     ///
     /// A correct sort of an already-sorted project is observationally identical
     /// to a menu press that did nothing. We do not inspect Undo text or infer an
@@ -115,8 +143,6 @@ enum TrackSortVerifier {
         actuate: () -> Actuation,
         after: () -> OrderRead
     ) -> Outcome {
-        _ = criterion // Keeps the API explicit at this transaction boundary.
-
         guard case .read(let beforeOrder) = before() else {
             return .refused(.beforeOrderUnreadable)
         }
@@ -125,16 +151,30 @@ enum TrackSortVerifier {
         }
 
         switch actuate() {
-        case .actuated:
-            break
+        case .actuated(let item), .pressReportedFailure(let item):
+            guard item.criterion == criterion else {
+                return .refused(.criterionMismatch(
+                    actual: item.criterion,
+                    label: item.localizedLabel
+                ))
+            }
         case .unmeasuredLocale(let locale):
             return .refused(.unmeasuredLocale(locale))
         case .criterionLabelMissing(let label):
             return .refused(.criterionLabelMissing(label))
+        case .criterionUnverified(let label):
+            return .refused(.criterionUnverified(label))
+        case .criterionMismatch(let item):
+            return .refused(.criterionMismatch(
+                actual: item.criterion,
+                label: item.localizedLabel
+            ))
         case .disabledMenuItem(let label):
             return .refused(.disabledMenuItem(label))
-        case .pressFailed(let label):
-            return .refused(.menuPressFailed(label))
+        case .enabledStateUnavailable(let label):
+            return .refused(.enabledStateUnavailable(label))
+        case .menuReadFailed(let stage, let status):
+            return .refused(.menuReadFailed(stage: stage, status: status))
         }
 
         guard case .read(let afterOrder) = after() else {

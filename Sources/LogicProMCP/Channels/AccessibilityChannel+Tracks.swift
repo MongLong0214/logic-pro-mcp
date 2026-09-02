@@ -48,12 +48,42 @@ extension AccessibilityChannel {
         var beforeTracks: [TrackState]?
         var afterTracks: [TrackState]?
         var afterReferences: [String]?
-        guard let beforeRead = strictTrackSortStateRead(runtime: runtime) else {
+        var actuatedMenuItem: TrackSortVerifier.ActuatedMenuItem?
+        var menuPressReportedSuccess: Bool?
+        let beforeRead: TrackSortStateRead
+        switch strictTrackSortStateRead(runtime: runtime) {
+        case .read(let read):
+            beforeRead = read
+        case .unavailable:
             return trackSortStateC(
                 .readbackUnavailable,
                 criterion: criterion.rawValue,
                 reason: "before_order_unreadable",
                 hint: "sort_verified refused before the menu action because the full track order could not be read."
+            )
+        case .unreadable(let stage, let status):
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "before_order_read_failed",
+                hint: "sort_verified refused before the menu action because \(stage) could not be read (\(status)).",
+                extras: ["read_failure_stage": stage, "read_failure_status": status]
+            )
+        case .stackStateUnreadable(let index, let name):
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "track_stack_state_unreadable",
+                hint: "sort_verified refused before the menu action because track \(index) ('\(name)') could not prove whether its stack is expanded.",
+                extras: ["unreadable_stack": ["index": index, "name": name]]
+            )
+        case .collapsedStack(let index, let name):
+            return trackSortStateC(
+                .invalidParams,
+                criterion: criterion.rawValue,
+                reason: "collapsed_track_stack",
+                hint: "sort_verified refused before the menu action because track \(index) ('\(name)') is a collapsed stack; expand it and re-read logic://tracks so the complete track order can be checked.",
+                extras: ["collapsed_stack": ["index": index, "name": name]]
             )
         }
         beforeTracks = beforeRead.tracks
@@ -62,14 +92,26 @@ extension AccessibilityChannel {
             expectedOrder: expectedOrder
         )
         guard case .matched(let beforeReferences) = beforeOrder else {
-            let missing = beforeOrder.missingReferences
-            return trackSortStateC(
-                .staleTargetReference,
-                criterion: criterion.rawValue,
-                reason: "expected_order_track_refs_not_in_before_order",
-                hint: "sort_verified expected_order names track references that are not in the current pre-sort order: \(missing.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
-                extras: ["missing_track_refs": missing]
-            )
+            switch beforeOrder {
+            case .missing(let missing):
+                return trackSortStateC(
+                    .staleTargetReference,
+                    criterion: criterion.rawValue,
+                    reason: "expected_order_track_refs_not_in_before_order",
+                    hint: "sort_verified expected_order names track references that are not in the current pre-sort order: \(missing.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                    extras: ["missing_track_refs": missing]
+                )
+            case .ambiguous(let references):
+                return trackSortStateC(
+                    .staleTargetReference,
+                    criterion: criterion.rawValue,
+                    reason: "duplicate_name_reference_identity_unprovable",
+                    hint: "sort_verified refused before the menu action because duplicate track names have no issued per-track identity beyond index and name. Rename duplicates and re-read logic://tracks before sorting.",
+                    extras: ["ambiguous_track_refs": references]
+                )
+            case .matched:
+                preconditionFailure("The matched case is handled by the guard")
+            }
         }
         let outcome = TrackSortVerifier.execute(
             criterion: criterion,
@@ -78,51 +120,112 @@ extension AccessibilityChannel {
                 .read(beforeReferences)
             },
             actuate: {
-                let observedLocale = AXLogicProElements.logicUILocaleIdentifier(runtime: runtime)
-                guard let locale = observedLocale,
-                      let measuredLabel = criterion.measuredLabel(for: locale) else {
-                    return .unmeasuredLocale(observedLocale ?? "unknown")
+                let locale: String
+                switch AXLogicProElements.logicUILocaleIdentifierRead(runtime: runtime) {
+                case .locale(let observed):
+                    locale = observed
+                case .absent:
+                    return .unmeasuredLocale("unknown")
+                case .unreadable(let stage, let status):
+                    return .menuReadFailed(stage: stage, status: status)
                 }
-                guard let item = AXLogicProElements.menuItem(
+                guard let measuredLabel = criterion.measuredLabel(for: locale) else {
+                    return .unmeasuredLocale(locale)
+                }
+                let item: AXUIElement
+                switch AXLogicProElements.menuItemRead(
                     labelPath: [
                         AXLocalePolicy.sortTracksMenuPath.bar,
                         AXLocalePolicy.sortTracksMenuPath.item,
                         criterion.label,
                     ],
                     runtime: runtime
-                ) else {
+                ) {
+                case .found(let found):
+                    item = found
+                case .absent:
                     return .criterionLabelMissing(measuredLabel)
+                case .unreadable(let stage, let status):
+                    return .menuReadFailed(stage: stage, status: status)
                 }
-                let enabled: Bool? = AXHelpers.getAttribute(
-                    item,
-                    kAXEnabledAttribute as String,
-                    runtime: runtime.ax
+                let observedLabel: String
+                switch AXHelpers.getAttributeResult(
+                    item, kAXTitleAttribute as String, runtime: runtime.ax
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .success(.some(let title)) where !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
+                    observedLabel = title
+                case .success(.some), .success(.none):
+                    return .criterionUnverified("unknown")
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    return .criterionUnverified("unknown")
+                case .failure(let error):
+                    return .menuReadFailed(stage: "AXMenuItem.AXTitle", status: error.diagnosticLabel)
+                }
+                guard let observedCriterion = TrackSortCriterion.measuredCriterion(
+                    forObservedMenuItemLabel: observedLabel,
+                    localeIdentifier: locale
+                ) else {
+                    return .criterionUnverified(observedLabel)
+                }
+                let observedItem = TrackSortVerifier.ActuatedMenuItem(
+                    localizedLabel: observedLabel,
+                    criterion: observedCriterion
                 )
-                guard enabled == true else {
-                    return .disabledMenuItem(measuredLabel)
+                guard observedCriterion == criterion else {
+                    return .criterionMismatch(observedItem)
                 }
-                guard AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else {
-                    return .pressFailed(measuredLabel)
+                switch AXHelpers.getAttributeResult(
+                    item, kAXEnabledAttribute as String, runtime: runtime.ax
+                ) as Result<Bool?, AXHelpers.AXStatusError> {
+                case .success(.some(true)):
+                    break
+                case .success(.some(false)):
+                    return .disabledMenuItem(observedLabel)
+                case .success(.none):
+                    return .enabledStateUnavailable(observedLabel)
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    return .enabledStateUnavailable(observedLabel)
+                case .failure(let error):
+                    return .menuReadFailed(stage: "AXMenuItem.AXEnabled", status: error.diagnosticLabel)
                 }
-                // The menu action is asynchronous on some Logic builds. The
-                // bounded settle is not proof; the second strict rail read is.
-                usleep(150_000)
-                return .actuated
+                // The menu leaf does not expose a persistent "selected sort"
+                // attribute. Its own title is therefore the only trustworthy
+                // criterion witness: we record the title and its measured mapping
+                // from this exact element before sending AXPress.
+                actuatedMenuItem = observedItem
+                let pressSucceeded = AXHelpers.performAction(
+                    item, kAXPressAction as String, runtime: runtime.ax
+                )
+                menuPressReportedSuccess = pressSucceeded
+                return pressSucceeded ? .actuated(observedItem) : .pressReportedFailure(observedItem)
             },
             after: {
-                guard let afterRead = strictTrackSortStateRead(runtime: runtime) else {
-                    return .unavailable
+                var previousOrder: [String]?
+                // Two equal, independently strict observations are required.
+                // We poll at most four times with 75 ms between later reads
+                // (225 ms after the first read). This bound replaces the old
+                // fixed 150 ms delay, but remains an unmeasured assumption until
+                // a live sort establishes Logic's settling distribution.
+                for attempt in 0..<4 {
+                    if attempt > 0 { usleep(75_000) }
+                    guard case .read(let afterRead) = strictTrackSortStateRead(runtime: runtime) else {
+                        return .unavailable
+                    }
+                    afterTracks = afterRead.tracks
+                    guard let resolvedAfterReferences = trackSortAfterOrder(
+                        headers: afterRead.headers,
+                        beforeHeaders: beforeRead.headers,
+                        beforeReferences: beforeReferences
+                    ) else {
+                        return .unavailable
+                    }
+                    afterReferences = resolvedAfterReferences
+                    if previousOrder == resolvedAfterReferences {
+                        return .read(resolvedAfterReferences)
+                    }
+                    previousOrder = resolvedAfterReferences
                 }
-                afterTracks = afterRead.tracks
-                guard let resolvedAfterReferences = trackSortAfterOrder(
-                    headers: afterRead.headers,
-                    beforeHeaders: beforeRead.headers,
-                    beforeReferences: beforeReferences
-                ) else {
-                    return .unavailable
-                }
-                afterReferences = resolvedAfterReferences
-                return .read(resolvedAfterReferences)
+                return .unavailable
             }
         )
 
@@ -132,7 +235,9 @@ extension AccessibilityChannel {
             beforeOrder: beforeReferences,
             afterOrder: afterReferences,
             before: beforeTracks,
-            after: afterTracks
+            after: afterTracks,
+            actuatedMenuItem: actuatedMenuItem,
+            menuPressReportedSuccess: menuPressReportedSuccess
         )
         switch outcome {
         case .verified:
@@ -153,34 +258,60 @@ extension AccessibilityChannel {
         let tracks: [TrackState]
     }
 
+    private enum StrictTrackSortStateRead {
+        case read(TrackSortStateRead)
+        case unavailable
+        case unreadable(stage: String, status: String)
+        case stackStateUnreadable(index: Int, name: String)
+        case collapsedStack(index: Int, name: String)
+    }
+
     private enum TrackSortBeforeOrder {
         case matched([String])
         case missing([String])
-
-        var missingReferences: [String] {
-            if case .missing(let references) = self { return references }
-            return []
-        }
+        case ambiguous([String])
     }
 
     private static func strictTrackSortStateRead(
         runtime: AXLogicProElements.Runtime
-    ) -> TrackSortStateRead? {
-        guard let window = AXLogicProElements.mainWindow(runtime: runtime),
-              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
-        else {
-            return nil
+    ) -> StrictTrackSortStateRead {
+        let window: AXUIElement
+        switch AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime) {
+        case .found(let resolved):
+            window = resolved
+        case .absent:
+            return .unavailable
+        case .unreadable(let stage, let status):
+            return .unreadable(stage: stage, status: status)
+        }
+        let headers: [AXUIElement]
+        switch AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime) {
+        case .read(let read):
+            headers = read
+        case .unavailable:
+            return .unavailable
+        case .unreadable(let stage, let status):
+            return .unreadable(stage: stage, status: status)
         }
         let tracks = headers.enumerated().map { index, header in
             AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
         }
-        guard tracks.allSatisfy({
-            $0.liveIdentityBacked
-                && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }) else {
-            return nil
+        for track in tracks {
+            guard track.liveIdentityBacked,
+                  !track.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return .unreadable(stage: "track_identity", status: "unreadable")
+            }
+            guard let isStackHeader = track.isStackHeader else {
+                return .stackStateUnreadable(index: track.id, name: track.name)
+            }
+            guard !isStackHeader || track.stackCollapsed != nil else {
+                return .stackStateUnreadable(index: track.id, name: track.name)
+            }
+            if isStackHeader, track.stackCollapsed == true {
+                return .collapsedStack(index: track.id, name: track.name)
+            }
         }
-        return TrackSortStateRead(headers: headers, tracks: tracks)
+        return .read(TrackSortStateRead(headers: headers, tracks: tracks))
     }
 
     private static func decodeTrackSortExpectedOrder(_ raw: String?) -> [TrackSortExpectedTrack]? {
@@ -199,14 +330,27 @@ extension AccessibilityChannel {
         return decoded
     }
 
-    /// The reference's pre-sort descriptor can bind each duplicate display name
-    /// to exactly one header. Name matching alone is intentionally absent here.
+    /// TargetDescriptor currently issues only `(index, name)` for a track. That
+    /// is not an identity when any name is duplicated: an out-of-band swap or
+    /// delete/recreate can leave both fields unchanged. Refuse those projects
+    /// rather than silently rebind a reference to whichever same-named header
+    /// now occupies its old index.
     private static func trackSortBeforeOrder(
         tracks: [TrackState],
         expectedOrder: [TrackSortExpectedTrack]
     ) -> TrackSortBeforeOrder {
         guard expectedOrder.count == tracks.count else {
             return .missing(expectedOrder.map(\.reference))
+        }
+        let duplicateNames = Set(
+            Dictionary(grouping: tracks, by: \.name)
+                .filter { $0.value.count > 1 }
+                .keys
+        )
+        if !duplicateNames.isEmpty {
+            return .ambiguous(expectedOrder.compactMap {
+                duplicateNames.contains($0.beforeName) ? $0.reference : nil
+            })
         }
         var order = Array(repeating: "", count: tracks.count)
         var missing: [String] = []
@@ -226,10 +370,11 @@ extension AccessibilityChannel {
         return .matched(order)
     }
 
-    /// Header equality is the measured transaction-local continuity witness:
-    /// the strict reads retain the same AX header objects across the menu press.
-    /// If Logic replaces a header object, we cannot prove which duplicate track
-    /// moved, so the caller receives State B rather than a guessed identity.
+    /// Header equality is an unmeasured transaction-local continuity assumption:
+    /// the #448 fixture reuses fake header objects, but no live sort has yet
+    /// established that Logic retains them across the menu action. If Logic
+    /// replaces a header object, we cannot prove which track moved, so the
+    /// caller receives State B rather than a guessed identity.
     private static func trackSortAfterOrder(
         headers: [AXUIElement],
         beforeHeaders: [AXUIElement],
@@ -258,11 +403,17 @@ extension AccessibilityChannel {
         beforeOrder: [String]?,
         afterOrder: [String]?,
         before: [TrackState]?,
-        after: [TrackState]?
+        after: [TrackState]?,
+        actuatedMenuItem: TrackSortVerifier.ActuatedMenuItem?,
+        menuPressReportedSuccess: Bool?
     ) -> [String: Any] {
         [
             "operation": "track.sort_verified",
             "criterion": criterion.rawValue,
+            "actuated_criterion": actuatedMenuItem?.criterion.rawValue ?? NSNull(),
+            "actuated_menu_item_label": actuatedMenuItem?.localizedLabel ?? NSNull(),
+            "menu_press_reported_success": menuPressReportedSuccess ?? NSNull(),
+            "write_attempted": actuatedMenuItem != nil,
             "expected_order": expectedOrder,
             "before_order": beforeOrder ?? NSNull(),
             "after_order": afterOrder ?? NSNull(),
@@ -341,6 +492,22 @@ extension AccessibilityChannel {
                 hint: "sort_verified expected the measured criterion label '\(label)' in the current Track > Sort Tracks By menu, but it was absent.",
                 extras: extras
             )
+        case .criterionUnverified(let label):
+            return trackSortStateC(
+                .elementNotFound,
+                criterion: criterion.rawValue,
+                reason: "actuated_criterion_unverified",
+                hint: "sort_verified refused because the menu leaf title '\(label)' could not be mapped to a measured sort criterion.",
+                extras: extras
+            )
+        case .criterionMismatch(let actual, let label):
+            return trackSortStateC(
+                .elementNotFound,
+                criterion: criterion.rawValue,
+                reason: "actuated_criterion_did_not_match_requested_criterion",
+                hint: "sort_verified refused because menu leaf '\(label)' maps to '\(actual.rawValue)', not requested criterion '\(criterion.rawValue)'.",
+                extras: extras
+            )
         case .disabledMenuItem(let label):
             return trackSortStateC(
                 .axWriteFailed,
@@ -349,12 +516,20 @@ extension AccessibilityChannel {
                 hint: "sort_verified refused because the measured menu item '\(label)' was disabled; AXPress on a disabled item is not an action.",
                 extras: extras
             )
-        case .menuPressFailed(let label):
+        case .enabledStateUnavailable(let label):
             return trackSortStateC(
-                .axWriteFailed,
+                .readbackUnavailable,
                 criterion: criterion.rawValue,
-                reason: "sort_menu_press_failed",
-                hint: "sort_verified could not press the measured menu item '\(label)'.",
+                reason: "sort_menu_item_enabled_state_unreadable",
+                hint: "sort_verified refused because the enabled state of menu item '\(label)' was unavailable; no AXPress was sent.",
+                extras: extras
+            )
+        case .menuReadFailed(let stage, let status):
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "sort_menu_read_failed",
+                hint: "sort_verified refused because \(stage) could not be read (\(status)); no AXPress was sent.",
                 extras: extras
             )
         }
@@ -366,9 +541,11 @@ extension AccessibilityChannel {
     ) -> ChannelResult {
         var details = extras
         details["write_attempted"] = true
+        details["safe_to_retry"] = false
         switch uncertainty {
         case .afterOrderUnreadable:
             details["detail"] = "after_order_unreadable"
+            details["project_state"] = "unknown"
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: details))
         case .afterOrderMismatch:
             details["detail"] = "after_order_did_not_match_requested_criterion"
