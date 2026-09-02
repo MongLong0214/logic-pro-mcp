@@ -74,7 +74,8 @@ enum ControlsViewBooleanParameterWriter {
         case viewSwitcherAmbiguous
         case unmeasuredLocale
         case entryViewNotConfirmed
-        case viewMenuNotFound
+        case viewMenuDidNotAppearBeforeDeadline
+        case viewMenuReadFailed(AXHelpers.AXStatusError)
         case viewMenuAmbiguous
         case viewMenuItemNotFound(PluginWindowView)
         case viewMenuItemAmbiguous(PluginWindowView)
@@ -89,9 +90,11 @@ enum ControlsViewBooleanParameterWriter {
             case .unmeasuredLocale:
                 return "the plugin-window View AXDescription is not measured for this locale; no view name was guessed"
             case .entryViewNotConfirmed:
-                return "the bound plugin window exposed neither a described native-editor AXSlider nor Controls-view rows with no described AXSlider; its entry view was not confirmed"
-            case .viewMenuNotFound:
-                return "the measured View switcher exposed no scoped AXMenu after AXPress"
+                return "the bound plugin window exposed neither a described native-editor AXSlider nor a Controls-view label-and-sibling-control row with no described AXSlider; its entry view was not confirmed"
+            case .viewMenuDidNotAppearBeforeDeadline:
+                return "the measured View switcher exposed no scoped AXMenu before the menu-appearance deadline after AXPress"
+            case let .viewMenuReadFailed(error):
+                return "the measured View switcher's scoped AXMenu read failed after AXPress (AXChildren/AXRole status \(error.diagnosticLabel)); this is distinct from a menu-appearance deadline"
             case .viewMenuAmbiguous:
                 return "the measured View switcher exposed several scoped AXMenus"
             case let .viewMenuItemNotFound(view):
@@ -147,6 +150,7 @@ enum ControlsViewBooleanParameterWriter {
         private let switcher: AXUIElement
         private let entryView: PluginWindowView
         private let didSwitch: Bool
+        private let menuAppearanceTimeout: TimeInterval
         private let runtime: AXHelpers.Runtime
         private var restorationFinished = false
 
@@ -155,12 +159,14 @@ enum ControlsViewBooleanParameterWriter {
             switcher: AXUIElement,
             entryView: PluginWindowView,
             didSwitch: Bool,
+            menuAppearanceTimeout: TimeInterval,
             runtime: AXHelpers.Runtime
         ) {
             self.window = window
             self.switcher = switcher
             self.entryView = entryView
             self.didSwitch = didSwitch
+            self.menuAppearanceTimeout = menuAppearanceTimeout
             self.runtime = runtime
         }
 
@@ -183,6 +189,7 @@ enum ControlsViewBooleanParameterWriter {
                 to: entryView,
                 in: window,
                 switcher: switcher,
+                menuAppearanceTimeout: menuAppearanceTimeout,
                 confirmationTimeout: viewConfirmationTimeout,
                 runtime: runtime
             ) {
@@ -204,7 +211,7 @@ enum ControlsViewBooleanParameterWriter {
 
     private enum ViewChangeResult {
         case confirmed(switched: Bool)
-        case refused(ViewSwitchFailure)
+        case refused(ViewSwitchFailure, targetSelectionAttempted: Bool)
     }
 
     struct ToggleResult: Sendable, Equatable {
@@ -224,6 +231,7 @@ enum ControlsViewBooleanParameterWriter {
     static func prepareView(
         _ targetView: PluginWindowView,
         in window: AXUIElement,
+        menuAppearanceTimeout: TimeInterval = viewMenuAppearanceTimeout,
         confirmationTimeout: TimeInterval = viewConfirmationTimeout,
         runtime: AXHelpers.Runtime = .production
     ) -> ViewPreparationResult {
@@ -251,6 +259,7 @@ enum ControlsViewBooleanParameterWriter {
             to: targetView,
             in: window,
             switcher: switcher,
+            menuAppearanceTimeout: menuAppearanceTimeout,
             confirmationTimeout: confirmationTimeout,
             runtime: runtime
         ) {
@@ -260,20 +269,25 @@ enum ControlsViewBooleanParameterWriter {
                 switcher: switcher,
                 entryView: entryView,
                 didSwitch: switched,
+                menuAppearanceTimeout: menuAppearanceTimeout,
                 runtime: runtime
             ))
-        case let .refused(failure):
+        case let .refused(failure, targetSelectionAttempted):
             // A pressed menu item can have changed the view even when the
             // target structure did not settle before its deadline. Re-select
             // the entry view best-effort before refusing, so failed selection
             // paths do not strand it.
-            _ = switchView(
-                to: entryView,
-                in: window,
-                switcher: switcher,
-                confirmationTimeout: confirmationTimeout,
-                runtime: runtime
-            )
+            if targetSelectionAttempted {
+                _ = switchView(
+                    to: entryView,
+                    in: window,
+                    switcher: switcher,
+                    menuAppearanceTimeout: menuAppearanceTimeout,
+                    confirmationTimeout: confirmationTimeout,
+                    forceSelection: true,
+                    runtime: runtime
+                )
+            }
             return .refused(failure)
         }
     }
@@ -299,7 +313,7 @@ enum ControlsViewBooleanParameterWriter {
         }) {
             return .editor
         }
-        if controlsViewRowsArePresent(in: window, runtime: runtime) {
+        if controlsViewStateIsBound(in: window, runtime: runtime) {
             return .controls
         }
         return sliders.isEmpty ? nil : .editor
@@ -309,10 +323,12 @@ enum ControlsViewBooleanParameterWriter {
         to targetView: PluginWindowView,
         in window: AXUIElement,
         switcher: AXUIElement,
+        menuAppearanceTimeout: TimeInterval,
         confirmationTimeout: TimeInterval,
+        forceSelection: Bool = false,
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
-        guard observedView(in: window, runtime: runtime) != targetView else {
+        guard forceSelection || observedView(in: window, runtime: runtime) != targetView else {
             return .confirmed(switched: false)
         }
 
@@ -320,11 +336,21 @@ enum ControlsViewBooleanParameterWriter {
         // reveals this app-wide menu after AXPress, and its entry accepts only
         // AXPick; no retry ladder can turn another protocol into evidence.
         _ = AXHelpers.performAction(switcher, kAXPressAction as String, runtime: runtime)
-        let menus = AXHelpers.censusDescendant(
-            of: switcher, role: kAXMenuRole, maxDepth: 4, runtime: runtime
-        ).matches
+        let menus: [AXUIElement]
+        switch waitForScopedViewMenu(
+            under: switcher,
+            timeout: menuAppearanceTimeout,
+            runtime: runtime
+        ) {
+        case let .found(observed):
+            menus = observed
+        case .deadlineExpired:
+            return .refused(.viewMenuDidNotAppearBeforeDeadline, targetSelectionAttempted: false)
+        case let .readFailed(error):
+            return .refused(.viewMenuReadFailed(error), targetSelectionAttempted: false)
+        }
         guard menus.count == 1, let menu = menus.first else {
-            return .refused(menus.isEmpty ? .viewMenuNotFound : .viewMenuAmbiguous)
+            return .refused(.viewMenuAmbiguous, targetSelectionAttempted: false)
         }
         let entries = AXLocalePolicy.censusDescendant(
             of: menu,
@@ -336,7 +362,8 @@ enum ControlsViewBooleanParameterWriter {
         guard entries.count == 1, let target = entries.first else {
             return .refused(entries.isEmpty
                 ? .viewMenuItemNotFound(targetView)
-                : .viewMenuItemAmbiguous(targetView)
+                : .viewMenuItemAmbiguous(targetView),
+                targetSelectionAttempted: false
             )
         }
         _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
@@ -346,13 +373,107 @@ enum ControlsViewBooleanParameterWriter {
             timeout: confirmationTimeout,
             runtime: runtime
         ) else {
-            return .refused(.viewStructureDidNotConfirm(targetView))
+            return .refused(.viewStructureDidNotConfirm(targetView), targetSelectionAttempted: true)
         }
         return .confirmed(switched: true)
     }
 
+    private static let viewMenuAppearanceTimeout: TimeInterval = 2.0
+    private static let viewMenuAppearancePollInterval: TimeInterval = 0.05
     private static let viewConfirmationTimeout: TimeInterval = 1.5
     private static let viewConfirmationPollInterval: TimeInterval = 0.05
+
+    private enum ScopedViewMenuWaitResult {
+        case found([AXUIElement])
+        case deadlineExpired
+        case readFailed(AXHelpers.AXStatusError)
+    }
+
+    /// The view menu is created below the switcher asynchronously. Preserve an
+    /// unreadable AX subtree as a refusal instead of treating it as an empty
+    /// menu and incorrectly claiming its appearance timed out.
+    private static func waitForScopedViewMenu(
+        under switcher: AXUIElement,
+        timeout: TimeInterval,
+        runtime: AXHelpers.Runtime
+    ) -> ScopedViewMenuWaitResult {
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+        repeat {
+            switch scopedViewMenus(under: switcher, runtime: runtime) {
+            case let .success(menus) where !menus.isEmpty:
+                return .found(menus)
+            case .success:
+                break
+            case let .failure(error):
+                return .readFailed(error)
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            Thread.sleep(forTimeInterval: min(viewMenuAppearancePollInterval, remaining))
+        } while Date() < deadline
+        return .deadlineExpired
+    }
+
+    private static func scopedViewMenus(
+        under switcher: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        var menus: [AXUIElement] = []
+        if let error = collectScopedViewMenus(
+            below: switcher,
+            remainingDepth: 4,
+            runtime: runtime,
+            into: &menus
+        ) {
+            return .failure(error)
+        }
+        return .success(menus)
+    }
+
+    private static func collectScopedViewMenus(
+        below element: AXUIElement,
+        remainingDepth: Int,
+        runtime: AXHelpers.Runtime,
+        into menus: inout [AXUIElement]
+    ) -> AXHelpers.AXStatusError? {
+        guard remainingDepth > 0 else { return nil }
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return nil
+        case let .failure(error):
+            return error
+        }
+        for child in children {
+            let role: String?
+            switch AXHelpers.getAttributeResult(
+                child,
+                kAXRoleAttribute as String,
+                runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                role = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                role = nil
+            case let .failure(error):
+                return error
+            }
+            if role == (kAXMenuRole as String) {
+                menus.append(child)
+            }
+            if let error = collectScopedViewMenus(
+                below: child,
+                remainingDepth: remainingDepth - 1,
+                runtime: runtime,
+                into: &menus
+            ) {
+                return error
+            }
+        }
+        return nil
+    }
 
     private static func waitForView(
         _ expected: PluginWindowView,
@@ -372,7 +493,7 @@ enum ControlsViewBooleanParameterWriter {
         return false
     }
 
-    private static func controlsViewRowsArePresent(
+    private static func controlsViewStateIsBound(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
@@ -381,6 +502,9 @@ enum ControlsViewBooleanParameterWriter {
         ).matches
         guard tables.count == 1, let table = tables.first else { return false }
         guard let rows = controlsRows(in: table, runtime: runtime) else { return false }
+        // Heading and section rows have no interactive control in the live
+        // table. A Controls view is bound by the presence of at least one
+        // measured label/control pair, not by requiring every row to be one.
         return rows.contains { rowCarriesParameterPair($0, runtime: runtime) }
     }
 

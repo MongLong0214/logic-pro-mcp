@@ -98,7 +98,9 @@ private final class LiveFixture: @unchecked Sendable {
         pluginWindowViewSwitcherDescription: String = "보기",
         viewMenuPressChangesStructure: Bool = true,
         viewMenuPressChangesTitle: Bool = true,
-        viewMenuBecomesUnavailableAfterControlsSelection: Bool = false
+        viewMenuBecomesUnavailableAfterControlsSelection: Bool = false,
+        viewMenuRevealAfterPolls: Int? = 4,
+        viewSettleDelay: TimeInterval = 0.5
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -127,6 +129,9 @@ private final class LiveFixture: @unchecked Sendable {
         let controlsControlCell = b.element(100_906)
         let controlsLabel = b.element(100_907)
         let controlsCheckbox = b.element(100_908)
+        let controlsHeadingRow = b.element(100_910)
+        let controlsHeadingCell = b.element(100_911)
+        let controlsHeadingLabel = b.element(100_912)
 
         // --- Track headers: one row per track, selected-state on the target. ---
         var headerRows: [AXUIElement] = []
@@ -261,8 +266,14 @@ private final class LiveFixture: @unchecked Sendable {
         // a Controls-view checkbox write.
         b.setRole(controlsTable, kAXTableRole as String)
         b.setRole(controlsRow, kAXRowRole as String)
-        b.setChildren(controlsTable, [controlsRow])
-        b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsRow])
+        b.setRole(controlsHeadingRow, kAXRowRole as String)
+        b.setRole(controlsHeadingCell, kAXCellRole as String)
+        b.setRole(controlsHeadingLabel, kAXStaticTextRole as String)
+        b.setAttribute(controlsHeadingLabel, kAXValueAttribute as String, "Dynamics")
+        b.setChildren(controlsHeadingCell, [controlsHeadingLabel])
+        b.setChildren(controlsHeadingRow, [controlsHeadingCell])
+        b.setChildren(controlsTable, [controlsHeadingRow, controlsRow])
+        b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsHeadingRow, controlsRow])
         controlsViewWindowChildren += [controlsTable]
         b.setRole(controlsLabelCell, kAXCellRole as String)
         b.setRole(controlsControlCell, kAXCellRole as String)
@@ -305,8 +316,36 @@ private final class LiveFixture: @unchecked Sendable {
         let editorWindowChildren = pluginWindowChildren
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
+        let menuOpen = MutableBox(false)
+        let menuVisible = MutableBox(false)
+        let menuCensusPolls = MutableBox(0)
+        let pendingPluginWindowChildren = MutableBox<(children: [AXUIElement], settlesAt: Date)?>(nil)
         let runtime = b.makeLogicRuntime(
             appElement: app,
+            childrenHandler: { element in
+                if CFEqual(element, pluginWindow),
+                   let pending = pendingPluginWindowChildren.value,
+                   Date() >= pending.settlesAt {
+                    b.setChildren(pluginWindow, pending.children)
+                    pendingPluginWindowChildren.value = nil
+                }
+                if CFEqual(element, controlsViewSwitcher), menuOpen.value, menuVisible.value {
+                    return [controlsViewMenu]
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                guard CFEqual(element, controlsViewSwitcher), menuOpen.value else { return nil }
+                guard let revealAfterPolls = viewMenuRevealAfterPolls else {
+                    return .success([])
+                }
+                if menuCensusPolls.value < max(0, revealAfterPolls) {
+                    menuCensusPolls.value += 1
+                    return .success([])
+                }
+                menuVisible.value = true
+                return .success([controlsViewMenu])
+            },
             setAttributeHandler: { [b] el, attribute, value in
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(pluginWindow),
@@ -360,16 +399,22 @@ private final class LiveFixture: @unchecked Sendable {
                         && controlsViewMenuPressCount.value > 0) else {
                         return true
                     }
-                    b.setChildren(controlsViewSwitcher, [controlsViewMenu])
+                    menuOpen.value = true
+                    menuVisible.value = false
+                    menuCensusPolls.value = 0
                     return true
                 }
                 if key == controlsViewMenuItemKey || key == editorViewMenuItemKey {
                     guard action == (kAXPickAction as String) else { return false }
-                    b.setChildren(controlsViewSwitcher, [])
+                    menuOpen.value = false
+                    menuVisible.value = false
                     if key == controlsViewMenuItemKey {
                         controlsViewMenuPressCount.value += 1
                         if viewMenuPressChangesStructure {
-                            b.setChildren(pluginWindow, controlsWindowChildren)
+                            pendingPluginWindowChildren.value = (
+                                children: controlsWindowChildren,
+                                settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                            )
                         }
                         if viewMenuPressChangesTitle {
                             b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "컨트롤")
@@ -378,7 +423,10 @@ private final class LiveFixture: @unchecked Sendable {
                     }
                     editorViewMenuPressCount.value += 1
                     if viewMenuPressChangesStructure {
-                        b.setChildren(pluginWindow, editorWindowChildren)
+                        pendingPluginWindowChildren.value = (
+                            children: editorWindowChildren,
+                            settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                        )
                     }
                     if viewMenuPressChangesTitle {
                         b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "편집기")
@@ -881,12 +929,12 @@ private func namedEQBandParams(
     let reportsUnconfirmedView = error == "plugin_view_not_confirmed"
     let reportsStructureDeadline = observed.contains("expected editor structure")
     let sliderWasNotWritten = fixture.sliderWriteCount.value == 0
-    let entryViewWasPreserved = fixture.editorViewMenuPressCount.value == 1
-        && fixture.controlsViewMenuPressCount.value == 0
+    let entryViewWasExplicitlyReselected = fixture.editorViewMenuPressCount.value == 1
+        && fixture.controlsViewMenuPressCount.value == 1
     #expect(reportsUnconfirmedView)
     #expect(reportsStructureDeadline)
     #expect(sliderWasNotWritten)
-    #expect(entryViewWasPreserved)
+    #expect(entryViewWasExplicitlyReselected)
 }
 
 @Test func testCompressorThresholdRestoresControlsAfterSliderLookupRefusal() async throws {
