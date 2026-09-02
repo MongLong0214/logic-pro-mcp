@@ -18,9 +18,11 @@ enum TempoMapAX {
         let smpte: String
     }
 
-    /// A complete Tempo List reading. `reportedEventCount` comes from the `Number of Items` /
+    /// A stable Tempo List reading. `reportedEventCount` comes from the `Number of Items` /
     /// `항목 수` AXStaticText, while `events` comes from the table's AXRows. Construction is private
-    /// to `read`, which refuses if those two independent counts disagree.
+    /// to `read`: it requires those two witnesses to agree in each of two consecutive passes.
+    /// That corroborates stable agreement at those instants; it does not prove a globally complete
+    /// AX table while Logic is still rendering it.
     struct Snapshot: Codable, Equatable, Sendable {
         let reportedEventCount: Int
         let events: [Event]
@@ -31,6 +33,7 @@ enum TempoMapAX {
         case tempoListWindowUnavailable
         case tempoListMenuUnavailable
         case tempoListMenuDisabled
+        case axReadFailed(site: String, status: AXHelpers.AXStatusError)
         case tableMissing
         case tableAmbiguous(count: Int)
         case rowsUnavailable
@@ -41,6 +44,12 @@ enum TempoMapAX {
         case itemCountMissing
         case invalidItemCount(String)
         case incompleteRead(reportedEventCount: Int, observedRowCount: Int)
+        case inventoryUnstable(
+            firstReportedEventCount: Int,
+            firstObservedRowCount: Int,
+            secondReportedEventCount: Int,
+            secondObservedRowCount: Int
+        )
 
         var description: String {
             switch self {
@@ -52,6 +61,9 @@ enum TempoMapAX {
                 return "Edit > Tempo > Show Tempo List is unavailable."
             case .tempoListMenuDisabled:
                 return "Edit > Tempo > Show Tempo List is disabled."
+            case let .axReadFailed(site, status):
+                let name = status.symbolicName ?? "AX status"
+                return "Tempo List AX read at \(site) failed with \(name) (\(status.diagnosticLabel))."
             case .tableMissing:
                 return "Tempo List table is unavailable."
             case let .tableAmbiguous(count):
@@ -72,11 +84,20 @@ enum TempoMapAX {
                 return "Tempo List item-count value '\(value)' has no leading count."
             case let .incompleteRead(reportedEventCount, observedRowCount):
                 return "Tempo List read is incomplete: item-count says \(reportedEventCount), table exposes \(observedRowCount) rows."
+            case let .inventoryUnstable(firstCount, firstRows, secondCount, secondRows):
+                return "Tempo List witnesses changed between passes: (\(firstCount), \(firstRows)) became (\(secondCount), \(secondRows))."
             }
+        }
+
+        /// A rebuilding tree invalidates this observation, not the operation. The settle poll
+        /// obtains a fresh inventory instead of treating this as a permanent Tempo List failure.
+        var isTransientDuringRebuild: Bool {
+            guard case let .axReadFailed(_, status) = self else { return false }
+            return status.isTransientDuringRebuild
         }
     }
 
-    enum WriteFailure: Equatable, Sendable, CustomStringConvertible {
+    enum WriteFailure: Error, Equatable, Sendable, CustomStringConvertible {
         case invalidTarget(Double)
         case eventIndexOutOfRange(index: Int, count: Int)
         case positionChanged(expected: String, observed: String)
@@ -84,12 +105,14 @@ enum TempoMapAX {
         case readFailed(ReadRefusal)
         case didNotMove(previous: Double, observed: Double, target: Double)
         case movedAway(previous: Double, observed: Double, target: Double)
+        case crossedTarget(previous: Double, observed: Double, target: Double)
         case attemptBudgetExhausted(observed: Double, target: Double, budget: Int)
+        case deadlineExceeded(observed: Double, target: Double)
 
         var description: String {
             switch self {
             case let .invalidTarget(target):
-                return "Tempo target \(target) is not a finite positive number or a representable bounded walk."
+                return "Tempo target \(target) is not a whole BPM in Logic's supported 5...999 range."
             case let .eventIndexOutOfRange(index, count):
                 return "Tempo event index \(index) is out of range for \(count) event(s)."
             case let .positionChanged(expected, observed):
@@ -102,20 +125,24 @@ enum TempoMapAX {
                 return "Tempo write did not move toward \(target): it stayed at \(observed) (previous \(previous))."
             case let .movedAway(previous, observed, target):
                 return "Tempo write moved away from \(target): \(previous) became \(observed)."
+            case let .crossedTarget(previous, observed, target):
+                return "Tempo write crossed \(target): \(previous) became \(observed), so the measured integer walk is no longer authorized."
             case let .attemptBudgetExhausted(observed, target, budget):
-                return "Tempo write spent its distance-derived budget of \(budget) step(s) and stopped at \(observed), not \(target)."
+                return "Tempo write spent its bounded budget of \(budget) step(s) and stopped at \(observed), not \(target)."
+            case let .deadlineExceeded(observed, target):
+                return "Tempo write reached its wall-clock deadline at \(observed), not \(target)."
             }
         }
     }
 
     enum RollbackOutcome: Equatable, Sendable {
         /// No forward value differed from the original tempo, so no restore write was needed.
-        case notNeeded
-        /// The same fresh-read, monotonic walk reached the original tempo.
-        case restored(writes: Int)
-        /// The restore stopped safely. No further writes are attempted: the receipt carries the
-        /// restore failure so the caller knows the project may still hold a partial forward value.
-        case failed(WriteFailure)
+        case notNeeded(writes: Int, finalObserved: Double?)
+        /// The same fresh-read, non-crossing walk reached the original tempo.
+        case restored(writes: Int, finalObserved: Double)
+        /// Restoration is attempted and reported, never guaranteed. No further writes are attempted
+        /// after this failure; `writes` and `finalObserved` retain the restore receipt.
+        case failed(failure: WriteFailure, writes: Int, finalObserved: Double?)
     }
 
     enum WriteOutcome: Equatable, Sendable {
@@ -125,6 +152,18 @@ enum TempoMapAX {
         case converged(initial: Double, observed: Double, writes: Int)
         case refused(failure: WriteFailure, rollback: RollbackOutcome)
     }
+
+    /// The measured writer has only observed whole-BPM steps. Fractional target values therefore
+    /// refuse rather than guessing that an unmeasured stepping rule can land on them.
+    private static let supportedTempoDecimalPlaces = 0
+    /// A practical cap even inside Logic's bounded tempo range; this is a mutation safety limit,
+    /// not evidence that all valid distances can be driven in one request.
+    private static let maximumConvergenceWrites = 64
+    private static let convergenceDeadline: TimeInterval = 3.0
+    /// ASSUMED, not yet measured live: the first live Tempo List drive must replace these settle
+    /// numbers with measured values. They bound two consecutive fresh observations after a write.
+    private static let postWriteSettleDeadline: TimeInterval = 0.5
+    private static let postWriteSettlePollMicros: useconds_t = 20_000
 
     /// Opens the only measured Tempo-menu view. The caller can then pass the returned window to
     /// `read(in:localeIdentifier:runtime:)` or `setExistingTempo(...)`.
@@ -146,7 +185,7 @@ enum TempoMapAX {
         guard AXHelpers.performAction(menuItem, kAXPressAction as String, runtime: runtime.ax) else {
             throw ReadRefusal.tempoListMenuUnavailable
         }
-        guard let window = findTempoListWindow(runtime: runtime) else {
+        guard let window = try findTempoListWindow(runtime: runtime) else {
             throw ReadRefusal.tempoListWindowUnavailable
         }
         return window
@@ -174,7 +213,7 @@ enum TempoMapAX {
         localeIdentifier: String? = nil
     ) throws -> Snapshot {
         try requireMeasuredLocale(runtime: runtime, localeIdentifier: localeIdentifier)
-        guard let window = findTempoListWindow(runtime: runtime) else {
+        guard let window = try findTempoListWindow(runtime: runtime) else {
             throw ReadRefusal.tempoListWindowUnavailable
         }
         return try inventory(in: window, runtime: runtime.ax).snapshot
@@ -182,10 +221,10 @@ enum TempoMapAX {
 
     /// Sets one existing event by row index and verifies the result.
     ///
-    /// Logic 12.3's Tempo List accepts an AXValue write but advances exactly one BPM toward the
-    /// requested number per write. Therefore `attemptBudget` is `ceil(abs(target - initial))`,
-    /// derived from the measured distance rather than a fixed retry count. Every loop observation
-    /// starts again from `window`; it never reads a cached row/group after Logic has re-rendered it.
+    /// The only measured write sequence is integer BPM: `118 → set 120 → 119`, then `119 → set
+    /// 120 → 120`. Fractional targets refuse. Every loop observation starts again from `window`; it
+    /// never reads a cached row/group after Logic has re-rendered it, and every loop is bounded by
+    /// both an iteration cap and a wall-clock deadline.
     static func setExistingTempo(
         at index: Int,
         to target: Double,
@@ -196,16 +235,22 @@ enum TempoMapAX {
         do {
             try requireMeasuredLocale(runtime: runtime, localeIdentifier: localeIdentifier)
         } catch let refusal as ReadRefusal {
-            return .refused(failure: .readFailed(refusal), rollback: .notNeeded)
+            return .refused(
+                failure: .readFailed(refusal),
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
         } catch {
             return .refused(
                 failure: .readFailed(.unmeasuredLocale(localeIdentifier ?? "unknown")),
-                rollback: .notNeeded
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         }
 
-        guard target.isFinite, target > 0 else {
-            return .refused(failure: .invalidTarget(target), rollback: .notNeeded)
+        guard isSupportedTempoTarget(target) else {
+            return .refused(
+                failure: .invalidTarget(target),
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
         }
 
         let initial: Event
@@ -214,27 +259,24 @@ enum TempoMapAX {
             guard snapshot.events.indices.contains(index) else {
                 return .refused(
                     failure: .eventIndexOutOfRange(index: index, count: snapshot.events.count),
-                    rollback: .notNeeded
+                    rollback: .notNeeded(writes: 0, finalObserved: nil)
                 )
             }
             initial = snapshot.events[index]
         } catch let refusal as ReadRefusal {
-            return .refused(failure: .readFailed(refusal), rollback: .notNeeded)
+            return .refused(
+                failure: .readFailed(refusal),
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
         } catch {
             return .refused(
                 failure: .readFailed(.tempoListWindowUnavailable),
-                rollback: .notNeeded
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         }
 
         guard initial.tempo != target else {
             return .alreadyAtTarget(observed: initial.tempo)
-        }
-
-        // A finite positive target can still be too far away to express a bounded loop on this
-        // platform. Refuse it before `attemptBudget` would be unable to represent the distance.
-        guard distance(initial.tempo, target) <= Double(Int.max) else {
-            return .refused(failure: .invalidTarget(target), rollback: .notNeeded)
         }
 
         let forward = converge(
@@ -243,22 +285,24 @@ enum TempoMapAX {
             to: target,
             in: window,
             localeIdentifier: localeIdentifier,
-            runtime: runtime
+            runtime: runtime,
+            deadline: Date().addingTimeInterval(convergenceDeadline)
         )
         switch forward {
         case let .success(observed, writes):
             return .converged(initial: initial.tempo, observed: observed, writes: writes)
-        case let .failure(failure, writes):
+        case let .failure(failure, writes, finalObserved):
             let rollback: RollbackOutcome
             if writes == 0 {
-                rollback = .notNeeded
+                rollback = .notNeeded(writes: 0, finalObserved: finalObserved)
             } else {
                 rollback = rollbackToInitialTempo(
                     at: index,
                     initial: initial,
                     in: window,
                     localeIdentifier: localeIdentifier,
-                    runtime: runtime
+                    runtime: runtime,
+                    fallbackObserved: finalObserved
                 )
             }
             return .refused(failure: failure, rollback: rollback)
@@ -278,6 +322,36 @@ enum TempoMapAX {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) throws -> Inventory {
+        let first = try inventoryPass(in: window, runtime: runtime)
+        let second = try inventoryPass(in: window, runtime: runtime)
+        let firstWitness = InventoryWitness(
+            reportedEventCount: first.snapshot.reportedEventCount,
+            observedRowCount: first.snapshot.events.count
+        )
+        let secondWitness = InventoryWitness(
+            reportedEventCount: second.snapshot.reportedEventCount,
+            observedRowCount: second.snapshot.events.count
+        )
+        guard firstWitness == secondWitness else {
+            throw ReadRefusal.inventoryUnstable(
+                firstReportedEventCount: firstWitness.reportedEventCount,
+                firstObservedRowCount: firstWitness.observedRowCount,
+                secondReportedEventCount: secondWitness.reportedEventCount,
+                secondObservedRowCount: secondWitness.observedRowCount
+            )
+        }
+        return second
+    }
+
+    private struct InventoryWitness: Equatable {
+        let reportedEventCount: Int
+        let observedRowCount: Int
+    }
+
+    private static func inventoryPass(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) throws -> Inventory {
         let table = try tempoListTable(in: window, runtime: runtime)
         let rows = try tempoListRows(in: table, runtime: runtime)
         let count = try itemCount(in: window, runtime: runtime)
@@ -288,9 +362,12 @@ enum TempoMapAX {
         tempoGroups.reserveCapacity(rows.count)
 
         for (rowIndex, row) in rows.enumerated() {
-            let cells = AXHelpers.getChildren(row, runtime: runtime).filter {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXCellRole as String)
-            }
+            let cells = try directChildren(
+                of: row,
+                withRole: kAXCellRole as String,
+                site: "row \(rowIndex) AXCells",
+                runtime: runtime
+            )
             guard cells.count == 3 else {
                 throw ReadRefusal.rowShapeMismatch(
                     row: rowIndex,
@@ -308,7 +385,7 @@ enum TempoMapAX {
             let tempoDescription = try description(of: tempoGroup, row: rowIndex, cell: 1, runtime: runtime)
             guard let tempo = Double(tempoDescription.trimmingCharacters(in: .whitespacesAndNewlines)),
                   tempo.isFinite,
-                  tempo > 0 else {
+                  TransportDispatcher.supportedTempoRange.contains(tempo) else {
                 throw ReadRefusal.invalidTempo(row: rowIndex, description: tempoDescription)
             }
             let smpte = try groupDescription(
@@ -335,12 +412,18 @@ enum TempoMapAX {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) throws -> AXUIElement {
-        let census = AXHelpers.censusDescendant(
+        let census: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
             of: window,
             role: kAXTableRole as String,
             maxDepth: 12,
             runtime: runtime
-        )
+        ) {
+        case let .success(observed):
+            census = observed
+        case let .failure(error):
+            throw axReadFailed(site: "Tempo List table census", status: error)
+        }
         guard census.candidates > 0 else { throw ReadRefusal.tableMissing }
         guard census.candidates == 1, let table = census.element else {
             throw ReadRefusal.tableAmbiguous(count: census.candidates)
@@ -352,7 +435,12 @@ enum TempoMapAX {
         in table: AXUIElement,
         runtime: AXHelpers.Runtime
     ) throws -> [AXUIElement] {
-        guard let rows: [AXUIElement] = AXHelpers.getAttribute(table, "AXRows", runtime: runtime) else {
+        guard let rows: [AXUIElement] = try attribute(
+            table,
+            "AXRows",
+            site: "Tempo List AXRows",
+            runtime: runtime
+        ) else {
             throw ReadRefusal.rowsUnavailable
         }
         return rows
@@ -364,9 +452,12 @@ enum TempoMapAX {
         cellIndex: Int,
         runtime: AXHelpers.Runtime
     ) throws -> AXUIElement {
-        let groups = AXHelpers.getChildren(cell, runtime: runtime).filter {
-            AXHelpers.getRole($0, runtime: runtime) == (kAXGroupRole as String)
-        }
+        let groups = try directChildren(
+            of: cell,
+            withRole: kAXGroupRole as String,
+            site: "row \(row) cell \(cellIndex) AXGroup",
+            runtime: runtime
+        )
         guard groups.count == 1, let group = groups.first else {
             throw ReadRefusal.cellGroupMissing(row: row, cell: cellIndex)
         }
@@ -389,9 +480,10 @@ enum TempoMapAX {
         cell: Int,
         runtime: AXHelpers.Runtime
     ) throws -> String {
-        guard let description: String = AXHelpers.getAttribute(
+        guard let description: String = try attribute(
             group,
             kAXDescriptionAttribute,
+            site: "row \(row) cell \(cell) AXDescription",
             runtime: runtime
         ), !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ReadRefusal.cellDescriptionMissing(row: row, cell: cell)
@@ -403,23 +495,22 @@ enum TempoMapAX {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) throws -> Int {
-        let census = AXLocalePolicy.censusDescendant(
+        let census = try localizedCensus(
             of: window,
-            role: kAXStaticTextRole as String,
-            matching: AXLocalePolicy.tempoListNumberOfItemsLabel,
-            mode: .exactStrict,
-            maxDepth: 12,
+            labels: AXLocalePolicy.tempoListNumberOfItemsLabel,
+            site: "Tempo List item-count census",
             runtime: runtime
         )
         guard census.candidates == 1,
-              let text = census.element,
-              AXLocalePolicy.tempoListNumberOfItemsLabel.matches(
-                AXHelpers.getDescription(text, runtime: runtime),
-                mode: .exactStrict
-              ) else {
+              let text = census.element else {
             throw ReadRefusal.itemCountMissing
         }
-        guard let value: String = AXHelpers.getAttribute(text, kAXValueAttribute, runtime: runtime) else {
+        guard let value: String = try attribute(
+            text,
+            kAXValueAttribute,
+            site: "Tempo List item-count AXValue",
+            runtime: runtime
+        ) else {
             throw ReadRefusal.itemCountMissing
         }
         guard let count = leadingASCIIInteger(in: value) else {
@@ -434,11 +525,116 @@ enum TempoMapAX {
         return Int(digits)
     }
 
+    /// `noValue` and `attributeUnsupported` are an observed absence; every other AX status is a
+    /// failed observation and must remain visible to the authority decision.
+    private static func attribute<T>(
+        _ element: AXUIElement,
+        _ name: String,
+        site: String,
+        runtime: AXHelpers.Runtime
+    ) throws -> T? {
+        switch AXHelpers.getAttributeResult(element, name, runtime: runtime) as Result<T?, AXHelpers.AXStatusError> {
+        case let .success(value):
+            return value
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return nil
+        case let .failure(error):
+            throw axReadFailed(site: site, status: error)
+        }
+    }
+
+    private static func directChildren(
+        of element: AXUIElement,
+        withRole role: String,
+        site: String,
+        runtime: AXHelpers.Runtime
+    ) throws -> [AXUIElement] {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error) where error.isDefinitiveAbsence:
+            children = []
+        case let .failure(error):
+            throw axReadFailed(site: site, status: error)
+        }
+        return try children.filter { child in
+            let childRole: String? = try attribute(
+                child,
+                kAXRoleAttribute as String,
+                site: "\(site) role",
+                runtime: runtime
+            )
+            return childRole == role
+        }
+    }
+
+    /// `AXLocalePolicy.censusDescendantResult` preserves a failed lookup when no label matches,
+    /// but Tempo List write authority needs the stricter fact: every competing static-text label
+    /// must be readable even when another one happens to match. Validate each title/description
+    /// after the policy census so an unreadable competing count witness cannot disappear.
+    private static func localizedCensus(
+        of element: AXUIElement,
+        labels: AXLocalePolicy.LabelSet,
+        site: String,
+        runtime: AXHelpers.Runtime
+    ) throws -> AXLocalePolicy.Census {
+        let policyCensus: AXLocalePolicy.Census
+        switch AXLocalePolicy.censusDescendantResult(
+            of: element,
+            role: kAXStaticTextRole as String,
+            matching: labels,
+            mode: .exactStrict,
+            maxDepth: 12,
+            runtime: runtime
+        ) {
+        case let .success(observed):
+            policyCensus = observed
+        case let .failure(error):
+            throw axReadFailed(site: site, status: error)
+        }
+
+        let staticTexts: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
+            of: element,
+            role: kAXStaticTextRole as String,
+            maxDepth: 12,
+            runtime: runtime
+        ) {
+        case let .success(observed):
+            staticTexts = observed
+        case let .failure(error):
+            throw axReadFailed(site: site, status: error)
+        }
+        for staticText in staticTexts.matches {
+            let _: String? = try attribute(
+                staticText,
+                kAXTitleAttribute as String,
+                site: "\(site) AXTitle",
+                runtime: runtime
+            )
+            let _: String? = try attribute(
+                staticText,
+                kAXDescriptionAttribute as String,
+                site: "\(site) AXDescription",
+                runtime: runtime
+            )
+        }
+        return policyCensus
+    }
+
+    private static func axReadFailed(
+        site: String,
+        status: AXHelpers.AXStatusError
+    ) -> ReadRefusal {
+        .axReadFailed(site: site, status: status)
+    }
+
     // MARK: - Convergence and rollback
 
     private enum Convergence {
         case success(observed: Double, writes: Int)
-        case failure(WriteFailure, writes: Int)
+        case failure(WriteFailure, writes: Int, finalObserved: Double?)
     }
 
     private static func converge(
@@ -447,13 +643,23 @@ enum TempoMapAX {
         to target: Double,
         in window: AXUIElement,
         localeIdentifier: String?,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        deadline: Date
     ) -> Convergence {
-        let budget = attemptBudget(from: initial.tempo, to: target)
+        guard let budget = attemptBudget(from: initial.tempo, to: target) else {
+            return .failure(.invalidTarget(target), writes: 0, finalObserved: initial.tempo)
+        }
         var current = initial
         var writes = 0
 
         for _ in 0..<budget {
+            guard Date() < deadline else {
+                return .failure(
+                    .deadlineExceeded(observed: current.tempo, target: target),
+                    writes: writes,
+                    finalObserved: current.tempo
+                )
+            }
             // Resolve the table, row, and value group anew immediately before every write. This is
             // not an optimization opportunity: the prior group's AXDescription can become nil when
             // Logic re-renders the row, and nil is not an observation that the value changed.
@@ -461,24 +667,33 @@ enum TempoMapAX {
             do {
                 fresh = try inventory(in: window, runtime: runtime.ax)
             } catch let refusal as ReadRefusal {
-                return .failure(.readFailed(refusal), writes: writes)
+                return .failure(.readFailed(refusal), writes: writes, finalObserved: current.tempo)
             } catch {
-                return .failure(.readFailed(.tempoListWindowUnavailable), writes: writes)
+                return .failure(
+                    .readFailed(.tempoListWindowUnavailable),
+                    writes: writes,
+                    finalObserved: current.tempo
+                )
             }
             guard fresh.snapshot.events.indices.contains(index) else {
                 return .failure(
                     .eventIndexOutOfRange(index: index, count: fresh.snapshot.events.count),
-                    writes: writes
+                    writes: writes,
+                    finalObserved: current.tempo
                 )
             }
             let freshEvent = fresh.snapshot.events[index]
             guard freshEvent.position == initial.position else {
                 return .failure(
                     .positionChanged(expected: initial.position, observed: freshEvent.position),
-                    writes: writes
+                    writes: writes,
+                    finalObserved: freshEvent.tempo
                 )
             }
             current = freshEvent
+            if current.tempo == target {
+                return .success(observed: current.tempo, writes: writes)
+            }
 
             guard AXHelpers.setAttribute(
                 fresh.tempoGroups[index],
@@ -486,37 +701,28 @@ enum TempoMapAX {
                 NSNumber(value: target),
                 runtime: runtime.ax
             ) else {
-                return .failure(.axWriteFailed, writes: writes)
+                return .failure(.axWriteFailed, writes: writes, finalObserved: current.tempo)
             }
             writes += 1
 
             // Re-enter through `read`, which resolves from `window` and deliberately retains no
-            // reference from `fresh`. Reading `nil` off fresh.tempoGroups[index] here would be a
-            // stale-element failure, not readback.
-            let reread: Snapshot
-            do {
-                reread = try read(
-                    in: window,
-                    localeIdentifier: localeIdentifier,
-                    runtime: runtime
-                )
-            } catch let refusal as ReadRefusal {
-                return .failure(.readFailed(refusal), writes: writes)
-            } catch {
-                return .failure(.readFailed(.tempoListWindowUnavailable), writes: writes)
-            }
-            guard reread.events.indices.contains(index) else {
-                return .failure(
-                    .eventIndexOutOfRange(index: index, count: reread.events.count),
-                    writes: writes
-                )
-            }
-            let next = reread.events[index]
-            guard next.position == initial.position else {
-                return .failure(
-                    .positionChanged(expected: initial.position, observed: next.position),
-                    writes: writes
-                )
+            // reference from `fresh`. Two consecutive fresh observations must agree before this
+            // write is judged. An invalid/rebuilding AX element is re-read within the deadline.
+            let next: Event
+            switch settleEvent(
+                at: index,
+                expectedPosition: initial.position,
+                after: current,
+                toward: target,
+                in: window,
+                localeIdentifier: localeIdentifier,
+                runtime: runtime,
+                deadline: min(deadline, Date().addingTimeInterval(postWriteSettleDeadline))
+            ) {
+            case let .success(observed):
+                next = observed
+            case let .failure(failure):
+                return .failure(failure, writes: writes, finalObserved: current.tempo)
             }
             if next.tempo == target {
                 return .success(observed: next.tempo, writes: writes)
@@ -524,13 +730,22 @@ enum TempoMapAX {
             if next.tempo == current.tempo {
                 return .failure(
                     .didNotMove(previous: current.tempo, observed: next.tempo, target: target),
-                    writes: writes
+                    writes: writes,
+                    finalObserved: next.tempo
                 )
             }
-            guard distance(next.tempo, target) < distance(current.tempo, target) else {
+            if crossedTarget(from: current.tempo, to: next.tempo, target: target) {
+                return .failure(
+                    .crossedTarget(previous: current.tempo, observed: next.tempo, target: target),
+                    writes: writes,
+                    finalObserved: next.tempo
+                )
+            }
+            guard movesTowardTarget(from: current.tempo, to: next.tempo, target: target) else {
                 return .failure(
                     .movedAway(previous: current.tempo, observed: next.tempo, target: target),
-                    writes: writes
+                    writes: writes,
+                    finalObserved: next.tempo
                 )
             }
             current = next
@@ -538,8 +753,53 @@ enum TempoMapAX {
 
         return .failure(
             .attemptBudgetExhausted(observed: current.tempo, target: target, budget: budget),
-            writes: writes
+            writes: writes,
+            finalObserved: current.tempo
         )
+    }
+
+    private static func settleEvent(
+        at index: Int,
+        expectedPosition: String,
+        after current: Event,
+        toward target: Double,
+        in window: AXUIElement,
+        localeIdentifier: String?,
+        runtime: AXLogicProElements.Runtime,
+        deadline: Date
+    ) -> Result<Event, WriteFailure> {
+        var previous: Event?
+        while Date() < deadline {
+            do {
+                let reread = try read(
+                    in: window,
+                    localeIdentifier: localeIdentifier,
+                    runtime: runtime
+                )
+                guard reread.events.indices.contains(index) else {
+                    return .failure(.eventIndexOutOfRange(index: index, count: reread.events.count))
+                }
+                let observed = reread.events[index]
+                guard observed.position == expectedPosition else {
+                    return .failure(
+                        .positionChanged(expected: expectedPosition, observed: observed.position)
+                    )
+                }
+                if previous == observed {
+                    return .success(observed)
+                }
+                previous = observed
+            } catch let refusal as ReadRefusal where refusal.isTransientDuringRebuild {
+                // A rebuild invalidates the pair; the next observation must be fresh again.
+                previous = nil
+            } catch let refusal as ReadRefusal {
+                return .failure(.readFailed(refusal))
+            } catch {
+                return .failure(.readFailed(.tempoListWindowUnavailable))
+            }
+            if Date() < deadline { usleep(postWriteSettlePollMicros) }
+        }
+        return .failure(.deadlineExceeded(observed: previous?.tempo ?? current.tempo, target: target))
     }
 
     private static func rollbackToInitialTempo(
@@ -547,7 +807,8 @@ enum TempoMapAX {
         initial: Event,
         in window: AXUIElement,
         localeIdentifier: String?,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        fallbackObserved: Double?
     ) -> RollbackOutcome {
         let current: Event
         do {
@@ -557,19 +818,33 @@ enum TempoMapAX {
                 runtime: runtime
             )
             guard snapshot.events.indices.contains(index) else {
-                return .failed(.eventIndexOutOfRange(index: index, count: snapshot.events.count))
+                return .failed(
+                    failure: .eventIndexOutOfRange(index: index, count: snapshot.events.count),
+                    writes: 0,
+                    finalObserved: fallbackObserved
+                )
             }
             current = snapshot.events[index]
         } catch let refusal as ReadRefusal {
-            return .failed(.readFailed(refusal))
+            return .failed(failure: .readFailed(refusal), writes: 0, finalObserved: fallbackObserved)
         } catch {
-            return .failed(.readFailed(.tempoListWindowUnavailable))
+            return .failed(
+                failure: .readFailed(.tempoListWindowUnavailable),
+                writes: 0,
+                finalObserved: fallbackObserved
+            )
         }
 
         guard current.position == initial.position else {
-            return .failed(.positionChanged(expected: initial.position, observed: current.position))
+            return .failed(
+                failure: .positionChanged(expected: initial.position, observed: current.position),
+                writes: 0,
+                finalObserved: current.tempo
+            )
         }
-        guard current.tempo != initial.tempo else { return .notNeeded }
+        guard current.tempo != initial.tempo else {
+            return .notNeeded(writes: 0, finalObserved: current.tempo)
+        }
 
         switch converge(
             at: index,
@@ -577,26 +852,43 @@ enum TempoMapAX {
             to: initial.tempo,
             in: window,
             localeIdentifier: localeIdentifier,
-            runtime: runtime
+            runtime: runtime,
+            deadline: Date().addingTimeInterval(convergenceDeadline)
         ) {
-        case let .success(_, writes):
-            return .restored(writes: writes)
-        case let .failure(failure, _):
-            return .failed(failure)
+        case let .success(observed, writes):
+            return .restored(writes: writes, finalObserved: observed)
+        case let .failure(failure, writes, finalObserved):
+            return .failed(failure: failure, writes: writes, finalObserved: finalObserved)
         }
     }
 
-    /// The measured AXValue setter moves exactly one BPM toward the target. `ceil(distance)` is
-    /// therefore the finite upper bound for a well-behaved walk; it is never a magic retry count.
-    private static func attemptBudget(from current: Double, to target: Double) -> Int {
-        let distance = distance(current, target)
-        precondition(distance.isFinite && distance > 0)
-        precondition(distance <= Double(Int.max))
-        return Int(distance.rounded(.up))
+    /// The measured one-BPM walk informs this bound, but a separate practical cap prevents a valid
+    /// target from authorizing arbitrary AX work. `Int(exactly:)` cannot trap on a rounded value.
+    private static func attemptBudget(from current: Double, to target: Double) -> Int? {
+        let requiredDistance = distance(current, target)
+        guard requiredDistance.isFinite, requiredDistance > 0 else { return nil }
+        let roundedDistance = requiredDistance.rounded(.up)
+        guard let exactDistance = Int(exactly: roundedDistance) else { return nil }
+        return min(exactDistance, maximumConvergenceWrites)
     }
 
     private static func distance(_ lhs: Double, _ rhs: Double) -> Double {
         abs(lhs - rhs)
+    }
+
+    private static func isSupportedTempoTarget(_ target: Double) -> Bool {
+        guard target.isFinite, TransportDispatcher.supportedTempoRange.contains(target) else { return false }
+        let multiplier = pow(10, Double(supportedTempoDecimalPlaces))
+        let scaled = target * multiplier
+        return scaled.isFinite && scaled.rounded(.toNearestOrAwayFromZero) == scaled
+    }
+
+    private static func crossedTarget(from current: Double, to next: Double, target: Double) -> Bool {
+        (current < target && next > target) || (current > target && next < target)
+    }
+
+    private static func movesTowardTarget(from current: Double, to next: Double, target: Double) -> Bool {
+        (current < target && next > current) || (current > target && next < current)
     }
 
     // MARK: - Locale and window resolution
@@ -618,33 +910,40 @@ enum TempoMapAX {
 
     private static func findTempoListWindow(
         runtime: AXLogicProElements.Runtime
-    ) -> AXUIElement? {
+    ) throws -> AXUIElement? {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
+        guard let windows: [AXUIElement] = try attribute(
             app,
-            kAXWindowsAttribute,
+            kAXWindowsAttribute as String,
+            site: "Tempo List window discovery AXWindows",
             runtime: runtime.ax
-        ) ?? []
-        let candidates = windows.filter { window in
-            let tables = AXHelpers.findAllDescendants(
+        ) else {
+            return nil
+        }
+        var candidates: [AXUIElement] = []
+        for window in windows {
+            let tables: AXHelpers.Census
+            switch AXHelpers.censusDescendantResult(
                 of: window,
                 role: kAXTableRole as String,
                 maxDepth: 12,
                 runtime: runtime.ax
-            )
-            guard tables.count == 1 else { return false }
-            let counts = AXHelpers.findAllDescendants(
-                of: window,
-                role: kAXStaticTextRole as String,
-                maxDepth: 12,
-                runtime: runtime.ax
-            ).filter {
-                AXLocalePolicy.tempoListNumberOfItemsLabel.matches(
-                    AXHelpers.getDescription($0, runtime: runtime.ax),
-                    mode: .exactStrict
-                )
+            ) {
+            case let .success(observed):
+                tables = observed
+            case let .failure(error):
+                throw axReadFailed(site: "Tempo List window table census", status: error)
             }
-            return counts.count == 1
+            guard tables.candidates == 1 else { continue }
+
+            let counts = try localizedCensus(
+                of: window,
+                labels: AXLocalePolicy.tempoListNumberOfItemsLabel,
+                site: "Tempo List window item-count census",
+                runtime: runtime.ax
+            )
+            guard counts.candidates == 1 else { continue }
+            candidates.append(window)
         }
         return candidates.count == 1 ? candidates[0] : nil
     }

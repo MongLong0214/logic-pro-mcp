@@ -4,6 +4,8 @@ import MCP
 struct TransportDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicTransport)
+    /// Logic's public tempo contract. Keep every tempo-writing surface on this one range.
+    static let supportedTempoRange: ClosedRange<Double> = 5.0...999.0
 
     static let tool = Tool(
         name: "logic_transport",
@@ -131,7 +133,7 @@ struct TransportDispatcher: OperationTraceDispatching {
             // Logic Pro's tempo range is 5..990 BPM; the schema documents 20..999.
             // Accept a slightly-wider 5..999 to match Logic's actual behavior,
             // reject anything clearly absurd so a typo doesn't silently pass.
-            guard (5.0...999.0).contains(tempo) else {
+            guard Self.supportedTempoRange.contains(tempo) else {
                     return toolInvalidParamsResult(
                         "set_tempo 'tempo' must be in 5..999 (got \(tempo))"
                     )
