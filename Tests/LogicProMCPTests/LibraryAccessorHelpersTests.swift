@@ -37,8 +37,9 @@ struct LibraryAccessorHelpersTests {
         let leaf = LibraryNode(name: "Quick", path: "Quick", kind: .leaf, children: [])
         let root = buildRoot([leaf])
         let r = LibraryAccessor.resolvePath("Quick", in: root)
-        #expect((r?.exists)!)
-        #expect(r?.kind == .leaf)
+        let isHit = r.exists
+        #expect(isHit)
+        #expect(r.kind == .leaf)
     }
 
     @Test func testResolvePath_ChildrenListedForFolder() async throws {
@@ -46,8 +47,8 @@ struct LibraryAccessorHelpersTests {
         let l2 = LibraryNode(name: "B", path: "Cat/B", kind: .leaf, children: [])
         let cat = LibraryNode(name: "Cat", path: "Cat", kind: .folder, children: [l1, l2])
         let r = LibraryAccessor.resolvePath("Cat", in: buildRoot([cat]))
-        #expect(r?.kind == .folder)
-        #expect(Set(r?.children ?? []) == Set(["A", "B"]))
+        #expect(r.kind == .folder)
+        #expect(Set(r.children ?? []) == Set(["A", "B"]))
     }
 
     // ---- Inventory.Codable (legacy type) ----

@@ -123,11 +123,9 @@ struct LibraryDiskScannerTests {
         #expect(leaf.path == "Electronic Drums/Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808")
         #expect(root.presetsByCategory["Electronic Drums"] == ["Snare 3 - Pawn Shop 808"])
 
-        let resolved = try #require(
-            LibraryAccessor.resolvePath(
-                "Electronic Drums/Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808",
-                in: root
-            )
+        let resolved = LibraryAccessor.resolvePath(
+            "Electronic Drums/Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808",
+            in: root
         )
         #expect(resolved.exists)
         #expect(resolved.kind == .leaf)
@@ -418,11 +416,11 @@ struct LibraryDiskScannerTests {
         let root = try LibraryDiskScanner.scan(bundleURL: bundle)
         #expect(root.categories.sorted() == ["Bass", "Orchestral", "Studio Horns", "Studio Strings", "World"])
         #expect(root.leafCount == 5)
-        let horns = try #require(LibraryAccessor.resolvePath("Studio Horns/3-Piece Section", in: root))
+        let horns = LibraryAccessor.resolvePath("Studio Horns/3-Piece Section", in: root)
         #expect(horns.kind == .folder)
-        let strings = try #require(LibraryAccessor.resolvePath("Studio Strings/Section Instruments", in: root))
+        let strings = LibraryAccessor.resolvePath("Studio Strings/Section Instruments", in: root)
         #expect(strings.kind == .folder)
-        let world = try #require(LibraryAccessor.resolvePath("World/Stringed", in: root))
+        let world = LibraryAccessor.resolvePath("World/Stringed", in: root)
         #expect(world.kind == .folder)
         let orchestral = try #require(root.root.children.first { $0.name == "Orchestral" })
         #expect(orchestral.children.map(\.name) == ["Brass"])
@@ -451,18 +449,14 @@ struct LibraryDiskScannerTests {
         #expect(root.leafCount == 3)
         #expect(root.candidatePatchCount == 5)
         #expect(root.nonApplicablePatchCount == 2)
-        let emptyPad = try #require(
-            LibraryAccessor.resolvePath(
-                "Electronic Drums/Kit Pieces/Empty Pad",
-                in: root
-            )
+        let emptyPad = LibraryAccessor.resolvePath(
+            "Electronic Drums/Kit Pieces/Empty Pad",
+            in: root
         )
         #expect(emptyPad.kind == LibraryNodeKind.leaf)
-        let templatePad = try #require(
-            LibraryAccessor.resolvePath(
-                "Electronic Drums/Kit Pieces/Template/Empty Pad",
-                in: root
-            )
+        let templatePad = LibraryAccessor.resolvePath(
+            "Electronic Drums/Kit Pieces/Template/Empty Pad",
+            in: root
         )
         #expect(!(templatePad.exists))
         #expect(root.scanWarnings.contains { warning in

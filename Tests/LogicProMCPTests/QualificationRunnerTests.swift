@@ -6,10 +6,10 @@ import Testing
 
 @Suite("ADR-001 qualification runner", .serialized)
 struct QualificationRunnerTests {
-    /// #284 has two measured product defects. This is intentionally an exact
-    /// list, rather than an allow-list: a new failure, a changed reason, OR a
-    /// known failure beginning to pass must all redden the live gate so the list
-    /// cannot silently absorb regressions or rot after a fix.
+    /// #284 has no measured product defect pinned here at the moment. This is
+    /// intentionally an exact list, rather than an allow-list: a new failure, a
+    /// changed reason, OR a known failure beginning to pass must all redden the
+    /// live gate so the list cannot silently absorb regressions or rot after a fix.
     private struct KnownLiveGateFailure: Equatable {
         let operationID: String
         let failureReason: String
@@ -21,16 +21,21 @@ struct QualificationRunnerTests {
     }
 
     private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
-        .init(
-            operationID: OperationID.tracksListLibrary.rawValue,
-            failureReason: "semantic readback mismatch: response did not match its independent readback",
-            trackingIssue: "#284"
-        ),
-        .init(
-            operationID: OperationID.tracksResolvePath.rawValue,
-            failureReason: "semantic readback mismatch: response did not match its independent readback",
-            trackingIssue: "#284"
-        ),
+        // `tracks.list_library` was pinned here until 2026-09-02. It is not a
+        // semantic shortfall: measured, it answers differently depending on whether
+        // Logic's Library panel is open — returning categories and presets when it
+        // is, and refusing with an exact hint when it is not. The closed-panel
+        // refusal is now classified as an environmental prerequisite, like the
+        // plug-in window `scan_plugin_presets` needs, so it left this list by being
+        // correctly bucketed rather than by being fixed. This comment is here
+        // because a name disappearing from a known-failure list should never be
+        // silent.
+        //
+        // `tracks.resolve_path` was pinned here until 2026-09-02 as well, and left
+        // by being fixed: a warm-cache miss answered `exists:false` with no `reason`
+        // and a warning claiming the path had resolved. Its oracle checks the
+        // response alone: a miss needs a non-empty `reason`; a hit needs a
+        // `matchedPath` and a known `kind`.
     ]
 
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
@@ -1417,39 +1422,117 @@ struct QualificationRunnerTests {
         #expect(everyDispositionIsAccountedFor)
     }
 
+    @Test func liveGateClassifiesExactClosedLibraryPanelHintAsEnvironmental() {
+        let summary = QualificationLiveGateSummary(operationResults: [
+            Self.tracksListLibraryRefusal()
+        ])
+        let classifiesClosedPanelAsEnvironmental = summary.environmentalPreconditions == [
+            .init(
+                operationID: OperationID.tracksListLibrary.rawValue,
+                reason: "requires Logic's Library panel to be open"
+            ),
+        ] && summary.failed == 0
+
+        #expect(classifiesClosedPanelAsEnvironmental)
+    }
+
+    @Test func liveGateRejectsDifferentTracksListLibraryHintAsFailure() {
+        let summary = QualificationLiveGateSummary(operationResults: [
+            Self.tracksListLibraryRefusal(hint: "A different library-panel refusal.")
+        ])
+        let differentHintRemainsFailure = summary.environmentalPreconditions.isEmpty
+            && summary.failed == 1
+
+        #expect(differentHintRemainsFailure)
+    }
+
+    @Test func liveGateRejectsDifferentTracksListLibraryErrorAsFailure() {
+        let summary = QualificationLiveGateSummary(operationResults: [
+            Self.tracksListLibraryRefusal(error: "different_error")
+        ])
+        let differentErrorRemainsFailure = summary.environmentalPreconditions.isEmpty
+            && summary.failed == 1
+
+        #expect(differentErrorRemainsFailure)
+    }
+
     @Test func knownLiveGateFailuresCarryReasonsAndTrackingReferences() {
         let eachFailureIsExplainedAndTracked = Self.knownLiveGateFailures.allSatisfy {
-            !$0.operationID.isEmpty && !$0.failureReason.isEmpty && $0.trackingIssue == "#284"
+            Self.hasValidKnownLiveGateFailureMetadata($0)
         }
 
         #expect(eachFailureIsExplainedAndTracked)
     }
 
+    @Test func knownLiveGateFailureMetadataPredicateRejectsMalformedEntries() {
+        let emptyReason = KnownLiveGateFailure(
+            operationID: "fixture.empty-reason", failureReason: "", trackingIssue: "#284"
+        )
+        let wrongTrackingIssue = KnownLiveGateFailure(
+            operationID: "fixture.wrong-tracking", failureReason: "observed cause", trackingIssue: "#999"
+        )
+        let wellFormed = KnownLiveGateFailure(
+            operationID: "fixture.well-formed", failureReason: "observed cause", trackingIssue: "#284"
+        )
+        let rejectsEmptyReason = !Self.hasValidKnownLiveGateFailureMetadata(emptyReason)
+        let rejectsWrongTrackingIssue = !Self.hasValidKnownLiveGateFailureMetadata(wrongTrackingIssue)
+        let acceptsWellFormedEntry = Self.hasValidKnownLiveGateFailureMetadata(wellFormed)
+
+        #expect(rejectsEmptyReason)
+        #expect(rejectsWrongTrackingIssue)
+        #expect(acceptsWellFormedEntry)
+    }
+
+    /// Exactness is a property of the matcher, not of whatever the production
+    /// list happens to hold -- and that list is legitimately empty when nothing
+    /// is pinned. These properties are therefore proved against a fixture list;
+    /// the live gate test above still holds the real list to the real run.
+    private static let exactnessFixture: [KnownLiveGateFailure] = [
+        .init(operationID: "fixture.first", failureReason: "first observed cause", trackingIssue: "#284"),
+        .init(operationID: "fixture.second", failureReason: "second observed cause", trackingIssue: "#284"),
+    ]
+
+    @Test func knownLiveGateFailureSetAcceptsTheExactKnownSet() {
+        let observed = Self.exactnessFixture.map(\.failure)
+        let acceptsExactSet = Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
+
+        #expect(acceptsExactSet)
+    }
+
     @Test func knownLiveGateFailureSetRejectsNewFailure() {
-        let observed = Self.knownLiveGateFailures.map(\.failure) + [
+        let observed = Self.exactnessFixture.map(\.failure) + [
             .init(operationID: "synthetic.new.failure", failureReason: "a newly observed failure"),
         ]
-        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed)
+        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
 
         #expect(rejectsNewFailure)
     }
 
     @Test func knownLiveGateFailureSetRejectsAKnownFailureStartingToPass() {
-        let observed = Array(Self.knownLiveGateFailures.map(\.failure).dropLast())
-        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed)
+        let observed = Array(Self.exactnessFixture.map(\.failure).dropLast())
+        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
 
         #expect(rejectsMissingKnownFailure)
     }
 
     @Test func knownLiveGateFailureSetRejectsChangedReason() {
-        var observed = Self.knownLiveGateFailures.map(\.failure)
+        var observed = Self.exactnessFixture.map(\.failure)
         observed[0] = .init(
             operationID: observed[0].operationID,
             failureReason: "semantic readback mismatch: a different observed cause"
         )
-        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed)
+        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
 
         #expect(rejectsChangedReason)
+    }
+
+    @Test func emptyKnownLiveGateFailureSetRejectsAnyFailure() {
+        let observed = [QualificationLiveGateSummary.Failure(
+            operationID: "synthetic.new.failure", failureReason: "a newly observed failure"
+        )]
+        let rejectsAnyFailure = !Self.matchesKnownLiveGateFailures(observed, against: [])
+
+        #expect(rejectsAnyFailure)
     }
 
     @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
@@ -3205,9 +3288,39 @@ struct QualificationRunnerTests {
     }
 
     private static func matchesKnownLiveGateFailures(
-        _ observed: [QualificationLiveGateSummary.Failure]
+        _ observed: [QualificationLiveGateSummary.Failure],
+        against known: [KnownLiveGateFailure] = knownLiveGateFailures
     ) -> Bool {
-        observed == knownLiveGateFailures.map(\.failure)
+        observed == known.map(\.failure)
+    }
+
+    private static func hasValidKnownLiveGateFailureMetadata(
+        _ failure: KnownLiveGateFailure
+    ) -> Bool {
+        !failure.operationID.isEmpty && !failure.failureReason.isEmpty && failure.trackingIssue == "#284"
+    }
+
+    private static func tracksListLibraryRefusal(
+        error: String = "channels_exhausted",
+        hint: String = "Library panel not found. Open Library (Y) in Logic Pro."
+    ) -> QualificationOperationResult {
+        QualificationOperationResult(
+            operationID: OperationID.tracksListLibrary.rawValue,
+            tool: "logic_tracks",
+            command: "list_library",
+            mutability: .readOnly,
+            requestID: "missing-library-panel-request",
+            responseData: Data(#"{\"state\":\"C\",\"error\":\"\#(error)\",\"write_attempted\":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: error,
+            hint: hint,
+            writeAttempted: false,
+            readbackSource: "logic://library/inventory",
+            readbackRequestID: "missing-library-panel-readback",
+            readbackData: Data(#"{}"#.utf8),
+            failureReason: nil
+        )
     }
 
     private static func driveResult(

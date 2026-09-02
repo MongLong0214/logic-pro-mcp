@@ -306,10 +306,16 @@ enum LibraryAccessor {
     // MARK: - T3 path parsing + cache-backed resolution + click navigation
 
     public struct PathResolution: Sendable, Equatable {
+        public enum Miss: Sendable, Equatable {
+            case malformedPath
+            case segmentNotFound(segment: String, under: String)
+        }
+
         public let exists: Bool
         public let kind: LibraryNodeKind?
         public let matchedPath: String?
         public let children: [String]?
+        public let miss: Miss?
     }
 
     public struct PathRuntime: Sendable {
@@ -349,9 +355,12 @@ enum LibraryAccessor {
 
     /// Cache-backed path resolver. Traverses the already-scanned LibraryRoot;
     /// never touches live AX; returns existence + kind + children.
-    public static func resolvePath(_ path: String, in root: LibraryRoot) -> PathResolution? {
+    public static func resolvePath(_ path: String, in root: LibraryRoot) -> PathResolution {
         guard let segments = parsePath(path) else {
-            return PathResolution(exists: false, kind: nil, matchedPath: nil, children: nil)
+            return PathResolution(
+                exists: false, kind: nil, matchedPath: nil, children: nil,
+                miss: .malformedPath
+            )
         }
         var current = root.root
         var matched: [String] = []
@@ -361,7 +370,10 @@ enum LibraryAccessor {
             guard let next = current.children.first(where: {
                 $0.name == seg || $0.path.split(separator: "/").last.map(String.init) == seg
             }) else {
-                return PathResolution(exists: false, kind: nil, matchedPath: nil, children: nil)
+                return PathResolution(
+                    exists: false, kind: nil, matchedPath: nil, children: nil,
+                    miss: .segmentNotFound(segment: seg, under: matched.joined(separator: "/"))
+                )
             }
             current = next
             matched.append(seg)
@@ -371,7 +383,8 @@ enum LibraryAccessor {
             exists: true,
             kind: current.kind,
             matchedPath: matched.joined(separator: "/"),
-            children: children
+            children: children,
+            miss: nil
         )
     }
 

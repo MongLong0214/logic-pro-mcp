@@ -365,7 +365,10 @@ extension AccessibilityChannel {
         lastPanelScan: LibraryRoot?,
         lastDiskScan: LibraryRoot?,
         lastScan: LibraryRoot?,
-        lastScanSource: String?
+        lastScanSource: String?,
+        resolveCachedPath: (String, LibraryRoot) -> LibraryAccessor.PathResolution = { path, root in
+            LibraryAccessor.resolvePath(path, in: root)
+        }
     ) -> ChannelResult {
         guard let path = params["path"], !path.isEmpty else {
             return .error("Missing 'path' parameter for library.resolve_path")
@@ -383,50 +386,54 @@ extension AccessibilityChannel {
         //     most recently) so callers that only ran one scan still work.
         //  5. Else return exists:false.
         // Panel cache: take the hit only if the path exists there. A
-        // `PathResolution(exists:false)` means the segment wasn't found in
-        // the panel tree — fall through to the disk cache before declaring
-        // the entry unloadable.
-        if let root = lastPanelScan,
-           let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
-            let diskOverride = lastDiskScan
-                .flatMap { LibraryAccessor.resolvePath(path, in: $0) }
-                .flatMap { diskRes in
-                    diskRes.exists && diskRes.kind != .leaf ? diskRes : nil
-                }
-            let effectiveKind = diskOverride?.kind ?? res.kind
-            let effectiveMatchedPath = diskOverride?.matchedPath ?? res.matchedPath
-            let effectiveChildren = diskOverride?.children ?? res.children
-            let loadable = effectiveKind == .leaf
-            return encodeResult(ResolvePathResponse(
-                exists: true, kind: effectiveKind?.rawValue,
-                matchedPath: effectiveMatchedPath, children: effectiveChildren,
-                reason: loadable ? nil : Self.nonLoadableReason(for: effectiveKind),
-                source: "panel",
-                loadable: loadable,
-                warning: loadable ? nil : Self.nonLoadableWarning(path: path, kind: effectiveKind)
-            ))
-        }
-        if let root = lastDiskScan,
-           let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
-            let hasPanelCache = lastPanelScan != nil
-            let isLoadableDiskCandidate = !hasPanelCache && res.kind == .leaf
-            let source = hasPanelCache ? "disk-only" : "disk"
-            let warning: String?
-            if isLoadableDiskCandidate {
-                warning = nil
-            } else if hasPanelCache {
-                warning = "Path exists on disk but isn't exposed via Logic's Library Panel. set_instrument will fail for this entry; run scan_library with mode=ax to see Panel-loadable paths."
-            } else {
-                warning = Self.nonLoadableWarning(path: path, kind: res.kind)
+        // `PathResolution(exists:false)` means the path was malformed or was
+        // not found in the panel tree — fall through to the disk cache before
+        // declaring the entry unloadable.
+        if let root = lastPanelScan {
+            let res = resolveCachedPath(path, root)
+            if res.exists {
+                let diskOverride = lastDiskScan
+                    .map { resolveCachedPath(path, $0) }
+                    .flatMap { diskRes in
+                        diskRes.exists && diskRes.kind != .leaf ? diskRes : nil
+                    }
+                let effectiveKind = diskOverride?.kind ?? res.kind
+                let effectiveMatchedPath = diskOverride?.matchedPath ?? res.matchedPath
+                let effectiveChildren = diskOverride?.children ?? res.children
+                let loadable = effectiveKind == .leaf
+                return encodeResult(ResolvePathResponse(
+                    exists: true, kind: effectiveKind?.rawValue,
+                    matchedPath: effectiveMatchedPath, children: effectiveChildren,
+                    reason: loadable ? nil : Self.nonLoadableReason(for: effectiveKind),
+                    source: "panel",
+                    loadable: loadable,
+                    warning: loadable ? nil : Self.nonLoadableWarning(path: path, kind: effectiveKind)
+                ))
             }
-            return encodeResult(ResolvePathResponse(
-                exists: true, kind: res.kind?.rawValue,
-                matchedPath: res.matchedPath, children: res.children,
-                reason: isLoadableDiskCandidate ? nil : Self.nonLoadableReason(for: res.kind),
-                source: source,
-                loadable: isLoadableDiskCandidate,
-                warning: warning
-            ))
+        }
+        if let root = lastDiskScan {
+            let res = resolveCachedPath(path, root)
+            if res.exists {
+                let hasPanelCache = lastPanelScan != nil
+                let isLoadableDiskCandidate = !hasPanelCache && res.kind == .leaf
+                let source = hasPanelCache ? "disk-only" : "disk"
+                let warning: String?
+                if isLoadableDiskCandidate {
+                    warning = nil
+                } else if hasPanelCache {
+                    warning = "Path exists on disk but isn't exposed via Logic's Library Panel. set_instrument will fail for this entry; run scan_library with mode=ax to see Panel-loadable paths."
+                } else {
+                    warning = Self.nonLoadableWarning(path: path, kind: res.kind)
+                }
+                return encodeResult(ResolvePathResponse(
+                    exists: true, kind: res.kind?.rawValue,
+                    matchedPath: res.matchedPath, children: res.children,
+                    reason: isLoadableDiskCandidate ? nil : Self.nonLoadableReason(for: res.kind),
+                    source: source,
+                    loadable: isLoadableDiskCandidate,
+                    warning: warning
+                ))
+            }
         }
         // Legacy fallback — use whatever cache was last populated.
         guard let root = lastScan else {
@@ -436,11 +443,31 @@ extension AccessibilityChannel {
                 source: nil, loadable: nil, warning: nil
             ))
         }
-        guard let res = LibraryAccessor.resolvePath(path, in: root) else {
-            return encodeResult(ResolvePathResponse(
-                exists: false, kind: nil, matchedPath: nil, children: nil,
-                reason: nil, source: lastScanSource, loadable: nil, warning: nil
-            ))
+        let res = resolveCachedPath(path, root)
+        // The only reachable `exists:false` shapes in this handler are cold
+        // cache, malformed path, and segment not found. Every other encoded
+        // ResolvePathResponse is a hit.
+        guard res.exists else {
+            switch res.miss {
+            case .malformedPath:
+                return encodeResult(ResolvePathResponse(
+                    exists: false, kind: nil, matchedPath: nil, children: nil,
+                    reason: "Malformed library path; after trimming surrounding spaces and tabs and removing one unescaped trailing '/', it must not be empty or contain an empty segment. Use non-empty slash-separated segments such as 'Bass/Sub Bass'; escape literal '/' in a segment as '\\/'.",
+                    source: lastScanSource, loadable: nil, warning: nil
+                ))
+            case let .segmentNotFound(segment, under):
+                let location = under.isEmpty ? "at the library root" : "under '\(under)'"
+                return encodeResult(ResolvePathResponse(
+                    exists: false, kind: nil, matchedPath: nil, children: nil,
+                    reason: "Library path segment '\(segment)' was not found \(location) in the scanned library cache.",
+                    source: lastScanSource, loadable: nil, warning: nil
+                ))
+            case nil:
+                return .error(HonestContract.encodeStateC(
+                    error: .internalInconsistency,
+                    hint: "Library path resolution returned a miss without a miss category. No absence was observed; run scan_library and retry."
+                ))
+            }
         }
         // If lastScanSource is "disk" or "both" and we didn't find the path
         // in lastPanelScan above, treat as disk-only.

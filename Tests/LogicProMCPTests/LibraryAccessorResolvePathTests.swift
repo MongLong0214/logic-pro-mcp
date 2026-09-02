@@ -73,66 +73,73 @@ struct LibraryAccessorResolvePathTests {
 
     @Test func testResolvePath_Depth1Leaf() async throws {
         let r = LibraryAccessor.resolvePath("Bass/Sub", in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.exists)
-        #expect(r!.kind == .leaf)
-        #expect(r!.matchedPath == "Bass/Sub")
+        let isHit = r.exists
+        let hasNoMiss = r.miss == nil
+        #expect(isHit)
+        #expect(r.kind == .leaf)
+        #expect(r.matchedPath == "Bass/Sub")
+        #expect(hasNoMiss)
     }
 
     @Test func testResolvePath_Depth3Leaf() async throws {
         let r = LibraryAccessor.resolvePath("Orch/Strings/Warm", in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.kind == .leaf)
-        #expect(r!.matchedPath == "Orch/Strings/Warm")
+        #expect(r.kind == .leaf)
+        #expect(r.matchedPath == "Orch/Strings/Warm")
     }
 
-    @Test func testResolvePath_MissingLeaf_NotExists() async throws {
+    @Test func testResolvePath_MissingLeaf_CarriesSegmentNotFoundMiss() async throws {
         let r = LibraryAccessor.resolvePath("Bass/Nope", in: sampleRoot())
-        #expect(r != nil)
-        #expect(!(r!.exists))
-        #expect(r!.kind == nil)
+        let isMiss = !r.exists
+        let expectedMiss: LibraryAccessor.PathResolution.Miss = .segmentNotFound(
+            segment: "Nope", under: "Bass"
+        )
+        #expect(isMiss)
+        #expect(r.kind == nil)
+        #expect(r.miss == expectedMiss)
     }
 
     @Test func testResolvePath_EscapedSlash() async throws {
         let r = LibraryAccessor.resolvePath(#"Foo/Sub\/Thing"#, in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.exists)
-        #expect(r!.kind == .leaf)
+        let isHit = r.exists
+        #expect(isHit)
+        #expect(r.kind == .leaf)
     }
 
     @Test func testResolvePath_DisambiguatedDuplicate() async throws {
         let r = LibraryAccessor.resolvePath("Synth/Pad[1]", in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.exists)
-        #expect(r!.kind == .leaf)
-        #expect(r!.matchedPath == "Synth/Pad[1]")
+        let isHit = r.exists
+        #expect(isHit)
+        #expect(r.kind == .leaf)
+        #expect(r.matchedPath == "Synth/Pad[1]")
     }
 
     @Test func testResolvePath_FolderPath_KindFolder() async throws {
         let r = LibraryAccessor.resolvePath("Orch", in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.exists)
-        #expect(r!.kind == .folder)
-        #expect((r!.children ?? []).contains("Strings"))
+        let isHit = r.exists
+        #expect(isHit)
+        #expect(r.kind == .folder)
+        #expect((r.children ?? []).contains("Strings"))
     }
 
-    @Test func testResolvePath_EmptyPath_NotExists() async throws {
+    @Test func testResolvePath_EmptyPath_CarriesMalformedPathMiss() async throws {
         let r = LibraryAccessor.resolvePath("", in: sampleRoot())
-        #expect(r != nil)
-        #expect(!(r!.exists))
+        let isMiss = !r.exists
+        #expect(isMiss)
+        #expect(r.miss == .malformedPath)
     }
 
-    @Test func testResolvePath_EmptySegment_NotExists() async throws {
+    @Test func testResolvePath_EmptySegment_CarriesMalformedPathMiss() async throws {
         let r = LibraryAccessor.resolvePath("A//C", in: sampleRoot())
-        #expect(r != nil)
-        #expect(!(r!.exists))
+        let isMiss = !r.exists
+        #expect(isMiss)
+        #expect(r.miss == .malformedPath)
     }
 
     @Test func testResolvePath_TrailingSlash() async throws {
         let r = LibraryAccessor.resolvePath("Bass/", in: sampleRoot())
-        #expect(r != nil)
-        #expect(r!.exists)
-        #expect(r!.kind == .folder)
+        let isHit = r.exists
+        #expect(isHit)
+        #expect(r.kind == .folder)
     }
 
     // -- selectByPath click sequence tests --

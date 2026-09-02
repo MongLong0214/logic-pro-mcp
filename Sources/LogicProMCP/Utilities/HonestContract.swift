@@ -220,6 +220,9 @@ enum HonestContract {
         /// Recovery: pick a path present in scan_library. v3.6.x (#135/#141).
         case pathNotInLibrary = "path_not_in_library"
         case folderNotPreset = "folder_not_preset"
+        /// A server-side invariant was violated while processing a request. The
+        /// result must fail closed without claiming an observed absence.
+        case internalInconsistency = "internal_inconsistency"
         /// The requested operation cannot be performed in the front document's
         /// current state — e.g. `project.save` on an UNTITLED document that has
         /// no on-disk path. Firing `save front document` on such a document
@@ -479,6 +482,7 @@ enum HonestContract {
         // the client must read the parent collection for valid indices.
         FailureError.indexOutOfRange.rawValue,
         FailureError.folderNotPreset.rawValue,
+        FailureError.internalInconsistency.rawValue,
         // #219: an unknown help category is terminal — no channel/retry can turn
         // a bad category token into a valid one; the caller must pick a listed
         // category. (help doesn't route through the fallback chain; listed for
