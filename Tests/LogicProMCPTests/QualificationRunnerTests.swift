@@ -1176,6 +1176,144 @@ struct QualificationRunnerTests {
         }
     }
 
+    @Test func liveGateSummaryNamesReadbackTimeoutAndMissingRefusal() throws {
+        let readSpec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportStop })
+        let readbackTimeout = QualificationOperationResult(
+            operationID: readSpec.id.rawValue,
+            tool: readSpec.tool.rawValue,
+            command: readSpec.command,
+            mutability: readSpec.mutability,
+            requestID: "timed-out-read",
+            responseData: Data(#"{"logic_pro_running":true}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "timed-out-readback",
+            readbackData: nil,
+            failureReason: QualificationTransport.observedFailureReason(
+                from: QualificationTransportError.requestTimeout(phase: "timed-out-readback"),
+                during: "independent readback"
+            )
+        )
+        let missingRefusal = QualificationOperationResult(
+            operationID: mutatingSpec.id.rawValue,
+            tool: mutatingSpec.tool.rawValue,
+            command: mutatingSpec.command,
+            mutability: mutatingSpec.mutability,
+            requestID: "missing-refusal",
+            responseData: Data(#"{"state":"A","write_attempted":false}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://transport/state",
+            readbackRequestID: "missing-refusal-readback",
+            readbackData: Data(#"{"is_playing":false}"#.utf8),
+            failureReason: nil
+        )
+
+        let summary = QualificationLiveGateSummary(
+            operationResults: [readbackTimeout, missingRefusal]
+        )
+        let readbackFailure = try #require(summary.failures.first {
+            $0.operationID == readSpec.id.rawValue
+        })
+        let refusalFailure = try #require(summary.failures.first {
+            $0.operationID == mutatingSpec.id.rawValue
+        })
+        let failureLine = try #require(summary.failureLine)
+
+        #expect(readbackFailure.failureReason.contains("independent readback timeout"))
+        #expect(refusalFailure.failureReason.contains("missing expected typed zero-write refusal"))
+        #expect(readbackFailure.failureReason != refusalFailure.failureReason)
+        #expect(failureLine.contains("failureReason=independent readback timeout"))
+        #expect(failureLine.contains("failureReason=operation request missing expected typed zero-write refusal"))
+    }
+
+    @Test func liveGateSummaryFailsAnInScopeSemanticShortfall() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let shortfall = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "semantic-shortfall",
+            responseData: Data(#"{"logic_pro_running":true}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "semantic-shortfall-readback",
+            readbackData: Data(#"{"logic_pro_running":false}"#.utf8),
+            failureReason: nil
+        )
+
+        let summary = QualificationLiveGateSummary(operationResults: [shortfall])
+        let failure = try #require(summary.failures.first)
+
+        #expect(shortfall.status == .notQualified)
+        #expect(shortfall.liveGateDisposition == .failed)
+        #expect(failure.failureReason.contains("semantic readback mismatch"))
+    }
+
+    @Test func liveGateSummaryCountsOutOfScopeSeparatelyFromInScopePassAndFailures() throws {
+        let readSpec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let passed = try #require(
+            Self.driveResult(specs: [readSpec]).operationResults[readSpec.id.rawValue]
+        )
+        let outOfScope = try #require(
+            Self.driveResult(specs: [mutatingSpec]).operationResults[mutatingSpec.id.rawValue]
+        )
+        let failed = QualificationOperationResult(
+            operationID: "synthetic.readback.timeout",
+            tool: readSpec.tool.rawValue,
+            command: readSpec.command,
+            mutability: .readOnly,
+            requestID: "failed-request",
+            responseData: Data(#"{}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "failed-readback",
+            readbackData: nil,
+            failureReason: QualificationTransport.observedFailureReason(
+                from: QualificationTransportError.requestTimeout(phase: "failed-readback"),
+                during: "independent readback"
+            )
+        )
+
+        let summary = QualificationLiveGateSummary(operationResults: [passed, outOfScope, failed])
+
+        #expect(passed.liveGateScope == .inScope)
+        #expect(outOfScope.liveGateScope == .outOfScope)
+        #expect(summary.inScopePassed == 1)
+        #expect(summary.outOfScope == 1)
+        #expect(summary.failed == 1)
+        #expect(summary.accounted == summary.total)
+    }
+
+    @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let operation = try #require(
+            Self.driveResult(specs: [mutatingSpec]).operationResults[mutatingSpec.id.rawValue]
+        )
+        let summary = QualificationLiveGateSummary(operationResults: [operation])
+
+        #expect(summary.mutatingOperationExclusionLine.contains("mutating operations are not exercised"))
+        #expect(summary.mutatingOperationExclusionLine.contains("zero-write refusal probes"))
+    }
+
     @Test(.enabled(
         if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
         "Requires `swift build -c release` before running the real-process qualification QA."
@@ -1196,14 +1334,14 @@ struct QualificationRunnerTests {
         let operationResults = Array(result.operationResults.values)
         let mutating = operationResults.filter { $0.mutability == .mutating }
         let readOnly = operationResults.filter { $0.mutability == .readOnly }
-        let qualified = operationResults.filter { $0.status == .passed }
-        let deferred = operationResults.filter { $0.status == .notQualified }
-        let smoke = operationResults.filter { $0.status == .protocolSmoke }
+        let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 89)
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
+        #expect(liveGate.accounted == operationResults.count)
+        #expect(liveGate.failures.isEmpty)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
@@ -1227,27 +1365,10 @@ struct QualificationRunnerTests {
         #expect(readOnly.allSatisfy {
             $0.status == .passed || $0.status == .notQualified || $0.status == .protocolSmoke
         })
-        // `failed` used to be a literal `0` inside this format string, so the line reported
-        // "failed=0" on runs where the `status != .failed` assertion had just failed. Believing it
-        // cost real time: the only way to see that one operation had failed was to notice that
-        // qualified + protocol_smoke + deferred summed to 110 against 111 specs and do the
-        // subtraction by hand. A diagnostic that states a count it never counted is worse than none,
-        // because it is believed.
-        //
-        // Counted by grouping rather than by naming three buckets: `QualificationStatus` has six
-        // cases, and a summary that names a subset of them is the same defect in a slower form —
-        // my first attempt at this fix hand-listed four and would have reported `waived` and
-        // `skipped` operations as unaccounted, turning a legitimate status into a test failure.
-        let byStatus = Dictionary(grouping: operationResults, by: \.status)
-            .mapValues(\.count)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
-            .map { "\($0.key.rawValue)=\($0.value)" }
-            .joined(separator: ", ")
-        print("qualification operation classification: \(byStatus) of \(operationResults.count)")
-
-        let failed = operationResults.filter { $0.status == .failed }
-        if !failed.isEmpty {
-            print("failed operations: \(failed.map(\.operationID).sorted().joined(separator: ", "))")
+        print(liveGate.classificationLine)
+        print(liveGate.mutatingOperationExclusionLine)
+        if let failureLine = liveGate.failureLine {
+            print(failureLine)
         }
 
         // #373 Phase A. The classification line above says how many reached each status; it cannot

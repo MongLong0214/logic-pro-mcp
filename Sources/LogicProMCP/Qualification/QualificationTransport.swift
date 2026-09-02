@@ -262,11 +262,88 @@ struct QualificationOperationResult: Equatable, Sendable {
             // confirmed. Keep the existing no-write deferrals untouched, but make a future
             // Phase-B success path refuse this observation instead of accepting equal stale data.
             if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
-            return isTypedZeroWriteRefusal ? .notQualified : .failed
+            return expectedZeroWriteRefusalObserved ? .notQualified : .failed
         }
     }
 
+    /// Scope is an operation property, not a verdict from this particular run.
+    ///
+    /// The live probe deliberately sends `__adr001b_no_write_probe` for every
+    /// mutating operation. It can observe the fail-closed refusal, but it
+    /// cannot establish that the operation's success path works.
+    var liveGateScope: QualificationLiveGateScope {
+        switch mutability {
+        case .readOnly: .inScope
+        case .mutating: .outOfScope
+        }
+    }
+
+    /// The observed zero-write refusal expected from a mutating probe.
+    ///
+    /// Kept available to the live-gate report so a missing refusal is reported
+    /// as the reason for failure rather than as an unexplained operation ID.
+    var expectedZeroWriteRefusalObserved: Bool {
+        isError == true
+            && state == "C"
+            // setup_arm_key's no-write probe refuses consent-first with
+            // `consent_required` (before param validation); every other mutating
+            // op's no-write probe is an `invalid_params` typed refusal (#413).
+            && ["consent_required", "invalid_params"].contains(error)
+            && writeAttempted == false
+    }
+
     var verified: Bool { status == .passed }
+
+    /// The outcome used by the live qualification gate. A non-passing
+    /// read-only observation is a gate failure; it must not be silently
+    /// accounted for with mutating operations that the gate does not exercise.
+    var liveGateDisposition: QualificationLiveGateDisposition {
+        if status == .failed { return .failed }
+        switch liveGateScope {
+        case .inScope:
+            return status == .passed ? .passed : .failed
+        case .outOfScope:
+            return .outOfScope
+        }
+    }
+
+    /// A diagnostic reason for a failed live-gate disposition, derived only
+    /// from the captured request, readback, and response observations.
+    var liveGateFailureReason: String? {
+        guard liveGateDisposition == .failed else { return nil }
+        if let failureReason { return failureReason }
+        if responseData == nil {
+            return "operation request produced no response"
+        }
+        if readbackArtifactData == nil {
+            return "independent readback produced no response"
+        }
+        switch mutability {
+        case .mutating:
+            guard !expectedZeroWriteRefusalObserved else {
+                return "mutating operation produced a failed observation after its zero-write refusal"
+            }
+            return "operation request missing expected typed zero-write refusal "
+                + "(is_error=\(Self.observed(isError)), state=\(Self.observed(state)), "
+                + "error=\(Self.observed(error)), write_attempted=\(Self.observed(writeAttempted)))"
+        case .readOnly:
+            if isError != false {
+                return "operation request returned a refusal: "
+                    + Self.unavailableDetail(error: error, hint: hint)
+            }
+            if let reason = readbackFreshness.refusalReason {
+                return "independent readback was not admissible: \(reason)"
+            }
+            switch semanticReadbackValidated {
+            case .some(false):
+                return "semantic readback mismatch: response did not match its independent readback"
+            case .none:
+                return "in-scope read has no operation-specific semantic validator"
+            case .some(true):
+                return "in-scope read did not reach a passing qualification"
+            }
+        }
+    }
 
     var verificationKind: QualificationVerificationKind {
         switch status {
@@ -384,20 +461,95 @@ struct QualificationOperationResult: Equatable, Sendable {
         )
     }
 
-    private var isTypedZeroWriteRefusal: Bool {
-        isError == true
-            && state == "C"
-            // setup_arm_key's no-write probe refuses consent-first with
-            // `consent_required` (before param validation); every other mutating
-            // op's no-write probe is an `invalid_params` typed refusal (#413).
-            && ["consent_required", "invalid_params"].contains(error)
-            && writeAttempted == false
-    }
-
     private static func encoded<Value: Encodable>(_ value: Value) -> Data? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try? encoder.encode(value)
+    }
+
+    private static func observed(_ value: String?) -> String {
+        value ?? "not observed"
+    }
+
+    private static func observed(_ value: Bool?) -> String {
+        value.map(String.init) ?? "not observed"
+    }
+}
+
+enum QualificationLiveGateScope: String, Sendable {
+    case inScope = "in_scope"
+    case outOfScope = "out_of_scope"
+}
+
+enum QualificationLiveGateDisposition: String, Sendable {
+    case passed
+    case outOfScope = "out_of_scope"
+    case failed
+}
+
+/// The human-readable accounting for the real-process live qualification test.
+///
+/// It deliberately does not alter `QualificationStatus`, which is also used by
+/// the release-attestation and waiver machinery. The direct live gate needs a
+/// stricter interpretation: semantic shortfalls in read-only operations fail,
+/// while mutating success paths are explicitly excluded.
+struct QualificationLiveGateSummary: Equatable, Sendable {
+    struct Failure: Equatable, Sendable {
+        let operationID: String
+        let failureReason: String
+    }
+
+    let total: Int
+    let inScopePassed: Int
+    let outOfScope: Int
+    let mutatingOperationCount: Int
+    let failures: [Failure]
+
+    init(operationResults: [QualificationOperationResult]) {
+        total = operationResults.count
+        mutatingOperationCount = operationResults.filter {
+            $0.liveGateScope == .outOfScope
+        }.count
+        inScopePassed = operationResults.filter {
+            $0.liveGateDisposition == .passed
+        }.count
+        outOfScope = operationResults.filter {
+            $0.liveGateDisposition == .outOfScope
+        }.count
+        failures = operationResults
+            .filter { $0.liveGateDisposition == .failed }
+            .sorted { $0.operationID < $1.operationID }
+            .map { operation in
+                guard let failureReason = operation.liveGateFailureReason else {
+                    preconditionFailure("A failed live-gate operation must retain an observed reason")
+                }
+                return Failure(
+                    operationID: operation.operationID,
+                    failureReason: failureReason
+                )
+            }
+    }
+
+    var failed: Int { failures.count }
+
+    var accounted: Int { inScopePassed + outOfScope + failed }
+
+    var classificationLine: String {
+        "qualification live gate: in_scope_passed=\(inScopePassed), "
+            + "out_of_scope=\(outOfScope), failed=\(failed) of \(total)"
+    }
+
+    var mutatingOperationExclusionLine: String {
+        "qualification live gate coverage: mutating operations are not exercised; "
+            + "\(mutatingOperationCount) are out of scope for semantic qualification and receive "
+            + "only zero-write refusal probes"
+    }
+
+    var failureLine: String? {
+        guard !failures.isEmpty else { return nil }
+        return "failed operations: " + failures.map {
+            "\($0.operationID) (failureReason=\($0.failureReason))"
+        }.joined(separator: ", ")
     }
 }
 
@@ -724,7 +876,10 @@ struct QualificationTransport: Sendable {
                         )
                     }
                 } catch {
-                    responseFailure = String(describing: error)
+                    responseFailure = Self.observedFailureReason(
+                        from: error,
+                        during: "operation request"
+                    )
                 }
                 let readbackRequestID = "operation-readback-\(nextID)"
                 let readbackSource = Self.readbackSource(for: spec)
@@ -738,7 +893,10 @@ struct QualificationTransport: Sendable {
                         phase: readbackRequestID
                     )
                 } catch {
-                    readbackFailure = String(describing: error)
+                    readbackFailure = Self.observedFailureReason(
+                        from: error,
+                        during: "independent readback"
+                    )
                 }
                 nextID += 1
                 let typed = response.flatMap {
@@ -1129,6 +1287,17 @@ struct QualificationTransport: Sendable {
                 return "logic://system/health"
             }
         }
+    }
+
+    static func observedFailureReason(
+        from error: Error,
+        during observation: String
+    ) -> String {
+        if let transportError = error as? QualificationTransportError,
+           case .requestTimeout = transportError {
+            return "\(observation) timeout: \(error)"
+        }
+        return "\(observation) failed: \(error)"
     }
 
     private func resourceReadback(
