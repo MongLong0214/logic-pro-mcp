@@ -6,6 +6,33 @@ import Testing
 
 @Suite("ADR-001 qualification runner", .serialized)
 struct QualificationRunnerTests {
+    /// #284 has two measured product defects. This is intentionally an exact
+    /// list, rather than an allow-list: a new failure, a changed reason, OR a
+    /// known failure beginning to pass must all redden the live gate so the list
+    /// cannot silently absorb regressions or rot after a fix.
+    private struct KnownLiveGateFailure: Equatable {
+        let operationID: String
+        let failureReason: String
+        let trackingIssue: String
+
+        var failure: QualificationLiveGateSummary.Failure {
+            .init(operationID: operationID, failureReason: failureReason)
+        }
+    }
+
+    private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
+        .init(
+            operationID: OperationID.tracksListLibrary.rawValue,
+            failureReason: "semantic readback mismatch: response did not match its independent readback",
+            trackingIssue: "#284"
+        ),
+        .init(
+            operationID: OperationID.tracksResolvePath.rawValue,
+            failureReason: "semantic readback mismatch: response did not match its independent readback",
+            trackingIssue: "#284"
+        ),
+    ]
+
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
         let specs = [
             try #require(OperationRegistry.specs.first { $0.id == .transportPlay }),
@@ -1263,7 +1290,42 @@ struct QualificationRunnerTests {
         #expect(failure.failureReason.contains("semantic readback mismatch"))
     }
 
-    @Test func liveGateSummaryCountsOutOfScopeSeparatelyFromInScopePassAndFailures() throws {
+    @Test func qualificationProbeSuppliesSpectralOperationPaths() throws {
+        let spectrum = try #require(OperationRegistry.specs.first { $0.id == .audioAnalyzeSpectrum })
+        let recommendEQ = try #require(OperationRegistry.specs.first { $0.id == .audioRecommendEQ })
+
+        let spectrumPath = QualificationTransport.probeParams(
+            for: spectrum,
+            traceID: "trace"
+        )["path"] as? String
+        let recommendationPath = QualificationTransport.probeParams(
+            for: recommendEQ,
+            traceID: "trace"
+        )["path"] as? String
+        let recommendationMinimumLevel = QualificationTransport.probeParams(
+            for: recommendEQ,
+            traceID: "trace"
+        )["minimum_level"] as? Double
+        let suppliesRealPathToBothSpectralOperations = spectrumPath
+            == QualificationTransport.qualificationAudioProbePath
+            && recommendationPath == QualificationTransport.qualificationAudioProbePath
+            && recommendationMinimumLevel == 0.5
+
+        #expect(suppliesRealPathToBothSpectralOperations)
+    }
+
+    @Test func qualificationProbeConfirmsTraceClear() throws {
+        let clearTraces = try #require(OperationRegistry.specs.first { $0.id == .systemClearTraces })
+        let confirmed = QualificationTransport.probeParams(
+            for: clearTraces,
+            traceID: "trace"
+        )["confirmed"] as? Bool
+        let sendsDocumentedConfirmation = confirmed == true
+
+        #expect(sendsDocumentedConfirmation)
+    }
+
+    @Test func liveGateSummarySeparatesPreconditionsEnvironmentAndFailures() throws {
         let readSpec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
         let passed = try #require(
@@ -1292,15 +1354,102 @@ struct QualificationRunnerTests {
                 during: "independent readback"
             )
         )
+        let missingPath = QualificationOperationResult(
+            operationID: OperationID.audioAnalyzeSpectrum.rawValue,
+            tool: "logic_audio",
+            command: "analyze_spectrum",
+            mutability: .readOnly,
+            requestID: "missing-path-request",
+            responseData: Data(#"{"state":"C","error":"invalid_params","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "invalid_params",
+            hint: "analyze_spectrum requires non-empty string 'path'",
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "missing-path-readback",
+            readbackData: Data(#"{}"#.utf8),
+            failureReason: nil
+        )
+        let missingPluginWindow = QualificationOperationResult(
+            operationID: OperationID.tracksScanPluginPresets.rawValue,
+            tool: "logic_tracks",
+            command: "scan_plugin_presets",
+            mutability: .readOnly,
+            requestID: "missing-plugin-window-request",
+            responseData: Data(#"{"state":"C","error":"channels_exhausted","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "channels_exhausted",
+            hint: "No plugin window with Setting dropdown found. Open an instrument plugin window first.",
+            writeAttempted: false,
+            readbackSource: "logic://library/inventory",
+            readbackRequestID: "missing-plugin-window-readback",
+            readbackData: Data(#"{}"#.utf8),
+            failureReason: nil
+        )
 
-        let summary = QualificationLiveGateSummary(operationResults: [passed, outOfScope, failed])
+        let summary = QualificationLiveGateSummary(
+            operationResults: [passed, outOfScope, missingPath, missingPluginWindow, failed]
+        )
 
-        #expect(passed.liveGateScope == .inScope)
-        #expect(outOfScope.liveGateScope == .outOfScope)
-        #expect(summary.inScopePassed == 1)
-        #expect(summary.outOfScope == 1)
-        #expect(summary.failed == 1)
-        #expect(summary.accounted == summary.total)
+        let scopesRemainDistinct = passed.liveGateScope == .inScope
+            && outOfScope.liveGateScope == .outOfScope
+        let bucketsAreSeparated = summary.inScopePassed == 1
+            && summary.outOfScope == 1
+            && summary.notExercisableWithoutPreconditions == [
+                .init(
+                    operationID: OperationID.audioAnalyzeSpectrum.rawValue,
+                    reason: "requires non-empty string 'path'"
+                ),
+            ]
+            && summary.environmentalPreconditions == [
+                .init(
+                    operationID: OperationID.tracksScanPluginPresets.rawValue,
+                    reason: "requires an open plugin window with a Setting dropdown"
+                ),
+            ]
+            && summary.failed == 1
+        let everyDispositionIsAccountedFor = summary.accounted == summary.total
+
+        #expect(scopesRemainDistinct)
+        #expect(bucketsAreSeparated)
+        #expect(everyDispositionIsAccountedFor)
+    }
+
+    @Test func knownLiveGateFailuresCarryReasonsAndTrackingReferences() {
+        let eachFailureIsExplainedAndTracked = Self.knownLiveGateFailures.allSatisfy {
+            !$0.operationID.isEmpty && !$0.failureReason.isEmpty && $0.trackingIssue == "#284"
+        }
+
+        #expect(eachFailureIsExplainedAndTracked)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsNewFailure() {
+        let observed = Self.knownLiveGateFailures.map(\.failure) + [
+            .init(operationID: "synthetic.new.failure", failureReason: "a newly observed failure"),
+        ]
+        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsNewFailure)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsAKnownFailureStartingToPass() {
+        let observed = Array(Self.knownLiveGateFailures.map(\.failure).dropLast())
+        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsMissingKnownFailure)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsChangedReason() {
+        var observed = Self.knownLiveGateFailures.map(\.failure)
+        observed[0] = .init(
+            operationID: observed[0].operationID,
+            failureReason: "semantic readback mismatch: a different observed cause"
+        )
+        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsChangedReason)
     }
 
     @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
@@ -1341,7 +1490,8 @@ struct QualificationRunnerTests {
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
-        #expect(liveGate.failures.isEmpty)
+        let knownLiveGateFailuresMatchExactly = Self.matchesKnownLiveGateFailures(liveGate.failures)
+        #expect(knownLiveGateFailuresMatchExactly)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
@@ -1367,6 +1517,12 @@ struct QualificationRunnerTests {
         })
         print(liveGate.classificationLine)
         print(liveGate.mutatingOperationExclusionLine)
+        if let preconditionLine = liveGate.unmetOperationPreconditionsLine {
+            print(preconditionLine)
+        }
+        if let environmentalPreconditionsLine = liveGate.environmentalPreconditionsLine {
+            print(environmentalPreconditionsLine)
+        }
         if let failureLine = liveGate.failureLine {
             print(failureLine)
         }
@@ -3046,6 +3202,12 @@ struct QualificationRunnerTests {
         manifestObject["files"] = entries
         try JSONSerialization.data(withJSONObject: manifestObject, options: [.sortedKeys])
             .write(to: fixture.manifestURL, options: .atomic)
+    }
+
+    private static func matchesKnownLiveGateFailures(
+        _ observed: [QualificationLiveGateSummary.Failure]
+    ) -> Bool {
+        observed == knownLiveGateFailures.map(\.failure)
     }
 
     private static func driveResult(

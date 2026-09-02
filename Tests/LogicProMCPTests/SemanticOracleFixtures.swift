@@ -369,7 +369,7 @@ enum SemanticOracleFixtures {
                 "resonances":[{"hz":5001.953125,"gainDb":36.0,"q":8.6,\
                 "resolutionLimited":true}],"spectralCentroidHz":2200.0,\
                 "frequencyPeaks":[{"frequency_hz":5001.953125,"magnitude":0.5}],\
-                "classification":"fullMix","confidence":0.8}
+                "classification":"fullMix","levelConfidence":0.8}
                 """,
             readback: health
         ),

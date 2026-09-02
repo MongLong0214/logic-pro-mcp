@@ -960,6 +960,10 @@ enum SemanticOracleTable {
     // AudioDispatcher `spectralAnalysisResult` encodes SpectralAnalysisResult
     // unchanged. A complete extraction always has the default log-band grid;
     // AudioFeatureExtractionEngine.Config pins its centres to 20...20,000 Hz.
+    // `levelConfidence` is deliberately the encoded field: it is the loudness
+    // gate, not an invented statement about classifier certainty. The 0...1
+    // domain check remains exactly as strict as the historical `confidence`
+    // check; only the stale wire key is corrected.
     static let audioAnalyzeSpectrum = OperationOracle(
         .audioAnalyzeSpectrum,
         strength: .shapeAndDomain,
@@ -981,7 +985,7 @@ enum SemanticOracleTable {
             .typedField(key: "resonances", type: .array),
             .typedField(key: "frequencyPeaks", type: .array),
             .enumMember(key: "classification", allowed: ["vocal", "drums", "bass", "fullMix", "unknown"]),
-            .numericRange(key: "confidence", min: 0, max: 1),
+            .numericRange(key: "levelConfidence", min: 0, max: 1),
         ]
     )
 
