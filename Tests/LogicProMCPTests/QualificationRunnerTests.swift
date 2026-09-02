@@ -6,6 +6,33 @@ import Testing
 
 @Suite("ADR-001 qualification runner", .serialized)
 struct QualificationRunnerTests {
+    /// #284 has two measured product defects. This is intentionally an exact
+    /// list, rather than an allow-list: a new failure, a changed reason, OR a
+    /// known failure beginning to pass must all redden the live gate so the list
+    /// cannot silently absorb regressions or rot after a fix.
+    private struct KnownLiveGateFailure: Equatable {
+        let operationID: String
+        let failureReason: String
+        let trackingIssue: String
+
+        var failure: QualificationLiveGateSummary.Failure {
+            .init(operationID: operationID, failureReason: failureReason)
+        }
+    }
+
+    private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
+        .init(
+            operationID: OperationID.tracksListLibrary.rawValue,
+            failureReason: "semantic readback mismatch: response did not match its independent readback",
+            trackingIssue: "#284"
+        ),
+        .init(
+            operationID: OperationID.tracksResolvePath.rawValue,
+            failureReason: "semantic readback mismatch: response did not match its independent readback",
+            trackingIssue: "#284"
+        ),
+    ]
+
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
         let specs = [
             try #require(OperationRegistry.specs.first { $0.id == .transportPlay }),
@@ -1176,6 +1203,266 @@ struct QualificationRunnerTests {
         }
     }
 
+    @Test func liveGateSummaryNamesReadbackTimeoutAndMissingRefusal() throws {
+        let readSpec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportStop })
+        let readbackTimeout = QualificationOperationResult(
+            operationID: readSpec.id.rawValue,
+            tool: readSpec.tool.rawValue,
+            command: readSpec.command,
+            mutability: readSpec.mutability,
+            requestID: "timed-out-read",
+            responseData: Data(#"{"logic_pro_running":true}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "timed-out-readback",
+            readbackData: nil,
+            failureReason: QualificationTransport.observedFailureReason(
+                from: QualificationTransportError.requestTimeout(phase: "timed-out-readback"),
+                during: "independent readback"
+            )
+        )
+        let missingRefusal = QualificationOperationResult(
+            operationID: mutatingSpec.id.rawValue,
+            tool: mutatingSpec.tool.rawValue,
+            command: mutatingSpec.command,
+            mutability: mutatingSpec.mutability,
+            requestID: "missing-refusal",
+            responseData: Data(#"{"state":"A","write_attempted":false}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://transport/state",
+            readbackRequestID: "missing-refusal-readback",
+            readbackData: Data(#"{"is_playing":false}"#.utf8),
+            failureReason: nil
+        )
+
+        let summary = QualificationLiveGateSummary(
+            operationResults: [readbackTimeout, missingRefusal]
+        )
+        let readbackFailure = try #require(summary.failures.first {
+            $0.operationID == readSpec.id.rawValue
+        })
+        let refusalFailure = try #require(summary.failures.first {
+            $0.operationID == mutatingSpec.id.rawValue
+        })
+        let failureLine = try #require(summary.failureLine)
+
+        #expect(readbackFailure.failureReason.contains("independent readback timeout"))
+        #expect(refusalFailure.failureReason.contains("missing expected typed zero-write refusal"))
+        #expect(readbackFailure.failureReason != refusalFailure.failureReason)
+        #expect(failureLine.contains("failureReason=independent readback timeout"))
+        #expect(failureLine.contains("failureReason=operation request missing expected typed zero-write refusal"))
+    }
+
+    @Test func liveGateSummaryFailsAnInScopeSemanticShortfall() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let shortfall = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "semantic-shortfall",
+            responseData: Data(#"{"logic_pro_running":true}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "semantic-shortfall-readback",
+            readbackData: Data(#"{"logic_pro_running":false}"#.utf8),
+            failureReason: nil
+        )
+
+        let summary = QualificationLiveGateSummary(operationResults: [shortfall])
+        let failure = try #require(summary.failures.first)
+
+        #expect(shortfall.status == .notQualified)
+        #expect(shortfall.liveGateDisposition == .failed)
+        #expect(failure.failureReason.contains("semantic readback mismatch"))
+    }
+
+    @Test func qualificationProbeSuppliesSpectralOperationPaths() throws {
+        let spectrum = try #require(OperationRegistry.specs.first { $0.id == .audioAnalyzeSpectrum })
+        let recommendEQ = try #require(OperationRegistry.specs.first { $0.id == .audioRecommendEQ })
+
+        let spectrumPath = QualificationTransport.probeParams(
+            for: spectrum,
+            traceID: "trace"
+        )["path"] as? String
+        let recommendationPath = QualificationTransport.probeParams(
+            for: recommendEQ,
+            traceID: "trace"
+        )["path"] as? String
+        let recommendationMinimumLevel = QualificationTransport.probeParams(
+            for: recommendEQ,
+            traceID: "trace"
+        )["minimum_level"] as? Double
+        let suppliesRealPathToBothSpectralOperations = spectrumPath
+            == QualificationTransport.qualificationAudioProbePath
+            && recommendationPath == QualificationTransport.qualificationAudioProbePath
+            && recommendationMinimumLevel == 0.5
+
+        #expect(suppliesRealPathToBothSpectralOperations)
+    }
+
+    @Test func qualificationProbeConfirmsTraceClear() throws {
+        let clearTraces = try #require(OperationRegistry.specs.first { $0.id == .systemClearTraces })
+        let confirmed = QualificationTransport.probeParams(
+            for: clearTraces,
+            traceID: "trace"
+        )["confirmed"] as? Bool
+        let sendsDocumentedConfirmation = confirmed == true
+
+        #expect(sendsDocumentedConfirmation)
+    }
+
+    @Test func liveGateSummarySeparatesPreconditionsEnvironmentAndFailures() throws {
+        let readSpec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let passed = try #require(
+            Self.driveResult(specs: [readSpec]).operationResults[readSpec.id.rawValue]
+        )
+        let outOfScope = try #require(
+            Self.driveResult(specs: [mutatingSpec]).operationResults[mutatingSpec.id.rawValue]
+        )
+        let failed = QualificationOperationResult(
+            operationID: "synthetic.readback.timeout",
+            tool: readSpec.tool.rawValue,
+            command: readSpec.command,
+            mutability: .readOnly,
+            requestID: "failed-request",
+            responseData: Data(#"{}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "failed-readback",
+            readbackData: nil,
+            failureReason: QualificationTransport.observedFailureReason(
+                from: QualificationTransportError.requestTimeout(phase: "failed-readback"),
+                during: "independent readback"
+            )
+        )
+        let missingPath = QualificationOperationResult(
+            operationID: OperationID.audioAnalyzeSpectrum.rawValue,
+            tool: "logic_audio",
+            command: "analyze_spectrum",
+            mutability: .readOnly,
+            requestID: "missing-path-request",
+            responseData: Data(#"{"state":"C","error":"invalid_params","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "invalid_params",
+            hint: "analyze_spectrum requires non-empty string 'path'",
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "missing-path-readback",
+            readbackData: Data(#"{}"#.utf8),
+            failureReason: nil
+        )
+        let missingPluginWindow = QualificationOperationResult(
+            operationID: OperationID.tracksScanPluginPresets.rawValue,
+            tool: "logic_tracks",
+            command: "scan_plugin_presets",
+            mutability: .readOnly,
+            requestID: "missing-plugin-window-request",
+            responseData: Data(#"{"state":"C","error":"channels_exhausted","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "channels_exhausted",
+            hint: "No plugin window with Setting dropdown found. Open an instrument plugin window first.",
+            writeAttempted: false,
+            readbackSource: "logic://library/inventory",
+            readbackRequestID: "missing-plugin-window-readback",
+            readbackData: Data(#"{}"#.utf8),
+            failureReason: nil
+        )
+
+        let summary = QualificationLiveGateSummary(
+            operationResults: [passed, outOfScope, missingPath, missingPluginWindow, failed]
+        )
+
+        let scopesRemainDistinct = passed.liveGateScope == .inScope
+            && outOfScope.liveGateScope == .outOfScope
+        let bucketsAreSeparated = summary.inScopePassed == 1
+            && summary.outOfScope == 1
+            && summary.notExercisableWithoutPreconditions == [
+                .init(
+                    operationID: OperationID.audioAnalyzeSpectrum.rawValue,
+                    reason: "requires non-empty string 'path'"
+                ),
+            ]
+            && summary.environmentalPreconditions == [
+                .init(
+                    operationID: OperationID.tracksScanPluginPresets.rawValue,
+                    reason: "requires an open plugin window with a Setting dropdown"
+                ),
+            ]
+            && summary.failed == 1
+        let everyDispositionIsAccountedFor = summary.accounted == summary.total
+
+        #expect(scopesRemainDistinct)
+        #expect(bucketsAreSeparated)
+        #expect(everyDispositionIsAccountedFor)
+    }
+
+    @Test func knownLiveGateFailuresCarryReasonsAndTrackingReferences() {
+        let eachFailureIsExplainedAndTracked = Self.knownLiveGateFailures.allSatisfy {
+            !$0.operationID.isEmpty && !$0.failureReason.isEmpty && $0.trackingIssue == "#284"
+        }
+
+        #expect(eachFailureIsExplainedAndTracked)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsNewFailure() {
+        let observed = Self.knownLiveGateFailures.map(\.failure) + [
+            .init(operationID: "synthetic.new.failure", failureReason: "a newly observed failure"),
+        ]
+        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsNewFailure)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsAKnownFailureStartingToPass() {
+        let observed = Array(Self.knownLiveGateFailures.map(\.failure).dropLast())
+        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsMissingKnownFailure)
+    }
+
+    @Test func knownLiveGateFailureSetRejectsChangedReason() {
+        var observed = Self.knownLiveGateFailures.map(\.failure)
+        observed[0] = .init(
+            operationID: observed[0].operationID,
+            failureReason: "semantic readback mismatch: a different observed cause"
+        )
+        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed)
+
+        #expect(rejectsChangedReason)
+    }
+
+    @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
+        let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let operation = try #require(
+            Self.driveResult(specs: [mutatingSpec]).operationResults[mutatingSpec.id.rawValue]
+        )
+        let summary = QualificationLiveGateSummary(operationResults: [operation])
+
+        #expect(summary.mutatingOperationExclusionLine.contains("mutating operations are not exercised"))
+        #expect(summary.mutatingOperationExclusionLine.contains("zero-write refusal probes"))
+    }
+
     @Test(.enabled(
         if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
         "Requires `swift build -c release` before running the real-process qualification QA."
@@ -1196,14 +1483,15 @@ struct QualificationRunnerTests {
         let operationResults = Array(result.operationResults.values)
         let mutating = operationResults.filter { $0.mutability == .mutating }
         let readOnly = operationResults.filter { $0.mutability == .readOnly }
-        let qualified = operationResults.filter { $0.status == .passed }
-        let deferred = operationResults.filter { $0.status == .notQualified }
-        let smoke = operationResults.filter { $0.status == .protocolSmoke }
+        let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 89)
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
+        #expect(liveGate.accounted == operationResults.count)
+        let knownLiveGateFailuresMatchExactly = Self.matchesKnownLiveGateFailures(liveGate.failures)
+        #expect(knownLiveGateFailuresMatchExactly)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
@@ -1227,27 +1515,16 @@ struct QualificationRunnerTests {
         #expect(readOnly.allSatisfy {
             $0.status == .passed || $0.status == .notQualified || $0.status == .protocolSmoke
         })
-        // `failed` used to be a literal `0` inside this format string, so the line reported
-        // "failed=0" on runs where the `status != .failed` assertion had just failed. Believing it
-        // cost real time: the only way to see that one operation had failed was to notice that
-        // qualified + protocol_smoke + deferred summed to 110 against 111 specs and do the
-        // subtraction by hand. A diagnostic that states a count it never counted is worse than none,
-        // because it is believed.
-        //
-        // Counted by grouping rather than by naming three buckets: `QualificationStatus` has six
-        // cases, and a summary that names a subset of them is the same defect in a slower form —
-        // my first attempt at this fix hand-listed four and would have reported `waived` and
-        // `skipped` operations as unaccounted, turning a legitimate status into a test failure.
-        let byStatus = Dictionary(grouping: operationResults, by: \.status)
-            .mapValues(\.count)
-            .sorted { $0.key.rawValue < $1.key.rawValue }
-            .map { "\($0.key.rawValue)=\($0.value)" }
-            .joined(separator: ", ")
-        print("qualification operation classification: \(byStatus) of \(operationResults.count)")
-
-        let failed = operationResults.filter { $0.status == .failed }
-        if !failed.isEmpty {
-            print("failed operations: \(failed.map(\.operationID).sorted().joined(separator: ", "))")
+        print(liveGate.classificationLine)
+        print(liveGate.mutatingOperationExclusionLine)
+        if let preconditionLine = liveGate.unmetOperationPreconditionsLine {
+            print(preconditionLine)
+        }
+        if let environmentalPreconditionsLine = liveGate.environmentalPreconditionsLine {
+            print(environmentalPreconditionsLine)
+        }
+        if let failureLine = liveGate.failureLine {
+            print(failureLine)
         }
 
         // #373 Phase A. The classification line above says how many reached each status; it cannot
@@ -2925,6 +3202,12 @@ struct QualificationRunnerTests {
         manifestObject["files"] = entries
         try JSONSerialization.data(withJSONObject: manifestObject, options: [.sortedKeys])
             .write(to: fixture.manifestURL, options: .atomic)
+    }
+
+    private static func matchesKnownLiveGateFailures(
+        _ observed: [QualificationLiveGateSummary.Failure]
+    ) -> Bool {
+        observed == knownLiveGateFailures.map(\.failure)
     }
 
     private static func driveResult(

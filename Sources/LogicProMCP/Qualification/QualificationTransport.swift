@@ -262,11 +262,132 @@ struct QualificationOperationResult: Equatable, Sendable {
             // confirmed. Keep the existing no-write deferrals untouched, but make a future
             // Phase-B success path refuse this observation instead of accepting equal stale data.
             if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
-            return isTypedZeroWriteRefusal ? .notQualified : .failed
+            return expectedZeroWriteRefusalObserved ? .notQualified : .failed
         }
     }
 
+    /// Scope is an operation property, not a verdict from this particular run.
+    ///
+    /// The live probe deliberately sends `__adr001b_no_write_probe` for every
+    /// mutating operation. It can observe the fail-closed refusal, but it
+    /// cannot establish that the operation's success path works.
+    var liveGateScope: QualificationLiveGateScope {
+        switch mutability {
+        case .readOnly: .inScope
+        case .mutating: .outOfScope
+        }
+    }
+
+    /// The observed zero-write refusal expected from a mutating probe.
+    ///
+    /// Kept available to the live-gate report so a missing refusal is reported
+    /// as the reason for failure rather than as an unexplained operation ID.
+    var expectedZeroWriteRefusalObserved: Bool {
+        isError == true
+            && state == "C"
+            // setup_arm_key's no-write probe refuses consent-first with
+            // `consent_required` (before param validation); every other mutating
+            // op's no-write probe is an `invalid_params` typed refusal (#413).
+            && ["consent_required", "invalid_params"].contains(error)
+            && writeAttempted == false
+    }
+
     var verified: Bool { status == .passed }
+
+    /// An input the harness did not provide, but which the operation says it
+    /// needs. This is deliberately an exact operation-and-refusal match: a
+    /// different refusal from one of these operations is a product failure,
+    /// not a generic exemption.
+    var liveGateUnmetOperationPrecondition: String? {
+        guard isError == true, error == "invalid_params" else { return nil }
+        switch OperationID(rawValue: operationID) {
+        case .audioAnalyzeSpectrum:
+            guard hint == "analyze_spectrum requires non-empty string 'path'" else { return nil }
+            return "requires non-empty string 'path'"
+        case .audioRecommendEQ:
+            guard hint == "recommend_eq requires non-empty string 'path'" else { return nil }
+            return "requires non-empty string 'path'"
+        case .systemClearTraces:
+            guard hint == "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
+            else { return nil }
+            return "requires 'confirmed:true'"
+        default:
+            return nil
+        }
+    }
+
+    /// An environmental prerequisite, distinct from an operation input. As
+    /// above, the exact refusal is part of the classification so a new error
+    /// from the same operation stays visible as a failure.
+    var liveGateUnmetEnvironmentalPrecondition: String? {
+        guard OperationID(rawValue: operationID) == .tracksScanPluginPresets,
+              isError == true,
+              error == "channels_exhausted",
+              hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first."
+        else {
+            return nil
+        }
+        return "requires an open plugin window with a Setting dropdown"
+    }
+
+    /// The outcome used by the live qualification gate. A non-passing
+    /// read-only observation is a gate failure unless the operation named an
+    /// exact missing operation or environmental prerequisite. Neither kind is
+    /// counted as a pass, and every other shortfall remains a failure.
+    var liveGateDisposition: QualificationLiveGateDisposition {
+        if status == .failed { return .failed }
+        switch liveGateScope {
+        case .inScope:
+            if status == .passed { return .passed }
+            if liveGateUnmetOperationPrecondition != nil {
+                return .notExercisableWithoutPreconditions
+            }
+            if liveGateUnmetEnvironmentalPrecondition != nil {
+                return .environmentalPrecondition
+            }
+            return .failed
+        case .outOfScope:
+            return .outOfScope
+        }
+    }
+
+    /// A diagnostic reason for a failed live-gate disposition, derived only
+    /// from the captured request, readback, and response observations.
+    var liveGateFailureReason: String? {
+        guard liveGateDisposition == .failed else { return nil }
+        if let failureReason { return failureReason }
+        if responseData == nil {
+            return "operation request produced no response"
+        }
+        if readbackArtifactData == nil {
+            return "independent readback produced no response"
+        }
+        switch mutability {
+        case .mutating:
+            guard !expectedZeroWriteRefusalObserved else {
+                return "mutating operation produced a failed observation after its zero-write refusal"
+            }
+            return "operation request missing expected typed zero-write refusal "
+                + "(is_error=\(Self.observed(isError)), state=\(Self.observed(state)), "
+                + "error=\(Self.observed(error)), write_attempted=\(Self.observed(writeAttempted)))"
+        case .readOnly:
+            if isError != false {
+                return "operation request returned a refusal: "
+                    + Self.unavailableDetail(error: error, hint: hint)
+            }
+            if let reason = readbackFreshness.refusalReason {
+                return "independent readback was not admissible: \(reason)"
+            }
+            switch semanticReadbackValidated {
+            case .some(false):
+                return "semantic readback mismatch: response did not match its independent readback"
+            case .none:
+                return "in-scope read has no operation-specific semantic validator"
+            case .some(true):
+                return "in-scope read did not reach a passing qualification"
+            }
+        }
+    }
 
     var verificationKind: QualificationVerificationKind {
         switch status {
@@ -296,22 +417,11 @@ struct QualificationOperationResult: Equatable, Sendable {
                 code: .semanticMismatch,
                 detail: "read-only response did not match its operation-specific independent readback"
             )
-        // DERIVED from what the operation answered, not from a list. `clear_traces` needs a set
-        // because nothing in its refusal distinguishes "declined on purpose" from "called wrong";
-        // this one announces itself, and a list here would be a second place to keep in step with
-        // the feature flags.
         case .notQualified where error == HonestContract.FailureError.commandNotExposed.rawValue:
             return QualificationDeferral(
                 code: .notExposedInProductionContract,
                 detail: "the production MCP contract does not expose this operation; no probe "
                     + "parameter can qualify it while its feature flag is off"
-            )
-        case .notQualified where QualificationTransport.declinesItsSuccessPathByDesign
-            .contains(operationID):
-            return QualificationDeferral(
-                code: .deliberateZeroWriteProbe,
-                detail: "the probe declines this operation's success path by design; reaching it "
-                    + "would destroy or mutate state the qualification must not touch"
             )
         case .notQualified:
             return QualificationDeferral(
@@ -384,20 +494,146 @@ struct QualificationOperationResult: Equatable, Sendable {
         )
     }
 
-    private var isTypedZeroWriteRefusal: Bool {
-        isError == true
-            && state == "C"
-            // setup_arm_key's no-write probe refuses consent-first with
-            // `consent_required` (before param validation); every other mutating
-            // op's no-write probe is an `invalid_params` typed refusal (#413).
-            && ["consent_required", "invalid_params"].contains(error)
-            && writeAttempted == false
-    }
-
     private static func encoded<Value: Encodable>(_ value: Value) -> Data? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try? encoder.encode(value)
+    }
+
+    private static func observed(_ value: String?) -> String {
+        value ?? "not observed"
+    }
+
+    private static func observed(_ value: Bool?) -> String {
+        value.map(String.init) ?? "not observed"
+    }
+}
+
+enum QualificationLiveGateScope: String, Sendable {
+    case inScope = "in_scope"
+    case outOfScope = "out_of_scope"
+}
+
+enum QualificationLiveGateDisposition: String, Sendable {
+    case passed
+    case outOfScope = "out_of_scope"
+    case notExercisableWithoutPreconditions = "not_exercisable_without_preconditions"
+    case environmentalPrecondition = "environmental_precondition"
+    case failed
+}
+
+/// The human-readable accounting for the real-process live qualification test.
+///
+/// It deliberately does not alter `QualificationStatus`, which is also used by
+/// the release-attestation and waiver machinery. The direct live gate needs a
+/// stricter interpretation: semantic shortfalls in read-only operations fail,
+/// while mutating success paths are explicitly excluded.
+struct QualificationLiveGateSummary: Equatable, Sendable {
+    struct Failure: Equatable, Sendable {
+        let operationID: String
+        let failureReason: String
+    }
+
+    struct Prerequisite: Equatable, Sendable {
+        let operationID: String
+        let reason: String
+    }
+
+    let total: Int
+    let inScopePassed: Int
+    let outOfScope: Int
+    let mutatingOperationCount: Int
+    let notExercisableWithoutPreconditions: [Prerequisite]
+    let environmentalPreconditions: [Prerequisite]
+    let failures: [Failure]
+
+    init(operationResults: [QualificationOperationResult]) {
+        total = operationResults.count
+        mutatingOperationCount = operationResults.filter {
+            $0.liveGateScope == .outOfScope
+        }.count
+        inScopePassed = operationResults.filter {
+            $0.liveGateDisposition == .passed
+        }.count
+        outOfScope = operationResults.filter {
+            $0.liveGateDisposition == .outOfScope
+        }.count
+        notExercisableWithoutPreconditions = operationResults
+            .filter { $0.liveGateDisposition == .notExercisableWithoutPreconditions }
+            .sorted { $0.operationID < $1.operationID }
+            .map { operation in
+                guard let reason = operation.liveGateUnmetOperationPrecondition else {
+                    preconditionFailure("An unmet operation precondition must retain its reason")
+                }
+                return Prerequisite(operationID: operation.operationID, reason: reason)
+            }
+        environmentalPreconditions = operationResults
+            .filter { $0.liveGateDisposition == .environmentalPrecondition }
+            .sorted { $0.operationID < $1.operationID }
+            .map { operation in
+                guard let reason = operation.liveGateUnmetEnvironmentalPrecondition else {
+                    preconditionFailure("An unmet environmental precondition must retain its reason")
+                }
+                return Prerequisite(operationID: operation.operationID, reason: reason)
+            }
+        failures = operationResults
+            .filter { $0.liveGateDisposition == .failed }
+            .sorted { $0.operationID < $1.operationID }
+            .map { operation in
+                guard let failureReason = operation.liveGateFailureReason else {
+                    preconditionFailure("A failed live-gate operation must retain an observed reason")
+                }
+                return Failure(
+                    operationID: operation.operationID,
+                    failureReason: failureReason
+                )
+            }
+    }
+
+    var failed: Int { failures.count }
+
+    var accounted: Int {
+        inScopePassed
+            + outOfScope
+            + notExercisableWithoutPreconditions.count
+            + environmentalPreconditions.count
+            + failed
+    }
+
+    var classificationLine: String {
+        "qualification live gate: in_scope_passed=\(inScopePassed), "
+            + "out_of_scope=\(outOfScope), "
+            + "not_exercisable_without_preconditions=\(notExercisableWithoutPreconditions.count), "
+            + "environmental_preconditions=\(environmentalPreconditions.count), "
+            + "failed=\(failed) of \(total)"
+    }
+
+    var mutatingOperationExclusionLine: String {
+        "qualification live gate coverage: mutating operations are not exercised; "
+            + "\(mutatingOperationCount) are out of scope for semantic qualification and receive "
+            + "only zero-write refusal probes"
+    }
+
+    var failureLine: String? {
+        guard !failures.isEmpty else { return nil }
+        return "failed operations: " + failures.map {
+            "\($0.operationID) (failureReason=\($0.failureReason))"
+        }.joined(separator: ", ")
+    }
+
+    var unmetOperationPreconditionsLine: String? {
+        guard !notExercisableWithoutPreconditions.isEmpty else { return nil }
+        return "not-exercisable without operation preconditions: "
+            + notExercisableWithoutPreconditions.map {
+                "\($0.operationID) (reason=\($0.reason))"
+            }.joined(separator: ", ")
+    }
+
+    var environmentalPreconditionsLine: String? {
+        guard !environmentalPreconditions.isEmpty else { return nil }
+        return "unmet environmental preconditions: " + environmentalPreconditions.map {
+            "\($0.operationID) (reason=\($0.reason))"
+        }.joined(separator: ", ")
     }
 }
 
@@ -724,7 +960,10 @@ struct QualificationTransport: Sendable {
                         )
                     }
                 } catch {
-                    responseFailure = String(describing: error)
+                    responseFailure = Self.observedFailureReason(
+                        from: error,
+                        during: "operation request"
+                    )
                 }
                 let readbackRequestID = "operation-readback-\(nextID)"
                 let readbackSource = Self.readbackSource(for: spec)
@@ -738,7 +977,10 @@ struct QualificationTransport: Sendable {
                         phase: readbackRequestID
                     )
                 } catch {
-                    readbackFailure = String(describing: error)
+                    readbackFailure = Self.observedFailureReason(
+                        from: error,
+                        during: "independent readback"
+                    )
                 }
                 nextID += 1
                 let typed = response.flatMap {
@@ -1006,24 +1248,20 @@ struct QualificationTransport: Sendable {
         )
     }
 
-    /// Operations whose probe parameters are chosen to REFUSE, not to succeed.
+    /// Inputs shared by the non-mutating operation probes.
     ///
-    /// Kept beside `probeParams` on purpose: the reason an operation is here is a value that
-    /// function sends, and separating the two is how a list stops matching the code it describes.
-    /// `system.clear_traces` is probed `confirmed: false` so qualification never destroys the
-    /// diagnostic evidence it is producing -- its oracle pins the real success contract
-    /// (`success == true`, a `receipt_path`, a cleared count), and that contract can only be
-    /// satisfied by actually clearing traces.
+    /// `system.clear_traces` receives `confirmed:true`: its destructive scope is the in-process
+    /// trace store, the runner reads the trace evidence it needs before entering the operation
+    /// loop, and the operation itself writes the durable receipt its oracle verifies. Sending
+    /// `false` only exercised the confirmation refusal and permanently misclassified correct
+    /// validation as a live-gate failure.
     /// One spelling of the key, shared by the seed and the probe. Two literals would be two
     /// places to keep in step, and the failure mode is silent: `saga_status` would look up a
     /// record nothing wrote and report exactly what it reported before the seed existed.
     static let sagaProbeIdempotencyKey = "qualification-read-probe"
+    static let qualificationAudioProbePath = "/System/Library/Sounds/Ping.aiff"
 
-    static let declinesItsSuccessPathByDesign: Set<String> = [
-        OperationID.systemClearTraces.rawValue,
-    ]
-
-    private static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
+    static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
         if spec.mutability == .mutating {
             return ["__adr001b_no_write_probe": true]
         }
@@ -1033,7 +1271,7 @@ struct QualificationTransport: Sendable {
         case .systemGetTrace:
             return ["trace_id": traceID]
         case .systemClearTraces:
-            return ["confirmed": false]
+            return ["confirmed": true]
         case .systemHelp:
             return ["category": "system"]
         case .systemSagaPreflight:
@@ -1041,10 +1279,8 @@ struct QualificationTransport: Sendable {
         case .systemSagaStatus:
             return ["idempotency_key": Self.sagaProbeIdempotencyKey]
 
-        // #373 Phase A. `default: [:]` sends NO parameters, so every read-only operation that
-        // requires one refuses correctly and is recorded as unavailable -- the product working,
-        // scored as a failure. `SemanticOracleTable`'s KNOWN GAPS note lists six in that state.
-        // These two are the ones a qualifying parameter can fix without a fixture or a side effect.
+        // #373 Phase A established the semantic oracle surface. These probes provide documented,
+        // deterministic inputs without weakening any operation's validation.
         case .tracksResolvePath:
             // A LIBRARY path classifier, not a filesystem one. Its oracle accepts either contract:
             // a hit must name `matchedPath` and classify the node, a miss must say why. This path
@@ -1066,7 +1302,18 @@ struct QualificationTransport: Sendable {
             // is the current state, so this cannot regress anything.
             //
             // Measured: 1.502 s, 48 kHz, `verification.status == "pass"`.
-            return ["path": "/System/Library/Sounds/Ping.aiff"]
+            return ["path": Self.qualificationAudioProbePath]
+        case .audioAnalyzeSpectrum:
+            // The spectral commands share the same documented non-empty audio path precondition
+            // as `analyze_file`. Reusing the measured system sound exercises the real analysis
+            // path; omitting it merely tests that the dispatcher refuses missing input.
+            return ["path": Self.qualificationAudioProbePath]
+        case .audioRecommendEQ:
+            // Ping's measured level confidence is 0.538. Its default 0.6 recommendation threshold
+            // correctly returns the safe `level_below_minimum` branch, but this probe needs to
+            // exercise the recommendation branch and its semantic constraints. 0.5 is still a
+            // caller-supplied, finite documented value, not a change to the operation's policy.
+            return ["path": Self.qualificationAudioProbePath, "minimum_level": 0.5]
         case .projectExportPlan:
             // A DRY RUN whose oracle allows `status ∈ {planned, degraded}`. An absent project is
             // honestly `degraded` and still returns a complete, schema-valid manifest, so the probe
@@ -1129,6 +1376,17 @@ struct QualificationTransport: Sendable {
                 return "logic://system/health"
             }
         }
+    }
+
+    static func observedFailureReason(
+        from error: Error,
+        during observation: String
+    ) -> String {
+        if let transportError = error as? QualificationTransportError,
+           case .requestTimeout = transportError {
+            return "\(observation) timeout: \(error)"
+        }
+        return "\(observation) failed: \(error)"
     }
 
     private func resourceReadback(
