@@ -59,6 +59,69 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refused)
     }
 
+    @Test func checkboxInsideTheLabelCellRefusesRatherThanBindingTheRow() {
+        let fixture = fixture(label: "Limiter On", controlRoles: [kAXCheckBoxRole as String])
+        let labelCell = fixture.builder.element(103)
+        let controlCell = fixture.builder.element(104)
+        let label = fixture.builder.element(105)
+        let checkbox = fixture.builder.element(110)
+        fixture.builder.setChildren(labelCell, [label, checkbox])
+        fixture.builder.setChildren(controlCell, [])
+
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refused: Bool
+        if case .refused(.rowStructureInvalid) = result {
+            refused = true
+        } else {
+            refused = false
+        }
+        #expect(refused)
+    }
+
+    @Test func AXRowsUnsupportedFallsBackToAXChildrenForTheLabelledRow() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            axRowsReadStatus: AXError.attributeUnsupported.rawValue
+        )
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let found: Bool
+        if case .found(.checkBox) = result {
+            found = true
+        } else {
+            found = false
+        }
+        #expect(found)
+    }
+
+    @Test func AXRowsReadFailureOtherThanAbsenceRefusesInsteadOfUsingChildren() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            axRowsReadStatus: AXError.cannotComplete.rawValue
+        )
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refused: Bool
+        if case .refused(.controlsViewTableNotFound) = result {
+            refused = true
+        } else {
+            refused = false
+        }
+        #expect(refused)
+    }
+
     @Test func unchangedReadbackRefusesAndAttemptsOneRestore() {
         let builder = FakeAXRuntimeBuilder()
         let checkbox = builder.element(10)
@@ -172,6 +235,42 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(titleWasNotNeeded)
     }
 
+    @Test func titleOnlyEditorSlidersAndABrowserRowDoNotQualifyAsControls() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(29_910)
+        let switcher = builder.element(29_911)
+        let slider = builder.element(29_912)
+        let browserTable = builder.element(29_913)
+        let browserRow = builder.element(29_914)
+        let browserTitle = builder.element(29_915)
+        builder.setRole(window, kAXWindowRole as String)
+        builder.setRole(switcher, kAXMenuButtonRole as String)
+        builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
+        builder.setRole(slider, kAXSliderRole as String)
+        builder.setAttribute(slider, kAXDescriptionAttribute as String, "")
+        builder.setRole(browserTable, kAXTableRole as String)
+        builder.setRole(browserRow, kAXRowRole as String)
+        builder.setRole(browserTitle, kAXStaticTextRole as String)
+        builder.setAttribute(browserTitle, kAXValueAttribute as String, "Factory Preset")
+        builder.setChildren(browserRow, [browserTitle])
+        builder.setChildren(browserTable, [browserRow])
+        builder.setAttribute(browserTable, kAXRowsAttribute as String, [browserRow])
+        builder.setChildren(window, [switcher, slider, browserTable])
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: window,
+            runtime: builder.makeAXRuntime(appElement: builder.element(29_900))
+        )
+        let confirmedEditor: Bool
+        if case .ready = result {
+            confirmedEditor = true
+        } else {
+            confirmedEditor = false
+        }
+        #expect(confirmedEditor)
+    }
+
     @Test func controlsRowsWithoutDescribedSlidersConfirmControlsDespiteContradictoryTitle() {
         let fixture = viewFixture(entry: .controls, title: "편집기", behavior: .switchesStructure)
 
@@ -190,6 +289,26 @@ struct ControlsViewBooleanParameterWriterTests {
         let titleWasNotNeeded = fixture.builder.actionCalls.isEmpty
         #expect(confirmed)
         #expect(titleWasNotNeeded)
+    }
+
+    @Test func viewFixtureRequiresAXPressToRevealAndAXPickToSelect() {
+        let fixture = viewFixture(entry: .editor, title: "편집기", behavior: .switchesStructure)
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let confirmed: Bool
+        if case .ready = result {
+            confirmed = true
+        } else {
+            confirmed = false
+        }
+        let revealedWithPress = fixture.switcherActions.value == [kAXPressAction as String]
+        let selectedWithPick = fixture.menuItemActions.value == [kAXPickAction as String]
+        #expect(confirmed)
+        #expect(revealedWithPress)
+        #expect(selectedWithPick)
     }
 
     @Test func switchThatNeverChangesStructureRefusesWithinDeadlineAndLeavesEntryView() {
@@ -303,6 +422,8 @@ struct ControlsViewBooleanParameterWriterTests {
         let controlsTable: AXUIElement
         let controlsSelections: MutableBox<Int>
         let editorSelections: MutableBox<Int>
+        let switcherActions: MutableBox<[String]>
+        let menuItemActions: MutableBox<[String]>
         let runtime: AXHelpers.Runtime
     }
 
@@ -321,8 +442,14 @@ struct ControlsViewBooleanParameterWriterTests {
         let editorSlider = builder.element(906)
         let controlsTable = builder.element(907)
         let controlsRow = builder.element(908)
+        let controlsLabelCell = builder.element(909)
+        let controlsControlCell = builder.element(910)
+        let controlsLabel = builder.element(911)
+        let controlsCheckbox = builder.element(912)
         let controlsSelections = MutableBox(0)
         let editorSelections = MutableBox(0)
+        let switcherActions = MutableBox<[String]>([])
+        let menuItemActions = MutableBox<[String]>([])
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(switcher, kAXMenuButtonRole as String)
@@ -334,12 +461,20 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setRole(editorMenuItem, kAXMenuItemRole as String)
         builder.setAttribute(editorMenuItem, kAXTitleAttribute as String, "편집기")
         builder.setChildren(menu, [controlsMenuItem, editorMenuItem])
-        builder.setChildren(switcher, [menu])
 
         builder.setRole(editorSlider, kAXSliderRole as String)
         builder.setAttribute(editorSlider, kAXDescriptionAttribute as String, "Threshold")
         builder.setRole(controlsTable, kAXTableRole as String)
         builder.setRole(controlsRow, kAXRowRole as String)
+        builder.setRole(controlsLabelCell, kAXCellRole as String)
+        builder.setRole(controlsControlCell, kAXCellRole as String)
+        builder.setRole(controlsLabel, kAXStaticTextRole as String)
+        builder.setRole(controlsCheckbox, kAXCheckBoxRole as String)
+        builder.setAttribute(controlsLabel, kAXValueAttribute as String, "Limiter On")
+        builder.setAttribute(controlsCheckbox, kAXValueAttribute as String, false)
+        builder.setChildren(controlsLabelCell, [controlsLabel])
+        builder.setChildren(controlsControlCell, [controlsCheckbox])
+        builder.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
         builder.setChildren(controlsTable, [controlsRow])
         builder.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsRow])
 
@@ -352,12 +487,23 @@ struct ControlsViewBooleanParameterWriterTests {
 
         let controlsKey = builder.elementID(controlsMenuItem)
         let editorKey = builder.elementID(editorMenuItem)
+        let switcherKey = builder.elementID(switcher)
         let runtime = builder.makeAXRuntime(
             appElement: app,
             setAttributeHandler: nil,
             performActionHandler: { element, action in
-                guard action == (kAXPressAction as String) else { return true }
-                switch builder.elementID(element) {
+                let key = builder.elementID(element)
+                if key == switcherKey {
+                    switcherActions.value.append(action)
+                    guard action == (kAXPressAction as String) else { return false }
+                    builder.setChildren(switcher, [menu])
+                    return true
+                }
+                guard key == editorKey || key == controlsKey else { return true }
+                menuItemActions.value.append(action)
+                guard action == (kAXPickAction as String) else { return false }
+                builder.setChildren(switcher, [])
+                switch key {
                 case editorKey:
                     editorSelections.value += 1
                     switch behavior {
@@ -388,6 +534,8 @@ struct ControlsViewBooleanParameterWriterTests {
             controlsTable: controlsTable,
             controlsSelections: controlsSelections,
             editorSelections: editorSelections,
+            switcherActions: switcherActions,
+            menuItemActions: menuItemActions,
             runtime: runtime
         )
     }
@@ -415,7 +563,8 @@ struct ControlsViewBooleanParameterWriterTests {
 
     private func fixture(
         label: String?,
-        controlRoles: [String]
+        controlRoles: [String],
+        axRowsReadStatus: Int32? = nil
     ) -> (builder: FakeAXRuntimeBuilder, window: AXUIElement, runtime: AXHelpers.Runtime) {
         let builder = FakeAXRuntimeBuilder()
         let window = builder.element(100)
@@ -448,6 +597,19 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setChildren(table, [row])
         builder.setAttribute(table, kAXRowsAttribute as String, [row])
         builder.setChildren(window, [table])
-        return (builder, window, builder.makeAXRuntime(appElement: builder.element(99)))
+        let runtime = builder.makeAXRuntime(
+            appElement: builder.element(99),
+            attributeValueResultHandler: { element, attribute in
+                guard let axRowsReadStatus,
+                      builder.elementID(element) == builder.elementID(table),
+                      attribute == (kAXRowsAttribute as String) else {
+                    return nil
+                }
+                return .failure(AXHelpers.AXStatusError(raw: axRowsReadStatus))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        return (builder, window, runtime)
     }
 }

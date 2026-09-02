@@ -1238,14 +1238,7 @@ extension AccessibilityChannel {
         /// to the next duplicate-instance call.
         func verifiedWriteEnvelope(extras: [String: Any]) -> String {
             var completedExtras = extras
-            if let restoration = restorePluginViewOnExit?() {
-                completedExtras["plugin_view_restore_attempted"] = restoration.attempted
-                completedExtras["plugin_view_restore_observed"] = restoration.confirmed
-                if !restoration.confirmed {
-                    completedExtras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                    completedExtras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
-                }
-            }
+            appendPluginViewRestoration(to: &completedExtras)
             guard !constructedWindowsNeedingCleanup.isEmpty else {
                 return HonestContract.encodeV2StateA(extras: completedExtras)
             }
@@ -1264,6 +1257,29 @@ extension AccessibilityChannel {
                 completedExtras["recovery_hint"] = "The \(pluginID) editor opened for this write is still visible on track \(track). Close it before another duplicate-instance write."
             }
             return HonestContract.encodeV2StateA(extras: completedExtras)
+        }
+
+        /// A State C built after a confirmed temporary view switch must expose
+        /// a failed restore. Without these fields a locator refusal can look
+        /// like a no-op even though the plug-in remains in Controls view.
+        func stateCWithPluginViewRestoration(
+            error: HonestContract.FailureError,
+            extras: [String: Any]
+        ) -> String {
+            var completedExtras = extras
+            appendPluginViewRestoration(to: &completedExtras)
+            return HonestContract.encodeV2StateC(error: error, extras: completedExtras)
+        }
+
+        func appendPluginViewRestoration(to extras: inout [String: Any]) {
+            guard let restoration = restorePluginViewOnExit?() else { return }
+            extras["plugin_view_restore_attempted"] = restoration.attempted
+            extras["plugin_view_restore_observed"] = restoration.confirmed
+            if !restoration.confirmed {
+                extras["plugin_view_left_changed"] = true
+                extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
+                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
+            }
         }
 
         if duplicatedPluginInstance {
@@ -1614,7 +1630,8 @@ extension AccessibilityChannel {
                 rowLabel: controlsViewRowLabel,
                 window: window,
                 runtime: runtime.ax,
-                verifiedWriteEnvelope: verifiedWriteEnvelope
+                verifiedWriteEnvelope: verifiedWriteEnvelope,
+                stateCWithPluginViewRestoration: stateCWithPluginViewRestoration
             )
         }
 
@@ -1635,7 +1652,7 @@ extension AccessibilityChannel {
                 "more than one slider exposed the requested AXDescription in the confirmed native plugin view"
             ))
         case .none:
-            return .error(HonestContract.encodeV2StateC(
+            return .error(stateCWithPluginViewRestoration(
                 error: .paramControlNotFound,
                 extras: [
                     "operation": operation,
@@ -1907,7 +1924,8 @@ extension AccessibilityChannel {
         rowLabel: String,
         window: AXUIElement,
         runtime: AXHelpers.Runtime,
-        verifiedWriteEnvelope: ([String: Any]) -> String
+        verifiedWriteEnvelope: ([String: Any]) -> String,
+        stateCWithPluginViewRestoration: (HonestContract.FailureError, [String: Any]) -> String
     ) -> ChannelResult {
         // The caller already selected and structurally confirmed Controls view.
         // Do not repeat the selection here: reopening its menu would make this
@@ -1920,9 +1938,9 @@ extension AccessibilityChannel {
             runtime: runtime
         ) {
         case let .refused(failure):
-            return .error(HonestContract.encodeV2StateC(
-                error: .paramControlNotFound,
-                extras: [
+            return .error(stateCWithPluginViewRestoration(
+                .paramControlNotFound,
+                [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
@@ -1936,9 +1954,9 @@ extension AccessibilityChannel {
         case let .found(control):
             guard case let .checkBox(found) = control else {
                 let failure = control.failure ?? .checkboxNotFound
-                return .error(HonestContract.encodeV2StateC(
-                    error: .unsupportedParamReadback,
-                    extras: [
+                return .error(stateCWithPluginViewRestoration(
+                    .unsupportedParamReadback,
+                    [
                         "operation": operation,
                         "target_identity": identity,
                         "param": paramAlias,
@@ -1987,9 +2005,9 @@ extension AccessibilityChannel {
             toggle.refusal ?? "Controls-view checkbox verification did not establish the requested state",
             restorationObservation,
         ].joined(separator: "; ")
-        return .error(HonestContract.encodeV2StateC(
-            error: toggle.observedAfterPress == nil ? .readbackLostAfterWrite : .readbackMismatch,
-            extras: [
+        return .error(stateCWithPluginViewRestoration(
+            toggle.observedAfterPress == nil ? .readbackLostAfterWrite : .readbackMismatch,
+            [
                 "operation": operation,
                 "target_identity": identity,
                 "param": paramAlias,

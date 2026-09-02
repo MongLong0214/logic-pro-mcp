@@ -36,6 +36,9 @@ private enum SliderWriteBehavior: Sendable {
 
 private enum ControlsCheckboxWriteBehavior: Sendable, Equatable {
     case toggle
+    /// The first requested transition reads back as AX's mixed/indeterminate
+    /// state. `NSNumber.boolValue` would incorrectly call this true.
+    case mixedAfterPress
     /// AXPress reports status 0/accepted but the checkbox AXValue is inert.
     /// This is the exact observation that prevents a status-only success.
     case statusZeroUnchanged
@@ -94,7 +97,8 @@ private final class LiveFixture: @unchecked Sendable {
         controlsViewInitiallySelected: Bool = false,
         pluginWindowViewSwitcherDescription: String = "보기",
         viewMenuPressChangesStructure: Bool = true,
-        viewMenuPressChangesTitle: Bool = true
+        viewMenuPressChangesTitle: Bool = true,
+        viewMenuBecomesUnavailableAfterControlsSelection: Bool = false
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -247,32 +251,35 @@ private final class LiveFixture: @unchecked Sendable {
         b.setRole(editorViewMenuItem, kAXMenuItemRole as String)
         b.setAttribute(editorViewMenuItem, kAXTitleAttribute as String, "편집기")
         b.setChildren(controlsViewMenu, [controlsViewMenuItem, editorViewMenuItem])
-        b.setChildren(controlsViewSwitcher, [controlsViewMenu])
         pluginWindowChildren += [controlsViewSwitcher]
         var controlsViewWindowChildren = [pluginBypass, pluginLink]
             + staticTexts
             + [controlsViewSwitcher]
-        // Controls view itself is identified by its rows, whether or not this
-        // particular test also supplies a writable labelled control.
+        // Controls view itself is identified by a parameter row whose label
+        // and control occupy sibling AXCells. Keep that measured shape even
+        // when this fixture is exercising an editor-slider write rather than
+        // a Controls-view checkbox write.
         b.setRole(controlsTable, kAXTableRole as String)
         b.setRole(controlsRow, kAXRowRole as String)
         b.setChildren(controlsTable, [controlsRow])
         b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsRow])
         controlsViewWindowChildren += [controlsTable]
-        if let controlsViewRowLabel {
-            b.setRole(controlsLabelCell, kAXCellRole as String)
-            b.setRole(controlsControlCell, kAXCellRole as String)
-            b.setRole(controlsLabel, kAXStaticTextRole as String)
-            b.setAttribute(controlsLabel, kAXValueAttribute as String, controlsViewRowLabel)
-            b.setRole(controlsCheckbox, controlsViewControlRole)
-            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, controlsCheckboxBefore)
-            b.setChildren(controlsLabelCell, [controlsLabel])
-            b.setChildren(controlsControlCell, [controlsCheckbox])
-            b.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
-            // Controls view has rows, but no editor-view slider descriptions.
-            // Keep its shape distinct from the native editor so a test cannot
-            // accidentally keep relying on Threshold after the view changes.
-        }
+        b.setRole(controlsLabelCell, kAXCellRole as String)
+        b.setRole(controlsControlCell, kAXCellRole as String)
+        b.setRole(controlsLabel, kAXStaticTextRole as String)
+        b.setAttribute(
+            controlsLabel,
+            kAXValueAttribute as String,
+            controlsViewRowLabel ?? "Measured Controls Parameter"
+        )
+        b.setRole(controlsCheckbox, controlsViewControlRole)
+        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, controlsCheckboxBefore)
+        b.setChildren(controlsLabelCell, [controlsLabel])
+        b.setChildren(controlsControlCell, [controlsCheckbox])
+        b.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
+        // Controls view has rows, but no editor-view slider descriptions.
+        // Keep its shape distinct from the native editor so a test cannot
+        // accidentally keep relying on Threshold after the view changes.
         b.setChildren(
             pluginWindow,
             controlsViewInitiallySelected ? controlsViewWindowChildren : pluginWindowChildren
@@ -293,6 +300,7 @@ private final class LiveFixture: @unchecked Sendable {
         let controlsCheckboxKey = b.elementID(controlsCheckbox)
         let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
         let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
+        let controlsViewSwitcherKey = b.elementID(controlsViewSwitcher)
         let controlsWindowChildren = controlsViewWindowChildren
         let editorWindowChildren = pluginWindowChildren
         let forced = forcedAfterValue
@@ -345,34 +353,43 @@ private final class LiveFixture: @unchecked Sendable {
                     b.setAttribute(pluginWindow, kAXFocusedAttribute as String, false)
                     return true
                 }
-                guard action == (kAXPressAction as String) else {
-                    return true
-                }
                 let key = b.elementID(el)
-                if key == pluginCloseKey {
-                    pluginCloseControlPressCount.value += 1
-                    if !pluginCloseControlFailsToClose {
-                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
+                if key == controlsViewSwitcherKey {
+                    guard action == (kAXPressAction as String) else { return false }
+                    guard !(viewMenuBecomesUnavailableAfterControlsSelection
+                        && controlsViewMenuPressCount.value > 0) else {
+                        return true
                     }
+                    b.setChildren(controlsViewSwitcher, [controlsViewMenu])
                     return true
                 }
-                if key == controlsViewMenuItemKey {
-                    controlsViewMenuPressCount.value += 1
-                    if viewMenuPressChangesStructure {
-                        b.setChildren(pluginWindow, controlsWindowChildren)
+                if key == controlsViewMenuItemKey || key == editorViewMenuItemKey {
+                    guard action == (kAXPickAction as String) else { return false }
+                    b.setChildren(controlsViewSwitcher, [])
+                    if key == controlsViewMenuItemKey {
+                        controlsViewMenuPressCount.value += 1
+                        if viewMenuPressChangesStructure {
+                            b.setChildren(pluginWindow, controlsWindowChildren)
+                        }
+                        if viewMenuPressChangesTitle {
+                            b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "컨트롤")
+                        }
+                        return true
                     }
-                    if viewMenuPressChangesTitle {
-                        b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "컨트롤")
-                    }
-                    return true
-                }
-                if key == editorViewMenuItemKey {
                     editorViewMenuPressCount.value += 1
                     if viewMenuPressChangesStructure {
                         b.setChildren(pluginWindow, editorWindowChildren)
                     }
                     if viewMenuPressChangesTitle {
                         b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "편집기")
+                    }
+                    return true
+                }
+                guard action == (kAXPressAction as String) else { return true }
+                if key == pluginCloseKey {
+                    pluginCloseControlPressCount.value += 1
+                    if !pluginCloseControlFailsToClose {
+                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
                     }
                     return true
                 }
@@ -384,6 +401,10 @@ private final class LiveFixture: @unchecked Sendable {
                             ?? (b.attributeValue(controlsCheckbox, kAXValueAttribute as String) as? Bool)
                             ?? false
                         b.setAttribute(controlsCheckbox, kAXValueAttribute as String, !old)
+                        return true
+                    }
+                    if controlsCheckboxWriteBehavior == .mixedAfterPress {
+                        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, NSNumber(value: 2))
                         return true
                     }
                     // Core AX returns status 0 for a successful action. Keep
@@ -1099,6 +1120,49 @@ private func namedEQBandParams(
     #expect(writeAttempted)
     #expect(statusOnlyWasNotSuccess)
     #expect(pressAndRestore)
+}
+
+@Test func testCompressorControlsViewMixedNSNumberReadbackRefusesInsteadOfStateA() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .mixedAfterPress
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let stateIsC = state == "C"
+    let mixedReadbackWasNotVerified = error == "readback_lost_after_write"
+    let compensatingPressWasAttempted = fixture.controlsCheckboxPressCount.value == 2
+    #expect(stateIsC)
+    #expect(mixedReadbackWasNotVerified)
+    #expect(writeAttempted)
+    #expect(compensatingPressWasAttempted)
+}
+
+@Test func testControlsLookupRefusalReportsFailedRestoreThatLeavesControlsSelected() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "A Different Boolean",
+        controlsCheckboxBefore: false,
+        viewMenuBecomesUnavailableAfterControlsSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let error = try #require(result["error"] as? String)
+    let restoreAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let leftChanged = try #require(result["plugin_view_left_changed"] as? Bool)
+    let observedStructure = try #require(result["plugin_view_restore_observed_structure"] as? String)
+    let lookupRefusalWasStateC = state == "C" && error == "param_control_not_found"
+    let restorationFailureWasVisible = restoreAttempted && !restoreObserved && leftChanged
+    let fixtureWasLeftInControls = fixture.currentPluginViewTitle == "컨트롤"
+    #expect(lookupRefusalWasStateC)
+    #expect(restorationFailureWasVisible)
+    #expect(observedStructure == "controls")
+    #expect(fixtureWasLeftInControls)
 }
 
 @Test func testWithinToleranceStillStateA() async {

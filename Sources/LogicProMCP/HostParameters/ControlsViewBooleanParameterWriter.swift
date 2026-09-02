@@ -17,6 +17,7 @@ enum ControlsViewBooleanParameterWriter {
         case rowLabelMissing
         case rowLabelAmbiguous
         case rowLabelNotFound
+        case rowStructureInvalid
         case controlMissing
         case controlAmbiguous
         case checkboxNotFound
@@ -36,6 +37,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the Controls-view AXRow exposes more than one AXStaticText label inside its cells"
             case .rowLabelNotFound:
                 return "no Controls-view AXRow label matched the requested parameter"
+            case .rowStructureInvalid:
+                return "the labelled Controls-view AXRow did not place its label and control in sibling AXCells"
             case .controlMissing:
                 return "the labelled Controls-view AXRow exposes no candidate control"
             case .controlAmbiguous:
@@ -88,7 +91,7 @@ enum ControlsViewBooleanParameterWriter {
             case .entryViewNotConfirmed:
                 return "the bound plugin window exposed neither a described native-editor AXSlider nor Controls-view rows with no described AXSlider; its entry view was not confirmed"
             case .viewMenuNotFound:
-                return "the measured View switcher exposed no scoped AXMenu after AXShowMenu"
+                return "the measured View switcher exposed no scoped AXMenu after AXPress"
             case .viewMenuAmbiguous:
                 return "the measured View switcher exposed several scoped AXMenus"
             case let .viewMenuItemNotFound(view):
@@ -276,9 +279,11 @@ enum ControlsViewBooleanParameterWriter {
     }
 
     /// The native editor is signaled by a parameter-bearing slider. Controls
-    /// is signaled only by its table rows *and* the absence of every slider
-    /// description, so a stale title or a shared zoom/view menu cannot alter
-    /// this result.
+    /// requires at least one AXRow with a nonempty AXStaticText label in one
+    /// AXCell and an interactive control in a sibling AXCell; a browser/preset
+    /// table has no such parameter-control pair, so its rows cannot prove
+    /// Controls. A title-only slider is Editor evidence only when that Controls
+    /// discriminator is absent.
     private static func observedView(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -294,7 +299,10 @@ enum ControlsViewBooleanParameterWriter {
         }) {
             return .editor
         }
-        return controlsViewRowsArePresent(in: window, runtime: runtime) ? .controls : nil
+        if controlsViewRowsArePresent(in: window, runtime: runtime) {
+            return .controls
+        }
+        return sliders.isEmpty ? nil : .editor
     }
 
     private static func switchView(
@@ -308,10 +316,10 @@ enum ControlsViewBooleanParameterWriter {
             return .confirmed(switched: false)
         }
 
-        // AX's action status is intentionally not the verdict. The scoped menu
-        // tree is observed after this one request; no retry ladder can turn an
-        // unmeasured locale or a missing menu into evidence.
-        _ = AXHelpers.performAction(switcher, kAXShowMenuAction as String, runtime: runtime)
+        // AX's action status is intentionally not the verdict. Live Logic
+        // reveals this app-wide menu after AXPress, and its entry accepts only
+        // AXPick; no retry ladder can turn another protocol into evidence.
+        _ = AXHelpers.performAction(switcher, kAXPressAction as String, runtime: runtime)
         let menus = AXHelpers.censusDescendant(
             of: switcher, role: kAXMenuRole, maxDepth: 4, runtime: runtime
         ).matches
@@ -331,7 +339,7 @@ enum ControlsViewBooleanParameterWriter {
                 : .viewMenuItemAmbiguous(targetView)
             )
         }
-        _ = AXHelpers.performAction(target, kAXPressAction as String, runtime: runtime)
+        _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
         guard waitForView(
             targetView,
             in: window,
@@ -372,22 +380,8 @@ enum ControlsViewBooleanParameterWriter {
             of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
         ).matches
         guard tables.count == 1, let table = tables.first else { return false }
-        let rows: [AXUIElement]
-        switch AXHelpers.getAXUIElementArrayRead(
-            table,
-            kAXRowsAttribute as String,
-            runtime: runtime
-        ) {
-        case let .success(.elements(observed)):
-            rows = observed
-        case .success(.absent):
-            rows = AXHelpers.getChildren(table, runtime: runtime).filter {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
-            }
-        case .success(.malformed), .failure:
-            return false
-        }
-        return rows.contains { AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String) }
+        guard let rows = controlsRows(in: table, runtime: runtime) else { return false }
+        return rows.contains { rowCarriesParameterPair($0, runtime: runtime) }
     }
 
     /// Resolve a row-label address without positional fallbacks. A candidate
@@ -405,19 +399,7 @@ enum ControlsViewBooleanParameterWriter {
         guard tables.count == 1, let table = tables.first else {
             return .refused(tables.isEmpty ? .controlsViewTableNotFound : .controlsViewTableAmbiguous)
         }
-        let rows: [AXUIElement]
-        switch AXHelpers.getAXUIElementArrayRead(
-            table,
-            kAXRowsAttribute as String,
-            runtime: runtime
-        ) {
-        case let .success(.elements(observed)):
-            rows = observed
-        case .success(.absent):
-            rows = AXHelpers.getChildren(table, runtime: runtime).filter {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
-            }
-        case .success(.malformed), .failure:
+        guard let rows = controlsRows(in: table, runtime: runtime) else {
             return .refused(.controlsViewTableNotFound)
         }
 
@@ -426,14 +408,25 @@ enum ControlsViewBooleanParameterWriter {
         var sawMissingLabel = false
         var sawAmbiguousLabel = false
         for row in rows where AXHelpers.getRole(row, runtime: runtime) == (kAXRowRole as String) {
-            let labels = rowLabels(in: row, runtime: runtime)
+            guard let cells = rowCells(in: row, runtime: runtime) else {
+                sawMissingLabel = true
+                continue
+            }
+            let labels = rowLabels(in: cells, runtime: runtime)
             guard labels.count == 1, let label = labels.first else {
                 sawMissingLabel = sawMissingLabel || labels.isEmpty
                 sawAmbiguousLabel = sawAmbiguousLabel || labels.count > 1
                 continue
             }
-            if normalizedLabel(label) == target {
-                matchingRows.append(candidateControls(in: row, runtime: runtime))
+            if normalizedLabel(label.value) == target {
+                guard controlsAreConfinedToCells(in: row, cells: cells, runtime: runtime) else {
+                    return .refused(.rowStructureInvalid)
+                }
+                guard candidateControls(in: label.cell, runtime: runtime).isEmpty else {
+                    return .refused(.rowStructureInvalid)
+                }
+                let siblingCells = cells.filter { !CFEqual($0, label.cell) }
+                matchingRows.append(candidateControls(in: siblingCells, runtime: runtime))
             }
         }
 
@@ -525,17 +518,68 @@ enum ControlsViewBooleanParameterWriter {
         )
     }
 
-    private static func rowLabels(
+    /// `AXRows` has two absence answers: a successful empty attribute and the
+    /// `noValue`/`attributeUnsupported` AX statuses. Only those answers may use
+    /// AXChildren as the alternate table representation; every other status is
+    /// a read failure and therefore cannot establish a Controls table.
+    private static func controlsRows(
+        in table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement]? {
+        switch AXHelpers.getAXUIElementArrayRead(
+            table,
+            kAXRowsAttribute as String,
+            runtime: runtime
+        ) {
+        case let .success(.elements(rows)):
+            return rows
+        case .success(.absent):
+            switch AXHelpers.childrenResult(table, runtime: runtime) {
+            case let .success(children):
+                return children.filter {
+                    AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
+                }
+            case .failure:
+                return nil
+            }
+        case .failure(let error) where error.isDefinitiveAbsence:
+            switch AXHelpers.childrenResult(table, runtime: runtime) {
+            case let .success(children):
+                return children.filter {
+                    AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
+                }
+            case .failure:
+                return nil
+            }
+        case .success(.malformed), .failure:
+            return nil
+        }
+    }
+
+    private struct RowLabel {
+        let cell: AXUIElement
+        let value: String
+    }
+
+    private static func rowCells(
         in row: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [String] {
-        let cells = AXHelpers.findAllDescendants(
-            of: row,
-            role: kAXCellRole,
-            maxDepth: 4,
-            runtime: runtime
-        )
-        return cells.flatMap { cell in
+    ) -> [AXUIElement]? {
+        switch AXHelpers.childrenResult(row, runtime: runtime) {
+        case let .success(children):
+            return children.filter {
+                AXHelpers.getRole($0, runtime: runtime) == (kAXCellRole as String)
+            }
+        case .failure:
+            return nil
+        }
+    }
+
+    private static func rowLabels(
+        in cells: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> [RowLabel] {
+        cells.flatMap { cell in
             AXHelpers.findAllDescendants(
                 of: cell,
                 role: kAXStaticTextRole,
@@ -544,19 +588,65 @@ enum ControlsViewBooleanParameterWriter {
             ).compactMap { text in
                 let value = AXValueExtractors.extractTextValue(text, runtime: runtime)
                 let normalized = normalizedLabel(value ?? "")
-                return normalized.isEmpty ? nil : normalized
+                return normalized.isEmpty ? nil : RowLabel(cell: cell, value: normalized)
             }
         }
     }
 
     private static func candidateControls(
-        in row: AXUIElement,
+        in element: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [AXUIElement] {
-        AXHelpers.findAllDescendants(of: row, maxDepth: 5, runtime: runtime).filter { element in
-            let role = AXHelpers.getRole(element, runtime: runtime)
+        AXHelpers.findAllDescendants(of: element, maxDepth: 5, runtime: runtime).filter { candidate in
+            let role = AXHelpers.getRole(candidate, runtime: runtime)
             return interactiveControlRoles.contains(role ?? "")
         }
+    }
+
+    private static func candidateControls(
+        in cells: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement] {
+        cells.flatMap { candidateControls(in: $0, runtime: runtime) }
+    }
+
+    private static func controlsAreConfinedToCells(
+        in row: AXUIElement,
+        cells: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let controlsInCells = candidateControls(in: cells, runtime: runtime)
+        let controlsInRow = candidateControls(in: row, runtime: runtime)
+        guard controlsInCells.count == controlsInRow.count else { return false }
+        return controlsInRow.allSatisfy { candidate in
+            controlsInCells.contains { CFEqual($0, candidate) }
+        }
+    }
+
+    private static func rowCarriesParameterPair(
+        _ row: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard let cells = rowCells(in: row, runtime: runtime) else {
+            return false
+        }
+        let labels = rowLabels(in: cells, runtime: runtime)
+        guard labels.count == 1,
+              let label = labels.first,
+              controlsAreConfinedToCells(in: row, cells: cells, runtime: runtime) else {
+            return false
+        }
+        // Keep the classifier's discriminator identical to `locate`'s binding:
+        // a control beside the label in its own AXCell is not a parameter pair.
+        // Otherwise an invalid row could certify Controls even though writes
+        // correctly refuse to bind it.
+        guard candidateControls(in: label.cell, runtime: runtime).isEmpty else {
+            return false
+        }
+        return candidateControls(
+            in: cells.filter { !CFEqual($0, label.cell) },
+            runtime: runtime
+        ).count == 1
     }
 
     /// The first four roles are the Controls-view roles observed on 2026-09-02.

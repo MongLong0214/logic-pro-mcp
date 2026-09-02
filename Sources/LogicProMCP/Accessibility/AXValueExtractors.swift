@@ -57,16 +57,32 @@ enum AXValueExtractors {
     /// indicates pressed/active state.
     static func extractButtonState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
         guard let value = AXHelpers.getValue(element, runtime: runtime) else { return nil }
-        // Toggle buttons typically report 0/1 as NSNumber
+        // Toggle buttons typically report 0/1 as NSNumber. Do not use
+        // `boolValue`: an AX checkbox may report 2 for its mixed state, which
+        // is neither a confirmed on nor a confirmed off reading.
         if let number = value as? NSNumber {
-            return number.boolValue
+            switch number.doubleValue {
+            case 0:
+                return false
+            case 1:
+                return true
+            default:
+                return nil
+            }
         }
         if let bool = value as? Bool {
             return bool
         }
-        // Some buttons use string "1"/"0"
+        // Some buttons use string "1"/"0". Unknown strings are not false.
         if let str = value as? String {
-            return str == "1" || str.lowercased() == "true"
+            switch str.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "1", "true":
+                return true
+            case "0", "false":
+                return false
+            default:
+                return nil
+            }
         }
         return nil
     }

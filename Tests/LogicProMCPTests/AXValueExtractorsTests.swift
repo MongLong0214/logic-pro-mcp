@@ -2,6 +2,20 @@
 import Testing
 @testable import LogicProMCP
 
+@Test func testExtractButtonStateRefusesIndeterminateNSNumber() {
+    let builder = FakeAXRuntimeBuilder()
+    let checkbox = builder.element(29_902)
+    builder.setRole(checkbox, kAXCheckBoxRole as String)
+    builder.setAttribute(checkbox, kAXValueAttribute as String, NSNumber(value: 2))
+
+    let observed = AXValueExtractors.extractButtonState(
+        checkbox,
+        runtime: builder.makeAXRuntime()
+    )
+    let indeterminateWasNotInterpreted = observed == nil
+    #expect(indeterminateWasNotInterpreted)
+}
+
 @Test func testAXValueExtractorsReadScalarValuesAndRanges() {
     let builder = FakeAXRuntimeBuilder()
     let slider = builder.element(1)
