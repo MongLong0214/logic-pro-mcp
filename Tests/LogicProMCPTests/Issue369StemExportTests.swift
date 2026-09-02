@@ -24,10 +24,15 @@ private final class StemPanelSurfaceFake: ProjectStemExportPanelDriver.Surface, 
     var destinationBefore: String? = "Old Exports"
     var destinationAfter: String? = "Stem Exports"
     var perTrackActive = true
-    var exportPressSucceeds = true
-    var progressStates: [Bool] = [true, false]
+    /// The action status and observable UI effect vary independently. The
+    /// driver must never use the first as evidence for the second.
+    var exportActionStatus = true
+    var exportEffectOccurs = true
+    var progressObservations: [ProjectStemExportPanelDriver.ProgressPresence] = [.present, .absent]
     var panelPresence: ProjectStemExportPanelDriver.PanelPresence = .present
     var closeChangesPanelPresence = true
+    var dismissLabelMeasured = true
+    var onPanelRead: (() -> Void)?
 
     func openFileMenu() -> Bool {
         events.append("file_open")
@@ -56,6 +61,7 @@ private final class StemPanelSurfaceFake: ProjectStemExportPanelDriver.Surface, 
 
     func exportPanelPresence() -> ProjectStemExportPanelDriver.PanelPresence {
         events.append("panel_read")
+        onPanelRead?()
         if !panelAppears { return .absent }
         if panelPresence == .present, absentPanelReadsBeforePresent > 0 {
             absentPanelReadsBeforePresent -= 1
@@ -84,24 +90,31 @@ private final class StemPanelSurfaceFake: ProjectStemExportPanelDriver.Surface, 
         return perTrackActive
     }
 
-    func pressExport() -> Bool {
-        events.append("export_press")
-        return exportPressSucceeds
+    func pressExport() {
+        events.append("export_press_status_\(exportActionStatus)")
+        if !exportEffectOccurs {
+            progressObservations = Array(repeating: .absent, count: max(1, progressObservations.count))
+        }
     }
 
-    func progressWindowPresent() -> Bool {
+    func progressWindowPresence() -> ProjectStemExportPanelDriver.ProgressPresence {
         events.append("progress_read")
-        guard !progressStates.isEmpty else { return false }
-        return progressStates.removeFirst()
+        guard !progressObservations.isEmpty else { return .absent }
+        return progressObservations.removeFirst()
     }
 
-    func closeExportPanel() -> Bool {
+    func closeExportPanel() {
         events.append("panel_close")
-        if closeChangesPanelPresence, panelPresence == .present {
+        if closeChangesPanelPresence,
+           dismissLabelMeasured,
+           panelPresence != .unavailable {
             panelPresence = .absent
         }
-        return true
     }
+}
+
+private final class StemPanelTestClock: @unchecked Sendable {
+    var now: UInt64 = 0
 }
 
 private func driveStemPanel(
@@ -109,23 +122,81 @@ private func driveStemPanel(
     attempts: Int = 3,
     pollIntervalNanos: UInt64 = 250_000_000
 ) async -> ProjectStemExportPanelDriver.Outcome {
-    await ProjectStemExportPanelDriver.drive(
+    let clock = StemPanelTestClock()
+    return await ProjectStemExportPanelDriver.drive(
         destination: "/private/tmp/Stem Exports",
         surface: surface,
         progressPollAttempts: attempts,
-        sleep: { _ in surface.events.append("poll_sleep") },
-        pollIntervalNanos: pollIntervalNanos
+        sleep: { duration in
+            surface.events.append("poll_sleep")
+            clock.now += duration
+        },
+        pollIntervalNanos: pollIntervalNanos,
+        monotonicNowNanos: { clock.now }
     )
+}
+
+private final class StemExportPanelAXFixtureState: @unchecked Sendable {
+    let builder: FakeAXRuntimeBuilder
+    let app: AXUIElement
+    let panel: AXUIElement
+    let export: AXUIElement?
+    let cancel: AXUIElement?
+    let actionEffectsOccur: Bool
+    private(set) var exportActionAttempts = 0
+    private(set) var cancelActionAttempts = 0
+
+    init(
+        builder: FakeAXRuntimeBuilder,
+        app: AXUIElement,
+        panel: AXUIElement,
+        export: AXUIElement?,
+        cancel: AXUIElement?,
+        actionEffectsOccur: Bool
+    ) {
+        self.builder = builder
+        self.app = app
+        self.panel = panel
+        self.export = export
+        self.cancel = cancel
+        self.actionEffectsOccur = actionEffectsOccur
+    }
+
+    func performAction(_ element: AXUIElement, _ action: String, status: Bool) -> Bool {
+        guard action == (kAXPressAction as String) else { return status }
+        if let export, CFEqual(element, export) {
+            exportActionAttempts += 1
+            if actionEffectsOccur {
+                let progress = builder.element(99)
+                builder.setRole(progress, kAXWindowRole as String)
+                builder.setAttribute(progress, kAXTitleAttribute as String, "Logic\u{00A0}Pro")
+                builder.setAttribute(app, kAXWindowsAttribute as String, [progress])
+            }
+        }
+        if let cancel, CFEqual(element, cancel) {
+            cancelActionAttempts += 1
+            if actionEffectsOccur {
+                builder.setAttribute(app, kAXWindowsAttribute as String, [])
+            }
+        }
+        return status
+    }
 }
 
 private struct StemExportPanelAXFixture {
     let runtime: AXLogicProElements.Runtime
+    let state: StemExportPanelAXFixtureState
 
     init(
         popupValue: String,
         exportButtonTitle: String?,
         cancelButtonTitle: String?,
-        isDialog: Bool = true
+        isDialog: Bool = true,
+        includesPopup: Bool = true,
+        popupTitle: String? = nil,
+        actionStatus: Bool = true,
+        actionEffectsOccur: Bool = true,
+        failPanelChildrenRead: Bool = false
     ) {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(1)
@@ -137,38 +208,112 @@ private struct StemExportPanelAXFixture {
             builder.setAttribute(panel, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         }
 
-        builder.setRole(popup, kAXPopUpButtonRole as String)
-        builder.setAttribute(popup, kAXValueAttribute as String, popupValue)
-        var panelChildren = [popup]
+        var panelChildren: [AXUIElement] = []
+        if includesPopup {
+            builder.setRole(popup, kAXPopUpButtonRole as String)
+            builder.setAttribute(popup, kAXValueAttribute as String, popupValue)
+            if let popupTitle {
+                builder.setAttribute(popup, kAXTitleAttribute as String, popupTitle)
+            }
+            panelChildren.append(popup)
+        }
 
+        var export: AXUIElement?
         if let exportButtonTitle {
-            let export = builder.element(4)
+            let button = builder.element(4)
             builder.setButton(
-                export,
+                button,
                 title: exportButtonTitle,
                 x: 100,
                 y: 100,
                 width: 70,
                 height: 24
             )
-            panelChildren.append(export)
+            panelChildren.append(button)
+            export = button
         }
+        var cancel: AXUIElement?
         if let cancelButtonTitle {
-            let cancel = builder.element(5)
+            let button = builder.element(5)
             builder.setButton(
-                cancel,
+                button,
                 title: cancelButtonTitle,
                 x: 180,
                 y: 100,
                 width: 70,
                 height: 24
             )
-            panelChildren.append(cancel)
+            panelChildren.append(button)
+            cancel = button
         }
 
         builder.setChildren(panel, panelChildren)
         builder.setAttribute(app, kAXWindowsAttribute as String, [panel])
 
+        let state = StemExportPanelAXFixtureState(
+            builder: builder,
+            app: app,
+            panel: panel,
+            export: export,
+            cancel: cancel,
+            actionEffectsOccur: actionEffectsOccur
+        )
+        self.state = state
+        runtime = builder.makeLogicRuntime(
+            appElement: app,
+            childrenResultHandler: { element in
+                if failPanelChildrenRead, CFEqual(element, panel) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                state.performAction(element, action, status: actionStatus)
+            }
+        )
+    }
+}
+
+/// The live export panel carries SIX popup buttons and only the destination one
+/// exposes an AXTitle. This fixture reproduces that shape so the production code
+/// cannot fall back to taking the first popup in traversal order — the untitled
+/// decoys are deliberately emitted BEFORE the titled one.
+private struct DestinationPopupAXFixture {
+    let runtime: AXLogicProElements.Runtime
+
+    init(titledPopups: [(title: String, value: String)], untitledValues: [String]) {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(1)
+        let panel = builder.element(2)
+        builder.setRole(panel, kAXWindowRole as String)
+        builder.setAttribute(panel, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+
+        var next = 3
+        var children: [AXUIElement] = []
+        for value in untitledValues {
+            let popup = builder.element(next); next += 1
+            builder.setRole(popup, kAXPopUpButtonRole as String)
+            builder.setAttribute(popup, kAXValueAttribute as String, value)
+            children.append(popup)
+        }
+        for entry in titledPopups {
+            let popup = builder.element(next); next += 1
+            builder.setRole(popup, kAXPopUpButtonRole as String)
+            builder.setAttribute(popup, kAXTitleAttribute as String, entry.title)
+            builder.setAttribute(popup, kAXValueAttribute as String, entry.value)
+            children.append(popup)
+        }
+        // The panel must still be recognisable, so give it its measured buttons.
+        let export = builder.element(next); next += 1
+        builder.setButton(export, title: "내보내기", x: 100, y: 100, width: 70, height: 24)
+        children.append(export)
+        let cancel = builder.element(next); next += 1
+        builder.setButton(cancel, title: "취소", x: 180, y: 100, width: 70, height: 24)
+        children.append(cancel)
+
+        builder.setChildren(panel, children)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [panel])
         runtime = builder.makeLogicRuntime(appElement: app)
     }
 }
@@ -181,7 +326,7 @@ private struct StemExportPanelAXFixture {
 private struct ProgressWindowAXFixture {
     let runtime: AXLogicProElements.Runtime
 
-    init(windowTitle: String?) {
+    init(windowTitle: String?, failWindowsRead: Bool = false) {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(1)
         var windows: [AXUIElement] = []
@@ -192,7 +337,19 @@ private struct ProgressWindowAXFixture {
             windows.append(window)
         }
         builder.setAttribute(app, kAXWindowsAttribute as String, windows)
-        runtime = builder.makeLogicRuntime(appElement: app)
+        runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if failWindowsRead,
+                   CFEqual(element, app),
+                   attribute == (kAXWindowsAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
     }
 }
 
@@ -207,8 +364,13 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
     private var pathByGroupID: [Int: String] = [:]
     private var listIDs: Set<Int> = []
     private let childrenByPath: [String: [String]]
-    private let observesSelection: Bool
+    private let acceptsWrite: Bool
+    private let navigationOccurs: Bool
+    private let outlineID: Int?
+    private let volumeRootEntriesAfterSelection: [String]?
+    private var navigationNowNanos: UInt64 = 0
     private(set) var selectedChildrenWrites: [(listID: Int, selectedGroupID: Int)] = []
+    private(set) var selectionEchoCount = 0
     private(set) var actions: [(elementID: Int, action: String)] = []
 
     init(
@@ -216,17 +378,31 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
         panel: AXUIElement,
         initialEntries: [String],
         childrenByPath: [String: [String]],
-        observesSelection: Bool
+        acceptsWrite: Bool,
+        navigationOccurs: Bool,
+        outline: AXUIElement?,
+        volumeRootEntriesAfterSelection: [String]?
     ) {
         self.builder = builder
         self.panel = panel
         self.panelChildren = AXHelpers.getChildren(panel, runtime: builder.makeAXRuntime())
         self.childrenByPath = childrenByPath
-        self.observesSelection = observesSelection
+        self.acceptsWrite = acceptsWrite
+        self.navigationOccurs = navigationOccurs
+        self.outlineID = outline.map(builder.elementID)
+        self.volumeRootEntriesAfterSelection = volumeRootEntriesAfterSelection
         appendColumn(entries: initialEntries)
     }
 
     func handleWrite(_ element: AXUIElement, _ attribute: String, _ value: CFTypeRef) -> Bool {
+        if attribute == (kAXSelectedRowsAttribute as String),
+           outlineID == builder.elementID(element) {
+            builder.setAttribute(element, attribute, value)
+            if let volumeRootEntriesAfterSelection {
+                appendColumn(entries: volumeRootEntriesAfterSelection)
+            }
+            return true
+        }
         guard attribute == (kAXSelectedChildrenAttribute as String),
               listIDs.contains(builder.elementID(element)),
               let selected = value as? [AXUIElement],
@@ -236,23 +412,28 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
             return true
         }
         selectedChildrenWrites.append((builder.elementID(element), builder.elementID(group)))
-        // Deliberately return success in both states. The no-readback fixture
-        // models an AX status 0 that had no observed effect at all: the write is
-        // accepted and then leaves no trace, so neither the selection nor a child
-        // column can be read back.
-        //
-        // It deliberately does NOT model "the selection is recorded but the panel
-        // does not navigate". That intermediate state has never been observed on
-        // the live panel — measured 2026-09-02, the selection readback and the
-        // destination agreed on every hop — and a fixture asserting it would be
-        // asserting behaviour we cannot show exists.
-        if observesSelection {
-            builder.setAttribute(element, attribute, value)
-            if let children = childrenByPath[path] {
-                appendColumn(entries: children)
-            }
+        guard acceptsWrite else { return false }
+        // A successful settable AX attribute write always echoes in a real AX
+        // server. Navigation is a distinct physical effect and is deliberately
+        // controlled separately, so all three states are expressible: rejected,
+        // echoed-without-navigation, and echoed-with-navigation.
+        builder.setAttribute(element, attribute, value)
+        selectionEchoCount += 1
+        if navigationOccurs, let children = childrenByPath[path] {
+            appendColumn(entries: children)
         }
         return true
+    }
+
+    func directoryListing(at path: String) -> AXSurface.DirectoryListing {
+        guard let entries = childrenByPath[path] else { return .empty }
+        return entries.isEmpty ? .empty : .hasEntries
+    }
+
+    func navigationNow() -> UInt64 { navigationNowNanos }
+
+    func advanceNavigationClock(by duration: UInt64) {
+        navigationNowNanos += duration
     }
 
     func recordAction(_ element: AXUIElement, _ action: String) -> Bool {
@@ -298,7 +479,10 @@ private struct DestinationBrowserAXFixture {
     init(
         initialEntries: [String],
         childrenByPath: [String: [String]],
-        observesSelection: Bool = true
+        acceptsWrite: Bool = true,
+        navigationOccurs: Bool = true,
+        volumeName: String? = nil,
+        volumeRootEntriesAfterSelection: [String]? = nil
     ) {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(1)
@@ -306,13 +490,33 @@ private struct DestinationBrowserAXFixture {
         let popup = builder.element(3)
         let export = builder.element(4)
         let cancel = builder.element(5)
+        let perTrack = builder.element(9)
         builder.setRole(panel, kAXWindowRole as String)
         builder.setAttribute(panel, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         builder.setRole(popup, kAXPopUpButtonRole as String)
         builder.setAttribute(popup, kAXValueAttribute as String, "Other Destination")
+        builder.setRole(perTrack, kAXPopUpButtonRole as String)
+        builder.setAttribute(perTrack, kAXValueAttribute as String, "One File per Track")
         builder.setButton(export, title: "Export", x: 100, y: 100, width: 70, height: 24)
         builder.setButton(cancel, title: "Cancel", x: 180, y: 100, width: 70, height: 24)
-        builder.setChildren(panel, [popup, export, cancel])
+        var panelChildren = [popup, perTrack, export, cancel]
+        let outline: AXUIElement?
+        if let volumeName {
+            let outlineElement = builder.element(6)
+            let row = builder.element(7)
+            let text = builder.element(8)
+            builder.setRole(outlineElement, kAXOutlineRole as String)
+            builder.setRole(row, kAXRowRole as String)
+            builder.setRole(text, kAXStaticTextRole as String)
+            builder.setAttribute(text, kAXValueAttribute as String, volumeName)
+            builder.setChildren(row, [text])
+            builder.setChildren(outlineElement, [row])
+            panelChildren.append(outlineElement)
+            outline = outlineElement
+        } else {
+            outline = nil
+        }
+        builder.setChildren(panel, panelChildren)
         builder.setAttribute(app, kAXWindowsAttribute as String, [panel])
 
         let state = DestinationBrowserFixtureState(
@@ -320,7 +524,10 @@ private struct DestinationBrowserAXFixture {
             panel: panel,
             initialEntries: initialEntries,
             childrenByPath: childrenByPath,
-            observesSelection: observesSelection
+            acceptsWrite: acceptsWrite,
+            navigationOccurs: navigationOccurs,
+            outline: outline,
+            volumeRootEntriesAfterSelection: volumeRootEntriesAfterSelection
         )
         self.state = state
         runtime = builder.makeLogicRuntime(
@@ -331,6 +538,15 @@ private struct DestinationBrowserAXFixture {
             performActionHandler: { element, action in
                 state.recordAction(element, action)
             }
+        )
+    }
+
+    func makeSurface() -> AXSurface {
+        AXSurface(
+            runtime: runtime,
+            directoryListing: { [state] path in state.directoryListing(at: path) },
+            navigationNowNanos: { [state] in state.navigationNow() },
+            navigationSleep: { [state] duration in state.advanceNavigationClock(by: duration) }
         )
     }
 }
@@ -434,6 +650,36 @@ struct Issue369StemExportTests {
         #expect(observationStayedBounded)
     }
 
+    @Test("panel observation budget includes synchronous AX census time")
+    func panelDeadlineCountsReadTime() async {
+        let surface = StemPanelSurfaceFake()
+        surface.panelAppears = false
+        let clock = StemPanelTestClock()
+        surface.onPanelRead = {
+            // One slow AX census already exceeds the advertised ten-second
+            // bound. Sleep-only accounting would still perform forty polls.
+            clock.now += ProjectStemExportPanelDriver.exportPanelObservationDeadlineNanos + 1
+        }
+        let outcome = await ProjectStemExportPanelDriver.drive(
+            destination: "/private/tmp/Stem Exports",
+            surface: surface,
+            progressPollAttempts: 1,
+            sleep: { duration in
+                surface.events.append("poll_sleep")
+                clock.now += duration
+            },
+            pollIntervalNanos: 250_000_000,
+            monotonicNowNanos: { clock.now }
+        )
+
+        let refusedAtElapsedBound = outcome == .refused(
+            "stem_export_panel_not_observed_after_bounded_wait_elapsed"
+        )
+        #expect(refusedAtElapsedBound)
+        let noSleepOccurred = !surface.events.contains("poll_sleep")
+        #expect(noSleepOccurred)
+    }
+
     @Test("an unavailable panel readback refuses without becoming absence")
     func unavailableExportPanelReadbackRefusesDistinctly() async {
         let surface = StemPanelSurfaceFake()
@@ -466,7 +712,33 @@ struct Issue369StemExportTests {
         #expect(resolves)
     }
 
-    @Test("English stem-export panel is recognised and its measured controls operate")
+    @Test("parent-menu action status is not treated as evidence that the menu opened")
+    func menuActionStatusDoesNotDecideAvailability() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(1)
+        let menuBar = builder.element(2)
+        let file = builder.element(3)
+        let export = builder.element(4)
+        builder.setAttribute(app, "AXMenuBar", menuBar)
+        builder.setAttribute(file, kAXTitleAttribute as String, "File")
+        builder.setChildren(menuBar, [file])
+        builder.setRole(export, kAXMenuItemRole as String)
+        builder.setAttribute(export, kAXTitleAttribute as String, "Export")
+        builder.setChildren(app, [export])
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: { _, _ in false }
+        )
+        let surface = AXSurface(runtime: runtime)
+
+        let fileCandidateWasFound = surface.openFileMenu()
+        #expect(fileCandidateWasFound)
+        let exportCandidateWasFound = surface.openExportMenu() == .available
+        #expect(exportCandidateWasFound)
+    }
+
+    @Test("English stem-export controls are identified and their effects are observed")
     func englishStemExportPanelIsRecognised() {
         let fixture = StemExportPanelAXFixture(
             popupValue: "One File per Track",
@@ -479,13 +751,24 @@ struct Issue369StemExportTests {
         #expect(recognised)
         let oneFilePerTrackIsActive = surface.oneFilePerTrackIsActive()
         #expect(oneFilePerTrackIsActive)
-        let exportPressed = surface.pressExport()
-        #expect(exportPressed)
-        let cancelPressed = surface.closeExportPanel()
-        #expect(cancelPressed)
+        surface.pressExport()
+        let exportEffectWasObserved = surface.progressWindowPresence() == .present
+        #expect(exportEffectWasObserved)
+        #expect(fixture.state.exportActionAttempts == 1)
+
+        let cancelFixture = StemExportPanelAXFixture(
+            popupValue: "One File per Track",
+            exportButtonTitle: "Export",
+            cancelButtonTitle: "Cancel"
+        )
+        let cancelSurface = AXSurface(runtime: cancelFixture.runtime)
+        cancelSurface.closeExportPanel()
+        let cancelEffectWasObserved = cancelSurface.exportPanelPresence() == .absent
+        #expect(cancelEffectWasObserved)
+        #expect(cancelFixture.state.cancelActionAttempts == 1)
     }
 
-    @Test("Korean stem-export panel is recognised and its measured controls operate")
+    @Test("Korean stem-export controls are identified and their effects are observed")
     func koreanStemExportPanelIsRecognised() {
         let fixture = StemExportPanelAXFixture(
             popupValue: "트랙당 하나의 파일",
@@ -498,10 +781,19 @@ struct Issue369StemExportTests {
         #expect(recognised)
         let oneFilePerTrackIsActive = surface.oneFilePerTrackIsActive()
         #expect(oneFilePerTrackIsActive)
-        let exportPressed = surface.pressExport()
-        #expect(exportPressed)
-        let cancelPressed = surface.closeExportPanel()
-        #expect(cancelPressed)
+        surface.pressExport()
+        let exportEffectWasObserved = surface.progressWindowPresence() == .present
+        #expect(exportEffectWasObserved)
+
+        let cancelFixture = StemExportPanelAXFixture(
+            popupValue: "트랙당 하나의 파일",
+            exportButtonTitle: "내보내기",
+            cancelButtonTitle: "취소"
+        )
+        let cancelSurface = AXSurface(runtime: cancelFixture.runtime)
+        cancelSurface.closeExportPanel()
+        let cancelEffectWasObserved = cancelSurface.exportPanelPresence() == .absent
+        #expect(cancelEffectWasObserved)
     }
 
     @Test("destination browser writes AXSelectedChildren for a URL-backed one-level entry")
@@ -511,8 +803,7 @@ struct Issue369StemExportTests {
             initialEntries: [destination],
             childrenByPath: [destination: ["\(destination)/Rendered"]]
         )
-        let result = AXSurface(runtime: fixture.runtime)
-            .selectDestinationBrowserElement(at: destination)
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: destination)
 
         let selected = result == .selected
         #expect(selected)
@@ -535,8 +826,7 @@ struct Issue369StemExportTests {
                 destination: ["\(destination)/Rendered"],
             ]
         )
-        let result = AXSurface(runtime: fixture.runtime)
-            .selectDestinationBrowserElement(at: destination)
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: destination)
 
         let selected = result == .selected
         #expect(selected)
@@ -550,8 +840,7 @@ struct Issue369StemExportTests {
             initialEntries: ["/Users/fixture/Exports"],
             childrenByPath: [:]
         )
-        let result = AXSurface(runtime: fixture.runtime)
-            .selectDestinationBrowserElement(at: "/Users/fixture/Missing")
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/Users/fixture/Missing")
 
         guard case let .refused(reason) = result else {
             Issue.record("an unlisted destination component was accepted")
@@ -561,25 +850,100 @@ struct Issue369StemExportTests {
         #expect(namesMissingComponent)
     }
 
-    @Test("destination browser refuses a status-zero write without navigation readback")
-    func destinationBrowserRequiresObservedWriteEffect() {
+    @Test("destination browser refuses an echoed selection without navigation for a non-empty destination")
+    func destinationBrowserRequiresObservedNavigationEffect() {
         let destination = "/Users/fixture/Exports"
         let fixture = DestinationBrowserAXFixture(
             initialEntries: [destination],
             childrenByPath: [destination: ["\(destination)/Rendered"]],
-            observesSelection: false
+            navigationOccurs: false
         )
-        let result = AXSurface(runtime: fixture.runtime)
-            .selectDestinationBrowserElement(at: destination)
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: destination)
 
         guard case let .refused(reason) = result else {
-            Issue.record("a status-zero write with no readback was accepted")
+            Issue.record("an echoed selection without navigation was accepted")
             return
         }
         let writeWasAttempted = fixture.state.selectedChildrenWrites.count == 1
         #expect(writeWasAttempted)
-        let refusalRequiresReadback = reason.contains("not_confirmed:Exports")
-        #expect(refusalRequiresReadback)
+        let refusalRequiresNavigation = reason.contains("not_confirmed:Exports")
+        #expect(refusalRequiresNavigation)
+    }
+
+    @Test("destination browser keeps a rejected write distinct from an echoed selection")
+    func destinationBrowserCanModelRejectedWrite() {
+        let destination = "/Users/fixture/Exports"
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [destination],
+            childrenByPath: [destination: ["\(destination)/Rendered"]],
+            acceptsWrite: false,
+            navigationOccurs: true
+        )
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: destination)
+
+        guard case let .refused(reason) = result else {
+            Issue.record("a rejected AX selection write was accepted")
+            return
+        }
+        let attemptedOneWrite = fixture.state.selectedChildrenWrites.count == 1
+        #expect(attemptedOneWrite)
+        let didNotEchoRejectedWrite = fixture.state.selectionEchoCount == 0
+        #expect(didNotEchoRejectedWrite)
+        let refusedWithoutReadback = reason.contains("not_confirmed:Exports")
+        #expect(refusedWithoutReadback)
+    }
+
+    @Test("a sidebar volume-name match is refused unless the browser lists that exact volume root")
+    func volumeSidebarRequiresRootPathListing() throws {
+        let root = URL(fileURLWithPath: "/")
+        let values = try root.resourceValues(forKeys: [.volumeNameKey])
+        let volumeName = try #require(values.volumeName)
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [],
+            childrenByPath: [:],
+            volumeName: volumeName,
+            // This materializes a browser entry, but its parent is not the
+            // requested root. A Favorites row with this display name must not
+            // be accepted as a volume hop.
+            volumeRootEntriesAfterSelection: ["/Volumes/not-the-requested-root/entry"]
+        )
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/")
+
+        let expected = ProjectStemExportPanelDriver.DestinationSelection.refused(
+            "stem_destination_volume_path_not_confirmed:\(volumeName):/"
+        )
+        let refusedWrongRootListing = result == expected
+        #expect(refusedWrongRootListing)
+    }
+
+    @Test("the destination popup is identified by carrying a title, not by traversal order")
+    func destinationPopupIsIdentifiedStructurally() {
+        // Five untitled decoys come first; taking the first popup would read
+        // "AIFF" as the destination.
+        let fixture = DestinationPopupAXFixture(
+            titledPopups: [(title: "위치:", value: "logic-pro-mcp-stem-test")],
+            untitledValues: ["AIFF", "16비트", "트랙당 하나의 파일", "과부하 보호만", "파일 끝점의 무음 구간 다듬기"]
+        )
+        let value = AXSurface(runtime: fixture.runtime).destinationPopupValue()
+        let readsTheTitledPopup = value == "logic-pro-mcp-stem-test"
+        #expect(readsTheTitledPopup)
+    }
+
+    @Test("an ambiguous or missing destination popup refuses instead of picking one")
+    func destinationPopupRefusesWhenNotUnique() {
+        let none = AXSurface(runtime: DestinationPopupAXFixture(
+            titledPopups: [],
+            untitledValues: ["AIFF", "16비트"]
+        ).runtime).destinationPopupValue()
+        let refusesWhenAbsent = none == nil
+        #expect(refusesWhenAbsent)
+
+        let two = AXSurface(runtime: DestinationPopupAXFixture(
+            titledPopups: [(title: "위치:", value: "A"), (title: "Where:", value: "B")],
+            untitledValues: []
+        ).runtime).destinationPopupValue()
+        let refusesWhenAmbiguous = two == nil
+        #expect(refusesWhenAmbiguous)
     }
 
     @Test("the export progress dialog is recognised through its NO-BREAK SPACE title")
@@ -591,11 +955,11 @@ struct Issue369StemExportTests {
         #expect(looksIdenticalButIsNotEqual)
 
         let observed = AXSurface(runtime: ProgressWindowAXFixture(windowTitle: liveTitle).runtime)
-            .progressWindowPresent()
+            .progressWindowPresence() == .present
         #expect(observed)
 
         let ordinarySpace = AXSurface(runtime: ProgressWindowAXFixture(windowTitle: "Logic Pro").runtime)
-            .progressWindowPresent()
+            .progressWindowPresence() == .present
         #expect(ordinarySpace)
     }
 
@@ -604,19 +968,41 @@ struct Issue369StemExportTests {
         // The separator may localise, but it must still BE a separator: a title
         // with the space removed is a different product string, not this dialog.
         let noSeparator = AXSurface(runtime: ProgressWindowAXFixture(windowTitle: "LogicPro").runtime)
-            .progressWindowPresent()
-        let rejectsRemovedSeparator = !noSeparator
+            .progressWindowPresence()
+        let rejectsRemovedSeparator = noSeparator == .absent
         #expect(rejectsRemovedSeparator)
 
         let project = AXSurface(runtime: ProgressWindowAXFixture(windowTitle: "lpm-606-warm - 트랙").runtime)
-            .progressWindowPresent()
-        let rejectsProjectWindow = !project
+            .progressWindowPresence()
+        let rejectsProjectWindow = project == .absent
         #expect(rejectsProjectWindow)
 
         let none = AXSurface(runtime: ProgressWindowAXFixture(windowTitle: nil).runtime)
-            .progressWindowPresent()
-        let rejectsNoWindows = !none
+            .progressWindowPresence()
+        let rejectsNoWindows = none == .absent
         #expect(rejectsNoWindows)
+    }
+
+    @Test("a failed progress-window read cannot be promoted to progress disappearance")
+    func failedProgressWindowReadNeverCompletesExport() async {
+        let unreadableProgress = AXSurface(runtime: ProgressWindowAXFixture(
+            windowTitle: "Logic Pro",
+            failWindowsRead: true
+        ).runtime).progressWindowPresence()
+        let fixturePreservesFailure = unreadableProgress == .unavailable
+        #expect(fixturePreservesFailure)
+
+        let surface = StemPanelSurfaceFake()
+        surface.progressObservations = [.present, .unavailable]
+        let outcome = await driveStemPanel(surface, attempts: 2)
+
+        let readbackUnavailable = outcome == .uncertain(
+            "readback_unavailable: stem_export_effect_or_progress_not_observed_after_press",
+            exportEffectObserved: true
+        )
+        #expect(readbackUnavailable)
+        let didNotClaimCompletion = outcome != .completed
+        #expect(didNotClaimCompletion)
     }
 
     @Test("destination browser refuses duplicate URL entries rather than using traversal order")
@@ -626,8 +1012,7 @@ struct Issue369StemExportTests {
             initialEntries: [destination, destination],
             childrenByPath: [destination: ["\(destination)/Rendered"]]
         )
-        let result = AXSurface(runtime: fixture.runtime)
-            .selectDestinationBrowserElement(at: destination)
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: destination)
 
         guard case let .refused(reason) = result else {
             Issue.record("a duplicate URL entry was accepted using traversal order")
@@ -639,8 +1024,8 @@ struct Issue369StemExportTests {
         #expect(wroteNothing)
     }
 
-    @Test("a Cancel-only decoy is not recognised as a stem-export panel")
-    func cancelOnlyDecoyIsNotRecognised() {
+    @Test("a Cancel-known and Export-unknown stem panel is partially measured and can close")
+    func cancelKnownPartialPanelCanClose() async {
         let fixture = StemExportPanelAXFixture(
             popupValue: "One File per Track",
             exportButtonTitle: nil,
@@ -648,20 +1033,34 @@ struct Issue369StemExportTests {
         )
         let surface = AXSurface(runtime: fixture.runtime)
 
-        let decoyIsAbsent = surface.exportPanelPresence() == .absent
-        #expect(decoyIsAbsent)
-        let exportWasNotPressed = !surface.pressExport()
-        #expect(exportWasNotPressed)
+        let presence = surface.exportPanelPresence()
+        let partiallyMeasured = presence == .partiallyMeasured(
+            recognized: "Cancel",
+            notMeasured: "Export"
+        )
+        #expect(partiallyMeasured)
+        surface.closeExportPanel()
+        let closeWasObserved = surface.exportPanelPresence() == .absent
+        #expect(closeWasObserved)
+
+        let driverSurface = StemPanelSurfaceFake()
+        driverSurface.panelPresence = presence
+        let outcome = await driveStemPanel(driverSurface)
+        let refusalNamesRecognizedAndMissingLabels = outcome == .refused(
+            "stem_export_panel_partially_measured: recognized=Cancel; not_measured=Export"
+        )
+        #expect(refusalNamesRecognizedAndMissingLabels)
     }
 
-    @Test("an unmeasured stem-export panel refuses with the missing-measurement reason")
+    @Test("an unmeasured stem-export panel states that it was left open")
     func unmeasuredStemExportPanelRefuses() async {
-        // Deliberately synthetic AX labels: neither is claimed as a Logic
-        // translation, so the fixture models a locale awaiting measurement.
+        // Deliberately synthetic button labels: neither is claimed as a Logic
+        // translation, while the per-track popup remains the structural signal.
         let fixture = StemExportPanelAXFixture(
-            popupValue: "未測定のトラック別ファイル",
+            popupValue: "Unmeasured per-track value",
             exportButtonTitle: "未測定の書き出し",
-            cancelButtonTitle: "未測定の取り消し"
+            cancelButtonTitle: "未測定の取り消し",
+            popupTitle: "Location:"
         )
         let panelPresence = AXSurface(runtime: fixture.runtime).exportPanelPresence()
         let namesMissingMeasurement = panelPresence == .unmeasured(
@@ -671,11 +1070,71 @@ struct Issue369StemExportTests {
 
         let surface = StemPanelSurfaceFake()
         surface.panelPresence = panelPresence
+        surface.dismissLabelMeasured = false
         let outcome = await driveStemPanel(surface)
-        let refusedForMissingMeasurement = outcome == .refused(
-            ProjectStemExportPanelDriver.panelLabelNotMeasuredReason
+        let refusedWithOpenPanelDisclosure = outcome == .refused(
+            "stem_export_panel_left_open_unmeasured: "
+                + ProjectStemExportPanelDriver.panelLabelNotMeasuredReason
         )
-        #expect(refusedForMissingMeasurement)
+        #expect(refusedWithOpenPanelDisclosure)
+    }
+
+    @Test("an Export-known and Cancel-unknown stem panel states that it was left open")
+    func exportKnownPartialPanelStatesOpenModal() async {
+        let fixture = StemExportPanelAXFixture(
+            popupValue: "One File per Track",
+            exportButtonTitle: "Export",
+            cancelButtonTitle: "Unmeasured Cancel"
+        )
+        let presence = AXSurface(runtime: fixture.runtime).exportPanelPresence()
+        let partiallyMeasured = presence == .partiallyMeasured(
+            recognized: "Export",
+            notMeasured: "Cancel"
+        )
+        #expect(partiallyMeasured)
+
+        let surface = StemPanelSurfaceFake()
+        surface.panelPresence = presence
+        surface.dismissLabelMeasured = false
+        let outcome = await driveStemPanel(surface)
+        let namesTheLeftOpenPanel = outcome == .refused(
+            "stem_export_panel_left_open_after_close_attempt: recognized=Export; not_measured=Cancel"
+        )
+        #expect(namesTheLeftOpenPanel)
+    }
+
+    @Test("an unreadable open panel's descendants cannot be accepted as absent after close")
+    func unreadablePanelChildrenRefuseCloseAcceptance() {
+        let fixture = StemExportPanelAXFixture(
+            popupValue: "One File per Track",
+            exportButtonTitle: "Export",
+            cancelButtonTitle: "Cancel",
+            failPanelChildrenRead: true
+        )
+        let surface = AXSurface(runtime: fixture.runtime)
+
+        surface.closeExportPanel()
+        let presenceIsUnavailable = surface.exportPanelPresence() == .unavailable
+        #expect(presenceIsUnavailable)
+        let noCancelWasGuessed = fixture.state.cancelActionAttempts == 0
+        #expect(noCancelWasGuessed)
+    }
+
+    @Test("an unrelated two-button dialog without the per-track popup is not a stem panel")
+    func twoButtonDialogWithoutStemPopupIsIgnored() {
+        let fixture = StemExportPanelAXFixture(
+            popupValue: "One File per Track",
+            exportButtonTitle: "Export",
+            cancelButtonTitle: "Cancel",
+            includesPopup: false
+        )
+        let surface = AXSurface(runtime: fixture.runtime)
+
+        let panelIsNotAccepted = surface.exportPanelPresence() == .absent
+        #expect(panelIsNotAccepted)
+        surface.closeExportPanel()
+        let unrelatedCancelWasNotPressed = fixture.state.cancelActionAttempts == 0
+        #expect(unrelatedCancelWasNotPressed)
     }
 
     @Test("Korean all-tracks audio-file leaf resolves")
@@ -730,7 +1189,7 @@ struct Issue369StemExportTests {
 
         let refused = outcome == .refused("stem_destination_not_confirmed_after_browser_selection")
         #expect(refused)
-        let exportWasNotPressed = !surface.events.contains("export_press")
+        let exportWasNotPressed = !surface.events.contains { $0.hasPrefix("export_press") }
         #expect(exportWasNotPressed)
         let panelClosed = surface.panelPresence == .absent
         #expect(panelClosed)
@@ -753,7 +1212,7 @@ struct Issue369StemExportTests {
         _ = await driveStemPanel(surface)
 
         let selected = try #require(surface.events.firstIndex(of: "destination_browser_select"))
-        let export = try #require(surface.events.firstIndex(of: "export_press"))
+        let export = try #require(surface.events.firstIndex(where: { $0.hasPrefix("export_press") }))
         let selectionPrecedesExport = selected < export
         #expect(selectionPrecedesExport)
     }
@@ -766,28 +1225,118 @@ struct Issue369StemExportTests {
 
         let refused = outcome == .refused("stem_one_file_per_track_not_active")
         #expect(refused)
-        let noExport = !surface.events.contains("export_press")
+        let noExport = !surface.events.contains { $0.hasPrefix("export_press") }
         #expect(noExport)
     }
 
     @Test("stuck progress window is State B, never successful completion")
     func stuckProgressIsUncertain() async {
         let surface = StemPanelSurfaceFake()
-        surface.progressStates = [true, true, true]
+        surface.progressObservations = [.present, .present, .present]
         let outcome = await driveStemPanel(surface, attempts: 3)
 
-        let uncertain = outcome == .uncertain("stem_progress_window_did_not_disappear_within_budget")
+        let uncertain = outcome == .uncertain(
+            "stem_progress_window_did_not_disappear_within_budget",
+            exportEffectObserved: true
+        )
         #expect(uncertain)
     }
 
     @Test("unseen progress window is State B, not click-return success")
     func unseenProgressIsUncertain() async {
         let surface = StemPanelSurfaceFake()
-        surface.progressStates = [false, false, false]
+        surface.progressObservations = [.absent, .absent, .absent]
         let outcome = await driveStemPanel(surface, attempts: 3)
 
-        let uncertain = outcome == .uncertain("readback_unavailable: stem_progress_window_not_observed")
+        let uncertain = outcome == .uncertain(
+            "stem_export_press_effect_not_observed",
+            exportEffectObserved: false
+        )
         #expect(uncertain)
+    }
+
+    @Test("a failed Export action status with observed progress is treated as an observed export effect")
+    func failedExportActionStatusWithObservedEffectCompletes() async {
+        let surface = StemPanelSurfaceFake()
+        surface.exportActionStatus = false
+        surface.exportEffectOccurs = true
+        let outcome = await driveStemPanel(surface)
+
+        let completedFromObservation = outcome == .completed
+        #expect(completedFromObservation)
+        let fakeReportedFailure = surface.events.contains("export_press_status_false")
+        #expect(fakeReportedFailure)
+    }
+
+    @Test("a successful Export action status with observed progress completes")
+    func successfulExportActionStatusWithObservedEffectCompletes() async {
+        let surface = StemPanelSurfaceFake()
+        surface.exportActionStatus = true
+        surface.exportEffectOccurs = true
+        let outcome = await driveStemPanel(surface)
+
+        let completedFromObservation = outcome == .completed
+        #expect(completedFromObservation)
+        let fakeReportedSuccess = surface.events.contains("export_press_status_true")
+        #expect(fakeReportedSuccess)
+    }
+
+    @Test("a successful Export action status without an observed effect does not claim a bounce")
+    func successfulExportActionStatusWithoutEffectIsNotFired() async {
+        let surface = StemPanelSurfaceFake()
+        surface.exportActionStatus = true
+        surface.exportEffectOccurs = false
+        let outcome = await driveStemPanel(surface)
+
+        let noEffectWasObserved = outcome == .uncertain(
+            "stem_export_press_effect_not_observed",
+            exportEffectObserved: false
+        )
+        #expect(noEffectWasObserved)
+    }
+
+    @Test("a failed Export action status without an observed effect does not claim a bounce")
+    func failedExportActionStatusWithoutEffectIsNotFired() async {
+        let surface = StemPanelSurfaceFake()
+        surface.exportActionStatus = false
+        surface.exportEffectOccurs = false
+        let outcome = await driveStemPanel(surface)
+
+        let noEffectWasObserved = outcome == .uncertain(
+            "stem_export_press_effect_not_observed",
+            exportEffectObserved: false
+        )
+        #expect(noEffectWasObserved)
+    }
+
+    @Test("an effect-unobserved panel drive does not publish bounce_fired")
+    func unobservedEffectMapsWithoutBounceFired() async throws {
+        let projectRoot = try makeExecTempDir()
+        let outputRoot = try makeExecTempDir()
+        let project = try makeLogicxProject(in: projectRoot, named: "Unobserved Stem Press")
+        var options = fastOptions(identity: { project.path })
+        options.driveStemExport = { _ in
+            .uncertain("stem_export_press_effect_not_observed", exportEffectObserved: false)
+        }
+
+        let run = await ProjectExportExecutor.run(
+            params: [
+                "project": .string(project.path),
+                "output_root": .string(outputRoot.path),
+                "artifact": .string("stem"),
+                "confirmed": .bool(true),
+            ],
+            router: await makeExportRouter(),
+            resume: false,
+            options: options,
+            stemSubjects: scannedStemSubjects(for: project)
+        )
+
+        let artifact = try #require(run.projects.first?.artifacts.first)
+        let didNotClaimBounce = !artifact.bounceFired
+        #expect(didNotClaimBounce)
+        let didNotClaimWrite = !artifact.writeAttempted
+        #expect(didNotClaimWrite)
     }
 
     @Test("panel refusal becomes State C with write_attempted false")

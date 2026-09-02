@@ -254,6 +254,21 @@ enum AXLocalePolicy {
         rationale: "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
     )
 
+    /// #369: The transient progress window title is rendered with an ordinary
+    /// space in some locales and a NO-BREAK SPACE in Korean. Keep the measured
+    /// product label in locale policy rather than scattering a literal through
+    /// the export driver.
+    static let stemExportProgressWindowTitle = LabelSet(
+        canonical: "Logic Pro",
+        variants: [],
+        rationale: "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+    )
+
+    static func progressWindowTitleMatches(_ title: String) -> Bool {
+        let normalized = String(title.map { $0.isWhitespace ? " " : $0 })
+        return stemExportProgressWindowTitle.matches(normalized)
+    }
+
     static let editMenuBar = LabelSet(
         canonical: "Edit",
         variants: ["편집", "編集"],
@@ -1263,6 +1278,7 @@ enum AXLocalePolicy {
         oneFilePerTrackPopupValue,
         stemExportCommitButton,
         stemExportDismissButton,
+        stemExportProgressWindowTitle,
         editMenuBar,
         navigateMenuBar,
         trackMenuBar,

@@ -307,14 +307,17 @@ extension ProjectExportExecutor {
                 reason: nil,
                 observations: nil
             )
-        case .uncertain(let reason):
+        case let .uncertain(reason, exportEffectObserved):
             return stemSubjectArtifacts(
                 artifact: artifact,
                 destination: destination,
                 subjects: subjects,
                 state: "B",
-                bounceFired: true,
-                writeAttempted: true,
+                // A status-success AXPress is not evidence that the export
+                // fired. These flags are true only when the driver observed the
+                // panel disappear or the progress dialog appear after the press.
+                bounceFired: exportEffectObserved,
+                writeAttempted: exportEffectObserved,
                 error: nil,
                 reason: reason,
                 observations: nil
