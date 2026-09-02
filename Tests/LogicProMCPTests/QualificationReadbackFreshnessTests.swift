@@ -2,70 +2,218 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-/// #373 Phase B — a readback is only evidence if it can be shown to postdate the mutation.
-///
-/// The values here are the ones measured live on 2026-08-24 (`tracks.create_audio`, readback either
-/// side), so the admissible case is a transcription of a real envelope rather than a shape invented
-/// to make the rule pass.
 @Suite("QualificationReadbackFreshness")
 struct QualificationReadbackFreshnessTests {
-    private static let mutationStart = ISO8601DateFormatter().date(from: "2026-08-24T01:19:03Z")!
-    private static let postMutation = ISO8601DateFormatter().date(from: "2026-08-24T01:19:06Z")!
-    private static let preMutation = ISO8601DateFormatter().date(from: "2026-08-24T01:19:00Z")!
-
-    private static func envelope(
-        source: String? = "ax_live",
-        fetchedAt: Date? = postMutation,
-        age: Double? = 0.28
-    ) -> QualificationReadbackFreshness.Envelope {
-        .init(source: source, fetchedAt: fetchedAt, cacheAgeSeconds: age)
+    private static func readback(
+        source: String = "ax_live",
+        readable: Bool = true,
+        axOccluded: Bool = false,
+        verifiedEmpty: Bool = false,
+        data: Any = [["id": 1, "name": "Track 1"]],
+        cacheAge: Double? = 0.28,
+        includesCacheAge: Bool = true
+    ) throws -> Data {
+        var object: [String: Any] = [
+            "source": source,
+            "readable": readable,
+            "ax_occluded": axOccluded,
+            "verified_empty": verifiedEmpty,
+            "data": data,
+        ]
+        if includesCacheAge {
+            object["cache_age_sec"] = cacheAge ?? NSNull()
+        }
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 
-    @Test("the measured live envelope is admissible")
-    func measuredEnvelopePasses() {
-        #expect(QualificationReadbackFreshness
-            .verdict(for: Self.envelope(), mutationStartedAt: Self.mutationStart) == .admissible)
+    private static func verdict(
+        _ readback: Data,
+        verification: VerificationPolicy = .readbackRequired,
+        deadline: DeadlineClass = .short
+    ) -> QualificationReadbackFreshness.Verdict {
+        QualificationReadbackFreshness.verdict(
+            for: readback,
+            verification: verification,
+            deadline: deadline
+        )
     }
 
-    @Test("a cache that never moved is refused, which is the defect Phase B was blocked on")
-    func staleCacheIsRefused() {
-        // The PRE envelope from the same live run: correct shape, correct source, simply older than
-        // the mutation. A value-equality check cannot tell this from the POST envelope; this can.
-        let verdict = QualificationReadbackFreshness.verdict(
-            for: Self.envelope(fetchedAt: Self.preMutation, age: 0.80),
-            mutationStartedAt: Self.mutationStart)
-        #expect(verdict == .predatesMutation(fetchedAt: Self.preMutation,
-                                             mutationStartedAt: Self.mutationStart))
+    @Test("readable false refuses while a readable observation is admissible")
+    func unreadableReadbackIsRefused() throws {
+        let clean = Self.verdict(try Self.readback(readable: true))
+        #expect(clean.isAdmissible)
+
+        let refusal = Self.verdict(try Self.readback(readable: false))
+        let hasUnreadableReason = refusal.refusalReason == "readback_unreadable"
+        #expect(hasUnreadableReason)
     }
 
-    @Test("an envelope stamped exactly at the mutation start cannot have witnessed it")
-    func sameInstantIsRefused() {
-        // Equality is what a coarse clock produces, so it is the case most likely to appear and be
-        // waved through by a `>=`.
-        #expect(!QualificationReadbackFreshness.verdict(
-            for: Self.envelope(fetchedAt: Self.mutationStart),
-            mutationStartedAt: Self.mutationStart).isAdmissible)
+    @Test("an AX-occluded surface refuses while an unobstructed readback is admissible")
+    func occludedReadbackIsRefused() throws {
+        let clean = Self.verdict(try Self.readback(axOccluded: false))
+        #expect(clean.isAdmissible)
+
+        let refusal = Self.verdict(try Self.readback(axOccluded: true))
+        let hasOcclusionReason = refusal.refusalReason == "readback_ax_occluded"
+        #expect(hasOcclusionReason)
     }
 
-    @Test("cache and default sources are refused by name, not merged into one failure")
-    func nonLiveSourcesAreNamed() {
-        for source in ["cache", "default", nil] as [String?] {
-            let verdict = QualificationReadbackFreshness.verdict(
-                for: Self.envelope(source: source), mutationStartedAt: Self.mutationStart)
-            #expect(verdict == .notLive(source: source),
-                    "source \(source ?? "nil") should be refused as not-live, got \(verdict)")
+    @Test("an unverified empty list refuses while a verified empty list is admissible")
+    func unverifiedEmptyReadbackIsRefused() throws {
+        let clean = Self.verdict(try Self.readback(verifiedEmpty: true, data: [Any]()))
+        #expect(clean.isAdmissible)
+
+        let refusal = Self.verdict(try Self.readback(verifiedEmpty: false, data: [Any]()))
+        let hasEmptyReason = refusal.refusalReason == "readback_empty_unverified"
+        #expect(hasEmptyReason)
+    }
+
+    @Test("a cache source refuses while ax_live is admissible for live verification")
+    func cachedReadbackIsRefused() throws {
+        let clean = Self.verdict(try Self.readback(source: "ax_live"))
+        #expect(clean.isAdmissible)
+
+        let refusal = Self.verdict(try Self.readback(source: "cache"))
+        let hasNotLiveReason = refusal.refusalReason == "readback_not_ax_live"
+        #expect(hasNotLiveReason)
+    }
+
+    @Test("each deadline class accepts its bound and refuses an older observation")
+    func expiredReadbackIsRefusedAtItsOwnDeadline() throws {
+        for deadline in [DeadlineClass.short, .medium, .long] {
+            let clean = Self.verdict(try Self.readback(cacheAge: deadline.seconds), deadline: deadline)
+            #expect(clean.isAdmissible)
+
+            let refusal = Self.verdict(
+                try Self.readback(cacheAge: deadline.seconds + 0.01),
+                deadline: deadline
+            )
+            let hasExpiredAgeReason = refusal.refusalReason == "readback_cache_age_exceeded"
+            #expect(hasExpiredAgeReason)
         }
     }
 
-    @Test("an unplaceable or wrong-shaped envelope is refused rather than assumed fresh")
-    func missingFieldsAreRefused() {
-        // A check that reports agreement when it cannot see its subject is the failure this suite
-        // exists to avoid: absence of a timestamp is not evidence of freshness.
-        #expect(QualificationReadbackFreshness.verdict(
-            for: Self.envelope(fetchedAt: nil),
-            mutationStartedAt: Self.mutationStart) == .unplaceableInTime)
-        #expect(QualificationReadbackFreshness.verdict(
-            for: Self.envelope(age: nil),
-            mutationStartedAt: Self.mutationStart) == .ageAbsent)
+    @Test("a stale equal readback is refused before equality could confirm it")
+    func staleButEqualReadbackIsRefused() throws {
+        let expected = [["id": 1, "name": "Track 1"]]
+        let fresh = try Self.readback(data: expected, cacheAge: DeadlineClass.medium.seconds)
+        let stale = try Self.readback(data: expected, cacheAge: DeadlineClass.medium.seconds + 0.01)
+        let valuesMatch = try Self.payload(of: fresh) == Self.payload(of: stale)
+        #expect(valuesMatch)
+
+        let refusal = Self.verdict(stale, deadline: .medium)
+        let hasExpiredAgeReason = refusal.refusalReason == "readback_cache_age_exceeded"
+        #expect(hasExpiredAgeReason)
+    }
+
+    @Test("the qualification result refuses a stale equal live readback before semantic equality")
+    func staleEqualReadbackCannotPassQualification() throws {
+        let freshReadback = try Self.healthReadback(cacheAge: 0.28)
+        let freshResult = Self.liveVerificationResult(readback: freshReadback)
+        let freshPasses = freshResult.status == .passed
+        #expect(freshPasses)
+
+        let staleReadback = try Self.healthReadback(cacheAge: DeadlineClass.short.seconds + 0.01)
+        let staleResult = Self.liveVerificationResult(readback: staleReadback)
+        let valuesMatch = staleResult.responseData == staleResult.readbackData
+        #expect(valuesMatch)
+        let staleIsRefused = staleResult.status == .notQualified
+        #expect(staleIsRefused)
+        let hasExpiredAgeReason = staleResult.deferral?.detail == "readback_cache_age_exceeded"
+        #expect(hasExpiredAgeReason)
+    }
+
+    @Test("a missing cache age is unknown and cannot satisfy a live-verification bound")
+    func missingCacheAgeIsRefused() throws {
+        let clean = Self.verdict(try Self.readback(cacheAge: 0.28))
+        #expect(clean.isAdmissible)
+
+        let refusal = Self.verdict(try Self.readback(includesCacheAge: false))
+        let hasUnknownAgeReason = refusal.refusalReason == "readback_cache_age_unknown"
+        #expect(hasUnknownAgeReason)
+    }
+
+    @Test("operations without a live-verification contract keep their existing readback semantics")
+    func nonLiveVerificationIsUnaffected() throws {
+        let inadmissibleForLiveVerification = try Self.readback(
+            source: "cache",
+            readable: false,
+            axOccluded: true,
+            data: [Any](),
+            cacheAge: DeadlineClass.long.seconds + 1
+        )
+        let result = Self.verdict(inadmissibleForLiveVerification, verification: .none)
+        #expect(result.isAdmissible)
+
+        let nonLiveResult = Self.liveVerificationResult(
+            readback: try Self.healthReadback(
+                cacheAge: DeadlineClass.long.seconds + 1,
+                source: "cache",
+                readable: false,
+                axOccluded: true
+            ),
+            verification: .none
+        )
+        let preservesExistingPass = nonLiveResult.status == .passed
+        #expect(preservesExistingPass)
+    }
+
+    private static func payload(of readback: Data) throws -> Data {
+        let object = try #require(JSONSerialization.jsonObject(with: readback) as? [String: Any])
+        let data = try #require(object["data"])
+        return try JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])
+    }
+
+    private static func healthReadback(
+        cacheAge: Double,
+        source: String = "ax_live",
+        readable: Bool = true,
+        axOccluded: Bool = false
+    ) throws -> Data {
+        let variants: [[String: Any]] = [
+            ["variant": "desktop", "bundle_id": "com.apple.logic10", "installed": true, "running": true],
+            ["variant": "creator_studio", "bundle_id": "com.apple.logicpro", "installed": false, "running": false],
+        ]
+        let object: [String: Any] = [
+            "source": source,
+            "readable": readable,
+            "ax_occluded": axOccluded,
+            "verified_empty": false,
+            "cache_age_sec": cacheAge,
+            "data": [["id": 1, "name": "Track 1"]],
+            "logic_pro_running": true,
+            "logic_pro_version": "11.2",
+            "logic_pro_bundle_id": "com.apple.logic10",
+            "logic_pro_variant": "desktop",
+            "logic_pro_ui_locale": "en-US",
+            "process_metadata_resolved": true,
+            "logic_pro_variants": variants,
+        ]
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
+    private static func liveVerificationResult(
+        readback: Data,
+        verification: VerificationPolicy = .readbackRequired
+    ) -> QualificationOperationResult {
+        QualificationOperationResult(
+            operationID: OperationID.systemHealth.rawValue,
+            tool: ToolID.logicSystem.rawValue,
+            command: "health",
+            mutability: .readOnly,
+            requestID: "freshness-response",
+            responseData: readback,
+            isError: false,
+            state: "A",
+            error: nil,
+            hint: nil,
+            writeAttempted: false,
+            readbackSource: "logic://tracks",
+            readbackRequestID: "freshness-readback",
+            readbackData: readback,
+            verification: verification,
+            deadline: .short,
+            failureReason: nil
+        )
     }
 }
