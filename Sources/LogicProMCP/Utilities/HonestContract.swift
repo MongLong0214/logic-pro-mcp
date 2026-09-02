@@ -155,6 +155,10 @@ enum HonestContract {
         case stableTargetRequired = "stable_target_required"
         case windowOpenFailed = "window_open_failed"
         case windowIdentityUnresolved = "window_identity_unresolved"
+        /// The bound plug-in editor could not prove the native/Controls view
+        /// required by the selected write plane. This is distinct from a
+        /// missing parameter control: the locator was never allowed to run.
+        case pluginViewNotConfirmed = "plugin_view_not_confirmed"
         case paramControlNotFound = "param_control_not_found"
         case readbackLostAfterWrite = "readback_lost_after_write"
         /// An AXValue nudge was accepted but the readback did not establish
@@ -456,6 +460,7 @@ enum HonestContract {
         FailureError.staleTargetReference.rawValue,
         FailureError.windowOpenFailed.rawValue,
         FailureError.windowIdentityUnresolved.rawValue,
+        FailureError.pluginViewNotConfirmed.rawValue,
         FailureError.paramControlNotFound.rawValue,
         FailureError.readbackLostAfterWrite.rawValue,
         FailureError.incrementWalkNoProgress.rawValue,

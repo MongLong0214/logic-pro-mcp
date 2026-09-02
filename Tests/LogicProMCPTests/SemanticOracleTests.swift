@@ -682,6 +682,34 @@ struct SemanticOracleStrengthTests {
 
 @Suite("#373 semantic oracle fixtures and mutation")
 struct SemanticOracleMutationTests {
+    @Test func pluginSetParamVerifiedOracleAcceptsCheckboxStateAWithoutWeakeningSliderStateA() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsSetParamVerified])
+        let sliderFixture = try #require(SemanticOracleFixtures.byOperationID[.pluginsSetParamVerified])
+        let sliderAccepted = try #require(oracle.evaluate(
+            responseData: sliderFixture.responseData,
+            readbackData: sliderFixture.readbackData
+        ))
+        let checkbox = Data(#"{"success":true,"verified":true,"state":"A","hc_schema":2,"operation":"logic_plugins.set_param_verified","target_identity":{"track":0,"insert":0,"plugin_id":"logic.stock.effect.compressor"},"param":"limiter_on","requested_normalized":1,"observed_normalized":1,"requested_boolean":true,"observed_boolean":true,"write_source":"ax_controls_view_checkbox","verify_source":"ax_controls_view_checkbox"}"#.utf8)
+        let checkboxAccepted = try #require(oracle.evaluate(
+            responseData: checkbox,
+            readbackData: Data("{}".utf8)
+        ))
+        let sliderWithoutToleranceAccepted = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","hc_schema":2,"operation":"logic_plugins.set_param_verified","target_identity":{},"param":"threshold","requested_normalized":60,"observed_normalized":60,"display_unit":"%","write_source":"ax_plugin_window","verify_source":"ax_plugin_window"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        let checkboxMismatchAccepted = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","hc_schema":2,"operation":"logic_plugins.set_param_verified","target_identity":{},"param":"limiter_on","requested_boolean":true,"observed_boolean":false,"write_source":"ax_controls_view_checkbox","verify_source":"ax_controls_view_checkbox"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        let sliderStillRequiresTolerance = !sliderWithoutToleranceAccepted
+        let checkboxRequiresMatchingBools = !checkboxMismatchAccepted
+        #expect(sliderAccepted)
+        #expect(checkboxAccepted)
+        #expect(sliderStillRequiresTolerance)
+        #expect(checkboxRequiresMatchingBools)
+    }
+
     @Test func everyOracleHasAFixture() {
         let missing = Set(SemanticOracleTable.byOperationID.keys)
             .subtracting(SemanticOracleFixtures.byOperationID.keys)
@@ -1453,7 +1481,7 @@ enum JSONMutator {
     static func mutants(for constraint: OracleConstraint, in root: Any) -> [Mutant] {
         let key = constraint.key
         var mutants: [Mutant] = []
-        if let dropped = remove(root, keyPath: key) {
+        if !key.isEmpty, let dropped = remove(root, keyPath: key) {
             mutants.append(Mutant(label: "drop \(key)", json: dropped))
         }
         switch constraint {
@@ -1604,6 +1632,12 @@ enum JSONMutator {
                 mutants.append(contentsOf: replacements(root, keyB, [
                     ("keyB moved off delta", a - offset + 1),
                 ]))
+            }
+        case let .anyOf(alternatives):
+            for alternative in alternatives {
+                for branchConstraint in alternative {
+                    mutants.append(contentsOf: Self.mutants(for: branchConstraint, in: root))
+                }
             }
         }
         return mutants

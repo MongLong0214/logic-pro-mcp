@@ -147,6 +147,11 @@ enum OracleConstraint: Sendable {
     /// fails. NUMBERS ONLY, with the same bool-vs-number discipline as the rest of the model,
     /// and fails closed on a missing key or a non-number on either side.
     case numericEqualsOffset(keyA: String, keyB: String, offset: Double)
+    /// At least one complete response shape must satisfy all of its constraints.
+    /// This keeps a versioned operation's mutually exclusive verified write
+    /// planes explicit: accepting a checkbox envelope must not relax any slider
+    /// invariant, and vice versa.
+    indirect case anyOf([[OracleConstraint]])
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -169,6 +174,10 @@ enum OracleConstraint: Sendable {
              .booleanFlipped(let key, _),
              .numericEqualsOffset(let key, _, _):
             return key
+        case .anyOf:
+            // Alternatives have no single response key. Mutators recurse into
+            // their actual clauses instead of fabricating a root-level field.
+            return ""
         }
     }
 
@@ -184,6 +193,10 @@ enum OracleConstraint: Sendable {
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
              .booleanFlipped, .numericEqualsOffset:
             return true
+        case let .anyOf(alternatives):
+            return alternatives.allSatisfy { branch in
+                branch.contains { $0.isValueConstraint }
+            }
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
@@ -321,6 +334,10 @@ enum OracleConstraint: Sendable {
                   let a = JSONInspector.number(of: aValue),
                   let b = JSONInspector.number(of: bValue) else { return false }
             return a == b + offset
+        case let .anyOf(alternatives):
+            return alternatives.contains { alternative in
+                alternative.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
+            }
         }
     }
 

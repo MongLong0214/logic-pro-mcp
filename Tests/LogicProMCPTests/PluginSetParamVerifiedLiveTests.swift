@@ -34,6 +34,19 @@ private enum SliderWriteBehavior: Sendable {
     case scripted([Double?])
 }
 
+private enum ControlsCheckboxWriteBehavior: Sendable, Equatable {
+    case toggle
+    /// The first requested transition reads back as AX's mixed/indeterminate
+    /// state. `NSNumber.boolValue` would incorrectly call this true.
+    case mixedAfterPress
+    /// AXPress reports status 0/accepted but the checkbox AXValue is inert.
+    /// This is the exact observation that prevents a status-only success.
+    case statusZeroUnchanged
+    /// The first post-press value is mixed, so compensation is warranted; the
+    /// compensating press lands on `true` rather than the original `false`.
+    case mixedThenChanged
+}
+
 /// A live-path fixture. The slider's AXValueDescription is recomputed from its
 /// AXValue on every write so a write updates the readback the way Logic does
 /// ("60 %"). `forcedAfterValue` models a sticky/taper mismatch; `otherTracks`
@@ -45,6 +58,9 @@ private final class LiveFixture: @unchecked Sendable {
     let targetOpenControlPressCount: MutableBox<Int>
     let pluginCloseControlPressCount: MutableBox<Int>
     let sliderWriteCount: MutableBox<Int>
+    let controlsCheckboxPressCount: MutableBox<Int>
+    let controlsViewMenuPressCount: MutableBox<Int>
+    let editorViewMenuPressCount: MutableBox<Int>
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -55,6 +71,7 @@ private final class LiveFixture: @unchecked Sendable {
         thresholdDescription: String = "Threshold",
         pluginSlotName: String = "Compressor",
         beforeValue: Double = 51,
+        sliderBeforeReadable: Bool = true,
         pluginWindowPresent: Bool = true,
         openWindowOnSlotPress: Bool = false,
         forcedAfterValue: Double? = nil,
@@ -65,9 +82,15 @@ private final class LiveFixture: @unchecked Sendable {
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
         sliderWriteBehavior: SliderWriteBehavior = .direct,
+        rejectSliderWrites: Bool = false,
         sliderDisplayUnit: String = "%",
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
+        pluginWindowTitleReadFails: Bool = false,
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError? = nil,
+        nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError? = nil,
+        sliderDescriptionReadStatuses: MutableBox<[Int: AXHelpers.AXStatusError]>? = nil,
+        pluginWindowStaticTextValueReadStatuses: MutableBox<[Int: AXHelpers.AXStatusError]>? = nil,
         // An already-visible editor whose title becomes the target track only
         // after the slot press. This models an existing AX element being
         // retargeted by an unrelated UI transition; duplicate acquisition must
@@ -76,13 +99,36 @@ private final class LiveFixture: @unchecked Sendable {
         // Model an editor whose close control is pressed but which stays in
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
-        pluginCloseControlFailsToClose: Bool = false
+        pluginCloseControlFailsToClose: Bool = false,
+        controlsViewRowLabel: String? = nil,
+        controlsViewControlRole: String = kAXCheckBoxRole as String,
+        controlsCheckboxBefore: Bool = false,
+        controlsCheckboxWriteBehavior: ControlsCheckboxWriteBehavior = .toggle,
+        controlsViewInitiallySelected: Bool = false,
+        pluginWindowViewSwitcherDescription: String = "보기",
+        viewMenuPressChangesStructure: Bool = true,
+        viewMenuPressChangesTitle: Bool = true,
+        viewMenuSelectionSetsUnconfirmedStructure: Bool = false,
+        viewMenuBecomesUnavailableAfterControlsSelection: Bool = false,
+        viewMenuReadFailsAfterFirstSelection: Bool = false,
+        controlsTableReadFailsAfterRestoration: Bool = false,
+        invalidateTargetSlotAfterViewSelection: Bool = false,
+        mutatePluginHeaderAfterViewSelection: Bool = false,
+        ambiguousEditorSliderAfterViewSelection: Bool = false,
+        viewMenuRevealAfterPolls: Int? = 3,
+        viewMenuDuplicatesOnReveal: Bool = false,
+        viewMenuOmitsEditorItem: Bool = false,
+        viewMenuEditorItemEnabled: Bool = true,
+        viewSettleDelay: TimeInterval = 0.5
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
         let targetOpenControlPressCount = MutableBox(0)
         let pluginCloseControlPressCount = MutableBox(0)
         let sliderWriteCount = MutableBox(0)
+        let controlsCheckboxPressCount = MutableBox(0)
+        let controlsViewMenuPressCount = MutableBox(0)
+        let editorViewMenuPressCount = MutableBox(0)
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
         let headersGroup = b.element(1002)
@@ -92,6 +138,19 @@ private final class LiveFixture: @unchecked Sendable {
         let pluginClose = b.element(1006)
         let pluginBypass = b.element(1007)
         let pluginLink = b.element(1008)
+        let controlsViewSwitcher = b.element(1009)
+        let controlsViewMenu = b.element(100_901)
+        let duplicateControlsViewMenu = b.element(100_914)
+        let controlsViewMenuItem = b.element(100_902)
+        let editorViewMenuItem = b.element(100_909)
+        let controlsTable = b.element(100_903)
+        let controlsRow = b.element(100_904)
+        let controlsLabelCell = b.element(100_905)
+        let controlsLabel = b.element(100_907)
+        let controlsCheckbox = b.element(100_908)
+        let controlsHeadingRow = b.element(100_910)
+        let controlsHeadingCell = b.element(100_911)
+        let controlsHeadingLabel = b.element(100_912)
 
         // --- Track headers: one row per track, selected-state on the target. ---
         var headerRows: [AXUIElement] = []
@@ -167,7 +226,11 @@ private final class LiveFixture: @unchecked Sendable {
         //     include the plug-in display name at no fixed index. ---
         b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
         b.setAttribute(slider, kAXDescriptionAttribute as String, thresholdDescription)
-        b.setAttribute(slider, kAXValueAttribute as String, beforeValue)
+        b.setAttribute(
+            slider,
+            kAXValueAttribute as String,
+            sliderBeforeReadable ? beforeValue : NSNull()
+        )
         b.setAttribute(slider, kAXMinValueAttribute as String, 0.0)
         b.setAttribute(slider, kAXMaxValueAttribute as String, 100.0)
         let formatSliderDisplay: @Sendable (Double) -> String = { value in
@@ -198,7 +261,76 @@ private final class LiveFixture: @unchecked Sendable {
                 b.setAttribute(text, kAXValueAttribute as String, value)
                 return text
             }
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider] + staticTexts)
+        let ambiguousEditorSlider = b.element(100_913)
+        if ambiguousEditorSliderAfterViewSelection {
+            b.setAttribute(ambiguousEditorSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+            b.setAttribute(ambiguousEditorSlider, kAXDescriptionAttribute as String, thresholdDescription)
+            b.setAttribute(ambiguousEditorSlider, kAXValueAttribute as String, beforeValue)
+        }
+        var pluginWindowChildren = [pluginBypass, pluginLink, slider]
+            + (ambiguousEditorSliderAfterViewSelection ? [ambiguousEditorSlider] : [])
+            + staticTexts
+        b.setRole(controlsViewSwitcher, kAXMenuButtonRole as String)
+        b.setAttribute(
+            controlsViewSwitcher,
+            kAXDescriptionAttribute as String,
+            pluginWindowViewSwitcherDescription
+        )
+        b.setAttribute(
+            controlsViewSwitcher,
+            kAXTitleAttribute as String,
+            controlsViewInitiallySelected ? "컨트롤" : "편집기"
+        )
+        b.setRole(controlsViewMenu, kAXMenuRole as String)
+        b.setRole(controlsViewMenuItem, kAXMenuItemRole as String)
+        b.setAttribute(controlsViewMenuItem, kAXTitleAttribute as String, "컨트롤")
+        b.setAttribute(controlsViewMenuItem, kAXEnabledAttribute as String, true)
+        b.setRole(editorViewMenuItem, kAXMenuItemRole as String)
+        b.setAttribute(editorViewMenuItem, kAXTitleAttribute as String, "편집기")
+        b.setAttribute(editorViewMenuItem, kAXEnabledAttribute as String, viewMenuEditorItemEnabled)
+        let viewMenuItems = viewMenuOmitsEditorItem
+            ? [controlsViewMenuItem]
+            : [controlsViewMenuItem, editorViewMenuItem]
+        b.setChildren(controlsViewMenu, viewMenuItems)
+        b.setRole(duplicateControlsViewMenu, kAXMenuRole as String)
+        b.setChildren(duplicateControlsViewMenu, viewMenuItems)
+        pluginWindowChildren += [controlsViewSwitcher]
+        var controlsViewWindowChildren = [pluginBypass, pluginLink]
+            + staticTexts
+            + [controlsViewSwitcher]
+        // Controls view itself is identified by a parameter row whose label
+        // and control occupy one AXCell as siblings. Keep that measured shape even
+        // when this fixture is exercising an editor-slider write rather than
+        // a Controls-view checkbox write.
+        b.setRole(controlsTable, kAXTableRole as String)
+        b.setRole(controlsRow, kAXRowRole as String)
+        b.setRole(controlsHeadingRow, kAXRowRole as String)
+        b.setRole(controlsHeadingCell, kAXCellRole as String)
+        b.setRole(controlsHeadingLabel, kAXStaticTextRole as String)
+        b.setAttribute(controlsHeadingLabel, kAXValueAttribute as String, "Dynamics")
+        b.setChildren(controlsHeadingCell, [controlsHeadingLabel])
+        b.setChildren(controlsHeadingRow, [controlsHeadingCell])
+        b.setChildren(controlsTable, [controlsHeadingRow, controlsRow])
+        b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsHeadingRow, controlsRow])
+        controlsViewWindowChildren += [controlsTable]
+        b.setRole(controlsLabelCell, kAXCellRole as String)
+        b.setRole(controlsLabel, kAXStaticTextRole as String)
+        b.setAttribute(
+            controlsLabel,
+            kAXValueAttribute as String,
+            controlsViewRowLabel ?? "Measured Controls Parameter"
+        )
+        b.setRole(controlsCheckbox, controlsViewControlRole)
+        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, controlsCheckboxBefore)
+        b.setChildren(controlsLabelCell, [controlsLabel, controlsCheckbox])
+        b.setChildren(controlsRow, [controlsLabelCell])
+        // Controls view has rows, but no editor-view slider descriptions.
+        // Keep its shape distinct from the native editor so a test cannot
+        // accidentally keep relying on Threshold after the view changes.
+        b.setChildren(
+            pluginWindow,
+            controlsViewInitiallySelected ? controlsViewWindowChildren : pluginWindowChildren
+        )
 
         let windows = pluginWindowPresent ? [arrangeWindow, pluginWindow] : [arrangeWindow]
         b.setAttribute(app, kAXWindowsAttribute as String, windows)
@@ -210,12 +342,97 @@ private final class LiveFixture: @unchecked Sendable {
         // sticky parameter (readback != requested).
         let sliderKey = b.elementID(slider)
         let targetSlotKey = targetSlot.map { b.elementID($0) }
+        let targetSlotForViewMutation = targetSlot
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
+        let controlsCheckboxKey = b.elementID(controlsCheckbox)
+        let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
+        let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
+        let controlsViewSwitcherKey = b.elementID(controlsViewSwitcher)
+        let controlsWindowChildren = controlsViewWindowChildren
+        let editorWindowChildren = pluginWindowChildren
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
+        let pluginWindowsReadStatusBeforeTargetOpen = pluginWindowsReadStatusBeforeTargetOpen
+        let nonPluginWindowSubroleReadStatus = nonPluginWindowSubroleReadStatus
+        let menuOpen = MutableBox(false)
+        let menuVisible = MutableBox(false)
+        let menuCensusPolls = MutableBox(0)
+        let pendingPluginWindowChildren = MutableBox<(children: [AXUIElement], settlesAt: Date)?>(nil)
         let runtime = b.makeLogicRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if let status = pluginWindowsReadStatusBeforeTargetOpen,
+                   CFEqual(element, app),
+                   attribute == (kAXWindowsAttribute as String),
+                   targetOpenControlPressCount.value == 0 {
+                    return .failure(status)
+                }
+                if let status = nonPluginWindowSubroleReadStatus,
+                   CFEqual(element, arrangeWindow),
+                   attribute == (kAXSubroleAttribute as String) {
+                    return .failure(status)
+                }
+                if pluginWindowTitleReadFails,
+                   CFEqual(element, pluginWindow),
+                   attribute == (kAXTitleAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if let status = sliderDescriptionReadStatuses?.value[b.elementID(element)],
+                   attribute == (kAXDescriptionAttribute as String) {
+                    return .failure(status)
+                }
+                if let status = pluginWindowStaticTextValueReadStatuses?.value[b.elementID(element)],
+                   attribute == (kAXValueAttribute as String) {
+                    return .failure(status)
+                }
+                return nil
+            },
+            childrenHandler: { element in
+                if CFEqual(element, pluginWindow),
+                   let pending = pendingPluginWindowChildren.value,
+                   Date() >= pending.settlesAt {
+                    b.setChildren(pluginWindow, pending.children)
+                    pendingPluginWindowChildren.value = nil
+                }
+                if CFEqual(element, controlsViewSwitcher), menuOpen.value, menuVisible.value {
+                    return [controlsViewMenu]
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                // The status-preserving censuses read through this seam rather
+                // than `childrenHandler`; advance the same realistic view-settle
+                // state before serving either read path.
+                if CFEqual(element, pluginWindow),
+                   let pending = pendingPluginWindowChildren.value,
+                   Date() >= pending.settlesAt {
+                    b.setChildren(pluginWindow, pending.children)
+                    pendingPluginWindowChildren.value = nil
+                }
+                if controlsTableReadFailsAfterRestoration,
+                   CFEqual(element, controlsTable),
+                   controlsViewMenuPressCount.value > 0 {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
+                guard CFEqual(element, controlsViewSwitcher), menuOpen.value else { return nil }
+                if viewMenuReadFailsAfterFirstSelection,
+                   controlsViewMenuPressCount.value + editorViewMenuPressCount.value > 0 {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
+                guard let revealAfterPolls = viewMenuRevealAfterPolls else {
+                    return .success([])
+                }
+                if menuCensusPolls.value < max(0, revealAfterPolls) {
+                    menuCensusPolls.value += 1
+                    return .success([])
+                }
+                menuVisible.value = true
+                    return .success(viewMenuDuplicatesOnReveal
+                        ? [controlsViewMenu, duplicateControlsViewMenu]
+                        : [controlsViewMenu]
+                    )
+            },
             setAttributeHandler: { [b] el, attribute, value in
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(pluginWindow),
@@ -233,6 +450,9 @@ private final class LiveFixture: @unchecked Sendable {
                     ?? 0
                 let writeIndex = sliderWriteCount.value
                 sliderWriteCount.value += 1
+                if rejectSliderWrites {
+                    return false
+                }
                 let landed: Double?
                 switch writeBehavior {
                 case .direct:
@@ -262,15 +482,102 @@ private final class LiveFixture: @unchecked Sendable {
                     b.setAttribute(pluginWindow, kAXFocusedAttribute as String, false)
                     return true
                 }
-                guard action == (kAXPressAction as String) else {
+                let key = b.elementID(el)
+                if key == controlsViewSwitcherKey {
+                    guard action == (kAXPressAction as String) else { return false }
+                    guard !(viewMenuBecomesUnavailableAfterControlsSelection
+                        && controlsViewMenuPressCount.value > 0) else {
+                        return true
+                    }
+                    menuOpen.value = true
+                    menuVisible.value = false
+                    menuCensusPolls.value = 0
                     return true
                 }
-                let key = b.elementID(el)
+                if key == controlsViewMenuItemKey || key == editorViewMenuItemKey {
+                    guard action == (kAXPickAction as String) else { return false }
+                    menuOpen.value = false
+                    menuVisible.value = false
+                    if key == controlsViewMenuItemKey {
+                        controlsViewMenuPressCount.value += 1
+                        if invalidateTargetSlotAfterViewSelection, let targetSlotForViewMutation {
+                            b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
+                        }
+                        if mutatePluginHeaderAfterViewSelection, staticTexts.indices.contains(1) {
+                            b.setAttribute(staticTexts[1], kAXValueAttribute as String, "Noise Gate")
+                        }
+                        if viewMenuSelectionSetsUnconfirmedStructure {
+                            pendingPluginWindowChildren.value = (
+                                children: [controlsViewSwitcher],
+                                settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                            )
+                        } else if viewMenuPressChangesStructure {
+                            pendingPluginWindowChildren.value = (
+                                children: controlsWindowChildren,
+                                settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                            )
+                        }
+                        if viewMenuPressChangesTitle {
+                            b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "컨트롤")
+                        }
+                        return true
+                    }
+                    editorViewMenuPressCount.value += 1
+                    if invalidateTargetSlotAfterViewSelection, let targetSlotForViewMutation {
+                        b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
+                    }
+                    if mutatePluginHeaderAfterViewSelection, staticTexts.indices.contains(1) {
+                        b.setAttribute(staticTexts[1], kAXValueAttribute as String, "Noise Gate")
+                    }
+                    if viewMenuSelectionSetsUnconfirmedStructure {
+                        pendingPluginWindowChildren.value = (
+                            children: [controlsViewSwitcher],
+                            settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                        )
+                    } else if viewMenuPressChangesStructure {
+                        pendingPluginWindowChildren.value = (
+                            children: editorWindowChildren,
+                            settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                        )
+                    }
+                    if viewMenuPressChangesTitle {
+                        b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "편집기")
+                    }
+                    return true
+                }
+                guard action == (kAXPressAction as String) else { return true }
                 if key == pluginCloseKey {
                     pluginCloseControlPressCount.value += 1
                     if !pluginCloseControlFailsToClose {
                         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
                     }
+                    return true
+                }
+                if key == controlsCheckboxKey,
+                   controlsViewRowLabel != nil {
+                    controlsCheckboxPressCount.value += 1
+                    if controlsCheckboxWriteBehavior == .toggle {
+                        let old = (b.attributeValue(controlsCheckbox, kAXValueAttribute as String) as? NSNumber)?.boolValue
+                            ?? (b.attributeValue(controlsCheckbox, kAXValueAttribute as String) as? Bool)
+                            ?? false
+                        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, !old)
+                        return true
+                    }
+                    if controlsCheckboxWriteBehavior == .mixedAfterPress {
+                        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, NSNumber(value: 2))
+                        return true
+                    }
+                    if controlsCheckboxWriteBehavior == .mixedThenChanged {
+                        if controlsCheckboxPressCount.value == 1 {
+                            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, NSNumber(value: 2))
+                        } else {
+                            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, true)
+                        }
+                        return true
+                    }
+                    // Core AX returns status 0 for a successful action. Keep
+                    // AXValue inert while still reporting that status so this
+                    // fixture proves status alone cannot certify a write.
                     return true
                 }
                 guard key == targetSlotKey || key == targetOpenButtonKey else {
@@ -302,6 +609,9 @@ private final class LiveFixture: @unchecked Sendable {
         self.targetOpenControlPressCount = targetOpenControlPressCount
         self.pluginCloseControlPressCount = pluginCloseControlPressCount
         self.sliderWriteCount = sliderWriteCount
+        self.controlsCheckboxPressCount = controlsCheckboxPressCount
+        self.controlsViewMenuPressCount = controlsViewMenuPressCount
+        self.editorViewMenuPressCount = editorViewMenuPressCount
         self.runtime = runtime
     }
 
@@ -331,6 +641,10 @@ private final class LiveFixture: @unchecked Sendable {
     var currentSliderValue: Double? {
         builder.attributeValue(builder.element(1005), kAXValueAttribute as String) as? Double
     }
+
+    var currentPluginViewTitle: String? {
+        builder.attributeValue(builder.element(1009), kAXTitleAttribute as String) as? String
+    }
 }
 
 private func runLive(
@@ -355,12 +669,25 @@ private func runLive(
     ) as! [String: Any]
 }
 
+private func reportsFailedPluginViewRestoration(_ envelope: [String: Any]) -> Bool {
+    guard let attempted = envelope["plugin_view_restore_attempted"] as? Bool,
+          let observed = envelope["plugin_view_restore_observed"] as? Bool else {
+        return false
+    }
+    if let leftChanged = envelope["plugin_view_left_changed"] as? Bool {
+        return attempted && !observed && leftChanged
+    }
+    let restorationWasUnobserved = envelope["plugin_view_restore_unobserved"] as? Bool ?? false
+    return attempted && !observed && restorationWasUnobserved
+}
+
 /// A second same-track Compressor editor for the duplicate-insert post-count
 /// case. Its distinct AX elements intentionally share every non-geometry
 /// identity attribute the live editors share.
 private func matchingCompressorEditorWindow(
     fixture: LiveFixture,
-    baseID: Int
+    baseID: Int,
+    trackName editorTrackName: String = trackName
 ) -> (window: AXUIElement, slider: AXUIElement) {
     let b = fixture.builder
     let window = b.element(baseID)
@@ -381,10 +708,56 @@ private func matchingCompressorEditorWindow(
     b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
     b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
-    b.setAttribute(window, kAXTitleAttribute as String, trackName)
+    b.setAttribute(window, kAXTitleAttribute as String, editorTrackName)
     b.setAttribute(window, kAXCloseButtonAttribute as String, close)
     b.setChildren(window, [bypass, link, slider, pluginName])
     return (window, slider)
+}
+
+/// A Controls-view editor on another strip. It intentionally has no described
+/// slider: header identity, not the native-editor anchor, must keep this
+/// window out of the requested strip's checkbox write.
+private func controlsViewCompressorEditorWindow(
+    fixture: LiveFixture,
+    baseID: Int,
+    trackName editorTrackName: String
+) -> (window: AXUIElement, checkbox: AXUIElement) {
+    let b = fixture.builder
+    let window = b.element(baseID)
+    let close = b.element(baseID + 1)
+    let bypass = b.element(baseID + 2)
+    let pluginName = b.element(baseID + 3)
+    let headerTrackName = b.element(baseID + 4)
+    let table = b.element(baseID + 5)
+    let row = b.element(baseID + 6)
+    let labelCell = b.element(baseID + 7)
+    let label = b.element(baseID + 9)
+    let checkbox = b.element(baseID + 10)
+
+    b.setRole(close, kAXButtonRole as String)
+    b.setRole(bypass, kAXCheckBoxRole as String)
+    b.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+    b.setRole(pluginName, kAXStaticTextRole as String)
+    b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
+    b.setRole(headerTrackName, kAXStaticTextRole as String)
+    b.setAttribute(headerTrackName, kAXValueAttribute as String, editorTrackName)
+    b.setRole(table, kAXTableRole as String)
+    b.setRole(row, kAXRowRole as String)
+    b.setRole(labelCell, kAXCellRole as String)
+    b.setRole(label, kAXStaticTextRole as String)
+    b.setAttribute(label, kAXValueAttribute as String, "Limiter On")
+    b.setRole(checkbox, kAXCheckBoxRole as String)
+    b.setAttribute(checkbox, kAXValueAttribute as String, false)
+    b.setChildren(labelCell, [label, checkbox])
+    b.setChildren(row, [labelCell])
+    b.setChildren(table, [row])
+    b.setAttribute(table, kAXRowsAttribute as String, [row])
+    b.setRole(window, kAXWindowRole as String)
+    b.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(window, kAXTitleAttribute as String, editorTrackName)
+    b.setAttribute(window, kAXCloseButtonAttribute as String, close)
+    b.setChildren(window, [bypass, pluginName, headerTrackName, table])
+    return (window, checkbox)
 }
 
 private func thresholdParams(
@@ -404,6 +777,15 @@ private func thresholdParams(
     return p
 }
 
+private func controlsBooleanParams(
+    param: String = "limiter_on",
+    value: String = "1"
+) -> [String: String] {
+    thresholdParams(value: value, unit: "boolean").merging([
+        "param": param,
+    ]) { _, new in new }
+}
+
 private let channelEQFixtureParamID = "__test_channel_eq_band_gain"
 private let channelEQFixtureAXDescription = "__TEST Channel EQ Band Gain"
 
@@ -411,7 +793,8 @@ private func channelEQFixtureEntryLookup(
     writeMethod: String = "ax_slider_axvalue",
     unit: String = "dB",
     acceptedUnits: [String]? = nil,
-    range: StockPluginValueRange = StockPluginValueRange(min: -24, max: 24, defaultValue: 0)
+    range: StockPluginValueRange = StockPluginValueRange(min: -24, max: 24, defaultValue: 0),
+    tolerance: Double = 0.5
 ) -> VerifiedPluginCatalog.EntryLookup {
     { pluginID in
         guard pluginID == "logic.stock.effect.channel_eq" else {
@@ -450,7 +833,7 @@ private func channelEQFixtureEntryLookup(
                     valueRange: range,
                     writeMethod: writeMethod,
                     readbackMethod: "ax_slider_axvalue",
-                    tolerance: 0.5,
+                    tolerance: tolerance,
                     axDescription: channelEQFixtureAXDescription,
                     availabilityState: .verified,
                     provenance: provenance
@@ -513,7 +896,8 @@ private func runChannelEQFixture(
     fixture: LiveFixture,
     params: [String: String],
     writeMethod: String,
-    incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget,
+    tolerance: Double = 0.5
 ) async throws -> [String: Any] {
     let result = await AccessibilityChannel.defaultSetParamVerified(
         params: params,
@@ -522,7 +906,8 @@ private func runChannelEQFixture(
         entryLookup: channelEQFixtureEntryLookup(
             writeMethod: writeMethod,
             unit: "raw_ax_value",
-            range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0)
+            range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0),
+            tolerance: tolerance
         ),
         paramAliasLookup: channelEQFixtureParamAlias,
         pluginPopupMenuCleaner: { _ in .noPopupObserved },
@@ -573,6 +958,762 @@ private func namedEQBandParams(
     #expect(identity?["insert"] as? Int == 6)
     // The live slider actually changed.
     #expect(fixture.currentSliderValue == 60)
+    let noViewMenuSelection = fixture.controlsViewMenuPressCount.value == 0
+        && fixture.editorViewMenuPressCount.value == 0
+    #expect(noViewMenuSelection)
+}
+
+@Test func testCompressorThresholdSwitchesControlsToEditorThenRestoresControls() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let observedDisplay = try #require(result["observed_display"] as? String)
+    let selectedEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "컨트롤"
+    let sliderWasFoundAndWritten = fixture.currentSliderValue == 60
+    let stateIsA = state == "A"
+    let observedDisplayMatches = observedDisplay == "60 %"
+    #expect(stateIsA)
+    #expect(observedDisplayMatches)
+    #expect(selectedEditorOnce)
+    #expect(restoredControlsOnce)
+    #expect(restoredEntryTitle)
+    #expect(sliderWasFoundAndWritten)
+}
+
+@Test func testCompressorThresholdEnsuresAndSearchesBoundEditorNotOtherOpenCompressor() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true
+    )
+    // A duplicate-applyback run can leave another Compressor editor open.
+    // It shares the plug-in header identity but belongs to another track, so
+    // only the target editor may be switched, searched, and written.
+    let other = matchingCompressorEditorWindow(
+        fixture: fixture,
+        baseID: 8_700,
+        trackName: "Other Strip"
+    )
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [other.window]
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let otherSliderValue = try #require(
+        fixture.builder.attributeValue(other.slider, kAXValueAttribute as String) as? Double
+    )
+    let targetSelectedEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let targetRestoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let stateIsA = state == "A"
+    let targetSliderWasWritten = fixture.currentSliderValue == 60
+    let otherSliderWasUntouched = otherSliderValue == 51
+    #expect(stateIsA)
+    #expect(targetSliderWasWritten)
+    #expect(otherSliderWasUntouched)
+    #expect(targetSelectedEditorOnce)
+    #expect(targetRestoredControlsOnce)
+}
+
+@Test func testCompressorThresholdConfirmsEditorStructureDespiteUnchangedContradictoryTitle() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesTitle: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let titleStayedContradictory = fixture.currentPluginViewTitle == "컨트롤"
+    let selectedEditor = fixture.editorViewMenuPressCount.value == 1
+    let restoredControls = fixture.controlsViewMenuPressCount.value == 1
+    let sliderWasWritten = fixture.currentSliderValue == 60
+    let stateIsA = state == "A"
+    #expect(stateIsA)
+    #expect(titleStayedContradictory)
+    #expect(selectedEditor)
+    #expect(restoredControls)
+    #expect(sliderWasWritten)
+}
+
+@Test func testCompressorThresholdRefusesWhenEditorStructureNeverAppears() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesStructure: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let observed = try #require(result["what_was_observed"] as? String)
+    let reportsUnconfirmedView = error == "plugin_view_not_confirmed"
+    let reportsStructureDeadline = observed.contains("expected editor structure")
+    let sliderWasNotWritten = fixture.sliderWriteCount.value == 0
+    let entryViewWasExplicitlyReselected = fixture.editorViewMenuPressCount.value == 1
+        && fixture.controlsViewMenuPressCount.value == 1
+    #expect(reportsUnconfirmedView)
+    #expect(reportsStructureDeadline)
+    #expect(sliderWasNotWritten)
+    #expect(entryViewWasExplicitlyReselected)
+}
+
+@Test func testPluginViewRefusalNamesTheMenuNeverAppearedPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: nil
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let namesTheObservedPhase = phase == "menu_never_appeared"
+    let refusedBeforeWrite = !writeAttempted
+    // Mutation: drop the menu-appearance diagnostic mapping.
+    #expect(namesTheObservedPhase)
+    #expect(refusedBeforeWrite)
+}
+
+@Test func testPluginViewRefusalNamesTheMenuAmbiguousPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuDuplicatesOnReveal: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "menu_ambiguous"
+    // Mutation: drop the scoped-menu ambiguity diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesTheItemNotFoundPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuOmitsEditorItem: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "item_not_found"
+    // Mutation: drop the scoped-item-not-found diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesTheItemNotEnabledPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuEditorItemEnabled: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "item_not_enabled"
+    // Mutation: drop the AXEnabled refusal diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesThePostPickStructurePhaseAndDeadlineSnapshot() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesStructure: false,
+        viewMenuRevealAfterPolls: 0
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let tables = try #require(result["plugin_view_structure_table_count"] as? Int)
+    let rows = try #require(result["plugin_view_structure_row_count"] as? Int)
+    let describedSliders = try #require(result["plugin_view_structure_described_slider_count"] as? Int)
+    let waitedMilliseconds = try #require(result["plugin_view_structure_waited_ms"] as? Int)
+    let restorationAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restorationObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let namesTheObservedPhase = phase == "pick_performed_structure_never_confirmed"
+    let capturesDeadlineClassifierState = tables == 1
+        && rows == 2
+        && describedSliders == 0
+        && waitedMilliseconds >= 2_900
+    let entryViewRestorationSurvived = restorationAttempted && restorationObserved
+    // Mutation: omit `failure.responseDiagnostics` from the State-C envelope.
+    #expect(namesTheObservedPhase)
+    #expect(capturesDeadlineClassifierState)
+    #expect(entryViewRestorationSurvived)
+}
+
+@Test func testCompressorThresholdRestoresControlsAfterSliderLookupRefusal() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        controlsViewInitiallySelected: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let switchedToEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "컨트롤"
+    let reportsSliderLookupRefusal = error == "param_control_not_found"
+    #expect(reportsSliderLookupRefusal)
+    #expect(switchedToEditorOnce)
+    #expect(restoredControlsOnce)
+    #expect(restoredEntryTitle)
+}
+
+@Test func testCompressorThresholdRefusesUnmeasuredViewSwitcherLocale() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        pluginWindowViewSwitcherDescription: "Ansicht"
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let observed = try #require(result["what_was_observed"] as? String)
+    let noViewMenuSelection = fixture.controlsViewMenuPressCount.value == 0
+        && fixture.editorViewMenuPressCount.value == 0
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportsUnconfirmedView = error == "plugin_view_not_confirmed"
+    let reportsUnmeasuredLocale = observed.contains("not measured for this locale")
+    #expect(reportsUnconfirmedView)
+    #expect(reportsUnmeasuredLocale)
+    #expect(noViewMenuSelection)
+    #expect(noSliderWrite)
+}
+
+@Test func testCompressorControlsViewCheckboxUsesRowLabelPressAndChangedReadback() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let rowLabel = try #require(result["controls_view_row_label"] as? String)
+    let presses = fixture.controlsCheckboxPressCount.value
+    let oneVerifiedPress = presses == 1
+    let selectedControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "편집기"
+    #expect(state == "A")
+    #expect(verified)
+    #expect(observed)
+    #expect(rowLabel == "Limiter On")
+    #expect(oneVerifiedPress)
+    #expect(selectedControlsOnce)
+    #expect(restoredEditorOnce)
+    #expect(restoredEntryTitle)
+}
+
+@Test func testControlsViewAlreadyOpenWithoutDescribedSlidersBindsHeaderAndReachesCheckbox() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    let viewMenuPresses = fixture.controlsViewMenuPressCount.value
+    let editorViewMenuPresses = fixture.editorViewMenuPressCount.value
+    #expect(state == "A")
+    #expect(verified)
+    #expect(checkboxPresses == 1)
+    #expect(viewMenuPresses == 0)
+    #expect(editorViewMenuPresses == 0)
+}
+
+@Test func testNativeEditorWithoutThresholdAnchorBindsHeaderThenSelectsControls() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    let viewMenuPresses = fixture.controlsViewMenuPressCount.value
+    let editorViewMenuPresses = fixture.editorViewMenuPressCount.value
+    #expect(state == "A")
+    #expect(verified)
+    #expect(checkboxPresses == 1)
+    #expect(viewMenuPresses == 1)
+    #expect(editorViewMenuPresses == 1)
+}
+
+@Test func testControlsViewHeaderBindingChoosesRequestedStripAndLeavesOtherEditorUntouched() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+    let other = controlsViewCompressorEditorWindow(
+        fixture: fixture,
+        baseID: 8_600,
+        trackName: "Other Strip"
+    )
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [other.window]
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let targetCheckboxPresses = fixture.controlsCheckboxPressCount.value
+    let otherCheckboxState = try #require(
+        fixture.builder.attributeValue(other.checkbox, kAXValueAttribute as String) as? Bool
+    )
+    #expect(state == "A")
+    #expect(targetCheckboxPresses == 1)
+    #expect(!otherCheckboxState)
+}
+
+@Test func testControlsViewMismatchedHeaderRefusesBeforeCheckboxActuation() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        pluginWindowStaticTextValues: ["보기:", "Noise Gate", trackName],
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    #expect(error == "plugin_window_plugin_mismatch")
+    #expect(!writeAttempted)
+    #expect(checkboxPresses == 0)
+}
+
+@Test func testControlsViewCheckboxBindsTargetHeaderBeforeSharedThresholdAnchor() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+    let unrelatedEditors = ["Drums", "Reverb", "Piano", "Vox"].enumerated().map { offset, otherTrack in
+        matchingCompressorEditorWindow(
+            fixture: fixture,
+            baseID: 8_000 + offset * 10,
+            trackName: otherTrack
+        ).window
+    }
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + unrelatedEditors
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    // Every added editor exposes the same Threshold slider. Success proves the
+    // target track/plugin header binding selected the intended editor before
+    // treating Threshold as its secondary Controls-view witness.
+    #expect(result["state"] as? String == "A")
+    #expect(fixture.controlsCheckboxPressCount.value == 1)
+}
+
+@Test func testCompressorControlsViewAutoReleaseUsesItsOwnRowLabel() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Auto Release",
+        controlsCheckboxBefore: true
+    )
+    let result = await runLive(
+        fixture: fixture,
+        params: controlsBooleanParams(param: "auto_release", value: "0")
+    )
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let rowLabel = try #require(result["controls_view_row_label"] as? String)
+    let oneVerifiedPress = fixture.controlsCheckboxPressCount.value == 1
+    #expect(state == "A")
+    #expect(verified)
+    #expect(!observed)
+    #expect(rowLabel == "Auto Release")
+    #expect(oneVerifiedPress)
+}
+
+@Test func testCompressorControlsViewStatusZeroUnchangedReadbackRefusesWithoutASecondPress() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .statusZeroUnchanged
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restoreAttempted = try #require(result["restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["restore_observed"] as? Bool)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let statusOnlyWasNotSuccess = result["state"] as? String != "A"
+    let noCompensatingPressWasSent = fixture.controlsCheckboxPressCount.value == 1
+    #expect(error == "readback_mismatch")
+    #expect(!restoreAttempted)
+    #expect(restoreObserved)
+    #expect(writeAttempted)
+    #expect(statusOnlyWasNotSuccess)
+    #expect(noCompensatingPressWasSent)
+}
+
+@Test func testControlsViewCheckboxAlreadyAtRequestedValueIsVerifiedWithoutActuation() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    #expect(state == "A")
+    #expect(verified)
+    #expect(observed)
+    #expect(!writeAttempted)
+    #expect(noCheckboxPress)
+}
+
+@Test func testFailedCompensatingCheckboxPressReportsTheChangedParameter() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .mixedThenChanged
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let leftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let restorationObserved = try #require(result["restore_observed"] as? Bool)
+    let restoredValue = try #require(result["restore_observed_boolean"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let compensationWasAttempted = fixture.controlsCheckboxPressCount.value == 2
+    #expect(state == "C")
+    #expect(leftChanged)
+    #expect(!restorationObserved)
+    #expect(restoredValue)
+    #expect(!safeToRetry)
+    #expect(compensationWasAttempted)
+}
+
+@Test func testCompressorControlsViewMixedNSNumberReadbackRefusesInsteadOfStateA() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .mixedAfterPress
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let stateIsC = state == "C"
+    let mixedReadbackWasNotVerified = error == "readback_lost_after_write"
+    let compensatingPressWasAttempted = fixture.controlsCheckboxPressCount.value == 2
+    #expect(stateIsC)
+    #expect(mixedReadbackWasNotVerified)
+    #expect(writeAttempted)
+    #expect(compensatingPressWasAttempted)
+}
+
+@Test func testControlsLookupRefusalReportsFailedRestoreThatLeavesControlsSelected() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "A Different Boolean",
+        controlsCheckboxBefore: false,
+        viewMenuBecomesUnavailableAfterControlsSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let error = try #require(result["error"] as? String)
+    let restoreAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let leftChanged = try #require(result["plugin_view_left_changed"] as? Bool)
+    let observedStructure = try #require(result["plugin_view_restore_observed_structure"] as? String)
+    let lookupRefusalWasStateC = state == "C" && error == "param_control_not_found"
+    let restorationFailureWasVisible = restoreAttempted && !restoreObserved && leftChanged
+    let fixtureWasLeftInControls = fixture.currentPluginViewTitle == "컨트롤"
+    #expect(lookupRefusalWasStateC)
+    #expect(restorationFailureWasVisible)
+    #expect(observedStructure == "controls")
+    #expect(fixtureWasLeftInControls)
+}
+
+@Test func testUnobservedRestoreDoesNotClaimTheRestoredEntryViewWasLeftChanged() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        controlsTableReadFailsAfterRestoration: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let restoreAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let restorationWasReportedUnobserved = try #require(result["plugin_view_restore_unobserved"] as? Bool)
+    let entryViewWasActuallyReselected = fixture.currentPluginViewTitle == "컨트롤"
+    let leftChangedWasNotAsserted = result["plugin_view_left_changed"] == nil
+    let writeReachedStateA = state == "A"
+    let restoreAttemptWasUnconfirmed = restoreAttempted && !restoreObserved
+    #expect(writeReachedStateA)
+    #expect(restoreAttemptWasUnconfirmed)
+    #expect(restorationWasReportedUnobserved)
+    #expect(entryViewWasActuallyReselected)
+    #expect(leftChangedWasNotAsserted)
+}
+
+@Test func testNoTableConfirmsEditorBeforeTheFailedCompensatingRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuSelectionSetsUnconfirmedStructure: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedMissingEditorControl = error == "param_control_not_found"
+    #expect(reportedMissingEditorControl)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
+}
+
+@Test func testTargetRevalidationStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        viewMenuReadFailsAfterFirstSelection: true,
+        invalidateTargetSlotAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noCheckboxPress)
+}
+
+@Test func testPluginIdentityFailureStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        viewMenuReadFailsAfterFirstSelection: true,
+        mutatePluginHeaderAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noCheckboxPress)
+}
+
+@Test func testSliderAmbiguityStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true,
+        ambiguousEditorSliderAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
+}
+
+@Test func testDirectWriteRejectionStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        rejectSliderWrites: true,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let parameterMayBeChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let reportedAXWriteFailure = error == "ax_write_failed"
+    #expect(reportedAXWriteFailure)
+    #expect(restorationFailureWasVisible)
+    #expect(rollbackAttempted)
+    #expect(parameterMayBeChanged)
+}
+
+@Test func testDirectReadbackLossRollsBackAndReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        sliderWriteBehavior: .scripted([nil, 51]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let rollbackObserved = try #require(result["rollback_observed"] as? Double)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackWasWritten = fixture.sliderWriteCount.value == 2
+    let reportedReadbackLoss = error == "readback_lost_after_write"
+    let rollbackObservedOriginalValue = rollbackObserved == 51
+    let parameterWasNotLeftChanged = !parameterLeftChanged
+    #expect(reportedReadbackLoss)
+    #expect(rollbackAttempted)
+    #expect(rolledBack)
+    #expect(rollbackObservedOriginalValue)
+    #expect(safeToRetry)
+    #expect(parameterWasNotLeftChanged)
+    #expect(restorationFailureWasVisible)
+    #expect(rollbackWasWritten)
+}
+
+@Test func testDirectReadbackLossWithFailedRollbackReportsParameterLeftChanged() async throws {
+    let fixture = LiveFixture(
+        sliderWriteBehavior: .scripted([nil, nil]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackWasNotObserved = !rolledBack
+    let retryIsNotSafe = !safeToRetry
+    #expect(rollbackAttempted)
+    #expect(rollbackWasNotObserved)
+    #expect(parameterLeftChanged)
+    #expect(retryIsNotSafe)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testDirectRollbackNearMissUsesTheParametersOwnZeroTolerance() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 51,
+        // The write's readback is lost; compensation reaches 51.4 rather than
+        // the pre-write 51. This fixture declares tolerance 0 below.
+        sliderWriteBehavior: .scripted([nil, 51.4])
+    )
+    let result = try await runChannelEQFixture(
+        fixture: fixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_axvalue",
+        tolerance: 0
+    )
+
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let rollbackObserved = try #require(result["rollback_observed"] as? Double)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let exactRestorationWasNotObserved = !rolledBack && rollbackObserved == 51.4
+    let parameterWasLeftChanged = parameterLeftChanged && !safeToRetry
+    #expect(rollbackAttempted)
+    #expect(exactRestorationWasNotObserved)
+    #expect(parameterWasLeftChanged)
+}
+
+@Test func testReadbackMismatchStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        forcedAfterValue: 40,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let reportedReadbackMismatch = error == "readback_mismatch"
+    #expect(reportedReadbackMismatch)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testIncrementWalkFailureStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .scripted([0]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = try await runChannelEQFixture(
+        fixture: fixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_increment_walk"
+    )
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let reportedNoIncrementProgress = error == "increment_walk_no_progress"
+    #expect(reportedNoIncrementProgress)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testUnreadableDirectBeforeStateRefusesWithoutWriting() async throws {
+    let fixture = LiveFixture(
+        sliderBeforeReadable: false,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedReadbackUnavailable = error == "readback_unavailable"
+    let writeWasNotAttempted = !writeAttempted
+    #expect(reportedReadbackUnavailable)
+    #expect(writeWasNotAttempted)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
 }
 
 @Test func testWithinToleranceStillStateA() async {
@@ -726,6 +1867,166 @@ private func namedEQBandParams(
     #expect(fixture.currentSliderValue == 51)
 }
 
+@Test func testUnreadableCompetingEditorMakesWindowUniquenessUndecidable() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowTitleReadFails: true
+    )
+    let sibling = matchingCompressorEditorWindow(fixture: fixture, baseID: 9_000)
+    let existingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [sibling.window]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let diagnostic = try #require(obj["plugin_window_read_failure"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let sliderWasUntouched = fixture.currentSliderValue == 51
+    #expect(state == "C")
+    #expect(error == "window_identity_unresolved")
+    #expect(diagnostic == "-25200")
+    #expect(!writeAttempted)
+    #expect(sliderWasUntouched)
+    #expect(fixture.builder.attributeValue(sibling.slider, kAXValueAttribute as String) as? Double == 51)
+}
+
+@Test func testUnreadableEditorDuringDuplicatePrecountRefusesBeforeTargetSlotPress() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowTitleReadFails: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let diagnostic = try #require(obj["plugin_window_read_failure"] as? String)
+    let noTargetSlotPress = fixture.targetOpenControlPressCount.value == 0
+    #expect(state == "C")
+    #expect(error == "window_identity_unresolved")
+    #expect(diagnostic == "-25200")
+    #expect(noTargetSlotPress)
+}
+
+@Test func testDuplicatePrecountTreatsNoValueAXWindowsAsEmptyAndWrites() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.noValue.rawValue
+        )
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+    let absencePrecountReachedTheWrite = result["state"] as? String == "A"
+        && fixture.targetOpenControlPressCount.value == 1
+        && fixture.currentSliderValue == 60
+    #expect(absencePrecountReachedTheWrite)
+}
+
+@Test func testDuplicatePrecountPreservesCannotCompleteAsARefusal() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+    let unreadablePrecountRefusedBeforeThePress = result["state"] as? String == "C"
+        && result["error"] as? String == "window_identity_unresolved"
+        && result["plugin_window_read_failure"] as? String == "-25204"
+        && fixture.targetOpenControlPressCount.value == 0
+        && fixture.currentSliderValue == 51
+    #expect(unreadablePrecountRefusedBeforeThePress)
+}
+
+@Test func testPluginEditorEnumerationTreatsDefinitiveAXAbsenceAsEmpty() {
+    let absenceStatuses = [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue]
+    let everyAbsenceWasAnEmptyCensus = absenceStatuses.allSatisfy { rawStatus in
+        let fixture = LiveFixture(
+            pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(raw: rawStatus)
+        )
+        switch AXLogicProElements.pluginEditorWindows(runtime: fixture.runtime) {
+        case let .success(editors):
+            return editors.isEmpty
+        case .failure:
+            return false
+        }
+    }
+    #expect(everyAbsenceWasAnEmptyCensus)
+}
+
+@Test func testPluginEditorEnumerationPreservesCannotCompleteAsAReadFailure() {
+    let fixture = LiveFixture(
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+    let result = AXLogicProElements.pluginEditorWindows(runtime: fixture.runtime)
+    let cannotCompleteWasPreserved: Bool
+    switch result {
+    case let .failure(error):
+        cannotCompleteWasPreserved = error.raw == AXError.cannotComplete.rawValue
+    case .success:
+        cannotCompleteWasPreserved = false
+    }
+    #expect(cannotCompleteWasPreserved)
+}
+
+@Test func testPluginWindowClassificationTreatsDefinitiveAXAbsenceAsANonCandidate() {
+    let absenceStatuses = [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue]
+    let everyAbsenceLeftTheReadableEditorClassified = absenceStatuses.allSatisfy { rawStatus in
+        let fixture = LiveFixture(
+            nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError(raw: rawStatus)
+        )
+        let match = AXLogicProElements.pluginWindowMatch(
+            forTrackName: trackName,
+            matchingPluginID: "logic.stock.effect.compressor",
+            matchingSliderDescription: "Threshold",
+            runtime: fixture.runtime
+        )
+        if case .unique = match {
+            return true
+        }
+        return false
+    }
+    #expect(everyAbsenceLeftTheReadableEditorClassified)
+}
+
+@Test func testPluginWindowClassificationPreservesCannotCompleteAsUnreadable() {
+    let fixture = LiveFixture(
+        nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+    let match = AXLogicProElements.pluginWindowMatch(
+        forTrackName: trackName,
+        matchingPluginID: "logic.stock.effect.compressor",
+        matchingSliderDescription: "Threshold",
+        runtime: fixture.runtime
+    )
+    let cannotCompleteWasUnreadable: Bool
+    switch match {
+    case let .unreadable(error):
+        cannotCompleteWasUnreadable = error.raw == AXError.cannotComplete.rawValue
+    case .none, .unique, .ambiguous, .pluginIdentityMismatch:
+        cannotCompleteWasUnreadable = false
+    }
+    #expect(cannotCompleteWasUnreadable)
+}
+
 @Test func testDuplicatePluginWithTwoEditorsAfterOnePressRefuses() async throws {
     let fixture = LiveFixture(
         beforeValue: 51,
@@ -748,11 +2049,17 @@ private func namedEQBandParams(
     // Count-mismatch is an early return, but both editors were newly observed
     // after this operation's press and must not be stranded for the next call.
     #expect(fixture.pluginCloseControlPressCount.value == 1)
-    #expect(AXLogicProElements.matchingPluginEditorWindows(
+    let remainingCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(remainingEditors) = remainingCensus else {
+        Issue.record("the post-close editor census was unreadable")
+        return
+    }
+    let allNewEditorsWereClosed = remainingEditors.isEmpty
+    #expect(allNewEditorsWereClosed)
 }
 
 @Test func testDuplicateAcquisitionRejectsAnExistingEditorThatOnlyBecomesAMatchAfterPress() async throws {
@@ -1409,7 +2716,7 @@ private func namedEQBandParams(
     #expect(fixture.currentSliderValue == 60)
 }
 
-@Test func testProductionOpenerRejectsOpenedWindowWithoutRequestedSlider() async throws {
+@Test func testProductionOpenerReportsOpenedNativeWindowWithoutRequestedSlider() async throws {
     let fixture = LiveFixture(
         thresholdDescription: "Output Gain",
         beforeValue: 51,
@@ -1419,15 +2726,11 @@ private func namedEQBandParams(
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["error"] as? String == "param_control_not_found")
     let v1 = try #require(obj["write_attempted"] as? Bool)
     #expect(!v1)
-    let v2 = try #require(obj["opener_action_attempted"] as? Bool)
-    #expect(v2)
-    let windowCandidates = obj["window_candidates"] as? [[String: Any]]
-    let sliders = windowCandidates?.last?["slider_descriptions"] as? [String]
-    let v3 = try #require(sliders?.contains("Output Gain"))
-    #expect(v3)
+    let observed = try #require(obj["what_was_observed"] as? String)
+    #expect(observed.contains("no slider with that AX description"))
     #expect(fixture.currentSliderValue == 51)
 }
 
@@ -1520,7 +2823,11 @@ private func namedEQBandParams(
 }
 
 @Test func testAmbiguousWindowAppearingAfterSlotPressFailsClosed() async throws {
-    let fixture = LiveFixture(beforeValue: 51, openWindowOnSlotPress: true)
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true
+    )
     let b = fixture.builder
     let duplicateWindow = b.element(3300)
     let duplicateSlider = b.element(3301)
@@ -1558,21 +2865,34 @@ private func namedEQBandParams(
 }
 
 @Test func testAmbiguousRequestedSlidersFailClosed() async throws {
-    let fixture = LiveFixture(beforeValue: 51)
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowPresent: false)
     let b = fixture.builder
     let duplicateSlider = b.element(3200)
     b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
     b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
     b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
-    b.setChildren(b.element(1004), [b.element(1007), b.element(1008), b.element(1005), duplicateSlider])
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), b.element(1005), duplicateSlider,
+        b.element(1011), b.element(1009),
+    ])
 
-    let obj = await runLive(fixture: fixture, params: thresholdParams())
+    let openedWindow = AXUIElementSendable(b.element(1004))
+    let obj = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), b.element(1004)])
+            return openedWindow
+        }
+    )
 
-    #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "window_identity_unresolved")
-    let v1 = try #require(obj["write_attempted"] as? Bool)
-    #expect(!v1)
-    #expect(fixture.currentSliderValue == 51)
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let refusedAsAmbiguous = state == "C" && error == "window_identity_unresolved"
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.currentSliderValue == 51
+    #expect(refusedAsAmbiguous)
+    #expect(noSliderWriteWasAttempted)
 }
 
 @Test func testOpenerFallbackProducesStateA() async {
@@ -1591,6 +2911,7 @@ private func namedEQBandParams(
     let openedBypass = b.element(2003)
     let openedLink = b.element(2004)
     let openedPluginName = b.element(2005)
+    let openedViewSwitcher = b.element(2006)
     b.setAttribute(openedClose, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(openedBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(openedBypass, kAXDescriptionAttribute as String, "bypass")
@@ -1598,13 +2919,18 @@ private func namedEQBandParams(
     b.setAttribute(openedLink, kAXDescriptionAttribute as String, "link")
     b.setAttribute(openedPluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
     b.setAttribute(openedPluginName, kAXValueAttribute as String, "Compressor")
+    b.setAttribute(openedViewSwitcher, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+    b.setAttribute(openedViewSwitcher, kAXDescriptionAttribute as String, "보기")
+    b.setAttribute(openedViewSwitcher, kAXTitleAttribute as String, "편집기")
     b.setAttribute(openedWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(openedWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     b.setAttribute(openedWindow, kAXTitleAttribute as String, trackName)
     b.setAttribute(openedWindow, kAXCloseButtonAttribute as String, openedClose)
     b.setAttribute(openedWindow, kAXMainAttribute as String, true)
     b.setAttribute(openedWindow, kAXFocusedAttribute as String, true)
-    b.setChildren(openedWindow, [openedBypass, openedLink, openedSlider, openedPluginName])
+    b.setChildren(openedWindow, [
+        openedBypass, openedLink, openedSlider, openedPluginName, openedViewSwitcher,
+    ])
     b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), openedWindow])
     let sendable = AXUIElementSendable(openedWindow)
 
@@ -1622,6 +2948,152 @@ private func namedEQBandParams(
 }
 
 // MARK: - State C: slider not found → param_control_not_found
+
+@Test func testMatchingSliderDescriptionWinsOverAnUnrelatedDescriptionReadFailure() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let unreadableSlider = b.element(32_101)
+    b.setAttribute(unreadableSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(unreadableSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), unreadableSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let writeWasAttempted = fixture.sliderWriteCount.value == 1
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(writeWasAttempted)
+    #expect(matchingSliderWasWritten)
+}
+
+@Test func testUnmatchedSliderDescriptionReadFailureRefusesAsUnknown() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        thresholdDescription: "Output Gain",
+        pluginWindowPresent: false,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let unreadableSlider = b.element(32_102)
+    b.setAttribute(unreadableSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(unreadableSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), unreadableSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+    let openedWindow = AXUIElementSendable(b.element(1004))
+
+    let result = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in openedWindow }
+    )
+
+    let error = try #require(result["error"] as? String)
+    let readFailure = try #require(result["slider_description_read_failure"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let refusedAsUnknown = error == "window_identity_unresolved"
+    let namesTheAXReadFailure = readFailure == "-25200"
+    let didNotClaimControlWasAbsent = error != "param_control_not_found"
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.sliderWriteCount.value == 0
+    #expect(refusedAsUnknown)
+    #expect(namesTheAXReadFailure)
+    #expect(didNotClaimControlWasAbsent)
+    #expect(noSliderWriteWasAttempted)
+}
+
+@Test func testUnmatchedSliderDescriptionsWithOnlyAbsenceAndSuccessAreNotFound() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        thresholdDescription: "Output Gain",
+        pluginWindowPresent: false,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let noValueSlider = b.element(32_103)
+    let unsupportedSlider = b.element(32_104)
+    b.setAttribute(noValueSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(unsupportedSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(noValueSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.noValue.rawValue
+    )
+    descriptionStatuses.value[b.elementID(unsupportedSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.attributeUnsupported.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), noValueSlider, unsupportedSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+    let openedWindow = AXUIElementSendable(b.element(1004))
+
+    let result = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in openedWindow }
+    )
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let reportedObservedAbsence = error == "param_control_not_found"
+    let noReadFailureWasInvented = result["slider_description_read_failure"] == nil
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.sliderWriteCount.value == 0
+    #expect(reportedObservedAbsence)
+    #expect(noReadFailureWasInvented)
+    #expect(noSliderWriteWasAttempted)
+}
+
+@Test func testBypassEvidenceWinsOverAnUnrelatedLabelReadFailure() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    descriptionStatuses.value[b.elementID(b.element(1008))] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(matchingSliderWasWritten)
+}
+
+@Test func testPluginHeaderEvidenceWinsOverAnUnrelatedStaticTextReadFailure() async throws {
+    let staticTextStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValueReadStatuses: staticTextStatuses
+    )
+    let b = fixture.builder
+    staticTextStatuses.value[b.elementID(b.element(1010))] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(matchingSliderWasWritten)
+}
 
 @Test func testWindowWithoutMatchingSliderIsParamControlNotFound() async {
     // The window exists and is titled with the track name, but its only slider
@@ -1795,6 +3267,7 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         let pluginBypass = b.element(3007)
         let pluginLink = b.element(3008)
         let pluginName = b.element(3009)
+        let viewSwitcher = b.element(3010)
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
@@ -1802,10 +3275,13 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
         b.setAttribute(pluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
         b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
+        b.setAttribute(viewSwitcher, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+        b.setAttribute(viewSwitcher, kAXDescriptionAttribute as String, "보기")
+        b.setAttribute(viewSwitcher, kAXTitleAttribute as String, "편집기")
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider, pluginName])
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider, pluginName, viewSwitcher])
 
         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow, pluginWindow])
         b.setAttribute(app, kAXMainWindowAttribute as String, arrangeWindow)
@@ -1854,6 +3330,41 @@ private final class Counter: @unchecked Sendable {
 
 // MARK: - #726 the operation closes the editor it opened
 
+@Test func testNormalAcquisitionViewRefusalClosesTheEditorItOpened() async {
+    // This is the normal (non-duplicate) acquisition path: the target-slot
+    // press opens an editor, then View selection refuses before any parameter
+    // write. The operation owns that newly observed editor even on State C.
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        controlsViewRowLabel: "Limiter On",
+        viewMenuSelectionSetsUnconfirmedStructure: true,
+        viewSettleDelay: 0
+    )
+
+    let result = await runLive(
+        fixture: fixture,
+        params: controlsBooleanParams()
+    )
+    // Probe AXWindows directly instead of reusing the writer's plugin-editor
+    // classifier: the cleanup proof must still see an editor if that classifier
+    // is ever changed to omit one.
+    let independentAXProbeFoundNoEditor: Bool
+    if let windows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] {
+        independentAXProbeFoundNoEditor = windows.count == 1
+    } else {
+        independentAXProbeFoundNoEditor = false
+    }
+    let refusalClosedItsNewEditor = result["state"] as? String == "C"
+        && result["error"] as? String == "plugin_view_not_confirmed"
+        && fixture.pluginCloseControlPressCount.value == 1
+        && independentAXProbeFoundNoEditor
+    #expect(refusalClosedItsNewEditor)
+}
+
 @Test func testDuplicateAcquisitionClosesTheEditorItOpened() async throws {
     // Measured live: writing insert 0 then insert 2 on a two-Compressor track
     // failed on the second call with duplicate_plugin_editor_already_open,
@@ -1872,11 +3383,17 @@ private final class Counter: @unchecked Sendable {
     let closeObserved = try #require(obj["editor_close_observed"] as? Bool)
     #expect(closeObserved)
     #expect(fixture.pluginCloseControlPressCount.value == 1)
-    #expect(AXLogicProElements.matchingPluginEditorWindows(
+    let remainingCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(remainingEditors) = remainingCensus else {
+        Issue.record("the post-close editor census was unreadable")
+        return
+    }
+    let constructedEditorWasClosed = remainingEditors.isEmpty
+    #expect(constructedEditorWasClosed)
 }
 
 @Test func testReusedEditorIsNotClosedByTheOperation() async {
@@ -1888,11 +3405,17 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["state"] as? String == "A")
     #expect(fixture.pluginCloseControlPressCount.value == 0)
-    #expect(!AXLogicProElements.matchingPluginEditorWindows(
+    let reusableCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(reusableEditors) = reusableCensus else {
+        Issue.record("the reused-editor census was unreadable")
+        return
+    }
+    let existingEditorRemainedOpen = !reusableEditors.isEmpty
+    #expect(existingEditorRemainedOpen)
 }
 
 @Test func testAnUnverifiableCloseDoesNotChangeTheWriteVerdict() async throws {

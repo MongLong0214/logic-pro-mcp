@@ -134,6 +134,43 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.elementMatches(descriptionButton, AXLocalePolicy.cancelButton, runtime: runtime))
     }
 
+    @Test("a matching localized menu item wins over another item's failed label read")
+    func matchingMenuItemWinsOverUnrelatedLabelReadFailure() {
+        let builder = FakeAXRuntimeBuilder()
+        let menu = builder.element(22)
+        let unreadableItem = builder.element(23)
+        let controlsItem = builder.element(24)
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        builder.setAttribute(unreadableItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        builder.setAttribute(controlsItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        builder.setAttribute(controlsItem, kAXTitleAttribute as String, "Controls")
+        builder.setChildren(menu, [unreadableItem, controlsItem])
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, unreadableItem), attribute == (kAXTitleAttribute as String) {
+                    return .failure(readFailure)
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let result = AXLocalePolicy.censusDescendantResult(
+            of: menu,
+            role: kAXMenuItemRole as String,
+            matching: AXLocalePolicy.pluginWindowControlsViewMenuItem,
+            runtime: runtime
+        )
+        let foundControlsItem: Bool
+        if case let .success(census) = result {
+            foundControlsItem = census.matches.count == 1 && CFEqual(census.matches[0], controlsItem)
+        } else {
+            foundControlsItem = false
+        }
+        #expect(foundControlsItem)
+    }
+
     // MARK: - Deliberate Save/Cancel narrowing (contains -> exact)
 
     /// PR #98 narrowed the Save-As commit match from substring `contains`

@@ -220,6 +220,47 @@ struct StockPluginValidatorTests {
         #expect(issues.contains { $0.code == "verified_parameter_missing_readback" })
     }
 
+    @Test("verified parameter evidence rejects a missing reverse observation")
+    func verifiedParameterEvidenceRequiresBidirectionalObservation() {
+        let provenance = StockPluginProvenance.verified(
+            source: "release_binary_live_drive",
+            method: "logic_plugins.set_param_verified.ax_controls_view_checkbox_press",
+            observedAt: "2026-09-02T11:30:17+09:00",
+            logicVersion: nil,
+            locale: "ko-KR",
+            evidence: [
+                "operation=logic_plugins.set_param_verified",
+                "write_method=ax_controls_view_checkbox_press",
+                "observed_transition=0->1",
+            ]
+        )
+        let parameter = StockPluginParameterMetadata(
+            id: "limiter_on",
+            displayName: "Limiter On",
+            unit: "boolean",
+            valueRange: StockPluginValueRange(min: 0, max: 1, defaultValue: nil),
+            writeMethod: "ax_controls_view_checkbox_press",
+            readbackMethod: "ax_controls_view_checkbox_value",
+            tolerance: 0,
+            availabilityState: .verified,
+            provenance: provenance
+        )
+        let entries = [
+            makeStockPluginEntry(
+                id: "logic.stock.effect.gain",
+                state: .verified,
+                provenance: provenance,
+                parameters: [parameter]
+            ),
+        ]
+
+        let issues = StockPluginCatalogValidator.validate(entries).issues
+        let rejectedForMissingReverse = issues.contains {
+            $0.code == "verified_parameter_missing_write_observation"
+        }
+        #expect(rejectedForMissingReverse)
+    }
+
     @Test("parameter value ranges and duplicate parameter IDs are validated")
     func parameterSanityValidated() {
         let provenance = StockPluginProvenance.inferred(reason: "fixture")

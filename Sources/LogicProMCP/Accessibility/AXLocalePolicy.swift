@@ -929,6 +929,38 @@ enum AXLocalePolicy {
         rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
     )
 
+    /// Controls/editor switching is deliberately keyed from AXDescription:
+    /// live Compressor evidence on 2026-09-02 showed the `AXMenuButton`
+    /// description is the localized View label, while AXTitle is the most
+    /// recently selected view *or zoom* menu item and is not a view readback.
+    /// English `View` and Korean `보기` are the only measured descriptions;
+    /// another locale must refuse rather than treating an arbitrary menu
+    /// button as the view switcher.
+    static let pluginWindowViewSwitcher = LabelSet(
+        canonical: "View",
+        variants: ["보기"],
+        rationale: "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback."
+    )
+
+    /// The measured Controls item in the scoped plugin-window View menu.
+    /// `Controls` and `컨트롤` were measured live on 2026-09-02; this is not a
+    /// translation table for unmeasured locales and is never used as a title
+    /// readback.
+    static let pluginWindowControlsViewMenuItem = LabelSet(
+        canonical: "Controls",
+        variants: ["컨트롤"],
+        rationale: "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only."
+    )
+
+    /// The measured native-editor item in the scoped plugin-window View menu.
+    /// `Editor` and `편집기` are not inferred translations and are never used
+    /// as a title readback.
+    static let pluginWindowEditorViewMenuItem = LabelSet(
+        canonical: "Editor",
+        variants: ["편집기"],
+        rationale: "Measured live on 2026-09-02 in Compressor's scoped View menu; paired evidence for Controls/컨트롤."
+    )
+
     /// #405: the "Smart Controls" toggle in a Drummer track's docked Smart Controls
     /// pane. Combined with an AXDialog subrole and an empty window title it forms
     /// the `isSmartControlsWindow` signature that classifies that pane as
@@ -1243,6 +1275,110 @@ enum AXLocalePolicy {
         return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count, matches: hits)
     }
 
+    /// Status-preserving counterpart to `censusDescendant` for a localized
+    /// label lookup. It is deliberately additive: ordinary read-only callers
+    /// keep the historical best-effort census, while a caller using a menu item
+    /// as write authority can refuse an unreadable title or description rather
+    /// than reporting that item as missing.
+    static func censusDescendantResult(
+        of element: AXUIElement,
+        role: String,
+        matching labels: LabelSet,
+        mode: MatchMode = .exact,
+        maxDepth: Int = 5,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Census, AXHelpers.AXStatusError> {
+        let roleCensus: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
+            of: element,
+            role: role,
+            maxDepth: maxDepth,
+            runtime: runtime
+        ) {
+        case let .success(observed):
+            roleCensus = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+
+        var hits: [AXUIElement] = []
+        var firstLabelReadFailure: AXHelpers.AXStatusError?
+        for candidate in roleCensus.matches {
+            switch elementMatchesResult(candidate, labels, mode: mode, runtime: runtime) {
+            case .success(true):
+                hits.append(candidate)
+            case .success(false):
+                continue
+            case let .failure(error):
+                firstLabelReadFailure = firstLabelReadFailure ?? error
+            }
+        }
+        if hits.isEmpty, let firstLabelReadFailure {
+            return .failure(firstLabelReadFailure)
+        }
+        return .success(Census(
+            element: hits.count == 1 ? hits[0] : nil,
+            candidates: hits.count,
+            matches: hits
+        ))
+    }
+
+    private static func elementMatchesResult(
+        _ element: AXUIElement,
+        _ labels: LabelSet,
+        mode: MatchMode,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        var firstReadFailure: AXHelpers.AXStatusError?
+        let title: String?
+        switch stringAttributeResult(element, kAXTitleAttribute as String, runtime: runtime) {
+        case let .success(observed):
+            title = observed
+        case let .failure(error):
+            firstReadFailure = error
+            title = nil
+        }
+        if labels.matches(title, mode: mode) {
+            return .success(true)
+        }
+
+        let description: String?
+        switch stringAttributeResult(element, kAXDescriptionAttribute as String, runtime: runtime) {
+        case let .success(observed):
+            description = observed
+        case let .failure(error):
+            firstReadFailure = firstReadFailure ?? error
+            description = nil
+        }
+        if labels.matches(description, mode: mode) {
+            return .success(true)
+        }
+        if let firstReadFailure {
+            return .failure(firstReadFailure)
+        }
+        return .success(false)
+    }
+
+    private static func stringAttributeResult(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            element,
+            attribute,
+            runtime: runtime
+        )
+        switch read {
+        case let .success(value):
+            return .success(value)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
     /// Every `LabelSet` declared above, for callers that need to ask "does the product recognise
     /// this string at all" rather than "does it match this particular set".
     ///
@@ -1254,6 +1390,9 @@ enum AXLocalePolicy {
     /// is tolerable at all; the unsafe direction is not reachable from a missing entry.
     static let allLabelSets: [LabelSet] = [
         viewMenuBar,
+        pluginWindowViewSwitcher,
+        pluginWindowControlsViewMenuItem,
+        pluginWindowEditorViewMenuItem,
         showMixerMenuItem,
         windowMenuBar,
         hideAllPluginWindowsMenuItem,
