@@ -79,12 +79,22 @@ enum ControlsViewBooleanParameterWriter {
     /// read therefore refuses instead of silently dropping a candidate and
     /// risking an action on a different element.
     enum ViewEvidenceReadFailure: Error, Sendable, Equatable {
+        enum Source: Sendable, Equatable {
+            case switcherCensus
+            case switcherDescription
+            case menuItemCensus
+            case menuItemEnabled
+            case sliderCensus
+            case sliderDescription
+        }
+
         case switcherCensus(AXHelpers.AXStatusError)
         case switcherDescription(AXHelpers.AXStatusError)
         case menuItemCensus(AXHelpers.AXStatusError)
         case menuItemEnabled(AXHelpers.AXStatusError)
         case sliderCensus(AXHelpers.AXStatusError)
         case sliderDescription(AXHelpers.AXStatusError)
+        case invalidUIElementRereadExhausted(Source, attempts: Int)
 
         var observation: String {
             switch self {
@@ -100,6 +110,57 @@ enum ControlsViewBooleanParameterWriter {
                 return "the plugin-window AXSlider census failed (AXChildren/AXRole status \(error.diagnosticLabel))"
             case let .sliderDescription(error):
                 return "a plugin-window AXSlider AXDescription read failed (status \(error.diagnosticLabel))"
+            case let .invalidUIElementRereadExhausted(source, attempts):
+                return "\(Self.observation(for: source, status: AXError.invalidUIElement.rawValue)) after \(attempts) attempts; the bound plugin window was re-resolved before each re-read"
+            }
+        }
+
+        /// `kAXErrorInvalidUIElement` means Logic replaced part of this view's
+        /// AX tree while its census was walking it (2026-09-03). The read says
+        /// neither that a candidate is absent nor that the window is durably
+        /// unreadable, so the honest response is to re-resolve the bound window
+        /// and take the structural evidence again.
+        var invalidUIElementSource: Source? {
+            switch self {
+            case let .switcherCensus(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .switcherCensus
+            case let .switcherDescription(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .switcherDescription
+            case let .menuItemCensus(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .menuItemCensus
+            case let .menuItemEnabled(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .menuItemEnabled
+            case let .sliderCensus(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .sliderCensus
+            case let .sliderDescription(error) where error.raw == AXError.invalidUIElement.rawValue:
+                return .sliderDescription
+            case .switcherCensus, .switcherDescription, .menuItemCensus, .menuItemEnabled,
+                 .sliderCensus, .sliderDescription, .invalidUIElementRereadExhausted:
+                return nil
+            }
+        }
+
+        var invalidUIElementRereadAttempts: Int? {
+            guard case let .invalidUIElementRereadExhausted(_, attempts) = self else {
+                return nil
+            }
+            return attempts
+        }
+
+        private static func observation(for source: Source, status: Int32) -> String {
+            switch source {
+            case .switcherCensus:
+                return "the plugin-window View-switcher census failed (AXChildren/AXRole status \(status))"
+            case .switcherDescription:
+                return "the plugin-window View-switcher AXDescription read failed (status \(status))"
+            case .menuItemCensus:
+                return "the scoped View-menu item census failed (AXChildren/AXRole/AXTitle/AXDescription status \(status))"
+            case .menuItemEnabled:
+                return "the scoped View-menu item's AXEnabled read failed (status \(status))"
+            case .sliderCensus:
+                return "the plugin-window AXSlider census failed (AXChildren/AXRole status \(status))"
+            case .sliderDescription:
+                return "a plugin-window AXSlider AXDescription read failed (status \(status))"
             }
         }
     }
@@ -114,7 +175,7 @@ enum ControlsViewBooleanParameterWriter {
         let waitedMilliseconds: Int
     }
 
-    enum ViewSwitchFailure: Sendable, Equatable {
+    enum ViewSwitchFailure: Error, Sendable, Equatable {
         case viewSwitcherNotFound
         case viewSwitcherAmbiguous
         case unmeasuredLocale
@@ -188,11 +249,22 @@ enum ControlsViewBooleanParameterWriter {
                 return ["plugin_view_switch_phase": "switcher_locale_unmeasured"]
             case .entryViewNotConfirmed:
                 return ["plugin_view_switch_phase": "entry_view_not_confirmed"]
-            case .viewEvidenceReadFailed:
-                return ["plugin_view_switch_phase": "view_evidence_read_failed"]
+            case let .viewEvidenceReadFailed(error):
+                var diagnostics: [String: Any] = ["plugin_view_switch_phase": "view_evidence_read_failed"]
+                if let attempts = error.invalidUIElementRereadAttempts {
+                    diagnostics["plugin_view_evidence_read_attempts"] = attempts
+                }
+                return diagnostics
             case .viewMenuReadFailed:
                 return ["plugin_view_switch_phase": "menu_read_failed"]
             }
+        }
+
+        fileprivate var invalidUIElementSource: ViewEvidenceReadFailure.Source? {
+            guard case let .viewEvidenceReadFailed(error) = self else {
+                return nil
+            }
+            return error.invalidUIElementSource
         }
     }
 
@@ -307,8 +379,11 @@ enum ControlsViewBooleanParameterWriter {
                 )
             case .refused:
                 let observed: PluginWindowView?
-                let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
-                if case let .success(.some(value)) = observedView(in: currentWindow, runtime: runtime) {
+                if case let .success(.some(value)) = observedView(
+                    in: window,
+                    windowRefresher: windowRefresher,
+                    runtime: runtime
+                ) {
                     observed = value
                 } else {
                     observed = nil
@@ -360,7 +435,8 @@ enum ControlsViewBooleanParameterWriter {
         let effectiveWindowRefresher = windowRefresher ?? { window }
         let entryView: PluginWindowView
         let entryObservation = observedView(
-            in: refreshedWindow(window, windowRefresher: effectiveWindowRefresher),
+            in: window,
+            windowRefresher: effectiveWindowRefresher,
             runtime: runtime
         )
         switch entryObservation {
@@ -429,8 +505,11 @@ enum ControlsViewBooleanParameterWriter {
                     )
                 case .refused:
                     let observed: PluginWindowView?
-                    let currentWindow = refreshedWindow(window, windowRefresher: effectiveWindowRefresher)
-                    if case let .success(.some(value)) = observedView(in: currentWindow, runtime: runtime) {
+                    if case let .success(.some(value)) = observedView(
+                        in: window,
+                        windowRefresher: effectiveWindowRefresher,
+                        runtime: runtime
+                    ) {
                         observed = value
                     } else {
                         observed = nil
@@ -471,6 +550,31 @@ enum ControlsViewBooleanParameterWriter {
     /// label/control. The two slider-shaped candidates are intentionally still
     /// ambiguous; this locator never chooses one by traversal position.
     private static func observedView(
+        in window: AXUIElement,
+        windowRefresher: @escaping () -> AXUIElement?,
+        runtime: AXHelpers.Runtime
+    ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
+        var attempts = 0
+        while true {
+            attempts += 1
+            let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+            let observation = observedViewOnce(in: currentWindow, runtime: runtime)
+            switch observation {
+            case .success:
+                return observation
+            case let .failure(error):
+                guard let source = error.invalidUIElementSource else {
+                    return observation
+                }
+                guard attempts <= viewEvidenceInvalidUIElementExtraAttempts else {
+                    return .failure(.invalidUIElementRereadExhausted(source, attempts: attempts))
+                }
+                Thread.sleep(forTimeInterval: viewEvidenceInvalidUIElementRereadPause)
+            }
+        }
+    }
+
+    private static func observedViewOnce(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
@@ -540,6 +644,28 @@ enum ControlsViewBooleanParameterWriter {
 
     private static func measuredViewSwitcher(
         in window: AXUIElement,
+        windowRefresher: @escaping () -> AXUIElement?,
+        runtime: AXHelpers.Runtime
+    ) -> MeasuredViewSwitcherResult {
+        let retried = retryInvalidUIElementViewEvidence {
+            let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+            switch measuredViewSwitcherOnce(in: currentWindow, runtime: runtime) {
+            case let .found(switcher):
+                return .success(switcher)
+            case let .refused(failure):
+                return .failure(failure)
+            }
+        }
+        switch retried {
+        case let .success(switcher):
+            return .found(switcher)
+        case let .failure(failure):
+            return .refused(failure)
+        }
+    }
+
+    private static func measuredViewSwitcherOnce(
+        in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> MeasuredViewSwitcherResult {
         let menuButtons: [AXUIElement]
@@ -578,6 +704,30 @@ enum ControlsViewBooleanParameterWriter {
         return .found(switcher)
     }
 
+    private static func retryInvalidUIElementViewEvidence<Value>(
+        _ read: () -> Result<Value, ViewSwitchFailure>
+    ) -> Result<Value, ViewSwitchFailure> {
+        var attempts = 0
+        while true {
+            attempts += 1
+            let result = read()
+            switch result {
+            case .success:
+                return result
+            case let .failure(failure):
+                guard let source = failure.invalidUIElementSource else {
+                    return result
+                }
+                guard attempts <= viewEvidenceInvalidUIElementExtraAttempts else {
+                    return .failure(.viewEvidenceReadFailed(
+                        .invalidUIElementRereadExhausted(source, attempts: attempts)
+                    ))
+                }
+                Thread.sleep(forTimeInterval: viewEvidenceInvalidUIElementRereadPause)
+            }
+        }
+    }
+
     private static func refreshedWindow(
         _ fallback: AXUIElement,
         windowRefresher: @escaping () -> AXUIElement?
@@ -594,20 +744,27 @@ enum ControlsViewBooleanParameterWriter {
         forceSelection: Bool = false,
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
-        let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
         if !forceSelection {
             // Preserve the fail-closed preflight: if no uniquely described
             // switcher can be read, refuse before treating a concurrent view
             // observation as a reason to skip selection. Do not retain this
             // element, though; the action below measures it again after the
             // view check in case Logic re-rendered in between.
-            switch measuredViewSwitcher(in: currentWindow, runtime: runtime) {
+            switch measuredViewSwitcher(
+                in: window,
+                windowRefresher: windowRefresher,
+                runtime: runtime
+            ) {
             case .found:
                 break
             case let .refused(error):
                 return .refused(error, targetSelectionAttempted: false)
             }
-            switch observedView(in: currentWindow, runtime: runtime) {
+            switch observedView(
+                in: window,
+                windowRefresher: windowRefresher,
+                runtime: runtime
+            ) {
             case let .success(.some(observed)) where observed == targetView:
                 return .confirmed(switched: false)
             case let .failure(error):
@@ -618,8 +775,11 @@ enum ControlsViewBooleanParameterWriter {
         }
 
         let switcher: AXUIElement
-        let actionWindow = refreshedWindow(window, windowRefresher: windowRefresher)
-        switch measuredViewSwitcher(in: actionWindow, runtime: runtime) {
+        switch measuredViewSwitcher(
+            in: window,
+            windowRefresher: windowRefresher,
+            runtime: runtime
+        ) {
         case let .found(observed):
             switcher = observed
         case let .refused(error):
@@ -711,6 +871,12 @@ enum ControlsViewBooleanParameterWriter {
     /// unmeasured timing increase.
     private static let viewConfirmationTimeout: TimeInterval = 3.0
     private static let viewConfirmationPollInterval: TimeInterval = 0.05
+    /// `kAXErrorInvalidUIElement` (-25202) is a view re-render invalidating an
+    /// in-flight structural census, not proof of an absent control. On
+    /// 2026-09-03 AXPick → structure settled in 527–785 ms, so each of the two
+    /// bounded re-reads pauses for this measured 50 ms confirmation-poll step.
+    private static let viewEvidenceInvalidUIElementExtraAttempts = 2
+    private static let viewEvidenceInvalidUIElementRereadPause = viewConfirmationPollInterval
 
     private enum ScopedViewMenuWaitResult {
         case found([AXUIElement])
@@ -814,8 +980,11 @@ enum ControlsViewBooleanParameterWriter {
         let started = Date()
         let deadline = started.addingTimeInterval(max(0, timeout))
         repeat {
-            let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
-            switch observedView(in: currentWindow, runtime: runtime) {
+            switch observedView(
+                in: window,
+                windowRefresher: windowRefresher,
+                runtime: runtime
+            ) {
             case let .success(.some(observed)) where observed == expected:
                 return .confirmed
             case let .failure(error):

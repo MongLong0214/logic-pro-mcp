@@ -343,6 +343,47 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(noCheckboxActionWasSent)
     }
 
+    @Test func invalidCheckboxValueRefusesWithoutAReread() {
+        final class ReadCount: @unchecked Sendable { var value = 0 }
+        let reads = ReadCount()
+        let invalidElement = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
+        let builder = FakeAXRuntimeBuilder()
+        let checkbox = builder.element(22)
+        builder.setRole(checkbox, kAXCheckBoxRole as String)
+        builder.setAttribute(checkbox, kAXValueAttribute as String, false)
+        let runtime = builder.makeAXRuntime(
+            appElement: builder.element(2),
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, checkbox), attribute == (kAXValueAttribute as String) else {
+                    return nil
+                }
+                reads.value += 1
+                return .failure(invalidElement)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let result = ControlsViewBooleanParameterWriter.pressAndVerify(
+            checkbox,
+            requested: true,
+            runtime: runtime
+        )
+
+        let refusedBeforeWriting = !result.verified && !result.pressAttempted
+        let valueWasReadOnce = reads.value == 1
+        let namesInvalidElementStatus: Bool
+        if let refusal = result.refusal {
+            namesInvalidElementStatus = refusal.contains("-25202")
+        } else {
+            namesInvalidElementStatus = false
+        }
+        // Mutation: route checkbox AXValue through the structural re-read loop.
+        #expect(refusedBeforeWriting)
+        #expect(valueWasReadOnce)
+        #expect(namesInvalidElementStatus)
+    }
+
     @Test func controlsViewSliderIsRefusedWithTheMeasuredNonactuationReason() {
         let fixture = fixture(label: "Gain", controlRoles: [kAXSliderRole as String])
         let result = ControlsViewBooleanParameterWriter.locate(
@@ -536,6 +577,75 @@ struct ControlsViewBooleanParameterWriterTests {
             refusedForTheMeasuredReadFailure = false
         }
         #expect(refusedForTheMeasuredReadFailure)
+    }
+
+    @Test func invalidSliderCensusIsRereadAndTheControlsCheckboxWriteProceeds() {
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            menuRevealAfterPolls: 0,
+            readFailure: .sliderCensusInvalidOnce,
+            viewSettleDelay: 0
+        )
+
+        let prepared = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            windowRefresher: fixture.windowRefresher,
+            runtime: fixture.runtime
+        )
+        let writeProceeded: Bool
+        if case let .ready(session) = prepared,
+           case let .found(.checkBox(checkbox)) = ControlsViewBooleanParameterWriter.locate(
+               label: "Limiter On",
+               in: fixture.window,
+               runtime: fixture.runtime
+           ) {
+            let toggle = ControlsViewBooleanParameterWriter.pressAndVerify(
+                checkbox,
+                requested: true,
+                runtime: fixture.runtime
+            )
+            _ = session.restore()
+            writeProceeded = toggle.verified
+        } else {
+            writeProceeded = false
+        }
+        let selectedControls = fixture.controlsSelections.value == 1
+        // Mutation: return the first -25202 instead of re-resolving and rereading.
+        #expect(writeProceeded)
+        #expect(selectedControls)
+    }
+
+    @Test func invalidSliderCensusThatPersistsRefusesWithItsPhaseAndAttemptCount() {
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .sliderCensusInvalidAlways
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            windowRefresher: fixture.windowRefresher,
+            runtime: fixture.runtime
+        )
+        let reportsRetriedEvidenceFailure: Bool
+        if case let .refused(failure, restoration: nil) = result {
+            let diagnostics = failure.responseDiagnostics
+            let phase = diagnostics["plugin_view_switch_phase"] as? String
+            let attempts = diagnostics["plugin_view_evidence_read_attempts"] as? Int
+            reportsRetriedEvidenceFailure = phase == "view_evidence_read_failed"
+                && attempts == 3
+                && failure.observation.contains("after 3 attempts")
+        } else {
+            reportsRetriedEvidenceFailure = false
+        }
+        // Mutation: raise the retry bound above two extra re-reads, or return
+        // the first invalid-element census directly.
+        #expect(reportsRetriedEvidenceFailure)
     }
 
     @Test func failedSliderDescriptionRefusesRatherThanConfirmingAnUnrelatedTableAsControls() {
@@ -1147,6 +1257,8 @@ struct ControlsViewBooleanParameterWriterTests {
         case switcherCensus
         case switcherDescription
         case sliderCensus
+        case sliderCensusInvalidOnce
+        case sliderCensusInvalidAlways
         case sliderDescription
         case menuItemCensus
         case tableCensus
@@ -1220,6 +1332,7 @@ struct ControlsViewBooleanParameterWriterTests {
         let windowChildrenReadCount = MutableBox(0)
         let postPickWindowReadCount = MutableBox(0)
         let statusFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let invalidElementFailure = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(switcher, kAXMenuButtonRole as String)
@@ -1287,6 +1400,7 @@ struct ControlsViewBooleanParameterWriterTests {
         let controlsKey = builder.elementID(controlsMenuItem)
         let editorKey = builder.elementID(editorMenuItem)
         let switcherKey = builder.elementID(switcher)
+        let controlsCheckboxKey = builder.elementID(controlsCheckbox)
         let runtime = builder.makeAXRuntime(
             appElement: app,
             attributeValueResultHandler: { element, attribute in
@@ -1369,6 +1483,14 @@ struct ControlsViewBooleanParameterWriterTests {
                         return .failure(statusFailure)
                     }
                 }
+                if (readFailure == .sliderCensusInvalidOnce
+                    || readFailure == .sliderCensusInvalidAlways),
+                   CFEqual(element, editorSlider) {
+                    sliderChildrenReadCount.value += 1
+                    if readFailure == .sliderCensusInvalidAlways || sliderChildrenReadCount.value == 1 {
+                        return .failure(invalidElementFailure)
+                    }
+                }
                 if readFailure == .tableCensus, CFEqual(element, controlsTable) {
                     tableChildrenReadCount.value += 1
                     if tableChildrenReadCount.value == 2 {
@@ -1407,6 +1529,18 @@ struct ControlsViewBooleanParameterWriterTests {
                     menuOpen.value = true
                     menuVisible.value = false
                     menuCensusPolls.value = 0
+                    return true
+                }
+                if key == controlsCheckboxKey, action == (kAXPressAction as String) {
+                    let current = (builder.attributeValue(
+                        controlsCheckbox,
+                        kAXValueAttribute as String
+                    ) as? NSNumber)?.boolValue ?? false
+                    builder.setAttribute(
+                        controlsCheckbox,
+                        kAXValueAttribute as String,
+                        !current
+                    )
                     return true
                 }
                 guard key == editorKey || key == controlsKey else { return true }
