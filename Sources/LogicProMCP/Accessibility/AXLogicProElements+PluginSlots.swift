@@ -586,8 +586,11 @@ extension AXLogicProElements {
     }
 
     /// Enumerate only windows whose plugin-editor classification was fully
-    /// observed. Any failed status is returned to the caller: a choice cannot
-    /// safely discard an editor whose classification could not be completed.
+    /// observed. `noValue` and `attributeUnsupported` are observations that an
+    /// optional AX field is absent, so they classify as no windows / no
+    /// children / no matching field. Any other failed status is returned to
+    /// the caller: a choice cannot safely discard an editor whose
+    /// classification could not be completed.
     private static func pluginEditorWindowCandidates(
         runtime: Runtime
     ) -> Result<[PluginEditorWindowCandidate], AXHelpers.AXStatusError> {
@@ -606,6 +609,10 @@ extension AXLogicProElements {
             windows = []
         case .success(.malformed):
             return .failure(.malformedAttribute)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            // `AXWindows` is absent when there are no windows to enumerate;
+            // that is an observed empty census, not an unreadable one.
+            windows = []
         case let .failure(error):
             return .failure(error)
         }
@@ -620,6 +627,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 subrole = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                subrole = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -633,6 +642,8 @@ extension AXLogicProElements {
             ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 closeButton = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                closeButton = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -642,6 +653,8 @@ extension AXLogicProElements {
             switch AXHelpers.childrenResult(window, runtime: runtime.ax) {
             case let .success(observed):
                 children = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                children = []
             case let .failure(error):
                 return .failure(error)
             }
@@ -655,6 +668,8 @@ extension AXLogicProElements {
                 ) as Result<String?, AXHelpers.AXStatusError> {
                 case let .success(observed):
                     role = observed
+                case let .failure(error) where error.isDefinitiveAbsence:
+                    role = nil
                 case let .failure(error):
                     return .failure(error)
                 }
@@ -692,6 +707,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 role = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                role = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -705,6 +722,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 title = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                title = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -739,6 +758,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 value = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                value = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -750,8 +771,8 @@ extension AXLogicProElements {
     }
 
     /// Return direct static-text values without falling back to a title,
-    /// descendant, or fixed child index. A failed header read is not an absent
-    /// name and therefore refuses the caller's window choice.
+    /// descendant, or fixed child index. An absent AXValue is no header name;
+    /// every other failed header read refuses the caller's window choice.
     private static func pluginWindowHeaderStaticTextValues(
         in candidate: PluginEditorWindowCandidate,
         runtime: AXHelpers.Runtime
@@ -766,6 +787,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 value = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                value = nil
             case let .failure(error):
                 return .failure(error)
             }
@@ -857,6 +880,8 @@ extension AXLogicProElements {
             ) as Result<String?, AXHelpers.AXStatusError> {
             case let .success(observed):
                 description = observed
+            case let .failure(error) where error.isDefinitiveAbsence:
+                description = nil
             case let .failure(error):
                 return .failure(error)
             }

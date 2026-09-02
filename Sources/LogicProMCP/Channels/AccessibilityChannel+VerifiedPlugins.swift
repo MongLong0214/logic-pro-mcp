@@ -1523,6 +1523,27 @@ extension AccessibilityChannel {
         case .none, .unique:
             break
         }
+        // A reused editor belongs to the caller, so the cleanup defer may only
+        // own an editor that was absent from this complete pre-open census.
+        // Take the snapshot before the normal opener can press its target slot;
+        // this covers every later refusal, including a View-session refusal
+        // immediately after a successful acquisition.
+        let pluginEditorWindowsBeforeNormalAcquisition: [AXUIElement]?
+        if constructedWindow == nil, case .none = preAcquisitionWindowMatch {
+            switch AXLogicProElements.pluginEditorWindows(runtime: runtime) {
+            case let .success(observed):
+                pluginEditorWindowsBeforeNormalAcquisition = observed
+            case let .failure(error):
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the complete editor census before normal target-slot acquisition"
+                ))
+            }
+        } else {
+            pluginEditorWindowsBeforeNormalAcquisition = nil
+        }
         let openedCandidate: AXUIElementSendable?
         if let constructedWindow {
             openedCandidate = constructedWindow
@@ -1648,6 +1669,14 @@ extension AccessibilityChannel {
             ))
         }
         let window = opened.element
+        if let beforeNormalAcquisition = pluginEditorWindowsBeforeNormalAcquisition,
+           !beforeNormalAcquisition.contains(where: { CFEqual($0, window) }) {
+            // The opener returned an exact editor element that was not present
+            // before its target-slot acquisition. Register it before popup or
+            // view setup can refuse, so `defer` closes only the editor this
+            // operation created and never a reused caller-owned editor.
+            constructedWindowsNeedingCleanup = [window]
+        }
 
         let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = controlsViewCheckbox
             ? .controls

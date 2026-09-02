@@ -80,6 +80,11 @@ enum AXValueExtractors {
         ) as Result<AnyObject?, AXHelpers.AXStatusError> {
         case let .success(observed):
             value = observed
+        case let .failure(error) where error.isDefinitiveAbsence:
+            // A checkbox with no AXValue cannot establish a Boolean state,
+            // but `noValue` / `attributeUnsupported` are still an observed
+            // absent attribute rather than a transport/read failure.
+            value = nil
         case let .failure(error):
             return .failure(error)
         }

@@ -28,6 +28,31 @@ import Testing
     #expect(preserved)
 }
 
+@Test func testCheckboxStateResultTreatsDefinitiveAXAbsenceAsNoValue() {
+    let absenceStatuses = [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue]
+    let everyAbsenceWasAnObservedMissingValue = absenceStatuses.allSatisfy { rawStatus in
+        let builder = FakeAXRuntimeBuilder()
+        let checkbox = builder.element(Int(rawStatus.magnitude))
+        builder.setRole(checkbox, kAXCheckBoxRole as String)
+        let runtime = builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, checkbox), attribute == (kAXValueAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: rawStatus))
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let result = AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime)
+        if case .success(nil) = result {
+            return true
+        }
+        return false
+    }
+    #expect(everyAbsenceWasAnObservedMissingValue)
+}
+
 @Test func testExtractButtonStateRefusesIndeterminateNSNumber() {
     let builder = FakeAXRuntimeBuilder()
     let checkbox = builder.element(29_902)

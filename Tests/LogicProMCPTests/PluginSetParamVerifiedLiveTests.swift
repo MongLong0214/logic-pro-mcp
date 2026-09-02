@@ -87,6 +87,8 @@ private final class LiveFixture: @unchecked Sendable {
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
         pluginWindowTitleReadFails: Bool = false,
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError? = nil,
+        nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError? = nil,
         // An already-visible editor whose title becomes the target track only
         // after the slot press. This models an existing AX element being
         // retargeted by an unrelated UI transition; duplicate acquisition must
@@ -340,6 +342,8 @@ private final class LiveFixture: @unchecked Sendable {
         let editorWindowChildren = pluginWindowChildren
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
+        let pluginWindowsReadStatusBeforeTargetOpen = pluginWindowsReadStatusBeforeTargetOpen
+        let nonPluginWindowSubroleReadStatus = nonPluginWindowSubroleReadStatus
         let menuOpen = MutableBox(false)
         let menuVisible = MutableBox(false)
         let menuCensusPolls = MutableBox(0)
@@ -347,6 +351,17 @@ private final class LiveFixture: @unchecked Sendable {
         let runtime = b.makeLogicRuntime(
             appElement: app,
             attributeValueResultHandler: { element, attribute in
+                if let status = pluginWindowsReadStatusBeforeTargetOpen,
+                   CFEqual(element, app),
+                   attribute == (kAXWindowsAttribute as String),
+                   targetOpenControlPressCount.value == 0 {
+                    return .failure(status)
+                }
+                if let status = nonPluginWindowSubroleReadStatus,
+                   CFEqual(element, arrangeWindow),
+                   attribute == (kAXSubroleAttribute as String) {
+                    return .failure(status)
+                }
                 if pluginWindowTitleReadFails,
                    CFEqual(element, pluginWindow),
                    attribute == (kAXTitleAttribute as String) {
@@ -1792,6 +1807,119 @@ private func namedEQBandParams(
     #expect(noTargetSlotPress)
 }
 
+@Test func testDuplicatePrecountTreatsNoValueAXWindowsAsEmptyAndWrites() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.noValue.rawValue
+        )
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+    let absencePrecountReachedTheWrite = result["state"] as? String == "A"
+        && fixture.targetOpenControlPressCount.value == 1
+        && fixture.currentSliderValue == 60
+    #expect(absencePrecountReachedTheWrite)
+}
+
+@Test func testDuplicatePrecountPreservesCannotCompleteAsARefusal() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+    let unreadablePrecountRefusedBeforeThePress = result["state"] as? String == "C"
+        && result["error"] as? String == "window_identity_unresolved"
+        && result["plugin_window_read_failure"] as? String == "-25204"
+        && fixture.targetOpenControlPressCount.value == 0
+        && fixture.currentSliderValue == 51
+    #expect(unreadablePrecountRefusedBeforeThePress)
+}
+
+@Test func testPluginEditorEnumerationTreatsDefinitiveAXAbsenceAsEmpty() {
+    let absenceStatuses = [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue]
+    let everyAbsenceWasAnEmptyCensus = absenceStatuses.allSatisfy { rawStatus in
+        let fixture = LiveFixture(
+            pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(raw: rawStatus)
+        )
+        switch AXLogicProElements.pluginEditorWindows(runtime: fixture.runtime) {
+        case let .success(editors):
+            return editors.isEmpty
+        case .failure:
+            return false
+        }
+    }
+    #expect(everyAbsenceWasAnEmptyCensus)
+}
+
+@Test func testPluginEditorEnumerationPreservesCannotCompleteAsAReadFailure() {
+    let fixture = LiveFixture(
+        pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+    let result = AXLogicProElements.pluginEditorWindows(runtime: fixture.runtime)
+    let cannotCompleteWasPreserved: Bool
+    switch result {
+    case let .failure(error):
+        cannotCompleteWasPreserved = error.raw == AXError.cannotComplete.rawValue
+    case .success:
+        cannotCompleteWasPreserved = false
+    }
+    #expect(cannotCompleteWasPreserved)
+}
+
+@Test func testPluginWindowClassificationTreatsDefinitiveAXAbsenceAsANonCandidate() {
+    let absenceStatuses = [AXError.noValue.rawValue, AXError.attributeUnsupported.rawValue]
+    let everyAbsenceLeftTheReadableEditorClassified = absenceStatuses.allSatisfy { rawStatus in
+        let fixture = LiveFixture(
+            nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError(raw: rawStatus)
+        )
+        let match = AXLogicProElements.pluginWindowMatch(
+            forTrackName: trackName,
+            matchingPluginID: "logic.stock.effect.compressor",
+            matchingSliderDescription: "Threshold",
+            runtime: fixture.runtime
+        )
+        if case .unique = match {
+            return true
+        }
+        return false
+    }
+    #expect(everyAbsenceLeftTheReadableEditorClassified)
+}
+
+@Test func testPluginWindowClassificationPreservesCannotCompleteAsUnreadable() {
+    let fixture = LiveFixture(
+        nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+    let match = AXLogicProElements.pluginWindowMatch(
+        forTrackName: trackName,
+        matchingPluginID: "logic.stock.effect.compressor",
+        matchingSliderDescription: "Threshold",
+        runtime: fixture.runtime
+    )
+    let cannotCompleteWasUnreadable: Bool
+    switch match {
+    case let .unreadable(error):
+        cannotCompleteWasUnreadable = error.raw == AXError.cannotComplete.rawValue
+    case .none, .unique, .ambiguous, .pluginIdentityMismatch:
+        cannotCompleteWasUnreadable = false
+    }
+    #expect(cannotCompleteWasUnreadable)
+}
+
 @Test func testDuplicatePluginWithTwoEditorsAfterOnePressRefuses() async throws {
     let fixture = LiveFixture(
         beforeValue: 51,
@@ -2938,6 +3066,41 @@ private final class Counter: @unchecked Sendable {
 }
 
 // MARK: - #726 the operation closes the editor it opened
+
+@Test func testNormalAcquisitionViewRefusalClosesTheEditorItOpened() async {
+    // This is the normal (non-duplicate) acquisition path: the target-slot
+    // press opens an editor, then View selection refuses before any parameter
+    // write. The operation owns that newly observed editor even on State C.
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        controlsViewRowLabel: "Limiter On",
+        viewMenuSelectionSetsUnconfirmedStructure: true,
+        viewSettleDelay: 0
+    )
+
+    let result = await runLive(
+        fixture: fixture,
+        params: controlsBooleanParams()
+    )
+    // Probe AXWindows directly instead of reusing the writer's plugin-editor
+    // classifier: the cleanup proof must still see an editor if that classifier
+    // is ever changed to omit one.
+    let independentAXProbeFoundNoEditor: Bool
+    if let windows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] {
+        independentAXProbeFoundNoEditor = windows.count == 1
+    } else {
+        independentAXProbeFoundNoEditor = false
+    }
+    let refusalClosedItsNewEditor = result["state"] as? String == "C"
+        && result["error"] as? String == "plugin_view_not_confirmed"
+        && fixture.pluginCloseControlPressCount.value == 1
+        && independentAXProbeFoundNoEditor
+    #expect(refusalClosedItsNewEditor)
+}
 
 @Test func testDuplicateAcquisitionClosesTheEditorItOpened() async throws {
     // Measured live: writing insert 0 then insert 2 on a two-Compressor track
