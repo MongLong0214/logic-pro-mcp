@@ -24,6 +24,14 @@ enum StockPluginSafeWriteCapability: String, Codable, Sendable {
     case parameterWriteReadback = "parameter_write_readback"
 }
 
+/// What live evidence establishes about a named control in Logic's Controls
+/// view. This is deliberately independent of `availabilityState`: an observed
+/// non-actuation is useful safety evidence, but it is never a write capability.
+enum ControlsViewActuationState: String, Codable, Sendable, Equatable {
+    case measuredNotActuable = "measured_not_actuable"
+    case unmeasured
+}
+
 struct StockPluginProvenance: Codable, Sendable, Equatable {
     let source: String
     let method: String
@@ -188,6 +196,21 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
     /// parameters without one stay write-unsupported. nil ⇒ not
     /// AX-addressable by description.
     let axDescription: String?
+    /// The Controls-view AXRow label for parameters whose name lives beside
+    /// their control rather than on it. nil means this catalog item has no
+    /// measured Controls-view row address.
+    let controlsViewRowLabel: String?
+    /// The observed Controls-view control role. This records an addressing
+    /// fact even for roles that have deliberately not been qualified to write.
+    let controlsViewControlRole: String?
+    /// The Controls-view role's explicit write qualification. In particular,
+    /// `measured_not_actuable` means its refusal must take precedence over the
+    /// generic missing-write/readback capability response.
+    let controlsViewActuationState: ControlsViewActuationState?
+    /// A separately measured editor-view slider description that authenticates
+    /// the Compressor window before this parameter switches it into Controls
+    /// view. It is not the parameter's control locator.
+    let editorWindowAnchorAXDescription: String?
     let availabilityState: StockPluginTruthState
     let provenance: StockPluginProvenance
 
@@ -201,6 +224,10 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         case readbackMethod = "readback_method"
         case tolerance
         case axDescription = "ax_description"
+        case controlsViewRowLabel = "controls_view_row_label"
+        case controlsViewControlRole = "controls_view_control_role"
+        case controlsViewActuationState = "controls_view_actuation_state"
+        case editorWindowAnchorAXDescription = "editor_window_anchor_ax_description"
         case availabilityState = "availability_state"
         case provenance
     }
@@ -215,6 +242,10 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         readbackMethod: String?,
         tolerance: Double? = nil,
         axDescription: String? = nil,
+        controlsViewRowLabel: String? = nil,
+        controlsViewControlRole: String? = nil,
+        controlsViewActuationState: ControlsViewActuationState? = nil,
+        editorWindowAnchorAXDescription: String? = nil,
         availabilityState: StockPluginTruthState,
         provenance: StockPluginProvenance
     ) {
@@ -227,6 +258,10 @@ struct StockPluginParameterMetadata: Codable, Sendable, Equatable {
         self.readbackMethod = readbackMethod
         self.tolerance = tolerance
         self.axDescription = axDescription
+        self.controlsViewRowLabel = controlsViewRowLabel
+        self.controlsViewControlRole = controlsViewControlRole
+        self.controlsViewActuationState = controlsViewActuationState
+        self.editorWindowAnchorAXDescription = editorWindowAnchorAXDescription
         self.availabilityState = availabilityState
         self.provenance = provenance
     }
@@ -921,6 +956,156 @@ enum StockPluginCatalog {
                 evidence: ["parameter_write_readback", "CHANGELOG.md"]
             )
         ),
+        // ADR-011 / ADR-018, measured on this machine 2026-09-02. In the
+        // Compressor's Controls view the name is the AXRow's AXStaticText,
+        // while the AXCheckBox itself exposes only AXValue. AXPress 0→1 and
+        // 1→0 both completed with observed readback. The editor anchor remains
+        // Threshold only for acquiring the already-known Compressor window;
+        // it is never used to address either checkbox.
+        StockPluginParameterMetadata(
+            id: "limiter_on",
+            displayName: "Limiter On",
+            unit: "boolean",
+            valueRange: StockPluginValueRange(min: 0, max: 1, defaultValue: nil),
+            writeMethod: "ax_controls_view_checkbox_press",
+            readbackMethod: "ax_controls_view_checkbox_value",
+            tolerance: 0,
+            controlsViewRowLabel: "Limiter On",
+            controlsViewControlRole: "AXCheckBox",
+            editorWindowAnchorAXDescription: "Threshold",
+            availabilityState: .verified,
+            provenance: StockPluginProvenance(
+                source: "live_logic",
+                method: "controls_view_axcheckbox_press_readback",
+                observedAt: "2026-09-02T11:30:17+09:00",
+                logicVersion: nil,
+                locale: "ko-KR",
+                sourcePath: "/Users/isaac/lpm-evidence/controls-view-write-20260902-113017/",
+                inferenceReason: nil,
+                evidence: [
+                    // The token the catalog validator requires for a VERIFIED parameter: it means a
+                    // write/readback round trip was observed, not merely that a readback method
+                    // was named. Measured 2026-09-02 on the live Controls view.
+                    "parameter_readback",
+                    "controls-view-write-20260902-113017",
+                    "Limiter On AXPress 0.00 -> 1.00 and 1.00 -> 0.00 observed",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "auto_release",
+            displayName: "Auto Release",
+            unit: "boolean",
+            valueRange: StockPluginValueRange(min: 0, max: 1, defaultValue: nil),
+            writeMethod: "ax_controls_view_checkbox_press",
+            readbackMethod: "ax_controls_view_checkbox_value",
+            tolerance: 0,
+            controlsViewRowLabel: "Auto Release",
+            controlsViewControlRole: "AXCheckBox",
+            editorWindowAnchorAXDescription: "Threshold",
+            availabilityState: .verified,
+            provenance: StockPluginProvenance(
+                source: "live_logic",
+                method: "controls_view_axcheckbox_press_readback",
+                observedAt: "2026-09-02T11:30:17+09:00",
+                logicVersion: nil,
+                locale: "ko-KR",
+                sourcePath: "/Users/isaac/lpm-evidence/controls-view-write-20260902-113017/",
+                inferenceReason: nil,
+                evidence: [
+                    // The token the catalog validator requires for a VERIFIED parameter: it means a
+                    // write/readback round trip was observed, not merely that a readback method
+                    // was named. Measured 2026-09-02 on the live Controls view.
+                    "parameter_readback",
+                    "controls-view-write-20260902-113017",
+                    "Auto Release AXPress 1.00 -> 0.00 and 0.00 -> 1.00 observed",
+                ]
+            )
+        ),
+        // This is not a write capability. It preserves the negative live
+        // measurement so a caller requesting Gain gets the reason that was
+        // established instead of an optimistic generic AX-settable path.
+        StockPluginParameterMetadata(
+            id: "gain",
+            displayName: "Gain",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_value_observed",
+            controlsViewRowLabel: "Gain",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .measuredNotActuable,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axslider_nonactuation_measurement",
+                observedAt: "2026-09-02T11:30:17+09:00",
+                logicVersion: nil,
+                locale: "ko-KR",
+                evidence: [
+                    // The token the catalog validator requires for a VERIFIED parameter: it means a
+                    // write/readback round trip was observed, not merely that a readback method
+                    // was named. Measured 2026-09-02 on the live Controls view.
+                    "parameter_readback",
+                    "controls-view-write-20260902-113017",
+                    "AXValue set and AXIncrement x5 reported success while Gain remained 48.0000",
+                ]
+            )
+        ),
+        // Ratio has the same observed Controls-view AXSlider non-actuation.
+        // It is intentionally catalogued as a refusal target, not as a
+        // verified parameter, so callers receive the established measurement
+        // rather than the generic "not in the verified allowlist" response.
+        StockPluginParameterMetadata(
+            id: "ratio",
+            displayName: "Ratio",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_value_observed",
+            controlsViewRowLabel: "Ratio",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .measuredNotActuable,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axslider_nonactuation_measurement",
+                observedAt: "2026-09-02T11:30:17+09:00",
+                logicVersion: nil,
+                locale: "ko-KR",
+                evidence: [
+                    "controls-view-write-20260902-113017",
+                    "Ratio AXSlider direct AXValue set and AXIncrement were observed non-actuating",
+                ]
+            )
+        ),
+        // This records readability only. No popup menu actuation was measured,
+        // so it contains no write method and exists solely to refuse by that
+        // missing measurement.
+        StockPluginParameterMetadata(
+            id: "circuit_type",
+            displayName: "Circuit Type",
+            unit: "enumerated",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_value_observed",
+            controlsViewRowLabel: "Circuit Type",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-02T11:30:17+09:00",
+                logicVersion: nil,
+                locale: "ko-KR",
+                evidence: [
+                    // The token the catalog validator requires for a VERIFIED parameter: it means a
+                    // write/readback round trip was observed, not merely that a readback method
+                    // was named. Measured 2026-09-02 on the live Controls view.
+                    "parameter_readback",
+                    "controls-view-write-20260902-113017",
+                    "Circuit Type AXValue Platinum Digital observed; popup selection was not measured",
+                ]
+            )
+        ),
     ]
 
     /// Curated stock catalog seeds. Display names double as probe keys for the
@@ -950,7 +1135,7 @@ enum StockPluginCatalog {
         // Dynamics
         fx("adaptive_limiter", "Adaptive Limiter", "Dynamics"),
         fx("compressor", "Compressor", "Dynamics", write: .parameterWriteReadback, parameters: compressorParameters,
-           notes: ["threshold parameter is verified-writable via AX (normalized %); other params are insert-only"]),
+           notes: ["Threshold is verified-writable via its AXSlider (normalized %). Limiter On and Auto Release are verified-writable via measured Controls-view AXCheckBox press/readback; Controls-view sliders and popups remain refused."]),
         fx("deesser_2", "DeEsser 2", "Dynamics"),
         fx("enveloper", "Enveloper", "Dynamics"),
         fx("expander", "Expander", "Dynamics"),

@@ -83,6 +83,7 @@ private func decode(_ json: String) -> [String: Any] {
         (.staleSnapshot, "stale_snapshot"),
         (.windowOpenFailed, "window_open_failed"),
         (.windowIdentityUnresolved, "window_identity_unresolved"),
+        (.pluginViewNotConfirmed, "plugin_view_not_confirmed"),
         (.paramControlNotFound, "param_control_not_found"),
         (.readbackLostAfterWrite, "readback_lost_after_write"),
         (.postInsertPluginMismatch, "post_insert_plugin_mismatch"),

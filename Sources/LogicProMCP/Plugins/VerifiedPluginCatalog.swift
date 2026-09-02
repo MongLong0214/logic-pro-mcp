@@ -59,6 +59,17 @@ enum VerifiedPluginCatalog {
         // `threshold` (normalized %, NOT dB) — see `StockPluginCatalog`.
         "logic.stock.effect.compressor": [
             "threshold": "threshold",
+            "limiter_on": "limiter_on",
+            "limiter on": "limiter_on",
+            "auto_release": "auto_release",
+            "auto release": "auto_release",
+            // Negative Controls-view measurements have canonical aliases too,
+            // so callers get their established refusal rather than an
+            // addressability guess or a generic unknown-param response.
+            "gain": "gain",
+            "ratio": "ratio",
+            "circuit_type": "circuit_type",
+            "circuit type": "circuit_type",
         ],
     ]
 
@@ -169,6 +180,42 @@ enum VerifiedPluginCatalog {
     ) -> String? {
         entryLookup(pluginID)?
             .parameters.first(where: { $0.id == paramKey })?.axDescription
+    }
+
+    /// A Controls-view parameter's row label. This is distinct from
+    /// `paramAXDescription`: Controls-view names live in AXRows while the
+    /// controls themselves are unnamed.
+    static func controlsViewRowLabel(
+        pluginID: String,
+        paramKey: String,
+        entryLookup: EntryLookup = productionEntryLookup
+    ) -> String? {
+        entryLookup(pluginID)?
+            .parameters.first(where: { $0.id == paramKey })?.controlsViewRowLabel
+    }
+
+    /// The parameter role observed on its Controls-view row. A value here is
+    /// not an actuation claim; consult the paired actuation state before any
+    /// Controls-view write is considered.
+    static func controlsViewControlRole(
+        pluginID: String,
+        paramKey: String,
+        entryLookup: EntryLookup = productionEntryLookup
+    ) -> String? {
+        entryLookup(pluginID)?
+            .parameters.first(where: { $0.id == paramKey })?.controlsViewControlRole
+    }
+
+    /// An editor-view control used only to acquire a known plug-in window
+    /// before switching it to Controls view. It must never be mistaken for the
+    /// requested parameter's locator.
+    static func editorWindowAnchorAXDescription(
+        pluginID: String,
+        paramKey: String,
+        entryLookup: EntryLookup = productionEntryLookup
+    ) -> String? {
+        entryLookup(pluginID)?
+            .parameters.first(where: { $0.id == paramKey })?.editorWindowAnchorAXDescription
     }
 
     /// The verified write/readback tolerance (in the parameter's own unit) for a

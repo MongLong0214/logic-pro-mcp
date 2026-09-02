@@ -152,3 +152,42 @@ private func validGainParams(
                 "value \(edge) should pass schema and reach preflight")
     }
 }
+
+// MARK: - ADR-011 / ADR-018 negative Controls-view evidence
+
+@Test func testControlsViewSliderRefusesWithMeasuredNotActuableReason() async throws {
+    let obj = await runSetParam([
+        "track": "0", "insert": "2", "plugin": "Compressor", "param": "Ratio",
+        "value": "4", "unit": "raw_ax_value", "mode": "duplicate_applyback",
+        "project_expected_path": expectedPath,
+    ])
+    let error = try #require(obj["error"] as? String)
+    let observation = try #require(obj["what_was_observed"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let namesMeasurement = observation.contains("AXSlider actuation is refused")
+        && observation.contains("direct AXValue set and AXIncrement")
+        && observation.contains("did not change")
+    let didNotFallBackToGenericAllowlistRefusal = !observation.contains("not in the verified allowlist")
+    let didNotAttemptWrite = !writeAttempted
+    #expect(error == "unsupported_param_readback")
+    #expect(namesMeasurement)
+    #expect(didNotFallBackToGenericAllowlistRefusal)
+    #expect(didNotAttemptWrite)
+}
+
+@Test func testControlsViewPopupRefusesWithUnmeasuredReason() async throws {
+    let obj = await runSetParam([
+        "track": "0", "insert": "2", "plugin": "Compressor", "param": "circuit_type",
+        "value": "0", "unit": "enumerated", "mode": "duplicate_applyback",
+        "project_expected_path": expectedPath,
+    ])
+    let error = try #require(obj["error"] as? String)
+    let observation = try #require(obj["what_was_observed"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let namesMissingMeasurement = observation.contains("AXPopUpButton actuation is refused")
+        && observation.contains("selection has not been measured")
+    let didNotAttemptWrite = !writeAttempted
+    #expect(error == "unsupported_param_readback")
+    #expect(namesMissingMeasurement)
+    #expect(didNotAttemptWrite)
+}

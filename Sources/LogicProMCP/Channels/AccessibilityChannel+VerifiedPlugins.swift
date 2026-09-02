@@ -440,6 +440,10 @@ extension AccessibilityChannel {
             pluginID: pluginID,
             trackName: trackName,
             axDescription: axDescription,
+            // The plug-in remembers its last view. If that is Controls, its
+            // native sliders have no descriptions until the caller selects and
+            // confirms the editor view after this header-bound acquisition.
+            requiringMatchingSlider: false,
             runtime: runtime
         )
     }
@@ -821,6 +825,50 @@ extension AccessibilityChannel {
             ))
         }
 
+        // ADR-011 / ADR-018 negative evidence is a first-class preflight
+        // refusal. The catalog gives this state explicitly to Controls-view
+        // shapes whose AX role is known but whose write path is either measured
+        // inert or unmeasured. Neither branch reaches AX window acquisition or
+        // a speculative actuation.
+        switch metadata.controlsViewActuationState {
+        case .measuredNotActuable:
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight the measured Controls-view slider actuation path for \(pluginID).\(paramAlias)",
+                    "what_was_observed": ControlsViewBooleanParameterWriter.LocatorFailure.sliderNotActuable.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        case .unmeasured:
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight the measured Controls-view popup actuation path for \(pluginID).\(paramAlias)",
+                    "what_was_observed": ControlsViewBooleanParameterWriter.LocatorFailure.popupUnmeasured.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        case nil:
+            break
+        }
+
+        if metadata.writeMethod == "ax_controls_view_checkbox_press",
+           requested != 0, requested != 1 {
+            return .failure(invalidParamsStateC(
+                operation,
+                "Controls-view boolean parameter \(pluginID).\(paramAlias) requires value 0 or 1"
+            ))
+        }
+
         let declaredUnits = metadata.acceptedUnits ?? metadata.unit.map { [$0] } ?? []
         let normalizedUnit = unit?.trimmingCharacters(in: .whitespacesAndNewlines)
         if case .channelEQ = selector, normalizedUnit?.isEmpty ?? true {
@@ -1005,21 +1053,62 @@ extension AccessibilityChannel {
         incrementWalkBudget: Int
     ) async -> ChannelResult {
         let identity = resolvedIdentity(track: track, insert: insert, pluginID: pluginID)
-        guard let axDescription = VerifiedPluginCatalog.paramAXDescription(
-            pluginID: pluginID,
-            paramKey: paramKey,
-            entryLookup: entryLookup
-        ) else {
-            // A `.writeReadback` parameter must declare its AX matcher; absence is
-            // a catalog defect, surfaced honestly rather than guessed around.
+        let controlsViewCheckbox = writeMethod == "ax_controls_view_checkbox_press"
+        let controlsViewRowLabel = controlsViewCheckbox
+            ? VerifiedPluginCatalog.controlsViewRowLabel(
+                pluginID: pluginID,
+                paramKey: paramKey,
+                entryLookup: entryLookup
+            )
+            : nil
+        let controlsViewEditorAnchor: String?
+        let axDescription: String
+        if controlsViewCheckbox {
+            // An editor-view description can corroborate the header-bound
+            // window when it happens to be present. It is not an acquisition
+            // precondition: an editor may already be in Controls view, where
+            // sliders intentionally have no AXDescription.
+            controlsViewEditorAnchor = VerifiedPluginCatalog.editorWindowAnchorAXDescription(
+                pluginID: pluginID,
+                paramKey: paramKey,
+                entryLookup: entryLookup
+            )
+            axDescription = controlsViewEditorAnchor ?? ""
+        } else {
+            controlsViewEditorAnchor = nil
+            guard let description = VerifiedPluginCatalog.paramAXDescription(
+                pluginID: pluginID,
+                paramKey: paramKey,
+                entryLookup: entryLookup
+            ) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .unsupportedParamReadback,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "what_was_attempted": "resolve the AX control matcher for \(pluginID).\(paramAlias)",
+                        "what_was_observed": "parameter declares no AX description matcher",
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            axDescription = description
+        }
+        // A remembered Controls view has no described sliders. Bind the editor
+        // by its measured track/plugin header first, then select and confirm
+        // the view required by the write plane before any slider lookup.
+        let requiringWindowSlider = false
+        if controlsViewCheckbox, controlsViewRowLabel == nil {
             return .error(HonestContract.encodeV2StateC(
                 error: .unsupportedParamReadback,
                 extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
-                    "what_was_attempted": "resolve the AX control matcher for \(pluginID).\(paramAlias)",
-                    "what_was_observed": "parameter declares no AX description matcher",
+                    "what_was_attempted": "resolve the Controls-view AXRow label for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "parameter declares no measured Controls-view row label",
                     "safe_to_retry": false,
                     "write_attempted": false,
                 ]
@@ -1131,6 +1220,7 @@ extension AccessibilityChannel {
         // make acquisition fail with two editors, and every newly observed
         // editor from that failed attempt still needs best-effort cleanup.
         var constructedWindowsNeedingCleanup: [AXUIElement] = []
+        var restorePluginViewOnExit: (() -> ControlsViewBooleanParameterWriter.ViewRestoration)?
         defer {
             if !constructedWindowsNeedingCleanup.isEmpty {
                 _ = closePluginEditorsOpenedByThisOperation(
@@ -1148,6 +1238,14 @@ extension AccessibilityChannel {
         /// to the next duplicate-instance call.
         func verifiedWriteEnvelope(extras: [String: Any]) -> String {
             var completedExtras = extras
+            if let restoration = restorePluginViewOnExit?() {
+                completedExtras["plugin_view_restore_attempted"] = restoration.attempted
+                completedExtras["plugin_view_restore_observed"] = restoration.confirmed
+                if !restoration.confirmed {
+                    completedExtras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
+                    completedExtras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
+                }
+            }
             guard !constructedWindowsNeedingCleanup.isEmpty else {
                 return HonestContract.encodeV2StateA(extras: completedExtras)
             }
@@ -1199,6 +1297,7 @@ extension AccessibilityChannel {
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
+                requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
             ) {
                 return .error(pluginWindowPluginMismatchStateC(
@@ -1256,6 +1355,7 @@ extension AccessibilityChannel {
                     forTrackName: trackName,
                     matchingPluginID: pluginID,
                     matchingSliderDescription: axDescription,
+                    requiringMatchingSlider: requiringWindowSlider,
                     runtime: runtime
                 ) {
                     return .error(pluginWindowPluginMismatchStateC(
@@ -1285,12 +1385,14 @@ extension AccessibilityChannel {
         // name/parameter resolution and opener behaviour. For a duplicated
         // instance, `constructedWindow` above is already proven by the one
         // target-slot press and the two editor counts.
-        switch AXLogicProElements.pluginWindowMatch(
+        let preAcquisitionWindowMatch = AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
             matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
+            requiringMatchingSlider: requiringWindowSlider,
             runtime: runtime
-        ) {
+        )
+        switch preAcquisitionWindowMatch {
         case .ambiguous:
             var diagnostics = pluginWindowAcquisitionDiagnostics(
                 trackName: trackName,
@@ -1318,6 +1420,20 @@ extension AccessibilityChannel {
         let openedCandidate: AXUIElementSendable?
         if let constructedWindow {
             openedCandidate = constructedWindow
+        } else if case let .unique(boundWindow) = preAcquisitionWindowMatch {
+            // The header-aware matcher is the binding for a reused editor.
+            // It cannot require the native slider because the remembered view
+            // may be Controls; the requested view is selected below.
+            openedCandidate = AXUIElementSendable(boundWindow)
+        } else if controlsViewCheckbox {
+            openedCandidate = await openPluginWindowFromTargetSlot(
+                slots[insert].element,
+                pluginID: pluginID,
+                trackName: trackName,
+                axDescription: controlsViewEditorAnchor ?? "",
+                requiringMatchingSlider: false,
+                runtime: runtime
+            )
         } else {
             openedCandidate = await pluginWindowOpener(
                 AXUIElementSendable(slots[insert].element),
@@ -1336,6 +1452,7 @@ extension AccessibilityChannel {
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
+                requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
             ) {
                 return .error(pluginWindowPluginMismatchStateC(
@@ -1365,6 +1482,7 @@ extension AccessibilityChannel {
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
+                requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
             ) {
             case .ambiguous:
@@ -1418,10 +1536,105 @@ extension AccessibilityChannel {
         }
         let window = opened.element
 
+        let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = controlsViewCheckbox
+            ? .controls
+            : .editor
+        let viewSession: ControlsViewBooleanParameterWriter.ViewSession
+        switch ControlsViewBooleanParameterWriter.prepareView(
+            requiredView,
+            in: window,
+            runtime: runtime.ax
+        ) {
+        case let .refused(failure):
+            return .error(HonestContract.encodeV2StateC(
+                // The slider locator has not run. Keep a failed structural
+                // confirmation distinct from a genuine missing AXSlider so the
+                // live response shows whether view selection was reached.
+                error: .pluginViewNotConfirmed,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "select the plugin-window View menu item and confirm the required \(requiredView.rawValue) structure before locating its control",
+                    "what_was_observed": failure.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        case let .ready(session):
+            viewSession = session
+        }
+        restorePluginViewOnExit = { viewSession.restore() }
+        defer {
+            if let restoration = restorePluginViewOnExit?(), !restoration.confirmed {
+                // The write result may already be State A or an unavoidable State C
+                // when this best-effort restoration fails. Keep that result honest,
+                // but never silently strand the user's editor: State A includes the
+                // restore fields above and refusal paths emit this actionable log.
+                Log.warn(
+                    "Plugin view restoration was not confirmed after \(operation); observed structure: \(restoration.observedStructure ?? "unconfirmed")",
+                    subsystem: .ax
+                )
+            }
+        }
+
+        if controlsViewCheckbox, let controlsViewRowLabel {
+            // This must run before the legacy slider locator: Controls view
+            // deliberately removes the parameter's identity from the control
+            // and places it on an AXRow label instead. The existing Threshold
+            // slider path selects the paired native editor view below.
+            guard targetPluginIdentityIsStable(
+                track: track,
+                insert: insert,
+                pluginID: pluginID,
+                originalSlot: slots[insert].element,
+                runtime: runtime
+            ) else {
+                return .error(windowIdentityUnresolvedStateC(
+                    operation,
+                    identity,
+                    "the target plugin slot identity was not stable immediately before Controls-view checkbox actuation"
+                ))
+            }
+            if let failure = controlsViewAcquiredPluginWindowFailureStateC(
+                acquiredWindow: window,
+                operation: operation,
+                identity: identity,
+                pluginID: pluginID,
+                trackName: trackName,
+                runtime: runtime
+            ) {
+                return .error(failure)
+            }
+            return performControlsViewCheckboxWrite(
+                operation: operation,
+                identity: identity,
+                paramAlias: paramAlias,
+                requested: requested,
+                rowLabel: controlsViewRowLabel,
+                window: window,
+                runtime: runtime.ax,
+                verifiedWriteEnvelope: verifiedWriteEnvelope
+            )
+        }
+
         // Step 9 — slider match by AXDescription (the only stable identifier).
-        guard let slider = AXLogicProElements.pluginWindowSlider(
+        // The view is confirmed native above, so this is the first parameter
+        // lookup. An ambiguous description is a window-identity refusal, never
+        // a positional choice between two sliders.
+        let slider: AXUIElement
+        switch AXLogicProElements.pluginWindowSliderResolution(
             in: window, axDescription: axDescription, runtime: runtime.ax
-        ) else {
+        ) {
+        case let .unique(found):
+            slider = found
+        case .ambiguous:
+            return .error(windowIdentityUnresolvedStateC(
+                operation,
+                identity,
+                "more than one slider exposed the requested AXDescription in the confirmed native plugin view"
+            ))
+        case .none:
             return .error(HonestContract.encodeV2StateC(
                 error: .paramControlNotFound,
                 extras: [
@@ -1680,6 +1893,119 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+    }
+
+    /// The additive ADR-011 / ADR-018 Controls-view checkbox branch. It is
+    /// intentionally separate from the slider writer above: the label belongs
+    /// to an AXRow, AXPress is the measured action, and success requires the
+    /// checkbox's own AXValue to change to the requested Boolean state.
+    private static func performControlsViewCheckboxWrite(
+        operation: String,
+        identity: [String: Any],
+        paramAlias: String,
+        requested: Double,
+        rowLabel: String,
+        window: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        verifiedWriteEnvelope: ([String: Any]) -> String
+    ) -> ChannelResult {
+        // The caller already selected and structurally confirmed Controls view.
+        // Do not repeat the selection here: reopening its menu would make this
+        // locator depend on a write status rather than the confirmed bound
+        // window state it was handed.
+        let checkbox: AXUIElement
+        switch ControlsViewBooleanParameterWriter.locate(
+            label: rowLabel,
+            in: window,
+            runtime: runtime
+        ) {
+        case let .refused(failure):
+            return .error(HonestContract.encodeV2StateC(
+                error: .paramControlNotFound,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "controls_view_row_label": rowLabel,
+                    "what_was_attempted": "bind the Controls-view AXRow label to one control",
+                    "what_was_observed": failure.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        case let .found(control):
+            guard case let .checkBox(found) = control else {
+                let failure = control.failure ?? .checkboxNotFound
+                return .error(HonestContract.encodeV2StateC(
+                    error: .unsupportedParamReadback,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "param": paramAlias,
+                        "controls_view_row_label": rowLabel,
+                        "what_was_attempted": "confirm the labelled Controls-view control is a measured AXCheckBox",
+                        "what_was_observed": failure.observation,
+                        "safe_to_retry": false,
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            checkbox = found
+        }
+
+        let requestedState = requested == 1
+        let toggle = ControlsViewBooleanParameterWriter.pressAndVerify(
+            checkbox,
+            requested: requestedState,
+            runtime: runtime
+        )
+        if toggle.verified, let observed = toggle.observedAfterPress {
+            return .success(verifiedWriteEnvelope([
+                "operation": operation,
+                "target_identity": identity,
+                "param": paramAlias,
+                "controls_view_row_label": rowLabel,
+                "requested_normalized": requested,
+                "requested_boolean": requestedState,
+                "observed_normalized": observed ? 1.0 : 0.0,
+                "observed_boolean": observed,
+                "write_source": "ax_controls_view_checkbox",
+                "verify_source": "ax_controls_view_checkbox",
+            ]))
+        }
+
+        let restorationObservation: String
+        switch toggle.restoreObserved {
+        case .some(true):
+            restorationObservation = "restore observed: AXValue returned to the pre-press state"
+        case .some(false):
+            restorationObservation = "restore not observed: AXValue did not return to the pre-press state"
+        case nil:
+            restorationObservation = "restore not observed: AXValue was unreadable after the compensating press"
+        }
+        let failureObservation = [
+            toggle.refusal ?? "Controls-view checkbox verification did not establish the requested state",
+            restorationObservation,
+        ].joined(separator: "; ")
+        return .error(HonestContract.encodeV2StateC(
+            error: toggle.observedAfterPress == nil ? .readbackLostAfterWrite : .readbackMismatch,
+            extras: [
+                "operation": operation,
+                "target_identity": identity,
+                "param": paramAlias,
+                "controls_view_row_label": rowLabel,
+                "requested_normalized": requested,
+                "requested_boolean": requestedState,
+                "before_boolean": toggle.before ?? NSNull(),
+                "observed_boolean": toggle.observedAfterPress ?? NSNull(),
+                "restore_attempted": toggle.restoreAttempted,
+                "restore_observed": toggle.restoreObserved ?? NSNull(),
+                "what_was_attempted": "AXPress the labelled Controls-view AXCheckBox then require changed AXValue readback",
+                "what_was_observed": failureObservation,
+                "safe_to_retry": false,
+                "write_attempted": toggle.pressAttempted,
+            ]
+        ))
     }
 
     private struct SliderRollback {
@@ -2010,17 +2336,52 @@ extension AccessibilityChannel {
         }
     }
 
+    /// Controls-view writes have already bound an editor through the caller's
+    /// target slot and the header-aware `pluginWindowMatch` acquisition above.
+    /// An editor-view slider description remains only an optional witness during
+    /// that match: Controls view is expected to expose no described sliders, so
+    /// its absence must never invalidate the already-bound editor.
+    private static func controlsViewAcquiredPluginWindowFailureStateC(
+        acquiredWindow: AXUIElement,
+        operation: String,
+        identity: [String: Any],
+        pluginID: String,
+        trackName: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> String? {
+        let headerBoundWindows = AXLogicProElements.matchingPluginEditorWindows(
+            forTrackName: trackName,
+            matchingPluginID: pluginID,
+            runtime: runtime
+        )
+        guard headerBoundWindows.contains(where: { CFEqual($0, acquiredWindow) }) else {
+            return windowIdentityUnresolvedStateC(
+                operation,
+                identity,
+                "the target-slot editor no longer proved the requested track and plugin header identity before Controls view selection",
+                diagnostics: pluginWindowAcquisitionDiagnostics(
+                    trackName: trackName,
+                    axDescription: "not required for Controls-view header binding",
+                    runtime: runtime
+                )
+            )
+        }
+        return nil
+    }
+
     private static func openPluginWindowFromTargetSlot(
         _ targetSlot: AXUIElement,
         pluginID: String,
         trackName: String,
         axDescription: String,
+        requiringMatchingSlider: Bool = true,
         runtime: AXLogicProElements.Runtime
     ) async -> AXUIElementSendable? {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
             matchingPluginID: pluginID,
             matchingSliderDescription: axDescription,
+            requiringMatchingSlider: requiringMatchingSlider,
             runtime: runtime
         ) {
         case .ambiguous:
@@ -2059,6 +2420,7 @@ extension AccessibilityChannel {
                 pluginID: pluginID,
                 trackName: trackName,
                 axDescription: axDescription,
+                requiringMatchingSlider: requiringMatchingSlider,
                 runtime: runtime,
                 timeoutMs: 1_250
             ) {
@@ -2288,6 +2650,7 @@ extension AccessibilityChannel {
         pluginID: String,
         trackName: String,
         axDescription: String,
+        requiringMatchingSlider: Bool = true,
         runtime: AXLogicProElements.Runtime,
         timeoutMs: Int
     ) async -> AXLogicProElements.PluginWindowMatch {
@@ -2298,6 +2661,7 @@ extension AccessibilityChannel {
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 matchingSliderDescription: axDescription,
+                requiringMatchingSlider: requiringMatchingSlider,
                 runtime: runtime
             ) {
             case let .unique(window):

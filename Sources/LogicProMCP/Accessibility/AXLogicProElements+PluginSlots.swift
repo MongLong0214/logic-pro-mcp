@@ -385,10 +385,11 @@ extension AXLogicProElements {
         return names
     }
 
-    /// Find an OPEN plug-in editor whose title equals `trackName`, whose direct
-    /// `AXStaticText` children contain a plug-in name for `pluginID` through the
-    /// verified catalog's observed-name aliases, and which exposes exactly one
-    /// matching slider.
+    /// Find an OPEN plug-in editor whose title equals `trackName` and whose
+    /// direct `AXStaticText` children contain a plug-in name for `pluginID`
+    /// through the verified catalog's observed-name aliases. A slider
+    /// description can corroborate that binding or, when explicitly required,
+    /// additionally constrain it.
     ///
     /// Measured for stock Logic editors only: their direct static-text children
     /// contain the English plug-in display name in both editor and Controls
@@ -401,7 +402,8 @@ extension AXLogicProElements {
     static func pluginWindowMatch(
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
-        matchingSliderDescription axDescription: String,
+        matchingSliderDescription axDescription: String?,
+        requiringMatchingSlider: Bool = true,
         runtime: Runtime = .production
     ) -> PluginWindowMatch {
         guard let app = appRoot(runtime: runtime) else { return .none }
@@ -418,26 +420,52 @@ extension AXLogicProElements {
             let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard title == target else { continue }
-            switch pluginWindowSliderMatch(in: window, axDescription: axDescription, runtime: runtime.ax) {
-            case .none:
-                continue
-            case .ambiguous:
-                return .ambiguous
-            case .unique:
-                let observedNames = pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax)
-                guard pluginWindowHeaderNames(
-                    observedNames,
-                    containPluginID: pluginID,
-                    excludingTrackName: title,
-                    callerTrackName: target
-                ) else {
+            let observedNames = pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax)
+            let headerMatchesPlugin = pluginWindowHeaderNames(
+                observedNames,
+                containPluginID: pluginID,
+                excludingTrackName: title,
+                callerTrackName: target
+            )
+            let sliderWitness = axDescription.map {
+                pluginWindowSliderMatch(in: window, axDescription: $0, runtime: runtime.ax)
+            }
+            guard headerMatchesPlugin else {
+                // A header-only binding has no parameter precondition: the
+                // requested track title plus catalog-resolved header identity
+                // are sufficient to refuse a same-track wrong editor. For the
+                // legacy slider path, retain the narrower diagnostic rule.
+                if !requiringMatchingSlider {
                     foundMismatchedCandidate = true
                     mismatchedObservedNames.append(contentsOf: observedNames)
                     continue
                 }
-                guard match == nil else { return .ambiguous }
-                match = window
+                switch sliderWitness {
+                case .some(.ambiguous):
+                    return .ambiguous
+                case .some(.unique):
+                    foundMismatchedCandidate = true
+                    mismatchedObservedNames.append(contentsOf: observedNames)
+                    continue
+                case .some(.none), nil:
+                    continue
+                }
             }
+            // Header identity always selects the candidate. A slider witness
+            // is mandatory only for the native-editor parameter path; Controls
+            // view deliberately removes descriptions from its sliders.
+            if requiringMatchingSlider {
+                switch sliderWitness {
+                case .some(.none), nil:
+                    continue
+                case .some(.ambiguous):
+                    return .ambiguous
+                case .some(.unique):
+                    break
+                }
+            }
+            guard match == nil else { return .ambiguous }
+            match = window
         }
         if let match {
             return .unique(match)
@@ -554,12 +582,37 @@ extension AXLogicProElements {
     /// is an unstable NSView id, and unnamed params share the locale word for
     /// "slider"). Matches against the window's slider descendants; the match is
     /// case-insensitive on the trimmed description.
+    enum PluginWindowSliderResolution {
+        case none
+        case unique(AXUIElement)
+        case ambiguous
+    }
+
+    static func pluginWindowSliderResolution(
+        in window: AXUIElement,
+        axDescription: String,
+        runtime: AXHelpers.Runtime = .production
+    ) -> PluginWindowSliderResolution {
+        switch pluginWindowSliderMatch(
+            in: window,
+            axDescription: axDescription,
+            runtime: runtime
+        ) {
+        case .none:
+            return .none
+        case let .unique(slider):
+            return .unique(slider)
+        case .ambiguous:
+            return .ambiguous
+        }
+    }
+
     static func pluginWindowSlider(
         in window: AXUIElement,
         axDescription: String,
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
-        if case let .unique(slider) = pluginWindowSliderMatch(
+        if case let .unique(slider) = pluginWindowSliderResolution(
             in: window,
             axDescription: axDescription,
             runtime: runtime

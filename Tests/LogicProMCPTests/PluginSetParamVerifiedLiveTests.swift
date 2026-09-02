@@ -34,6 +34,13 @@ private enum SliderWriteBehavior: Sendable {
     case scripted([Double?])
 }
 
+private enum ControlsCheckboxWriteBehavior: Sendable, Equatable {
+    case toggle
+    /// AXPress reports status 0/accepted but the checkbox AXValue is inert.
+    /// This is the exact observation that prevents a status-only success.
+    case statusZeroUnchanged
+}
+
 /// A live-path fixture. The slider's AXValueDescription is recomputed from its
 /// AXValue on every write so a write updates the readback the way Logic does
 /// ("60 %"). `forcedAfterValue` models a sticky/taper mismatch; `otherTracks`
@@ -45,6 +52,9 @@ private final class LiveFixture: @unchecked Sendable {
     let targetOpenControlPressCount: MutableBox<Int>
     let pluginCloseControlPressCount: MutableBox<Int>
     let sliderWriteCount: MutableBox<Int>
+    let controlsCheckboxPressCount: MutableBox<Int>
+    let controlsViewMenuPressCount: MutableBox<Int>
+    let editorViewMenuPressCount: MutableBox<Int>
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -76,13 +86,24 @@ private final class LiveFixture: @unchecked Sendable {
         // Model an editor whose close control is pressed but which stays in
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
-        pluginCloseControlFailsToClose: Bool = false
+        pluginCloseControlFailsToClose: Bool = false,
+        controlsViewRowLabel: String? = nil,
+        controlsViewControlRole: String = kAXCheckBoxRole as String,
+        controlsCheckboxBefore: Bool = false,
+        controlsCheckboxWriteBehavior: ControlsCheckboxWriteBehavior = .toggle,
+        controlsViewInitiallySelected: Bool = false,
+        pluginWindowViewSwitcherDescription: String = "보기",
+        viewMenuPressChangesStructure: Bool = true,
+        viewMenuPressChangesTitle: Bool = true
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
         let targetOpenControlPressCount = MutableBox(0)
         let pluginCloseControlPressCount = MutableBox(0)
         let sliderWriteCount = MutableBox(0)
+        let controlsCheckboxPressCount = MutableBox(0)
+        let controlsViewMenuPressCount = MutableBox(0)
+        let editorViewMenuPressCount = MutableBox(0)
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
         let headersGroup = b.element(1002)
@@ -92,6 +113,16 @@ private final class LiveFixture: @unchecked Sendable {
         let pluginClose = b.element(1006)
         let pluginBypass = b.element(1007)
         let pluginLink = b.element(1008)
+        let controlsViewSwitcher = b.element(1009)
+        let controlsViewMenu = b.element(100_901)
+        let controlsViewMenuItem = b.element(100_902)
+        let editorViewMenuItem = b.element(100_909)
+        let controlsTable = b.element(100_903)
+        let controlsRow = b.element(100_904)
+        let controlsLabelCell = b.element(100_905)
+        let controlsControlCell = b.element(100_906)
+        let controlsLabel = b.element(100_907)
+        let controlsCheckbox = b.element(100_908)
 
         // --- Track headers: one row per track, selected-state on the target. ---
         var headerRows: [AXUIElement] = []
@@ -198,7 +229,54 @@ private final class LiveFixture: @unchecked Sendable {
                 b.setAttribute(text, kAXValueAttribute as String, value)
                 return text
             }
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider] + staticTexts)
+        var pluginWindowChildren = [pluginBypass, pluginLink, slider] + staticTexts
+        b.setRole(controlsViewSwitcher, kAXMenuButtonRole as String)
+        b.setAttribute(
+            controlsViewSwitcher,
+            kAXDescriptionAttribute as String,
+            pluginWindowViewSwitcherDescription
+        )
+        b.setAttribute(
+            controlsViewSwitcher,
+            kAXTitleAttribute as String,
+            controlsViewInitiallySelected ? "컨트롤" : "편집기"
+        )
+        b.setRole(controlsViewMenu, kAXMenuRole as String)
+        b.setRole(controlsViewMenuItem, kAXMenuItemRole as String)
+        b.setAttribute(controlsViewMenuItem, kAXTitleAttribute as String, "컨트롤")
+        b.setRole(editorViewMenuItem, kAXMenuItemRole as String)
+        b.setAttribute(editorViewMenuItem, kAXTitleAttribute as String, "편집기")
+        b.setChildren(controlsViewMenu, [controlsViewMenuItem, editorViewMenuItem])
+        b.setChildren(controlsViewSwitcher, [controlsViewMenu])
+        pluginWindowChildren += [controlsViewSwitcher]
+        var controlsViewWindowChildren = [pluginBypass, pluginLink]
+            + staticTexts
+            + [controlsViewSwitcher]
+        // Controls view itself is identified by its rows, whether or not this
+        // particular test also supplies a writable labelled control.
+        b.setRole(controlsTable, kAXTableRole as String)
+        b.setRole(controlsRow, kAXRowRole as String)
+        b.setChildren(controlsTable, [controlsRow])
+        b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsRow])
+        controlsViewWindowChildren += [controlsTable]
+        if let controlsViewRowLabel {
+            b.setRole(controlsLabelCell, kAXCellRole as String)
+            b.setRole(controlsControlCell, kAXCellRole as String)
+            b.setRole(controlsLabel, kAXStaticTextRole as String)
+            b.setAttribute(controlsLabel, kAXValueAttribute as String, controlsViewRowLabel)
+            b.setRole(controlsCheckbox, controlsViewControlRole)
+            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, controlsCheckboxBefore)
+            b.setChildren(controlsLabelCell, [controlsLabel])
+            b.setChildren(controlsControlCell, [controlsCheckbox])
+            b.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
+            // Controls view has rows, but no editor-view slider descriptions.
+            // Keep its shape distinct from the native editor so a test cannot
+            // accidentally keep relying on Threshold after the view changes.
+        }
+        b.setChildren(
+            pluginWindow,
+            controlsViewInitiallySelected ? controlsViewWindowChildren : pluginWindowChildren
+        )
 
         let windows = pluginWindowPresent ? [arrangeWindow, pluginWindow] : [arrangeWindow]
         b.setAttribute(app, kAXWindowsAttribute as String, windows)
@@ -212,6 +290,11 @@ private final class LiveFixture: @unchecked Sendable {
         let targetSlotKey = targetSlot.map { b.elementID($0) }
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
+        let controlsCheckboxKey = b.elementID(controlsCheckbox)
+        let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
+        let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
+        let controlsWindowChildren = controlsViewWindowChildren
+        let editorWindowChildren = pluginWindowChildren
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
         let runtime = b.makeLogicRuntime(
@@ -273,6 +356,41 @@ private final class LiveFixture: @unchecked Sendable {
                     }
                     return true
                 }
+                if key == controlsViewMenuItemKey {
+                    controlsViewMenuPressCount.value += 1
+                    if viewMenuPressChangesStructure {
+                        b.setChildren(pluginWindow, controlsWindowChildren)
+                    }
+                    if viewMenuPressChangesTitle {
+                        b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "컨트롤")
+                    }
+                    return true
+                }
+                if key == editorViewMenuItemKey {
+                    editorViewMenuPressCount.value += 1
+                    if viewMenuPressChangesStructure {
+                        b.setChildren(pluginWindow, editorWindowChildren)
+                    }
+                    if viewMenuPressChangesTitle {
+                        b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "편집기")
+                    }
+                    return true
+                }
+                if key == controlsCheckboxKey,
+                   controlsViewRowLabel != nil {
+                    controlsCheckboxPressCount.value += 1
+                    if controlsCheckboxWriteBehavior == .toggle {
+                        let old = (b.attributeValue(controlsCheckbox, kAXValueAttribute as String) as? NSNumber)?.boolValue
+                            ?? (b.attributeValue(controlsCheckbox, kAXValueAttribute as String) as? Bool)
+                            ?? false
+                        b.setAttribute(controlsCheckbox, kAXValueAttribute as String, !old)
+                        return true
+                    }
+                    // Core AX returns status 0 for a successful action. Keep
+                    // AXValue inert while still reporting that status so this
+                    // fixture proves status alone cannot certify a write.
+                    return true
+                }
                 guard key == targetSlotKey || key == targetOpenButtonKey else {
                     return true
                 }
@@ -302,6 +420,9 @@ private final class LiveFixture: @unchecked Sendable {
         self.targetOpenControlPressCount = targetOpenControlPressCount
         self.pluginCloseControlPressCount = pluginCloseControlPressCount
         self.sliderWriteCount = sliderWriteCount
+        self.controlsCheckboxPressCount = controlsCheckboxPressCount
+        self.controlsViewMenuPressCount = controlsViewMenuPressCount
+        self.editorViewMenuPressCount = editorViewMenuPressCount
         self.runtime = runtime
     }
 
@@ -330,6 +451,10 @@ private final class LiveFixture: @unchecked Sendable {
 
     var currentSliderValue: Double? {
         builder.attributeValue(builder.element(1005), kAXValueAttribute as String) as? Double
+    }
+
+    var currentPluginViewTitle: String? {
+        builder.attributeValue(builder.element(1009), kAXTitleAttribute as String) as? String
     }
 }
 
@@ -360,7 +485,8 @@ private func runLive(
 /// identity attribute the live editors share.
 private func matchingCompressorEditorWindow(
     fixture: LiveFixture,
-    baseID: Int
+    baseID: Int,
+    trackName editorTrackName: String = trackName
 ) -> (window: AXUIElement, slider: AXUIElement) {
     let b = fixture.builder
     let window = b.element(baseID)
@@ -381,10 +507,59 @@ private func matchingCompressorEditorWindow(
     b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
     b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
-    b.setAttribute(window, kAXTitleAttribute as String, trackName)
+    b.setAttribute(window, kAXTitleAttribute as String, editorTrackName)
     b.setAttribute(window, kAXCloseButtonAttribute as String, close)
     b.setChildren(window, [bypass, link, slider, pluginName])
     return (window, slider)
+}
+
+/// A Controls-view editor on another strip. It intentionally has no described
+/// slider: header identity, not the native-editor anchor, must keep this
+/// window out of the requested strip's checkbox write.
+private func controlsViewCompressorEditorWindow(
+    fixture: LiveFixture,
+    baseID: Int,
+    trackName editorTrackName: String
+) -> (window: AXUIElement, checkbox: AXUIElement) {
+    let b = fixture.builder
+    let window = b.element(baseID)
+    let close = b.element(baseID + 1)
+    let bypass = b.element(baseID + 2)
+    let pluginName = b.element(baseID + 3)
+    let headerTrackName = b.element(baseID + 4)
+    let table = b.element(baseID + 5)
+    let row = b.element(baseID + 6)
+    let labelCell = b.element(baseID + 7)
+    let controlCell = b.element(baseID + 8)
+    let label = b.element(baseID + 9)
+    let checkbox = b.element(baseID + 10)
+
+    b.setRole(close, kAXButtonRole as String)
+    b.setRole(bypass, kAXCheckBoxRole as String)
+    b.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+    b.setRole(pluginName, kAXStaticTextRole as String)
+    b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
+    b.setRole(headerTrackName, kAXStaticTextRole as String)
+    b.setAttribute(headerTrackName, kAXValueAttribute as String, editorTrackName)
+    b.setRole(table, kAXTableRole as String)
+    b.setRole(row, kAXRowRole as String)
+    b.setRole(labelCell, kAXCellRole as String)
+    b.setRole(controlCell, kAXCellRole as String)
+    b.setRole(label, kAXStaticTextRole as String)
+    b.setAttribute(label, kAXValueAttribute as String, "Limiter On")
+    b.setRole(checkbox, kAXCheckBoxRole as String)
+    b.setAttribute(checkbox, kAXValueAttribute as String, false)
+    b.setChildren(labelCell, [label])
+    b.setChildren(controlCell, [checkbox])
+    b.setChildren(row, [labelCell, controlCell])
+    b.setChildren(table, [row])
+    b.setAttribute(table, kAXRowsAttribute as String, [row])
+    b.setRole(window, kAXWindowRole as String)
+    b.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(window, kAXTitleAttribute as String, editorTrackName)
+    b.setAttribute(window, kAXCloseButtonAttribute as String, close)
+    b.setChildren(window, [bypass, pluginName, headerTrackName, table])
+    return (window, checkbox)
 }
 
 private func thresholdParams(
@@ -402,6 +577,15 @@ private func thresholdParams(
     ]
     if let path { p["project_expected_path"] = path }
     return p
+}
+
+private func controlsBooleanParams(
+    param: String = "limiter_on",
+    value: String = "1"
+) -> [String: String] {
+    thresholdParams(value: value, unit: "boolean").merging([
+        "param": param,
+    ]) { _, new in new }
 }
 
 private let channelEQFixtureParamID = "__test_channel_eq_band_gain"
@@ -573,6 +757,348 @@ private func namedEQBandParams(
     #expect(identity?["insert"] as? Int == 6)
     // The live slider actually changed.
     #expect(fixture.currentSliderValue == 60)
+    let noViewMenuSelection = fixture.controlsViewMenuPressCount.value == 0
+        && fixture.editorViewMenuPressCount.value == 0
+    #expect(noViewMenuSelection)
+}
+
+@Test func testCompressorThresholdSwitchesControlsToEditorThenRestoresControls() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let observedDisplay = try #require(result["observed_display"] as? String)
+    let selectedEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "컨트롤"
+    let sliderWasFoundAndWritten = fixture.currentSliderValue == 60
+    let stateIsA = state == "A"
+    let observedDisplayMatches = observedDisplay == "60 %"
+    #expect(stateIsA)
+    #expect(observedDisplayMatches)
+    #expect(selectedEditorOnce)
+    #expect(restoredControlsOnce)
+    #expect(restoredEntryTitle)
+    #expect(sliderWasFoundAndWritten)
+}
+
+@Test func testCompressorThresholdEnsuresAndSearchesBoundEditorNotOtherOpenCompressor() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true
+    )
+    // A duplicate-applyback session can leave another Compressor editor open.
+    // It shares the plug-in header identity but belongs to another track, so
+    // only the target editor may be switched, searched, and written.
+    let other = matchingCompressorEditorWindow(
+        fixture: fixture,
+        baseID: 8_700,
+        trackName: "Other Strip"
+    )
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [other.window]
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let otherSliderValue = try #require(
+        fixture.builder.attributeValue(other.slider, kAXValueAttribute as String) as? Double
+    )
+    let targetSelectedEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let targetRestoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let stateIsA = state == "A"
+    let targetSliderWasWritten = fixture.currentSliderValue == 60
+    let otherSliderWasUntouched = otherSliderValue == 51
+    #expect(stateIsA)
+    #expect(targetSliderWasWritten)
+    #expect(otherSliderWasUntouched)
+    #expect(targetSelectedEditorOnce)
+    #expect(targetRestoredControlsOnce)
+}
+
+@Test func testCompressorThresholdConfirmsEditorStructureDespiteUnchangedContradictoryTitle() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesTitle: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let titleStayedContradictory = fixture.currentPluginViewTitle == "컨트롤"
+    let selectedEditor = fixture.editorViewMenuPressCount.value == 1
+    let restoredControls = fixture.controlsViewMenuPressCount.value == 1
+    let sliderWasWritten = fixture.currentSliderValue == 60
+    let stateIsA = state == "A"
+    #expect(stateIsA)
+    #expect(titleStayedContradictory)
+    #expect(selectedEditor)
+    #expect(restoredControls)
+    #expect(sliderWasWritten)
+}
+
+@Test func testCompressorThresholdRefusesWhenEditorStructureNeverAppears() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesStructure: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let observed = try #require(result["what_was_observed"] as? String)
+    let reportsUnconfirmedView = error == "plugin_view_not_confirmed"
+    let reportsStructureDeadline = observed.contains("expected editor structure")
+    let sliderWasNotWritten = fixture.sliderWriteCount.value == 0
+    let entryViewWasPreserved = fixture.editorViewMenuPressCount.value == 1
+        && fixture.controlsViewMenuPressCount.value == 0
+    #expect(reportsUnconfirmedView)
+    #expect(reportsStructureDeadline)
+    #expect(sliderWasNotWritten)
+    #expect(entryViewWasPreserved)
+}
+
+@Test func testCompressorThresholdRestoresControlsAfterSliderLookupRefusal() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        controlsViewInitiallySelected: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let switchedToEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "컨트롤"
+    let reportsSliderLookupRefusal = error == "param_control_not_found"
+    #expect(reportsSliderLookupRefusal)
+    #expect(switchedToEditorOnce)
+    #expect(restoredControlsOnce)
+    #expect(restoredEntryTitle)
+}
+
+@Test func testCompressorThresholdRefusesUnmeasuredViewSwitcherLocale() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        pluginWindowViewSwitcherDescription: "Ansicht"
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let error = try #require(result["error"] as? String)
+    let observed = try #require(result["what_was_observed"] as? String)
+    let noViewMenuSelection = fixture.controlsViewMenuPressCount.value == 0
+        && fixture.editorViewMenuPressCount.value == 0
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportsUnconfirmedView = error == "plugin_view_not_confirmed"
+    let reportsUnmeasuredLocale = observed.contains("not measured for this locale")
+    #expect(reportsUnconfirmedView)
+    #expect(reportsUnmeasuredLocale)
+    #expect(noViewMenuSelection)
+    #expect(noSliderWrite)
+}
+
+@Test func testCompressorControlsViewCheckboxUsesRowLabelPressAndChangedReadback() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let rowLabel = try #require(result["controls_view_row_label"] as? String)
+    let presses = fixture.controlsCheckboxPressCount.value
+    let oneVerifiedPress = presses == 1
+    let selectedControlsOnce = fixture.controlsViewMenuPressCount.value == 1
+    let restoredEditorOnce = fixture.editorViewMenuPressCount.value == 1
+    let restoredEntryTitle = fixture.currentPluginViewTitle == "편집기"
+    #expect(state == "A")
+    #expect(verified)
+    #expect(observed)
+    #expect(rowLabel == "Limiter On")
+    #expect(oneVerifiedPress)
+    #expect(selectedControlsOnce)
+    #expect(restoredEditorOnce)
+    #expect(restoredEntryTitle)
+}
+
+@Test func testControlsViewAlreadyOpenWithoutDescribedSlidersBindsHeaderAndReachesCheckbox() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    let viewMenuPresses = fixture.controlsViewMenuPressCount.value
+    let editorViewMenuPresses = fixture.editorViewMenuPressCount.value
+    #expect(state == "A")
+    #expect(verified)
+    #expect(checkboxPresses == 1)
+    #expect(viewMenuPresses == 0)
+    #expect(editorViewMenuPresses == 0)
+}
+
+@Test func testNativeEditorWithoutThresholdAnchorBindsHeaderThenSelectsControls() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    let viewMenuPresses = fixture.controlsViewMenuPressCount.value
+    let editorViewMenuPresses = fixture.editorViewMenuPressCount.value
+    #expect(state == "A")
+    #expect(verified)
+    #expect(checkboxPresses == 1)
+    #expect(viewMenuPresses == 1)
+    #expect(editorViewMenuPresses == 1)
+}
+
+@Test func testControlsViewHeaderBindingChoosesRequestedStripAndLeavesOtherEditorUntouched() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+    let other = controlsViewCompressorEditorWindow(
+        fixture: fixture,
+        baseID: 8_600,
+        trackName: "Other Strip"
+    )
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [other.window]
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let targetCheckboxPresses = fixture.controlsCheckboxPressCount.value
+    let otherCheckboxState = try #require(
+        fixture.builder.attributeValue(other.checkbox, kAXValueAttribute as String) as? Bool
+    )
+    #expect(state == "A")
+    #expect(targetCheckboxPresses == 1)
+    #expect(!otherCheckboxState)
+}
+
+@Test func testControlsViewMismatchedHeaderRefusesBeforeCheckboxActuation() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: "Native-only non-anchor",
+        pluginWindowStaticTextValues: ["보기:", "Noise Gate", trackName],
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsViewInitiallySelected: true
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let checkboxPresses = fixture.controlsCheckboxPressCount.value
+    #expect(error == "plugin_window_plugin_mismatch")
+    #expect(!writeAttempted)
+    #expect(checkboxPresses == 0)
+}
+
+@Test func testControlsViewCheckboxBindsTargetHeaderBeforeSharedThresholdAnchor() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false
+    )
+    let unrelatedEditors = ["Drums", "Reverb", "Piano", "Vox"].enumerated().map { offset, otherTrack in
+        matchingCompressorEditorWindow(
+            fixture: fixture,
+            baseID: 8_000 + offset * 10,
+            trackName: otherTrack
+        ).window
+    }
+    let existingWindows = fixture.builder.attributeValue(
+        fixture.app,
+        kAXWindowsAttribute as String
+    ) as? [AXUIElement] ?? []
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + unrelatedEditors
+    )
+
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    // Every added editor exposes the same Threshold slider. Success proves the
+    // target track/plugin header binding selected the intended editor before
+    // treating Threshold as its secondary Controls-view witness.
+    #expect(result["state"] as? String == "A")
+    #expect(fixture.controlsCheckboxPressCount.value == 1)
+}
+
+@Test func testCompressorControlsViewAutoReleaseUsesItsOwnRowLabel() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Auto Release",
+        controlsCheckboxBefore: true
+    )
+    let result = await runLive(
+        fixture: fixture,
+        params: controlsBooleanParams(param: "auto_release", value: "0")
+    )
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let rowLabel = try #require(result["controls_view_row_label"] as? String)
+    let oneVerifiedPress = fixture.controlsCheckboxPressCount.value == 1
+    #expect(state == "A")
+    #expect(verified)
+    #expect(!observed)
+    #expect(rowLabel == "Auto Release")
+    #expect(oneVerifiedPress)
+}
+
+@Test func testCompressorControlsViewStatusZeroUnchangedReadbackRefusesAndRestores() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .statusZeroUnchanged
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restoreAttempted = try #require(result["restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["restore_observed"] as? Bool)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let statusOnlyWasNotSuccess = result["state"] as? String != "A"
+    let pressAndRestore = fixture.controlsCheckboxPressCount.value == 2
+    #expect(error == "readback_mismatch")
+    #expect(restoreAttempted)
+    #expect(restoreObserved)
+    #expect(writeAttempted)
+    #expect(statusOnlyWasNotSuccess)
+    #expect(pressAndRestore)
 }
 
 @Test func testWithinToleranceStillStateA() async {
@@ -1409,7 +1935,7 @@ private func namedEQBandParams(
     #expect(fixture.currentSliderValue == 60)
 }
 
-@Test func testProductionOpenerRejectsOpenedWindowWithoutRequestedSlider() async throws {
+@Test func testProductionOpenerReportsOpenedNativeWindowWithoutRequestedSlider() async throws {
     let fixture = LiveFixture(
         thresholdDescription: "Output Gain",
         beforeValue: 51,
@@ -1419,15 +1945,11 @@ private func namedEQBandParams(
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["error"] as? String == "param_control_not_found")
     let v1 = try #require(obj["write_attempted"] as? Bool)
     #expect(!v1)
-    let v2 = try #require(obj["opener_action_attempted"] as? Bool)
-    #expect(v2)
-    let windowCandidates = obj["window_candidates"] as? [[String: Any]]
-    let sliders = windowCandidates?.last?["slider_descriptions"] as? [String]
-    let v3 = try #require(sliders?.contains("Output Gain"))
-    #expect(v3)
+    let observed = try #require(obj["what_was_observed"] as? String)
+    #expect(observed.contains("no slider with that AX description"))
     #expect(fixture.currentSliderValue == 51)
 }
 
@@ -1520,7 +2042,11 @@ private func namedEQBandParams(
 }
 
 @Test func testAmbiguousWindowAppearingAfterSlotPressFailsClosed() async throws {
-    let fixture = LiveFixture(beforeValue: 51, openWindowOnSlotPress: true)
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true
+    )
     let b = fixture.builder
     let duplicateWindow = b.element(3300)
     let duplicateSlider = b.element(3301)
@@ -1564,7 +2090,10 @@ private func namedEQBandParams(
     b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
     b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
     b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
-    b.setChildren(b.element(1004), [b.element(1007), b.element(1008), b.element(1005), duplicateSlider])
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), b.element(1005), duplicateSlider,
+        b.element(1011), b.element(1009),
+    ])
 
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
@@ -1591,6 +2120,7 @@ private func namedEQBandParams(
     let openedBypass = b.element(2003)
     let openedLink = b.element(2004)
     let openedPluginName = b.element(2005)
+    let openedViewSwitcher = b.element(2006)
     b.setAttribute(openedClose, kAXRoleAttribute as String, kAXButtonRole as String)
     b.setAttribute(openedBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     b.setAttribute(openedBypass, kAXDescriptionAttribute as String, "bypass")
@@ -1598,13 +2128,18 @@ private func namedEQBandParams(
     b.setAttribute(openedLink, kAXDescriptionAttribute as String, "link")
     b.setAttribute(openedPluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
     b.setAttribute(openedPluginName, kAXValueAttribute as String, "Compressor")
+    b.setAttribute(openedViewSwitcher, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+    b.setAttribute(openedViewSwitcher, kAXDescriptionAttribute as String, "보기")
+    b.setAttribute(openedViewSwitcher, kAXTitleAttribute as String, "편집기")
     b.setAttribute(openedWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setAttribute(openedWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     b.setAttribute(openedWindow, kAXTitleAttribute as String, trackName)
     b.setAttribute(openedWindow, kAXCloseButtonAttribute as String, openedClose)
     b.setAttribute(openedWindow, kAXMainAttribute as String, true)
     b.setAttribute(openedWindow, kAXFocusedAttribute as String, true)
-    b.setChildren(openedWindow, [openedBypass, openedLink, openedSlider, openedPluginName])
+    b.setChildren(openedWindow, [
+        openedBypass, openedLink, openedSlider, openedPluginName, openedViewSwitcher,
+    ])
     b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), openedWindow])
     let sendable = AXUIElementSendable(openedWindow)
 
@@ -1795,6 +2330,7 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         let pluginBypass = b.element(3007)
         let pluginLink = b.element(3008)
         let pluginName = b.element(3009)
+        let viewSwitcher = b.element(3010)
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
@@ -1802,10 +2338,13 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
         b.setAttribute(pluginName, kAXRoleAttribute as String, kAXStaticTextRole as String)
         b.setAttribute(pluginName, kAXValueAttribute as String, "Compressor")
+        b.setAttribute(viewSwitcher, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+        b.setAttribute(viewSwitcher, kAXDescriptionAttribute as String, "보기")
+        b.setAttribute(viewSwitcher, kAXTitleAttribute as String, "편집기")
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
-        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider, pluginName])
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider, pluginName, viewSwitcher])
 
         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow, pluginWindow])
         b.setAttribute(app, kAXMainWindowAttribute as String, arrangeWindow)

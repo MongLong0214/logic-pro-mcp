@@ -57,10 +57,10 @@ import Testing
         VerifiedPluginCatalog.paramCapability(pluginID: "logic.stock.effect.gain", paramKey: "nope")
             == .unknownParameter
     )
-    // An unknown compressor param is still unknown; `threshold` itself is now
-    // writeReadback (T5) — see testCompressorThresholdCapabilityIsWriteReadback.
+    // Ratio is deliberately known-but-unsupported in Controls view, so use a
+    // genuinely absent Compressor key for the unknown-parameter assertion.
     #expect(
-        VerifiedPluginCatalog.paramCapability(pluginID: "logic.stock.effect.compressor", paramKey: "ratio")
+        VerifiedPluginCatalog.paramCapability(pluginID: "logic.stock.effect.compressor", paramKey: "not_a_compressor_parameter")
             == .unknownParameter
     )
 }
