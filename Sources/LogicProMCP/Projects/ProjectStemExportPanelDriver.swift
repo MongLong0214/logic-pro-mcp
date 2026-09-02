@@ -63,8 +63,10 @@ enum ProjectStemExportPanelDriver {
         /// `write_attempted:false`.
         case refused(String)
         /// Completion could not be established after the Export route. The
-        /// Boolean is evidence-derived: it is true only when the panel
-        /// disappeared or the progress dialog appeared after the press.
+        /// Boolean is evidence-derived: it is true only when the progress
+        /// dialog appeared after the press. The panel going away can happen for
+        /// unrelated reasons, including a user Escape, so it is not export
+        /// evidence.
         case uncertain(String, exportEffectObserved: Bool)
     }
 
@@ -237,9 +239,11 @@ enum ProjectStemExportPanelDriver {
         for attempt in 0..<max(1, progressPollAttempts) {
             switch surface.exportPanelPresence() {
             case .absent:
-                // The panel's observed disappearance is evidence that the press
-                // landed, but not alone evidence that the export completed.
-                sawExportEffect = true
+                // The panel can disappear because the user dismissed it or a
+                // transient census missed it. The actuator was already reached
+                // by `pressExport()`, but disappearance alone is not evidence
+                // that an export started.
+                break
             case .unavailable:
                 panelReadFailed = true
             case .present, .partiallyMeasured, .unmeasured:
@@ -269,12 +273,6 @@ enum ProjectStemExportPanelDriver {
         if sawProgressWindow {
             return finish(.uncertain(
                 "stem_progress_window_did_not_disappear_within_budget",
-                exportEffectObserved: true
-            ))
-        }
-        if sawExportEffect {
-            return finish(.uncertain(
-                "stem_export_effect_observed_but_progress_window_not_observed",
                 exportEffectObserved: true
             ))
         }
@@ -571,9 +569,7 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
             return .absent
         case let .success(.elements(windows)):
             for window in windows {
-                switch AXHelpers.getAttributeResult(
-                    window, kAXTitleAttribute as String, runtime: runtime.ax
-                ) as Result<String?, AXHelpers.AXStatusError> {
+                switch readAttribute(window, kAXTitleAttribute as String) as Result<String?, PanelReadFailure> {
                 case .failure:
                     return .unavailable
                 case let .success(title):
@@ -653,13 +649,10 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
     }
 
     private func assessPanel(_ window: AXUIElement) -> Result<PanelAssessment?, PanelReadFailure> {
-        switch AXHelpers.getAttributeResult(
-            window, kAXSubroleAttribute as String, runtime: runtime.ax
-        ) as Result<String?, AXHelpers.AXStatusError> {
-        case let .failure(error):
-            guard Self.absentAttributeStatuses.contains(error.raw) else {
-                return .failure(.unavailable)
-            }
+        switch readAttribute(window, kAXSubroleAttribute as String) as Result<String?, PanelReadFailure> {
+        case .failure:
+            return .failure(.unavailable)
+        case .success(nil):
             // No subrole at all means this is not the dialog we are looking for.
             return .success(nil)
         case let .success(subrole):
@@ -675,20 +668,16 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         }
 
         var buttons: [(element: AXUIElement, label: String)] = []
-        var popupHasPerTrackValue = false
         var popupCount = 0
         var titledPopupCount = 0
         for element in descendants {
-            let role: String?
-            switch AXHelpers.getAttributeResult(
-                element, kAXRoleAttribute as String, runtime: runtime.ax
-            ) as Result<String?, AXHelpers.AXStatusError> {
-            case let .failure(error):
-                guard Self.absentAttributeStatuses.contains(error.raw) else {
-                    return .failure(.unavailable)
-                }
-                role = nil
-            case let .success(value):
+            let role: String
+            switch readAttribute(element, kAXRoleAttribute as String) as Result<String?, PanelReadFailure> {
+            case .failure, .success(nil):
+                // A role is the mandatory census evidence. An element with no
+                // readable role cannot safely be omitted as irrelevant.
+                return .failure(.unavailable)
+            case let .success(.some(value)):
                 role = value
             }
             if role == (kAXButtonRole as String) {
@@ -703,19 +692,16 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
                 switch elementTextResult(element) {
                 case .failure:
                     return .failure(.unavailable)
-                case let .success(label):
-                    popupHasPerTrackValue = popupHasPerTrackValue
-                        || AXLocalePolicy.oneFilePerTrackPopupValue.matches(label)
+                case .success:
+                    break
                 }
-                switch AXHelpers.getAttributeResult(
-                    element, kAXTitleAttribute as String, runtime: runtime.ax
-                ) as Result<String?, AXHelpers.AXStatusError> {
-                case let .failure(error):
+                switch readAttribute(element, kAXTitleAttribute as String) as Result<String?, PanelReadFailure> {
+                case .failure:
+                    return .failure(.unavailable)
+                case .success(nil):
                     // An untitled popup is exactly what the five decoys are; the
                     // absence IS the discriminator, not a failure to observe it.
-                    guard Self.absentAttributeStatuses.contains(error.raw) else {
-                        return .failure(.unavailable)
-                    }
+                    break
                 case let .success(title):
                     if !(title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         titledPopupCount += 1
@@ -729,18 +715,22 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         guard commits.count <= 1, dismisses.count <= 1 else {
             return .failure(.unavailable)
         }
+        // The live panel's six popup controls have one titled destination
+        // control and five untitled option controls, one of which is the
+        // per-track popup. This structural witness identifies the panel without
+        // conflating the current per-track value (state) with panel identity.
+        let hasStemPerTrackPopup = popupCount == 6 && titledPopupCount == 1
         switch (commits.first, dismisses.first) {
         case let (.some(commit), .some(dismiss)):
-            // The two button labels alone are a generic macOS dialog shape. A
-            // measured per-track value is the stem-specific witness for a fully
-            // recognised panel.
-            guard popupHasPerTrackValue else { return .success(nil) }
+            // The two button labels alone are a generic macOS dialog shape.
+            // Whether the per-track popup currently has the desired active
+            // value is checked later by `oneFilePerTrackIsActive()`.
+            guard hasStemPerTrackPopup else { return .success(nil) }
             return .success(.recognized(window, commit.element, dismiss.element))
         case (.some, nil):
-            // In a partially measured locale the per-track value itself can be
-            // unmeasured. A popup still distinguishes this panel shape from the
-            // bare two-button dialog that must never be cancelled.
-            guard popupCount > 0 else { return .success(nil) }
+            // Partial measurement relaxes only a button label. It retains the
+            // exact same stem-specific structural witness as full recognition.
+            guard hasStemPerTrackPopup else { return .success(nil) }
             return .success(.partiallyMeasured(
                 window,
                 recognized: AXLocalePolicy.stemExportCommitButton.canonical,
@@ -748,7 +738,7 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
                 dismiss: nil
             ))
         case let (nil, .some(dismiss)):
-            guard popupCount > 0 else { return .success(nil) }
+            guard hasStemPerTrackPopup else { return .success(nil) }
             return .success(.partiallyMeasured(
                 window,
                 recognized: AXLocalePolicy.stemExportDismissButton.canonical,
@@ -760,7 +750,7 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
             // The uniquely titled destination popup is the remaining measured
             // export-panel structure; report the modal as unmeasured so the
             // outcome honestly says it was left open.
-            guard titledPopupCount == 1 else { return .success(nil) }
+            guard hasStemPerTrackPopup else { return .success(nil) }
             return .success(.unmeasured(window))
         }
     }
@@ -786,8 +776,10 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         AXError.attributeUnsupported.rawValue,
     ]
 
-    /// One read for the whole driver, so "the attribute is not there" can never be
-    /// mistaken for "the attribute could not be read" at ANY site.
+    /// The driver's single absent-aware ATTRIBUTE reader, so "the attribute is
+    /// not there" cannot be mistaken for "the attribute could not be read" at a
+    /// call site. Child traversal is separate because an absent children
+    /// attribute has its own structural meaning (a leaf).
     ///
     /// Three separate sites were fixed one at a time before this existed — the
     /// children walk, the button text, then the browser entries — each one
@@ -858,13 +850,10 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
             kAXTitleAttribute as String,
             kAXDescriptionAttribute as String,
         ] {
-            switch AXHelpers.getAttributeResult(
-                element, attribute, runtime: runtime.ax
-            ) as Result<String?, AXHelpers.AXStatusError> {
-            case let .failure(error):
-                guard Self.absentAttributeStatuses.contains(error.raw) else {
-                    return .failure(.unavailable)
-                }
+            switch readAttribute(element, attribute) as Result<String?, PanelReadFailure> {
+            case .failure:
+                return .failure(.unavailable)
+            case .success(nil):
                 continue
             case let .success(value):
                 if let value { return .success(value) }
