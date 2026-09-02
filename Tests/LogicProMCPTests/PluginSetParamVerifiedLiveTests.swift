@@ -106,7 +106,7 @@ private final class LiveFixture: @unchecked Sendable {
         invalidateTargetSlotAfterViewSelection: Bool = false,
         mutatePluginHeaderAfterViewSelection: Bool = false,
         ambiguousEditorSliderAfterViewSelection: Bool = false,
-        viewMenuRevealAfterPolls: Int? = 4,
+        viewMenuRevealAfterPolls: Int? = 3,
         viewSettleDelay: TimeInterval = 0.5
     ) {
         let b = builder
@@ -352,6 +352,15 @@ private final class LiveFixture: @unchecked Sendable {
                 return nil
             },
             childrenResultHandler: { element in
+                // The status-preserving censuses read through this seam rather
+                // than `childrenHandler`; advance the same realistic view-settle
+                // state before serving either read path.
+                if CFEqual(element, pluginWindow),
+                   let pending = pendingPluginWindowChildren.value,
+                   Date() >= pending.settlesAt {
+                    b.setChildren(pluginWindow, pending.children)
+                    pendingPluginWindowChildren.value = nil
+                }
                 guard CFEqual(element, controlsViewSwitcher), menuOpen.value else { return nil }
                 if viewMenuReadFailsAfterFirstSelection,
                    controlsViewMenuPressCount.value + editorViewMenuPressCount.value > 0 {
@@ -716,7 +725,8 @@ private func channelEQFixtureEntryLookup(
     writeMethod: String = "ax_slider_axvalue",
     unit: String = "dB",
     acceptedUnits: [String]? = nil,
-    range: StockPluginValueRange = StockPluginValueRange(min: -24, max: 24, defaultValue: 0)
+    range: StockPluginValueRange = StockPluginValueRange(min: -24, max: 24, defaultValue: 0),
+    tolerance: Double = 0.5
 ) -> VerifiedPluginCatalog.EntryLookup {
     { pluginID in
         guard pluginID == "logic.stock.effect.channel_eq" else {
@@ -755,7 +765,7 @@ private func channelEQFixtureEntryLookup(
                     valueRange: range,
                     writeMethod: writeMethod,
                     readbackMethod: "ax_slider_axvalue",
-                    tolerance: 0.5,
+                    tolerance: tolerance,
                     axDescription: channelEQFixtureAXDescription,
                     availabilityState: .verified,
                     provenance: provenance
@@ -818,7 +828,8 @@ private func runChannelEQFixture(
     fixture: LiveFixture,
     params: [String: String],
     writeMethod: String,
-    incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
+    incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget,
+    tolerance: Double = 0.5
 ) async throws -> [String: Any] {
     let result = await AccessibilityChannel.defaultSetParamVerified(
         params: params,
@@ -827,7 +838,8 @@ private func runChannelEQFixture(
         entryLookup: channelEQFixtureEntryLookup(
             writeMethod: writeMethod,
             unit: "raw_ax_value",
-            range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0)
+            range: StockPluginValueRange(min: 0, max: 10, defaultValue: 0),
+            tolerance: tolerance
         ),
         paramAliasLookup: channelEQFixtureParamAlias,
         pluginPopupMenuCleaner: { _ in .noPopupObserved },
@@ -911,7 +923,7 @@ private func namedEQBandParams(
         beforeValue: 51,
         controlsViewInitiallySelected: true
     )
-    // A duplicate-applyback session can leave another Compressor editor open.
+    // A duplicate-applyback run can leave another Compressor editor open.
     // It shares the plug-in header identity but belongs to another track, so
     // only the target editor may be switched, searched, and written.
     let other = matchingCompressorEditorWindow(
@@ -1269,8 +1281,7 @@ private func namedEQBandParams(
     let fixture = LiveFixture(
         controlsViewInitiallySelected: true,
         viewMenuSelectionSetsUnconfirmedStructure: true,
-        viewMenuReadFailsAfterFirstSelection: true,
-        viewSettleDelay: 0
+        viewMenuReadFailsAfterFirstSelection: true
     )
     let result = await runLive(fixture: fixture, params: thresholdParams())
 
@@ -1402,6 +1413,34 @@ private func namedEQBandParams(
     #expect(parameterLeftChanged)
     #expect(retryIsNotSafe)
     #expect(restorationFailureWasVisible)
+}
+
+@Test func testDirectRollbackNearMissUsesTheParametersOwnZeroTolerance() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 51,
+        // The write's readback is lost; compensation reaches 51.4 rather than
+        // the pre-write 51. This fixture declares tolerance 0 below.
+        sliderWriteBehavior: .scripted([nil, 51.4])
+    )
+    let result = try await runChannelEQFixture(
+        fixture: fixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_axvalue",
+        tolerance: 0
+    )
+
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let rollbackObserved = try #require(result["rollback_observed"] as? Double)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let exactRestorationWasNotObserved = !rolledBack && rollbackObserved == 51.4
+    let parameterWasLeftChanged = parameterLeftChanged && !safeToRetry
+    #expect(rollbackAttempted)
+    #expect(exactRestorationWasNotObserved)
+    #expect(parameterWasLeftChanged)
 }
 
 @Test func testReadbackMismatchStateCReportsFailedViewRestore() async throws {

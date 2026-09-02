@@ -1782,6 +1782,7 @@ extension AccessibilityChannel {
                     slider,
                     to: before,
                     writeMethod: writeMethod,
+                    tolerance: tolerance,
                     runtime: runtime.ax
                 )
                 return .error(HonestContract.encodeV2StateC(
@@ -1811,6 +1812,7 @@ extension AccessibilityChannel {
                     slider,
                     to: before,
                     writeMethod: writeMethod,
+                    tolerance: tolerance,
                     runtime: runtime.ax
                 )
                 return .error(HonestContract.encodeV2StateC(
@@ -1856,6 +1858,7 @@ extension AccessibilityChannel {
                 slider,
                 to: before,
                 writeMethod: writeMethod,
+                tolerance: tolerance,
                 runtime: runtime.ax
             )
             return .error(HonestContract.encodeV2StateC(
@@ -1944,6 +1947,7 @@ extension AccessibilityChannel {
                     slider,
                     to: before,
                     writeMethod: writeMethod,
+                    tolerance: tolerance,
                     runtime: runtime.ax,
                     incrementWalkBudget: incrementWalkBudget
                 )
@@ -2105,6 +2109,7 @@ extension AccessibilityChannel {
         _ slider: AXUIElement,
         to before: Double?,
         writeMethod: String,
+        tolerance: Double,
         runtime: AXHelpers.Runtime,
         incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) -> SliderRollback {
@@ -2114,7 +2119,7 @@ extension AccessibilityChannel {
         switch writeMethod {
         case "ax_slider_increment_walk":
             let outcome = SliderIncrementWalk.walk(
-                to: .rawValue(before, tolerance: 0),
+                to: .rawValue(before, tolerance: tolerance),
                 read: {
                     AXValueExtractors.extractSliderValue(slider, runtime: runtime).map {
                         SliderIncrementWalk.Reading(value: $0, display: "")
@@ -2148,7 +2153,7 @@ extension AccessibilityChannel {
             }
             return SliderRollback(
                 attempted: true,
-                succeeded: abs(restored - before) <= 0.5,
+                succeeded: abs(restored - before) <= tolerance,
                 observed: restored,
                 walkOutcome: nil
             )

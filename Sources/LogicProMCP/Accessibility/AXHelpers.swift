@@ -604,6 +604,44 @@ enum AXHelpers {
         return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count, matches: hits)
     }
 
+    /// Status-preserving counterpart to `censusDescendant`.
+    ///
+    /// The historical census intentionally keeps its best-effort contract for
+    /// its many existing callers: a failed AX read contributes no match. A
+    /// caller using a census as write authority cannot make that tradeoff,
+    /// because an unreadable competing candidate is not evidence that it is
+    /// absent. This additive form reports the first non-absence AX failure
+    /// instead. `attributeUnsupported` and `noValue` remain an ordinary
+    /// missing role/title/identifier or child list.
+    static func censusDescendantResult(
+        of element: AXUIElement,
+        role: String? = nil,
+        title: String? = nil,
+        identifier: String? = nil,
+        maxDepth: Int = 10,
+        runtime: Runtime = .production
+    ) -> Result<Census, AXStatusError> {
+        var hits: [AXUIElement] = []
+        switch collectMatchingResult(
+            of: element,
+            role: role,
+            title: title,
+            identifier: identifier,
+            maxDepth: maxDepth,
+            runtime: runtime,
+            into: &hits
+        ) {
+        case .success:
+            return .success(Census(
+                element: hits.count == 1 ? hits[0] : nil,
+                candidates: hits.count,
+                matches: hits
+            ))
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
     private static func collectMatching(
         of element: AXUIElement,
         role: String?,
@@ -623,6 +661,103 @@ enum AXHelpers {
             }
             collectMatching(of: child, role: role, title: title, identifier: identifier,
                             maxDepth: maxDepth - 1, runtime: runtime, into: &results)
+        }
+    }
+
+    private static func collectMatchingResult(
+        of element: AXUIElement,
+        role: String?,
+        title: String?,
+        identifier: String?,
+        maxDepth: Int,
+        runtime: Runtime,
+        into results: inout [AXUIElement]
+    ) -> Result<Void, AXStatusError> {
+        guard maxDepth > 0 else { return .success(()) }
+        let children: [AXUIElement]
+        switch childrenResult(element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error) where error.isDefinitiveAbsence:
+            children = []
+        case let .failure(error):
+            return .failure(error)
+        }
+        for child in children {
+            switch descendantMatchesResult(
+                child,
+                role: role,
+                title: title,
+                identifier: identifier,
+                runtime: runtime
+            ) {
+            case .success(true):
+                results.append(child)
+            case .success(false):
+                break
+            case let .failure(error):
+                return .failure(error)
+            }
+            switch collectMatchingResult(
+                of: child,
+                role: role,
+                title: title,
+                identifier: identifier,
+                maxDepth: maxDepth - 1,
+                runtime: runtime,
+                into: &results
+            ) {
+            case .success:
+                continue
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(())
+    }
+
+    private static func descendantMatchesResult(
+        _ element: AXUIElement,
+        role: String?,
+        title: String?,
+        identifier: String?,
+        runtime: Runtime
+    ) -> Result<Bool, AXStatusError> {
+        for (attribute, expected) in [
+            (kAXRoleAttribute as String, role),
+            (kAXTitleAttribute as String, title),
+            (kAXIdentifierAttribute as String, identifier),
+        ] {
+            guard let expected else { continue }
+            let value: String?
+            switch stringAttributeResult(element, attribute, runtime: runtime) {
+            case let .success(observed):
+                value = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            guard value == expected else { return .success(false) }
+        }
+        return .success(true)
+    }
+
+    private static func stringAttributeResult(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: Runtime
+    ) -> Result<String?, AXStatusError> {
+        let read: Result<String?, AXStatusError> = getAttributeResult(
+            element,
+            attribute,
+            runtime: runtime
+        )
+        switch read {
+        case let .success(value):
+            return .success(value)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
         }
     }
 

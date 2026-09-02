@@ -521,13 +521,20 @@ enum StockPluginCatalogValidator {
                     path: "\(base).parameters[\(paramIndex)].provenance",
                     issues: &issues
                 )
-                if parameter.availabilityState == .verified,
-                   (parameter.readbackMethod?.isEmpty ?? true) || !parameter.provenance.evidence.contains("parameter_readback") {
-                    issues.append(issue(
-                        "verified_parameter_missing_readback",
-                        "\(base).parameters[\(paramIndex)]",
-                        "verified parameters require readback method and parameter_readback evidence"
-                    ))
+                if parameter.availabilityState == .verified {
+                    if parameter.readbackMethod?.isEmpty ?? true {
+                        issues.append(issue(
+                            "verified_parameter_missing_readback",
+                            "\(base).parameters[\(paramIndex)]",
+                            "verified parameters require a readback method"
+                        ))
+                    } else if !hasVerifiedParameterWriteObservation(parameter) {
+                        issues.append(issue(
+                            "verified_parameter_missing_write_observation",
+                            "\(base).parameters[\(paramIndex)]",
+                            "verified parameter evidence must parse operation=logic_plugins.set_param_verified, write_method=<declared method>, and reciprocal observed_transition=<from>-><to> records"
+                        ))
+                    }
                 }
             }
         }
@@ -539,6 +546,73 @@ enum StockPluginCatalogValidator {
     private static func hasPresetProvenance(_ provenance: StockPluginProvenance) -> Bool {
         provenance.evidence.contains("factory_preset_filenames") ||
             provenance.evidence.contains("preset_names_observed")
+    }
+
+    /// Verified parameter evidence is deliberately structured rather than a
+    /// reassuring free-form token. A verifier can check the named public
+    /// operation, bind the observation to this parameter's declared write
+    /// method, and require a measured transition plus its reverse. This proves
+    /// bidirectional actuation without pretending the catalog can inspect a
+    /// live artifact path at validation time.
+    private static func hasVerifiedParameterWriteObservation(_ parameter: StockPluginParameterMetadata) -> Bool {
+        guard let declaredWriteMethod = parameter.writeMethod,
+              !declaredWriteMethod.isEmpty else {
+            return false
+        }
+        let parsed = VerifiedParameterEvidence.parse(parameter.provenance.evidence)
+        guard parsed.operations.contains("logic_plugins.set_param_verified"),
+              parsed.writeMethods.contains(declaredWriteMethod) else {
+            return false
+        }
+        return parsed.transitions.contains { transition in
+            transition.from != transition.to && parsed.transitions.contains(
+                VerifiedParameterEvidence.Transition(
+                    from: transition.to,
+                    to: transition.from
+                )
+            )
+        }
+    }
+
+    private struct VerifiedParameterEvidence {
+        struct Transition: Hashable {
+            let from: Double
+            let to: Double
+        }
+
+        var operations = Set<String>()
+        var writeMethods = Set<String>()
+        var transitions = Set<Transition>()
+
+        static func parse(_ records: [String]) -> Self {
+            var parsed = Self()
+            for record in records {
+                let pieces = record.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                guard pieces.count == 2 else { continue }
+                let key = String(pieces[0])
+                let value = String(pieces[1])
+                guard !value.isEmpty else { continue }
+                switch key {
+                case "operation":
+                    parsed.operations.insert(value)
+                case "write_method":
+                    parsed.writeMethods.insert(value)
+                case "observed_transition":
+                    let endpoints = value.split(separator: "->", maxSplits: 1, omittingEmptySubsequences: false)
+                    guard endpoints.count == 2,
+                          let from = Double(endpoints[0]),
+                          let to = Double(endpoints[1]),
+                          from.isFinite,
+                          to.isFinite else {
+                        continue
+                    }
+                    parsed.transitions.insert(Transition(from: from, to: to))
+                default:
+                    continue
+                }
+            }
+            return parsed
+        }
     }
 
     private static func validateProvenance(
@@ -975,20 +1049,19 @@ enum StockPluginCatalog {
             editorWindowAnchorAXDescription: "Threshold",
             availabilityState: .verified,
             provenance: StockPluginProvenance(
-                source: "live_logic",
-                method: "controls_view_axcheckbox_press_readback",
+                source: "release_binary_live_drive",
+                method: "logic_plugins.set_param_verified.ax_controls_view_checkbox_press",
                 observedAt: "2026-09-02T11:30:17+09:00",
                 logicVersion: nil,
                 locale: "ko-KR",
-                sourcePath: "/Users/isaac/lpm-evidence/controls-view-write-20260902-113017/",
+                sourcePath: nil,
                 inferenceReason: nil,
                 evidence: [
-                    // The token the catalog validator requires for a VERIFIED parameter: it means a
-                    // write/readback round trip was observed, not merely that a readback method
-                    // was named. Measured 2026-09-02 on the live Controls view.
-                    "parameter_readback",
-                    "controls-view-write-20260902-113017",
-                    "Limiter On AXPress 0.00 -> 1.00 and 1.00 -> 0.00 observed",
+                    "operation=logic_plugins.set_param_verified",
+                    "write_method=ax_controls_view_checkbox_press",
+                    "observed_transition=0->1",
+                    "observed_transition=1->0",
+                    "artifact=release_binary_head_67ba2e8d_2026-09-02",
                 ]
             )
         ),
@@ -1005,20 +1078,19 @@ enum StockPluginCatalog {
             editorWindowAnchorAXDescription: "Threshold",
             availabilityState: .verified,
             provenance: StockPluginProvenance(
-                source: "live_logic",
-                method: "controls_view_axcheckbox_press_readback",
+                source: "release_binary_live_drive",
+                method: "logic_plugins.set_param_verified.ax_controls_view_checkbox_press",
                 observedAt: "2026-09-02T11:30:17+09:00",
                 logicVersion: nil,
                 locale: "ko-KR",
-                sourcePath: "/Users/isaac/lpm-evidence/controls-view-write-20260902-113017/",
+                sourcePath: nil,
                 inferenceReason: nil,
                 evidence: [
-                    // The token the catalog validator requires for a VERIFIED parameter: it means a
-                    // write/readback round trip was observed, not merely that a readback method
-                    // was named. Measured 2026-09-02 on the live Controls view.
-                    "parameter_readback",
-                    "controls-view-write-20260902-113017",
-                    "Auto Release AXPress 1.00 -> 0.00 and 0.00 -> 1.00 observed",
+                    "operation=logic_plugins.set_param_verified",
+                    "write_method=ax_controls_view_checkbox_press",
+                    "observed_transition=0->1",
+                    "observed_transition=1->0",
+                    "artifact=release_binary_head_67ba2e8d_2026-09-02",
                 ]
             )
         ),

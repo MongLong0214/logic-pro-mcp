@@ -393,6 +393,186 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(confirmedEditor)
     }
 
+    @Test func failedSwitcherCensusRefusesInsteadOfReportingNoSwitcher() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .switcherCensus
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForCensusRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.switcherCensus(observed)), restoration: nil) = result {
+            refusedForCensusRead = observed == readFailure
+        } else {
+            refusedForCensusRead = false
+        }
+        #expect(refusedForCensusRead)
+    }
+
+    @Test func failedSwitcherDescriptionRefusesInsteadOfReportingUnmeasuredLocale() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .switcherDescription
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForDescriptionRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.switcherDescription(observed)), restoration: nil) = result {
+            refusedForDescriptionRead = observed == readFailure
+        } else {
+            refusedForDescriptionRead = false
+        }
+        #expect(refusedForDescriptionRead)
+    }
+
+    @Test func failedSliderCensusRefusesInsteadOfErasingEditorEvidence() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .sliderCensus
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForSliderCensusRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.sliderCensus(observed)), restoration: nil) = result {
+            refusedForSliderCensusRead = observed == readFailure
+        } else {
+            refusedForSliderCensusRead = false
+        }
+        #expect(refusedForSliderCensusRead)
+    }
+
+    @Test func failedSliderDescriptionRefusesBeforeAnyTableCanConfirmControls() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .sliderDescription,
+            includeControlsTableBesideEditor: true
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForSliderDescriptionRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.sliderDescription(observed)), restoration: nil) = result {
+            refusedForSliderDescriptionRead = observed == readFailure
+        } else {
+            refusedForSliderDescriptionRead = false
+        }
+        #expect(refusedForSliderDescriptionRead)
+    }
+
+    @Test func failedViewMenuItemCensusRefusesInsteadOfReportingMissingItem() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            readFailure: .menuItemCensus
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForMenuItemCensusRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.menuItemCensus(observed)), restoration: nil) = result {
+            refusedForMenuItemCensusRead = observed == readFailure
+        } else {
+            refusedForMenuItemCensusRead = false
+        }
+        #expect(refusedForMenuItemCensusRead)
+    }
+
+    @Test func failedControlsTableCensusRefusesInsteadOfReportingEntryViewMissing() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .controls,
+            title: "컨트롤",
+            behavior: .switchesStructure,
+            readFailure: .tableCensus
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForTableCensusRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.controlsTableCensus(observed)), restoration: nil) = result {
+            refusedForTableCensusRead = observed == readFailure
+        } else {
+            refusedForTableCensusRead = false
+        }
+        #expect(refusedForTableCensusRead)
+    }
+
+    @Test func failedControlsRowReadRefusesInsteadOfContinuingToTheNextRow() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(29_930)
+        let switcher = builder.element(29_931)
+        let table = builder.element(29_932)
+        let unreadableRow = builder.element(29_933)
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        builder.setRole(window, kAXWindowRole as String)
+        builder.setRole(switcher, kAXMenuButtonRole as String)
+        builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
+        builder.setRole(table, kAXTableRole as String)
+        // Keep the AXRows-only row outside AXChildren so the three preceding
+        // censuses complete; this isolates the classifier's row loop.
+        builder.setAttribute(table, kAXRowsAttribute as String, [unreadableRow])
+        builder.setChildren(window, [switcher, table])
+        let runtime = builder.makeAXRuntime(
+            appElement: builder.element(29_900),
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, unreadableRow), attribute == (kAXRoleAttribute as String) {
+                    return .failure(readFailure)
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: window,
+            runtime: runtime
+        )
+        let refusedForRowRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.controlsTableRow(observed)), restoration: nil) = result {
+            refusedForRowRead = observed == readFailure
+        } else {
+            refusedForRowRead = false
+        }
+        #expect(refusedForRowRead)
+    }
+
     @Test func tableWhoseRowsCarryNoLabelControlPairDoesNotConfirmControls() {
         let builder = FakeAXRuntimeBuilder()
         let window = builder.element(29_920)
@@ -476,8 +656,7 @@ struct ControlsViewBooleanParameterWriterTests {
             entry: .controls,
             title: "[100%]",
             behavior: .neverChanges,
-            menuRevealAfterPolls: 0,
-            viewSettleDelay: 0
+            menuRevealAfterPolls: 3
         )
         let started = Date()
 
@@ -494,11 +673,14 @@ struct ControlsViewBooleanParameterWriterTests {
         } else {
             refused = false
         }
-        let completedWithinDeadline = Date().timeIntervalSince(started) < 0.25
+        // Menu appearance is now the measured ~150 ms on both the attempted
+        // switch and its compensating restoration; this remains a bounded
+        // deadline test rather than an instant-fixture timing test.
+        let completedWithinBoundedRestore = Date().timeIntervalSince(started) < 0.75
         let attemptedEditorSelection = fixture.editorSelections.value == 1
         let entryStructureRemainedControls = controlsStructureIsPresent(fixture)
         #expect(refused)
-        #expect(completedWithinDeadline)
+        #expect(completedWithinBoundedRestore)
         #expect(attemptedEditorSelection)
         #expect(entryStructureRemainedControls)
     }
@@ -557,6 +739,8 @@ struct ControlsViewBooleanParameterWriterTests {
             entry: .controls,
             title: "[100%]",
             behavior: .switchesStructure,
+            // Intentionally instant: this test isolates the 150 ms structure
+            // settle from the separate menu-appearance deadline.
             menuRevealAfterPolls: 0,
             viewSettleDelay: 0.15
         )
@@ -662,6 +846,15 @@ struct ControlsViewBooleanParameterWriterTests {
         case becomesUnconfirmedThenControlsRestores
     }
 
+    private enum ViewFixtureReadFailure {
+        case switcherCensus
+        case switcherDescription
+        case sliderCensus
+        case sliderDescription
+        case menuItemCensus
+        case tableCensus
+    }
+
     private struct ViewFixture {
         let builder: FakeAXRuntimeBuilder
         let window: AXUIElement
@@ -678,8 +871,10 @@ struct ControlsViewBooleanParameterWriterTests {
         entry: ControlsViewBooleanParameterWriter.PluginWindowView,
         title: String,
         behavior: ViewFixtureBehavior,
-        menuRevealAfterPolls: Int? = 4,
+        menuRevealAfterPolls: Int? = 3,
         menuReadFailure: AXHelpers.AXStatusError? = nil,
+        readFailure: ViewFixtureReadFailure? = nil,
+        includeControlsTableBesideEditor: Bool = false,
         viewSettleDelay: TimeInterval = 0.5
     ) -> ViewFixture {
         let builder = FakeAXRuntimeBuilder()
@@ -706,6 +901,9 @@ struct ControlsViewBooleanParameterWriterTests {
         let menuOpen = MutableBox(false)
         let menuVisible = MutableBox(false)
         let pendingWindowChildren = MutableBox<(children: [AXUIElement], settlesAt: Date)?>(nil)
+        let sliderChildrenReadCount = MutableBox(0)
+        let tableChildrenReadCount = MutableBox(0)
+        let statusFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(switcher, kAXMenuButtonRole as String)
@@ -738,7 +936,9 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setChildren(controlsTable, [controlsHeadingRow, controlsRow])
         builder.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsHeadingRow, controlsRow])
 
-        let editorChildren = [switcher, editorSlider]
+        let editorChildren = includeControlsTableBesideEditor
+            ? [switcher, editorSlider, controlsTable]
+            : [switcher, editorSlider]
         let controlsChildren = [switcher, controlsTable]
         builder.setChildren(
             window,
@@ -750,6 +950,24 @@ struct ControlsViewBooleanParameterWriterTests {
         let switcherKey = builder.elementID(switcher)
         let runtime = builder.makeAXRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if readFailure == .switcherDescription,
+                   CFEqual(element, switcher),
+                   attribute == (kAXDescriptionAttribute as String) {
+                    return .failure(statusFailure)
+                }
+                if readFailure == .sliderDescription,
+                   CFEqual(element, editorSlider),
+                   attribute == (kAXDescriptionAttribute as String) {
+                    return .failure(statusFailure)
+                }
+                if readFailure == .menuItemCensus,
+                   (CFEqual(element, controlsMenuItem) || CFEqual(element, editorMenuItem)),
+                   attribute == (kAXTitleAttribute as String) {
+                    return .failure(statusFailure)
+                }
+                return nil
+            },
             childrenHandler: { element in
                 if CFEqual(element, window),
                    let pending = pendingWindowChildren.value,
@@ -763,6 +981,27 @@ struct ControlsViewBooleanParameterWriterTests {
                 return nil
             },
             childrenResultHandler: { element in
+                if CFEqual(element, window),
+                   let pending = pendingWindowChildren.value,
+                   Date() >= pending.settlesAt {
+                    builder.setChildren(window, pending.children)
+                    pendingWindowChildren.value = nil
+                }
+                if readFailure == .switcherCensus, CFEqual(element, window) {
+                    return .failure(statusFailure)
+                }
+                if readFailure == .sliderCensus, CFEqual(element, editorSlider) {
+                    sliderChildrenReadCount.value += 1
+                    if sliderChildrenReadCount.value == 2 {
+                        return .failure(statusFailure)
+                    }
+                }
+                if readFailure == .tableCensus, CFEqual(element, controlsTable) {
+                    tableChildrenReadCount.value += 1
+                    if tableChildrenReadCount.value == 3 {
+                        return .failure(statusFailure)
+                    }
+                }
                 guard CFEqual(element, switcher), menuOpen.value else { return nil }
                 if let menuReadFailure {
                     return .failure(menuReadFailure)

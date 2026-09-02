@@ -1275,6 +1275,97 @@ enum AXLocalePolicy {
         return Census(element: hits.count == 1 ? hits[0] : nil, candidates: hits.count, matches: hits)
     }
 
+    /// Status-preserving counterpart to `censusDescendant` for a localized
+    /// label lookup. It is deliberately additive: ordinary read-only callers
+    /// keep the historical best-effort census, while a caller using a menu item
+    /// as write authority can refuse an unreadable title or description rather
+    /// than reporting that item as missing.
+    static func censusDescendantResult(
+        of element: AXUIElement,
+        role: String,
+        matching labels: LabelSet,
+        mode: MatchMode = .exact,
+        maxDepth: Int = 5,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Census, AXHelpers.AXStatusError> {
+        let roleCensus: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
+            of: element,
+            role: role,
+            maxDepth: maxDepth,
+            runtime: runtime
+        ) {
+        case let .success(observed):
+            roleCensus = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+
+        var hits: [AXUIElement] = []
+        for candidate in roleCensus.matches {
+            switch elementMatchesResult(candidate, labels, mode: mode, runtime: runtime) {
+            case .success(true):
+                hits.append(candidate)
+            case .success(false):
+                continue
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(Census(
+            element: hits.count == 1 ? hits[0] : nil,
+            candidates: hits.count,
+            matches: hits
+        ))
+    }
+
+    private static func elementMatchesResult(
+        _ element: AXUIElement,
+        _ labels: LabelSet,
+        mode: MatchMode,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        let title: String?
+        switch stringAttributeResult(element, kAXTitleAttribute as String, runtime: runtime) {
+        case let .success(observed):
+            title = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+        if labels.matches(title, mode: mode) {
+            return .success(true)
+        }
+
+        let description: String?
+        switch stringAttributeResult(element, kAXDescriptionAttribute as String, runtime: runtime) {
+        case let .success(observed):
+            description = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+        return .success(labels.matches(description, mode: mode))
+    }
+
+    private static func stringAttributeResult(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            element,
+            attribute,
+            runtime: runtime
+        )
+        switch read {
+        case let .success(value):
+            return .success(value)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
     /// Every `LabelSet` declared above, for callers that need to ask "does the product recognise
     /// this string at all" rather than "does it match this particular set".
     ///
