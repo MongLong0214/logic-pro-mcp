@@ -1464,6 +1464,10 @@ actor ProductionMCUTransport: MCUTransportProtocol {
         MCUTrace.emit(.tx, bytes)
     }
 
+    func endpointCensus() async -> VirtualMIDIEndpointCensus {
+        await portManager.endpointCensus(name: "LogicProMCP-MCU-Internal")
+    }
+
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {
         try await start(
             onReceive: onReceive,
