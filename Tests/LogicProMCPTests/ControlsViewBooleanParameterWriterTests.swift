@@ -868,14 +868,14 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refused: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor, _), restoration: _) = result {
             refused = true
         } else {
             refused = false
         }
-        // Menu appearance is now the measured ~150 ms on both the attempted
-        // switch and its compensating restoration; this remains a bounded
-        // deadline test rather than an instant-fixture timing test.
+        // The menu was measured at 28–46 ms with a 25 ms poll. This keeps a
+        // nonzero fixture reveal on both the attempted switch and restoration,
+        // so it remains a bounded-deadline test rather than an instant fixture.
         let completedWithinBoundedRestore = Date().timeIntervalSince(started) < 0.75
         let attemptedEditorSelection = fixture.editorSelections.value == 1
         let entryStructureRemainedControls = controlsStructureIsPresent(fixture)
@@ -939,8 +939,8 @@ struct ControlsViewBooleanParameterWriterTests {
             entry: .controls,
             title: "[100%]",
             behavior: .switchesStructure,
-            // Intentionally instant: this test isolates the 150 ms structure
-            // settle from the separate menu-appearance deadline.
+            // Intentionally shorter than the measured 527–785 ms structural
+            // settle: this test isolates its timeout from menu appearance.
             menuRevealAfterPolls: 0,
             viewSettleDelay: 0.15
         )
@@ -954,7 +954,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refusedForSettleDeadline: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor, _), restoration: _) = result {
             refusedForSettleDeadline = true
         } else {
             refusedForSettleDeadline = false
@@ -965,6 +965,103 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refusedForSettleDeadline)
         #expect(entryStructureWasRestored)
         #expect(restorationWasExplicitlySelected)
+    }
+
+    @Test func structureSettlingAtTwoPointFiveSecondsConfirmsUnderTheMeasuredDefaultDeadline() {
+        let fixture = viewFixture(
+            entry: .controls,
+            title: "[100%]",
+            behavior: .switchesStructure,
+            menuRevealAfterPolls: 0,
+            viewSettleDelay: 2.5
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let confirmed: Bool
+        if case .ready = result {
+            confirmed = true
+        } else {
+            confirmed = false
+        }
+        // Mutation: restore `viewConfirmationTimeout` to its former 1.5 s.
+        #expect(confirmed)
+    }
+
+    @Test func structureDeadlineReportsTheFreshClassifierCounts() {
+        let fixture = viewFixture(
+            entry: .controls,
+            title: "[100%]",
+            behavior: .neverChanges,
+            menuRevealAfterPolls: 0,
+            deadlineSnapshotAddsSecondTable: true
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            menuAppearanceTimeout: 0.025,
+            confirmationTimeout: 0.025,
+            runtime: fixture.runtime
+        )
+
+        let carriesDeadlineObservation: Bool
+        if case let .refused(.viewStructureDidNotConfirm(.editor, observed), restoration: _) = result {
+            carriesDeadlineObservation = observed.tableCount == 2
+                && observed.rowCount == 2
+                && observed.describedSliderCount == 0
+                && observed.waitedMilliseconds >= 20
+        } else {
+            carriesDeadlineObservation = false
+        }
+        // Mutation: return the pre-deadline poll instead of the fresh snapshot.
+        #expect(carriesDeadlineObservation)
+    }
+
+    @Test func viewSessionRebindsTheWindowAndSwitcherAfterAViewRerender() {
+        let fixture = viewFixture(
+            entry: .controls,
+            title: "[100%]",
+            behavior: .switchesStructure,
+            menuRevealAfterPolls: 0,
+            replacesWindowAndSwitcherOnSelection: true,
+            viewSettleDelay: 0
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            windowRefresher: fixture.windowRefresher,
+            runtime: fixture.runtime
+        )
+        let session: ControlsViewBooleanParameterWriter.ViewSession?
+        if case let .ready(ready) = result {
+            session = ready
+        } else {
+            session = nil
+        }
+        let prepared = session != nil
+        #expect(prepared)
+        guard let session else { return }
+
+        let restoration = session.restore()
+        let switcherPresses = fixture.switcherActionElementIDs.value
+        let reboundSwitcherWasPressed = switcherPresses == [
+            fixture.builder.elementID(fixture.originalSwitcher),
+            fixture.builder.elementID(fixture.refreshedSwitcher),
+        ]
+        let staleSwitcherWasNotReused = !switcherPresses.dropFirst().contains(
+            fixture.builder.elementID(fixture.originalSwitcher)
+        )
+        let restored = restoration.confirmed
+        // Mutation: retain the original switcher/window in ViewSession.
+        #expect(reboundSwitcherWasPressed)
+        #expect(staleSwitcherWasNotReused)
+        #expect(restored)
     }
 
     @Test func confirmedSwitchRestoresTheStructuralEntryView() {
@@ -1010,7 +1107,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refused: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor, _), restoration: _) = result {
             refused = true
         } else {
             refused = false
@@ -1058,10 +1155,14 @@ struct ControlsViewBooleanParameterWriterTests {
     private struct ViewFixture {
         let builder: FakeAXRuntimeBuilder
         let window: AXUIElement
+        let originalSwitcher: AXUIElement
+        let refreshedSwitcher: AXUIElement
+        let windowRefresher: () -> AXUIElement?
         let controlsTable: AXUIElement
         let controlsSelections: MutableBox<Int>
         let editorSelections: MutableBox<Int>
         let switcherActions: MutableBox<[String]>
+        let switcherActionElementIDs: MutableBox<[Int]>
         let menuItemActions: MutableBox<[String]>
         let menuCensusPolls: MutableBox<Int>
         let runtime: AXHelpers.Runtime
@@ -1079,6 +1180,8 @@ struct ControlsViewBooleanParameterWriterTests {
         additionalSliderDescriptionFailure: Bool = false,
         additionalSwitcherDescriptionFailure: Bool = false,
         allDescriptionReadsFail: Bool = false,
+        deadlineSnapshotAddsSecondTable: Bool = false,
+        replacesWindowAndSwitcherOnSelection: Bool = false,
         viewSettleDelay: TimeInterval = 0.5
     ) -> ViewFixture {
         let builder = FakeAXRuntimeBuilder()
@@ -1091,6 +1194,9 @@ struct ControlsViewBooleanParameterWriterTests {
         let editorSlider = builder.element(906)
         let additionalSlider = builder.element(916)
         let additionalSwitcher = builder.element(917)
+        let refreshedWindow = builder.element(918)
+        let refreshedSwitcher = builder.element(919)
+        let deadlineSnapshotTable = builder.element(920)
         let controlsTable = builder.element(907)
         let controlsRow = builder.element(908)
         let controlsLabelCell = builder.element(909)
@@ -1102,20 +1208,28 @@ struct ControlsViewBooleanParameterWriterTests {
         let controlsSelections = MutableBox(0)
         let editorSelections = MutableBox(0)
         let switcherActions = MutableBox<[String]>([])
+        let switcherActionElementIDs = MutableBox<[Int]>([])
         let menuItemActions = MutableBox<[String]>([])
         let menuCensusPolls = MutableBox(0)
         let menuOpen = MutableBox(false)
         let menuVisible = MutableBox(false)
         let pendingWindowChildren = MutableBox<(children: [AXUIElement], settlesAt: Date)?>(nil)
+        let currentWindow = MutableBox(window)
         let sliderChildrenReadCount = MutableBox(0)
         let tableChildrenReadCount = MutableBox(0)
         let windowChildrenReadCount = MutableBox(0)
+        let postPickWindowReadCount = MutableBox(0)
         let statusFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(switcher, kAXMenuButtonRole as String)
         builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
         builder.setAttribute(switcher, kAXTitleAttribute as String, title)
+        builder.setRole(refreshedWindow, kAXWindowRole as String)
+        builder.setRole(refreshedSwitcher, kAXMenuButtonRole as String)
+        builder.setAttribute(refreshedSwitcher, kAXDescriptionAttribute as String, "보기")
+        builder.setAttribute(refreshedSwitcher, kAXTitleAttribute as String, title)
+        builder.setRole(deadlineSnapshotTable, kAXTableRole as String)
         if additionalSwitcherDescriptionFailure {
             builder.setRole(additionalSwitcher, kAXMenuButtonRole as String)
         }
@@ -1159,9 +1273,15 @@ struct ControlsViewBooleanParameterWriterTests {
             ? switchers + slidersBeforeEditor + [editorSlider, controlsTable]
             : switchers + slidersBeforeEditor + [editorSlider]
         let controlsChildren = switchers + slidersBeforeEditor + [controlsTable]
+        let refreshedEditorChildren = [refreshedSwitcher] + slidersBeforeEditor + [editorSlider]
+        let refreshedControlsChildren = [refreshedSwitcher] + slidersBeforeEditor + [controlsTable]
         builder.setChildren(
             window,
             entry == .editor ? editorChildren : controlsChildren
+        )
+        builder.setChildren(
+            refreshedWindow,
+            entry == .editor ? refreshedEditorChildren : refreshedControlsChildren
         )
 
         let controlsKey = builder.elementID(controlsMenuItem)
@@ -1213,7 +1333,8 @@ struct ControlsViewBooleanParameterWriterTests {
                     builder.setChildren(window, pending.children)
                     pendingWindowChildren.value = nil
                 }
-                if CFEqual(element, switcher), menuOpen.value, menuVisible.value {
+                if (CFEqual(element, switcher) || CFEqual(element, refreshedSwitcher)),
+                   menuOpen.value, menuVisible.value {
                     return [menu]
                 }
                 return nil
@@ -1231,6 +1352,17 @@ struct ControlsViewBooleanParameterWriterTests {
                         return .failure(statusFailure)
                     }
                 }
+                if deadlineSnapshotAddsSecondTable,
+                   CFEqual(element, window),
+                   editorSelections.value > 0 {
+                    postPickWindowReadCount.value += 1
+                    // The post-pick classifier reads the window twice (sliders,
+                    // then tables). Change the tree only for the fresh
+                    // deadline census, after that poll is complete.
+                    if postPickWindowReadCount.value == 3 {
+                        builder.setChildren(window, controlsChildren + [deadlineSnapshotTable])
+                    }
+                }
                 if readFailure == .sliderCensus, CFEqual(element, editorSlider) {
                     sliderChildrenReadCount.value += 1
                     if sliderChildrenReadCount.value == 1 {
@@ -1243,7 +1375,8 @@ struct ControlsViewBooleanParameterWriterTests {
                         return .failure(statusFailure)
                     }
                 }
-                guard CFEqual(element, switcher), menuOpen.value else { return nil }
+                guard (CFEqual(element, switcher) || CFEqual(element, refreshedSwitcher)),
+                      menuOpen.value else { return nil }
                 if let menuReadFailure {
                     return .failure(menuReadFailure)
                 }
@@ -1260,9 +1393,17 @@ struct ControlsViewBooleanParameterWriterTests {
             setAttributeHandler: nil,
             performActionHandler: { element, action in
                 let key = builder.elementID(element)
-                if key == switcherKey {
+                if key == switcherKey || key == builder.elementID(refreshedSwitcher) {
                     switcherActions.value.append(action)
+                    switcherActionElementIDs.value.append(key)
                     guard action == (kAXPressAction as String) else { return false }
+                    // After the first selection the old switcher models a
+                    // stale AXUIElement: it cannot reveal the current menu.
+                    if replacesWindowAndSwitcherOnSelection,
+                       key == switcherKey,
+                       CFEqual(currentWindow.value, refreshedWindow) {
+                        return false
+                    }
                     menuOpen.value = true
                     menuVisible.value = false
                     menuCensusPolls.value = 0
@@ -1276,6 +1417,11 @@ struct ControlsViewBooleanParameterWriterTests {
                 switch key {
                 case editorKey:
                     editorSelections.value += 1
+                    if replacesWindowAndSwitcherOnSelection {
+                        builder.setChildren(refreshedWindow, refreshedEditorChildren)
+                        currentWindow.value = refreshedWindow
+                        return true
+                    }
                     switch behavior {
                     case .switchesStructure:
                         pendingWindowChildren.value = (
@@ -1292,6 +1438,11 @@ struct ControlsViewBooleanParameterWriterTests {
                     }
                 case controlsKey:
                     controlsSelections.value += 1
+                    if replacesWindowAndSwitcherOnSelection {
+                        builder.setChildren(refreshedWindow, refreshedControlsChildren)
+                        currentWindow.value = refreshedWindow
+                        return true
+                    }
                     switch behavior {
                     case .switchesStructure, .becomesUnconfirmedThenControlsRestores:
                         pendingWindowChildren.value = (
@@ -1310,10 +1461,14 @@ struct ControlsViewBooleanParameterWriterTests {
         return ViewFixture(
             builder: builder,
             window: window,
+            originalSwitcher: switcher,
+            refreshedSwitcher: refreshedSwitcher,
+            windowRefresher: { currentWindow.value },
             controlsTable: controlsTable,
             controlsSelections: controlsSelections,
             editorSelections: editorSelections,
             switcherActions: switcherActions,
+            switcherActionElementIDs: switcherActionElementIDs,
             menuItemActions: menuItemActions,
             menuCensusPolls: menuCensusPolls,
             runtime: runtime

@@ -104,6 +104,16 @@ enum ControlsViewBooleanParameterWriter {
         }
     }
 
+    struct ViewStructureObservation: Sendable, Equatable {
+        /// Counts are taken by a fresh classifier census at the structure
+        /// deadline. `nil` means that exact count could not be read then; it is
+        /// not a zero inferred from an unreadable AX subtree.
+        let tableCount: Int?
+        let rowCount: Int?
+        let describedSliderCount: Int?
+        let waitedMilliseconds: Int
+    }
+
     enum ViewSwitchFailure: Sendable, Equatable {
         case viewSwitcherNotFound
         case viewSwitcherAmbiguous
@@ -116,7 +126,7 @@ enum ControlsViewBooleanParameterWriter {
         case viewMenuItemNotFound(PluginWindowView)
         case viewMenuItemAmbiguous(PluginWindowView)
         case viewMenuItemDisabled(PluginWindowView)
-        case viewStructureDidNotConfirm(PluginWindowView)
+        case viewStructureDidNotConfirm(PluginWindowView, ViewStructureObservation)
 
         var observation: String {
             switch self {
@@ -142,8 +152,46 @@ enum ControlsViewBooleanParameterWriter {
                 return "the scoped View menu exposed several measured \(view.labels.canonical) items"
             case let .viewMenuItemDisabled(view):
                 return "the scoped View menu's measured \(view.labels.canonical) item did not expose AXEnabled == true, so AXPick was refused"
-            case let .viewStructureDidNotConfirm(expected):
+            case let .viewStructureDidNotConfirm(expected, _):
                 return "after selecting the measured \(expected.labels.canonical) item, the bound plugin window did not expose the expected \(expected.rawValue) structure before the confirmation deadline"
+            }
+        }
+
+        /// Structured observations for a `plugin_view_not_confirmed` envelope.
+        /// Keep the phase separate from the prose observation so an intermittent
+        /// refusal can be grouped without parsing a user-facing sentence.
+        var responseDiagnostics: [String: Any] {
+            switch self {
+            case .viewMenuDidNotAppearBeforeDeadline:
+                return ["plugin_view_switch_phase": "menu_never_appeared"]
+            case .viewMenuAmbiguous:
+                return ["plugin_view_switch_phase": "menu_ambiguous"]
+            case .viewMenuItemNotFound:
+                return ["plugin_view_switch_phase": "item_not_found"]
+            case .viewMenuItemAmbiguous:
+                return ["plugin_view_switch_phase": "item_ambiguous"]
+            case .viewMenuItemDisabled:
+                return ["plugin_view_switch_phase": "item_not_enabled"]
+            case let .viewStructureDidNotConfirm(_, observed):
+                return [
+                    "plugin_view_switch_phase": "pick_performed_structure_never_confirmed",
+                    "plugin_view_structure_table_count": observed.tableCount ?? NSNull(),
+                    "plugin_view_structure_row_count": observed.rowCount ?? NSNull(),
+                    "plugin_view_structure_described_slider_count": observed.describedSliderCount ?? NSNull(),
+                    "plugin_view_structure_waited_ms": observed.waitedMilliseconds,
+                ]
+            case .viewSwitcherNotFound:
+                return ["plugin_view_switch_phase": "switcher_not_found"]
+            case .viewSwitcherAmbiguous:
+                return ["plugin_view_switch_phase": "switcher_ambiguous"]
+            case .unmeasuredLocale:
+                return ["plugin_view_switch_phase": "switcher_locale_unmeasured"]
+            case .entryViewNotConfirmed:
+                return ["plugin_view_switch_phase": "entry_view_not_confirmed"]
+            case .viewEvidenceReadFailed:
+                return ["plugin_view_switch_phase": "view_evidence_read_failed"]
+            case .viewMenuReadFailed:
+                return ["plugin_view_switch_phase": "menu_read_failed"]
             }
         }
     }
@@ -197,7 +245,7 @@ enum ControlsViewBooleanParameterWriter {
     /// exact entry view on every exit path, including a locator refusal.
     final class ViewSession: @unchecked Sendable {
         private let window: AXUIElement
-        private let switcher: AXUIElement?
+        private let windowRefresher: () -> AXUIElement?
         private let entryView: PluginWindowView
         private let didSwitch: Bool
         private let menuAppearanceTimeout: TimeInterval
@@ -206,14 +254,14 @@ enum ControlsViewBooleanParameterWriter {
 
         fileprivate init(
             window: AXUIElement,
-            switcher: AXUIElement?,
+            windowRefresher: @escaping () -> AXUIElement?,
             entryView: PluginWindowView,
             didSwitch: Bool,
             menuAppearanceTimeout: TimeInterval,
             runtime: AXHelpers.Runtime
         ) {
             self.window = window
-            self.switcher = switcher
+            self.windowRefresher = windowRefresher
             self.entryView = entryView
             self.didSwitch = didSwitch
             self.menuAppearanceTimeout = menuAppearanceTimeout
@@ -234,7 +282,7 @@ enum ControlsViewBooleanParameterWriter {
                 )
             }
             restorationFinished = true
-            guard didSwitch, let switcher else {
+            guard didSwitch else {
                 return ViewRestoration(
                     attempted: false,
                     confirmed: true,
@@ -245,7 +293,7 @@ enum ControlsViewBooleanParameterWriter {
             switch switchView(
                 to: entryView,
                 in: window,
-                switcher: switcher,
+                windowRefresher: windowRefresher,
                 menuAppearanceTimeout: menuAppearanceTimeout,
                 confirmationTimeout: viewConfirmationTimeout,
                 runtime: runtime
@@ -259,7 +307,8 @@ enum ControlsViewBooleanParameterWriter {
                 )
             case .refused:
                 let observed: PluginWindowView?
-                if case let .success(.some(value)) = observedView(in: window, runtime: runtime) {
+                let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+                if case let .success(.some(value)) = observedView(in: currentWindow, runtime: runtime) {
                     observed = value
                 } else {
                     observed = nil
@@ -281,7 +330,7 @@ enum ControlsViewBooleanParameterWriter {
 
     private enum ViewWaitResult {
         case confirmed
-        case deadlineExpired
+        case deadlineExpired(ViewStructureObservation)
         case readFailed(ViewEvidenceReadFailure)
     }
 
@@ -305,10 +354,15 @@ enum ControlsViewBooleanParameterWriter {
         in window: AXUIElement,
         menuAppearanceTimeout: TimeInterval = viewMenuAppearanceTimeout,
         confirmationTimeout: TimeInterval = viewConfirmationTimeout,
+        windowRefresher: (() -> AXUIElement?)? = nil,
         runtime: AXHelpers.Runtime = .production
     ) -> ViewPreparationResult {
+        let effectiveWindowRefresher = windowRefresher ?? { window }
         let entryView: PluginWindowView
-        let entryObservation = observedView(in: window, runtime: runtime)
+        let entryObservation = observedView(
+            in: refreshedWindow(window, windowRefresher: effectiveWindowRefresher),
+            runtime: runtime
+        )
         switch entryObservation {
         case let .success(.some(observed)):
             entryView = observed
@@ -325,7 +379,7 @@ enum ControlsViewBooleanParameterWriter {
         guard entryView != targetView else {
             return .ready(ViewSession(
                 window: window,
-                switcher: nil,
+                windowRefresher: effectiveWindowRefresher,
                 entryView: entryView,
                 didSwitch: false,
                 menuAppearanceTimeout: menuAppearanceTimeout,
@@ -333,47 +387,10 @@ enum ControlsViewBooleanParameterWriter {
             ))
         }
 
-        let menuButtons: [AXUIElement]
-        switch AXHelpers.censusDescendantResult(
-            of: window, role: kAXMenuButtonRole, maxDepth: 5, runtime: runtime
-        ) {
-        case let .success(census):
-            menuButtons = census.matches
-        case let .failure(error):
-            return .refused(.viewEvidenceReadFailed(.switcherCensus(error)), restoration: nil)
-        }
-        var measured: [AXUIElement] = []
-        var firstSwitcherDescriptionReadFailure: AXHelpers.AXStatusError?
-        for menuButton in menuButtons {
-            let description: String?
-            switch descriptionResult(of: menuButton, runtime: runtime) {
-            case let .success(observed):
-                description = observed
-            case let .failure(error):
-                firstSwitcherDescriptionReadFailure = firstSwitcherDescriptionReadFailure ?? error
-                continue
-            }
-            if AXLocalePolicy.pluginWindowViewSwitcher.matches(description, mode: .exact) {
-                measured.append(menuButton)
-            }
-        }
-        guard measured.count == 1, let switcher = measured.first else {
-            if measured.count > 1 {
-                return .refused(.viewSwitcherAmbiguous, restoration: nil)
-            }
-            if let firstSwitcherDescriptionReadFailure {
-                return .refused(
-                    .viewEvidenceReadFailed(.switcherDescription(firstSwitcherDescriptionReadFailure)),
-                    restoration: nil
-                )
-            }
-            return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale, restoration: nil)
-        }
-
         switch switchView(
             to: targetView,
             in: window,
-            switcher: switcher,
+            windowRefresher: effectiveWindowRefresher,
             menuAppearanceTimeout: menuAppearanceTimeout,
             confirmationTimeout: confirmationTimeout,
             runtime: runtime
@@ -381,7 +398,7 @@ enum ControlsViewBooleanParameterWriter {
         case let .confirmed(switched):
             return .ready(ViewSession(
                 window: window,
-                switcher: switcher,
+                windowRefresher: effectiveWindowRefresher,
                 entryView: entryView,
                 didSwitch: switched,
                 menuAppearanceTimeout: menuAppearanceTimeout,
@@ -397,7 +414,7 @@ enum ControlsViewBooleanParameterWriter {
                 switch switchView(
                     to: entryView,
                     in: window,
-                    switcher: switcher,
+                    windowRefresher: effectiveWindowRefresher,
                     menuAppearanceTimeout: menuAppearanceTimeout,
                     confirmationTimeout: confirmationTimeout,
                     forceSelection: true,
@@ -412,7 +429,8 @@ enum ControlsViewBooleanParameterWriter {
                     )
                 case .refused:
                     let observed: PluginWindowView?
-                    if case let .success(.some(value)) = observedView(in: window, runtime: runtime) {
+                    let currentWindow = refreshedWindow(window, windowRefresher: effectiveWindowRefresher)
+                    if case let .success(.some(value)) = observedView(in: currentWindow, runtime: runtime) {
                         observed = value
                     } else {
                         observed = nil
@@ -512,17 +530,84 @@ enum ControlsViewBooleanParameterWriter {
         return firstFailure.map(SliderEvidence.readFailed) ?? .notDescribed
     }
 
+    /// A view pick can re-render the editor subtree. Never carry the old
+    /// AXMenuButton over that boundary: bind a current, uniquely described
+    /// switcher immediately before every AXPress, including restoration.
+    private enum MeasuredViewSwitcherResult {
+        case found(AXUIElement)
+        case refused(ViewSwitchFailure)
+    }
+
+    private static func measuredViewSwitcher(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> MeasuredViewSwitcherResult {
+        let menuButtons: [AXUIElement]
+        switch AXHelpers.censusDescendantResult(
+            of: window, role: kAXMenuButtonRole, maxDepth: 5, runtime: runtime
+        ) {
+        case let .success(census):
+            menuButtons = census.matches
+        case let .failure(error):
+            return .refused(.viewEvidenceReadFailed(.switcherCensus(error)))
+        }
+        var measured: [AXUIElement] = []
+        var firstSwitcherDescriptionReadFailure: AXHelpers.AXStatusError?
+        for menuButton in menuButtons {
+            let description: String?
+            switch descriptionResult(of: menuButton, runtime: runtime) {
+            case let .success(observed):
+                description = observed
+            case let .failure(error):
+                firstSwitcherDescriptionReadFailure = firstSwitcherDescriptionReadFailure ?? error
+                continue
+            }
+            if AXLocalePolicy.pluginWindowViewSwitcher.matches(description, mode: .exact) {
+                measured.append(menuButton)
+            }
+        }
+        guard measured.count == 1, let switcher = measured.first else {
+            if measured.count > 1 {
+                return .refused(.viewSwitcherAmbiguous)
+            }
+            if let firstSwitcherDescriptionReadFailure {
+                return .refused(.viewEvidenceReadFailed(.switcherDescription(firstSwitcherDescriptionReadFailure)))
+            }
+            return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale)
+        }
+        return .found(switcher)
+    }
+
+    private static func refreshedWindow(
+        _ fallback: AXUIElement,
+        windowRefresher: @escaping () -> AXUIElement?
+    ) -> AXUIElement {
+        windowRefresher() ?? fallback
+    }
+
     private static func switchView(
         to targetView: PluginWindowView,
         in window: AXUIElement,
-        switcher: AXUIElement,
+        windowRefresher: @escaping () -> AXUIElement?,
         menuAppearanceTimeout: TimeInterval,
         confirmationTimeout: TimeInterval,
         forceSelection: Bool = false,
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
+        let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
         if !forceSelection {
-            switch observedView(in: window, runtime: runtime) {
+            // Preserve the fail-closed preflight: if no uniquely described
+            // switcher can be read, refuse before treating a concurrent view
+            // observation as a reason to skip selection. Do not retain this
+            // element, though; the action below measures it again after the
+            // view check in case Logic re-rendered in between.
+            switch measuredViewSwitcher(in: currentWindow, runtime: runtime) {
+            case .found:
+                break
+            case let .refused(error):
+                return .refused(error, targetSelectionAttempted: false)
+            }
+            switch observedView(in: currentWindow, runtime: runtime) {
             case let .success(.some(observed)) where observed == targetView:
                 return .confirmed(switched: false)
             case let .failure(error):
@@ -530,6 +615,15 @@ enum ControlsViewBooleanParameterWriter {
             case .success:
                 break
             }
+        }
+
+        let switcher: AXUIElement
+        let actionWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+        switch measuredViewSwitcher(in: actionWindow, runtime: runtime) {
+        case let .found(observed):
+            switcher = observed
+        case let .refused(error):
+            return .refused(error, targetSelectionAttempted: false)
         }
 
         // AX's action status is intentionally not the verdict. Live Logic
@@ -588,22 +682,34 @@ enum ControlsViewBooleanParameterWriter {
         switch waitForView(
             targetView,
             in: window,
+            windowRefresher: windowRefresher,
             timeout: confirmationTimeout,
             runtime: runtime
         ) {
         case .confirmed:
             break
-        case .deadlineExpired:
-            return .refused(.viewStructureDidNotConfirm(targetView), targetSelectionAttempted: true)
+        case let .deadlineExpired(observed):
+            return .refused(
+                .viewStructureDidNotConfirm(targetView, observed),
+                targetSelectionAttempted: true
+            )
         case let .readFailed(error):
             return .refused(.viewEvidenceReadFailed(error), targetSelectionAttempted: true)
         }
         return .confirmed(switched: true)
     }
 
+    /// Measured on the live Compressor on 2026-09-03 with a 25 ms poll:
+    /// AXPress → scoped View menu was 28–46 ms across ten switches (and 32–46
+    /// ms across five first switches immediately after opening the editor).
     private static let viewMenuAppearanceTimeout: TimeInterval = 2.0
     private static let viewMenuAppearancePollInterval: TimeInterval = 0.05
-    private static let viewConfirmationTimeout: TimeInterval = 1.5
+    /// Measured on the live Compressor on 2026-09-03 with a 25 ms poll:
+    /// AXPick → structural confirmation was 527–785 ms across ten switches;
+    /// five first switches immediately after opening the editor were 529–711
+    /// ms. Three seconds is about a 4× margin over the 785 ms maximum, not an
+    /// unmeasured timing increase.
+    private static let viewConfirmationTimeout: TimeInterval = 3.0
     private static let viewConfirmationPollInterval: TimeInterval = 0.05
 
     private enum ScopedViewMenuWaitResult {
@@ -701,12 +807,15 @@ enum ControlsViewBooleanParameterWriter {
     private static func waitForView(
         _ expected: PluginWindowView,
         in window: AXUIElement,
+        windowRefresher: @escaping () -> AXUIElement?,
         timeout: TimeInterval,
         runtime: AXHelpers.Runtime
     ) -> ViewWaitResult {
-        let deadline = Date().addingTimeInterval(max(0, timeout))
+        let started = Date()
+        let deadline = started.addingTimeInterval(max(0, timeout))
         repeat {
-            switch observedView(in: window, runtime: runtime) {
+            let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+            switch observedView(in: currentWindow, runtime: runtime) {
             case let .success(.some(observed)) where observed == expected:
                 return .confirmed
             case let .failure(error):
@@ -718,7 +827,80 @@ enum ControlsViewBooleanParameterWriter {
             guard remaining > 0 else { break }
             Thread.sleep(forTimeInterval: min(viewConfirmationPollInterval, remaining))
         } while Date() < deadline
-        return .deadlineExpired
+        // Read a fresh structural snapshot *after* the deadline, rather than
+        // reporting the previous poll as though it were an end-of-wait fact.
+        let deadlineWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+        return .deadlineExpired(viewStructureObservation(
+            in: deadlineWindow,
+            waitedMilliseconds: Int((Date().timeIntervalSince(started) * 1_000).rounded()),
+            runtime: runtime
+        ))
+    }
+
+    private static func viewStructureObservation(
+        in window: AXUIElement,
+        waitedMilliseconds: Int,
+        runtime: AXHelpers.Runtime
+    ) -> ViewStructureObservation {
+        let sliders: [AXUIElement]?
+        switch AXHelpers.censusDescendantResult(
+            of: window, role: kAXSliderRole, maxDepth: 8, runtime: runtime
+        ) {
+        case let .success(census):
+            sliders = census.matches
+        case .failure:
+            sliders = nil
+        }
+        let describedSliderCount: Int?
+        if let sliders {
+            var count = 0
+            var descriptionWasUnreadable = false
+            for slider in sliders {
+                switch descriptionResult(of: slider, runtime: runtime) {
+                case let .success(description):
+                    if !(description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                        count += 1
+                    }
+                case .failure:
+                    descriptionWasUnreadable = true
+                }
+            }
+            describedSliderCount = descriptionWasUnreadable ? nil : count
+        } else {
+            describedSliderCount = nil
+        }
+
+        let tables: [AXUIElement]?
+        switch AXHelpers.censusDescendantResult(
+            of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
+        ) {
+        case let .success(census):
+            tables = census.matches
+        case .failure:
+            tables = nil
+        }
+        let rowCount: Int?
+        if let tables {
+            var count = 0
+            var rowsWereUnreadable = false
+            for table in tables {
+                switch controlsRows(in: table, runtime: runtime) {
+                case let .success(rows):
+                    count += rows.count
+                case .failure:
+                    rowsWereUnreadable = true
+                }
+            }
+            rowCount = rowsWereUnreadable ? nil : count
+        } else {
+            rowCount = nil
+        }
+        return ViewStructureObservation(
+            tableCount: tables?.count,
+            rowCount: rowCount,
+            describedSliderCount: describedSliderCount,
+            waitedMilliseconds: waitedMilliseconds
+        )
     }
 
     private enum ControlsTableEvidence {

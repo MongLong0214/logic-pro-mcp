@@ -1681,10 +1681,27 @@ extension AccessibilityChannel {
         let requiredView: ControlsViewBooleanParameterWriter.PluginWindowView = controlsViewCheckbox
             ? .controls
             : .editor
+        // Logic can replace the editor's AX window/switcher during a View
+        // re-render. Rebind only when the already identity-verified editor is
+        // uniquely recoverable; a same-track duplicate remains ambiguous rather
+        // than letting a stale handle select a sibling's view.
+        let refreshPluginWindowForViewSelection: () -> AXUIElement? = {
+            switch AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                runtime: runtime
+            ) {
+            case let .success(editors) where editors.count == 1:
+                return editors[0]
+            case .success, .failure:
+                return nil
+            }
+        }
         let viewSession: ControlsViewBooleanParameterWriter.ViewSession
         switch ControlsViewBooleanParameterWriter.prepareView(
             requiredView,
             in: window,
+            windowRefresher: refreshPluginWindowForViewSelection,
             runtime: runtime.ax
         ) {
         case let .refused(failure, restoration):
@@ -1697,6 +1714,7 @@ extension AccessibilityChannel {
                 "safe_to_retry": false,
                 "write_attempted": false,
             ]
+            extras.merge(failure.responseDiagnostics) { _, new in new }
             // `prepareView` can have picked the target item before its structural
             // confirmation times out. Its compensating re-selection has no
             // ViewSession yet, so carry that observed attempt explicitly.

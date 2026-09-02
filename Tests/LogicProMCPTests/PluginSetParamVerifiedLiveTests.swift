@@ -116,6 +116,9 @@ private final class LiveFixture: @unchecked Sendable {
         mutatePluginHeaderAfterViewSelection: Bool = false,
         ambiguousEditorSliderAfterViewSelection: Bool = false,
         viewMenuRevealAfterPolls: Int? = 3,
+        viewMenuDuplicatesOnReveal: Bool = false,
+        viewMenuOmitsEditorItem: Bool = false,
+        viewMenuEditorItemEnabled: Bool = true,
         viewSettleDelay: TimeInterval = 0.5
     ) {
         let b = builder
@@ -137,6 +140,7 @@ private final class LiveFixture: @unchecked Sendable {
         let pluginLink = b.element(1008)
         let controlsViewSwitcher = b.element(1009)
         let controlsViewMenu = b.element(100_901)
+        let duplicateControlsViewMenu = b.element(100_914)
         let controlsViewMenuItem = b.element(100_902)
         let editorViewMenuItem = b.element(100_909)
         let controlsTable = b.element(100_903)
@@ -283,8 +287,13 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(controlsViewMenuItem, kAXEnabledAttribute as String, true)
         b.setRole(editorViewMenuItem, kAXMenuItemRole as String)
         b.setAttribute(editorViewMenuItem, kAXTitleAttribute as String, "편집기")
-        b.setAttribute(editorViewMenuItem, kAXEnabledAttribute as String, true)
-        b.setChildren(controlsViewMenu, [controlsViewMenuItem, editorViewMenuItem])
+        b.setAttribute(editorViewMenuItem, kAXEnabledAttribute as String, viewMenuEditorItemEnabled)
+        let viewMenuItems = viewMenuOmitsEditorItem
+            ? [controlsViewMenuItem]
+            : [controlsViewMenuItem, editorViewMenuItem]
+        b.setChildren(controlsViewMenu, viewMenuItems)
+        b.setRole(duplicateControlsViewMenu, kAXMenuRole as String)
+        b.setChildren(duplicateControlsViewMenu, viewMenuItems)
         pluginWindowChildren += [controlsViewSwitcher]
         var controlsViewWindowChildren = [pluginBypass, pluginLink]
             + staticTexts
@@ -419,7 +428,10 @@ private final class LiveFixture: @unchecked Sendable {
                     return .success([])
                 }
                 menuVisible.value = true
-                return .success([controlsViewMenu])
+                    return .success(viewMenuDuplicatesOnReveal
+                        ? [controlsViewMenu, duplicateControlsViewMenu]
+                        : [controlsViewMenu]
+                    )
             },
             setAttributeHandler: { [b] el, attribute, value in
                 if pluginWindowRejectsDirectDemotion,
@@ -1055,6 +1067,91 @@ private func namedEQBandParams(
     #expect(reportsStructureDeadline)
     #expect(sliderWasNotWritten)
     #expect(entryViewWasExplicitlyReselected)
+}
+
+@Test func testPluginViewRefusalNamesTheMenuNeverAppearedPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: nil
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let namesTheObservedPhase = phase == "menu_never_appeared"
+    let refusedBeforeWrite = !writeAttempted
+    // Mutation: drop the menu-appearance diagnostic mapping.
+    #expect(namesTheObservedPhase)
+    #expect(refusedBeforeWrite)
+}
+
+@Test func testPluginViewRefusalNamesTheMenuAmbiguousPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuDuplicatesOnReveal: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "menu_ambiguous"
+    // Mutation: drop the scoped-menu ambiguity diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesTheItemNotFoundPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuOmitsEditorItem: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "item_not_found"
+    // Mutation: drop the scoped-item-not-found diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesTheItemNotEnabledPhase() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuRevealAfterPolls: 0,
+        viewMenuEditorItemEnabled: false
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let namesTheObservedPhase = phase == "item_not_enabled"
+    // Mutation: drop the AXEnabled refusal diagnostic mapping.
+    #expect(namesTheObservedPhase)
+}
+
+@Test func testPluginViewRefusalNamesThePostPickStructurePhaseAndDeadlineSnapshot() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuPressChangesStructure: false,
+        viewMenuRevealAfterPolls: 0
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let phase = try #require(result["plugin_view_switch_phase"] as? String)
+    let tables = try #require(result["plugin_view_structure_table_count"] as? Int)
+    let rows = try #require(result["plugin_view_structure_row_count"] as? Int)
+    let describedSliders = try #require(result["plugin_view_structure_described_slider_count"] as? Int)
+    let waitedMilliseconds = try #require(result["plugin_view_structure_waited_ms"] as? Int)
+    let restorationAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restorationObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let namesTheObservedPhase = phase == "pick_performed_structure_never_confirmed"
+    let capturesDeadlineClassifierState = tables == 1
+        && rows == 2
+        && describedSliders == 0
+        && waitedMilliseconds >= 2_900
+    let entryViewRestorationSurvived = restorationAttempted && restorationObserved
+    // Mutation: omit `failure.responseDiagnostics` from the State-C envelope.
+    #expect(namesTheObservedPhase)
+    #expect(capturesDeadlineClassifierState)
+    #expect(entryViewRestorationSurvived)
 }
 
 @Test func testCompressorThresholdRestoresControlsAfterSliderLookupRefusal() async throws {
