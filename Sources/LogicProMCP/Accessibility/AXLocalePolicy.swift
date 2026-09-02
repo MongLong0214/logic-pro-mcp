@@ -212,6 +212,63 @@ enum AXLocalePolicy {
         rationale: "Reveals the New Project chooser, or creates the project directly where Logic skips it."
     )
 
+    /// #369: File > Export. Both forms were read from Logic's File menu; no other locale has been
+    /// measured for this submenu, so callers must refuse rather than translate or guess one.
+    static let exportMenuItem = LabelSet(
+        canonical: "Export",
+        variants: ["내보내기"],
+        rationale: "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label."
+    )
+
+    /// #369: File > Export > All Tracks as Audio Files… — the only measured leaf that reaches the
+    /// one-file-per-track export panel. Exact labels deliberately distinguish all three audio-file
+    /// entries that share the rest of their wording. English identifies the target with `All Tracks`,
+    /// rather than the selection-rewritten singular `1 Track as Audio File…` or a `Selected…` range
+    /// entry. Korean identifies it with `모든 트랙을`, rather than `1개의 트랙을` or `선택 범위를`.
+    /// The discriminator is therefore locale-specific: the English word `selected` is not assumed to
+    /// exist in Korean. Only these English and Korean forms are measured; other locales must refuse
+    /// as an unmeasured all-tracks-audio-file label instead of falling back to keyword matching.
+    static let allTracksAsAudioFilesMenuItem = LabelSet(
+        canonical: "All Tracks as Audio Files…",
+        variants: ["모든 트랙을 오디오 파일로…"],
+        rationale: "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`."
+    )
+
+    /// #369: controls inside the per-track stem-export panel. The panel's own
+    /// window title is the OS Open-panel string, so it is not a usable signal.
+    static let oneFilePerTrackPopupValue = LabelSet(
+        canonical: "One File per Track",
+        variants: ["트랙당 하나의 파일"],
+        rationale: "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    )
+
+    static let stemExportCommitButton = LabelSet(
+        canonical: "Export",
+        variants: ["내보내기"],
+        rationale: "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    )
+
+    static let stemExportDismissButton = LabelSet(
+        canonical: "Cancel",
+        variants: ["취소"],
+        rationale: "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    )
+
+    /// #369: The transient progress window title is rendered with an ordinary
+    /// space in some locales and a NO-BREAK SPACE in Korean. Keep the measured
+    /// product label in locale policy rather than scattering a literal through
+    /// the export driver.
+    static let stemExportProgressWindowTitle = LabelSet(
+        canonical: "Logic Pro",
+        variants: [],
+        rationale: "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+    )
+
+    static func progressWindowTitleMatches(_ title: String) -> Bool {
+        let normalized = String(title.map { $0.isWhitespace ? " " : $0 })
+        return stemExportProgressWindowTitle.matches(normalized)
+    }
+
     static let editMenuBar = LabelSet(
         canonical: "Edit",
         variants: ["편집", "編集"],
@@ -1216,6 +1273,12 @@ enum AXLocalePolicy {
         eventPositionAsTimeMenuItem,
         fileMenuBar,
         newProjectMenuItem,
+        exportMenuItem,
+        allTracksAsAudioFilesMenuItem,
+        oneFilePerTrackPopupValue,
+        stemExportCommitButton,
+        stemExportDismissButton,
+        stemExportProgressWindowTitle,
         editMenuBar,
         navigateMenuBar,
         trackMenuBar,
