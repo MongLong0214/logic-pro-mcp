@@ -473,31 +473,33 @@ actor AccessibilityChannel: Channel {
                 isPanelOpen: { rt in LibraryAccessor.isLibraryPanelOpen(runtime: rt) },
                 openPanel: { rt in await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: rt) },
                 resolvePathKind: { path in
-                    if let panelRoot = panelScanSnapshot,
-                       let panelResolution = LibraryAccessor.resolvePath(path, in: panelRoot),
-                       panelResolution.exists {
-                        if let diskRoot = diskScanSnapshot,
-                           let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot),
-                           diskResolution.exists,
-                           diskResolution.kind != .leaf {
+                    if let panelRoot = panelScanSnapshot {
+                        let panelResolution = LibraryAccessor.resolvePath(path, in: panelRoot)
+                        if panelResolution.exists {
+                            if let diskRoot = diskScanSnapshot {
+                                let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot)
+                                if diskResolution.exists, diskResolution.kind != .leaf {
+                                    return diskResolution.kind
+                                }
+                            }
+                            return panelResolution.kind
+                        }
+                    }
+                    if let diskRoot = diskScanSnapshot {
+                        let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot)
+                        if diskResolution.exists {
                             return diskResolution.kind
                         }
-                        return panelResolution.kind
-                    }
-                    if let diskRoot = diskScanSnapshot,
-                       let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot),
-                       diskResolution.exists {
-                        return diskResolution.kind
                     }
                     return nil
                 },
                 resolvePath: { path in
-                    if let root = panelScanSnapshot,
-                       let resolution = LibraryAccessor.resolvePath(path, in: root) {
+                    if let root = panelScanSnapshot {
+                        let resolution = LibraryAccessor.resolvePath(path, in: root)
                         return resolution.exists
                     }
-                    if let root = diskScanSnapshot,
-                       let resolution = LibraryAccessor.resolvePath(path, in: root) {
+                    if let root = diskScanSnapshot {
+                        let resolution = LibraryAccessor.resolvePath(path, in: root)
                         return resolution.exists
                     }
                     return nil   // no cache → undecided, attempt nav

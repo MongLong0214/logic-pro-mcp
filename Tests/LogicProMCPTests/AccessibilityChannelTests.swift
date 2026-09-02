@@ -738,6 +738,27 @@ private func makeSetInstrumentFixture() -> (
     return (builder, app, firstHeader, secondHeader, category, preset)
 }
 
+private func makeInstrumentCacheRoot(preset: String) -> LibraryRoot {
+    let leaf = LibraryNode(name: preset, path: "Bass/\(preset)", kind: .leaf, children: [])
+    let bass = LibraryNode(name: "Bass", path: "Bass", kind: .folder, children: [leaf])
+    let root = LibraryNode(name: "(library-root)", path: "", kind: .folder, children: [bass])
+    return LibraryRoot(
+        generatedAt: "2026-09-02T00:00:00Z",
+        scanDurationMs: 0,
+        measuredSettleDelayMs: 0,
+        selectionRestored: false,
+        truncatedBranches: 0,
+        probeTimeouts: 0,
+        cycleCount: 0,
+        nodeCount: 3,
+        leafCount: 1,
+        folderCount: 2,
+        root: root,
+        categories: ["Bass"],
+        presetsByCategory: ["Bass": [preset]]
+    )
+}
+
 @Test func testAccessibilityChannelStartRequiresTrustAndAllowsMissingLogic() async throws {
     let untrusted = AccessibilityChannel(runtime: makeAccessibilityRuntime(isTrusted: false))
     await #expect(throws: AccessibilityError.notTrusted) {
@@ -3528,6 +3549,59 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "path_not_in_library")
     #expect(obj["precondition"] as? String == "missing_path")
     #expect(obj["error"] as? String != "ax_write_failed")
+}
+
+@Test func testSetInstrumentPanelMissRefusesEvenWhenDiskCacheHasPath() async throws {
+    let fixture = makeSetInstrumentFixture()
+    let logicRuntime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in true },
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == fixture.secondHeader {
+                fixture.builder.setAttribute(fixture.firstHeader, kAXSelectedAttribute as String, false)
+                fixture.builder.setAttribute(fixture.secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: fixture.builder,
+        app: fixture.app,
+        logicRuntime: logicRuntime
+    )
+    await channel.seedLastScanForTest(
+        makeInstrumentCacheRoot(preset: "Panel Only"), source: "panel"
+    )
+    await channel.seedLastScanForTest(
+        makeInstrumentCacheRoot(preset: "Disk Only"), source: "disk"
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_instrument",
+        params: ["index": "1", "path": "Bass/Disk Only"]
+    )
+
+    let isFailure = !result.isSuccess
+    #expect(isFailure)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let error = try #require(obj["error"] as? String)
+    let isPathNotInLibrary = error == "path_not_in_library"
+    #expect(isPathNotInLibrary)
+    let precondition = try #require(obj["precondition"] as? String)
+    let isMissingPathPrecondition = precondition == "missing_path"
+    #expect(isMissingPathPrecondition)
+    let actionElementIDs = fixture.builder.actionCalls.map(\.elementID)
+    let categoryWasNotNavigated = !actionElementIDs.contains(
+        fixture.builder.elementID(fixture.category)
+    )
+    #expect(categoryWasNotNavigated)
+    let presetWasNotNavigated = !actionElementIDs.contains(
+        fixture.builder.elementID(fixture.preset)
+    )
+    #expect(presetWasNotNavigated)
 }
 
 @Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async {

@@ -6,7 +6,7 @@ import Testing
 // / both). resolve_path responses carry `source` and `loadable` fields so the
 // client can distinguish disk-catalog candidates from panel-proven misses.
 
-@Test func testResolvePathMissingCacheReturnsReason() async {
+@Test func testResolvePathMissingCacheReturnsReason() async throws {
     // No scan has been run; resolve_path should hint at scan_library without
     // crashing.
     let channel = AccessibilityChannel(runtime: makeRuntime())
@@ -14,15 +14,148 @@ import Testing
         operation: "library.resolve_path",
         params: ["path": "Bass/Sub"]
     )
-    #expect(result.isSuccess)
-    let obj = try! JSONSerialization.jsonObject(
+    let isSuccess = result.isSuccess
+    #expect(isSuccess)
+    let obj = try #require(JSONSerialization.jsonObject(
         with: Data(result.message.utf8)
-    ) as! [String: Any]
-    #expect(!((obj["exists"] as? Bool)!))
-    #expect(obj["reason"] as? String == "No cached library scan; call scan_library first")
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    let isMiss = !exists
+    #expect(isMiss)
+    let reason = try #require(obj["reason"] as? String)
+    let hasExistingColdCacheReason = reason == "No cached library scan; call scan_library first"
+    #expect(hasExistingColdCacheReason)
 }
 
-@Test func testResolvePathReturnsPanelSourceAndLoadableTrueForMatch() async {
+@Test func testResolvePathWarmCacheAbsentPathNamesMissingSegmentAndPrefix() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
+    await channel.seedLastScanForTest(root, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Bass/Absent"]
+    )
+    let isSuccess = result.isSuccess
+    #expect(isSuccess)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    let isMiss = !exists
+    #expect(isMiss)
+    let reason = try #require(obj["reason"] as? String)
+    let namesMissingSegmentAndPrefix = reason == "Library path segment 'Absent' was not found under 'Bass' in the scanned library cache."
+    #expect(namesMissingSegmentAndPrefix)
+    let source = try #require(obj["source"] as? String)
+    let consultedDiskCache = source == "disk"
+    #expect(consultedDiskCache)
+    let warningIsOmitted = obj["warning"] == nil
+    #expect(warningIsOmitted)
+}
+
+@Test func testResolvePathWarmCacheRootMissNamesLibraryRoot() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
+    await channel.seedLastScanForTest(root, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Absent"]
+    )
+    let isSuccess = result.isSuccess
+    #expect(isSuccess)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    let isMiss = !exists
+    #expect(isMiss)
+    let reason = try #require(obj["reason"] as? String)
+    let namesLibraryRoot = reason == "Library path segment 'Absent' was not found at the library root in the scanned library cache."
+    #expect(namesLibraryRoot)
+}
+
+@Test func testResolvePathWarmCacheMalformedPathExplainsSyntaxAndOmitsWarning() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
+    await channel.seedLastScanForTest(root, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "A//C"]
+    )
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    let isMiss = !exists
+    #expect(isMiss)
+    let reason = try #require(obj["reason"] as? String)
+    let explainsMalformedSyntax = reason == "Malformed library path; after trimming surrounding spaces and tabs and removing one unescaped trailing '/', it must not be empty or contain an empty segment. Use non-empty slash-separated segments such as 'Bass/Sub Bass'; escape literal '/' in a segment as '\\/'."
+    #expect(explainsMalformedSyntax)
+    let source = try #require(obj["source"] as? String)
+    let consultedDiskCache = source == "disk"
+    #expect(consultedDiskCache)
+    let warningIsOmitted = obj["warning"] == nil
+    #expect(warningIsOmitted)
+}
+
+@Test func testResolvePathLeadingNewlineIsNotTrimmed() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
+    await channel.seedLastScanForTest(root, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "\nBass/Sub Bass"]
+    )
+    let isSuccess = result.isSuccess
+    #expect(isSuccess)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    let isMiss = !exists
+    #expect(isMiss)
+    let reason = try #require(obj["reason"] as? String)
+    let keepsLeadingNewlineAsSegment = reason == "Library path segment '\nBass' was not found at the library root in the scanned library cache."
+    #expect(keepsLeadingNewlineAsSegment)
+}
+
+@Test func testResolvePathInvariantViolationReturnsStateCWithoutExists() async throws {
+    let root = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
+    let invalidMiss = LibraryAccessor.PathResolution(
+        exists: false, kind: nil, matchedPath: nil, children: nil, miss: nil
+    )
+
+    let result = AccessibilityChannel.resolveLibraryPath(
+        params: ["path": "Bass/Sub Bass"],
+        lastPanelScan: nil,
+        lastDiskScan: nil,
+        lastScan: root,
+        lastScanSource: "disk",
+        resolveCachedPath: { _, _ in invalidMiss }
+    )
+
+    let isFailure = !result.isSuccess
+    #expect(isFailure)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let state = try #require(obj["state"] as? String)
+    let isStateC = state == "C"
+    #expect(isStateC)
+    let error = try #require(obj["error"] as? String)
+    let isInternalInconsistency = error == "internal_inconsistency"
+    #expect(isInternalInconsistency)
+    let existsIsOmitted = obj["exists"] == nil
+    #expect(existsIsOmitted)
+    let isTerminal = HonestContract.isTerminalStateC(result.message)
+    #expect(isTerminal)
+}
+
+@Test func testResolvePathReturnsPanelSourceAndLoadableTrueForMatch() async throws {
     let channel = AccessibilityChannel(runtime: makeRuntime())
     // Seed panel cache directly via a canned scan run. We can't easily run
     // runLiveScan here without a live AX tree, so we drive setLastScan via
@@ -35,13 +168,18 @@ import Testing
         operation: "library.resolve_path",
         params: ["path": "Bass/Sub Bass"]
     )
-    let obj = try! JSONSerialization.jsonObject(
+    let obj = try #require(JSONSerialization.jsonObject(
         with: Data(result.message.utf8)
-    ) as! [String: Any]
-    #expect((obj["exists"] as? Bool)!)
-    #expect(obj["source"] as? String == "panel")
-    #expect((obj["loadable"] as? Bool)!)
-    #expect(obj["warning"] == nil)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    #expect(exists)
+    let source = try #require(obj["source"] as? String)
+    let reportsPanelSource = source == "panel"
+    #expect(reportsPanelSource)
+    let loadable = try #require(obj["loadable"] as? Bool)
+    #expect(loadable)
+    let warningIsOmitted = obj["warning"] == nil
+    #expect(warningIsOmitted)
 }
 
 @Test func testResolvePathReturnsPanelFolderAsNonLoadable() async {
@@ -64,7 +202,7 @@ import Testing
     #expect(((obj["warning"] as? String)?.contains("leaf preset paths"))!)
 }
 
-@Test func testResolvePathReturnsDiskLeafAsLoadableCandidateWithoutPanelCache() async {
+@Test func testResolvePathReturnsDiskLeafAsLoadableCandidateWithoutPanelCache() async throws {
     let channel = AccessibilityChannel(runtime: makeRuntime())
     let disk = makeFolderRoot()
     await channel.seedLastScanForTest(disk, source: "disk")
@@ -73,15 +211,23 @@ import Testing
         operation: "library.resolve_path",
         params: ["path": "Synthesizer/Bass/Acid Etched Bass"]
     )
-    let obj = try! JSONSerialization.jsonObject(
+    let obj = try #require(JSONSerialization.jsonObject(
         with: Data(result.message.utf8)
-    ) as! [String: Any]
-    #expect((obj["exists"] as? Bool)!)
-    #expect(obj["kind"] as? String == "leaf")
-    #expect(obj["source"] as? String == "disk")
-    #expect((obj["loadable"] as? Bool)!)
-    #expect(obj["reason"] == nil)
-    #expect(obj["warning"] == nil)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    #expect(exists)
+    let kind = try #require(obj["kind"] as? String)
+    let reportsLeaf = kind == "leaf"
+    #expect(reportsLeaf)
+    let source = try #require(obj["source"] as? String)
+    let reportsDiskSource = source == "disk"
+    #expect(reportsDiskSource)
+    let loadable = try #require(obj["loadable"] as? Bool)
+    #expect(loadable)
+    let reasonIsOmitted = obj["reason"] == nil
+    #expect(reasonIsOmitted)
+    let warningIsOmitted = obj["warning"] == nil
+    #expect(warningIsOmitted)
 }
 
 @Test func testResolvePathUsesDiskTreeToDisambiguateShallowPanelFolderRows() async {
@@ -150,7 +296,7 @@ import Testing
     #expect(obj["warning"] == nil, "No disk-only warning for Panel-known entry")
 }
 
-@Test func testResolvePathReturnsDiskOnlyWithLoadableFalse() async {
+@Test func testResolvePathReturnsDiskOnlyWithLoadableFalse() async throws {
     let channel = AccessibilityChannel(runtime: makeRuntime())
     // Panel cache has category Bass / preset Sub Bass.
     let panel = makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"])
@@ -164,13 +310,19 @@ import Testing
         operation: "library.resolve_path",
         params: ["path": "Drums/Disk Only Kit"]
     )
-    let obj = try! JSONSerialization.jsonObject(
+    let obj = try #require(JSONSerialization.jsonObject(
         with: Data(result.message.utf8)
-    ) as! [String: Any]
-    #expect((obj["exists"] as? Bool)!)
-    #expect(obj["source"] as? String == "disk-only")
-    #expect(!((obj["loadable"] as? Bool)!))
-    #expect(obj["warning"] != nil)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    #expect(exists)
+    let source = try #require(obj["source"] as? String)
+    let reportsDiskOnlySource = source == "disk-only"
+    #expect(reportsDiskOnlySource)
+    let loadable = try #require(obj["loadable"] as? Bool)
+    let isNotLoadable = !loadable
+    #expect(isNotLoadable)
+    let warningIsPresent = obj["warning"] != nil
+    #expect(warningIsPresent)
 }
 
 // MARK: - Helpers
