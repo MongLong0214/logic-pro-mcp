@@ -74,6 +74,7 @@ Also open, outside the ADR set:
 | #678 | closed | the drift guard and this file's update rule shipped in #684 |
 | #735 | OPEN | legacy `MIDIPacketList` traversal walked past a value copy (SIGBUS). Fixed on `fix/735-midi-packetlist`; measured 2026-09-02 the parsed inbound stream has NO production consumer, so `LogicProMCP-MIDI-In` accepts MIDI and discards it — decide whether to finish that port or stop publishing it. The live gate cannot express this proof: `is_clean` requires captures/visual/recordings and this is a non-UI path with nothing in Logic to observe |
 | #736 | OPEN | external report — duplicate virtual MIDI endpoints. Root cause measured both directions: two endpoints sharing a name make Logic bind the wrong one (duplicate -> `connected:false` x2, single -> `connected:true` x2). PR #738 open but REFUTED by review — census/create is a cross-process TOCTOU race, an enumeration failure publishes as an observed `endpoint_count: 0`, health republishes a startup snapshot, and the unique-ID hash has concrete collisions |
+| #742 | OPEN | a handoff for whoever picks up the open issues next: where main is, which branches carry unmerged work, the one confirmed live-gate failure and its trace, and the corrections made publicly so they are not re-inherited. Closes when the work it hands off is picked up |
 | #683 | OPEN | external report — MCU feedback from Logic Pro Creator Studio wedges the loop; four hypotheses refuted or weakened by measurement, blocked on a `sample` from the reporter's host |
 | #724 | closed | |
 | #726 | closed | |
