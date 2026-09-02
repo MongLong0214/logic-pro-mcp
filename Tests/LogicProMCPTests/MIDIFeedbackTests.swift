@@ -2,7 +2,7 @@ import CoreMIDI
 import Testing
 @testable import LogicProMCP
 
-private func withMIDIPacketList(_ packets: [[UInt8]], _ body: (MIDIPacketList) -> Void) {
+private func withMIDIPacketList(_ packets: [[UInt8]], _ body: (UnsafeMutablePointer<MIDIPacketList>) -> Void) {
     let payloadSize = packets.reduce(0) { partial, packet in
         partial + max(MemoryLayout<MIDIPacket>.size, packet.count)
     }
@@ -28,7 +28,34 @@ private func withMIDIPacketList(_ packets: [[UInt8]], _ body: (MIDIPacketList) -
             }
         }
 
-        body(packetList.pointee)
+        body(packetList)
+    }
+}
+
+private func boundaryCrossingFeedbackPackets() -> [[UInt8]] {
+    (0..<64).map { index in
+        let value = UInt8(index)
+        switch index % 4 {
+        case 0:
+            return [0x90, value, 0x40]
+        case 1:
+            return [0xF0, 0x7D, value, 0xF7]
+        case 2:
+            return [0xF0, 0x7D, 0x01, value, 0xF7]
+        default:
+            return [0xF0, 0x7D, 0x01, 0x02, value, 0xF7]
+        }
+    }
+}
+
+private func bytesRepresentedByFeedbackEvent(_ event: MIDIFeedback.Event) -> [UInt8]? {
+    switch event {
+    case .noteOn(let channel, let note, let velocity):
+        [0x90 | channel, note, velocity]
+    case .sysEx(let bytes):
+        bytes
+    default:
+        nil
     }
 }
 
@@ -199,6 +226,50 @@ private func withMIDIPacketList(_ packets: [[UInt8]], _ body: (MIDIPacketList) -
     }
 
     #expect(second == nil)
+}
+
+// This uses the pointer-backed API because MIDIPacketList is variable-length;
+// passing it by value would truncate this 64-packet list before parse can start.
+@Test func testMIDIFeedbackParsesEveryPacketAcrossMIDIPacketListCopyBoundary() async {
+    let expectedPackets = boundaryCrossingFeedbackPackets()
+    let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream()
+    var iterator = stream.makeAsyncIterator()
+
+    withMIDIPacketList(expectedPackets) { packetList in
+        MIDIFeedback.parse(packetList: packetList, into: continuation)
+    }
+    continuation.finish()
+
+    var receivedPackets: [[UInt8]] = []
+    for _ in expectedPackets {
+        guard let event = await iterator.next() else {
+            Issue.record("Expected an event for every packet in the CoreMIDI list")
+            return
+        }
+        guard let bytes = bytesRepresentedByFeedbackEvent(event) else {
+            Issue.record("Expected only note-on or SysEx events from the CoreMIDI list")
+            return
+        }
+        receivedPackets.append(bytes)
+    }
+
+    #expect(receivedPackets == expectedPackets)
+    let noAdditionalEvent = await iterator.next()
+    #expect(noAdditionalEvent == nil)
+}
+
+@Test func testMIDIFeedbackRejectsOversizedMIDIPacketDataTuple() async {
+    let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream()
+    var iterator = stream.makeAsyncIterator()
+
+    withMIDIPacketList([[0x90, 0x3C, 0x64]]) { packetList in
+        packetList.pointee.packet.length = 257
+        MIDIFeedback.parse(packetList: packetList, into: continuation)
+    }
+    continuation.finish()
+
+    let malformedPacketEvent = await iterator.next()
+    #expect(malformedPacketEvent == nil)
 }
 
 @Test func testMMCCommandsBuildExpectedTransportMessages() {

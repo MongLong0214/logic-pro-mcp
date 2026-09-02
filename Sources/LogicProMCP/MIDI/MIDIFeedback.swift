@@ -17,20 +17,18 @@ enum MIDIFeedback {
     }
 
     /// Parse a CoreMIDI packet list and yield events into an AsyncStream continuation.
-    static func parse(packetList: MIDIPacketList, into continuation: AsyncStream<Event>.Continuation) {
-        var list = packetList
-        withUnsafePointer(to: &list.packet) { firstPacket in
-            var packet = firstPacket
-            for _ in 0..<list.numPackets {
-                let p = packet.pointee
-                let length = Int(p.length)
-                let bytes = withUnsafeBytes(of: p.data) { raw in
-                    Array(raw.prefix(length).bindMemory(to: UInt8.self))
-                }
-                for event in parseBytes(bytes) {
-                    continuation.yield(event)
-                }
-                packet = UnsafePointer(MIDIPacketNext(packet))
+    static func parse(packetList: UnsafePointer<MIDIPacketList>, into continuation: AsyncStream<Event>.Continuation) {
+        for packet in packetList.unsafeSequence() {
+            let length = Int(packet.pointee.length)
+            let bytes = withUnsafeBytes(of: packet.pointee.data) { raw -> [UInt8]? in
+                // Reject, rather than truncate, packets larger than Swift's imported
+                // 256-byte data tuple: truncation could turn one MIDI command into another.
+                guard length <= raw.count else { return nil }
+                return Array(raw.prefix(length).bindMemory(to: UInt8.self))
+            }
+            guard let bytes else { continue }
+            for event in parseBytes(bytes) {
+                continuation.yield(event)
             }
         }
     }
