@@ -27,6 +27,31 @@ enum TargetRefResolver {
         case failure(CallTool.Result)
     }
 
+    /// Resolve a track only to a reference that has already been issued by the
+    /// ADR-002 registry. This is a read-side counterpart to mutation target
+    /// resolution: it deliberately does not bind, so a localized output label
+    /// can never become a node identity merely because it was observed.
+    static func issuedTrackReference(
+        for track: TrackState,
+        targetRegistry: TargetRegistry?,
+        snapshot: TargetRegistrySnapshot?
+    ) async -> TargetReference? {
+        guard FeatureFlags.adr002TargetRef,
+              track.liveIdentityBacked,
+              track.placeholder != true,
+              let targetRegistry,
+              let snapshot else {
+            return nil
+        }
+        let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
+        return await targetRegistry.issuedReference(
+            kind: .track,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint,
+            snapshot: snapshot
+        )
+    }
+
     static func validateProjectReference(
         _ params: [String: Value],
         targetRegistry: TargetRegistry?,

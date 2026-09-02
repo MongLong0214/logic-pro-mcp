@@ -323,12 +323,12 @@ extension ResourceHandlers {
             targetSnapshot = nil
         }
         let strips = await cache.getChannelStrips()
+        let tracks = await cache.getTracks()
         let conn = await cache.getMCUConnection()
         let fetchedAt = await cache.getMixerFetchedAt()
         let axOccluded = await cache.getAXOccluded()
         let stripsJSON: String
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
-            let tracks = await cache.getTracks()
             var payload: [[String: Any]] = []
             payload.reserveCapacity(strips.count)
             for strip in strips {
@@ -362,6 +362,14 @@ extension ResourceHandlers {
         // can decide whether to trust the strips. `registered` is kept as a
         // one-release alias of `mcu_registered` for existing parsers.
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
+        let routingGraph = await RoutingGraphPublication.publish(
+            strips: strips,
+            tracks: tracks,
+            targetRegistry: targetRegistry,
+            snapshot: targetSnapshot,
+            mixerWasObserved: fetchedAt > .distantPast
+        )
+        let routingGraphJSON = encodeJSON(routingGraph)
         let ageMsPart = conn.lastFeedbackAgeMs().map { "\($0)" } ?? "null"
         let versionedFragment: String
         if FeatureFlags.adr006VersionedCache {
@@ -375,7 +383,7 @@ extension ResourceHandlers {
             versionedFragment = ""
         }
         let json = """
-            {"cache_age_sec":\(agePart),"data_source":"\(dataSource)","fetched_at":\(isoPart),"ax_occluded":\(axOccluded),"mcu_connected":\(conn.isConnected),"mcu_registered":\(conn.registeredAsDevice),"mcu_last_feedback_age_ms":\(ageMsPart),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)\(versionedFragment)}
+            {"cache_age_sec":\(agePart),"data_source":"\(dataSource)","fetched_at":\(isoPart),"ax_occluded":\(axOccluded),"mcu_connected":\(conn.isConnected),"mcu_registered":\(conn.registeredAsDevice),"mcu_last_feedback_age_ms":\(ageMsPart),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON),"routing_graph":\(routingGraphJSON)\(versionedFragment)}
             """
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]

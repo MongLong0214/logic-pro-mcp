@@ -16,6 +16,50 @@ struct RoutingNode: Codable, Equatable, Sendable {
     let displayName: String
     let busNumber: Int?
     let targetRef: TargetReference?
+    /// What the source strip displays in its output slot. This is a label, not
+    /// an identity: it is locale- and user-rename-dependent, and may repeat.
+    let observedOutputLabel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, displayName, busNumber, targetRef
+        case observedOutputLabel = "observed_output_label"
+    }
+
+    init(
+        id: String,
+        kind: RoutingNodeKind,
+        displayName: String,
+        busNumber: Int?,
+        targetRef: TargetReference?,
+        observedOutputLabel: String? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.displayName = displayName
+        self.busNumber = busNumber
+        self.targetRef = targetRef
+        self.observedOutputLabel = observedOutputLabel
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        kind = try container.decode(RoutingNodeKind.self, forKey: .kind)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        busNumber = try container.decodeIfPresent(Int.self, forKey: .busNumber)
+        targetRef = try container.decodeIfPresent(TargetReference.self, forKey: .targetRef)
+        observedOutputLabel = try container.decodeIfPresent(String.self, forKey: .observedOutputLabel)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(busNumber, forKey: .busNumber)
+        try container.encodeIfPresent(targetRef, forKey: .targetRef)
+        try container.encodeIfPresent(observedOutputLabel, forKey: .observedOutputLabel)
+    }
 }
 
 enum RoutingEdgeKind: String, Codable, Sendable {
@@ -50,7 +94,9 @@ struct RoutingEdge: Codable, Equatable, Sendable {
 }
 
 struct RoutingGraph: Codable, Equatable, Sendable {
-    let projectReference: TargetReference
+    /// The project reference when one has already been issued. A mixer read
+    /// must not mint a project identity merely to fill this field.
+    let projectReference: TargetReference?
     let projectEpoch: UInt64
     let complete: Bool
     let partialReason: String?
