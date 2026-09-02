@@ -1232,6 +1232,24 @@ extension AccessibilityChannel {
             }
         }
 
+        func append(
+            pluginViewRestoration restoration: ControlsViewBooleanParameterWriter.ViewRestoration?,
+            to extras: inout [String: Any]
+        ) {
+            guard let restoration else { return }
+            extras["plugin_view_restore_attempted"] = restoration.attempted
+            extras["plugin_view_restore_observed"] = restoration.confirmed
+            if !restoration.confirmed {
+                extras["plugin_view_left_changed"] = true
+                extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
+                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
+            }
+        }
+
+        func appendPluginViewRestoration(to extras: inout [String: Any]) {
+            append(pluginViewRestoration: restorePluginViewOnExit?(), to: &extras)
+        }
+
         /// A write may be fully verified before this operation's editor closes.
         /// Keep State A for the established write verdict, while making a
         /// failed observed close actionable rather than deferring that surprise
@@ -1259,27 +1277,38 @@ extension AccessibilityChannel {
             return HonestContract.encodeV2StateA(extras: completedExtras)
         }
 
-        /// A State C built after a confirmed temporary view switch must expose
-        /// a failed restore. Without these fields a locator refusal can look
-        /// like a no-op even though the plug-in remains in Controls view.
+        /// One terminal funnel owns temporary-view cleanup for every State C
+        /// below. Returning an already encoded State C from the body is safe:
+        /// the funnel decodes it once, performs restoration before it is exposed,
+        /// and adds the observed outcome. New early exits cannot bypass it.
+        func finishPluginViewSessionResult(_ result: ChannelResult) -> ChannelResult {
+            guard case let .error(raw) = result,
+                  let data = raw.data(using: .utf8),
+                  var envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  envelope["state"] as? String == "C" else {
+                return result
+            }
+            var extras: [String: Any] = [:]
+            appendPluginViewRestoration(to: &extras)
+            for (key, value) in extras {
+                envelope[key] = value
+            }
+            guard let encoded = try? JSONSerialization.data(
+                withJSONObject: envelope,
+                options: [.sortedKeys]
+            ), let message = String(data: encoded, encoding: .utf8) else {
+                return result
+            }
+            return .error(message)
+        }
+
         func stateCWithPluginViewRestoration(
             error: HonestContract.FailureError,
             extras: [String: Any]
         ) -> String {
-            var completedExtras = extras
-            appendPluginViewRestoration(to: &completedExtras)
-            return HonestContract.encodeV2StateC(error: error, extras: completedExtras)
-        }
-
-        func appendPluginViewRestoration(to extras: inout [String: Any]) {
-            guard let restoration = restorePluginViewOnExit?() else { return }
-            extras["plugin_view_restore_attempted"] = restoration.attempted
-            extras["plugin_view_restore_observed"] = restoration.confirmed
-            if !restoration.confirmed {
-                extras["plugin_view_left_changed"] = true
-                extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
-            }
+            // The name remains at the Controls helper boundary; restoration is
+            // applied by `finishPluginViewSessionResult`, not at each exit site.
+            HonestContract.encodeV2StateC(error: error, extras: extras)
         }
 
         if duplicatedPluginInstance {
@@ -1561,39 +1590,32 @@ extension AccessibilityChannel {
             in: window,
             runtime: runtime.ax
         ) {
-        case let .refused(failure):
+        case let .refused(failure, restoration):
+            var extras: [String: Any] = [
+                "operation": operation,
+                "target_identity": identity,
+                "param": paramAlias,
+                "what_was_attempted": "select the plugin-window View menu item and confirm the required \(requiredView.rawValue) structure before locating its control",
+                "what_was_observed": failure.observation,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+            // `prepareView` can have picked the target item before its structural
+            // confirmation times out. Its compensating re-selection has no
+            // ViewSession yet, so carry that observed attempt explicitly.
+            append(pluginViewRestoration: restoration, to: &extras)
             return .error(HonestContract.encodeV2StateC(
                 // The slider locator has not run. Keep a failed structural
                 // confirmation distinct from a genuine missing AXSlider so the
                 // live response shows whether view selection was reached.
                 error: .pluginViewNotConfirmed,
-                extras: [
-                    "operation": operation,
-                    "target_identity": identity,
-                    "param": paramAlias,
-                    "what_was_attempted": "select the plugin-window View menu item and confirm the required \(requiredView.rawValue) structure before locating its control",
-                    "what_was_observed": failure.observation,
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
+                extras: extras
             ))
         case let .ready(session):
             viewSession = session
         }
         restorePluginViewOnExit = { viewSession.restore() }
-        defer {
-            if let restoration = restorePluginViewOnExit?(), !restoration.confirmed {
-                // The write result may already be State A or an unavoidable State C
-                // when this best-effort restoration fails. Keep that result honest,
-                // but never silently strand the user's editor: State A includes the
-                // restore fields above and refusal paths emit this actionable log.
-                Log.warn(
-                    "Plugin view restoration was not confirmed after \(operation); observed structure: \(restoration.observedStructure ?? "unconfirmed")",
-                    subsystem: .ax
-                )
-            }
-        }
-
+        let resultAfterViewPreparation: ChannelResult = {
         if controlsViewCheckbox, let controlsViewRowLabel {
             // This must run before the legacy slider locator: Controls view
             // deliberately removes the parameter's identity from the control
@@ -1679,8 +1701,24 @@ extension AccessibilityChannel {
             return .error(failure)
         }
 
-        // Step 10 — read the before value (for rollback + provenance).
-        let before = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
+        // Step 10 — read the before value (for rollback + provenance). A
+        // direct AXValue write is never safe to issue without a recoverable
+        // state: an accepted write followed by lost readback needs this exact
+        // value for compensation.
+        guard let before = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "read the '\(axDescription)' slider value before any AXValue write",
+                    "what_was_observed": "the slider value could not be read before the write, so no write was attempted without a rollback state",
+                    "safe_to_retry": true,
+                    "write_attempted": false,
+                ]
+            ))
+        }
 
         if let failure = acquiredPluginWindowFailureStateC(
             acquiredWindow: window,
@@ -1740,6 +1778,12 @@ extension AccessibilityChannel {
         switch writeMethod {
         case "ax_slider_axvalue":
             guard AXValueExtractors.setSliderValue(slider, requested, runtime: runtime.ax) else {
+                let rollback = rollbackSliderValue(
+                    slider,
+                    to: before,
+                    writeMethod: writeMethod,
+                    runtime: runtime.ax
+                )
                 return .error(HonestContract.encodeV2StateC(
                     error: .axWriteFailed,
                     extras: [
@@ -1748,8 +1792,13 @@ extension AccessibilityChannel {
                         "param": paramAlias,
                         "requested_normalized": requested,
                         "what_was_attempted": "set AXValue \(requested) on the '\(axDescription)' slider",
-                        "what_was_observed": "the AX value write was rejected",
-                        "safe_to_retry": true,
+                        "rollback_attempted": rollback.attempted,
+                        "rollback_succeeded": rollback.succeeded,
+                        "rollback_observed": rollback.observed ?? NSNull(),
+                        "rolled_back": rollback.succeeded,
+                        "parameter_left_changed": !rollback.succeeded,
+                        "what_was_observed": "the AX value write was rejected; rollback to the readable pre-write value was attempted",
+                        "safe_to_retry": rollback.succeeded,
                         "write_attempted": true,
                     ]
                 ))
@@ -1758,6 +1807,12 @@ extension AccessibilityChannel {
             // Step 12 — read the after value (+ value description). A write
             // that cannot be read back is uncertain, not confirmed — fail closed.
             guard let after = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax) else {
+                let rollback = rollbackSliderValue(
+                    slider,
+                    to: before,
+                    writeMethod: writeMethod,
+                    runtime: runtime.ax
+                )
                 return .error(HonestContract.encodeV2StateC(
                     error: .readbackLostAfterWrite,
                     extras: [
@@ -1766,8 +1821,13 @@ extension AccessibilityChannel {
                         "param": paramAlias,
                         "requested_normalized": requested,
                         "what_was_attempted": "read back the '\(axDescription)' slider value after writing",
-                        "what_was_observed": "the slider value could not be read after the write",
-                        "safe_to_retry": true,
+                        "rollback_attempted": rollback.attempted,
+                        "rollback_succeeded": rollback.succeeded,
+                        "rollback_observed": rollback.observed ?? NSNull(),
+                        "rolled_back": rollback.succeeded,
+                        "parameter_left_changed": !rollback.succeeded,
+                        "what_was_observed": "the slider value could not be read after the write; rollback to the readable pre-write value was attempted",
+                        "safe_to_retry": rollback.succeeded,
                         "write_attempted": true,
                     ]
                 ))
@@ -1811,8 +1871,11 @@ extension AccessibilityChannel {
                     "tolerance": tolerance,
                     "rollback_attempted": rollback.attempted,
                     "rollback_succeeded": rollback.succeeded,
+                    "rollback_observed": rollback.observed ?? NSNull(),
+                    "rolled_back": rollback.succeeded,
+                    "parameter_left_changed": !rollback.succeeded,
                     "rollback_outcome": rollback.walkOutcome ?? NSNull(),
-                    "rollback_to": before ?? NSNull(),
+                    "rollback_to": before,
                     "what_was_attempted": "verify the '\(axDescription)' write within tolerance \(tolerance)",
                     "what_was_observed": "observed \(after) differs from requested \(requested) beyond tolerance",
                     "safe_to_retry": false,
@@ -1910,6 +1973,8 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        }()
+        return finishPluginViewSessionResult(resultAfterViewPreparation)
     }
 
     /// The additive ADR-011 / ADR-018 Controls-view checkbox branch. It is
@@ -2029,6 +2094,7 @@ extension AccessibilityChannel {
     private struct SliderRollback {
         let attempted: Bool
         let succeeded: Bool
+        let observed: Double?
         let walkOutcome: String?
     }
 
@@ -2042,7 +2108,9 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         incrementWalkBudget: Int = ChannelEQBandCatalog.incrementWalkBudget
     ) -> SliderRollback {
-        guard let before else { return SliderRollback(attempted: false, succeeded: false, walkOutcome: nil) }
+        guard let before else {
+            return SliderRollback(attempted: false, succeeded: false, observed: nil, walkOutcome: nil)
+        }
         switch writeMethod {
         case "ax_slider_increment_walk":
             let outcome = SliderIncrementWalk.walk(
@@ -2057,24 +2125,31 @@ extension AccessibilityChannel {
                 },
                 budget: incrementWalkBudget
             )
-            if case .arrived(_, _) = outcome {
-                return SliderRollback(attempted: true, succeeded: true, walkOutcome: "arrived")
+            if case let .arrived(_, final) = outcome {
+                return SliderRollback(
+                    attempted: true,
+                    succeeded: true,
+                    observed: final.value,
+                    walkOutcome: "arrived"
+                )
             }
             return SliderRollback(
                 attempted: true,
                 succeeded: false,
+                observed: nil,
                 walkOutcome: incrementWalkOutcomeName(outcome)
             )
         default:
             guard AXValueExtractors.setSliderValue(slider, before, runtime: runtime) else {
-                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+                return SliderRollback(attempted: true, succeeded: false, observed: nil, walkOutcome: nil)
             }
             guard let restored = AXValueExtractors.extractSliderValue(slider, runtime: runtime) else {
-                return SliderRollback(attempted: true, succeeded: false, walkOutcome: nil)
+                return SliderRollback(attempted: true, succeeded: false, observed: nil, walkOutcome: nil)
             }
             return SliderRollback(
                 attempted: true,
                 succeeded: abs(restored - before) <= 0.5,
+                observed: restored,
                 walkOutcome: nil
             )
         }

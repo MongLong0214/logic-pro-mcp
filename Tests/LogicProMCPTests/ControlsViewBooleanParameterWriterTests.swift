@@ -59,14 +59,16 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refused)
     }
 
-    @Test func checkboxInsideTheLabelCellRefusesRatherThanBindingTheRow() {
+    @Test func rowWithTwoCellsRefusesRatherThanBindingTheRow() {
         let fixture = fixture(label: "Limiter On", controlRoles: [kAXCheckBoxRole as String])
         let labelCell = fixture.builder.element(103)
         let controlCell = fixture.builder.element(104)
         let label = fixture.builder.element(105)
         let checkbox = fixture.builder.element(110)
-        fixture.builder.setChildren(labelCell, [label, checkbox])
-        fixture.builder.setChildren(controlCell, [])
+        fixture.builder.setRole(controlCell, kAXCellRole as String)
+        fixture.builder.setChildren(labelCell, [label])
+        fixture.builder.setChildren(controlCell, [checkbox])
+        fixture.builder.setChildren(fixture.builder.element(102), [labelCell, controlCell])
 
         let result = ControlsViewBooleanParameterWriter.locate(
             label: "Limiter On",
@@ -75,6 +77,29 @@ struct ControlsViewBooleanParameterWriterTests {
         )
         let refused: Bool
         if case .refused(.rowStructureInvalid) = result {
+            refused = true
+        } else {
+            refused = false
+        }
+        #expect(refused)
+    }
+
+    @Test func rowWithTwoNonemptyStaticTextLabelsRefuses() {
+        let fixture = fixture(label: "Limiter On", controlRoles: [kAXCheckBoxRole as String])
+        let secondLabel = fixture.builder.element(106)
+        let cell = fixture.builder.element(103)
+        fixture.builder.setRole(secondLabel, kAXStaticTextRole as String)
+        fixture.builder.setAttribute(secondLabel, kAXValueAttribute as String, "Auto Release")
+        fixture.builder.setChildren(cell, [fixture.builder.element(105), secondLabel, fixture.builder.element(110)])
+
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refused: Bool
+        if case .refused(.rowLabelAmbiguous) = result {
             refused = true
         } else {
             refused = false
@@ -102,6 +127,26 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(found)
     }
 
+    @Test func AXRowsNoValueFallsBackToAXChildrenForTheLabelledRow() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            axRowsReadStatus: AXError.noValue.rawValue
+        )
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let found: Bool
+        if case .found(.checkBox) = result {
+            found = true
+        } else {
+            found = false
+        }
+        #expect(found)
+    }
+
     @Test func AXRowsReadFailureOtherThanAbsenceRefusesInsteadOfUsingChildren() {
         let fixture = fixture(
             label: "Limiter On",
@@ -114,12 +159,83 @@ struct ControlsViewBooleanParameterWriterTests {
             runtime: fixture.runtime
         )
         let refused: Bool
-        if case .refused(.controlsViewTableNotFound) = result {
+        if case .refused(.accessibilityReadFailed) = result {
             refused = true
         } else {
             refused = false
         }
         #expect(refused)
+    }
+
+    @Test func secondControlWhoseRoleReadFailsRefusesTheWholeBinding() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String, kAXButtonRole as String],
+            roleReadFailureElementIDs: [111]
+        )
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+        let refusedForUnreadableCandidate: Bool
+        if case .refused(.accessibilityReadFailed) = result {
+            refusedForUnreadableCandidate = true
+        } else {
+            refusedForUnreadableCandidate = false
+        }
+        #expect(refusedForUnreadableCandidate)
+    }
+
+    @Test func unreadableRoleWhileFilteringFallbackRowsRefusesTheWholeBinding() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            axRowsReadStatus: AXError.attributeUnsupported.rawValue,
+            roleReadFailureElementIDs: [112]
+        )
+        let table = fixture.builder.element(101)
+        let unreadableNonRow = fixture.builder.element(112)
+        fixture.builder.setChildren(table, [fixture.builder.element(102), unreadableNonRow])
+
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refusedForUnreadableFallbackRow: Bool
+        if case .refused(.accessibilityReadFailed) = result {
+            refusedForUnreadableFallbackRow = true
+        } else {
+            refusedForUnreadableFallbackRow = false
+        }
+        #expect(refusedForUnreadableFallbackRow)
+    }
+
+    @Test func unreadableRoleWhileFilteringCellsRefusesTheWholeBinding() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            roleReadFailureElementIDs: [113]
+        )
+        let row = fixture.builder.element(102)
+        let unreadableNonCell = fixture.builder.element(113)
+        fixture.builder.setChildren(row, [fixture.builder.element(103), unreadableNonCell])
+
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refusedForUnreadableCell: Bool
+        if case .refused(.accessibilityReadFailed) = result {
+            refusedForUnreadableCell = true
+        } else {
+            refusedForUnreadableCell = false
+        }
+        #expect(refusedForUnreadableCell)
     }
 
     @Test func unchangedReadbackRefusesAndAttemptsOneRestore() {
@@ -235,24 +351,30 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(titleWasNotNeeded)
     }
 
-    @Test func titleOnlyEditorSlidersAndABrowserRowDoNotQualifyAsControls() {
+    @Test func describedEditorSliderWinsOverTheStrongestLabelControlTableShape() {
         let builder = FakeAXRuntimeBuilder()
         let window = builder.element(29_910)
         let switcher = builder.element(29_911)
         let slider = builder.element(29_912)
         let browserTable = builder.element(29_913)
         let browserRow = builder.element(29_914)
-        let browserTitle = builder.element(29_915)
+        let browserCell = builder.element(29_915)
+        let browserTitle = builder.element(29_916)
+        let browserCheckbox = builder.element(29_917)
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(switcher, kAXMenuButtonRole as String)
         builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
         builder.setRole(slider, kAXSliderRole as String)
-        builder.setAttribute(slider, kAXDescriptionAttribute as String, "")
+        builder.setAttribute(slider, kAXDescriptionAttribute as String, "Threshold")
         builder.setRole(browserTable, kAXTableRole as String)
         builder.setRole(browserRow, kAXRowRole as String)
+        builder.setRole(browserCell, kAXCellRole as String)
         builder.setRole(browserTitle, kAXStaticTextRole as String)
-        builder.setAttribute(browserTitle, kAXValueAttribute as String, "Factory Preset")
-        builder.setChildren(browserRow, [browserTitle])
+        builder.setAttribute(browserTitle, kAXValueAttribute as String, "Limiter On")
+        builder.setRole(browserCheckbox, kAXCheckBoxRole as String)
+        builder.setAttribute(browserCheckbox, kAXValueAttribute as String, false)
+        builder.setChildren(browserCell, [browserTitle, browserCheckbox])
+        builder.setChildren(browserRow, [browserCell])
         builder.setChildren(browserTable, [browserRow])
         builder.setAttribute(browserTable, kAXRowsAttribute as String, [browserRow])
         builder.setChildren(window, [switcher, slider, browserTable])
@@ -269,6 +391,42 @@ struct ControlsViewBooleanParameterWriterTests {
             confirmedEditor = false
         }
         #expect(confirmedEditor)
+    }
+
+    @Test func tableWhoseRowsCarryNoLabelControlPairDoesNotConfirmControls() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(29_920)
+        let switcher = builder.element(29_921)
+        let table = builder.element(29_922)
+        let row = builder.element(29_923)
+        let cell = builder.element(29_924)
+        let heading = builder.element(29_925)
+        builder.setRole(window, kAXWindowRole as String)
+        builder.setRole(switcher, kAXMenuButtonRole as String)
+        builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
+        builder.setRole(table, kAXTableRole as String)
+        builder.setRole(row, kAXRowRole as String)
+        builder.setRole(cell, kAXCellRole as String)
+        builder.setRole(heading, kAXStaticTextRole as String)
+        builder.setAttribute(heading, kAXValueAttribute as String, "Dynamics")
+        builder.setChildren(cell, [heading])
+        builder.setChildren(row, [cell])
+        builder.setChildren(table, [row])
+        builder.setAttribute(table, kAXRowsAttribute as String, [row])
+        builder.setChildren(window, [switcher, table])
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: window,
+            runtime: builder.makeAXRuntime(appElement: builder.element(29_900))
+        )
+        let refusedBecauseTheTableCannotProveControls: Bool
+        if case .refused(.entryViewNotConfirmed, restoration: nil) = result {
+            refusedBecauseTheTableCannotProveControls = true
+        } else {
+            refusedBecauseTheTableCannotProveControls = false
+        }
+        #expect(refusedBecauseTheTableCannotProveControls)
     }
 
     @Test func controlsTableWithHeadingRowsAndParameterPairConfirmsControls() {
@@ -331,7 +489,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refused: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor)) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
             refused = true
         } else {
             refused = false
@@ -361,7 +519,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refusedForAppearanceDeadline: Bool
-        if case .refused(.viewMenuDidNotAppearBeforeDeadline) = result {
+        if case .refused(.viewMenuDidNotAppearBeforeDeadline, restoration: _) = result {
             refusedForAppearanceDeadline = true
         } else {
             refusedForAppearanceDeadline = false
@@ -386,7 +544,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refusedForTheObservedReadFailure: Bool
-        if case let .refused(.viewMenuReadFailed(observed)) = result {
+        if case let .refused(.viewMenuReadFailed(observed), restoration: _) = result {
             refusedForTheObservedReadFailure = observed == readFailure
         } else {
             refusedForTheObservedReadFailure = false
@@ -412,7 +570,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refusedForSettleDeadline: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor)) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
             refusedForSettleDeadline = true
         } else {
             refusedForSettleDeadline = false
@@ -468,7 +626,7 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refused: Bool
-        if case .refused(.viewStructureDidNotConfirm(.editor)) = result {
+        if case .refused(.viewStructureDidNotConfirm(.editor), restoration: _) = result {
             refused = true
         } else {
             refused = false
@@ -535,7 +693,6 @@ struct ControlsViewBooleanParameterWriterTests {
         let controlsTable = builder.element(907)
         let controlsRow = builder.element(908)
         let controlsLabelCell = builder.element(909)
-        let controlsControlCell = builder.element(910)
         let controlsLabel = builder.element(911)
         let controlsCheckbox = builder.element(912)
         let controlsHeadingRow = builder.element(913)
@@ -566,14 +723,12 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setRole(controlsTable, kAXTableRole as String)
         builder.setRole(controlsRow, kAXRowRole as String)
         builder.setRole(controlsLabelCell, kAXCellRole as String)
-        builder.setRole(controlsControlCell, kAXCellRole as String)
         builder.setRole(controlsLabel, kAXStaticTextRole as String)
         builder.setRole(controlsCheckbox, kAXCheckBoxRole as String)
         builder.setAttribute(controlsLabel, kAXValueAttribute as String, "Limiter On")
         builder.setAttribute(controlsCheckbox, kAXValueAttribute as String, false)
-        builder.setChildren(controlsLabelCell, [controlsLabel])
-        builder.setChildren(controlsControlCell, [controlsCheckbox])
-        builder.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
+        builder.setChildren(controlsLabelCell, [controlsLabel, controlsCheckbox])
+        builder.setChildren(controlsRow, [controlsLabelCell])
         builder.setRole(controlsHeadingRow, kAXRowRole as String)
         builder.setRole(controlsHeadingCell, kAXCellRole as String)
         builder.setRole(controlsHeadingLabel, kAXStaticTextRole as String)
@@ -709,27 +864,23 @@ struct ControlsViewBooleanParameterWriterTests {
     private func fixture(
         label: String?,
         controlRoles: [String],
-        axRowsReadStatus: Int32? = nil
+        axRowsReadStatus: Int32? = nil,
+        roleReadFailureElementIDs: Set<Int> = []
     ) -> (builder: FakeAXRuntimeBuilder, window: AXUIElement, runtime: AXHelpers.Runtime) {
         let builder = FakeAXRuntimeBuilder()
         let window = builder.element(100)
         let table = builder.element(101)
         let row = builder.element(102)
         let labelCell = builder.element(103)
-        let controlCell = builder.element(104)
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setRole(table, kAXTableRole as String)
         builder.setRole(row, kAXRowRole as String)
         builder.setRole(labelCell, kAXCellRole as String)
-        builder.setRole(controlCell, kAXCellRole as String)
         if let label {
             let text = builder.element(105)
             builder.setRole(text, kAXStaticTextRole as String)
             builder.setAttribute(text, kAXValueAttribute as String, label)
-            builder.setChildren(labelCell, [text])
-        } else {
-            builder.setChildren(labelCell, [])
         }
         let controls = controlRoles.enumerated().map { offset, role -> AXUIElement in
             let control = builder.element(110 + offset)
@@ -737,14 +888,26 @@ struct ControlsViewBooleanParameterWriterTests {
             builder.setAttribute(control, kAXValueAttribute as String, 0)
             return control
         }
-        builder.setChildren(controlCell, controls)
-        builder.setChildren(row, [labelCell, controlCell])
+        let labelContents: [AXUIElement]
+        if label == nil {
+            labelContents = controls
+        } else {
+            labelContents = [builder.element(105)] + controls
+        }
+        builder.setChildren(labelCell, labelContents)
+        builder.setChildren(row, [labelCell])
         builder.setChildren(table, [row])
         builder.setAttribute(table, kAXRowsAttribute as String, [row])
         builder.setChildren(window, [table])
         let runtime = builder.makeAXRuntime(
             appElement: builder.element(99),
             attributeValueResultHandler: { element, attribute in
+                if attribute == (kAXRoleAttribute as String),
+                   roleReadFailureElementIDs.contains(where: {
+                       CFEqual(element, builder.element($0))
+                   }) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 guard let axRowsReadStatus,
                       builder.elementID(element) == builder.elementID(table),
                       attribute == (kAXRowsAttribute as String) else {

@@ -68,6 +68,7 @@ private final class LiveFixture: @unchecked Sendable {
         thresholdDescription: String = "Threshold",
         pluginSlotName: String = "Compressor",
         beforeValue: Double = 51,
+        sliderBeforeReadable: Bool = true,
         pluginWindowPresent: Bool = true,
         openWindowOnSlotPress: Bool = false,
         forcedAfterValue: Double? = nil,
@@ -78,6 +79,7 @@ private final class LiveFixture: @unchecked Sendable {
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
         sliderWriteBehavior: SliderWriteBehavior = .direct,
+        rejectSliderWrites: Bool = false,
         sliderDisplayUnit: String = "%",
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
@@ -98,7 +100,12 @@ private final class LiveFixture: @unchecked Sendable {
         pluginWindowViewSwitcherDescription: String = "보기",
         viewMenuPressChangesStructure: Bool = true,
         viewMenuPressChangesTitle: Bool = true,
+        viewMenuSelectionSetsUnconfirmedStructure: Bool = false,
         viewMenuBecomesUnavailableAfterControlsSelection: Bool = false,
+        viewMenuReadFailsAfterFirstSelection: Bool = false,
+        invalidateTargetSlotAfterViewSelection: Bool = false,
+        mutatePluginHeaderAfterViewSelection: Bool = false,
+        ambiguousEditorSliderAfterViewSelection: Bool = false,
         viewMenuRevealAfterPolls: Int? = 4,
         viewSettleDelay: TimeInterval = 0.5
     ) {
@@ -126,7 +133,6 @@ private final class LiveFixture: @unchecked Sendable {
         let controlsTable = b.element(100_903)
         let controlsRow = b.element(100_904)
         let controlsLabelCell = b.element(100_905)
-        let controlsControlCell = b.element(100_906)
         let controlsLabel = b.element(100_907)
         let controlsCheckbox = b.element(100_908)
         let controlsHeadingRow = b.element(100_910)
@@ -207,7 +213,11 @@ private final class LiveFixture: @unchecked Sendable {
         //     include the plug-in display name at no fixed index. ---
         b.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
         b.setAttribute(slider, kAXDescriptionAttribute as String, thresholdDescription)
-        b.setAttribute(slider, kAXValueAttribute as String, beforeValue)
+        b.setAttribute(
+            slider,
+            kAXValueAttribute as String,
+            sliderBeforeReadable ? beforeValue : NSNull()
+        )
         b.setAttribute(slider, kAXMinValueAttribute as String, 0.0)
         b.setAttribute(slider, kAXMaxValueAttribute as String, 100.0)
         let formatSliderDisplay: @Sendable (Double) -> String = { value in
@@ -238,7 +248,15 @@ private final class LiveFixture: @unchecked Sendable {
                 b.setAttribute(text, kAXValueAttribute as String, value)
                 return text
             }
-        var pluginWindowChildren = [pluginBypass, pluginLink, slider] + staticTexts
+        let ambiguousEditorSlider = b.element(100_913)
+        if ambiguousEditorSliderAfterViewSelection {
+            b.setAttribute(ambiguousEditorSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+            b.setAttribute(ambiguousEditorSlider, kAXDescriptionAttribute as String, thresholdDescription)
+            b.setAttribute(ambiguousEditorSlider, kAXValueAttribute as String, beforeValue)
+        }
+        var pluginWindowChildren = [pluginBypass, pluginLink, slider]
+            + (ambiguousEditorSliderAfterViewSelection ? [ambiguousEditorSlider] : [])
+            + staticTexts
         b.setRole(controlsViewSwitcher, kAXMenuButtonRole as String)
         b.setAttribute(
             controlsViewSwitcher,
@@ -261,7 +279,7 @@ private final class LiveFixture: @unchecked Sendable {
             + staticTexts
             + [controlsViewSwitcher]
         // Controls view itself is identified by a parameter row whose label
-        // and control occupy sibling AXCells. Keep that measured shape even
+        // and control occupy one AXCell as siblings. Keep that measured shape even
         // when this fixture is exercising an editor-slider write rather than
         // a Controls-view checkbox write.
         b.setRole(controlsTable, kAXTableRole as String)
@@ -276,7 +294,6 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(controlsTable, kAXRowsAttribute as String, [controlsHeadingRow, controlsRow])
         controlsViewWindowChildren += [controlsTable]
         b.setRole(controlsLabelCell, kAXCellRole as String)
-        b.setRole(controlsControlCell, kAXCellRole as String)
         b.setRole(controlsLabel, kAXStaticTextRole as String)
         b.setAttribute(
             controlsLabel,
@@ -285,9 +302,8 @@ private final class LiveFixture: @unchecked Sendable {
         )
         b.setRole(controlsCheckbox, controlsViewControlRole)
         b.setAttribute(controlsCheckbox, kAXValueAttribute as String, controlsCheckboxBefore)
-        b.setChildren(controlsLabelCell, [controlsLabel])
-        b.setChildren(controlsControlCell, [controlsCheckbox])
-        b.setChildren(controlsRow, [controlsLabelCell, controlsControlCell])
+        b.setChildren(controlsLabelCell, [controlsLabel, controlsCheckbox])
+        b.setChildren(controlsRow, [controlsLabelCell])
         // Controls view has rows, but no editor-view slider descriptions.
         // Keep its shape distinct from the native editor so a test cannot
         // accidentally keep relying on Threshold after the view changes.
@@ -306,6 +322,7 @@ private final class LiveFixture: @unchecked Sendable {
         // sticky parameter (readback != requested).
         let sliderKey = b.elementID(slider)
         let targetSlotKey = targetSlot.map { b.elementID($0) }
+        let targetSlotForViewMutation = targetSlot
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
         let controlsCheckboxKey = b.elementID(controlsCheckbox)
@@ -336,6 +353,10 @@ private final class LiveFixture: @unchecked Sendable {
             },
             childrenResultHandler: { element in
                 guard CFEqual(element, controlsViewSwitcher), menuOpen.value else { return nil }
+                if viewMenuReadFailsAfterFirstSelection,
+                   controlsViewMenuPressCount.value + editorViewMenuPressCount.value > 0 {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 guard let revealAfterPolls = viewMenuRevealAfterPolls else {
                     return .success([])
                 }
@@ -363,6 +384,9 @@ private final class LiveFixture: @unchecked Sendable {
                     ?? 0
                 let writeIndex = sliderWriteCount.value
                 sliderWriteCount.value += 1
+                if rejectSliderWrites {
+                    return false
+                }
                 let landed: Double?
                 switch writeBehavior {
                 case .direct:
@@ -410,7 +434,18 @@ private final class LiveFixture: @unchecked Sendable {
                     menuVisible.value = false
                     if key == controlsViewMenuItemKey {
                         controlsViewMenuPressCount.value += 1
-                        if viewMenuPressChangesStructure {
+                        if invalidateTargetSlotAfterViewSelection, let targetSlotForViewMutation {
+                            b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
+                        }
+                        if mutatePluginHeaderAfterViewSelection, staticTexts.indices.contains(1) {
+                            b.setAttribute(staticTexts[1], kAXValueAttribute as String, "Noise Gate")
+                        }
+                        if viewMenuSelectionSetsUnconfirmedStructure {
+                            pendingPluginWindowChildren.value = (
+                                children: [controlsViewSwitcher],
+                                settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                            )
+                        } else if viewMenuPressChangesStructure {
                             pendingPluginWindowChildren.value = (
                                 children: controlsWindowChildren,
                                 settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
@@ -422,7 +457,18 @@ private final class LiveFixture: @unchecked Sendable {
                         return true
                     }
                     editorViewMenuPressCount.value += 1
-                    if viewMenuPressChangesStructure {
+                    if invalidateTargetSlotAfterViewSelection, let targetSlotForViewMutation {
+                        b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
+                    }
+                    if mutatePluginHeaderAfterViewSelection, staticTexts.indices.contains(1) {
+                        b.setAttribute(staticTexts[1], kAXValueAttribute as String, "Noise Gate")
+                    }
+                    if viewMenuSelectionSetsUnconfirmedStructure {
+                        pendingPluginWindowChildren.value = (
+                            children: [controlsViewSwitcher],
+                            settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
+                        )
+                    } else if viewMenuPressChangesStructure {
                         pendingPluginWindowChildren.value = (
                             children: editorWindowChildren,
                             settlesAt: Date().addingTimeInterval(max(0, viewSettleDelay))
@@ -549,6 +595,15 @@ private func runLive(
     ) as! [String: Any]
 }
 
+private func reportsFailedPluginViewRestoration(_ envelope: [String: Any]) -> Bool {
+    guard let attempted = envelope["plugin_view_restore_attempted"] as? Bool,
+          let observed = envelope["plugin_view_restore_observed"] as? Bool,
+          let leftChanged = envelope["plugin_view_left_changed"] as? Bool else {
+        return false
+    }
+    return attempted && !observed && leftChanged
+}
+
 /// A second same-track Compressor editor for the duplicate-insert post-count
 /// case. Its distinct AX elements intentionally share every non-geometry
 /// identity attribute the live editors share.
@@ -599,7 +654,6 @@ private func controlsViewCompressorEditorWindow(
     let table = b.element(baseID + 5)
     let row = b.element(baseID + 6)
     let labelCell = b.element(baseID + 7)
-    let controlCell = b.element(baseID + 8)
     let label = b.element(baseID + 9)
     let checkbox = b.element(baseID + 10)
 
@@ -613,14 +667,12 @@ private func controlsViewCompressorEditorWindow(
     b.setRole(table, kAXTableRole as String)
     b.setRole(row, kAXRowRole as String)
     b.setRole(labelCell, kAXCellRole as String)
-    b.setRole(controlCell, kAXCellRole as String)
     b.setRole(label, kAXStaticTextRole as String)
     b.setAttribute(label, kAXValueAttribute as String, "Limiter On")
     b.setRole(checkbox, kAXCheckBoxRole as String)
     b.setAttribute(checkbox, kAXValueAttribute as String, false)
-    b.setChildren(labelCell, [label])
-    b.setChildren(controlCell, [checkbox])
-    b.setChildren(row, [labelCell, controlCell])
+    b.setChildren(labelCell, [label, checkbox])
+    b.setChildren(row, [labelCell])
     b.setChildren(table, [row])
     b.setAttribute(table, kAXRowsAttribute as String, [row])
     b.setRole(window, kAXWindowRole as String)
@@ -1211,6 +1263,202 @@ private func namedEQBandParams(
     #expect(restorationFailureWasVisible)
     #expect(observedStructure == "controls")
     #expect(fixtureWasLeftInControls)
+}
+
+@Test func testInitialViewConfirmationFailureReportsItsFailedCompensatingRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuSelectionSetsUnconfirmedStructure: true,
+        viewMenuReadFailsAfterFirstSelection: true,
+        viewSettleDelay: 0
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedPluginViewNotConfirmed = error == "plugin_view_not_confirmed"
+    #expect(reportedPluginViewNotConfirmed)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
+}
+
+@Test func testTargetRevalidationStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        viewMenuReadFailsAfterFirstSelection: true,
+        invalidateTargetSlotAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noCheckboxPress)
+}
+
+@Test func testPluginIdentityFailureStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        viewMenuReadFailsAfterFirstSelection: true,
+        mutatePluginHeaderAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noCheckboxPress)
+}
+
+@Test func testSliderAmbiguityStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true,
+        ambiguousEditorSliderAfterViewSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedUnresolvedIdentity = error == "window_identity_unresolved"
+    #expect(reportedUnresolvedIdentity)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
+}
+
+@Test func testDirectWriteRejectionStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        rejectSliderWrites: true,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let parameterMayBeChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let reportedAXWriteFailure = error == "ax_write_failed"
+    #expect(reportedAXWriteFailure)
+    #expect(restorationFailureWasVisible)
+    #expect(rollbackAttempted)
+    #expect(parameterMayBeChanged)
+}
+
+@Test func testDirectReadbackLossRollsBackAndReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        sliderWriteBehavior: .scripted([nil, 51]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let rollbackObserved = try #require(result["rollback_observed"] as? Double)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackWasWritten = fixture.sliderWriteCount.value == 2
+    let reportedReadbackLoss = error == "readback_lost_after_write"
+    let rollbackObservedOriginalValue = rollbackObserved == 51
+    let parameterWasNotLeftChanged = !parameterLeftChanged
+    #expect(reportedReadbackLoss)
+    #expect(rollbackAttempted)
+    #expect(rolledBack)
+    #expect(rollbackObservedOriginalValue)
+    #expect(safeToRetry)
+    #expect(parameterWasNotLeftChanged)
+    #expect(restorationFailureWasVisible)
+    #expect(rollbackWasWritten)
+}
+
+@Test func testDirectReadbackLossWithFailedRollbackReportsParameterLeftChanged() async throws {
+    let fixture = LiveFixture(
+        sliderWriteBehavior: .scripted([nil, nil]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let rollbackAttempted = try #require(result["rollback_attempted"] as? Bool)
+    let rolledBack = try #require(result["rolled_back"] as? Bool)
+    let parameterLeftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let rollbackWasNotObserved = !rolledBack
+    let retryIsNotSafe = !safeToRetry
+    #expect(rollbackAttempted)
+    #expect(rollbackWasNotObserved)
+    #expect(parameterLeftChanged)
+    #expect(retryIsNotSafe)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testReadbackMismatchStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        forcedAfterValue: 40,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let reportedReadbackMismatch = error == "readback_mismatch"
+    #expect(reportedReadbackMismatch)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testIncrementWalkFailureStateCReportsFailedViewRestore() async throws {
+    let fixture = LiveFixture(
+        thresholdDescription: channelEQFixtureAXDescription,
+        pluginSlotName: "Channel EQ",
+        beforeValue: 0,
+        sliderWriteBehavior: .scripted([0]),
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = try await runChannelEQFixture(
+        fixture: fixture,
+        params: channelEQFixtureParams(value: "3", unit: "raw_ax_value"),
+        writeMethod: "ax_slider_increment_walk"
+    )
+
+    let error = try #require(result["error"] as? String)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let reportedNoIncrementProgress = error == "increment_walk_no_progress"
+    #expect(reportedNoIncrementProgress)
+    #expect(restorationFailureWasVisible)
+}
+
+@Test func testUnreadableDirectBeforeStateRefusesWithoutWriting() async throws {
+    let fixture = LiveFixture(
+        sliderBeforeReadable: false,
+        controlsViewInitiallySelected: true,
+        viewMenuReadFailsAfterFirstSelection: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams())
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
+    let noSliderWrite = fixture.sliderWriteCount.value == 0
+    let reportedReadbackUnavailable = error == "readback_unavailable"
+    let writeWasNotAttempted = !writeAttempted
+    #expect(reportedReadbackUnavailable)
+    #expect(writeWasNotAttempted)
+    #expect(restorationFailureWasVisible)
+    #expect(noSliderWrite)
 }
 
 @Test func testWithinToleranceStillStateA() async {

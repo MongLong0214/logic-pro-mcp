@@ -20,6 +20,7 @@ enum ControlsViewBooleanParameterWriter {
         case rowStructureInvalid
         case controlMissing
         case controlAmbiguous
+        case accessibilityReadFailed
         case checkboxNotFound
         case sliderNotActuable
         case popupUnmeasured
@@ -38,11 +39,13 @@ enum ControlsViewBooleanParameterWriter {
             case .rowLabelNotFound:
                 return "no Controls-view AXRow label matched the requested parameter"
             case .rowStructureInvalid:
-                return "the labelled Controls-view AXRow did not place its label and control in sibling AXCells"
+                return "the labelled Controls-view AXRow did not expose one AXCell with its label and control as siblings"
             case .controlMissing:
                 return "the labelled Controls-view AXRow exposes no candidate control"
             case .controlAmbiguous:
                 return "the labelled Controls-view AXRow exposes several candidate controls; no control was chosen by position"
+            case .accessibilityReadFailed:
+                return "an AX role, child list, or label-value read failed while binding the Controls-view AXRow; no partially classified control was used"
             case .checkboxNotFound:
                 return "the labelled Controls-view AXRow did not resolve to an AXCheckBox"
             case .sliderNotActuable:
@@ -134,7 +137,7 @@ enum ControlsViewBooleanParameterWriter {
 
     enum ViewPreparationResult {
         case ready(ViewSession)
-        case refused(ViewSwitchFailure)
+        case refused(ViewSwitchFailure, restoration: ViewRestoration?)
     }
 
     struct ViewRestoration: Sendable, Equatable {
@@ -170,9 +173,10 @@ enum ControlsViewBooleanParameterWriter {
             self.runtime = runtime
         }
 
-        /// Restoration is idempotent. A failed restore is logged and exposed
-        /// in successful write metadata by the caller; the already-observed
-        /// parameter-write verdict is never recast as though it had not run.
+        /// Restoration is idempotent. Its observed outcome is serialized by the
+        /// caller before it returns either a successful write or a State C; the
+        /// already-observed parameter-write verdict is never recast as though it
+        /// had not run.
         func restore() -> ViewRestoration {
             guard !restorationFinished else {
                 return ViewRestoration(attempted: false, confirmed: true, observedStructure: nil)
@@ -200,10 +204,11 @@ enum ControlsViewBooleanParameterWriter {
                     observedStructure: entryView.rawValue
                 )
             case .refused:
+                let observed = observedView(in: window, runtime: runtime)
                 return ViewRestoration(
                     attempted: true,
-                    confirmed: false,
-                    observedStructure: observedView(in: window, runtime: runtime)?.rawValue
+                    confirmed: observed == entryView,
+                    observedStructure: observed?.rawValue
                 )
             }
         }
@@ -246,13 +251,13 @@ enum ControlsViewBooleanParameterWriter {
         }
         guard measured.count == 1, let switcher = measured.first else {
             if measured.count > 1 {
-                return .refused(.viewSwitcherAmbiguous)
+                return .refused(.viewSwitcherAmbiguous, restoration: nil)
             }
-            return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale)
+            return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale, restoration: nil)
         }
 
         guard let entryView = observedView(in: window, runtime: runtime) else {
-            return .refused(.entryViewNotConfirmed)
+            return .refused(.entryViewNotConfirmed, restoration: nil)
         }
 
         switch switchView(
@@ -277,8 +282,9 @@ enum ControlsViewBooleanParameterWriter {
             // target structure did not settle before its deadline. Re-select
             // the entry view best-effort before refusing, so failed selection
             // paths do not strand it.
+            let restoration: ViewRestoration?
             if targetSelectionAttempted {
-                _ = switchView(
+                switch switchView(
                     to: entryView,
                     in: window,
                     switcher: switcher,
@@ -286,18 +292,45 @@ enum ControlsViewBooleanParameterWriter {
                     confirmationTimeout: confirmationTimeout,
                     forceSelection: true,
                     runtime: runtime
-                )
+                ) {
+                case let .confirmed(switched):
+                    restoration = ViewRestoration(
+                        attempted: switched,
+                        confirmed: true,
+                        observedStructure: entryView.rawValue
+                    )
+                case .refused:
+                    let observed = observedView(in: window, runtime: runtime)
+                    restoration = ViewRestoration(
+                        attempted: true,
+                        confirmed: observed == entryView,
+                        observedStructure: observed?.rawValue
+                    )
+                }
+            } else {
+                restoration = nil
             }
-            return .refused(failure)
+            return .refused(failure, restoration: restoration)
         }
     }
 
-    /// The native editor is signaled by a parameter-bearing slider. Controls
-    /// requires at least one AXRow with a nonempty AXStaticText label in one
-    /// AXCell and an interactive control in a sibling AXCell; a browser/preset
-    /// table has no such parameter-control pair, so its rows cannot prove
-    /// Controls. A title-only slider is Editor evidence only when that Controls
-    /// discriminator is absent.
+    /// The native editor is signaled by a parameter-bearing slider. A described
+    /// slider anywhere in the window is Editor evidence and wins over every
+    /// table shape. Controls is then recognized by at least one row with one
+    /// cell, one nonempty AXStaticText label, and a control in that label's
+    /// sibling subtree. This is deliberately not an identity proof for an
+    /// arbitrary label/control table: without the described-slider evidence,
+    /// AX exposes no structural fact that distinguishes such a table from
+    /// Controls.
+    ///
+    /// Measured 2026-09-02, Compressor editor window "Absolute Zero": one
+    /// AXTable at depth 2 had AXRows status 0 and 29 rows; every row had exactly
+    /// one AXCell. `row[12]` was AXRow → AXCell → AXStaticText "Limiter On:"
+    /// and AXCheckBox value "0" as siblings. `row[0]` was AXRow → AXCell →
+    /// AXStaticText "Threshold:", an AXGroup-wrapped AXSlider, and a bare
+    /// AXSlider with AXValueIndicator. No measured row used sibling AXCells for
+    /// label/control. The two slider-shaped candidates are intentionally still
+    /// ambiguous; this locator never chooses one by traversal position.
     private static func observedView(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -501,11 +534,19 @@ enum ControlsViewBooleanParameterWriter {
             of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
         ).matches
         guard tables.count == 1, let table = tables.first else { return false }
-        guard let rows = controlsRows(in: table, runtime: runtime) else { return false }
+        guard case let .success(rows) = controlsRows(in: table, runtime: runtime) else { return false }
         // Heading and section rows have no interactive control in the live
         // table. A Controls view is bound by the presence of at least one
         // measured label/control pair, not by requiring every row to be one.
-        return rows.contains { rowCarriesParameterPair($0, runtime: runtime) }
+        for row in rows {
+            switch rowCarriesParameterPair(row, runtime: runtime) {
+            case .success(true):
+                return true
+            case .success(false), .failure:
+                continue
+            }
+        }
+        return false
     }
 
     /// Resolve a row-label address without positional fallbacks. A candidate
@@ -517,13 +558,26 @@ enum ControlsViewBooleanParameterWriter {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> LocateResult {
-        let tables = AXHelpers.censusDescendant(
-            of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
-        ).matches
+        let tables: [AXUIElement]
+        switch descendantElements(of: window, maxDepth: 8, runtime: runtime) {
+        case let .success(elements):
+            tables = elements.compactMap { element, role in
+                role == (kAXTableRole as String) ? element : nil
+            }
+        case .failure:
+            return .refused(.accessibilityReadFailed)
+        }
         guard tables.count == 1, let table = tables.first else {
             return .refused(tables.isEmpty ? .controlsViewTableNotFound : .controlsViewTableAmbiguous)
         }
-        guard let rows = controlsRows(in: table, runtime: runtime) else {
+        let rows: [AXUIElement]
+        switch controlsRows(in: table, runtime: runtime) {
+        case let .success(observed):
+            rows = observed
+        case .failure:
+            return .refused(.accessibilityReadFailed)
+        }
+        guard !rows.isEmpty else {
             return .refused(.controlsViewTableNotFound)
         }
 
@@ -531,26 +585,54 @@ enum ControlsViewBooleanParameterWriter {
         var matchingRows: [[AXUIElement]] = []
         var sawMissingLabel = false
         var sawAmbiguousLabel = false
-        for row in rows where AXHelpers.getRole(row, runtime: runtime) == (kAXRowRole as String) {
-            guard let cells = rowCells(in: row, runtime: runtime) else {
+        for row in rows {
+            let rowRole: String?
+            switch roleResult(of: row, runtime: runtime) {
+            case let .success(observed):
+                rowRole = observed
+            case .failure:
+                return .refused(.accessibilityReadFailed)
+            }
+            guard rowRole == (kAXRowRole as String) else { continue }
+            let cells: [AXUIElement]
+            switch rowCells(in: row, runtime: runtime) {
+            case let .success(observed):
+                cells = observed
+            case .failure:
+                return .refused(.accessibilityReadFailed)
+            }
+            guard !cells.isEmpty else {
                 sawMissingLabel = true
                 continue
             }
-            let labels = rowLabels(in: cells, runtime: runtime)
+            let labels: [RowLabel]
+            switch rowLabels(in: cells, runtime: runtime) {
+            case let .success(observed):
+                labels = observed
+            case .failure:
+                return .refused(.accessibilityReadFailed)
+            }
             guard labels.count == 1, let label = labels.first else {
                 sawMissingLabel = sawMissingLabel || labels.isEmpty
                 sawAmbiguousLabel = sawAmbiguousLabel || labels.count > 1
                 continue
             }
             if normalizedLabel(label.value) == target {
-                guard controlsAreConfinedToCells(in: row, cells: cells, runtime: runtime) else {
+                guard cells.count == 1 else {
                     return .refused(.rowStructureInvalid)
                 }
-                guard candidateControls(in: label.cell, runtime: runtime).isEmpty else {
-                    return .refused(.rowStructureInvalid)
+                let controls: [AXUIElement]
+                switch candidateControls(
+                    beside: label.element,
+                    in: label.cell,
+                    runtime: runtime
+                ) {
+                case let .success(observed):
+                    controls = observed
+                case .failure:
+                    return .refused(.accessibilityReadFailed)
                 }
-                let siblingCells = cells.filter { !CFEqual($0, label.cell) }
-                matchingRows.append(candidateControls(in: siblingCells, runtime: runtime))
+                matchingRows.append(controls)
             }
         }
 
@@ -565,7 +647,13 @@ enum ControlsViewBooleanParameterWriter {
         guard controls.count == 1, let control = controls.first else {
             return .refused(controls.isEmpty ? .controlMissing : .controlAmbiguous)
         }
-        let role = AXHelpers.getRole(control, runtime: runtime)
+        let role: String?
+        switch roleResult(of: control, runtime: runtime) {
+        case let .success(observed):
+            role = observed
+        case .failure:
+            return .refused(.accessibilityReadFailed)
+        }
         if role == (kAXCheckBoxRole as String) {
             return .found(.checkBox(control))
         }
@@ -649,128 +737,294 @@ enum ControlsViewBooleanParameterWriter {
     private static func controlsRows(
         in table: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [AXUIElement]? {
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         switch AXHelpers.getAXUIElementArrayRead(
             table,
             kAXRowsAttribute as String,
             runtime: runtime
         ) {
         case let .success(.elements(rows)):
-            return rows
+            return .success(rows)
         case .success(.absent):
-            switch AXHelpers.childrenResult(table, runtime: runtime) {
-            case let .success(children):
-                return children.filter {
-                    AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
+            return directChildrenWithRoles(of: table, runtime: runtime).map { children in
+                children.compactMap { element, role in
+                    role == (kAXRowRole as String) ? element : nil
                 }
-            case .failure:
-                return nil
             }
         case .failure(let error) where error.isDefinitiveAbsence:
-            switch AXHelpers.childrenResult(table, runtime: runtime) {
-            case let .success(children):
-                return children.filter {
-                    AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
+            return directChildrenWithRoles(of: table, runtime: runtime).map { children in
+                children.compactMap { element, role in
+                    role == (kAXRowRole as String) ? element : nil
                 }
-            case .failure:
-                return nil
             }
-        case .success(.malformed), .failure:
-            return nil
+        case .success(.malformed):
+            return .success([])
+        case let .failure(error):
+            return .failure(error)
         }
     }
 
     private struct RowLabel {
         let cell: AXUIElement
+        let element: AXUIElement
         let value: String
     }
+
+    private typealias ElementRole = (element: AXUIElement, role: String?)
 
     private static func rowCells(
         in row: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [AXUIElement]? {
-        switch AXHelpers.childrenResult(row, runtime: runtime) {
-        case let .success(children):
-            return children.filter {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXCellRole as String)
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        directChildrenWithRoles(of: row, runtime: runtime).map { children in
+            children.compactMap { element, role in
+                role == (kAXCellRole as String) ? element : nil
             }
-        case .failure:
-            return nil
         }
     }
 
     private static func rowLabels(
         in cells: [AXUIElement],
         runtime: AXHelpers.Runtime
-    ) -> [RowLabel] {
-        cells.flatMap { cell in
-            AXHelpers.findAllDescendants(
-                of: cell,
-                role: kAXStaticTextRole,
-                maxDepth: 4,
-                runtime: runtime
-            ).compactMap { text in
-                let value = AXValueExtractors.extractTextValue(text, runtime: runtime)
+    ) -> Result<[RowLabel], AXHelpers.AXStatusError> {
+        var labels: [RowLabel] = []
+        for cell in cells {
+            let children: [ElementRole]
+            switch directChildrenWithRoles(of: cell, runtime: runtime) {
+            case let .success(observed):
+                children = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            for (element, role) in children where role == (kAXStaticTextRole as String) {
+                let value: String?
+                switch textValueResult(of: element, runtime: runtime) {
+                case let .success(observed):
+                    value = observed
+                case let .failure(error):
+                    return .failure(error)
+                }
                 let normalized = normalizedLabel(value ?? "")
-                return normalized.isEmpty ? nil : RowLabel(cell: cell, value: normalized)
+                if !normalized.isEmpty {
+                    labels.append(RowLabel(cell: cell, element: element, value: normalized))
+                }
             }
         }
+        return .success(labels)
     }
 
     private static func candidateControls(
-        in element: AXUIElement,
+        beside label: AXUIElement,
+        in cell: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [AXUIElement] {
-        AXHelpers.findAllDescendants(of: element, maxDepth: 5, runtime: runtime).filter { candidate in
-            let role = AXHelpers.getRole(candidate, runtime: runtime)
-            return interactiveControlRoles.contains(role ?? "")
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        let siblings: [ElementRole]
+        switch directChildrenWithRoles(of: cell, runtime: runtime) {
+        case let .success(observed):
+            siblings = observed
+        case let .failure(error):
+            return .failure(error)
         }
-    }
-
-    private static func candidateControls(
-        in cells: [AXUIElement],
-        runtime: AXHelpers.Runtime
-    ) -> [AXUIElement] {
-        cells.flatMap { candidateControls(in: $0, runtime: runtime) }
-    }
-
-    private static func controlsAreConfinedToCells(
-        in row: AXUIElement,
-        cells: [AXUIElement],
-        runtime: AXHelpers.Runtime
-    ) -> Bool {
-        let controlsInCells = candidateControls(in: cells, runtime: runtime)
-        let controlsInRow = candidateControls(in: row, runtime: runtime)
-        guard controlsInCells.count == controlsInRow.count else { return false }
-        return controlsInRow.allSatisfy { candidate in
-            controlsInCells.contains { CFEqual($0, candidate) }
+        var controls: [AXUIElement] = []
+        for sibling in siblings where !CFEqual(sibling.element, label) {
+            switch collectCandidateControls(
+                from: sibling.element,
+                knownRole: sibling.role,
+                remainingDepth: 5,
+                runtime: runtime,
+                into: &controls
+            ) {
+            case .success:
+                continue
+            case let .failure(error):
+                return .failure(error)
+            }
         }
+        return .success(controls)
     }
 
     private static func rowCarriesParameterPair(
         _ row: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
-        guard let cells = rowCells(in: row, runtime: runtime) else {
-            return false
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        let role: String?
+        switch roleResult(of: row, runtime: runtime) {
+        case let .success(observed):
+            role = observed
+        case let .failure(error):
+            return .failure(error)
         }
-        let labels = rowLabels(in: cells, runtime: runtime)
-        guard labels.count == 1,
-              let label = labels.first,
-              controlsAreConfinedToCells(in: row, cells: cells, runtime: runtime) else {
-            return false
+        guard role == (kAXRowRole as String) else { return .success(false) }
+        let cells: [AXUIElement]
+        switch rowCells(in: row, runtime: runtime) {
+        case let .success(observed):
+            cells = observed
+        case let .failure(error):
+            return .failure(error)
         }
-        // Keep the classifier's discriminator identical to `locate`'s binding:
-        // a control beside the label in its own AXCell is not a parameter pair.
-        // Otherwise an invalid row could certify Controls even though writes
-        // correctly refuse to bind it.
-        guard candidateControls(in: label.cell, runtime: runtime).isEmpty else {
-            return false
+        guard cells.count == 1 else { return .success(false) }
+        let labels: [RowLabel]
+        switch rowLabels(in: cells, runtime: runtime) {
+        case let .success(observed):
+            labels = observed
+        case let .failure(error):
+            return .failure(error)
         }
-        return candidateControls(
-            in: cells.filter { !CFEqual($0, label.cell) },
+        guard labels.count == 1, let label = labels.first else { return .success(false) }
+        // The classifier intentionally requires only a label/control relation,
+        // while `locate` requires exactly one candidate before it can bind a
+        // write. Thus the measured Threshold row helps prove Controls even
+        // though its two slider-shaped candidates still refuse actuation.
+        return candidateControls(beside: label.element, in: label.cell, runtime: runtime)
+            .map { !$0.isEmpty }
+    }
+
+    private static func roleResult(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            element,
+            kAXRoleAttribute as String,
             runtime: runtime
-        ).count == 1
+        )
+        switch read {
+        case let .success(role):
+            return .success(role)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    private static func textValueResult(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            element,
+            kAXValueAttribute as String,
+            runtime: runtime
+        )
+        switch read {
+        case let .success(value):
+            return .success(value as? String)
+        case let .failure(error) where error.isDefinitiveAbsence:
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    private static func directChildrenWithRoles(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[ElementRole], AXHelpers.AXStatusError> {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error) where error.isDefinitiveAbsence:
+            children = []
+        case let .failure(error):
+            return .failure(error)
+        }
+        var observed: [ElementRole] = []
+        for child in children {
+            switch roleResult(of: child, runtime: runtime) {
+            case let .success(role):
+                observed.append((child, role))
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(observed)
+    }
+
+    private static func descendantElements(
+        of element: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[ElementRole], AXHelpers.AXStatusError> {
+        var found: [ElementRole] = []
+        switch collectDescendantElements(
+            below: element,
+            remainingDepth: maxDepth,
+            runtime: runtime,
+            into: &found
+        ) {
+        case .success:
+            return .success(found)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    private static func collectDescendantElements(
+        below element: AXUIElement,
+        remainingDepth: Int,
+        runtime: AXHelpers.Runtime,
+        into found: inout [ElementRole]
+    ) -> Result<Void, AXHelpers.AXStatusError> {
+        guard remainingDepth > 0 else { return .success(()) }
+        let children: [ElementRole]
+        switch directChildrenWithRoles(of: element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+        for child in children {
+            found.append(child)
+            switch collectDescendantElements(
+                below: child.element,
+                remainingDepth: remainingDepth - 1,
+                runtime: runtime,
+                into: &found
+            ) {
+            case .success:
+                continue
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(())
+    }
+
+    private static func collectCandidateControls(
+        from element: AXUIElement,
+        knownRole: String?,
+        remainingDepth: Int,
+        runtime: AXHelpers.Runtime,
+        into controls: inout [AXUIElement]
+    ) -> Result<Void, AXHelpers.AXStatusError> {
+        guard remainingDepth > 0 else { return .success(()) }
+        if interactiveControlRoles.contains(knownRole ?? "") {
+            controls.append(element)
+        }
+        let children: [ElementRole]
+        switch directChildrenWithRoles(of: element, runtime: runtime) {
+        case let .success(observed):
+            children = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+        for child in children {
+            switch collectCandidateControls(
+                from: child.element,
+                knownRole: child.role,
+                remainingDepth: remainingDepth - 1,
+                runtime: runtime,
+                into: &controls
+            ) {
+            case .success:
+                continue
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(())
     }
 
     /// The first four roles are the Controls-view roles observed on 2026-09-02.
