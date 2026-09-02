@@ -5,6 +5,7 @@ protocol CoreMIDIEngineProtocol: Actor {
     func start() throws
     func stop()
     var isActive: Bool { get }
+    var unavailableReason: String? { get }
     func sendNoteOn(channel: UInt8, note: UInt8, velocity: UInt8) throws
     func sendNoteOff(channel: UInt8, note: UInt8, velocity: UInt8) throws
     func sendCC(channel: UInt8, controller: UInt8, value: UInt8) throws
@@ -12,6 +13,12 @@ protocol CoreMIDIEngineProtocol: Actor {
     func sendPitchBend(channel: UInt8, value: UInt16) throws
     func sendAftertouch(channel: UInt8, pressure: UInt8) throws
     func sendSysEx(_ bytes: [UInt8]) throws
+}
+
+extension CoreMIDIEngineProtocol {
+    /// Engines without a startup diagnostic still report their normal inactive
+    /// state. MIDIEngine overrides this to preserve a refused ownership claim.
+    var unavailableReason: String? { nil }
 }
 
 /// Actor wrapping CoreMIDI. Creates a virtual source (for sending MIDI to Logic Pro)
@@ -25,10 +32,37 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             _ name: String,
             _ onBytes: @escaping @Sendable ([UInt8]) -> Void
         ) -> (OSStatus, MIDIEndpointRef)
-        let disposeEndpoint: @Sendable (_ endpoint: MIDIEndpointRef) -> Void
+        let disposeEndpoint: @Sendable (_ endpoint: MIDIEndpointRef) -> OSStatus
         let disposeClient: @Sendable (_ client: MIDIClientRef) -> Void
         let sendMessage: @Sendable (_ source: MIDIEndpointRef, _ bytes: [UInt8]) -> OSStatus
         let endpointRuntime: VirtualMIDIEndpointRuntime
+        let acquireOwnershipLock: @Sendable () -> VirtualMIDIEndpointOwnershipLock.Acquisition
+
+        init(
+            createClient: @escaping @Sendable (_ name: String, _ onNotification: @escaping @Sendable (Int32) -> Void) -> (OSStatus, MIDIClientRef),
+            createSource: @escaping @Sendable (_ client: MIDIClientRef, _ name: String) -> (OSStatus, MIDIEndpointRef),
+            createDestination: @escaping @Sendable (
+                _ client: MIDIClientRef,
+                _ name: String,
+                _ onBytes: @escaping @Sendable ([UInt8]) -> Void
+            ) -> (OSStatus, MIDIEndpointRef),
+            disposeEndpoint: @escaping @Sendable (_ endpoint: MIDIEndpointRef) -> OSStatus,
+            disposeClient: @escaping @Sendable (_ client: MIDIClientRef) -> Void,
+            sendMessage: @escaping @Sendable (_ source: MIDIEndpointRef, _ bytes: [UInt8]) -> OSStatus,
+            endpointRuntime: VirtualMIDIEndpointRuntime,
+            acquireOwnershipLock: @escaping @Sendable () -> VirtualMIDIEndpointOwnershipLock.Acquisition = {
+                VirtualMIDIEndpointOwnershipLock.acquire()
+            }
+        ) {
+            self.createClient = createClient
+            self.createSource = createSource
+            self.createDestination = createDestination
+            self.disposeEndpoint = disposeEndpoint
+            self.disposeClient = disposeClient
+            self.sendMessage = sendMessage
+            self.endpointRuntime = endpointRuntime
+            self.acquireOwnershipLock = acquireOwnershipLock
+        }
 
         static let production = Runtime(
             createClient: { name, onNotification in
@@ -65,8 +99,9 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             },
             disposeEndpoint: { endpoint in
                 if endpoint != 0 {
-                    MIDIEndpointDispose(endpoint)
+                    return MIDIEndpointDispose(endpoint)
                 }
+                return noErr
             },
             disposeClient: { client in
                 if client != 0 {
@@ -98,8 +133,8 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
     private var client: MIDIClientRef = 0
     private var virtualSource: MIDIEndpointRef = 0
     private var virtualDestination: MIDIEndpointRef = 0
-    private var ownedEndpoints: Set<MIDIEndpointRef> = []
     private var isRunning = false
+    private var startupFailure: String?
     private let runtime: Runtime
 
     /// Stream of inbound MIDI packets from Logic Pro via the virtual destination.
@@ -122,7 +157,17 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
     /// Create the CoreMIDI client, virtual source, and virtual destination.
     func start() throws {
         guard !isRunning else { return }
+        startupFailure = nil
 
+        do {
+            try startResources()
+        } catch {
+            startupFailure = String(describing: error)
+            throw error
+        }
+    }
+
+    private func startResources() throws {
         let (clientStatus, createdClient) = runtime.createClient(
             ServerConfig.virtualMIDISourceName,
             MIDIEngine.logMIDINotification
@@ -130,6 +175,15 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         guard clientStatus == noErr else {
             throw MIDIEngineError.clientCreationFailed(clientStatus)
         }
+
+        let ownershipLock: VirtualMIDIEndpointOwnershipLock
+        do {
+            ownershipLock = try acquireOwnershipLock(named: ServerConfig.virtualMIDISourceName)
+        } catch {
+            runtime.disposeClient(createdClient)
+            throw error
+        }
+        defer { ownershipLock.release() }
 
         do {
             try rejectForeignEndpoint(named: ServerConfig.virtualMIDISourceName)
@@ -143,6 +197,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.sourceCreationFailed(sourceStatus)
         }
+        VirtualMIDIEndpointProcessOwnership.shared.claim(createdSource)
         do {
             try assignStableUniqueID(
                 to: createdSource,
@@ -150,17 +205,15 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
                 kind: .source
             )
         } catch {
-            runtime.disposeEndpoint(createdSource)
+            _ = disposeOwnedEndpoint(createdSource)
             runtime.disposeClient(createdClient)
             throw error
         }
-        ownedEndpoints.insert(createdSource)
 
         do {
             try rejectForeignEndpoint(named: ServerConfig.virtualMIDISinkName)
         } catch {
-            ownedEndpoints.remove(createdSource)
-            runtime.disposeEndpoint(createdSource)
+            _ = disposeOwnedEndpoint(createdSource)
             runtime.disposeClient(createdClient)
             throw error
         }
@@ -175,11 +228,11 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             }
         }
         guard destinationStatus == noErr else {
-            ownedEndpoints.remove(createdSource)
-            runtime.disposeEndpoint(createdSource)
+            _ = disposeOwnedEndpoint(createdSource)
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.destinationCreationFailed(destinationStatus)
         }
+        VirtualMIDIEndpointProcessOwnership.shared.claim(createdDestination)
         do {
             try assignStableUniqueID(
                 to: createdDestination,
@@ -187,13 +240,11 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
                 kind: .destination
             )
         } catch {
-            ownedEndpoints.remove(createdSource)
-            runtime.disposeEndpoint(createdDestination)
-            runtime.disposeEndpoint(createdSource)
+            _ = disposeOwnedEndpoint(createdDestination)
+            _ = disposeOwnedEndpoint(createdSource)
             runtime.disposeClient(createdClient)
             throw error
         }
-        ownedEndpoints.insert(createdDestination)
 
         client = createdClient
         virtualSource = createdSource
@@ -204,15 +255,19 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
 
     /// Tear down all CoreMIDI resources.
     func stop() {
-        guard isRunning else { return }
-        runtime.disposeEndpoint(virtualSource)
-        runtime.disposeEndpoint(virtualDestination)
-        runtime.disposeClient(client)
-        virtualSource = 0
-        virtualDestination = 0
-        ownedEndpoints.removeAll()
-        client = 0
+        guard isRunning || virtualSource != 0 || virtualDestination != 0 || client != 0 else { return }
+        if virtualSource != 0, disposeOwnedEndpoint(virtualSource) {
+            virtualSource = 0
+        }
+        if virtualDestination != 0, disposeOwnedEndpoint(virtualDestination) {
+            virtualDestination = 0
+        }
+        if client != 0 {
+            runtime.disposeClient(client)
+            client = 0
+        }
         isRunning = false
+        startupFailure = nil
         // v3.4.5 (H1 / P1-6): do NOT finish the inbound stream here. The
         // stream + continuation are created once in init() and cannot be
         // re-created (`inboundMessages` is a `let` the consumer holds). If
@@ -225,6 +280,8 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
     }
 
     var isActive: Bool { isRunning && client != 0 }
+
+    var unavailableReason: String? { startupFailure }
 
     // MARK: - Send: Notes
 
@@ -306,15 +363,57 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
     }
 
     private func rejectForeignEndpoint(named name: String) throws {
-        let census = runtime.endpointRuntime.census(named: name, ownedEndpoints: ownedEndpoints)
-        guard !census.hasForeignEndpoint else {
+        let census = runtime.endpointRuntime.census(named: name)
+        guard census.isObserved,
+              let endpointCount = census.endpointCount,
+              let hasForeignEndpoint = census.hasForeignEndpoint else {
+            Log.warn(
+                "Virtual MIDI endpoint '\(name)' census is unknown; skipping creation (\(census.reason ?? "no reason supplied"))",
+                subsystem: "midi"
+            )
+            throw MIDIEngineError.censusUnknown(name: name, census: census)
+        }
+        guard !hasForeignEndpoint else {
             Log.warn(
                 "Virtual MIDI endpoint '\(name)' is owned by another instance or is stale; skipping creation "
-                    + "(\(census.endpointCount) matching endpoint(s))",
+                    + "(\(endpointCount) matching endpoint(s))",
                 subsystem: "midi"
             )
             throw MIDIEngineError.foreignEndpointConflict(name: name, census: census)
         }
+    }
+
+    private func acquireOwnershipLock(named name: String) throws -> VirtualMIDIEndpointOwnershipLock {
+        switch runtime.acquireOwnershipLock() {
+        case .acquired(let lock):
+            return lock
+        case .held:
+            Log.warn(
+                "Virtual MIDI endpoint '\(name)' ownership lock is held by another process; skipping creation",
+                subsystem: "midi"
+            )
+            throw MIDIEngineError.ownershipLockHeld(name: name)
+        case .unavailable(let reason):
+            Log.warn(
+                "Virtual MIDI endpoint '\(name)' ownership lock is unavailable; skipping creation (\(reason))",
+                subsystem: "midi"
+            )
+            throw MIDIEngineError.ownershipLockUnavailable(name: name, reason: reason)
+        }
+    }
+
+    @discardableResult
+    private func disposeOwnedEndpoint(_ endpoint: MIDIEndpointRef) -> Bool {
+        let status = runtime.disposeEndpoint(endpoint)
+        guard status == noErr else {
+            Log.warn(
+                "Could not dispose virtual MIDI endpoint \(endpoint) (\(status)); retaining process ownership",
+                subsystem: "midi"
+            )
+            return false
+        }
+        VirtualMIDIEndpointProcessOwnership.shared.release(endpoint)
+        return true
     }
 
     private func assignStableUniqueID(
@@ -365,6 +464,9 @@ enum MIDIEngineError: Error, Sendable, CustomStringConvertible {
     case sendFailed(OSStatus)
     case invalidSysEx
     case foreignEndpointConflict(name: String, census: VirtualMIDIEndpointCensus)
+    case censusUnknown(name: String, census: VirtualMIDIEndpointCensus)
+    case ownershipLockHeld(name: String)
+    case ownershipLockUnavailable(name: String, reason: String)
     case uniqueIDCollision(name: String, kind: VirtualMIDIEndpointKind, uniqueID: Int32)
     case uniqueIDAssignmentFailed(name: String, kind: VirtualMIDIEndpointKind, status: OSStatus)
 
@@ -383,7 +485,13 @@ enum MIDIEngineError: Error, Sendable, CustomStringConvertible {
         case .invalidSysEx:
             return "Invalid SysEx"
         case .foreignEndpointConflict(let name, let census):
-            return "MIDI endpoint '\(name)' has \(census.endpointCount) foreign matching endpoint(s)"
+            return "MIDI endpoint '\(name)' ownership conflict: \(census.endpointCount ?? 0) matching endpoint(s) are held by another process or left by a stale endpoint"
+        case .censusUnknown(let name, let census):
+            return "MIDI endpoint '\(name)' was not created because its CoreMIDI endpoint census is unknown: \(census.reason ?? "no reason supplied")"
+        case .ownershipLockHeld(let name):
+            return "MIDI endpoint '\(name)' was not created because another process is checking or creating virtual MIDI endpoints"
+        case .ownershipLockUnavailable(let name, let reason):
+            return "MIDI endpoint '\(name)' was not created because cross-process ownership locking is unavailable: \(reason)"
         case .uniqueIDCollision(let name, let kind, let uniqueID):
             return "MIDI \(kind.rawValue) '\(name)' cannot claim stable unique ID \(uniqueID): another endpoint already holds it"
         case .uniqueIDAssignmentFailed(let name, let kind, let status):

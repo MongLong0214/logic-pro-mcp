@@ -454,6 +454,12 @@ actor MCUChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
+        // Health is a read-time CoreMIDI observation. Do not republish the
+        // startup census as though it still described current endpoint state.
+        let census = await transport.endpointCensus()
+        await cache.updateMCUConnection { conn in
+            conn.portCensus = census
+        }
         let ingress = feedbackIngress?.snapshot() ?? .empty
         if ingress.overflowed {
             return .unavailable(
@@ -467,16 +473,25 @@ actor MCUChannel: Channel {
         let conn = await cache.getMCUConnection()
         if !conn.isConnected {
             let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
-            if conn.portCensus.hasForeignEndpoint {
+            guard census.isObserved,
+                  let endpointCount = census.endpointCount,
+                  let hasForeignEndpoint = census.hasForeignEndpoint else {
                 return .unavailable(
-                    "MCU feedback not detected: \(conn.portCensus.endpointCount) endpoint(s) named "
+                    "MCU feedback not detected: CoreMIDI endpoint census for '\(portName)' is unknown; "
+                        + "this server refused to infer port ownership or publish a duplicate (\(census.reason ?? "no reason supplied"))."
+                        + workBudgetDetail
+                )
+            }
+            if hasForeignEndpoint {
+                return .unavailable(
+                    "MCU feedback not detected: \(endpointCount) endpoint(s) named "
                         + "'\(portName)' include one this server did not create. Another server instance "
                         + "or a stale endpoint owns this name; this server did not publish a duplicate."
                         + workBudgetDetail
                 )
             }
             return .unavailable(
-                "MCU feedback not detected: no feedback has been received on '\(portName)' (\(conn.portCensus.endpointCount) "
+                "MCU feedback not detected: no feedback has been received on '\(portName)' (\(endpointCount) "
                     + "endpoint(s) visible, all owned by this server). Check the Logic Pro > Control "
                     + "Surfaces > Setup binding."
                     + workBudgetDetail

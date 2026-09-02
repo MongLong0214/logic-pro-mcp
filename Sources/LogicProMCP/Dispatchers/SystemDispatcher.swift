@@ -103,12 +103,24 @@ struct SystemDispatcher: OperationTraceDispatching {
 
         struct MCUSection: Encodable {
             struct PortCensus: Encodable {
-                let endpointCount: Int
-                let hasForeignEndpoint: Bool
+                let state: String
+                let endpointCount: Int?
+                let hasForeignEndpoint: Bool?
+                let reason: String?
 
                 enum CodingKeys: String, CodingKey {
+                    case state
                     case endpointCount = "endpoint_count"
                     case hasForeignEndpoint = "has_foreign_endpoint"
+                    case reason
+                }
+
+                func encode(to encoder: any Encoder) throws {
+                    var values = encoder.container(keyedBy: CodingKeys.self)
+                    try values.encode(state, forKey: .state)
+                    try values.encodeIfPresent(endpointCount, forKey: .endpointCount)
+                    try values.encodeIfPresent(hasForeignEndpoint, forKey: .hasForeignEndpoint)
+                    try values.encodeIfPresent(reason, forKey: .reason)
                 }
             }
 
@@ -407,8 +419,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                     feedbackStale: mcu.isConnected && (lastFeedbackAge ?? .infinity) > 5.0,
                     portName: mcu.portName,
                     portCensus: .init(
+                        state: mcu.portCensus.state.rawValue,
                         endpointCount: mcu.portCensus.endpointCount,
-                        hasForeignEndpoint: mcu.portCensus.hasForeignEndpoint
+                        hasForeignEndpoint: mcu.portCensus.hasForeignEndpoint,
+                        reason: mcu.portCensus.reason
                     )
                 ),
                 channels: entries,

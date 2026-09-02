@@ -785,6 +785,8 @@ actor CoreMIDIChannel: Channel {
         let active = await engine.isActive
         if active {
             return .healthy(detail: "CoreMIDI client active, virtual ports created")
+        } else if let reason = await engine.unavailableReason {
+            return .unavailable("CoreMIDI startup refused: \(reason)")
         } else {
             return .unavailable("CoreMIDI client not initialized")
         }
