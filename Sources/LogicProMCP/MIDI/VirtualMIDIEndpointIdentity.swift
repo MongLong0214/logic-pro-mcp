@@ -51,6 +51,14 @@ struct VirtualMIDIEndpointCensus: Sendable, Equatable, Codable {
         state == .observed
     }
 
+    /// A foreign-endpoint conflict requires a concrete, non-empty observation.
+    /// Keep this invariant here instead of asking each creator to reconcile a
+    /// count with a separate Boolean. In particular, an observed empty catalog
+    /// can never be promoted into an ownership conflict.
+    var hasForeignConflict: Bool {
+        isObserved && (endpointCount ?? 0) > 0 && hasForeignEndpoint == true
+    }
+
     enum CodingKeys: String, CodingKey {
         case state
         case endpointCount = "endpoint_count"
@@ -113,6 +121,19 @@ struct VirtualMIDIEndpointRuntime: Sendable {
     let allEndpoints: @Sendable () -> VirtualMIDIEndpointCatalogRead
     let endpointName: @Sendable (_ endpoint: MIDIEndpointRef) -> VirtualMIDIEndpointNameRead
     let setUniqueID: @Sendable (_ endpoint: MIDIEndpointRef, _ uniqueID: Int32) -> OSStatus
+    private let processOwnership: VirtualMIDIEndpointProcessOwnership
+
+    init(
+        allEndpoints: @escaping @Sendable () -> VirtualMIDIEndpointCatalogRead,
+        endpointName: @escaping @Sendable (_ endpoint: MIDIEndpointRef) -> VirtualMIDIEndpointNameRead,
+        setUniqueID: @escaping @Sendable (_ endpoint: MIDIEndpointRef, _ uniqueID: Int32) -> OSStatus,
+        processOwnership: VirtualMIDIEndpointProcessOwnership = .shared
+    ) {
+        self.allEndpoints = allEndpoints
+        self.endpointName = endpointName
+        self.setUniqueID = setUniqueID
+        self.processOwnership = processOwnership
+    }
 
     static let production = Self(
         allEndpoints: { readAllEndpoints() },
@@ -141,10 +162,18 @@ struct VirtualMIDIEndpointRuntime: Sendable {
             return .init(
                 endpointCount: matchingEndpoints.count,
                 hasForeignEndpoint: matchingEndpoints.contains {
-                    !VirtualMIDIEndpointProcessOwnership.shared.contains($0)
+                    !processOwnership.contains($0)
                 }
             )
         }
+    }
+
+    func claimProcessOwnership(of endpoint: MIDIEndpointRef) {
+        processOwnership.claim(endpoint)
+    }
+
+    func releaseProcessOwnership(of endpoint: MIDIEndpointRef) {
+        processOwnership.release(endpoint)
     }
 
     /// `MIDIGetNumberOfSources` and `MIDIGetNumberOfDestinations` return zero

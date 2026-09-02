@@ -149,7 +149,7 @@ actor MIDIPortManager: VirtualPortManaging {
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
         }
-        VirtualMIDIEndpointProcessOwnership.shared.claim(source)
+        runtime.endpointRuntime.claimProcessOwnership(of: source)
         do {
             try assignStableUniqueID(to: source, name: name, kind: .source)
         } catch {
@@ -163,7 +163,7 @@ actor MIDIPortManager: VirtualPortManaging {
             _ = disposeOwnedEndpoint(source)
             throw MIDIPortError.destinationCreationFailed(name, status)
         }
-        VirtualMIDIEndpointProcessOwnership.shared.claim(dest)
+        runtime.endpointRuntime.claimProcessOwnership(of: dest)
         do {
             try assignStableUniqueID(to: dest, name: name, kind: .destination)
         } catch {
@@ -195,7 +195,7 @@ actor MIDIPortManager: VirtualPortManaging {
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
         }
-        VirtualMIDIEndpointProcessOwnership.shared.claim(source)
+        runtime.endpointRuntime.claimProcessOwnership(of: source)
         do {
             try assignStableUniqueID(to: source, name: name, kind: .source)
         } catch {
@@ -264,14 +264,14 @@ actor MIDIPortManager: VirtualPortManaging {
         let census = currentCensus(named: name)
         guard census.isObserved,
               let endpointCount = census.endpointCount,
-              let hasForeignEndpoint = census.hasForeignEndpoint else {
+              census.hasForeignEndpoint != nil else {
             Log.warn(
                 "Virtual MIDI port '\(name)' census is unknown; skipping creation (\(census.reason ?? "no reason supplied"))",
                 subsystem: "midi"
             )
             throw MIDIPortError.censusUnknown(name: name, census: census)
         }
-        guard !hasForeignEndpoint else {
+        guard !census.hasForeignConflict else {
             // The first instance to start owns the ports. A later instance runs
             // degraded and cannot use this MIDI port; if the owner exits, this
             // process does not take over because it created nothing. Restart it.
@@ -313,7 +313,7 @@ actor MIDIPortManager: VirtualPortManaging {
             )
             return false
         }
-        VirtualMIDIEndpointProcessOwnership.shared.release(endpoint)
+        runtime.endpointRuntime.releaseProcessOwnership(of: endpoint)
         return true
     }
 

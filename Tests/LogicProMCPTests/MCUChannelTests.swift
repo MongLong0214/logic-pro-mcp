@@ -76,6 +76,18 @@ import Testing
     #expect(health.detail.count > 0)
 }
 
+@Test func issue736ObservedEmptyForeignCensusDoesNotClaimAnotherMCUOwner() async {
+    let emptyForeignCensus = VirtualMIDIEndpointCensus(endpointCount: 0, hasForeignEndpoint: true)
+    let transport = MockMCUTransport(endpointCensus: emptyForeignCensus)
+    let channel = MCUChannel(transport: transport, cache: StateCache())
+
+    let health = await channel.healthCheck()
+
+    let doesNotClaimAnotherOwner = !health.detail.contains("did not create")
+        && !health.detail.contains("Another server instance")
+    #expect(doesNotClaimAnotherOwner)
+}
+
 @Test func testMCUStartRequiresFeedbackBeforeHealthy() async throws {
     let transport = MockMCUTransport()
     let cache = StateCache()
@@ -538,7 +550,12 @@ actor MockMCUTransport: MCUTransportProtocol {
     var sentBytes: [[UInt8]] = []
     var startCount = 0
     var stopCount = 0
+    private let endpointCensusValue: VirtualMIDIEndpointCensus
     private var onReceive: (@Sendable (MIDIFeedback.Event) -> Void)?
+
+    init(endpointCensus: VirtualMIDIEndpointCensus = .none) {
+        endpointCensusValue = endpointCensus
+    }
 
     func send(_ bytes: [UInt8]) {
         sentBytes.append(bytes)
@@ -547,6 +564,10 @@ actor MockMCUTransport: MCUTransportProtocol {
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {
         startCount += 1
         self.onReceive = onReceive
+    }
+
+    func endpointCensus() -> VirtualMIDIEndpointCensus {
+        endpointCensusValue
     }
 
     func stop() {

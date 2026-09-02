@@ -197,7 +197,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.sourceCreationFailed(sourceStatus)
         }
-        VirtualMIDIEndpointProcessOwnership.shared.claim(createdSource)
+        runtime.endpointRuntime.claimProcessOwnership(of: createdSource)
         do {
             try assignStableUniqueID(
                 to: createdSource,
@@ -232,7 +232,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             runtime.disposeClient(createdClient)
             throw MIDIEngineError.destinationCreationFailed(destinationStatus)
         }
-        VirtualMIDIEndpointProcessOwnership.shared.claim(createdDestination)
+        runtime.endpointRuntime.claimProcessOwnership(of: createdDestination)
         do {
             try assignStableUniqueID(
                 to: createdDestination,
@@ -366,14 +366,14 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         let census = runtime.endpointRuntime.census(named: name)
         guard census.isObserved,
               let endpointCount = census.endpointCount,
-              let hasForeignEndpoint = census.hasForeignEndpoint else {
+              census.hasForeignEndpoint != nil else {
             Log.warn(
                 "Virtual MIDI endpoint '\(name)' census is unknown; skipping creation (\(census.reason ?? "no reason supplied"))",
                 subsystem: "midi"
             )
             throw MIDIEngineError.censusUnknown(name: name, census: census)
         }
-        guard !hasForeignEndpoint else {
+        guard !census.hasForeignConflict else {
             Log.warn(
                 "Virtual MIDI endpoint '\(name)' is owned by another instance or is stale; skipping creation "
                     + "(\(endpointCount) matching endpoint(s))",
@@ -412,7 +412,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             )
             return false
         }
-        VirtualMIDIEndpointProcessOwnership.shared.release(endpoint)
+        runtime.endpointRuntime.releaseProcessOwnership(of: endpoint)
         return true
     }
 

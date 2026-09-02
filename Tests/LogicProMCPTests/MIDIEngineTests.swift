@@ -57,7 +57,9 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     private var notificationHandler: (@Sendable (Int32) -> Void)?
     private var lifecycleEvents: [String] = []
 
-    func makeRuntime() -> MIDIEngine.Runtime {
+    func makeRuntime(
+        processOwnership: VirtualMIDIEndpointProcessOwnership = .shared
+    ) -> MIDIEngine.Runtime {
         MIDIEngine.Runtime(
             createClient: { [self] name, onNotification in
                 withLock {
@@ -114,7 +116,8 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
             endpointRuntime: .init(
                 allEndpoints: { [self] in self.allEndpoints() },
                 endpointName: { [self] endpoint in self.endpointName(endpoint) },
-                setUniqueID: { [self] endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) }
+                setUniqueID: { [self] endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) },
+                processOwnership: processOwnership
             ),
             acquireOwnershipLock: { [self] in acquireOwnershipLock() }
         )
@@ -402,34 +405,75 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     #expect(snapshot.createDestinationCalls == 0)
 }
 
+@Test func issue736ObservedEmptyCensusCannotReportAnOwnershipConflict() {
+    let emptyCensus = VirtualMIDIEndpointCensus(endpointCount: 0, hasForeignEndpoint: true)
+
+    let reportsConflict = emptyCensus.hasForeignConflict
+    let doesNotReportConflict = !reportsConflict
+
+    #expect(doesNotReportConflict)
+}
+
 @Test func issue736MIDIEngineOwnershipIsSharedWithPortManager() async throws {
+    let processOwnership = VirtualMIDIEndpointProcessOwnership()
     let engineHarness = MIDIEngineRuntimeHarness()
-    let engine = MIDIEngine(runtime: engineHarness.makeRuntime())
+    let engine = MIDIEngine(runtime: engineHarness.makeRuntime(processOwnership: processOwnership))
     try await engine.start()
 
     let managerHarness = MIDIPortRuntimeHarness()
     managerHarness.foreignEndpointsByName[ServerConfig.virtualMIDISourceName] = [engineHarness.createdSource]
-    let manager = MIDIPortManager(runtime: managerHarness.runtime())
+    let manager = MIDIPortManager(runtime: managerHarness.runtime(processOwnership: processOwnership))
     try await manager.start()
 
-    let channel = CoreMIDIChannel(engine: engine, portManager: manager)
-    let router = ChannelRouter()
-    await router.register(channel)
-    let response = await MIDIDispatcher.handle(
-        command: "create_virtual_port",
-        params: ["name": .string(ServerConfig.virtualMIDISourceName)],
-        router: router,
-        cache: StateCache()
-    )
-
-    #expect(!(response.isError!), "our MIDIEngine endpoint must not be reported as foreign: \(sharedToolText(response))")
-    let envelope = try #require(sharedJSONObject(sharedToolText(response)))
-    #expect(envelope["port_name"] as? String == ServerConfig.virtualMIDISourceName)
-    let createdSources = managerHarness.createdSources
-    #expect(createdSources == [ServerConfig.virtualMIDISourceName])
+    let census = await manager.endpointCensus(name: ServerConfig.virtualMIDISourceName)
+    let hasForeignEndpoint = try #require(census.hasForeignEndpoint as Bool?)
+    let treatsEngineEndpointAsLocal = !hasForeignEndpoint
+    #expect(treatsEngineEndpointAsLocal)
 
     await manager.stop()
     await engine.stop()
+}
+
+@Test func issue736EndpointClaimedByAnotherProcessStillConflicts() async throws {
+    let otherProcessOwnership = VirtualMIDIEndpointProcessOwnership()
+    let thisProcessOwnership = VirtualMIDIEndpointProcessOwnership()
+    let portName = ServerConfig.virtualMIDISourceName
+    let otherProcessHarness = MIDIEngineRuntimeHarness()
+    let otherProcessEngine = MIDIEngine(
+        runtime: otherProcessHarness.makeRuntime(processOwnership: otherProcessOwnership)
+    )
+    try await otherProcessEngine.start()
+    // This testing process also has a claim for the same integer reference.
+    // A census must use *its configured process registry*, not whichever
+    // process-wide singleton happens to contain the reference.
+    VirtualMIDIEndpointProcessOwnership.shared.claim(otherProcessHarness.createdSource)
+
+    let harness = MIDIPortRuntimeHarness()
+    harness.foreignEndpointsByName[portName] = [otherProcessHarness.createdSource]
+    let manager = MIDIPortManager(runtime: harness.runtime(processOwnership: thisProcessOwnership))
+    try await manager.start()
+
+    var conflict: MIDIPortError?
+    do {
+        _ = try await manager.createSendOnlyPort(name: portName)
+        Issue.record("Expected the other process endpoint to be refused")
+    } catch let error as MIDIPortError {
+        conflict = error
+    }
+
+    guard case .foreignEndpointConflict(name: let rejectedName, census: let census)? = conflict else {
+        Issue.record("Expected foreign endpoint conflict, got: \(String(describing: conflict))")
+        await manager.stop()
+        VirtualMIDIEndpointProcessOwnership.shared.release(otherProcessHarness.createdSource)
+        await otherProcessEngine.stop()
+        return
+    }
+    let isOtherProcessEndpoint = rejectedName == portName && census.hasForeignConflict
+    #expect(isOtherProcessEndpoint)
+
+    await manager.stop()
+    VirtualMIDIEndpointProcessOwnership.shared.release(otherProcessHarness.createdSource)
+    await otherProcessEngine.stop()
 }
 
 @Test func issue736OwnershipConflictSurvivesToCoreMIDIOperationResponse() async throws {

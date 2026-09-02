@@ -475,14 +475,14 @@ actor MCUChannel: Channel {
             let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
             guard census.isObserved,
                   let endpointCount = census.endpointCount,
-                  let hasForeignEndpoint = census.hasForeignEndpoint else {
+                  census.hasForeignEndpoint != nil else {
                 return .unavailable(
                     "MCU feedback not detected: CoreMIDI endpoint census for '\(portName)' is unknown; "
                         + "this server refused to infer port ownership or publish a duplicate (\(census.reason ?? "no reason supplied"))."
                         + workBudgetDetail
                 )
             }
-            if hasForeignEndpoint {
+            if census.hasForeignConflict {
                 return .unavailable(
                     "MCU feedback not detected: \(endpointCount) endpoint(s) named "
                         + "'\(portName)' include one this server did not create. Another server instance "
