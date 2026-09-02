@@ -2,6 +2,32 @@
 import Testing
 @testable import LogicProMCP
 
+@Test func testCheckboxStateResultPreservesAXValueReadFailure() {
+    let builder = FakeAXRuntimeBuilder()
+    let checkbox = builder.element(9_901)
+    builder.setRole(checkbox, kAXCheckBoxRole as String)
+    let expected = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+    let runtime = builder.makeAXRuntime(
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, checkbox), attribute == (kAXValueAttribute as String) {
+                return .failure(expected)
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    let result = AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime)
+    let preserved: Bool
+    if case let .failure(observed) = result {
+        preserved = observed == expected
+    } else {
+        preserved = false
+    }
+    #expect(preserved)
+}
+
 @Test func testExtractButtonStateRefusesIndeterminateNSNumber() {
     let builder = FakeAXRuntimeBuilder()
     let checkbox = builder.element(29_902)

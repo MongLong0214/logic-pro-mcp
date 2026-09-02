@@ -1325,11 +1325,22 @@ extension AccessibilityChannel {
             // make one press restore two editors. These header-proven counts are
             // therefore the provenance proof; neither geometry nor name-only
             // reuse chooses the editor in this branch.
-            let matchingEditorsBeforePress = AXLogicProElements.matchingPluginEditorWindows(
+            let matchingEditorsBeforePress: [AXUIElement]
+            switch AXLogicProElements.matchingPluginEditorWindows(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 runtime: runtime
-            )
+            ) {
+            case let .success(observed):
+                matchingEditorsBeforePress = observed
+            case let .failure(error):
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the duplicate-editor pre-count before target-slot AXPress"
+                ))
+            }
             guard matchingEditorsBeforePress.isEmpty else {
                 return .error(duplicatePluginEditorAlreadyOpenStateC(
                     operation: operation,
@@ -1359,6 +1370,20 @@ extension AccessibilityChannel {
                     observedNames: observedNames
                 ))
             }
+            if case let .unreadable(error) = AXLogicProElements.pluginWindowMatch(
+                forTrackName: trackName,
+                matchingPluginID: pluginID,
+                matchingSliderDescription: axDescription,
+                requiringMatchingSlider: requiringWindowSlider,
+                runtime: runtime
+            ) {
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the duplicate-editor identity census before target-slot AXPress"
+                ))
+            }
 
             guard let targetOpenControl = rankedPluginSlotOpenControls(
                 in: slots[insert].element,
@@ -1385,14 +1410,36 @@ extension AccessibilityChannel {
             // human or other automation opening the same-track sibling between
             // the snapshot and poll remains unprovable; the one-new-window rule
             // makes that uncertainty refuse rather than reuse an old editor.
-            let pluginEditorWindowsBeforePress = AXLogicProElements.pluginEditorWindows(runtime: runtime)
+            let pluginEditorWindowsBeforePress: [AXUIElement]
+            switch AXLogicProElements.pluginEditorWindows(runtime: runtime) {
+            case let .success(observed):
+                pluginEditorWindowsBeforePress = observed
+            case let .failure(error):
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the complete editor census before target-slot AXPress"
+                ))
+            }
             _ = pressElement(targetOpenControl, runtime: runtime.ax)
-            let matchingEditorsAfterPress = await pollMatchingPluginEditorWindows(
+            let matchingEditorsAfterPress: [AXUIElement]
+            switch await pollMatchingPluginEditorWindows(
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
                 timeoutMs: 1_250
-            )
+            ) {
+            case let .success(observed):
+                matchingEditorsAfterPress = observed
+            case let .failure(error):
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the duplicate-editor post-press census"
+                ))
+            }
             let newlyObservedMatchingEditors = matchingEditorsAfterPress.filter { candidate in
                 !pluginEditorWindowsBeforePress.contains { CFEqual($0, candidate) }
             }
@@ -1445,6 +1492,13 @@ extension AccessibilityChannel {
             runtime: runtime
         )
         switch preAcquisitionWindowMatch {
+        case let .unreadable(error):
+            return .error(pluginWindowReadFailureStateC(
+                operation,
+                identity,
+                error,
+                phase: "the plugin-window acquisition census"
+            ))
         case .ambiguous:
             var diagnostics = pluginWindowAcquisitionDiagnostics(
                 trackName: trackName,
@@ -1537,6 +1591,13 @@ extension AccessibilityChannel {
                 requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
             ) {
+            case let .unreadable(error):
+                return .error(pluginWindowReadFailureStateC(
+                    operation,
+                    identity,
+                    error,
+                    phase: "the plugin-window acquisition retry census"
+                ))
             case .ambiguous:
                 var diagnostics = pluginWindowAcquisitionDiagnostics(
                     trackName: trackName,
@@ -2065,6 +2126,7 @@ extension AccessibilityChannel {
                 "observed_boolean": observed,
                 "write_source": "ax_controls_view_checkbox",
                 "verify_source": "ax_controls_view_checkbox",
+                "write_attempted": toggle.pressAttempted,
             ]))
         }
 
@@ -2094,6 +2156,8 @@ extension AccessibilityChannel {
                 "observed_boolean": toggle.observedAfterPress ?? NSNull(),
                 "restore_attempted": toggle.restoreAttempted,
                 "restore_observed": toggle.restoreObserved ?? NSNull(),
+                "restore_observed_boolean": toggle.restoreObservedValue ?? NSNull(),
+                "parameter_left_changed": toggle.restoreAttempted && toggle.restoreObserved == false,
                 "what_was_attempted": "AXPress the labelled Controls-view AXCheckBox then require changed AXValue readback",
                 "what_was_observed": failureObservation,
                 "safe_to_retry": false,
@@ -2313,6 +2377,23 @@ extension AccessibilityChannel {
         )
     }
 
+    /// A failed AX window census/classification is not evidence that no
+    /// competing editor exists. Keep the raw diagnostic in the State-C receipt
+    /// and refuse before any window-dependent choice or slot press.
+    private static func pluginWindowReadFailureStateC(
+        _ operation: String,
+        _ identity: [String: Any],
+        _ error: AXHelpers.AXStatusError,
+        phase: String
+    ) -> String {
+        windowIdentityUnresolvedStateC(
+            operation,
+            identity,
+            "plugin-window acquisition could not complete \(phase) (AX status \(error.diagnosticLabel)); unreadable candidates were not treated as absent",
+            diagnostics: ["plugin_window_read_failure": error.diagnosticLabel]
+        )
+    }
+
     private static func pluginWindowPluginMismatchStateC(
         _ operation: String,
         _ identity: [String: Any],
@@ -2420,6 +2501,13 @@ extension AccessibilityChannel {
         ) {
         case let .unique(currentWindow) where CFEqual(currentWindow, acquiredWindow):
             return nil
+        case let .unreadable(error):
+            return pluginWindowReadFailureStateC(
+                operation,
+                identity,
+                error,
+                phase: "the acquired plugin-window identity recheck"
+            )
         case let .pluginIdentityMismatch(observedNames):
             return pluginWindowPluginMismatchStateC(
                 operation,
@@ -2454,11 +2542,22 @@ extension AccessibilityChannel {
         trackName: String,
         runtime: AXLogicProElements.Runtime
     ) -> String? {
-        let headerBoundWindows = AXLogicProElements.matchingPluginEditorWindows(
+        let headerBoundWindows: [AXUIElement]
+        switch AXLogicProElements.matchingPluginEditorWindows(
             forTrackName: trackName,
             matchingPluginID: pluginID,
             runtime: runtime
-        )
+        ) {
+        case let .success(observed):
+            headerBoundWindows = observed
+        case let .failure(error):
+            return pluginWindowReadFailureStateC(
+                operation,
+                identity,
+                error,
+                phase: "the Controls-view acquired-editor header recheck"
+            )
+        }
         guard headerBoundWindows.contains(where: { CFEqual($0, acquiredWindow) }) else {
             return windowIdentityUnresolvedStateC(
                 operation,
@@ -2489,6 +2588,8 @@ extension AccessibilityChannel {
             requiringMatchingSlider: requiringMatchingSlider,
             runtime: runtime
         ) {
+        case .unreadable:
+            return nil
         case .ambiguous:
             return nil
         case .pluginIdentityMismatch:
@@ -2529,6 +2630,8 @@ extension AccessibilityChannel {
                 runtime: runtime,
                 timeoutMs: 1_250
             ) {
+            case .unreadable:
+                return nil
             case let .unique(window):
                 guard pluginWindowIsFront(window, runtime: runtime.ax) else {
                     return nil
@@ -2775,6 +2878,8 @@ extension AccessibilityChannel {
                 return .ambiguous
             case let .pluginIdentityMismatch(observedNames):
                 return .pluginIdentityMismatch(observedNames: observedNames)
+            case let .unreadable(error):
+                return .unreadable(error)
             case .none:
                 lastUniqueWindow = nil
             }
@@ -2795,22 +2900,27 @@ extension AccessibilityChannel {
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
         timeoutMs: Int
-    ) async -> [AXUIElement] {
+    ) async -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000.0)
         var matchingEditors: [AXUIElement] = []
         repeat {
-            matchingEditors = AXLogicProElements.matchingPluginEditorWindows(
+            switch AXLogicProElements.matchingPluginEditorWindows(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
                 runtime: runtime
-            )
+            ) {
+            case let .success(observed):
+                matchingEditors = observed
+            case let .failure(error):
+                return .failure(error)
+            }
             if !matchingEditors.isEmpty {
-                return matchingEditors
+                return .success(matchingEditors)
             }
             guard Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
-        return matchingEditors
+        return .success(matchingEditors)
     }
 
     /// ADR-001 coordinate ban: open the plugin window from its slot control via

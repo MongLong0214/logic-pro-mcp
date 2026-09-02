@@ -1424,30 +1424,34 @@ enum SemanticOracleTable {
 
     // AccessibilityChannel+VerifiedPlugins `defaultSetParamVerified` →
     // encodeV2StateA(extras). HC v2 (the verified-plugin superset): the envelope
-    // additionally carries `hc_schema:2`, pinned here. State A is the tolerance
-    // gate `abs(after − requested) <= tolerance` (VerifiedPlugins line 1056), and
-    // `tolerance` is PER-PARAMETER in the parameter's OWN unit (0..1 for some
-    // controls, 0..100 for others — e.g. Compressor Threshold, tolerance 1.0), so
-    // no single constant could bound it. It is pinned as
-    // `.numericNear(observed_normalized, requested_normalized, .field("tolerance"))`
-    // — reading the bound from the payload's OWN emitted tolerance, the faithful
-    // request↔readback proof (observed_normalized is the achieved slider read,
-    // requested_normalized the input). Plus the hardcoded same-surface
-    // write/verify (no cross-surface laundering), display_unit, operation
-    // identity, and target_identity/param shapes.
+    // additionally carries `hc_schema:2`, pinned here. It has two measured,
+    // mutually exclusive verified write planes. The slider plane retains its
+    // unit/tolerance gate exactly; the Controls-view checkbox plane requires
+    // genuine requested/observed Bool fields and its own same-surface sources.
     static let pluginsSetParamVerified = SafeMutationOracle.oracle(
         .pluginsSetParamVerified,
         semantics: [
             .valueEquals(key: "hc_schema", expected: .number(2)),
             .valueEquals(key: "operation", expected: .string("logic_plugins.set_param_verified")),
-            .valueEquals(key: "write_source", expected: .string("ax_plugin_window")),
-            .valueEquals(key: "verify_source", expected: .string("ax_plugin_window")),
-            .valueEquals(key: "display_unit", expected: .string("%")),
-            .numericNear(
-                keyA: "observed_normalized",
-                keyB: "requested_normalized",
-                within: .field("tolerance")
-            ),
+            .anyOf([
+                [
+                    .valueEquals(key: "write_source", expected: .string("ax_plugin_window")),
+                    .valueEquals(key: "verify_source", expected: .string("ax_plugin_window")),
+                    .valueEquals(key: "display_unit", expected: .string("%")),
+                    .numericNear(
+                        keyA: "observed_normalized",
+                        keyB: "requested_normalized",
+                        within: .field("tolerance")
+                    ),
+                ],
+                [
+                    .valueEquals(key: "write_source", expected: .string("ax_controls_view_checkbox")),
+                    .valueEquals(key: "verify_source", expected: .string("ax_controls_view_checkbox")),
+                    .typedField(key: "requested_boolean", type: .bool),
+                    .typedField(key: "observed_boolean", type: .bool),
+                    .fieldsEqual(keyA: "requested_boolean", keyB: "observed_boolean"),
+                ],
+            ]),
             .typedField(key: "target_identity", type: .object),
             .typedField(key: "param", type: .string),
         ]

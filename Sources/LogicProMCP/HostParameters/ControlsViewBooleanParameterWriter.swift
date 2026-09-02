@@ -21,6 +21,7 @@ enum ControlsViewBooleanParameterWriter {
         case controlMissing
         case controlAmbiguous
         case accessibilityReadFailed
+        case accessibilityReadMalformed
         case checkboxNotFound
         case sliderNotActuable
         case popupUnmeasured
@@ -46,6 +47,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the labelled Controls-view AXRow exposes several candidate controls; no control was chosen by position"
             case .accessibilityReadFailed:
                 return "an AX role, child list, or label-value read failed while binding the Controls-view AXRow; no partially classified control was used"
+            case .accessibilityReadMalformed:
+                return "the Controls-view AXRows attribute returned a malformed payload; an undecodable row list is not evidence that the table is empty"
             case .checkboxNotFound:
                 return "the labelled Controls-view AXRow did not resolve to an AXCheckBox"
             case .sliderNotActuable:
@@ -79,6 +82,9 @@ enum ControlsViewBooleanParameterWriter {
         case switcherCensus(AXHelpers.AXStatusError)
         case switcherDescription(AXHelpers.AXStatusError)
         case menuItemCensus(AXHelpers.AXStatusError)
+        case menuItemEnabled(AXHelpers.AXStatusError)
+        case sliderCensus(AXHelpers.AXStatusError)
+        case sliderDescription(AXHelpers.AXStatusError)
 
         var observation: String {
             switch self {
@@ -88,6 +94,12 @@ enum ControlsViewBooleanParameterWriter {
                 return "the plugin-window View-switcher AXDescription read failed (status \(error.diagnosticLabel))"
             case let .menuItemCensus(error):
                 return "the scoped View-menu item census failed (AXChildren/AXRole/AXTitle/AXDescription status \(error.diagnosticLabel))"
+            case let .menuItemEnabled(error):
+                return "the scoped View-menu item's AXEnabled read failed (status \(error.diagnosticLabel))"
+            case let .sliderCensus(error):
+                return "the plugin-window AXSlider census failed (AXChildren/AXRole status \(error.diagnosticLabel))"
+            case let .sliderDescription(error):
+                return "a plugin-window AXSlider AXDescription read failed (status \(error.diagnosticLabel))"
             }
         }
     }
@@ -103,6 +115,7 @@ enum ControlsViewBooleanParameterWriter {
         case viewMenuAmbiguous
         case viewMenuItemNotFound(PluginWindowView)
         case viewMenuItemAmbiguous(PluginWindowView)
+        case viewMenuItemDisabled(PluginWindowView)
         case viewStructureDidNotConfirm(PluginWindowView)
 
         var observation: String {
@@ -127,6 +140,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the scoped View menu exposed no measured \(view.labels.canonical) item"
             case let .viewMenuItemAmbiguous(view):
                 return "the scoped View menu exposed several measured \(view.labels.canonical) items"
+            case let .viewMenuItemDisabled(view):
+                return "the scoped View menu's measured \(view.labels.canonical) item did not expose AXEnabled == true, so AXPick was refused"
             case let .viewStructureDidNotConfirm(expected):
                 return "after selecting the measured \(expected.labels.canonical) item, the bound plugin window did not expose the expected \(expected.rawValue) structure before the confirmation deadline"
             }
@@ -243,7 +258,12 @@ enum ControlsViewBooleanParameterWriter {
                     entryView: entryView
                 )
             case .refused:
-                let observed = observedView(in: window, runtime: runtime)
+                let observed: PluginWindowView?
+                if case let .success(.some(value)) = observedView(in: window, runtime: runtime) {
+                    observed = value
+                } else {
+                    observed = nil
+                }
                 return ViewRestoration(
                     attempted: true,
                     confirmed: observed == entryView,
@@ -262,6 +282,7 @@ enum ControlsViewBooleanParameterWriter {
     private enum ViewWaitResult {
         case confirmed
         case deadlineExpired
+        case readFailed(ViewEvidenceReadFailure)
     }
 
     struct ToggleResult: Sendable, Equatable {
@@ -271,6 +292,7 @@ enum ControlsViewBooleanParameterWriter {
         let observedAfterPress: Bool?
         let restoreAttempted: Bool
         let restoreObserved: Bool?
+        let restoreObservedValue: Bool?
         let refusal: String?
     }
 
@@ -286,15 +308,20 @@ enum ControlsViewBooleanParameterWriter {
         runtime: AXHelpers.Runtime = .production
     ) -> ViewPreparationResult {
         let entryView: PluginWindowView
-        guard let observed = observedView(in: window, runtime: runtime) else {
+        let entryObservation = observedView(in: window, runtime: runtime)
+        switch entryObservation {
+        case let .success(.some(observed)):
+            entryView = observed
+        case .success(.none):
             return .refused(.entryViewNotConfirmed, restoration: nil)
+        case let .failure(error):
+            return .refused(.viewEvidenceReadFailed(error), restoration: nil)
         }
-        entryView = observed
 
         // A view already confirmed by its own positive evidence needs no
         // switcher read: no switcher will be acted on and there is no view to
-        // restore. This also keeps classifier-only AXDescription failures out
-        // of an otherwise completed Controls or Editor operation.
+        // restore. No further classifier read is needed once the requested
+        // view was positively observed.
         guard entryView != targetView else {
             return .ready(ViewSession(
                 window: window,
@@ -376,7 +403,12 @@ enum ControlsViewBooleanParameterWriter {
                         entryView: entryView
                     )
                 case .refused:
-                    let observed = observedView(in: window, runtime: runtime)
+                    let observed: PluginWindowView?
+                    if case let .success(.some(value)) = observedView(in: window, runtime: runtime) {
+                        observed = value
+                    } else {
+                        observed = nil
+                    }
                     restoration = ViewRestoration(
                         attempted: true,
                         confirmed: observed == entryView,
@@ -398,11 +430,11 @@ enum ControlsViewBooleanParameterWriter {
     /// control in that label's sibling subtree. With no AXTable, Editor is
     /// confirmed by that observed absence.
     ///
-    /// AXDescription failures are deliberately ignored here. On the measured
-    /// Compressor surface those reads fail on Editor and on fourteen Controls
-    /// sliders, so their absence or failure cannot answer this question. They
-    /// never select an element to act on; a successful nonempty description is
-    /// positive Editor evidence, while the table structure decides Controls.
+    /// A successful nonempty AXDescription is positive Editor evidence. Once
+    /// observed, it wins immediately over all later reads. Conversely, when no
+    /// described slider was observed, a slider census or description failure
+    /// leaves the view unknown: an unreadable editor candidate must not be
+    /// erased so an unrelated table can become Controls evidence.
     ///
     /// Measured 2026-09-02, Compressor editor window "Absolute Zero": one
     /// AXTable at depth 2 had AXRows status 0 and 29 rows; every row had exactly
@@ -415,47 +447,61 @@ enum ControlsViewBooleanParameterWriter {
     private static func observedView(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> PluginWindowView? {
-        if hasDescribedNativeEditorSlider(in: window, runtime: runtime) {
-            return .editor
+    ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
+        switch describedNativeEditorSliderEvidence(in: window, runtime: runtime) {
+        case .described:
+            return .success(.editor)
+        case let .readFailed(error):
+            return .failure(error)
+        case .notDescribed:
+            break
         }
         switch controlsViewStateIsBound(in: window, runtime: runtime) {
         case .controls:
-            return .controls
+            return .success(.controls)
         case .noTable:
-            return .editor
+            return .success(.editor)
         case .unconfirmed:
-            return nil
+            return .success(nil)
         }
     }
 
-    /// A description can establish Editor only when it is actually read and
-    /// nonempty. Failed and absent reads are not negative evidence, so scanning
-    /// continues through every slider and reports only a positive observation.
-    private static func hasDescribedNativeEditorSlider(
+    private enum SliderEvidence {
+        case described
+        case notDescribed
+        case readFailed(ViewEvidenceReadFailure)
+    }
+
+    /// Scan until a described slider establishes Editor. Keep reading after an
+    /// earlier failure so a later positive observation wins; if none is found,
+    /// preserve the first failed read instead of treating it as negative evidence.
+    private static func describedNativeEditorSliderEvidence(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
+    ) -> SliderEvidence {
         let sliders: [AXUIElement]
         switch AXHelpers.censusDescendantResult(
             of: window, role: kAXSliderRole, maxDepth: 8, runtime: runtime
         ) {
         case let .success(census):
             sliders = census.matches
-        case .failure:
-            return false
+        case let .failure(error):
+            return .readFailed(.sliderCensus(error))
         }
+        var firstFailure: ViewEvidenceReadFailure?
         for slider in sliders {
             switch descriptionResult(of: slider, runtime: runtime) {
             case let .success(description):
                 if !(description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
-                    return true
+                    return .described
                 }
-            case .failure:
-                continue
+            case let .failure(error):
+                if firstFailure == nil {
+                    firstFailure = .sliderDescription(error)
+                }
             }
         }
-        return false
+        return firstFailure.map(SliderEvidence.readFailed) ?? .notDescribed
     }
 
     private static func switchView(
@@ -468,8 +514,13 @@ enum ControlsViewBooleanParameterWriter {
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
         if !forceSelection {
-            if observedView(in: window, runtime: runtime) == targetView {
+            switch observedView(in: window, runtime: runtime) {
+            case let .success(.some(observed)) where observed == targetView:
                 return .confirmed(switched: false)
+            case let .failure(error):
+                return .refused(.viewEvidenceReadFailed(error), targetSelectionAttempted: false)
+            case .success:
+                break
             }
         }
 
@@ -513,6 +564,18 @@ enum ControlsViewBooleanParameterWriter {
                 targetSelectionAttempted: false
             )
         }
+        switch AXHelpers.getAttributeResult(
+            target,
+            kAXEnabledAttribute as String,
+            runtime: runtime
+        ) as Result<Bool?, AXHelpers.AXStatusError> {
+        case .success(.some(true)):
+            break
+        case .success:
+            return .refused(.viewMenuItemDisabled(targetView), targetSelectionAttempted: false)
+        case let .failure(error):
+            return .refused(.viewEvidenceReadFailed(.menuItemEnabled(error)), targetSelectionAttempted: false)
+        }
         _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
         switch waitForView(
             targetView,
@@ -524,6 +587,8 @@ enum ControlsViewBooleanParameterWriter {
             break
         case .deadlineExpired:
             return .refused(.viewStructureDidNotConfirm(targetView), targetSelectionAttempted: true)
+        case let .readFailed(error):
+            return .refused(.viewEvidenceReadFailed(error), targetSelectionAttempted: true)
         }
         return .confirmed(switched: true)
     }
@@ -633,8 +698,13 @@ enum ControlsViewBooleanParameterWriter {
     ) -> ViewWaitResult {
         let deadline = Date().addingTimeInterval(max(0, timeout))
         repeat {
-            if observedView(in: window, runtime: runtime) == expected {
+            switch observedView(in: window, runtime: runtime) {
+            case let .success(.some(observed)) where observed == expected:
                 return .confirmed
+            case let .failure(error):
+                return .readFailed(error)
+            case .success:
+                break
             }
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { break }
@@ -724,8 +794,10 @@ enum ControlsViewBooleanParameterWriter {
         switch controlsRows(in: table, runtime: runtime) {
         case let .success(observed):
             rows = observed
-        case .failure:
-            return .refused(.accessibilityReadFailed)
+        case let .failure(error):
+            return .refused(error == .malformedAttribute
+                ? .accessibilityReadMalformed
+                : .accessibilityReadFailed)
         }
         guard !rows.isEmpty else {
             return .refused(.controlsViewTableNotFound)
@@ -818,14 +890,18 @@ enum ControlsViewBooleanParameterWriter {
 
     /// A press status of zero is not success evidence. The checkbox must read
     /// back as *changed* and equal to the requested state. Any failed
-    /// verification causes one compensating press, followed by a readback that
-    /// reports whether restoration to the before state was actually observed.
+    /// verification compensates only when the observed first read differs from
+    /// the readable pre-press state; a no-op needs no second actuation.
     static func pressAndVerify(
         _ checkbox: AXUIElement,
         requested: Bool,
         runtime: AXHelpers.Runtime = .production
     ) -> ToggleResult {
-        guard let before = AXValueExtractors.extractButtonState(checkbox, runtime: runtime) else {
+        let before: Bool
+        switch AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime) {
+        case let .success(.some(observed)):
+            before = observed
+        case .success(.none):
             return ToggleResult(
                 verified: false,
                 pressAttempted: false,
@@ -833,23 +909,45 @@ enum ControlsViewBooleanParameterWriter {
                 observedAfterPress: nil,
                 restoreAttempted: false,
                 restoreObserved: nil,
+                restoreObservedValue: nil,
                 refusal: "the Controls-view AXCheckBox AXValue could not be read before AXPress"
+            )
+        case let .failure(error):
+            return ToggleResult(
+                verified: false,
+                pressAttempted: false,
+                before: nil,
+                observedAfterPress: nil,
+                restoreAttempted: false,
+                restoreObserved: nil,
+                restoreObservedValue: nil,
+                refusal: "the Controls-view AXCheckBox AXValue read failed before AXPress (status \(error.diagnosticLabel))"
             )
         }
         guard before != requested else {
             return ToggleResult(
-                verified: false,
+                verified: true,
                 pressAttempted: false,
                 before: before,
                 observedAfterPress: before,
                 restoreAttempted: false,
                 restoreObserved: before,
-                refusal: "the Controls-view AXCheckBox already has the requested state; AXPress would change it away, so no write was attempted"
+                restoreObservedValue: before,
+                refusal: nil
             )
         }
 
         _ = AXHelpers.performAction(checkbox, kAXPressAction as String, runtime: runtime)
-        let after = AXValueExtractors.extractButtonState(checkbox, runtime: runtime)
+        let after: Bool?
+        let afterReadFailure: AXHelpers.AXStatusError?
+        switch AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime) {
+        case let .success(observed):
+            after = observed
+            afterReadFailure = nil
+        case let .failure(error):
+            after = nil
+            afterReadFailure = error
+        }
         if after == requested, after != before {
             return ToggleResult(
                 verified: true,
@@ -858,7 +956,24 @@ enum ControlsViewBooleanParameterWriter {
                 observedAfterPress: after,
                 restoreAttempted: false,
                 restoreObserved: nil,
+                restoreObservedValue: nil,
                 refusal: nil
+            )
+        }
+
+        // A readable pre-press state proves this first press was a no-op. Do
+        // not send an unnecessary second press: it could be the first one that
+        // lands and would change a request that must return failure.
+        if after == before {
+            return ToggleResult(
+                verified: false,
+                pressAttempted: true,
+                before: before,
+                observedAfterPress: after,
+                restoreAttempted: false,
+                restoreObserved: true,
+                restoreObservedValue: before,
+                refusal: "the Controls-view AXCheckBox did not change to the requested state after AXPress; the observed state already equals the pre-press state, so no compensating press was sent"
             )
         }
 
@@ -866,7 +981,24 @@ enum ControlsViewBooleanParameterWriter {
         // One inverse press is the only available compensation; it is not a
         // retry of the requested write, and its result is observed separately.
         _ = AXHelpers.performAction(checkbox, kAXPressAction as String, runtime: runtime)
-        let restored = AXValueExtractors.extractButtonState(checkbox, runtime: runtime)
+        let restored: Bool?
+        let restorationReadFailure: AXHelpers.AXStatusError?
+        switch AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime) {
+        case let .success(observed):
+            restored = observed
+            restorationReadFailure = nil
+        case let .failure(error):
+            restored = nil
+            restorationReadFailure = error
+        }
+        let refusal: String
+        if let afterReadFailure {
+            refusal = "the Controls-view AXCheckBox AXValue read failed after AXPress (status \(afterReadFailure.diagnosticLabel)); restoration was attempted once"
+        } else if let restorationReadFailure {
+            refusal = "the Controls-view AXCheckBox restoration AXValue read failed (status \(restorationReadFailure.diagnosticLabel)) after one compensating AXPress"
+        } else {
+            refusal = "the Controls-view AXCheckBox did not change to the requested state after AXPress; AX status is not confirmation, and restoration was attempted once"
+        }
         return ToggleResult(
             verified: false,
             pressAttempted: true,
@@ -874,9 +1006,8 @@ enum ControlsViewBooleanParameterWriter {
             observedAfterPress: after,
             restoreAttempted: true,
             restoreObserved: restored.map { $0 == before },
-            refusal: after == nil
-                ? "the Controls-view AXCheckBox value could not be read after AXPress; restoration was attempted once"
-                : "the Controls-view AXCheckBox did not change to the requested state after AXPress; AX status is not confirmation, and restoration was attempted once"
+            restoreObservedValue: restored,
+            refusal: refusal
         )
     }
 
@@ -908,7 +1039,7 @@ enum ControlsViewBooleanParameterWriter {
                 }
             }
         case .success(.malformed):
-            return .success([])
+            return .failure(.malformedAttribute)
         case let .failure(error):
             return .failure(error)
         }

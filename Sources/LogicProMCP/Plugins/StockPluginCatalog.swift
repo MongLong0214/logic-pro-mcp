@@ -1114,9 +1114,9 @@ enum StockPluginCatalog {
                 logicVersion: nil,
                 locale: "ko-KR",
                 evidence: [
-                    // The token the catalog validator requires for a VERIFIED parameter: it means a
-                    // write/readback round trip was observed, not merely that a readback method
-                    // was named. Measured 2026-09-02 on the live Controls view.
+                    // Evidence from the observed Controls-view probe. The catalog
+                    // validator requires corroborating write/readback evidence;
+                    // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
                     "controls-view-write-20260902-113017",
                     "AXValue set and AXIncrement x5 reported success while Gain remained 48.0000",
@@ -1169,9 +1169,9 @@ enum StockPluginCatalog {
                 logicVersion: nil,
                 locale: "ko-KR",
                 evidence: [
-                    // The token the catalog validator requires for a VERIFIED parameter: it means a
-                    // write/readback round trip was observed, not merely that a readback method
-                    // was named. Measured 2026-09-02 on the live Controls view.
+                    // Evidence from the observed Controls-view probe. The catalog
+                    // validator requires corroborating write/readback evidence;
+                    // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
                     "controls-view-write-20260902-113017",
                     "Circuit Type AXValue Platinum Digital observed; popup selection was not measured",

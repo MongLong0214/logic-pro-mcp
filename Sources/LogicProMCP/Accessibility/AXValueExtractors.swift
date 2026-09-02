@@ -56,35 +56,62 @@ enum AXValueExtractors {
     /// For toggle buttons (mute, solo, arm, cycle, metronome), the value
     /// indicates pressed/active state.
     static func extractButtonState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
-        guard let value = AXHelpers.getValue(element, runtime: runtime) else { return nil }
+        switch extractButtonStateResult(element, runtime: runtime) {
+        case let .success(observed):
+            return observed
+        case .failure:
+            return nil
+        }
+    }
+
+    /// Status-preserving checkbox/button state reader. A failed AXValue read is
+    /// distinct from a readable absent, mixed, or malformed value; writers that
+    /// decide whether to compensate must surface that distinction rather than
+    /// treating it as an observed state.
+    static func extractButtonStateResult(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> Result<Bool?, AXHelpers.AXStatusError> {
+        let value: AnyObject?
+        switch AXHelpers.getAttributeResult(
+            element,
+            kAXValueAttribute as String,
+            runtime: runtime
+        ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+        case let .success(observed):
+            value = observed
+        case let .failure(error):
+            return .failure(error)
+        }
+        guard let value else { return .success(nil) }
         // Toggle buttons typically report 0/1 as NSNumber. Do not use
         // `boolValue`: an AX checkbox may report 2 for its mixed state, which
         // is neither a confirmed on nor a confirmed off reading.
         if let number = value as? NSNumber {
             switch number.doubleValue {
             case 0:
-                return false
+                return .success(false)
             case 1:
-                return true
+                return .success(true)
             default:
-                return nil
+                return .success(nil)
             }
         }
         if let bool = value as? Bool {
-            return bool
+            return .success(bool)
         }
         // Some buttons use string "1"/"0". Unknown strings are not false.
         if let str = value as? String {
             switch str.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "1", "true":
-                return true
+                return .success(true)
             case "0", "false":
-                return false
+                return .success(false)
             default:
-                return nil
+                return .success(nil)
             }
         }
-        return nil
+        return .success(nil)
     }
 
     /// Extract the selected state of an element.

@@ -347,6 +347,10 @@ extension AXLogicProElements {
         case none
         case unique(AXUIElement)
         case ambiguous
+        /// A required candidate-window observation failed. This is not an
+        /// empty census: another editor may exist behind the unreadable AX
+        /// boundary, so choosing a visible candidate would be unsound.
+        case unreadable(AXHelpers.AXStatusError)
         /// A candidate has the requested track and parameter control, but its
         /// direct static-text header does not prove the requested plug-in.
         /// `observedNames` is empty when those children exposed no readable
@@ -406,29 +410,38 @@ extension AXLogicProElements {
         requiringMatchingSlider: Bool = true,
         runtime: Runtime = .production
     ) -> PluginWindowMatch {
-        guard let app = appRoot(runtime: runtime) else { return .none }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) ?? []
         let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
         var match: AXUIElement?
         var mismatchedObservedNames: [String] = []
         var foundMismatchedCandidate = false
-        for window in windows {
-            guard isPluginEditorWindow(window, runtime: runtime.ax) else { continue }
-            guard AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else { continue }
-            let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard title == target else { continue }
-            let observedNames = pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax)
+        let candidates: [PluginEditorWindowCandidate]
+        switch pluginEditorWindowCandidates(runtime: runtime) {
+        case let .success(observed):
+            candidates = observed
+        case let .failure(error):
+            return .unreadable(error)
+        }
+        for candidate in candidates {
+            guard candidate.title == target else { continue }
+            let observedNames: [String]
+            switch pluginWindowHeaderStaticTextValues(in: candidate, runtime: runtime.ax) {
+            case let .success(observed):
+                observedNames = observed
+            case let .failure(error):
+                return .unreadable(error)
+            }
             let headerMatchesPlugin = pluginWindowHeaderNames(
                 observedNames,
                 containPluginID: pluginID,
-                excludingTrackName: title,
+                excludingTrackName: candidate.title,
                 callerTrackName: target
             )
-            let sliderWitness = axDescription.map {
-                pluginWindowSliderMatch(in: window, axDescription: $0, runtime: runtime.ax)
+            let sliderWitness: Result<PluginSliderMatch, AXHelpers.AXStatusError>? = axDescription.map {
+                pluginWindowSliderMatchResult(
+                    in: candidate.element,
+                    axDescription: $0,
+                    runtime: runtime.ax
+                )
             }
             guard headerMatchesPlugin else {
                 // A header-only binding has no parameter precondition: the
@@ -441,14 +454,16 @@ extension AXLogicProElements {
                     continue
                 }
                 switch sliderWitness {
-                case .some(.ambiguous):
+                case .some(.success(.ambiguous)):
                     return .ambiguous
-                case .some(.unique):
+                case .some(.success(.unique)):
                     foundMismatchedCandidate = true
                     mismatchedObservedNames.append(contentsOf: observedNames)
                     continue
-                case .some(.none), nil:
+                case .some(.success(.none)), nil:
                     continue
+                case let .some(.failure(error)):
+                    return .unreadable(error)
                 }
             }
             // Header identity always selects the candidate. A slider witness
@@ -456,16 +471,18 @@ extension AXLogicProElements {
             // view deliberately removes descriptions from its sliders.
             if requiringMatchingSlider {
                 switch sliderWitness {
-                case .some(.none), nil:
+                case .some(.success(.none)), nil:
                     continue
-                case .some(.ambiguous):
+                case .some(.success(.ambiguous)):
                     return .ambiguous
-                case .some(.unique):
+                case .some(.success(.unique)):
                     break
+                case let .some(.failure(error)):
+                    return .unreadable(error)
                 }
             }
             guard match == nil else { return .ambiguous }
-            match = window
+            match = candidate.element
         }
         if let match {
             return .unique(match)
@@ -490,41 +507,43 @@ extension AXLogicProElements {
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
         runtime: Runtime = .production
-    ) -> [AXUIElement] {
-        guard let app = appRoot(runtime: runtime) else { return [] }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) ?? []
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return windows.filter { window in
-            guard isPluginEditorWindow(window, runtime: runtime.ax),
-                  AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else {
-                return false
-            }
-            let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard title == target else { return false }
-            return pluginWindowHeaderNames(
-                pluginWindowHeaderStaticTextValues(in: window, runtime: runtime.ax),
-                containPluginID: pluginID,
-                excludingTrackName: title,
-                callerTrackName: target
-            )
+        let candidates: [PluginEditorWindowCandidate]
+        switch pluginEditorWindowCandidates(runtime: runtime) {
+        case let .success(observed):
+            candidates = observed
+        case let .failure(error):
+            return .failure(error)
         }
+        var matches: [AXUIElement] = []
+        for candidate in candidates where candidate.title == target {
+            let observedNames: [String]
+            switch pluginWindowHeaderStaticTextValues(in: candidate, runtime: runtime.ax) {
+            case let .success(observed):
+                observedNames = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            if pluginWindowHeaderNames(
+                observedNames,
+                containPluginID: pluginID,
+                excludingTrackName: candidate.title,
+                callerTrackName: target
+            ) {
+                matches.append(candidate.element)
+            }
+        }
+        return .success(matches)
     }
 
     /// Every currently open plug-in editor window. Duplicate-instance
     /// acquisition snapshots this before it presses an insert control, then
     /// requires its accepted candidate to be a newly observed AX element.
-    static func pluginEditorWindows(runtime: Runtime = .production) -> [AXUIElement] {
-        guard let app = appRoot(runtime: runtime) else { return [] }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) ?? []
-        return windows.filter {
-            isPluginEditorWindow($0, runtime: runtime.ax)
-                && AXHelpers.getRole($0, runtime: runtime.ax) == (kAXWindowRole as String)
-        }
+    static func pluginEditorWindows(
+        runtime: Runtime = .production
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        pluginEditorWindowCandidates(runtime: runtime).map { $0.map(\.element) }
     }
 
     /// Whether the exact AX window element remains in the application's
@@ -560,21 +579,202 @@ extension AXLogicProElements {
         }
     }
 
-    /// Return only readable values of direct static-text children. Do not fall
-    /// back to a title, a descendant, or a fixed child index: neither identifies
-    /// the plug-in editor reliably.
-    private static func pluginWindowHeaderStaticTextValues(
-        in window: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> [String] {
-        AXHelpers.getChildren(window, runtime: runtime).compactMap { child in
-            guard AXHelpers.getRole(child, runtime: runtime) == (kAXStaticTextRole as String),
-                  let value = AXHelpers.getValue(child, runtime: runtime) as? String else {
-                return nil
-            }
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
+    private struct PluginEditorWindowCandidate {
+        let element: AXUIElement
+        let title: String
+        let directChildren: [(element: AXUIElement, role: String?)]
+    }
+
+    /// Enumerate only windows whose plugin-editor classification was fully
+    /// observed. Any failed status is returned to the caller: a choice cannot
+    /// safely discard an editor whose classification could not be completed.
+    private static func pluginEditorWindowCandidates(
+        runtime: Runtime
+    ) -> Result<[PluginEditorWindowCandidate], AXHelpers.AXStatusError> {
+        guard let app = appRoot(runtime: runtime) else { return .success([]) }
+        let windows: [AXUIElement]
+        switch AXHelpers.getAXUIElementArrayRead(
+            app,
+            kAXWindowsAttribute as String,
+            runtime: runtime.ax
+        ) {
+        case let .success(.elements(observed)):
+            windows = observed
+        case .success(.absent):
+            // The AX attribute answered absent, which is an observed empty
+            // census rather than a failed enumeration.
+            windows = []
+        case .success(.malformed):
+            return .failure(.malformedAttribute)
+        case let .failure(error):
+            return .failure(error)
         }
+
+        var candidates: [PluginEditorWindowCandidate] = []
+        for window in windows {
+            let subrole: String?
+            switch AXHelpers.getAttributeResult(
+                window,
+                kAXSubroleAttribute as String,
+                runtime: runtime.ax
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                subrole = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            guard subrole == (kAXDialogSubrole as String) else { continue }
+
+            let closeButton: AXUIElement?
+            switch AXHelpers.getAttributeResult(
+                window,
+                kAXCloseButtonAttribute as String,
+                runtime: runtime.ax
+            ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                closeButton = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            guard closeButton != nil else { continue }
+
+            let children: [AXUIElement]
+            switch AXHelpers.childrenResult(window, runtime: runtime.ax) {
+            case let .success(observed):
+                children = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            var directChildren: [(element: AXUIElement, role: String?)] = []
+            for child in children {
+                let role: String?
+                switch AXHelpers.getAttributeResult(
+                    child,
+                    kAXRoleAttribute as String,
+                    runtime: runtime.ax
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case let .success(observed):
+                    role = observed
+                case let .failure(error):
+                    return .failure(error)
+                }
+                directChildren.append((child, role))
+            }
+            let hasBypass: Bool
+            do {
+                var found = false
+                for child in directChildren where child.role == (kAXCheckBoxRole as String)
+                    || child.role == (kAXButtonRole as String) {
+                    switch hasExactLabelResult(
+                        child.element,
+                        matching: AXLocalePolicy.pluginBypassControl,
+                        runtime: runtime.ax
+                    ) {
+                    case let .success(matches):
+                        found = found || matches
+                    case let .failure(error):
+                        throw error
+                    }
+                }
+                hasBypass = found
+            } catch let error as AXHelpers.AXStatusError {
+                return .failure(error)
+            } catch {
+                return .failure(.malformedAttribute)
+            }
+            guard hasBypass else { continue }
+
+            let role: String?
+            switch AXHelpers.getAttributeResult(
+                window,
+                kAXRoleAttribute as String,
+                runtime: runtime.ax
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                role = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            guard role == (kAXWindowRole as String) else { continue }
+
+            let title: String?
+            switch AXHelpers.getAttributeResult(
+                window,
+                kAXTitleAttribute as String,
+                runtime: runtime.ax
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                title = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            candidates.append(PluginEditorWindowCandidate(
+                element: window,
+                title: (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                directChildren: directChildren
+            ))
+        }
+        return .success(candidates)
+    }
+
+    /// Status-preserving exact-label matcher used only while a window is being
+    /// classified for an imminent selection. An absent label field is a normal
+    /// non-match; a failed read is never silently converted to one.
+    private static func hasExactLabelResult(
+        _ element: AXUIElement,
+        matching labelSet: AXLocalePolicy.LabelSet,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        for attribute in [
+            kAXIdentifierAttribute as String,
+            kAXDescriptionAttribute as String,
+            kAXTitleAttribute as String,
+            kAXHelpAttribute as String,
+        ] {
+            let value: String?
+            switch AXHelpers.getAttributeResult(
+                element,
+                attribute,
+                runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                value = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            if labelSet.matches(value, mode: .exactStrict) {
+                return .success(true)
+            }
+        }
+        return .success(false)
+    }
+
+    /// Return direct static-text values without falling back to a title,
+    /// descendant, or fixed child index. A failed header read is not an absent
+    /// name and therefore refuses the caller's window choice.
+    private static func pluginWindowHeaderStaticTextValues(
+        in candidate: PluginEditorWindowCandidate,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[String], AXHelpers.AXStatusError> {
+        var values: [String] = []
+        for child in candidate.directChildren where child.role == (kAXStaticTextRole as String) {
+            let value: String?
+            switch AXHelpers.getAttributeResult(
+                child.element,
+                kAXValueAttribute as String,
+                runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                value = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            if let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trimmed.isEmpty {
+                values.append(trimmed)
+            }
+        }
+        return .success(values)
     }
 
     /// Find the parameter `AXSlider` inside a plugin window by its
@@ -593,16 +793,16 @@ extension AXLogicProElements {
         axDescription: String,
         runtime: AXHelpers.Runtime = .production
     ) -> PluginWindowSliderResolution {
-        switch pluginWindowSliderMatch(
+        switch pluginWindowSliderMatchResult(
             in: window,
             axDescription: axDescription,
             runtime: runtime
         ) {
-        case .none:
+        case .success(.none), .failure:
             return .none
-        case let .unique(slider):
+        case let .success(.unique(slider)):
             return .unique(slider)
-        case .ambiguous:
+        case .success(.ambiguous):
             return .ambiguous
         }
     }
@@ -628,23 +828,45 @@ extension AXLogicProElements {
         case ambiguous
     }
 
-    private static func pluginWindowSliderMatch(
+    private static func pluginWindowSliderMatchResult(
         in window: AXUIElement,
         axDescription: String,
         runtime: AXHelpers.Runtime
-    ) -> PluginSliderMatch {
+    ) -> Result<PluginSliderMatch, AXHelpers.AXStatusError> {
         let target = axDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty else { return .none }
-        let sliders = AXHelpers.findAllDescendants(
-            of: window, role: kAXSliderRole, maxDepth: 4, runtime: runtime
-        )
-        let matches = sliders.filter { slider in
-            let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return desc.caseInsensitiveCompare(target) == .orderedSame
+        guard !target.isEmpty else { return .success(.none) }
+        let sliders: [AXUIElement]
+        switch AXHelpers.censusDescendantResult(
+            of: window,
+            role: kAXSliderRole,
+            maxDepth: 4,
+            runtime: runtime
+        ) {
+        case let .success(census):
+            sliders = census.matches
+        case let .failure(error):
+            return .failure(error)
         }
-        guard let first = matches.first else { return .none }
-        return matches.count == 1 ? .unique(first) : .ambiguous
+        var matches: [AXUIElement] = []
+        for slider in sliders {
+            let description: String?
+            switch AXHelpers.getAttributeResult(
+                slider,
+                kAXDescriptionAttribute as String,
+                runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case let .success(observed):
+                description = observed
+            case let .failure(error):
+                return .failure(error)
+            }
+            let trimmed = (description ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.caseInsensitiveCompare(target) == .orderedSame {
+                matches.append(slider)
+            }
+        }
+        guard let first = matches.first else { return .success(.none) }
+        return .success(matches.count == 1 ? .unique(first) : .ambiguous)
     }
 
 }

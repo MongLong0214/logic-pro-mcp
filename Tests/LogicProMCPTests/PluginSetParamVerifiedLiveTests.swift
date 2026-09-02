@@ -42,6 +42,9 @@ private enum ControlsCheckboxWriteBehavior: Sendable, Equatable {
     /// AXPress reports status 0/accepted but the checkbox AXValue is inert.
     /// This is the exact observation that prevents a status-only success.
     case statusZeroUnchanged
+    /// The first post-press value is mixed, so compensation is warranted; the
+    /// compensating press lands on `true` rather than the original `false`.
+    case mixedThenChanged
 }
 
 /// A live-path fixture. The slider's AXValueDescription is recomputed from its
@@ -83,6 +86,7 @@ private final class LiveFixture: @unchecked Sendable {
         sliderDisplayUnit: String = "%",
         sliderUsesSignedPositiveDisplay: Bool = false,
         pluginWindowStaticTextValues: [String]? = nil,
+        pluginWindowTitleReadFails: Bool = false,
         // An already-visible editor whose title becomes the target track only
         // after the slot press. This models an existing AX element being
         // retargeted by an unrelated UI transition; duplicate acquisition must
@@ -272,8 +276,10 @@ private final class LiveFixture: @unchecked Sendable {
         b.setRole(controlsViewMenu, kAXMenuRole as String)
         b.setRole(controlsViewMenuItem, kAXMenuItemRole as String)
         b.setAttribute(controlsViewMenuItem, kAXTitleAttribute as String, "컨트롤")
+        b.setAttribute(controlsViewMenuItem, kAXEnabledAttribute as String, true)
         b.setRole(editorViewMenuItem, kAXMenuItemRole as String)
         b.setAttribute(editorViewMenuItem, kAXTitleAttribute as String, "편집기")
+        b.setAttribute(editorViewMenuItem, kAXEnabledAttribute as String, true)
         b.setChildren(controlsViewMenu, [controlsViewMenuItem, editorViewMenuItem])
         pluginWindowChildren += [controlsViewSwitcher]
         var controlsViewWindowChildren = [pluginBypass, pluginLink]
@@ -340,6 +346,14 @@ private final class LiveFixture: @unchecked Sendable {
         let pendingPluginWindowChildren = MutableBox<(children: [AXUIElement], settlesAt: Date)?>(nil)
         let runtime = b.makeLogicRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if pluginWindowTitleReadFails,
+                   CFEqual(element, pluginWindow),
+                   attribute == (kAXTitleAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                return nil
+            },
             childrenHandler: { element in
                 if CFEqual(element, pluginWindow),
                    let pending = pendingPluginWindowChildren.value,
@@ -514,6 +528,14 @@ private final class LiveFixture: @unchecked Sendable {
                     }
                     if controlsCheckboxWriteBehavior == .mixedAfterPress {
                         b.setAttribute(controlsCheckbox, kAXValueAttribute as String, NSNumber(value: 2))
+                        return true
+                    }
+                    if controlsCheckboxWriteBehavior == .mixedThenChanged {
+                        if controlsCheckboxPressCount.value == 1 {
+                            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, NSNumber(value: 2))
+                        } else {
+                            b.setAttribute(controlsCheckbox, kAXValueAttribute as String, true)
+                        }
                         return true
                     }
                     // Core AX returns status 0 for a successful action. Keep
@@ -1221,7 +1243,7 @@ private func namedEQBandParams(
     #expect(oneVerifiedPress)
 }
 
-@Test func testCompressorControlsViewStatusZeroUnchangedReadbackRefusesAndRestores() async throws {
+@Test func testCompressorControlsViewStatusZeroUnchangedReadbackRefusesWithoutASecondPress() async throws {
     let fixture = LiveFixture(
         controlsViewRowLabel: "Limiter On",
         controlsCheckboxBefore: false,
@@ -1234,13 +1256,54 @@ private func namedEQBandParams(
     let restoreObserved = try #require(result["restore_observed"] as? Bool)
     let writeAttempted = try #require(result["write_attempted"] as? Bool)
     let statusOnlyWasNotSuccess = result["state"] as? String != "A"
-    let pressAndRestore = fixture.controlsCheckboxPressCount.value == 2
+    let noCompensatingPressWasSent = fixture.controlsCheckboxPressCount.value == 1
     #expect(error == "readback_mismatch")
-    #expect(restoreAttempted)
+    #expect(!restoreAttempted)
     #expect(restoreObserved)
     #expect(writeAttempted)
     #expect(statusOnlyWasNotSuccess)
-    #expect(pressAndRestore)
+    #expect(noCompensatingPressWasSent)
+}
+
+@Test func testControlsViewCheckboxAlreadyAtRequestedValueIsVerifiedWithoutActuation() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let verified = try #require(result["verified"] as? Bool)
+    let observed = try #require(result["observed_boolean"] as? Bool)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let noCheckboxPress = fixture.controlsCheckboxPressCount.value == 0
+    #expect(state == "A")
+    #expect(verified)
+    #expect(observed)
+    #expect(!writeAttempted)
+    #expect(noCheckboxPress)
+}
+
+@Test func testFailedCompensatingCheckboxPressReportsTheChangedParameter() async throws {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: false,
+        controlsCheckboxWriteBehavior: .mixedThenChanged
+    )
+    let result = await runLive(fixture: fixture, params: controlsBooleanParams())
+
+    let state = try #require(result["state"] as? String)
+    let leftChanged = try #require(result["parameter_left_changed"] as? Bool)
+    let restorationObserved = try #require(result["restore_observed"] as? Bool)
+    let restoredValue = try #require(result["restore_observed_boolean"] as? Bool)
+    let safeToRetry = try #require(result["safe_to_retry"] as? Bool)
+    let compensationWasAttempted = fixture.controlsCheckboxPressCount.value == 2
+    #expect(state == "C")
+    #expect(leftChanged)
+    #expect(!restorationObserved)
+    #expect(restoredValue)
+    #expect(!safeToRetry)
+    #expect(compensationWasAttempted)
 }
 
 @Test func testCompressorControlsViewMixedNSNumberReadbackRefusesInsteadOfStateA() async throws {
@@ -1682,6 +1745,53 @@ private func namedEQBandParams(
     #expect(fixture.currentSliderValue == 51)
 }
 
+@Test func testUnreadableCompetingEditorMakesWindowUniquenessUndecidable() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowTitleReadFails: true
+    )
+    let sibling = matchingCompressorEditorWindow(fixture: fixture, baseID: 9_000)
+    let existingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    fixture.builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        existingWindows + [sibling.window]
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let diagnostic = try #require(obj["plugin_window_read_failure"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let sliderWasUntouched = fixture.currentSliderValue == 51
+    #expect(state == "C")
+    #expect(error == "window_identity_unresolved")
+    #expect(diagnostic == "-25200")
+    #expect(!writeAttempted)
+    #expect(sliderWasUntouched)
+    #expect(fixture.builder.attributeValue(sibling.slider, kAXValueAttribute as String) as? Double == 51)
+}
+
+@Test func testUnreadableEditorDuringDuplicatePrecountRefusesBeforeTargetSlotPress() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginWindowTitleReadFails: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let diagnostic = try #require(obj["plugin_window_read_failure"] as? String)
+    let noTargetSlotPress = fixture.targetOpenControlPressCount.value == 0
+    #expect(state == "C")
+    #expect(error == "window_identity_unresolved")
+    #expect(diagnostic == "-25200")
+    #expect(noTargetSlotPress)
+}
+
 @Test func testDuplicatePluginWithTwoEditorsAfterOnePressRefuses() async throws {
     let fixture = LiveFixture(
         beforeValue: 51,
@@ -1704,11 +1814,17 @@ private func namedEQBandParams(
     // Count-mismatch is an early return, but both editors were newly observed
     // after this operation's press and must not be stranded for the next call.
     #expect(fixture.pluginCloseControlPressCount.value == 1)
-    #expect(AXLogicProElements.matchingPluginEditorWindows(
+    let remainingCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(remainingEditors) = remainingCensus else {
+        Issue.record("the post-close editor census was unreadable")
+        return
+    }
+    let allNewEditorsWereClosed = remainingEditors.isEmpty
+    #expect(allNewEditorsWereClosed)
 }
 
 @Test func testDuplicateAcquisitionRejectsAnExistingEditorThatOnlyBecomesAMatchAfterPress() async throws {
@@ -2841,11 +2957,17 @@ private final class Counter: @unchecked Sendable {
     let closeObserved = try #require(obj["editor_close_observed"] as? Bool)
     #expect(closeObserved)
     #expect(fixture.pluginCloseControlPressCount.value == 1)
-    #expect(AXLogicProElements.matchingPluginEditorWindows(
+    let remainingCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(remainingEditors) = remainingCensus else {
+        Issue.record("the post-close editor census was unreadable")
+        return
+    }
+    let constructedEditorWasClosed = remainingEditors.isEmpty
+    #expect(constructedEditorWasClosed)
 }
 
 @Test func testReusedEditorIsNotClosedByTheOperation() async {
@@ -2857,11 +2979,17 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["state"] as? String == "A")
     #expect(fixture.pluginCloseControlPressCount.value == 0)
-    #expect(!AXLogicProElements.matchingPluginEditorWindows(
+    let reusableCensus = AXLogicProElements.matchingPluginEditorWindows(
         forTrackName: trackName,
         matchingPluginID: "logic.stock.effect.compressor",
         runtime: fixture.runtime
-    ).isEmpty)
+    )
+    guard case let .success(reusableEditors) = reusableCensus else {
+        Issue.record("the reused-editor census was unreadable")
+        return
+    }
+    let existingEditorRemainedOpen = !reusableEditors.isEmpty
+    #expect(existingEditorRemainedOpen)
 }
 
 @Test func testAnUnverifiableCloseDoesNotChangeTheWriteVerdict() async throws {

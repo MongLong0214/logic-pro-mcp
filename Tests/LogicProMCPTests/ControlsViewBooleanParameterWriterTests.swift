@@ -167,6 +167,27 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refused)
     }
 
+    @Test func malformedAXRowsPayloadRefusesInsteadOfClaimingTheTableHasNoRows() {
+        let fixture = fixture(
+            label: "Limiter On",
+            controlRoles: [kAXCheckBoxRole as String],
+            axRowsMalformed: true
+        )
+        let result = ControlsViewBooleanParameterWriter.locate(
+            label: "Limiter On",
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refusedForMalformedRows: Bool
+        if case .refused(.accessibilityReadMalformed) = result {
+            refusedForMalformedRows = true
+        } else {
+            refusedForMalformedRows = false
+        }
+        #expect(refusedForMalformedRows)
+    }
+
     @Test func secondControlWhoseRoleReadFailsRefusesTheWholeBinding() {
         let fixture = fixture(
             label: "Limiter On",
@@ -238,7 +259,7 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refusedForUnreadableCell)
     }
 
-    @Test func unchangedReadbackRefusesAndAttemptsOneRestore() {
+    @Test func unchangedReadbackRefusesWithoutAnUnneededCompensatingPress() {
         let builder = FakeAXRuntimeBuilder()
         let checkbox = builder.element(10)
         builder.setRole(checkbox, kAXCheckBoxRole as String)
@@ -257,10 +278,10 @@ struct ControlsViewBooleanParameterWriterTests {
             $0.elementID == builder.elementID(checkbox)
                 && $0.action == (kAXPressAction as String)
         }.count
-        let attemptedExactlyPressAndRestore = actionCount == 2
+        let attemptedOnlyTheInitialPress = actionCount == 1
         #expect(refused)
-        #expect(restoreAttempted)
-        #expect(attemptedExactlyPressAndRestore)
+        #expect(!restoreAttempted)
+        #expect(attemptedOnlyTheInitialPress)
     }
 
     @Test func statusZeroPressWithUnchangedReadbackNeverReportsSuccess() {
@@ -288,9 +309,9 @@ struct ControlsViewBooleanParameterWriterTests {
         )
 
         let refused = !result.verified
-        let attemptedRestore = count.value == 2
+        let noCompensatingPress = count.value == 1
         #expect(refused)
-        #expect(attemptedRestore)
+        #expect(noCompensatingPress)
     }
 
     @Test func unreadableCheckboxValueRefusesBeforeAnyPress() {
@@ -468,7 +489,8 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refusedForDescriptionRead)
     }
 
-    @Test func failedSliderCensusDoesNotRefuseEditorConfirmedByNoTable() {
+    @Test func failedSliderCensusRefusesRatherThanTreatingNoTableAsEditorEvidence() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
         let fixture = viewFixture(
             entry: .editor,
             title: "편집기",
@@ -481,16 +503,17 @@ struct ControlsViewBooleanParameterWriterTests {
             in: fixture.window,
             runtime: fixture.runtime
         )
-        let editorWasConfirmed: Bool
-        if case .ready = result {
-            editorWasConfirmed = true
+        let refusedForTheMeasuredReadFailure: Bool
+        if case let .refused(.viewEvidenceReadFailed(.sliderCensus(observed)), restoration: nil) = result {
+            refusedForTheMeasuredReadFailure = observed == readFailure
         } else {
-            editorWasConfirmed = false
+            refusedForTheMeasuredReadFailure = false
         }
-        #expect(editorWasConfirmed)
+        #expect(refusedForTheMeasuredReadFailure)
     }
 
-    @Test func failedSliderDescriptionDoesNotRefuseControlsConfirmedByTable() {
+    @Test func failedSliderDescriptionRefusesRatherThanConfirmingAnUnrelatedTableAsControls() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
         let fixture = viewFixture(
             entry: .editor,
             title: "편집기",
@@ -504,18 +527,18 @@ struct ControlsViewBooleanParameterWriterTests {
             in: fixture.window,
             runtime: fixture.runtime
         )
-        let controlsWereConfirmed: Bool
-        if case .ready = result {
-            controlsWereConfirmed = true
+        let refusedForTheSliderDescription: Bool
+        if case let .refused(.viewEvidenceReadFailed(.sliderDescription(observed)), restoration: nil) = result {
+            refusedForTheSliderDescription = observed == readFailure
         } else {
-            controlsWereConfirmed = false
+            refusedForTheSliderDescription = false
         }
-        let tableConfirmedTheAlreadySelectedView = fixture.builder.actionCalls.isEmpty
-        #expect(controlsWereConfirmed)
-        #expect(tableConfirmedTheAlreadySelectedView)
+        let tableDidNotAuthorizeAViewChoice = fixture.builder.actionCalls.isEmpty
+        #expect(refusedForTheSliderDescription)
+        #expect(tableDidNotAuthorizeAViewChoice)
     }
 
-    @Test func allDescriptionFailuresDoNotRefuseControlsConfirmedByTheTable() {
+    @Test func allDescriptionFailuresRefuseControlsClassificationWhenNoDescribedSliderWasObserved() {
         let fixture = viewFixture(
             entry: .controls,
             title: "컨트롤",
@@ -529,18 +552,18 @@ struct ControlsViewBooleanParameterWriterTests {
             runtime: fixture.runtime
         )
 
-        let controlsWereConfirmed: Bool
-        if case .ready = result {
-            controlsWereConfirmed = true
+        let refusedForDescriptionRead: Bool
+        if case .refused(.viewEvidenceReadFailed(.sliderDescription), restoration: nil) = result {
+            refusedForDescriptionRead = true
         } else {
-            controlsWereConfirmed = false
+            refusedForDescriptionRead = false
         }
-        let tableConfirmedTheAlreadySelectedView = fixture.builder.actionCalls.isEmpty
-        #expect(controlsWereConfirmed)
-        #expect(tableConfirmedTheAlreadySelectedView)
+        let tableDidNotConfirmTheView = fixture.builder.actionCalls.isEmpty
+        #expect(refusedForDescriptionRead)
+        #expect(tableDidNotConfirmTheView)
     }
 
-    @Test func allDescriptionFailuresDoNotRefuseEditorConfirmedByNoTable() {
+    @Test func allDescriptionFailuresRefuseEditorClassificationWhenNoDescriptionWasReadable() {
         let fixture = viewFixture(
             entry: .editor,
             title: "편집기",
@@ -554,15 +577,15 @@ struct ControlsViewBooleanParameterWriterTests {
             runtime: fixture.runtime
         )
 
-        let editorWasConfirmed: Bool
-        if case .ready = result {
-            editorWasConfirmed = true
+        let refusedForDescriptionRead: Bool
+        if case .refused(.viewEvidenceReadFailed(.sliderDescription), restoration: nil) = result {
+            refusedForDescriptionRead = true
         } else {
-            editorWasConfirmed = false
+            refusedForDescriptionRead = false
         }
-        let missingTableConfirmedTheAlreadySelectedView = fixture.builder.actionCalls.isEmpty
-        #expect(editorWasConfirmed)
-        #expect(missingTableConfirmedTheAlreadySelectedView)
+        let missingTableDidNotConfirmTheView = fixture.builder.actionCalls.isEmpty
+        #expect(refusedForDescriptionRead)
+        #expect(missingTableDidNotConfirmTheView)
     }
 
     @Test func describedSliderConfirmsEditorAfterAnotherDescriptionReadFails() {
@@ -753,6 +776,53 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(revealedWithPress)
         #expect(selectedWithPick)
         #expect(menuWasPolledUntilVisible)
+    }
+
+    @Test func disabledViewMenuItemIsNeverPicked() {
+        let fixture = viewFixture(entry: .editor, title: "편집기", behavior: .switchesStructure)
+        fixture.builder.setAttribute(fixture.builder.element(904), kAXEnabledAttribute as String, false)
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refusedForDisabledItem: Bool
+        if case .refused(.viewMenuItemDisabled(.controls), restoration: nil) = result {
+            refusedForDisabledItem = true
+        } else {
+            refusedForDisabledItem = false
+        }
+        let noMenuItemAction = fixture.menuItemActions.value.isEmpty
+        #expect(refusedForDisabledItem)
+        #expect(noMenuItemAction)
+    }
+
+    @Test func unreadableViewMenuItemEnabledStateIsNeverPicked() {
+        let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            menuItemEnabledReadFails: true
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refusedForEnabledRead: Bool
+        if case let .refused(.viewEvidenceReadFailed(.menuItemEnabled(observed)), restoration: nil) = result {
+            refusedForEnabledRead = observed == readFailure
+        } else {
+            refusedForEnabledRead = false
+        }
+        let noMenuItemAction = fixture.menuItemActions.value.isEmpty
+        #expect(refusedForEnabledRead)
+        #expect(noMenuItemAction)
     }
 
     @Test func switchThatNeverChangesStructureRefusesWithinDeadlineAndLeavesEntryView() {
@@ -978,6 +1048,7 @@ struct ControlsViewBooleanParameterWriterTests {
         menuRevealAfterPolls: Int? = 3,
         menuReadFailure: AXHelpers.AXStatusError? = nil,
         readFailure: ViewFixtureReadFailure? = nil,
+        menuItemEnabledReadFails: Bool = false,
         includeControlsTableBesideEditor: Bool = false,
         additionalSliderDescriptionFailure: Bool = false,
         allDescriptionReadsFail: Bool = false,
@@ -1020,8 +1091,10 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setRole(menu, kAXMenuRole as String)
         builder.setRole(controlsMenuItem, kAXMenuItemRole as String)
         builder.setAttribute(controlsMenuItem, kAXTitleAttribute as String, "컨트롤")
+        builder.setAttribute(controlsMenuItem, kAXEnabledAttribute as String, true)
         builder.setRole(editorMenuItem, kAXMenuItemRole as String)
         builder.setAttribute(editorMenuItem, kAXTitleAttribute as String, "편집기")
+        builder.setAttribute(editorMenuItem, kAXEnabledAttribute as String, true)
         builder.setChildren(menu, [controlsMenuItem, editorMenuItem])
 
         builder.setRole(editorSlider, kAXSliderRole as String)
@@ -1089,6 +1162,11 @@ struct ControlsViewBooleanParameterWriterTests {
                    attribute == (kAXTitleAttribute as String) {
                     return .failure(statusFailure)
                 }
+                if menuItemEnabledReadFails,
+                   (CFEqual(element, controlsMenuItem) || CFEqual(element, editorMenuItem)),
+                   attribute == (kAXEnabledAttribute as String) {
+                    return .failure(statusFailure)
+                }
                 return nil
             },
             childrenHandler: { element in
@@ -1118,7 +1196,7 @@ struct ControlsViewBooleanParameterWriterTests {
                 }
                 if readFailure == .sliderCensus, CFEqual(element, editorSlider) {
                     sliderChildrenReadCount.value += 1
-                    if sliderChildrenReadCount.value == 2 {
+                    if sliderChildrenReadCount.value == 1 {
                         return .failure(statusFailure)
                     }
                 }
@@ -1230,6 +1308,7 @@ struct ControlsViewBooleanParameterWriterTests {
         label: String?,
         controlRoles: [String],
         axRowsReadStatus: Int32? = nil,
+        axRowsMalformed: Bool = false,
         roleReadFailureElementIDs: Set<Int> = []
     ) -> (builder: FakeAXRuntimeBuilder, window: AXUIElement, runtime: AXHelpers.Runtime) {
         let builder = FakeAXRuntimeBuilder()
@@ -1262,7 +1341,7 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setChildren(labelCell, labelContents)
         builder.setChildren(row, [labelCell])
         builder.setChildren(table, [row])
-        builder.setAttribute(table, kAXRowsAttribute as String, [row])
+        builder.setAttribute(table, kAXRowsAttribute as String, axRowsMalformed ? "not an AX element array" : [row])
         builder.setChildren(window, [table])
         let runtime = builder.makeAXRuntime(
             appElement: builder.element(99),
