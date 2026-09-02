@@ -1,76 +1,151 @@
 import Foundation
 
-/// Whether a Phase-B readback may be believed — #373.
+/// Whether an independent readback may count as live-verification evidence — #373.
 ///
-/// Phase B is "pre-state → mutation → independent readback → restore → restore-readback", and its
-/// recorded blocker was that `logic://tracks` is served from the poller cache: a cache that never
-/// moved satisfies a value-equality check exactly as well as a fresh read does. The proposed remedy
-/// was a second, non-cached read path.
-///
-/// Measured 2026-08-24 against live Logic, one `tracks.create_audio` with a readback either side:
-///
-///     PRE   source=ax_live  fetched_at=…T01:19:00.078Z  cache_age_sec=0.80  tracks=1
-///     MUT   observed_delta=1  state=A
-///     POST  source=ax_live  fetched_at=…T01:19:06.135Z  cache_age_sec=0.28  tracks=2
-///
-/// The envelope already carries the proof. `fetched_at` advanced past the mutation and `source`
-/// distinguishes a live walk from a cache or default answer, so the freshness requirement is an
-/// assertion on fields that ship today rather than a new read path.
-///
-/// The clause that does the work is `fetchedAt > mutationStartedAt`: a stale envelope fails it by
-/// construction, whatever its values say. The other two are there because a check that cannot see
-/// its subject reports absence as agreement — `source` absent or `default` means the poller never
-/// read, and a missing `cache_age_sec` means the envelope is not the one this rule was measured on.
+/// State resources already publish the observations this gate needs. In particular, a tracks
+/// envelope says whether Accessibility was readable, whether an AX-occluding surface was present,
+/// whether an empty result was positively established, where the result came from, and how old it
+/// is. Comparing only `data` let an unchanged cache masquerade as a post-write observation.
 enum QualificationReadbackFreshness {
-    /// The three fields `ResourceHandlers+StateReaders` publishes on every state envelope.
+    /// The observed fields that determine whether a resource body is evidence. `dataIsEmpty` is
+    /// derived from the resource payload rather than supplied by the caller, so an empty list and
+    /// an unconfirmed empty list cannot be confused.
     struct Envelope: Equatable, Sendable {
         let source: String?
-        let fetchedAt: Date?
+        let readable: Bool?
+        let axOccluded: Bool?
+        let verifiedEmpty: Bool?
+        let dataIsEmpty: Bool
         let cacheAgeSeconds: Double?
 
-        init(source: String?, fetchedAt: Date?, cacheAgeSeconds: Double?) {
+        init(
+            source: String?,
+            readable: Bool?,
+            axOccluded: Bool?,
+            verifiedEmpty: Bool?,
+            dataIsEmpty: Bool,
+            cacheAgeSeconds: Double?
+        ) {
             self.source = source
-            self.fetchedAt = fetchedAt
+            self.readable = readable
+            self.axOccluded = axOccluded
+            self.verifiedEmpty = verifiedEmpty
+            self.dataIsEmpty = dataIsEmpty
             self.cacheAgeSeconds = cacheAgeSeconds
         }
     }
 
-    /// Why a readback was refused, named rather than reduced to `false`. A Phase-B recipe that
-    /// logs "inadmissible" and nothing else cannot tell a stale cache from an unread poller, and
-    /// those two failures call for opposite responses.
+    /// The reason an otherwise well-formed readback cannot confirm a live operation. These are
+    /// wire-stable strings because a refusal needs to say whether to retry the AX read, dismiss an
+    /// occluding panel, or investigate an outdated cache.
     enum Verdict: Equatable, Sendable {
         case admissible
-        /// The poller never produced a live walk — `source` is `cache`, `default`, or absent.
+        case unreadable
+        case axOccluded
+        case emptyUnverified
         case notLive(source: String?)
-        /// The envelope predates the mutation it is supposed to witness.
-        case predatesMutation(fetchedAt: Date, mutationStartedAt: Date)
-        /// `fetched_at` is absent, so the envelope cannot be placed in time at all.
-        case unplaceableInTime
-        /// `cache_age_sec` is absent; this is not the envelope shape the rule was measured against.
-        case ageAbsent
+        case cacheAgeUnknown
+        case cacheAgeExceeded(age: Double, maximum: Double)
 
         var isAdmissible: Bool { self == .admissible }
+
+        var refusalReason: String? {
+            switch self {
+            case .admissible:
+                nil
+            case .unreadable:
+                "readback_unreadable"
+            case .axOccluded:
+                "readback_ax_occluded"
+            case .emptyUnverified:
+                "readback_empty_unverified"
+            case .notLive:
+                "readback_not_ax_live"
+            case .cacheAgeUnknown:
+                "readback_cache_age_unknown"
+            case .cacheAgeExceeded:
+                "readback_cache_age_exceeded"
+            }
+        }
     }
 
-    /// The one source token that means "the poller walked Accessibility for this answer".
-    /// `cache` and `default` are the other two `ResourceHandlers` emits, and both are refusals here.
+    /// The sole resource provenance that means this answer came from the AX surface.
     static let liveSourceToken = "ax_live"
 
-    static func verdict(for envelope: Envelope, mutationStartedAt: Date) -> Verdict {
+    static func verdict(
+        for readbackData: Data,
+        verification: VerificationPolicy,
+        deadline: DeadlineClass
+    ) -> Verdict {
+        verdict(for: envelope(from: readbackData), verification: verification, deadline: deadline)
+    }
+
+    static func verdict(
+        for envelope: Envelope,
+        verification: VerificationPolicy,
+        deadline: DeadlineClass
+    ) -> Verdict {
+        // `readbackRequired` is the registry's live-verification contract. Read-only and
+        // best-effort operations may retain their existing independent-readback semantics without
+        // acquiring a new AX freshness precondition.
+        guard verification == .readbackRequired else { return .admissible }
+
+        if envelope.readable == false { return .unreadable }
+        if envelope.axOccluded == true { return .axOccluded }
+        if envelope.dataIsEmpty && envelope.verifiedEmpty != true { return .emptyUnverified }
         guard envelope.source == liveSourceToken else {
             return .notLive(source: envelope.source)
         }
-        guard let fetchedAt = envelope.fetchedAt else {
-            return .unplaceableInTime
+
+        // The bound is the operation's own deadline, not a new uniform cache constant:
+        // short = 25 s, medium = 90 s, and long = 300 s (`DeadlineClass.seconds`). Those are the
+        // maximum in-flight windows the operation contract already grants. An observation older
+        // than its own window could predate the write it is meant to confirm; a tighter shared
+        // window would invent a constraint for slower classes, while a looser one would defeat the
+        // short class's contract. Unknown age (including an absent `cache_age_sec`) is refused:
+        // without a measurement, it cannot satisfy any age bound.
+        guard let age = envelope.cacheAgeSeconds, age >= 0 else {
+            return .cacheAgeUnknown
         }
-        // Strictly after: an envelope stamped at the same instant as the mutation started cannot
-        // have observed its effect, and equality is exactly the case a coarse clock produces.
-        guard fetchedAt > mutationStartedAt else {
-            return .predatesMutation(fetchedAt: fetchedAt, mutationStartedAt: mutationStartedAt)
-        }
-        guard envelope.cacheAgeSeconds != nil else {
-            return .ageAbsent
+        let maximum = deadline.seconds
+        guard age <= maximum else {
+            return .cacheAgeExceeded(age: age, maximum: maximum)
         }
         return .admissible
+    }
+
+    private static func envelope(from readbackData: Data) -> Envelope {
+        guard let object = try? JSONSerialization.jsonObject(with: readbackData) as? [String: Any]
+        else {
+            return Envelope(
+                source: nil,
+                readable: nil,
+                axOccluded: nil,
+                verifiedEmpty: nil,
+                dataIsEmpty: false,
+                cacheAgeSeconds: nil
+            )
+        }
+        return Envelope(
+            source: object["source"] as? String,
+            readable: object["readable"] as? Bool,
+            axOccluded: object["ax_occluded"] as? Bool,
+            verifiedEmpty: object["verified_empty"] as? Bool,
+            dataIsEmpty: isEmpty(object["data"]),
+            cacheAgeSeconds: object["cache_age_sec"] as? Double
+        )
+    }
+
+    private static func isEmpty(_ value: Any?) -> Bool {
+        switch value {
+        case let values as [Any]:
+            values.isEmpty
+        case let values as [String: Any]:
+            values.isEmpty
+        case is NSNull:
+            true
+        default:
+            false
+        }
     }
 }

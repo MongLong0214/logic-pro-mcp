@@ -152,7 +152,49 @@ struct QualificationOperationResult: Equatable, Sendable {
     let readbackSource: String?
     let readbackRequestID: String?
     let readbackData: Data?
+    /// The operation contract is carried with the captured readback so that an independent read
+    /// can apply a live-freshness requirement only when this operation actually promises one.
+    let verification: VerificationPolicy
+    let deadline: DeadlineClass
     let failureReason: String?
+
+    init(
+        operationID: String,
+        tool: String,
+        command: String,
+        mutability: Mutability,
+        requestID: String?,
+        responseData: Data?,
+        isError: Bool?,
+        state: String?,
+        error: String?,
+        hint: String?,
+        writeAttempted: Bool?,
+        readbackSource: String?,
+        readbackRequestID: String?,
+        readbackData: Data?,
+        verification: VerificationPolicy = .none,
+        deadline: DeadlineClass = .short,
+        failureReason: String?
+    ) {
+        self.operationID = operationID
+        self.tool = tool
+        self.command = command
+        self.mutability = mutability
+        self.requestID = requestID
+        self.responseData = responseData
+        self.isError = isError
+        self.state = state
+        self.error = error
+        self.hint = hint
+        self.writeAttempted = writeAttempted
+        self.readbackSource = readbackSource
+        self.readbackRequestID = readbackRequestID
+        self.readbackData = readbackData
+        self.verification = verification
+        self.deadline = deadline
+        self.failureReason = failureReason
+    }
 
     var responseArtifactData: Data? {
         guard let requestID,
@@ -208,6 +250,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
         switch mutability {
         case .readOnly:
+            guard readbackFreshness.isAdmissible else { return .notQualified }
             guard isError == false else { return .notQualified }
             switch semanticReadbackValidated {
             case .some(true): return .passed
@@ -215,6 +258,10 @@ struct QualificationOperationResult: Equatable, Sendable {
             case .none: return .protocolSmoke
             }
         case .mutating:
+            // A successful write that carries an inadmissible live readback has not been
+            // confirmed. Keep the existing no-write deferrals untouched, but make a future
+            // Phase-B success path refuse this observation instead of accepting equal stale data.
+            if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
             return isTypedZeroWriteRefusal ? .notQualified : .failed
         }
     }
@@ -230,14 +277,22 @@ struct QualificationOperationResult: Equatable, Sendable {
     }
 
     var deferral: QualificationDeferral? {
+        if status == .notQualified,
+           isError == false,
+           let reason = readbackFreshness.refusalReason {
+            return QualificationDeferral(
+                code: .semanticMismatch,
+                detail: reason
+            )
+        }
         switch status {
         case .notQualified where mutability == .mutating:
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .liveMutationNotRun,
                 detail: "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
             )
         case .notQualified where isError == false && semanticReadbackValidated == false:
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .semanticMismatch,
                 detail: "read-only response did not match its operation-specific independent readback"
             )
@@ -246,20 +301,20 @@ struct QualificationOperationResult: Equatable, Sendable {
         // this one announces itself, and a list here would be a second place to keep in step with
         // the feature flags.
         case .notQualified where error == HonestContract.FailureError.commandNotExposed.rawValue:
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .notExposedInProductionContract,
                 detail: "the production MCP contract does not expose this operation; no probe "
                     + "parameter can qualify it while its feature flag is off"
             )
         case .notQualified where QualificationTransport.declinesItsSuccessPathByDesign
             .contains(operationID):
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .deliberateZeroWriteProbe,
                 detail: "the probe declines this operation's success path by design; reaching it "
                     + "would destroy or mutate state the qualification must not touch"
             )
         case .notQualified:
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .operationUnavailable,
                 // This used to assert one cause for every shortfall: that the probe sends `[:]`
                 // and the operation refused for want of a parameter. That is true for some and
@@ -278,12 +333,12 @@ struct QualificationOperationResult: Equatable, Sendable {
                 detail: Self.unavailableDetail(error: error, hint: hint)
             )
         case .protocolSmoke:
-            QualificationDeferral(
+            return QualificationDeferral(
                 code: .semanticValidatorUnavailable,
                 detail: "protocol transport succeeded without an operation-specific semantic validator"
             )
         default:
-            nil
+            return nil
         }
     }
 
@@ -317,6 +372,15 @@ struct QualificationOperationResult: Equatable, Sendable {
             operationID: operationID,
             responseData: responseData,
             readbackData: readbackData
+        )
+    }
+
+    private var readbackFreshness: QualificationReadbackFreshness.Verdict {
+        guard let readbackData else { return .cacheAgeUnknown }
+        return QualificationReadbackFreshness.verdict(
+            for: readbackData,
+            verification: verification,
+            deadline: deadline
         )
     }
 
@@ -698,6 +762,8 @@ struct QualificationTransport: Sendable {
                     readbackSource: readbackSource,
                     readbackRequestID: readbackRequestID,
                     readbackData: readbackData,
+                    verification: spec.verification,
+                    deadline: spec.deadline,
                     failureReason: responseFailure ?? readbackFailure
                 )
             }
