@@ -21,11 +21,15 @@ struct QualificationRunnerTests {
     }
 
     private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
-        .init(
-            operationID: OperationID.tracksListLibrary.rawValue,
-            failureReason: "semantic readback mismatch: response did not match its independent readback",
-            trackingIssue: "#284"
-        ),
+        // `tracks.list_library` was pinned here until 2026-09-02. It is not a
+        // semantic shortfall: measured, it answers differently depending on whether
+        // Logic's Library panel is open — returning categories and presets when it
+        // is, and refusing with an exact hint when it is not. The closed-panel
+        // refusal is now classified as an environmental prerequisite, like the
+        // plug-in window `scan_plugin_presets` needs, so it left this list by being
+        // correctly bucketed rather than by being fixed. This comment is here
+        // because a name disappearing from a known-failure list should never be
+        // silent.
         .init(
             operationID: OperationID.tracksResolvePath.rawValue,
             failureReason: "semantic readback mismatch: response did not match its independent readback",

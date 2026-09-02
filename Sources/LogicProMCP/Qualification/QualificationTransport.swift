@@ -320,14 +320,25 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// above, the exact refusal is part of the classification so a new error
     /// from the same operation stays visible as a failure.
     var liveGateUnmetEnvironmentalPrecondition: String? {
-        guard OperationID(rawValue: operationID) == .tracksScanPluginPresets,
-              isError == true,
-              error == "channels_exhausted",
-              hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first."
-        else {
+        guard isError == true, error == "channels_exhausted" else { return nil }
+        switch OperationID(rawValue: operationID) {
+        case .tracksScanPluginPresets
+            where hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first.":
+            return "requires an open plugin window with a Setting dropdown"
+        // Measured 2026-09-02: `tracks.list_library` answers differently depending
+        // on whether Logic's Library panel is open. With the panel open it returns
+        // categories and presets and its readback is compared; with the panel
+        // closed it refuses with this exact hint. Both observations are true — they
+        // are of different states — so the closed-panel refusal is an environmental
+        // prerequisite, exactly like the plug-in window above, and not a semantic
+        // shortfall. Pinning it as a semantic failure made the gate's exact-match
+        // assertion fire on a panel the operator happened to close.
+        case .tracksListLibrary
+            where hint == "Library panel not found. Open Library (Y) in Logic Pro.":
+            return "requires Logic's Library panel to be open"
+        default:
             return nil
         }
-        return "requires an open plugin window with a Setting dropdown"
     }
 
     /// The outcome used by the live qualification gate. A non-passing
