@@ -1302,6 +1302,7 @@ enum AXLocalePolicy {
         }
 
         var hits: [AXUIElement] = []
+        var firstLabelReadFailure: AXHelpers.AXStatusError?
         for candidate in roleCensus.matches {
             switch elementMatchesResult(candidate, labels, mode: mode, runtime: runtime) {
             case .success(true):
@@ -1309,8 +1310,11 @@ enum AXLocalePolicy {
             case .success(false):
                 continue
             case let .failure(error):
-                return .failure(error)
+                firstLabelReadFailure = firstLabelReadFailure ?? error
             }
+        }
+        if hits.isEmpty, let firstLabelReadFailure {
+            return .failure(firstLabelReadFailure)
         }
         return .success(Census(
             element: hits.count == 1 ? hits[0] : nil,
@@ -1325,12 +1329,14 @@ enum AXLocalePolicy {
         mode: MatchMode,
         runtime: AXHelpers.Runtime
     ) -> Result<Bool, AXHelpers.AXStatusError> {
+        var firstReadFailure: AXHelpers.AXStatusError?
         let title: String?
         switch stringAttributeResult(element, kAXTitleAttribute as String, runtime: runtime) {
         case let .success(observed):
             title = observed
         case let .failure(error):
-            return .failure(error)
+            firstReadFailure = error
+            title = nil
         }
         if labels.matches(title, mode: mode) {
             return .success(true)
@@ -1341,9 +1347,16 @@ enum AXLocalePolicy {
         case let .success(observed):
             description = observed
         case let .failure(error):
-            return .failure(error)
+            firstReadFailure = firstReadFailure ?? error
+            description = nil
         }
-        return .success(labels.matches(description, mode: mode))
+        if labels.matches(description, mode: mode) {
+            return .success(true)
+        }
+        if let firstReadFailure {
+            return .failure(firstReadFailure)
+        }
+        return .success(false)
     }
 
     private static func stringAttributeResult(

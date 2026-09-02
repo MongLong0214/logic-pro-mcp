@@ -343,13 +343,15 @@ enum ControlsViewBooleanParameterWriter {
             return .refused(.viewEvidenceReadFailed(.switcherCensus(error)), restoration: nil)
         }
         var measured: [AXUIElement] = []
+        var firstSwitcherDescriptionReadFailure: AXHelpers.AXStatusError?
         for menuButton in menuButtons {
             let description: String?
             switch descriptionResult(of: menuButton, runtime: runtime) {
             case let .success(observed):
                 description = observed
             case let .failure(error):
-                return .refused(.viewEvidenceReadFailed(.switcherDescription(error)), restoration: nil)
+                firstSwitcherDescriptionReadFailure = firstSwitcherDescriptionReadFailure ?? error
+                continue
             }
             if AXLocalePolicy.pluginWindowViewSwitcher.matches(description, mode: .exact) {
                 measured.append(menuButton)
@@ -358,6 +360,12 @@ enum ControlsViewBooleanParameterWriter {
         guard measured.count == 1, let switcher = measured.first else {
             if measured.count > 1 {
                 return .refused(.viewSwitcherAmbiguous, restoration: nil)
+            }
+            if let firstSwitcherDescriptionReadFailure {
+                return .refused(
+                    .viewEvidenceReadFailed(.switcherDescription(firstSwitcherDescriptionReadFailure)),
+                    restoration: nil
+                )
             }
             return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale, restoration: nil)
         }

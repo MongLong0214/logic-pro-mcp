@@ -1770,6 +1770,20 @@ extension AccessibilityChannel {
                 identity,
                 "more than one slider exposed the requested AXDescription in the confirmed native plugin view"
             ))
+        case let .unreadable(error):
+            return .error(stateCWithPluginViewRestoration(
+                error: .windowIdentityUnresolved,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "slider_description_read_failure": error.diagnosticLabel,
+                    "what_was_attempted": "locate the '\(axDescription)' AXSlider in the plugin window",
+                    "what_was_observed": "no slider with that AX description was observed, and another slider's AXDescription read failed (AX status \(error.diagnosticLabel)); the control was not treated as absent",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
         case .none:
             return .error(stateCWithPluginViewRestoration(
                 error: .paramControlNotFound,

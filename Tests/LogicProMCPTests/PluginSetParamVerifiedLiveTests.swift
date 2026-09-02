@@ -89,6 +89,8 @@ private final class LiveFixture: @unchecked Sendable {
         pluginWindowTitleReadFails: Bool = false,
         pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError? = nil,
         nonPluginWindowSubroleReadStatus: AXHelpers.AXStatusError? = nil,
+        sliderDescriptionReadStatuses: MutableBox<[Int: AXHelpers.AXStatusError]>? = nil,
+        pluginWindowStaticTextValueReadStatuses: MutableBox<[Int: AXHelpers.AXStatusError]>? = nil,
         // An already-visible editor whose title becomes the target track only
         // after the slot press. This models an existing AX element being
         // retargeted by an unrelated UI transition; duplicate acquisition must
@@ -366,6 +368,14 @@ private final class LiveFixture: @unchecked Sendable {
                    CFEqual(element, pluginWindow),
                    attribute == (kAXTitleAttribute as String) {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if let status = sliderDescriptionReadStatuses?.value[b.elementID(element)],
+                   attribute == (kAXDescriptionAttribute as String) {
+                    return .failure(status)
+                }
+                if let status = pluginWindowStaticTextValueReadStatuses?.value[b.elementID(element)],
+                   attribute == (kAXValueAttribute as String) {
+                    return .failure(status)
                 }
                 return nil
             },
@@ -2758,7 +2768,7 @@ private func namedEQBandParams(
 }
 
 @Test func testAmbiguousRequestedSlidersFailClosed() async throws {
-    let fixture = LiveFixture(beforeValue: 51)
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowPresent: false)
     let b = fixture.builder
     let duplicateSlider = b.element(3200)
     b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
@@ -2769,13 +2779,23 @@ private func namedEQBandParams(
         b.element(1011), b.element(1009),
     ])
 
-    let obj = await runLive(fixture: fixture, params: thresholdParams())
+    let openedWindow = AXUIElementSendable(b.element(1004))
+    let obj = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), b.element(1004)])
+            return openedWindow
+        }
+    )
 
-    #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "window_identity_unresolved")
-    let v1 = try #require(obj["write_attempted"] as? Bool)
-    #expect(!v1)
-    #expect(fixture.currentSliderValue == 51)
+    let state = try #require(obj["state"] as? String)
+    let error = try #require(obj["error"] as? String)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    let refusedAsAmbiguous = state == "C" && error == "window_identity_unresolved"
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.currentSliderValue == 51
+    #expect(refusedAsAmbiguous)
+    #expect(noSliderWriteWasAttempted)
 }
 
 @Test func testOpenerFallbackProducesStateA() async {
@@ -2831,6 +2851,152 @@ private func namedEQBandParams(
 }
 
 // MARK: - State C: slider not found → param_control_not_found
+
+@Test func testMatchingSliderDescriptionWinsOverAnUnrelatedDescriptionReadFailure() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let unreadableSlider = b.element(32_101)
+    b.setAttribute(unreadableSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(unreadableSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), unreadableSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let writeWasAttempted = fixture.sliderWriteCount.value == 1
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(writeWasAttempted)
+    #expect(matchingSliderWasWritten)
+}
+
+@Test func testUnmatchedSliderDescriptionReadFailureRefusesAsUnknown() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        thresholdDescription: "Output Gain",
+        pluginWindowPresent: false,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let unreadableSlider = b.element(32_102)
+    b.setAttribute(unreadableSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(unreadableSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), unreadableSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+    let openedWindow = AXUIElementSendable(b.element(1004))
+
+    let result = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in openedWindow }
+    )
+
+    let error = try #require(result["error"] as? String)
+    let readFailure = try #require(result["slider_description_read_failure"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let refusedAsUnknown = error == "window_identity_unresolved"
+    let namesTheAXReadFailure = readFailure == "-25200"
+    let didNotClaimControlWasAbsent = error != "param_control_not_found"
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.sliderWriteCount.value == 0
+    #expect(refusedAsUnknown)
+    #expect(namesTheAXReadFailure)
+    #expect(didNotClaimControlWasAbsent)
+    #expect(noSliderWriteWasAttempted)
+}
+
+@Test func testUnmatchedSliderDescriptionsWithOnlyAbsenceAndSuccessAreNotFound() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        thresholdDescription: "Output Gain",
+        pluginWindowPresent: false,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    let noValueSlider = b.element(32_103)
+    let unsupportedSlider = b.element(32_104)
+    b.setAttribute(noValueSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(unsupportedSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    descriptionStatuses.value[b.elementID(noValueSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.noValue.rawValue
+    )
+    descriptionStatuses.value[b.elementID(unsupportedSlider)] = AXHelpers.AXStatusError(
+        raw: AXError.attributeUnsupported.rawValue
+    )
+    b.setChildren(b.element(1004), [
+        b.element(1007), b.element(1008), noValueSlider, unsupportedSlider, b.element(1005),
+        b.element(1011), b.element(1009),
+    ])
+    let openedWindow = AXUIElementSendable(b.element(1004))
+
+    let result = await runLive(
+        fixture: fixture,
+        params: thresholdParams(),
+        opener: { _, _, _, _, _ in openedWindow }
+    )
+
+    let error = try #require(result["error"] as? String)
+    let writeAttempted = try #require(result["write_attempted"] as? Bool)
+    let reportedObservedAbsence = error == "param_control_not_found"
+    let noReadFailureWasInvented = result["slider_description_read_failure"] == nil
+    let noSliderWriteWasAttempted = !writeAttempted && fixture.sliderWriteCount.value == 0
+    #expect(reportedObservedAbsence)
+    #expect(noReadFailureWasInvented)
+    #expect(noSliderWriteWasAttempted)
+}
+
+@Test func testBypassEvidenceWinsOverAnUnrelatedLabelReadFailure() async throws {
+    let descriptionStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        sliderDescriptionReadStatuses: descriptionStatuses
+    )
+    let b = fixture.builder
+    descriptionStatuses.value[b.elementID(b.element(1008))] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(matchingSliderWasWritten)
+}
+
+@Test func testPluginHeaderEvidenceWinsOverAnUnrelatedStaticTextReadFailure() async throws {
+    let staticTextStatuses = MutableBox<[Int: AXHelpers.AXStatusError]>([:])
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowStaticTextValueReadStatuses: staticTextStatuses
+    )
+    let b = fixture.builder
+    staticTextStatuses.value[b.elementID(b.element(1010))] = AXHelpers.AXStatusError(
+        raw: AXError.failure.rawValue
+    )
+
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let reachedVerifiedWrite = state == "A"
+    let matchingSliderWasWritten = fixture.currentSliderValue == 60
+    #expect(reachedVerifiedWrite)
+    #expect(matchingSliderWasWritten)
+}
 
 @Test func testWindowWithoutMatchingSliderIsParamControlNotFound() async {
     // The window exists and is titled with the track name, but its only slider

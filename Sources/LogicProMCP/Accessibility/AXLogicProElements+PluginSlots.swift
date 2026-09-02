@@ -423,19 +423,23 @@ extension AXLogicProElements {
         }
         for candidate in candidates {
             guard candidate.title == target else { continue }
-            let observedNames: [String]
+            let headerEvidence: PluginWindowHeaderStaticTextEvidence
             switch pluginWindowHeaderStaticTextValues(in: candidate, runtime: runtime.ax) {
             case let .success(observed):
-                observedNames = observed
+                headerEvidence = observed
             case let .failure(error):
                 return .unreadable(error)
             }
+            let observedNames = headerEvidence.values
             let headerMatchesPlugin = pluginWindowHeaderNames(
                 observedNames,
                 containPluginID: pluginID,
                 excludingTrackName: candidate.title,
                 callerTrackName: target
             )
+            if !headerMatchesPlugin, let error = headerEvidence.firstReadFailure {
+                return .unreadable(error)
+            }
             let sliderWitness: Result<PluginSliderMatch, AXHelpers.AXStatusError>? = axDescription.map {
                 pluginWindowSliderMatchResult(
                     in: candidate.element,
@@ -518,13 +522,14 @@ extension AXLogicProElements {
         }
         var matches: [AXUIElement] = []
         for candidate in candidates where candidate.title == target {
-            let observedNames: [String]
+            let headerEvidence: PluginWindowHeaderStaticTextEvidence
             switch pluginWindowHeaderStaticTextValues(in: candidate, runtime: runtime.ax) {
             case let .success(observed):
-                observedNames = observed
+                headerEvidence = observed
             case let .failure(error):
                 return .failure(error)
             }
+            let observedNames = headerEvidence.values
             if pluginWindowHeaderNames(
                 observedNames,
                 containPluginID: pluginID,
@@ -532,6 +537,8 @@ extension AXLogicProElements {
                 callerTrackName: target
             ) {
                 matches.append(candidate.element)
+            } else if let error = headerEvidence.firstReadFailure {
+                return .failure(error)
             }
         }
         return .success(matches)
@@ -675,27 +682,23 @@ extension AXLogicProElements {
                 }
                 directChildren.append((child, role))
             }
-            let hasBypass: Bool
-            do {
-                var found = false
-                for child in directChildren where child.role == (kAXCheckBoxRole as String)
-                    || child.role == (kAXButtonRole as String) {
-                    switch hasExactLabelResult(
-                        child.element,
-                        matching: AXLocalePolicy.pluginBypassControl,
-                        runtime: runtime.ax
-                    ) {
-                    case let .success(matches):
-                        found = found || matches
-                    case let .failure(error):
-                        throw error
-                    }
+            var hasBypass = false
+            var firstBypassLabelReadFailure: AXHelpers.AXStatusError?
+            for child in directChildren where child.role == (kAXCheckBoxRole as String)
+                || child.role == (kAXButtonRole as String) {
+                switch hasExactLabelResult(
+                    child.element,
+                    matching: AXLocalePolicy.pluginBypassControl,
+                    runtime: runtime.ax
+                ) {
+                case let .success(matches):
+                    hasBypass = hasBypass || matches
+                case let .failure(error):
+                    firstBypassLabelReadFailure = firstBypassLabelReadFailure ?? error
                 }
-                hasBypass = found
-            } catch let error as AXHelpers.AXStatusError {
-                return .failure(error)
-            } catch {
-                return .failure(.malformedAttribute)
+            }
+            if !hasBypass, let firstBypassLabelReadFailure {
+                return .failure(firstBypassLabelReadFailure)
             }
             guard hasBypass else { continue }
 
@@ -744,6 +747,7 @@ extension AXLogicProElements {
         matching labelSet: AXLocalePolicy.LabelSet,
         runtime: AXHelpers.Runtime
     ) -> Result<Bool, AXHelpers.AXStatusError> {
+        var firstReadFailure: AXHelpers.AXStatusError?
         for attribute in [
             kAXIdentifierAttribute as String,
             kAXDescriptionAttribute as String,
@@ -761,23 +765,35 @@ extension AXLogicProElements {
             case let .failure(error) where error.isDefinitiveAbsence:
                 value = nil
             case let .failure(error):
-                return .failure(error)
+                firstReadFailure = firstReadFailure ?? error
+                continue
             }
             if labelSet.matches(value, mode: .exactStrict) {
                 return .success(true)
             }
         }
+        if let firstReadFailure {
+            return .failure(firstReadFailure)
+        }
         return .success(false)
     }
 
+    private struct PluginWindowHeaderStaticTextEvidence {
+        let values: [String]
+        let firstReadFailure: AXHelpers.AXStatusError?
+    }
+
     /// Return direct static-text values without falling back to a title,
-    /// descendant, or fixed child index. An absent AXValue is no header name;
-    /// every other failed header read refuses the caller's window choice.
+    /// descendant, or fixed child index. An absent AXValue is no header name.
+    /// A readable matching name is positive evidence even when another direct
+    /// static text cannot be read; without a matching name, that failure leaves
+    /// the header identity unknown.
     private static func pluginWindowHeaderStaticTextValues(
         in candidate: PluginEditorWindowCandidate,
         runtime: AXHelpers.Runtime
-    ) -> Result<[String], AXHelpers.AXStatusError> {
+    ) -> Result<PluginWindowHeaderStaticTextEvidence, AXHelpers.AXStatusError> {
         var values: [String] = []
+        var firstReadFailure: AXHelpers.AXStatusError?
         for child in candidate.directChildren where child.role == (kAXStaticTextRole as String) {
             let value: String?
             switch AXHelpers.getAttributeResult(
@@ -790,14 +806,18 @@ extension AXLogicProElements {
             case let .failure(error) where error.isDefinitiveAbsence:
                 value = nil
             case let .failure(error):
-                return .failure(error)
+                firstReadFailure = firstReadFailure ?? error
+                continue
             }
             if let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
                !trimmed.isEmpty {
                 values.append(trimmed)
             }
         }
-        return .success(values)
+        return .success(PluginWindowHeaderStaticTextEvidence(
+            values: values,
+            firstReadFailure: firstReadFailure
+        ))
     }
 
     /// Find the parameter `AXSlider` inside a plugin window by its
@@ -809,6 +829,9 @@ extension AXLogicProElements {
         case none
         case unique(AXUIElement)
         case ambiguous
+        /// No slider description matched, and at least one other slider's
+        /// description could not be read. This is unknown, not absence.
+        case unreadable(AXHelpers.AXStatusError)
     }
 
     static func pluginWindowSliderResolution(
@@ -821,12 +844,14 @@ extension AXLogicProElements {
             axDescription: axDescription,
             runtime: runtime
         ) {
-        case .success(.none), .failure:
+        case .success(.none):
             return .none
         case let .success(.unique(slider)):
             return .unique(slider)
         case .success(.ambiguous):
             return .ambiguous
+        case let .failure(error):
+            return .unreadable(error)
         }
     }
 
@@ -871,6 +896,7 @@ extension AXLogicProElements {
             return .failure(error)
         }
         var matches: [AXUIElement] = []
+        var firstDescriptionReadFailure: AXHelpers.AXStatusError?
         for slider in sliders {
             let description: String?
             switch AXHelpers.getAttributeResult(
@@ -883,15 +909,21 @@ extension AXLogicProElements {
             case let .failure(error) where error.isDefinitiveAbsence:
                 description = nil
             case let .failure(error):
-                return .failure(error)
+                firstDescriptionReadFailure = firstDescriptionReadFailure ?? error
+                continue
             }
             let trimmed = (description ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.caseInsensitiveCompare(target) == .orderedSame {
                 matches.append(slider)
             }
         }
-        guard let first = matches.first else { return .success(.none) }
-        return .success(matches.count == 1 ? .unique(first) : .ambiguous)
+        if let first = matches.first {
+            return .success(matches.count == 1 ? .unique(first) : .ambiguous)
+        }
+        if let firstDescriptionReadFailure {
+            return .failure(firstDescriptionReadFailure)
+        }
+        return .success(.none)
     }
 
 }

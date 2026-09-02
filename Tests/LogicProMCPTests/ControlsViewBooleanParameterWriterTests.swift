@@ -489,6 +489,32 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refusedForDescriptionRead)
     }
 
+    @Test func describedSwitcherWinsOverAnUnrelatedSwitcherDescriptionReadFailure() {
+        let fixture = viewFixture(
+            entry: .editor,
+            title: "편집기",
+            behavior: .switchesStructure,
+            additionalSwitcherDescriptionFailure: true,
+            viewSettleDelay: 0
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .controls,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let preparedControls: Bool
+        if case .ready = result {
+            preparedControls = true
+        } else {
+            preparedControls = false
+        }
+        let pressedOnlyTheDescribedSwitcher = fixture.switcherActions.value == [kAXPressAction as String]
+        #expect(preparedControls)
+        #expect(pressedOnlyTheDescribedSwitcher)
+    }
+
     @Test func failedSliderCensusRefusesRatherThanTreatingNoTableAsEditorEvidence() {
         let readFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
         let fixture = viewFixture(
@@ -1051,6 +1077,7 @@ struct ControlsViewBooleanParameterWriterTests {
         menuItemEnabledReadFails: Bool = false,
         includeControlsTableBesideEditor: Bool = false,
         additionalSliderDescriptionFailure: Bool = false,
+        additionalSwitcherDescriptionFailure: Bool = false,
         allDescriptionReadsFail: Bool = false,
         viewSettleDelay: TimeInterval = 0.5
     ) -> ViewFixture {
@@ -1063,6 +1090,7 @@ struct ControlsViewBooleanParameterWriterTests {
         let editorMenuItem = builder.element(905)
         let editorSlider = builder.element(906)
         let additionalSlider = builder.element(916)
+        let additionalSwitcher = builder.element(917)
         let controlsTable = builder.element(907)
         let controlsRow = builder.element(908)
         let controlsLabelCell = builder.element(909)
@@ -1088,6 +1116,9 @@ struct ControlsViewBooleanParameterWriterTests {
         builder.setRole(switcher, kAXMenuButtonRole as String)
         builder.setAttribute(switcher, kAXDescriptionAttribute as String, "보기")
         builder.setAttribute(switcher, kAXTitleAttribute as String, title)
+        if additionalSwitcherDescriptionFailure {
+            builder.setRole(additionalSwitcher, kAXMenuButtonRole as String)
+        }
         builder.setRole(menu, kAXMenuRole as String)
         builder.setRole(controlsMenuItem, kAXMenuItemRole as String)
         builder.setAttribute(controlsMenuItem, kAXTitleAttribute as String, "컨트롤")
@@ -1123,10 +1154,11 @@ struct ControlsViewBooleanParameterWriterTests {
         let slidersBeforeEditor = additionalSliderDescriptionFailure || allDescriptionReadsFail
             ? [additionalSlider]
             : []
+        let switchers = additionalSwitcherDescriptionFailure ? [additionalSwitcher, switcher] : [switcher]
         let editorChildren = includeControlsTableBesideEditor
-            ? [switcher] + slidersBeforeEditor + [editorSlider, controlsTable]
-            : [switcher] + slidersBeforeEditor + [editorSlider]
-        let controlsChildren = [switcher] + slidersBeforeEditor + [controlsTable]
+            ? switchers + slidersBeforeEditor + [editorSlider, controlsTable]
+            : switchers + slidersBeforeEditor + [editorSlider]
+        let controlsChildren = switchers + slidersBeforeEditor + [controlsTable]
         builder.setChildren(
             window,
             entry == .editor ? editorChildren : controlsChildren
@@ -1144,6 +1176,11 @@ struct ControlsViewBooleanParameterWriterTests {
                 }
                 if readFailure == .switcherDescription,
                    CFEqual(element, switcher),
+                   attribute == (kAXDescriptionAttribute as String) {
+                    return .failure(statusFailure)
+                }
+                if additionalSwitcherDescriptionFailure,
+                   CFEqual(element, additionalSwitcher),
                    attribute == (kAXDescriptionAttribute as String) {
                     return .failure(statusFailure)
                 }
