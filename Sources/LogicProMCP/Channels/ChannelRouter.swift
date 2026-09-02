@@ -21,6 +21,7 @@ actor ChannelRouter {
     }
 
     private var channels: [ChannelID: any Channel] = [:]
+    private var channelStartOrder: [ChannelID] = []
 
     // Operations for which an Accessibility `element_not_found` is provably a
     // PRE-WRITE miss, so a later channel may still run. Three conditions must all
@@ -81,7 +82,11 @@ actor ChannelRouter {
     // MARK: - Lifecycle
 
     func register(_ channel: any Channel) {
-        channels[channel.id] = channel
+        // Re-registering the same id replaces the channel but keeps its original
+        // position, so a caller cannot reorder startup by registering twice.
+        if channels.updateValue(channel, forKey: channel.id) == nil {
+            channelStartOrder.append(channel.id)
+        }
     }
 
     func startAll() async -> StartReport {
@@ -89,7 +94,8 @@ actor ChannelRouter {
         var failures: [ChannelID: String] = [:]
         var degraded: [ChannelID: String] = [:]
 
-        for (id, channel) in channels {
+        for id in channelStartOrder {
+            guard let channel = channels[id] else { continue }
             do {
                 try await channel.start()
                 Log.info("Channel \(id.rawValue) started", subsystem: "router")

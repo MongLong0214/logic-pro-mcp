@@ -33,7 +33,9 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
     private var claimedUniqueIDs: [Int32: MIDIEndpointRef] = [:]
     private var lifecycleEvents: [String] = []
 
-    func runtime() -> MIDIPortManager.Runtime {
+    func runtime(
+        processOwnership: VirtualMIDIEndpointProcessOwnership = .shared
+    ) -> MIDIPortManager.Runtime {
         MIDIPortManager.Runtime(
             createClient: { name, client in
                 self.createClient(name: name, client: &client)
@@ -53,7 +55,8 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
             endpointRuntime: .init(
                 allEndpoints: { self.allEndpoints() },
                 endpointName: { endpoint in self.endpointName(endpoint) },
-                setUniqueID: { endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) }
+                setUniqueID: { endpoint, uniqueID in self.setUniqueID(endpoint, uniqueID: uniqueID) },
+                processOwnership: processOwnership
             ),
             acquireOwnershipLock: { self.acquireOwnershipLock() }
         )

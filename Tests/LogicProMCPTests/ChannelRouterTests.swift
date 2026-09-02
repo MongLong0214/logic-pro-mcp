@@ -114,6 +114,42 @@ private actor StopAllCompletionProbe {
     }
 }
 
+private actor StartOrderRecorder {
+    private var started: [ChannelID] = []
+
+    func record(_ id: ChannelID) {
+        started.append(id)
+    }
+
+    func snapshot() -> [ChannelID] {
+        started
+    }
+}
+
+private actor OrderedStartChannel: Channel {
+    nonisolated let id: ChannelID
+    private let recorder: StartOrderRecorder
+
+    init(id: ChannelID, recorder: StartOrderRecorder) {
+        self.id = id
+        self.recorder = recorder
+    }
+
+    func start() async throws {
+        await recorder.record(id)
+    }
+
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        .success("ordered start channel")
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "ordered start channel")
+    }
+}
+
 private func waitUntil(
     timeoutNanoseconds: UInt64 = 1_000_000_000,
     pollIntervalNanoseconds: UInt64 = 5_000_000,
@@ -645,6 +681,21 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     #expect(report.started.contains(.coreMIDI))
     #expect(report.failures[.appleScript] != nil)
     #expect(report.hasFailures)
+}
+
+@Test func issue736RouterStartsChannelsInRegistrationOrder() async {
+    let router = ChannelRouter()
+    let recorder = StartOrderRecorder()
+    let registeredOrder: [ChannelID] = [.mcu, .midiKeyCommands, .scripter, .coreMIDI]
+
+    for id in registeredOrder {
+        await router.register(OrderedStartChannel(id: id, recorder: recorder))
+    }
+    _ = await router.startAll()
+
+    let observedOrder = await recorder.snapshot()
+    let preservesRegistrationOrder = observedOrder == registeredOrder
+    #expect(preservesRegistrationOrder)
 }
 
 @Test func testRouterStartAllTreatsOptionalStartupFailureAsDegraded() async {
