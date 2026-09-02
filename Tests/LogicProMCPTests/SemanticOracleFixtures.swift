@@ -634,8 +634,8 @@ enum SemanticOracleFixtures {
             response: """
                 {"success":true,"verified":true,"state":"A",\
                 "operation":"track.sort_verified","criterion":"track_name",\
-                "expected_order":["Bass","Kick"],"before_order":["Kick","Bass"],\
-                "after_order":["Bass","Kick"],"before_track_count":2,"after_track_count":2}
+                "expected_order":["trk_bass","trk_kick"],"before_order":["trk_kick","trk_bass"],\
+                "after_order":["trk_bass","trk_kick"],"before_track_count":2,"after_track_count":2}
                 """,
             readback: "{}"
         ),

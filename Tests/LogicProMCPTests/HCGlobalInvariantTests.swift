@@ -90,7 +90,7 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_tracks", command: "arm_only", params: ["index": .int(1)], operation: "track.arm_only", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "set_automation", params: ["index": .int(0), "mode": .string("read")], operation: "track.set_automation", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "set_instrument", params: ["index": .int(2), "path": .string("/Library/Application Support/Logic/Patches/Instrument/HC.patch"), "expected_name": .string("Bass")], operation: "track.set_instrument", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_tracks", command: "sort_verified", params: ["criterion": .string("track_name"), "expected_order": .array([.string("Bass"), .string("Kick")]), "confirmed": .bool(true)], operation: "track.sort_verified", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_tracks", command: "sort_verified", params: ["criterion": .string("track_name"), "expected_order": .array([.string("trk_hc_bass"), .string("trk_hc_kick")]), "confirmed": .bool(true)], operation: "track.sort_verified", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_mixer", command: "set_volume", params: ["track": .int(0), "value": .double(0.5)], operation: "mixer.set_volume", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_mixer", command: "set_pan", params: ["track": .int(0), "value": .double(0)], operation: "mixer.set_pan", destinations: [], invariant: .minimumV1),
@@ -462,7 +462,32 @@ struct HCGlobalInvariantTests {
                 sleep: { _ in }
             )
         case "logic_tracks":
-            return await TrackDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache, liveTrackNames: hcLiveTrackHeaders)
+            var trackParams = routeCase.params
+            let targetRegistry = TargetRegistry()
+            if routeCase.command == "sort_verified" {
+                let descriptors = [
+                    TargetDescriptor(trackIndex: 2, trackName: "Bass"),
+                    TargetDescriptor(trackIndex: 0, trackName: "Kick"),
+                    TargetDescriptor(trackIndex: 1, trackName: "Kick"),
+                ]
+                var references: [TargetReference] = []
+                for descriptor in descriptors {
+                    references.append(await targetRegistry.bind(
+                        kind: .track,
+                        descriptor: descriptor,
+                        fingerprint: descriptor.fingerprint
+                    ))
+                }
+                trackParams["expected_order"] = .array(references.map { .string($0.rawValue) })
+            }
+            return await TrackDispatcher.handle(
+                command: routeCase.command,
+                params: trackParams,
+                router: router,
+                cache: cache,
+                targetRegistry: targetRegistry,
+                liveTrackNames: hcLiveTrackHeaders
+            )
         case "logic_mixer":
             return await MixerDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache)
         case "logic_midi":

@@ -1306,8 +1306,8 @@ enum SemanticOracleTable {
 
     // #448: `defaultSortTracks` publishes State A only after a fresh complete
     // arrangement-rail read matches the caller's complete criterion-implied
-    // order. A changed order is intentionally insufficient, so this exact array
-    // equality is the load-bearing response invariant.
+    // `trk_` reference order. A changed order is intentionally insufficient, so
+    // this exact array equality is the load-bearing response invariant.
     static let tracksSortVerified = SafeMutationOracle.oracle(
         .tracksSortVerified,
         semantics: [

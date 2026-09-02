@@ -30,8 +30,34 @@ enum TrackSortCriterion: String, CaseIterable, Sendable, Hashable {
     /// menu bar is not a translation oracle: an English or unknown UI locale is
     /// a missing measurement, even if a human could guess a plausible label.
     func measuredLabel(for localeIdentifier: String?) -> String? {
-        guard localeIdentifier == "ko_KR" else { return nil }
+        // `logicUILocaleIdentifier` publishes BCP-47 (`ko-KR`), while the
+        // original #448 fixture used the underscore spelling (`ko_KR`). Both
+        // identify the one measured Korean UI; accepting this formatting
+        // difference does not infer a label for another locale.
+        guard localeIdentifier == "ko_KR" || localeIdentifier == "ko-KR" else { return nil }
         return label.canonical
+    }
+}
+
+/// An issued track reference together with the pre-sort rail location it named.
+///
+/// `expected_order` is a caller-facing list of the `trk_…` values emitted by
+/// `logic://tracks`; this value is only the dispatcher-to-channel witness that
+/// lets the channel bind those references to one strict pre-sort AX read. We
+/// deliberately do not use arrangement indexes as the public identity: sorting
+/// changes them. We also do not manufacture `(name, ordinal)` identities: no
+/// measurement establishes that Logic preserves an equal-name ordinal through a
+/// sort. If a reference no longer resolves, or its bound pre-sort row is gone,
+/// the operation refuses before pressing the menu and names that reference.
+struct TrackSortExpectedTrack: Codable, Equatable, Sendable {
+    let reference: String
+    let beforeIndex: Int
+    let beforeName: String
+
+    enum CodingKeys: String, CodingKey {
+        case reference = "track_ref"
+        case beforeIndex = "before_index"
+        case beforeName = "before_name"
     }
 }
 
@@ -74,9 +100,10 @@ enum TrackSortVerifier {
     }
 
     /// A changed order is not a verifier: another criterion could produce it.
-    /// The caller supplies the complete expected name order derived from the
-    /// requested criterion, and it must be a permutation of the pre-write
-    /// order. State A therefore requires an exact post-write match.
+    /// The caller supplies the complete expected *track-reference* order
+    /// derived from the requested criterion, and it must be a permutation of
+    /// the pre-write order. State A therefore requires an exact post-write
+    /// match.
     ///
     /// A correct sort of an already-sorted project is observationally identical
     /// to a menu press that did nothing. We do not inspect Undo text or infer an
@@ -93,7 +120,7 @@ enum TrackSortVerifier {
         guard case .read(let beforeOrder) = before() else {
             return .refused(.beforeOrderUnreadable)
         }
-        guard ordersContainSameUniqueNames(beforeOrder, expectedOrder) else {
+        guard ordersContainSameUniqueTrackReferences(beforeOrder, expectedOrder) else {
             return .refused(.expectedOrderIsNotBeforeOrder)
         }
 
@@ -122,7 +149,7 @@ enum TrackSortVerifier {
         return .verified
     }
 
-    private static func ordersContainSameUniqueNames(_ before: [String], _ expected: [String]) -> Bool {
+    private static func ordersContainSameUniqueTrackReferences(_ before: [String], _ expected: [String]) -> Bool {
         guard before.count == expected.count,
               Set(before).count == before.count,
               Set(expected).count == expected.count else {

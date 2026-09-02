@@ -41,21 +41,41 @@ extension AccessibilityChannel {
                 .invalidParams,
                 criterion: criterion.rawValue,
                 reason: "expected_order_invalid",
-                hint: "sort_verified requires expected_order as a non-empty array of unique track names."
+                hint: "sort_verified requires expected_order as a non-empty array of unique track_ref values."
             )
         }
 
         var beforeTracks: [TrackState]?
         var afterTracks: [TrackState]?
+        var afterReferences: [String]?
+        guard let beforeRead = strictTrackSortStateRead(runtime: runtime) else {
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "before_order_unreadable",
+                hint: "sort_verified refused before the menu action because the full track order could not be read."
+            )
+        }
+        beforeTracks = beforeRead.tracks
+        let beforeOrder = trackSortBeforeOrder(
+            tracks: beforeRead.tracks,
+            expectedOrder: expectedOrder
+        )
+        guard case .matched(let beforeReferences) = beforeOrder else {
+            let missing = beforeOrder.missingReferences
+            return trackSortStateC(
+                .staleTargetReference,
+                criterion: criterion.rawValue,
+                reason: "expected_order_track_refs_not_in_before_order",
+                hint: "sort_verified expected_order names track references that are not in the current pre-sort order: \(missing.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                extras: ["missing_track_refs": missing]
+            )
+        }
         let outcome = TrackSortVerifier.execute(
             criterion: criterion,
-            expectedOrder: expectedOrder,
+            expectedOrder: expectedOrder.map(\.reference),
             before: {
-                guard let tracks = strictTrackSortStateRead(runtime: runtime) else {
-                    return .unavailable
-                }
-                beforeTracks = tracks
-                return .read(tracks.map(\.name))
+                .read(beforeReferences)
             },
             actuate: {
                 let observedLocale = AXLogicProElements.logicUILocaleIdentifier(runtime: runtime)
@@ -90,17 +110,27 @@ extension AccessibilityChannel {
                 return .actuated
             },
             after: {
-                guard let tracks = strictTrackSortStateRead(runtime: runtime) else {
+                guard let afterRead = strictTrackSortStateRead(runtime: runtime) else {
                     return .unavailable
                 }
-                afterTracks = tracks
-                return .read(tracks.map(\.name))
+                afterTracks = afterRead.tracks
+                guard let resolvedAfterReferences = trackSortAfterOrder(
+                    headers: afterRead.headers,
+                    beforeHeaders: beforeRead.headers,
+                    beforeReferences: beforeReferences
+                ) else {
+                    return .unavailable
+                }
+                afterReferences = resolvedAfterReferences
+                return .read(resolvedAfterReferences)
             }
         )
 
         let evidence = trackSortEvidence(
             criterion: criterion,
-            expectedOrder: expectedOrder,
+            expectedOrder: expectedOrder.map(\.reference),
+            beforeOrder: beforeReferences,
+            afterOrder: afterReferences,
             before: beforeTracks,
             after: afterTracks
         )
@@ -118,9 +148,24 @@ extension AccessibilityChannel {
     /// best-effort readers. A verified mutation cannot collapse unavailable or
     /// unreadable into that same empty value, so it uses the status-preserving
     /// rail reader and requires every row's identity to be readable.
+    private struct TrackSortStateRead {
+        let headers: [AXUIElement]
+        let tracks: [TrackState]
+    }
+
+    private enum TrackSortBeforeOrder {
+        case matched([String])
+        case missing([String])
+
+        var missingReferences: [String] {
+            if case .missing(let references) = self { return references }
+            return []
+        }
+    }
+
     private static func strictTrackSortStateRead(
         runtime: AXLogicProElements.Runtime
-    ) -> [TrackState]? {
+    ) -> TrackSortStateRead? {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
               case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
         else {
@@ -135,24 +180,83 @@ extension AccessibilityChannel {
         }) else {
             return nil
         }
-        return tracks
+        return TrackSortStateRead(headers: headers, tracks: tracks)
     }
 
-    private static func decodeTrackSortExpectedOrder(_ raw: String?) -> [String]? {
+    private static func decodeTrackSortExpectedOrder(_ raw: String?) -> [TrackSortExpectedTrack]? {
         guard let raw,
               let data = raw.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode([String].self, from: data),
+              let decoded = try? JSONDecoder().decode([TrackSortExpectedTrack].self, from: data),
               !decoded.isEmpty,
-              decoded.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
-              Set(decoded).count == decoded.count else {
+              decoded.allSatisfy({
+                  !$0.reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      && $0.beforeIndex >= 0
+                      && !$0.beforeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              }),
+              Set(decoded.map(\.reference)).count == decoded.count else {
             return nil
         }
         return decoded
     }
 
+    /// The reference's pre-sort descriptor can bind each duplicate display name
+    /// to exactly one header. Name matching alone is intentionally absent here.
+    private static func trackSortBeforeOrder(
+        tracks: [TrackState],
+        expectedOrder: [TrackSortExpectedTrack]
+    ) -> TrackSortBeforeOrder {
+        guard expectedOrder.count == tracks.count else {
+            return .missing(expectedOrder.map(\.reference))
+        }
+        var order = Array(repeating: "", count: tracks.count)
+        var missing: [String] = []
+        for expected in expectedOrder {
+            guard expected.beforeIndex < tracks.count,
+                  tracks[expected.beforeIndex].name == expected.beforeName,
+                  order[expected.beforeIndex].isEmpty else {
+                missing.append(expected.reference)
+                continue
+            }
+            order[expected.beforeIndex] = expected.reference
+        }
+        let unmatched = order.filter(\.isEmpty)
+        guard missing.isEmpty, unmatched.isEmpty else {
+            return .missing(missing.isEmpty ? expectedOrder.map(\.reference) : missing)
+        }
+        return .matched(order)
+    }
+
+    /// Header equality is the measured transaction-local continuity witness:
+    /// the strict reads retain the same AX header objects across the menu press.
+    /// If Logic replaces a header object, we cannot prove which duplicate track
+    /// moved, so the caller receives State B rather than a guessed identity.
+    private static func trackSortAfterOrder(
+        headers: [AXUIElement],
+        beforeHeaders: [AXUIElement],
+        beforeReferences: [String]
+    ) -> [String]? {
+        guard headers.count == beforeHeaders.count,
+              beforeReferences.count == beforeHeaders.count else {
+            return nil
+        }
+        var matchedBeforeIndexes = Set<Int>()
+        var order: [String] = []
+        order.reserveCapacity(headers.count)
+        for header in headers {
+            guard let beforeIndex = beforeHeaders.firstIndex(where: { CFEqual($0, header) }),
+                  matchedBeforeIndexes.insert(beforeIndex).inserted else {
+                return nil
+            }
+            order.append(beforeReferences[beforeIndex])
+        }
+        return order
+    }
+
     private static func trackSortEvidence(
         criterion: TrackSortCriterion,
         expectedOrder: [String],
+        beforeOrder: [String]?,
+        afterOrder: [String]?,
         before: [TrackState]?,
         after: [TrackState]?
     ) -> [String: Any] {
@@ -160,8 +264,8 @@ extension AccessibilityChannel {
             "operation": "track.sort_verified",
             "criterion": criterion.rawValue,
             "expected_order": expectedOrder,
-            "before_order": before?.map(\.name) ?? NSNull(),
-            "after_order": after?.map(\.name) ?? NSNull(),
+            "before_order": beforeOrder ?? NSNull(),
+            "after_order": afterOrder ?? NSNull(),
             // Preserve the full public order read, not just its name projection.
             // `id` is the observed arrangement index, and the remaining fields
             // are the stable `logic://tracks` row shape that accompanied it.
@@ -218,7 +322,7 @@ extension AccessibilityChannel {
                 .invalidParams,
                 criterion: criterion.rawValue,
                 reason: "expected_order_not_full_before_order",
-                hint: "sort_verified expected_order must name each current track exactly once, so an unrelated order cannot certify a wrong sort.",
+                hint: "sort_verified expected_order must name each current track reference exactly once, so an unrelated order cannot certify a wrong sort.",
                 extras: extras
             )
         case .unmeasuredLocale(let locale):
