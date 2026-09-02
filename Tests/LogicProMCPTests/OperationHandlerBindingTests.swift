@@ -142,7 +142,7 @@ struct OperationHandlerBindingTests {
         let specKeys = Set(specs.map { "\($0.tool.rawValue):\($0.command)" })
         let bindingKeys = bindings.map { "\($0.tool):\($0.command)" }
 
-        #expect(specs.count == 112)   // #575 registered edit.move_to_playhead
+        #expect(specs.count == 113)   // #448 registered tracks.sort_verified
         #expect(bindings.count == specs.count)
         #expect(Set(bindingIDs).count == bindings.count, "duplicate handler IDs")
         #expect(Set(bindingKeys).count == bindings.count, "duplicate handler keys")

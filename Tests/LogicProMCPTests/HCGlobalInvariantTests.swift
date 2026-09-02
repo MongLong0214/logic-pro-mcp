@@ -90,6 +90,7 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_tracks", command: "arm_only", params: ["index": .int(1)], operation: "track.arm_only", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "set_automation", params: ["index": .int(0), "mode": .string("read")], operation: "track.set_automation", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "set_instrument", params: ["index": .int(2), "path": .string("/Library/Application Support/Logic/Patches/Instrument/HC.patch"), "expected_name": .string("Bass")], operation: "track.set_instrument", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_tracks", command: "sort_verified", params: ["criterion": .string("track_name"), "expected_order": .array([.string("Bass"), .string("Kick")]), "confirmed": .bool(true)], operation: "track.sort_verified", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_mixer", command: "set_volume", params: ["track": .int(0), "value": .double(0.5)], operation: "mixer.set_volume", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_mixer", command: "set_pan", params: ["track": .int(0), "value": .double(0)], operation: "mixer.set_pan", destinations: [], invariant: .minimumV1),

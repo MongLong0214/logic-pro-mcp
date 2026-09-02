@@ -97,6 +97,7 @@ actor AccessibilityChannel: Channel {
         let selectTrack: @Sendable ([String: String]) async -> ChannelResult
         let setTrackToggle: @Sendable ([String: String], String) -> ChannelResult
         let renameTrack: @Sendable ([String: String]) -> ChannelResult
+        let sortTracks: @Sendable ([String: String]) -> ChannelResult
         let mixerState: @Sendable () -> ChannelResult
         let channelStrip: @Sendable ([String: String]) -> ChannelResult
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
@@ -132,6 +133,7 @@ actor AccessibilityChannel: Channel {
             selectTrack: @escaping @Sendable ([String: String]) async -> ChannelResult,
             setTrackToggle: @escaping @Sendable ([String: String], String) -> ChannelResult,
             renameTrack: @escaping @Sendable ([String: String]) -> ChannelResult,
+            sortTracks: @escaping @Sendable ([String: String]) -> ChannelResult = { _ in .error("sortTracks not wired") },
             mixerState: @escaping @Sendable () -> ChannelResult,
             channelStrip: @escaping @Sendable ([String: String]) -> ChannelResult,
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
@@ -165,6 +167,7 @@ actor AccessibilityChannel: Channel {
             self.selectTrack = selectTrack
             self.setTrackToggle = setTrackToggle
             self.renameTrack = renameTrack
+            self.sortTracks = sortTracks
             self.mixerState = mixerState
             self.channelStrip = channelStrip
             self.setMixerValue = setMixerValue
@@ -245,6 +248,7 @@ actor AccessibilityChannel: Channel {
                         processRuntime: processRuntime
                     )
                 },
+                sortTracks: { AccessibilityChannel.defaultSortTracks(params: $0, runtime: logicRuntime) },
                 mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
@@ -398,6 +402,8 @@ actor AccessibilityChannel: Channel {
             return runtime.setTrackToggle(params, "Record")
         case "track.rename":
             return runtime.renameTrack(params)
+        case "track.sort_verified":
+            return runtime.sortTracks(params)
         case "track.set_color":
             // v3.1.2 P2-1 — explicit State C `not_implemented` so callers
             // (and the router's terminal-error gate) can distinguish a

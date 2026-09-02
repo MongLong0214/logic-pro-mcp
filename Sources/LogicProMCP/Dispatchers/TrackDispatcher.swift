@@ -12,7 +12,7 @@ struct TrackDispatcher: OperationTraceDispatching {
 
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, by default (disable with LOGIC_MCP_ADR002_TARGET_REF=0), { name: String, target_ref: String, index?: Int }; when the kill-switch is set, supplying target_ref fails closed with target_ref_unavailable; omit it to use index; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int, expected_name: String } (PRD-007 index binding: delete, duplicate and set_instrument are `corroborated` — a bare index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false); set_automation -> { mode: read|write|touch|latch|trim } (independent readback required for State A); set_instrument -> { path: String, expected_name: String } or { category: String, preset: String, expected_name: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): select, delete, duplicate, mute, solo, arm, arm_only, set_automation, and set_instrument ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) in place of the explicit index; when both target_ref and index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit index path.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, sort_verified, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, by default (disable with LOGIC_MCP_ADR002_TARGET_REF=0), { name: String, target_ref: String, index?: Int }; when the kill-switch is set, supplying target_ref fails closed with target_ref_unavailable; omit it to use index; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. sort_verified -> { criterion: midi_channel|audio_channel|output_channel|instrument_name|track_name|used|creation_date, expected_order: [unique track names], confirmed: true }; the caller supplies the complete order implied by the requested criterion so the after-read can reject a wrong sort rather than treating any order change as success. A correctly already-sorted project remains State B because a no-op cannot prove the menu command ran. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int, expected_name: String } (PRD-007 index binding: delete, duplicate and set_instrument are `corroborated` — a bare index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false); set_automation -> { mode: read|write|touch|latch|trim } (independent readback required for State A); set_instrument -> { path: String, expected_name: String } or { category: String, preset: String, expected_name: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): select, delete, duplicate, mute, solo, arm, arm_only, set_automation, and set_instrument ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) in place of the explicit index; when both target_ref and index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit index path.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -652,6 +652,80 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "set_color":
             return notExposedCommandResult(operation: "track.set_color")
 
+        case "sort_verified":
+            guard let criterion = TrackSortCriterion(rawValue: stringParam(params, "criterion")) else {
+                return toolInvalidParamsResult(
+                    "sort_verified 'criterion' must be one of \(TrackSortCriterion.allCases.map(\.rawValue).joined(separator: ", "))",
+                    extras: [
+                        "operation": "track.sort_verified",
+                        "reason": "unknown_sort_criterion",
+                        "write_attempted": false,
+                    ]
+                )
+            }
+            guard let expectedOrder = trackSortExpectedOrder(params) else {
+                return toolInvalidParamsResult(
+                    "sort_verified requires expected_order as a non-empty array of unique track names",
+                    extras: [
+                        "operation": "track.sort_verified",
+                        "reason": "expected_order_invalid",
+                        "write_attempted": false,
+                    ]
+                )
+            }
+            switch strictBoolParam(params, "confirmed") {
+            case .value(true):
+                break
+            case .missing, .value(false):
+                let level = DestructivePolicy.promptLabel(
+                    of: OperationRegistry.spec(
+                        tool: ToolID.logicTracks.rawValue,
+                        command: "sort_verified"
+                    )?.confirmation ?? .l2
+                ) ?? "L2"
+                let confirmedParams = HonestContract.jsonString([
+                    "criterion": criterion.rawValue,
+                    "expected_order": expectedOrder,
+                    "confirmed": true,
+                ])
+                return toolTextResult(HonestContract.jsonString([
+                    "status": "confirmation_required",
+                    "command": "sort_verified",
+                    "level": level,
+                    "message": "sort_verified reorders the project's track layout. Re-call with confirmed:true after reviewing the expected order.",
+                    "confirm_command": "logic_tracks(\"sort_verified\", \(confirmedParams))",
+                ]))
+            case .invalid(let hint):
+                return toolInvalidParamsResult(
+                    "sort_verified \(hint)",
+                    extras: ["operation": "track.sort_verified", "write_attempted": false]
+                )
+            }
+            guard let encodedExpectedOrder = encodeTrackSortExpectedOrder(expectedOrder) else {
+                return toolInvalidParamsResult(
+                    "sort_verified could not encode expected_order",
+                    extras: ["operation": "track.sort_verified", "write_attempted": false]
+                )
+            }
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.sort_verified",
+                    params: [
+                        "criterion": criterion.rawValue,
+                        "expected_order_json": encodedExpectedOrder,
+                    ]
+                )
+            }
+            // State B (after-order unavailable, mismatch, or already-sorted
+            // no-op) is an error to callers of this verified surface. The menu
+            // may have changed project state, so it is not retroactively turned
+            // into a pre-write State C refusal.
+            return await finalizeTrace(
+                toolTextResultTreatingUnverifiedAsError(result),
+                traceID: traceID
+            )
+
         case "set_automation":
             let index: Int
             let resolvedReference: TargetReference?
@@ -874,6 +948,25 @@ struct TrackDispatcher: OperationTraceDispatching {
         OperationRegistry.spec(tool: ToolID.logicTracks.rawValue, command: command)?.indexBinding
     }
 
+    private static func trackSortExpectedOrder(_ params: [String: Value]) -> [String]? {
+        guard let values = params["expected_order"]?.arrayValue,
+              !values.isEmpty,
+              values.allSatisfy({ $0.stringValue != nil }) else {
+            return nil
+        }
+        let names = values.compactMap(\.stringValue)
+        guard names.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+              Set(names).count == names.count else {
+            return nil
+        }
+        return names
+    }
+
+    private static func encodeTrackSortExpectedOrder(_ names: [String]) -> String? {
+        guard let data = try? JSONEncoder().encode(names) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     private static func handleToggle(
         command: String,
         operation: String,
@@ -952,6 +1045,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "arm": return "track.set_arm"
         case "arm_only": return "track.arm_only"
         case "record_sequence": return "track.record_sequence"
+        case "sort_verified": return "track.sort_verified"
         case "set_automation": return "track.set_automation"
         default: return nil
         }

@@ -17,6 +17,264 @@ extension AccessibilityChannel {
         }
     }
 
+    // MARK: - Verified track sort (#448)
+
+    /// Drives the measured Track > Sort Tracks By leaf and verifies the complete
+    /// post-write arrangement order. This path must not reuse the cache: the
+    /// poller can legitimately still hold the pre-sort rail while this mutation
+    /// needs the two reads that bracket its own menu press.
+    static func defaultSortTracks(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        guard let criterionRaw = params["criterion"],
+              let criterion = TrackSortCriterion(rawValue: criterionRaw) else {
+            return trackSortStateC(
+                .invalidParams,
+                criterion: params["criterion"],
+                reason: "unknown_sort_criterion",
+                hint: "sort_verified requires one of: \(TrackSortCriterion.allCases.map(\.rawValue).joined(separator: ", "))"
+            )
+        }
+        guard let expectedOrder = decodeTrackSortExpectedOrder(params["expected_order_json"]) else {
+            return trackSortStateC(
+                .invalidParams,
+                criterion: criterion.rawValue,
+                reason: "expected_order_invalid",
+                hint: "sort_verified requires expected_order as a non-empty array of unique track names."
+            )
+        }
+
+        var beforeTracks: [TrackState]?
+        var afterTracks: [TrackState]?
+        let outcome = TrackSortVerifier.execute(
+            criterion: criterion,
+            expectedOrder: expectedOrder,
+            before: {
+                guard let tracks = strictTrackSortStateRead(runtime: runtime) else {
+                    return .unavailable
+                }
+                beforeTracks = tracks
+                return .read(tracks.map(\.name))
+            },
+            actuate: {
+                let observedLocale = AXLogicProElements.logicUILocaleIdentifier(runtime: runtime)
+                guard let locale = observedLocale,
+                      let measuredLabel = criterion.measuredLabel(for: locale) else {
+                    return .unmeasuredLocale(observedLocale ?? "unknown")
+                }
+                guard let item = AXLogicProElements.menuItem(
+                    labelPath: [
+                        AXLocalePolicy.sortTracksMenuPath.bar,
+                        AXLocalePolicy.sortTracksMenuPath.item,
+                        criterion.label,
+                    ],
+                    runtime: runtime
+                ) else {
+                    return .criterionLabelMissing(measuredLabel)
+                }
+                let enabled: Bool? = AXHelpers.getAttribute(
+                    item,
+                    kAXEnabledAttribute as String,
+                    runtime: runtime.ax
+                )
+                guard enabled == true else {
+                    return .disabledMenuItem(measuredLabel)
+                }
+                guard AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) else {
+                    return .pressFailed(measuredLabel)
+                }
+                // The menu action is asynchronous on some Logic builds. The
+                // bounded settle is not proof; the second strict rail read is.
+                usleep(150_000)
+                return .actuated
+            },
+            after: {
+                guard let tracks = strictTrackSortStateRead(runtime: runtime) else {
+                    return .unavailable
+                }
+                afterTracks = tracks
+                return .read(tracks.map(\.name))
+            }
+        )
+
+        let evidence = trackSortEvidence(
+            criterion: criterion,
+            expectedOrder: expectedOrder,
+            before: beforeTracks,
+            after: afterTracks
+        )
+        switch outcome {
+        case .verified:
+            return .success(HonestContract.encodeStateA(extras: evidence))
+        case .refused(let refusal):
+            return trackSortRefusal(refusal, criterion: criterion, extras: evidence)
+        case .uncertain(let uncertainty):
+            return trackSortUncertain(uncertainty, extras: evidence)
+        }
+    }
+
+    /// `allTrackHeaders()` intentionally returns an empty array for historic
+    /// best-effort readers. A verified mutation cannot collapse unavailable or
+    /// unreadable into that same empty value, so it uses the status-preserving
+    /// rail reader and requires every row's identity to be readable.
+    private static func strictTrackSortStateRead(
+        runtime: AXLogicProElements.Runtime
+    ) -> [TrackState]? {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime),
+              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        else {
+            return nil
+        }
+        let tracks = headers.enumerated().map { index, header in
+            AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
+        }
+        guard tracks.allSatisfy({
+            $0.liveIdentityBacked
+                && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) else {
+            return nil
+        }
+        return tracks
+    }
+
+    private static func decodeTrackSortExpectedOrder(_ raw: String?) -> [String]? {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data),
+              !decoded.isEmpty,
+              decoded.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+              Set(decoded).count == decoded.count else {
+            return nil
+        }
+        return decoded
+    }
+
+    private static func trackSortEvidence(
+        criterion: TrackSortCriterion,
+        expectedOrder: [String],
+        before: [TrackState]?,
+        after: [TrackState]?
+    ) -> [String: Any] {
+        [
+            "operation": "track.sort_verified",
+            "criterion": criterion.rawValue,
+            "expected_order": expectedOrder,
+            "before_order": before?.map(\.name) ?? NSNull(),
+            "after_order": after?.map(\.name) ?? NSNull(),
+            // Preserve the full public order read, not just its name projection.
+            // `id` is the observed arrangement index, and the remaining fields
+            // are the stable `logic://tracks` row shape that accompanied it.
+            "before_tracks": before.map(trackSortTrackList) ?? NSNull(),
+            "after_tracks": after.map(trackSortTrackList) ?? NSNull(),
+            "before_track_count": before?.count ?? NSNull(),
+            "after_track_count": after?.count ?? NSNull(),
+        ]
+    }
+
+    private static func trackSortTrackList(_ tracks: [TrackState]) -> [[String: Any]] {
+        tracks.map { track in
+            [
+                "id": track.id,
+                "name": track.name,
+                "type": track.type.rawValue,
+                "is_stack_header": track.isStackHeader ?? NSNull(),
+                "stack_collapsed": track.stackCollapsed ?? NSNull(),
+            ]
+        }
+    }
+
+    private static func trackSortStateC(
+        _ error: HonestContract.FailureError,
+        criterion: String?,
+        reason: String,
+        hint: String,
+        extras: [String: Any] = [:]
+    ) -> ChannelResult {
+        var details = extras
+        details["operation"] = "track.sort_verified"
+        details["criterion"] = criterion ?? NSNull()
+        details["reason"] = reason
+        details["write_attempted"] = false
+        return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: details))
+    }
+
+    private static func trackSortRefusal(
+        _ refusal: TrackSortVerifier.Refusal,
+        criterion: TrackSortCriterion,
+        extras: [String: Any]
+    ) -> ChannelResult {
+        switch refusal {
+        case .beforeOrderUnreadable:
+            return trackSortStateC(
+                .readbackUnavailable,
+                criterion: criterion.rawValue,
+                reason: "before_order_unreadable",
+                hint: "sort_verified refused before the menu action because the full track order could not be read.",
+                extras: extras
+            )
+        case .expectedOrderIsNotBeforeOrder:
+            return trackSortStateC(
+                .invalidParams,
+                criterion: criterion.rawValue,
+                reason: "expected_order_not_full_before_order",
+                hint: "sort_verified expected_order must name each current track exactly once, so an unrelated order cannot certify a wrong sort.",
+                extras: extras
+            )
+        case .unmeasuredLocale(let locale):
+            return trackSortStateC(
+                .elementNotFound,
+                criterion: criterion.rawValue,
+                reason: "unmeasured_locale_missing_sort_menu_measurement",
+                hint: "sort_verified has no measured Track > Sort Tracks By labels for Logic UI locale '\(locale)'; measure that locale before enabling this command.",
+                extras: extras
+            )
+        case .criterionLabelMissing(let label):
+            return trackSortStateC(
+                .elementNotFound,
+                criterion: criterion.rawValue,
+                reason: "measured_criterion_label_absent",
+                hint: "sort_verified expected the measured criterion label '\(label)' in the current Track > Sort Tracks By menu, but it was absent.",
+                extras: extras
+            )
+        case .disabledMenuItem(let label):
+            return trackSortStateC(
+                .axWriteFailed,
+                criterion: criterion.rawValue,
+                reason: "sort_menu_item_disabled",
+                hint: "sort_verified refused because the measured menu item '\(label)' was disabled; AXPress on a disabled item is not an action.",
+                extras: extras
+            )
+        case .menuPressFailed(let label):
+            return trackSortStateC(
+                .axWriteFailed,
+                criterion: criterion.rawValue,
+                reason: "sort_menu_press_failed",
+                hint: "sort_verified could not press the measured menu item '\(label)'.",
+                extras: extras
+            )
+        }
+    }
+
+    private static func trackSortUncertain(
+        _ uncertainty: TrackSortVerifier.Uncertainty,
+        extras: [String: Any]
+    ) -> ChannelResult {
+        var details = extras
+        details["write_attempted"] = true
+        switch uncertainty {
+        case .afterOrderUnreadable:
+            details["detail"] = "after_order_unreadable"
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: details))
+        case .afterOrderMismatch:
+            details["detail"] = "after_order_did_not_match_requested_criterion"
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: details))
+        case .alreadySortedCommandUnobservable:
+            details["detail"] = "already_sorted_command_unobservable"
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: details))
+        }
+    }
+
     static func defaultGetSelectedTrack(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
         for (index, header) in headers.enumerated() {

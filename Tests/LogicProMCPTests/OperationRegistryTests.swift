@@ -607,6 +607,7 @@ struct OperationRegistryTests {
         ("logic_project", "export_resume", .l2),
         ("logic_mixer", "insert_plugin", .l2),
         ("logic_system", "clear_traces", .l2),
+        ("logic_tracks", "sort_verified", .l2),
         ("logic_project", "close", .l3),
         ("logic_project", "quit", .l3),
     ]
@@ -967,6 +968,7 @@ struct OperationRegistryTests {
         ("tracks.arm", "arm", .mutating, .short, .readbackRequired),
         ("tracks.arm_only", "arm_only", .mutating, .short, .readbackRequired),
         ("tracks.record_sequence", "record_sequence", .mutating, .long, .readbackRequired),
+        ("tracks.sort_verified", "sort_verified", .mutating, .medium, .readbackRequired),
         ("tracks.set_automation", "set_automation", .mutating, .short, .readbackRequired),
         ("tracks.set_instrument", "set_instrument", .mutating, .medium, .readbackRequired),
         ("tracks.list_library", "list_library", .readOnly, .long, .none),
@@ -1011,7 +1013,8 @@ struct OperationRegistryTests {
             #expect(spec.tool == tool)
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
-            #expect(spec.confirmation == .none)
+            let expectedConfirmation: ConfirmationPolicy = entry.command == "sort_verified" ? .l2 : .none
+            #expect(spec.confirmation == expectedConfirmation)
             #expect(spec.target == (targetBearingCommands.contains(entry.command) ? .acceptsStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
@@ -1038,7 +1041,7 @@ struct OperationRegistryTests {
             .map(\.command))
         #expect(expected == Set([
             "select", "create_audio", "create_instrument", "create_drummer", "create_external_midi",
-            "delete", "duplicate", "rename", "mute", "solo", "arm", "arm_only", "record_sequence",
+            "delete", "duplicate", "rename", "mute", "solo", "arm", "arm_only", "record_sequence", "sort_verified",
             "set_automation", "set_instrument",
         ]))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
@@ -1054,7 +1057,7 @@ struct OperationRegistryTests {
     @Test("tracks deadlines preserve short medium long and read-only long tiers")
     func tracksDeadlineParity() {
         #expect(Self.trackCommands.filter { $0.deadline == .short }.count == 14)
-        #expect(Self.trackCommands.filter { $0.deadline == .medium }.map(\.command) == ["set_instrument"])
+        #expect(Self.trackCommands.filter { $0.deadline == .medium }.map(\.command) == ["sort_verified", "set_instrument"])
         #expect(Set(Self.trackCommands.filter { $0.deadline == .long }.map(\.command)) == Set([
             "record_sequence", "list_library", "scan_library", "scan_plugin_presets",
         ]))
