@@ -21,15 +21,36 @@ struct QualificationRunnerTests {
     }
 
     private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
-        // `tracks.list_library` was pinned here until 2026-09-02. It is not a
-        // semantic shortfall: measured, it answers differently depending on whether
-        // Logic's Library panel is open — returning categories and presets when it
-        // is, and refusing with an exact hint when it is not. The closed-panel
-        // refusal is now classified as an environmental prerequisite, like the
-        // plug-in window `scan_plugin_presets` needs, so it left this list by being
-        // correctly bucketed rather than by being fixed. This comment is here
-        // because a name disappearing from a known-failure list should never be
-        // silent.
+        // `tracks.list_library` has TWO distinct behaviours and needs both handled.
+        //
+        // With Logic's Library panel closed it refuses with an exact hint, and that
+        // refusal is an environmental prerequisite — the same shape as the plug-in
+        // window `scan_plugin_presets` needs — so it is bucketed there rather than
+        // counted as a shortfall.
+        //
+        // When it ANSWERS, it fails its own oracle, and that is a real defect. It was
+        // pinned here until 2026-09-02, removed on the strength of a run where the
+        // panel happened to be closed, and the exact-match assertion put it straight
+        // back the first time a run answered instead of refusing. Measured 2026-09-03
+        // against the release binary:
+        //
+        //     tracks.list_library   -> {"categories": ["Aux","Bass","Drums","Effects",
+        //                                "Guitar","Keys","Mix Bus","Vocal"],
+        //                               "presetsByCategory": {}}
+        //     logic://library/inventory (its independent readback)
+        //                           -> {"cached": false, …} — no inventory at all
+        //
+        // Eight advertised categories, presets enumerated for none of them, and a
+        // readback carrying nothing to compare against. The oracle's own words for
+        // this: an inventory that advertises a category it cannot enumerate presets
+        // for is lying about what it read. So it is pinned again, with the reason it
+        // actually fails with, and it leaves this list when the operation stops
+        // reporting categories it cannot enumerate.
+        .init(
+            operationID: OperationID.tracksListLibrary.rawValue,
+            failureReason: "semantic readback mismatch: response did not match its independent readback",
+            trackingIssue: "#284"
+        ),
         //
         // `tracks.resolve_path` was pinned here until 2026-09-02 as well, and left
         // by being fixed: a warm-cache miss answered `exists:false` with no `reason`
