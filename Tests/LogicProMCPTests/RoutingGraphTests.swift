@@ -152,21 +152,6 @@ struct RoutingGraphTests {
         #expect(decoded == original)
     }
 
-    @Test func adr008FeatureFlagDefaultsToFalse() {
-        let key = "LOGIC_MCP_ADR008_ROUTING_GRAPH"
-        let previous = ProcessInfo.processInfo.environment[key]
-        unsetenv(key)
-        defer {
-            if let previous {
-                setenv(key, previous, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-
-        #expect(!FeatureFlags.adr008RoutingGraph)
-    }
-
     private let projectRef = TargetReference(rawValue: "prj_test")
     private let sourceRef = TargetReference(rawValue: "trk_source")
 

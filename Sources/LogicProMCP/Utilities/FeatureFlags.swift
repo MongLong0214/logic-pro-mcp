@@ -91,10 +91,6 @@ enum FeatureFlags: Sendable {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR007_SELECTOR_ATLAS"] == "1"
     }
 
-    static var adr008RoutingGraph: Bool {
-        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR008_ROUTING_GRAPH"] == "1"
-    }
-
     static var adr009PluginCapabilities: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR009_PLUGIN_CAPABILITIES"] == "1"
     }

@@ -184,6 +184,42 @@ actor TargetRegistry {
         return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint)
     }
 
+    /// Return a current reference that this registry has already issued for the
+    /// exact descriptor. This is intentionally lookup-only: a display label
+    /// resolving during a read must never cause a new identity to be minted.
+    func issuedReference(
+        kind: TargetKind,
+        descriptor: TargetDescriptor,
+        fingerprint: String,
+        snapshot: TargetRegistrySnapshot
+    ) -> TargetReference? {
+        guard snapshot.projectEpoch == projectEpoch,
+              snapshot.topologyGeneration == topologyGeneration else {
+            return nil
+        }
+        return bindings.values.first(where: {
+            $0.kind == kind
+                && $0.serverSessionID == serverSessionID
+                && $0.projectEpoch == projectEpoch
+                && $0.topologyGeneration == topologyGeneration
+                && $0.descriptor == descriptor
+                && $0.observedFingerprint == fingerprint
+        })?.reference
+    }
+
+    /// The project reference when it was previously issued for this exact
+    /// snapshot. Resource reads may report its absence, but must not manufacture
+    /// a project identity as a side effect of publishing another resource.
+    func issuedCurrentProjectReference(snapshot: TargetRegistrySnapshot) -> TargetReference? {
+        guard let descriptor = currentProjectDescriptor else { return nil }
+        return issuedReference(
+            kind: .project,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint,
+            snapshot: snapshot
+        )
+    }
+
     func resolveCurrentProject(_ reference: TargetReference) -> TargetBinding? {
         guard let binding = resolve(reference),
               binding.kind == .project,
