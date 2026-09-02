@@ -143,7 +143,10 @@ struct Issue519SaveAsMenuLocaleTests {
     func labelsCoverMeasuredForms() {
         let labels = AXLocalePolicy.saveAsMenuItem.labels
         #expect(labels.contains("Save As…"))
-        #expect(labels.contains("다른 이름으로 저장…"))
+        #expect(labels.contains("별도 저장…"))
+        // The string this replaced was never in any observed build; keeping it would put an
+        // untested guess back in the table.
+        #expect(!labels.contains("다른 이름으로 저장…"))
         // The trailing character is a real ellipsis. Three dots is a different string and would not
         // match the live menu.
         #expect(!labels.contains("Save As..."))
@@ -151,12 +154,61 @@ struct Issue519SaveAsMenuLocaleTests {
 
     /// The item is picked by exact label, so the two neighbours in the same File menu — measured on a
     /// live Logic 12.3 two rows away — must not match.
+    /// #747: the panel's own title and its two radios were compared against English literals, so a
+    /// Korean Logic opened the right window and the classifier rejected it. These are the measured
+    /// Korean forms, read off a live Logic 12.3 on 2026-09-03.
+    @Test("issue747_save_panel_shape_labels_carry_the_measured_korean_forms")
+    func savePanelShapeLabelsAreLocalised() {
+        #expect(AXLocalePolicy.savePanelWindowTitle.matches("저장", mode: .exact))
+        #expect(AXLocalePolicy.savePanelWindowTitle.matches("Save", mode: .exact))
+        #expect(AXLocalePolicy.savePanelPackageRadio.matches("패키지", mode: .exact))
+        #expect(AXLocalePolicy.savePanelFolderRadio.matches("폴더", mode: .exact))
+        // The panel sits next to windows whose titles merely start the same way; an exact match is
+        // what keeps the classifier from accepting one of those.
+        #expect(!AXLocalePolicy.savePanelWindowTitle.matches("저장하기", mode: .exact))
+        #expect(!AXLocalePolicy.savePanelPackageRadio.matches("폴더", mode: .exact))
+        #expect(!AXLocalePolicy.savePanelFolderRadio.matches("패키지", mode: .exact))
+    }
+
+    @Test("issue747_the_korean_panel_shape_satisfies_the_structural_classifier")
+    func koreanPanelShapeIsAccepted() {
+        // Measured 2026-09-03: AXWindow/AXDialog titled 저장, one filename field, one enabled save
+        // button, one cancel button, and the two radios 패키지 / 폴더.
+        let accepted = AccessibilityChannel.saveAsDialogSelectionIsUnambiguous(
+            containerRole: kAXWindowRole as String,
+            containerSubrole: kAXDialogSubrole as String,
+            windowTitle: "저장",
+            filenameFieldCount: 1,
+            saveButtonCount: 1,
+            saveEnabled: true,
+            cancelButtonCount: 1,
+            packageRadioCount: 1,
+            folderRadioCount: 1
+        )
+        #expect(accepted)
+    }
+
+    @Test("issue747_an_english_only_classifier_would_have_rejected_the_korean_panel")
+    func englishOnlyTitleWouldReject() {
+        // The defect, stated as a test: the same shape with the title compared to the English
+        // literal alone. If someone reverts the LabelSet to `== "Save"`, this is what breaks.
+        let titleMatchesLocalised = AXLocalePolicy.savePanelWindowTitle.matches("저장", mode: .exact)
+        let titleMatchesEnglishLiteral = "저장" == "Save"
+        #expect(titleMatchesLocalised)
+        #expect(!titleMatchesEnglishLiteral)
+    }
+
     @Test("issue519_save_as_does_not_match_its_neighbours_in_the_same_menu")
     func doesNotMatchNeighbours() {
         let item = AXLocalePolicy.saveAsMenuItem
         #expect(item.matches("Save As…"))
         #expect(!item.matches("Save A Copy As…"))
         #expect(!item.matches("Save as Template…"))
+        // The Korean neighbours, measured in the same menu on 2026-09-03. The first CONTAINS this
+        // item's label, so a contains-match would pick it and save a copy instead.
+        #expect(!item.matches("복사본 별도 저장…"))
+        #expect(!item.matches("템플릿으로 저장…"))
+        #expect(!item.matches("저장"))
         #expect(!item.matches("Save"))
     }
 
@@ -179,7 +231,7 @@ struct Issue519SaveAsMenuLocaleTests {
         // reads the real label off a Japanese Logic — not before.
         let item = AXLocalePolicy.saveAsMenuItem.labels
         #expect(item.contains("Save As…"))
-        #expect(item.contains("다른 이름으로 저장…"))
+        #expect(item.contains("별도 저장…"))
         let itemHasAnyJapanese = item.contains { label in
             label.unicodeScalars.contains { (0x3040...0x30FF).contains(Int($0.value)) }
         }

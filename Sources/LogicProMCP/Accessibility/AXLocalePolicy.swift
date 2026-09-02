@@ -322,10 +322,54 @@ enum AXLocalePolicy {
     /// absence so it cannot quietly become an assumption.
     ///
     /// This is not a regression: the two hard-coded literals it replaces had exactly the same gap.
+    ///
+    /// The Korean label was corrected on 2026-09-03 after reading the File menu off a live Logic
+    /// 12.3 running in Korean. The item is `별도 저장…`; the string carried here before,
+    /// `다른 이름으로 저장…`, is in no menu of that build, so `save_as` refused every call with
+    /// `element_not_found`. Byte-exact, in menu order:
+    ///
+    ///     저장                eca080ec9ea5
+    ///     별도 저장…          ebb384eb8f8420eca080ec9ea5e280a6   <- this item
+    ///     복사본 별도 저장…   ebb3b5ec82acebb3b820ebb384eb8f84…  <- Save a Copy As…
+    ///     템플릿으로 저장…    ed859ced948ceba6bfec9cbceba19c20…  <- Save as Template…
+    ///
+    /// The neighbour `복사본 별도 저장…` CONTAINS this item's label, so the exact-match discipline
+    /// is load-bearing: a prefix or contains match would save a copy instead. The unmeasured
+    /// string is not kept as a second variant — nobody has seen it in any build, and an untested
+    /// guess in a LabelSet is what this defect was.
     static let saveAsMenuItem = LabelSet(
         canonical: "Save As…",
-        variants: ["다른 이름으로 저장…"],
+        variants: ["별도 저장…"],
         rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as."
+    )
+
+    /// #747: the Save panel's own window title, and the two "Organize my project as" radios inside
+    /// it. Measured 2026-09-03 on a live Logic 12.3 in Korean by opening `파일 > 별도 저장…` and
+    /// enumerating the panel: it is an `AXWindow` with subrole `AXDialog` titled `저장`, carrying
+    /// exactly one filename field, one enabled save button, one cancel button, and two
+    /// `AXRadioButton`s titled `패키지` and `폴더`.
+    ///
+    /// The classifier that recognises this panel compared all three against English literals, so on
+    /// a Korean Logic it enumerated the right window and rejected it — `save_as` refused with
+    /// `element_not_found` after the panel was already on screen.
+    static let savePanelWindowTitle = LabelSet(
+        canonical: "Save",
+        variants: ["저장"],
+        rationale: "Title of the Save As panel window; the structural classifier matches it exactly."
+    )
+
+    /// #747: the `Package` radio in the Save panel. See `savePanelWindowTitle`.
+    static let savePanelPackageRadio = LabelSet(
+        canonical: "Package",
+        variants: ["패키지"],
+        rationale: "One of the two project-organisation radios that identify the Save As panel."
+    )
+
+    /// #747: the `Folder` radio in the Save panel. See `savePanelWindowTitle`.
+    static let savePanelFolderRadio = LabelSet(
+        canonical: "Folder",
+        variants: ["폴더"],
+        rationale: "One of the two project-organisation radios that identify the Save As panel."
     )
 
     /// #519: File > Bounce.
@@ -1422,6 +1466,9 @@ enum AXLocalePolicy {
         navigateMenuBar,
         trackMenuBar,
         saveAsMenuItem,
+        savePanelWindowTitle,
+        savePanelPackageRadio,
+        savePanelFolderRadio,
         bounceMenuItem,
         projectOrSectionMenuItem,
         importMenuItem,

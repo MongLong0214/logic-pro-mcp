@@ -712,7 +712,7 @@ extension AccessibilityChannel {
             || (containerRole == (kAXWindowRole as String)
                 && containerSubrole == (kAXDialogSubrole as String))
         return exactContainer
-            && windowTitle == "Save"
+            && AXLocalePolicy.savePanelWindowTitle.matches(windowTitle ?? "", mode: .exact)
             && filenameFieldCount == 1
             && saveButtonCount == 1
             && saveEnabled
@@ -759,7 +759,8 @@ extension AccessibilityChannel {
             let subrole = (shape["subrole"] as? String) ?? ""
             let isContainer = role == (kAXSheetRole as String)
                 || (role == (kAXWindowRole as String) && subrole == (kAXDialogSubrole as String))
-            return isContainer && ((shape["title"] as? String) ?? "") == "Save"
+            return isContainer
+                && AXLocalePolicy.savePanelWindowTitle.matches((shape["title"] as? String) ?? "", mode: .exact)
         }.count
     }
 
@@ -849,10 +850,10 @@ extension AccessibilityChannel {
                     AXLocalePolicy.elementMatches($0, AXLocalePolicy.cancelButton, runtime: runtime.ax)
                 }.count,
                 "package_radios": radios.filter {
-                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Package"
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.savePanelPackageRadio, runtime: runtime.ax)
                 }.count,
                 "folder_radios": radios.filter {
-                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Folder"
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.savePanelFolderRadio, runtime: runtime.ax)
                 }.count,
             ]
         }
@@ -933,10 +934,10 @@ extension AccessibilityChannel {
                 saveEnabled: saveEnabled,
                 cancelButtonCount: cancelButtons.count,
                 packageRadioCount: radios.filter {
-                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Package"
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.savePanelPackageRadio, runtime: runtime.ax)
                 }.count,
                 folderRadioCount: radios.filter {
-                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Folder"
+                    AXLocalePolicy.elementMatches($0, AXLocalePolicy.savePanelFolderRadio, runtime: runtime.ax)
                 }.count
             )
         }
@@ -952,14 +953,17 @@ extension AccessibilityChannel {
         in panel: AXUIElement,
         runtime: AXLogicProElements.Runtime
     ) async -> AXUIElement? {
-        _ = await AppleScriptChannel.executeAppleScript("""
-        tell application "System Events"
-            keystroke "g" using {command down, shift down}
-        end tell
-        return "sent"
-        """)
-        for _ in 0..<15 {
-            try? await Task.sleep(nanoseconds: 200_000_000)
+        // Measured 2026-09-03 on Logic 12.3 / Korean, with the panel open and Logic frontmost:
+        // Command-Shift-G produced NO sheet at all (0 sheets under the panel and 0 anywhere under
+        // any window, checked over 3 s). Typing a single "/" into the focused filename field opened
+        // the sheet immediately — one AXSheet under the panel, carrying exactly one AXTextField
+        // whose value was the "/" just typed. That is the trigger this panel actually has.
+        //
+        // Both are attempted, in that order, because the keystroke is the documented one and may
+        // work on other builds; the slash is the one observed to work here. A slash is safe to send
+        // either way: if the sheet is already open it lands in the sheet's field, and the field's
+        // full value is replaced before it is used.
+        func sheetField() -> AXUIElement? {
             let sheets = AXHelpers.getChildren(panel, runtime: runtime.ax).filter {
                 AXHelpers.getRole($0, runtime: runtime.ax) == (kAXSheetRole as String)
             }
@@ -969,6 +973,27 @@ extension AccessibilityChannel {
                 )
                 if fields.count == 1 { return fields[0] }
             }
+            return nil
+        }
+        _ = await AppleScriptChannel.executeAppleScript("""
+        tell application "System Events"
+            keystroke "g" using {command down, shift down}
+        end tell
+        return "sent"
+        """)
+        for _ in 0..<8 {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            if let field = sheetField() { return field }
+        }
+        _ = await AppleScriptChannel.executeAppleScript("""
+        tell application "System Events"
+            keystroke "/"
+        end tell
+        return "sent"
+        """)
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            if let field = sheetField() { return field }
         }
         return nil
     }
