@@ -72,18 +72,13 @@ enum ControlsViewBooleanParameterWriter {
         }
     }
 
-    /// A classifier census is evidence for a view transition, not a search
-    /// convenience. Keep its failed reads distinct from an empty census so an
-    /// unreadable Editor signal or table cannot authorise a Controls write.
+    /// These reads select the AX element that will receive an action. A failed
+    /// read therefore refuses instead of silently dropping a candidate and
+    /// risking an action on a different element.
     enum ViewEvidenceReadFailure: Error, Sendable, Equatable {
         case switcherCensus(AXHelpers.AXStatusError)
         case switcherDescription(AXHelpers.AXStatusError)
-        case sliderCensus(AXHelpers.AXStatusError)
-        case sliderDescription(AXHelpers.AXStatusError)
         case menuItemCensus(AXHelpers.AXStatusError)
-        case controlsTableCensus(AXHelpers.AXStatusError)
-        case controlsTableRows(AXHelpers.AXStatusError)
-        case controlsTableRow(AXHelpers.AXStatusError)
 
         var observation: String {
             switch self {
@@ -91,18 +86,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the plugin-window View-switcher census failed (AXChildren/AXRole status \(error.diagnosticLabel))"
             case let .switcherDescription(error):
                 return "the plugin-window View-switcher AXDescription read failed (status \(error.diagnosticLabel))"
-            case let .sliderCensus(error):
-                return "the native-editor AXSlider census failed (AXChildren/AXRole status \(error.diagnosticLabel))"
-            case let .sliderDescription(error):
-                return "a native-editor AXSlider AXDescription read failed (status \(error.diagnosticLabel))"
             case let .menuItemCensus(error):
                 return "the scoped View-menu item census failed (AXChildren/AXRole/AXTitle/AXDescription status \(error.diagnosticLabel))"
-            case let .controlsTableCensus(error):
-                return "the Controls-table census failed (AXChildren/AXRole status \(error.diagnosticLabel))"
-            case let .controlsTableRows(error):
-                return "the candidate Controls table AXRows read failed (status \(error.diagnosticLabel))"
-            case let .controlsTableRow(error):
-                return "a candidate Controls-table row read failed (status \(error.diagnosticLabel))"
             }
         }
     }
@@ -129,9 +114,9 @@ enum ControlsViewBooleanParameterWriter {
             case .unmeasuredLocale:
                 return "the plugin-window View AXDescription is not measured for this locale; no view name was guessed"
             case .entryViewNotConfirmed:
-                return "the bound plugin window exposed neither a described native-editor AXSlider nor a Controls-view label-and-sibling-control row with no described AXSlider; its entry view was not confirmed"
+                return "the bound plugin window exposed neither a described native-editor AXSlider, an absent AXTable, nor one Controls-view AXTable with a label-and-sibling-control row; its entry view was not confirmed"
             case let .viewEvidenceReadFailed(error):
-                return "view classification refused because \(error.observation); this is distinct from a missing switcher, menu item, slider, or table"
+                return "view selection refused because \(error.observation); this is distinct from a missing switcher or menu item"
             case .viewMenuDidNotAppearBeforeDeadline:
                 return "the measured View switcher exposed no scoped AXMenu before the menu-appearance deadline after AXPress"
             case let .viewMenuReadFailed(error):
@@ -182,13 +167,22 @@ enum ControlsViewBooleanParameterWriter {
         let attempted: Bool
         let confirmed: Bool
         let observedStructure: String?
+        let entryView: PluginWindowView
+
+        /// Only an observed structure different from the recorded entry view
+        /// proves that the operation left the plug-in view changed. A failed
+        /// restoration confirmation with no readable current view is unobserved,
+        /// not evidence of a changed view.
+        var leftViewChanged: Bool {
+            observedStructure.map { $0 != entryView.rawValue } ?? false
+        }
     }
 
     /// Owns one confirmed temporary view selection. Its caller restores this
     /// exact entry view on every exit path, including a locator refusal.
     final class ViewSession: @unchecked Sendable {
         private let window: AXUIElement
-        private let switcher: AXUIElement
+        private let switcher: AXUIElement?
         private let entryView: PluginWindowView
         private let didSwitch: Bool
         private let menuAppearanceTimeout: TimeInterval
@@ -197,7 +191,7 @@ enum ControlsViewBooleanParameterWriter {
 
         fileprivate init(
             window: AXUIElement,
-            switcher: AXUIElement,
+            switcher: AXUIElement?,
             entryView: PluginWindowView,
             didSwitch: Bool,
             menuAppearanceTimeout: TimeInterval,
@@ -217,14 +211,20 @@ enum ControlsViewBooleanParameterWriter {
         /// had not run.
         func restore() -> ViewRestoration {
             guard !restorationFinished else {
-                return ViewRestoration(attempted: false, confirmed: true, observedStructure: nil)
-            }
-            restorationFinished = true
-            guard didSwitch else {
                 return ViewRestoration(
                     attempted: false,
                     confirmed: true,
-                    observedStructure: entryView.rawValue
+                    observedStructure: nil,
+                    entryView: entryView
+                )
+            }
+            restorationFinished = true
+            guard didSwitch, let switcher else {
+                return ViewRestoration(
+                    attempted: false,
+                    confirmed: true,
+                    observedStructure: entryView.rawValue,
+                    entryView: entryView
                 )
             }
             switch switchView(
@@ -239,20 +239,16 @@ enum ControlsViewBooleanParameterWriter {
                 return ViewRestoration(
                     attempted: switched,
                     confirmed: true,
-                    observedStructure: entryView.rawValue
+                    observedStructure: entryView.rawValue,
+                    entryView: entryView
                 )
             case .refused:
-                let observed: PluginWindowView?
-                switch observedView(in: window, runtime: runtime) {
-                case let .success(view):
-                    observed = view
-                case .failure:
-                    observed = nil
-                }
+                let observed = observedView(in: window, runtime: runtime)
                 return ViewRestoration(
                     attempted: true,
                     confirmed: observed == entryView,
-                    observedStructure: observed?.rawValue
+                    observedStructure: observed?.rawValue,
+                    entryView: entryView
                 )
             }
         }
@@ -263,12 +259,9 @@ enum ControlsViewBooleanParameterWriter {
         case refused(ViewSwitchFailure, targetSelectionAttempted: Bool)
     }
 
-    private typealias ObservedViewResult = Result<PluginWindowView?, ViewEvidenceReadFailure>
-
     private enum ViewWaitResult {
         case confirmed
         case deadlineExpired
-        case readFailed(ViewEvidenceReadFailure)
     }
 
     struct ToggleResult: Sendable, Equatable {
@@ -292,6 +285,27 @@ enum ControlsViewBooleanParameterWriter {
         confirmationTimeout: TimeInterval = viewConfirmationTimeout,
         runtime: AXHelpers.Runtime = .production
     ) -> ViewPreparationResult {
+        let entryView: PluginWindowView
+        guard let observed = observedView(in: window, runtime: runtime) else {
+            return .refused(.entryViewNotConfirmed, restoration: nil)
+        }
+        entryView = observed
+
+        // A view already confirmed by its own positive evidence needs no
+        // switcher read: no switcher will be acted on and there is no view to
+        // restore. This also keeps classifier-only AXDescription failures out
+        // of an otherwise completed Controls or Editor operation.
+        guard entryView != targetView else {
+            return .ready(ViewSession(
+                window: window,
+                switcher: nil,
+                entryView: entryView,
+                didSwitch: false,
+                menuAppearanceTimeout: menuAppearanceTimeout,
+                runtime: runtime
+            ))
+        }
+
         let menuButtons: [AXUIElement]
         switch AXHelpers.censusDescendantResult(
             of: window, role: kAXMenuButtonRole, maxDepth: 5, runtime: runtime
@@ -319,16 +333,6 @@ enum ControlsViewBooleanParameterWriter {
                 return .refused(.viewSwitcherAmbiguous, restoration: nil)
             }
             return .refused(menuButtons.isEmpty ? .viewSwitcherNotFound : .unmeasuredLocale, restoration: nil)
-        }
-
-        let entryView: PluginWindowView
-        switch observedView(in: window, runtime: runtime) {
-        case let .success(.some(observed)):
-            entryView = observed
-        case .success(nil):
-            return .refused(.entryViewNotConfirmed, restoration: nil)
-        case let .failure(error):
-            return .refused(.viewEvidenceReadFailed(error), restoration: nil)
         }
 
         switch switchView(
@@ -368,20 +372,16 @@ enum ControlsViewBooleanParameterWriter {
                     restoration = ViewRestoration(
                         attempted: switched,
                         confirmed: true,
-                        observedStructure: entryView.rawValue
+                        observedStructure: entryView.rawValue,
+                        entryView: entryView
                     )
                 case .refused:
-                    let observed: PluginWindowView?
-                    switch observedView(in: window, runtime: runtime) {
-                    case let .success(view):
-                        observed = view
-                    case .failure:
-                        observed = nil
-                    }
+                    let observed = observedView(in: window, runtime: runtime)
                     restoration = ViewRestoration(
                         attempted: true,
                         confirmed: observed == entryView,
-                        observedStructure: observed?.rawValue
+                        observedStructure: observed?.rawValue,
+                        entryView: entryView
                     )
                 }
             } else {
@@ -393,11 +393,16 @@ enum ControlsViewBooleanParameterWriter {
 
     /// The native editor is signaled by a parameter-bearing slider. A described
     /// slider anywhere in the window is Editor evidence and wins over every
-    /// table shape. Controls is then recognized by at least one row with one
-    /// cell, one nonempty AXStaticText label, and a control in that label's
-    /// sibling subtree. Every census and description read is status-preserving:
-    /// an unreadable Editor signal refuses instead of disappearing and turning
-    /// an arbitrary one-cell table into Controls evidence.
+    /// table shape. Controls is confirmed only by one AXTable containing at
+    /// least one row with one cell, one nonempty AXStaticText label, and a
+    /// control in that label's sibling subtree. With no AXTable, Editor is
+    /// confirmed by that observed absence.
+    ///
+    /// AXDescription failures are deliberately ignored here. On the measured
+    /// Compressor surface those reads fail on Editor and on fourteen Controls
+    /// sliders, so their absence or failure cannot answer this question. They
+    /// never select an element to act on; a successful nonempty description is
+    /// positive Editor evidence, while the table structure decides Controls.
     ///
     /// Measured 2026-09-02, Compressor editor window "Absolute Zero": one
     /// AXTable at depth 2 had AXRows status 0 and 29 rows; every row had exactly
@@ -410,57 +415,47 @@ enum ControlsViewBooleanParameterWriter {
     private static func observedView(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> ObservedViewResult {
-        let sliderDescriptions: [String]
-        switch nativeEditorSliderEvidence(in: window, runtime: runtime) {
-        case let .success(observed):
-            sliderDescriptions = observed
-        case let .failure(error):
-            return .failure(error)
-        }
-        if sliderDescriptions.contains(where: { !$0.isEmpty }) {
-            return .success(.editor)
+    ) -> PluginWindowView? {
+        if hasDescribedNativeEditorSlider(in: window, runtime: runtime) {
+            return .editor
         }
         switch controlsViewStateIsBound(in: window, runtime: runtime) {
-        case .success(true):
-            return .success(.controls)
-        case .success(false):
-            return .success(sliderDescriptions.isEmpty ? nil : .editor)
-        case let .failure(error):
-            return .failure(error)
+        case .controls:
+            return .controls
+        case .noTable:
+            return .editor
+        case .unconfirmed:
+            return nil
         }
     }
 
-    /// Returns every native-editor slider description, preserving the exact
-    /// census/description failure that would otherwise erase Editor evidence.
-    /// A present-but-empty description is deliberately retained: bare sliders
-    /// still distinguish an unconfirmed window from a Controls table, while
-    /// only nonempty descriptions establish the native Editor view.
-    private static func nativeEditorSliderEvidence(
+    /// A description can establish Editor only when it is actually read and
+    /// nonempty. Failed and absent reads are not negative evidence, so scanning
+    /// continues through every slider and reports only a positive observation.
+    private static func hasDescribedNativeEditorSlider(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Result<[String], ViewEvidenceReadFailure> {
+    ) -> Bool {
         let sliders: [AXUIElement]
         switch AXHelpers.censusDescendantResult(
             of: window, role: kAXSliderRole, maxDepth: 8, runtime: runtime
         ) {
         case let .success(census):
             sliders = census.matches
-        case let .failure(error):
-            return .failure(.sliderCensus(error))
+        case .failure:
+            return false
         }
-        var descriptions: [String] = []
         for slider in sliders {
-            let description: String?
             switch descriptionResult(of: slider, runtime: runtime) {
-            case let .success(observed):
-                description = observed
-            case let .failure(error):
-                return .failure(.sliderDescription(error))
+            case let .success(description):
+                if !(description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                    return true
+                }
+            case .failure:
+                continue
             }
-            descriptions.append(description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
         }
-        return .success(descriptions)
+        return false
     }
 
     private static func switchView(
@@ -473,13 +468,8 @@ enum ControlsViewBooleanParameterWriter {
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
         if !forceSelection {
-            switch observedView(in: window, runtime: runtime) {
-            case let .success(observed) where observed == targetView:
+            if observedView(in: window, runtime: runtime) == targetView {
                 return .confirmed(switched: false)
-            case .success:
-                break
-            case let .failure(error):
-                return .refused(.viewEvidenceReadFailed(error), targetSelectionAttempted: false)
             }
         }
 
@@ -534,8 +524,6 @@ enum ControlsViewBooleanParameterWriter {
             break
         case .deadlineExpired:
             return .refused(.viewStructureDidNotConfirm(targetView), targetSelectionAttempted: true)
-        case let .readFailed(error):
-            return .refused(.viewEvidenceReadFailed(error), targetSelectionAttempted: true)
         }
         return .confirmed(switched: true)
     }
@@ -645,13 +633,8 @@ enum ControlsViewBooleanParameterWriter {
     ) -> ViewWaitResult {
         let deadline = Date().addingTimeInterval(max(0, timeout))
         repeat {
-            switch observedView(in: window, runtime: runtime) {
-            case let .success(observed) where observed == expected:
+            if observedView(in: window, runtime: runtime) == expected {
                 return .confirmed
-            case .success:
-                break
-            case let .failure(error):
-                return .readFailed(error)
             }
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { break }
@@ -660,41 +643,49 @@ enum ControlsViewBooleanParameterWriter {
         return .deadlineExpired
     }
 
+    private enum ControlsTableEvidence {
+        case controls
+        case noTable
+        case unconfirmed
+    }
+
     private static func controlsViewStateIsBound(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Result<Bool, ViewEvidenceReadFailure> {
+    ) -> ControlsTableEvidence {
         let tables: [AXUIElement]
         switch AXHelpers.censusDescendantResult(
             of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
         ) {
         case let .success(census):
             tables = census.matches
-        case let .failure(error):
-            return .failure(.controlsTableCensus(error))
+        case .failure:
+            return .unconfirmed
         }
-        guard tables.count == 1, let table = tables.first else { return .success(false) }
+        if tables.isEmpty { return .noTable }
+        guard tables.count == 1, let table = tables.first else { return .unconfirmed }
         let rows: [AXUIElement]
         switch controlsRows(in: table, runtime: runtime) {
         case let .success(observed):
             rows = observed
-        case let .failure(error):
-            return .failure(.controlsTableRows(error))
+        case .failure:
+            return .unconfirmed
         }
         // Heading and section rows have no interactive control in the live
         // table. A Controls view is bound by the presence of at least one
         // measured label/control pair, not by requiring every row to be one.
+        // A failed row read is not negative evidence and cannot erase a pair
+        // observed in another row; without a pair, the table remains
+        // unconfirmed rather than becoming Editor evidence.
         for row in rows {
             switch rowCarriesParameterPair(row, runtime: runtime) {
             case .success(true):
-                return .success(true)
-            case .success(false):
+                return .controls
+            case .success(false), .failure:
                 continue
-            case let .failure(error):
-                return .failure(.controlsTableRow(error))
             }
         }
-        return .success(false)
+        return .unconfirmed
     }
 
     /// Resolve a row-label address without positional fallbacks. A candidate
@@ -703,12 +694,12 @@ enum ControlsViewBooleanParameterWriter {
     /// control.
     ///
     /// An AXTable is not structurally self-identifying as the parameter table.
-    /// This method accepts one only when the caller has already bound this
-    /// window to the requested plug-in by header identity, this window has one
-    /// table, no described native-editor slider, and one row whose catalogued
-    /// requested label has one sibling control. AX exposes no stronger table
-    /// identity fact; any failed part of that evidence refuses rather than
-    /// weakening it to a missing match.
+    /// The guarantee here is deliberately limited: the caller has already
+    /// bound the window by plug-in header identity, this window has exactly one
+    /// AXTable, and the selected AXRow label equals the catalogued parameter's
+    /// `controlsViewRowLabel`. AX exposes no stronger table identity fact. In
+    /// particular, this does not claim that an unrelated one-table plug-in
+    /// window can be distinguished by table structure alone.
     static func locate(
         label requestedLabel: String,
         in window: AXUIElement,
@@ -728,14 +719,6 @@ enum ControlsViewBooleanParameterWriter {
         }
         guard tables.count == 1, let table = tables.first else {
             return .refused(tables.isEmpty ? .controlsViewTableNotFound : .controlsViewTableAmbiguous)
-        }
-        switch nativeEditorSliderEvidence(in: window, runtime: runtime) {
-        case let .success(descriptions) where descriptions.allSatisfy(\.isEmpty):
-            break
-        case .success:
-            return .refused(.controlsViewTableNotFound)
-        case .failure:
-            return .refused(.accessibilityReadFailed)
         }
         let rows: [AXUIElement]
         switch controlsRows(in: table, runtime: runtime) {

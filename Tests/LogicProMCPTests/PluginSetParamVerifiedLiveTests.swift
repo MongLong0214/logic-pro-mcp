@@ -103,6 +103,7 @@ private final class LiveFixture: @unchecked Sendable {
         viewMenuSelectionSetsUnconfirmedStructure: Bool = false,
         viewMenuBecomesUnavailableAfterControlsSelection: Bool = false,
         viewMenuReadFailsAfterFirstSelection: Bool = false,
+        controlsTableReadFailsAfterRestoration: Bool = false,
         invalidateTargetSlotAfterViewSelection: Bool = false,
         mutatePluginHeaderAfterViewSelection: Bool = false,
         ambiguousEditorSliderAfterViewSelection: Bool = false,
@@ -361,6 +362,11 @@ private final class LiveFixture: @unchecked Sendable {
                     b.setChildren(pluginWindow, pending.children)
                     pendingPluginWindowChildren.value = nil
                 }
+                if controlsTableReadFailsAfterRestoration,
+                   CFEqual(element, controlsTable),
+                   controlsViewMenuPressCount.value > 0 {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 guard CFEqual(element, controlsViewSwitcher), menuOpen.value else { return nil }
                 if viewMenuReadFailsAfterFirstSelection,
                    controlsViewMenuPressCount.value + editorViewMenuPressCount.value > 0 {
@@ -606,11 +612,14 @@ private func runLive(
 
 private func reportsFailedPluginViewRestoration(_ envelope: [String: Any]) -> Bool {
     guard let attempted = envelope["plugin_view_restore_attempted"] as? Bool,
-          let observed = envelope["plugin_view_restore_observed"] as? Bool,
-          let leftChanged = envelope["plugin_view_left_changed"] as? Bool else {
+          let observed = envelope["plugin_view_restore_observed"] as? Bool else {
         return false
     }
-    return attempted && !observed && leftChanged
+    if let leftChanged = envelope["plugin_view_left_changed"] as? Bool {
+        return attempted && !observed && leftChanged
+    }
+    let restorationWasUnobserved = envelope["plugin_view_restore_unobserved"] as? Bool ?? false
+    return attempted && !observed && restorationWasUnobserved
 }
 
 /// A second same-track Compressor editor for the duplicate-insert post-count
@@ -1277,7 +1286,29 @@ private func namedEQBandParams(
     #expect(fixtureWasLeftInControls)
 }
 
-@Test func testInitialViewConfirmationFailureReportsItsFailedCompensatingRestore() async throws {
+@Test func testUnobservedRestoreDoesNotClaimTheRestoredEntryViewWasLeftChanged() async throws {
+    let fixture = LiveFixture(
+        controlsViewInitiallySelected: true,
+        controlsTableReadFailsAfterRestoration: true
+    )
+    let result = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+
+    let state = try #require(result["state"] as? String)
+    let restoreAttempted = try #require(result["plugin_view_restore_attempted"] as? Bool)
+    let restoreObserved = try #require(result["plugin_view_restore_observed"] as? Bool)
+    let restorationWasReportedUnobserved = try #require(result["plugin_view_restore_unobserved"] as? Bool)
+    let entryViewWasActuallyReselected = fixture.currentPluginViewTitle == "컨트롤"
+    let leftChangedWasNotAsserted = result["plugin_view_left_changed"] == nil
+    let writeReachedStateA = state == "A"
+    let restoreAttemptWasUnconfirmed = restoreAttempted && !restoreObserved
+    #expect(writeReachedStateA)
+    #expect(restoreAttemptWasUnconfirmed)
+    #expect(restorationWasReportedUnobserved)
+    #expect(entryViewWasActuallyReselected)
+    #expect(leftChangedWasNotAsserted)
+}
+
+@Test func testNoTableConfirmsEditorBeforeTheFailedCompensatingRestore() async throws {
     let fixture = LiveFixture(
         controlsViewInitiallySelected: true,
         viewMenuSelectionSetsUnconfirmedStructure: true,
@@ -1288,8 +1319,8 @@ private func namedEQBandParams(
     let error = try #require(result["error"] as? String)
     let restorationFailureWasVisible = reportsFailedPluginViewRestoration(result)
     let noSliderWrite = fixture.sliderWriteCount.value == 0
-    let reportedPluginViewNotConfirmed = error == "plugin_view_not_confirmed"
-    #expect(reportedPluginViewNotConfirmed)
+    let reportedMissingEditorControl = error == "param_control_not_found"
+    #expect(reportedMissingEditorControl)
     #expect(restorationFailureWasVisible)
     #expect(noSliderWrite)
 }

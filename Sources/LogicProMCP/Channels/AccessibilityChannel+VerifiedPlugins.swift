@@ -1239,10 +1239,17 @@ extension AccessibilityChannel {
             guard let restoration else { return }
             extras["plugin_view_restore_attempted"] = restoration.attempted
             extras["plugin_view_restore_observed"] = restoration.confirmed
-            if !restoration.confirmed {
+            if restoration.leftViewChanged {
                 extras["plugin_view_left_changed"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
                 extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this write. Select the prior view manually before continuing."
+            } else if !restoration.confirmed {
+                // A failed restore confirmation does not establish that the
+                // view changed. When AX cannot classify the current view, say
+                // exactly that rather than reporting an unobserved change.
+                extras["plugin_view_restore_unobserved"] = true
+                extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
+                extras["plugin_view_restore_recovery_hint"] = "The plug-in view restoration could not be observed. Verify the prior view before continuing."
             }
         }
 
