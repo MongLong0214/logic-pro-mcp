@@ -225,11 +225,18 @@ enum TempoMapAX {
     /// 120 → 120`. Fractional targets refuse. Every loop observation starts again from `window`; it
     /// never reads a cached row/group after Logic has re-rendered it, and every loop is bounded by
     /// both an iteration cap and a wall-clock deadline.
+    ///
+    /// `convergenceDeadlineOverride` exists so a test can decide WHICH of the two bounds it is
+    /// measuring. With both left at their defaults the two race, and which one fires depends on how
+    /// fast the machine runs the fixture: a budget test written against a 3 s default passed here
+    /// and failed on a slower CI runner, where the deadline arrived first and the refusal named the
+    /// other bound. Production never passes it.
     static func setExistingTempo(
         at index: Int,
         to target: Double,
         in window: AXUIElement,
         localeIdentifier: String? = nil,
+        convergenceDeadlineOverride: TimeInterval? = nil,
         runtime: AXLogicProElements.Runtime = .production
     ) -> WriteOutcome {
         do {
@@ -286,7 +293,7 @@ enum TempoMapAX {
             in: window,
             localeIdentifier: localeIdentifier,
             runtime: runtime,
-            deadline: Date().addingTimeInterval(convergenceDeadline)
+            deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline)
         )
         switch forward {
         case let .success(observed, writes):

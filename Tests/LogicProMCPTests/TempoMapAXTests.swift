@@ -315,6 +315,10 @@ struct TempoMapAXTests {
         }
     }
 
+    /// The two bounds race unless the test says which one it is measuring. Written against the
+    /// production 3 s deadline this passed here and failed on a slower CI runner, where the
+    /// deadline arrived first and the refusal named the other bound. The deadline is pushed far
+    /// out so the budget is the only thing that can stop this walk.
     @Test("the practical write cap stops a long valid walk and reports the rollback receipt")
     func practicalWriteCapBoundsLongWalk() throws {
         let fixture = TempoListFixture(tempo: 5)
@@ -323,12 +327,33 @@ struct TempoMapAXTests {
             to: 999,
             in: fixture.window,
             localeIdentifier: "ko-KR",
+            convergenceDeadlineOverride: 600,
             runtime: fixture.runtime()
         )
         let refusedOutcome = try #require(refusal(from: outcome))
 
         #expect(refusedOutcome.failure == .attemptBudgetExhausted(observed: 69, target: 999, budget: 64))
         #expect(refusedOutcome.rollback == .restored(writes: 64, finalObserved: 5))
+        #expect(fixture.currentTempo == 5)
+    }
+
+    /// The other bound, pinned the same way: a deadline already in the past stops the walk before
+    /// the budget can, and the refusal names the deadline rather than the cap.
+    @Test("the wall-clock deadline stops the walk when it arrives before the budget")
+    func wallClockDeadlineBoundsLongWalk() throws {
+        let fixture = TempoListFixture(tempo: 5)
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 999,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            convergenceDeadlineOverride: -1,
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        var namedTheDeadline = false
+        if case .deadlineExceeded = refusedOutcome.failure { namedTheDeadline = true }
+        #expect(namedTheDeadline)
         #expect(fixture.currentTempo == 5)
     }
 
