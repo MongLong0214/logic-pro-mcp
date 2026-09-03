@@ -25,6 +25,7 @@ GOOD = {
     "captures": 1, "captures_unsettled": 0, "captures_straddling_displays": 0,
     "restorations_failed": 0, "cached_reads_used_as_live": 0,
     "visual_assertions": 1, "visual_failed": 0, "visual_assertions_without_a_subject": 0,
+    "declared_surface": None,
     "recordings": 1,
 }
 
@@ -61,6 +62,22 @@ CASES = [
     (False, {**GOOD, "visual_assertions_without_a_subject": 1},
      "a visual that names no subject"),
     (False, None, "not a summary at all"),
+    # #754 — a declared non-UI surface earns its zeros by a different instrument, never by silence.
+    (True, {**GOOD, "declared_surface": "non_ui", "captures": 0, "visual_assertions": 0,
+            "recordings": 0, "checks_with_a_counterexample": 3},
+     "non_ui: no captures, visuals or recordings, but a counterexample control"),
+    (False, {**GOOD, "declared_surface": None, "captures": 0, "visual_assertions": 0,
+             "recordings": 0, "checks_with_a_counterexample": 3},
+     "the same zeros with NO declaration are still unclean — silence is not a class"),
+    (False, {**GOOD, "declared_surface": "non_ui", "captures": 0, "visual_assertions": 0,
+             "recordings": 0, "checks_with_a_counterexample": 0},
+     "non_ui that asserted nothing: zeros unearned on this surface too"),
+    (False, {**GOOD, "declared_surface": "non_ui", "captures": 0, "visual_assertions": 0,
+             "recordings": 0, "checks_with_a_counterexample": 3, "counterexamples_not_rejected": 1},
+     "non_ui whose counterexample was not rejected — the shared rule still applies"),
+    (True, {**GOOD, "declared_surface": "ui"}, "an explicitly declared UI document is judged as before"),
+    (False, {**GOOD, "declared_surface": "ui", "captures": 0},
+     "declaring ui does not relax anything"),
 ]
 
 failed = 0
@@ -529,7 +546,12 @@ out = ev.write()
 shapes.append(("write() returns a dict", isinstance(out, dict)))
 shapes.append(("summary carries every required key",
                all(k in out for k in E._REQUIRED_SUMMARY_KEYS)))
-shapes.append(("counters are ints", all(isinstance(out[k], int) for k in E._REQUIRED_SUMMARY_KEYS)))
+# `declared_surface` is the one required key that is not a counter: it is what the harness said
+# about its subject, so it is a surface name or None. Everything else is a count.
+shapes.append(("counters are ints", all(isinstance(out[k], int)
+                                        for k in E._REQUIRED_SUMMARY_KEYS if k != "declared_surface")))
+shapes.append(("the declaration is a surface name or None",
+               out["declared_surface"] is None or out["declared_surface"] in E.Evidence.SURFACES))
 shapes.append(("is_clean() returns a bool", isinstance(E.is_clean(out), bool)))
 shapes.append(("the driven visual named a subject", out["visual_assertions_without_a_subject"] == 0))
 shapes.append(("have_tools() returns a list", isinstance(E.have_tools(), list)))
@@ -572,6 +594,18 @@ shapes.append(("the summary counts them", fsummary["checks_with_a_counterexample
 shapes.append(("and counts only the ones that failed to reject",
                fsummary["counterexamples_not_rejected"] == 3))
 
+# #754 — the declaration is read off the records by summarize, and only a valid one counts.
+decl = E.summarize([{"kind": "declaration", "surface": "non_ui"}, {"kind": "check", "passed": True}])
+shapes.append(("summarize reads a non_ui declaration", decl["declared_surface"] == "non_ui"))
+shapes.append(("summarize reads no declaration as None",
+               E.summarize([{"kind": "check", "passed": True}])["declared_surface"] is None))
+shapes.append(("summarize ignores a declaration naming an unknown surface",
+               E.summarize([{"kind": "declaration", "surface": "maybe"}])["declared_surface"] is None))
+try:
+    E.Evidence("0" * 40, "/tmp/lpm-test-754-unused", surface="maybe")
+    shapes.append(("Evidence refuses an unknown surface", False))
+except ValueError:
+    shapes.append(("Evidence refuses an unknown surface", True))
 for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
