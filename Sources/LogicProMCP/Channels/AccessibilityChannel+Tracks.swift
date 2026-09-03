@@ -213,8 +213,8 @@ extension AccessibilityChannel {
                     }
                     afterTracks = afterRead.tracks
                     guard let resolvedAfterReferences = trackSortAfterOrder(
-                        headers: afterRead.headers,
-                        beforeHeaders: beforeRead.headers,
+                        afterNames: afterRead.tracks.map(\.name),
+                        beforeNames: beforeRead.tracks.map(\.name),
                         beforeReferences: beforeReferences
                     ) else {
                         return .unavailable
@@ -370,29 +370,49 @@ extension AccessibilityChannel {
         return .matched(order)
     }
 
-    /// Header equality is an unmeasured transaction-local continuity assumption:
-    /// the #448 fixture reuses fake header objects, but no live sort has yet
-    /// established that Logic retains them across the menu action. If Logic
-    /// replaces a header object, we cannot prove which track moved, so the
-    /// caller receives State B rather than a guessed identity.
-    private static func trackSortAfterOrder(
-        headers: [AXUIElement],
-        beforeHeaders: [AXUIElement],
+    /// Recovers which reference each row holds AFTER the sort, by track name.
+    ///
+    /// This used to join on `AXUIElement` identity, guarded by a comment that called that an
+    /// unmeasured assumption and predicted the failure would be Logic REPLACING a header object,
+    /// costing us the identity and yielding State B. Driven live on Logic Pro 12.3 on 2026-09-03,
+    /// the assumption fails the other way, which is worse: across a sort that demonstrably moved
+    /// the rows, every after-element was `CFEqual` to the before-element at the SAME index while
+    /// the names moved between them. Logic keeps the objects in place and swaps their content.
+    ///
+    /// An identity join therefore returns the identity permutation for every sort, `after_order`
+    /// always equals `before_order`, and the comparison against the caller's expected order can
+    /// only fail — so `sort_verified` could never award State A for any criterion.
+    ///
+    /// Names carry the join instead. That is sound here and only here: this operation has already
+    /// refused a project whose track names are not unique, before any AX work. A duplicate name
+    /// reaching this point means that guard did not hold, and is answered with `nil` (the caller's
+    /// "unreadable") rather than an arbitrary pick.
+    /// `internal`, not `private`: joining on names rather than element handles is what makes this
+    /// decidable from values, and a rule that decides the verdict with no test is how the identity
+    /// join survived to a live drive. See `Issue448TrackSortAfterOrderTests`.
+    static func trackSortAfterOrder(
+        afterNames: [String],
+        beforeNames: [String],
         beforeReferences: [String]
     ) -> [String]? {
-        guard headers.count == beforeHeaders.count,
-              beforeReferences.count == beforeHeaders.count else {
+        guard afterNames.count == beforeNames.count,
+              beforeReferences.count == beforeNames.count else {
             return nil
         }
-        var matchedBeforeIndexes = Set<Int>()
-        var order: [String] = []
-        order.reserveCapacity(headers.count)
-        for header in headers {
-            guard let beforeIndex = beforeHeaders.firstIndex(where: { CFEqual($0, header) }),
-                  matchedBeforeIndexes.insert(beforeIndex).inserted else {
+        var referenceByName: [String: String] = [:]
+        referenceByName.reserveCapacity(beforeNames.count)
+        for (name, reference) in zip(beforeNames, beforeReferences) {
+            guard referenceByName.updateValue(reference, forKey: name) == nil else {
                 return nil
             }
-            order.append(beforeReferences[beforeIndex])
+        }
+        var order: [String] = []
+        order.reserveCapacity(afterNames.count)
+        for name in afterNames {
+            guard let reference = referenceByName[name] else {
+                return nil
+            }
+            order.append(reference)
         }
         return order
     }
