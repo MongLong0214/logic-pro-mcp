@@ -73,6 +73,11 @@ jobs:
         # clean — the failure the guard itself had before review.
         run: bash Scripts/test-menu-literal-guard.sh
 
+      - name: Self-test the typechecker-heavy-literal guard (#749)
+        # Fixtures prove a three-concatenation value is refused and that unrelated one-concatenation
+        # values, comments, and plain literals remain accepted.
+        run: bash Scripts/test-typechecker-heavy-literal-guard.sh
+
       - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
         # A literal `menu bar item "..."` cannot reach the extra locale variants
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
@@ -130,6 +135,11 @@ jobs:
         # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
         # clean — the failure the guard itself had before review.
         run: bash Scripts/test-menu-literal-guard.sh
+
+      - name: Self-test the typechecker-heavy-literal guard (#749)
+        # Fixtures prove a three-concatenation value is refused and that unrelated one-concatenation
+        # values, comments, and plain literals remain accepted.
+        run: bash Scripts/test-typechecker-heavy-literal-guard.sh
 
       - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
         # A literal `menu bar item "..."` cannot reach the extra locale variants
