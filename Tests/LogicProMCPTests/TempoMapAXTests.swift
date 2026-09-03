@@ -357,6 +357,36 @@ struct TempoMapAXTests {
         #expect(fixture.currentTempo == 5)
     }
 
+    /// The short override must also bound the rollback. The fixture delays only its decreasing
+    /// write, so an unthreaded rollback would use the production deadline and restore instead.
+    @Test("the deadline override also bounds a rollback")
+    func rollbackDeadlineUsesOverride() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .stuck],
+            decreasingWriteDelay: 0.75
+        )
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            convergenceDeadlineOverride: 0.5,
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .didNotMove(previous: 119, observed: 119, target: 121))
+        let rollbackReachedDeadline: Bool
+        if case let .failed(failure: .deadlineExceeded(observed, target), writes: writes, finalObserved: finalObserved) = refusedOutcome.rollback {
+            rollbackReachedDeadline = observed == 119 && target == 118 && writes == 1 && finalObserved == 119
+        } else {
+            rollbackReachedDeadline = false
+        }
+        #expect(rollbackReachedDeadline)
+        #expect(fixture.currentTempo == 118)
+    }
+
     @Test("a delayed Logic render settles before the write is judged")
     func delayedRenderSettlesBeforeJudgment() {
         let fixture = TempoListFixture(tempo: 118, postWriteRenderDelayAXRowsReads: 3)
@@ -513,6 +543,7 @@ private final class TempoListFixture: @unchecked Sendable {
     private let witnessPairs: [WitnessPair]
     private var witnessPairIndex = 0
     private let postWriteRenderDelayAXRowsReads: Int
+    private let decreasingWriteDelay: TimeInterval
     private var pendingRenderAXRowsReads = 0
     private var renderPending = false
     private(set) var currentTempo: Double
@@ -530,7 +561,8 @@ private final class TempoListFixture: @unchecked Sendable {
         readFailureSite: ReadFailureSite? = nil,
         postWriteAXRowsReadFailures: [Int32] = [],
         witnessPairs: [WitnessPair] = [],
-        postWriteRenderDelayAXRowsReads: Int = 0
+        postWriteRenderDelayAXRowsReads: Int = 0,
+        decreasingWriteDelay: TimeInterval = 0
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -539,6 +571,7 @@ private final class TempoListFixture: @unchecked Sendable {
         self.postWriteAXRowsReadFailures = postWriteAXRowsReadFailures
         self.witnessPairs = witnessPairs
         self.postWriteRenderDelayAXRowsReads = postWriteRenderDelayAXRowsReads
+        self.decreasingWriteDelay = decreasingWriteDelay
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -650,6 +683,7 @@ private final class TempoListFixture: @unchecked Sendable {
                     return false
                 }
                 writeElementIDs.append(builder.elementID(element))
+                let decreasingWrite = requested.doubleValue < currentTempo
                 let step = stepIndex < steps.count ? steps[stepIndex] : .toward
                 stepIndex += 1
                 switch step {
@@ -665,6 +699,9 @@ private final class TempoListFixture: @unchecked Sendable {
                         : requested.doubleValue - 1
                 }
                 scheduleCurrentRowRender()
+                if decreasingWrite, decreasingWriteDelay > 0 {
+                    Thread.sleep(forTimeInterval: decreasingWriteDelay)
+                }
                 return true
             },
             performActionHandler: nil
