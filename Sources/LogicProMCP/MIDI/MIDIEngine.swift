@@ -80,20 +80,7 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             createDestination: { client, name, onBytes in
                 var destination: MIDIEndpointRef = 0
                 let status = MIDIDestinationCreateWithBlock(client, name as CFString, &destination) { packetList, _ in
-                    let packets = packetList.pointee
-                    var list = packets
-                    withUnsafePointer(to: &list.packet) { firstPacket in
-                        var packet = firstPacket
-                        for _ in 0..<list.numPackets {
-                            let current = packet.pointee
-                            let length = Int(current.length)
-                            let bytes = withUnsafeBytes(of: current.data) { raw in
-                                Array(raw.prefix(length).bindMemory(to: UInt8.self))
-                            }
-                            onBytes(bytes)
-                            packet = UnsafePointer(MIDIPacketNext(packet))
-                        }
-                    }
+                    MIDIEngine.receivePackets(from: packetList, onBytes: onBytes)
                 }
                 return (status, destination)
             },
@@ -128,6 +115,25 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             },
             endpointRuntime: .production
         )
+    }
+
+    /// Delivers the packets in a CoreMIDI-owned list while its original buffer is valid.
+    nonisolated static func receivePackets(
+        from packetList: UnsafePointer<MIDIPacketList>,
+        onBytes: @escaping @Sendable ([UInt8]) -> Void
+    ) {
+        for packet in packetList.unsafeSequence() {
+            let length = Int(packet.pointee.length)
+            let bytes = withUnsafeBytes(of: packet.pointee.data) { raw -> [UInt8]? in
+                // Reject, rather than truncate, packets larger than Swift's imported
+                // 256-byte data tuple: truncation could turn one MIDI command into another.
+                guard length <= raw.count else { return nil }
+                return Array(raw.prefix(length).bindMemory(to: UInt8.self))
+            }
+            if let bytes {
+                onBytes(bytes)
+            }
+        }
     }
 
     private var client: MIDIClientRef = 0

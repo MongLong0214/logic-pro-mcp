@@ -216,6 +216,72 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     }
 }
 
+private final class MIDIBytesRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedPackets: [[UInt8]] = []
+
+    func append(_ bytes: [UInt8]) {
+        lock.lock()
+        defer { lock.unlock() }
+        storedPackets.append(bytes)
+    }
+
+    var packets: [[UInt8]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedPackets
+    }
+}
+
+private func withCoreMIDIPacketList(
+    _ packets: [[UInt8]],
+    _ body: (UnsafeMutablePointer<MIDIPacketList>) -> Void
+) {
+    let payloadSize = packets.reduce(0) { partial, packet in
+        partial + max(MemoryLayout<MIDIPacket>.size, packet.count)
+    }
+    let bufferSize = max(1024, MemoryLayout<MIDIPacketList>.size + payloadSize)
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+
+    buffer.withUnsafeMutableBytes { rawBuffer in
+        let packetList = rawBuffer.baseAddress!.assumingMemoryBound(to: MIDIPacketList.self)
+        var currentPacket = MIDIPacketListInit(packetList)
+
+        for packetBytes in packets {
+            packetBytes.withUnsafeBufferPointer { bytes in
+                if let base = bytes.baseAddress {
+                    currentPacket = MIDIPacketListAdd(
+                        packetList,
+                        bufferSize,
+                        currentPacket,
+                        0,
+                        packetBytes.count,
+                        base
+                    )
+                }
+            }
+        }
+
+        body(packetList)
+    }
+}
+
+private func boundaryCrossingPackets() -> [[UInt8]] {
+    (0..<64).map { index in
+        let value = UInt8(index)
+        switch index % 4 {
+        case 0:
+            return [0x90, value, 0x40]
+        case 1:
+            return [0xF0, 0x7D, value, 0xF7]
+        case 2:
+            return [0xF0, 0x7D, 0x01, value, 0xF7]
+        default:
+            return [0xF0, 0x7D, 0x01, 0x02, value, 0xF7]
+        }
+    }
+}
+
 @Test func testMIDIEngineStartAndStopLifecycleUsesRuntimeResources() async throws {
     let harness = MIDIEngineRuntimeHarness()
     let engine = MIDIEngine(runtime: harness.makeRuntime())
@@ -618,6 +684,36 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     // terminates the stream. Asserting via lifecycle state instead of a
     // would-block iterator read.
     #expect(!(await engine.isActive))
+}
+
+// 64 deliberately varied packets exceed the one-packet window a Swift value copy
+// of MIDIPacketList retains. Comparing the complete array also pins packet order.
+@Test func testMIDIEngineReceivesEveryPacketAcrossMIDIPacketListCopyBoundary() {
+    let expectedPackets = boundaryCrossingPackets()
+    let recorder = MIDIBytesRecorder()
+
+    withCoreMIDIPacketList(expectedPackets) { packetList in
+        MIDIEngine.receivePackets(from: packetList) { bytes in
+            recorder.append(bytes)
+        }
+    }
+
+    let receivedPackets = recorder.packets
+    #expect(receivedPackets == expectedPackets)
+}
+
+@Test func testMIDIEngineRejectsOversizedMIDIPacketDataTuple() {
+    let recorder = MIDIBytesRecorder()
+
+    withCoreMIDIPacketList([[0x90, 0x3C, 0x64]]) { packetList in
+        packetList.pointee.packet.length = 257
+        MIDIEngine.receivePackets(from: packetList) { bytes in
+            recorder.append(bytes)
+        }
+    }
+
+    let receivedPackets = recorder.packets
+    #expect(receivedPackets.isEmpty)
 }
 
 // T-H1 (P1-6) — start → stop → start must restore the inbound feedback path.
