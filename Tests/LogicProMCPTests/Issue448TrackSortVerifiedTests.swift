@@ -491,9 +491,12 @@ struct Issue448TrackSortVerifiedTests {
             runtime: fixture.runtime
         )
         let body = try #require(sharedJSONObject(result.message))
+        // `noop_unobservable`, not `readback_unavailable`: the arrangement WAS read and matched.
+        // What cannot be observed is whether the command did anything, because a correct sort of
+        // a sorted project changes nothing. The old reason said the readback failed.
         let stateBForUnobservableNoOp = result.isSuccess
             && body["state"] as? String == "B"
-            && body["reason"] as? String == HonestContract.UncertainReason.readbackUnavailable.rawValue
+            && body["reason"] as? String == HonestContract.UncertainReason.noopUnobservable.rawValue
             && body["detail"] as? String == "already_sorted_command_unobservable"
 
         #expect(stateBForUnobservableNoOp)
