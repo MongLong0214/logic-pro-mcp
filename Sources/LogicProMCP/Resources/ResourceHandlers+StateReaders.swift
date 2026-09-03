@@ -219,12 +219,20 @@ extension ResourceHandlers {
         // that demonstrably has tracks. `ax_live` is the only source that saw the real thing; the
         // file-count tiers synthesise placeholder names from a count.
         let observedLive = source == "ax_live"
+        let collapsedStacks = collapsedTrackStacks(in: tracksOut)
+        // A collapsed stack makes AX expose its header but not the child rows. The observed rows
+        // remain readable, but they cannot represent a complete track inventory.
+        let complete = observedLive && collapsedStacks.isEmpty
         var extras: [String: Any] = [
             "source": source,
             "readable": observedLive,
-            "verified_empty": observedLive && tracksOut.isEmpty,
+            "complete": complete,
+            "verified_empty": observedLive && complete && tracksOut.isEmpty,
         ]
-        if !observedLive {
+        if observedLive && !complete {
+            extras["reason"] = "collapsed_track_stack"
+            extras["collapsed_stacks"] = collapsedStacks
+        } else if !observedLive {
             extras["reason"] = tracksOut.isEmpty
                 ? "no_live_track_read_yet"
                 : "track_names_synthesised_from_project_file"
@@ -251,28 +259,37 @@ extension ResourceHandlers {
     /// #200: an out-of-range / empty-state indexed-template read returns a typed,
     /// classifiable resource body (State C `index_out_of_range`) instead of a raw
     /// JSON-RPC `-32602`. `availableIndices` is the EXACT set of valid indices for
-    /// the collection — `0..<count` for the positionally-indexed track list, but
+    /// the observed collection — `0..<count` for the positionally-indexed track list, but
     /// the actual `trackIndex` values for the mixer (whose strips are keyed by
     /// `trackIndex`, NOT array position, so a strip set can be non-contiguous,
     /// e.g. {0, 2, 4}). The hint therefore never asserts a contiguous `0..<N`
     /// range (which would mislead a client past a gap); it points at the parent
-    /// collection and the body carries `available_indices` as the machine truth.
+    /// collection and the body carries `available_indices` as the machine truth. A collapsed
+    /// track stack makes that observed track rail incomplete, and is labelled explicitly rather
+    /// than letting its visible row count stand in for project inventory.
     static func indexOutOfRangeResult(
         uri: String,
         requestedIndex: Int,
         availableIndices: [Int],
-        collection: String
+        collection: String,
+        inventoryComplete: Bool = true,
+        extras additionalExtras: [String: Any] = [:]
     ) -> ReadResource.Result {
+        let availability = inventoryComplete
+            ? "\(availableIndices.count) \(collection)(s) available."
+            : "\(availableIndices.count) \(collection)(s) visible, but the inventory is incomplete."
+        var extras: [String: Any] = [
+            "uri": uri,
+            "requested_index": requestedIndex,
+            "available_count": availableIndices.count,
+            "available_indices": availableIndices,
+            "collection": collection,
+        ]
+        extras.merge(additionalExtras) { _, new in new }
         let body = HonestContract.encodeStateC(
             error: .indexOutOfRange,
-            hint: "No \(collection) at index \(requestedIndex); \(availableIndices.count) \(collection)(s) available. Read the parent collection resource for the current valid indices.",
-            extras: [
-                "uri": uri,
-                "requested_index": requestedIndex,
-                "available_count": availableIndices.count,
-                "available_indices": availableIndices,
-                "collection": collection,
-            ]
+            hint: "No \(collection) at index \(requestedIndex); \(availability) Read the parent collection resource for the current valid indices.",
+            extras: extras
         )
         return ReadResource.Result(
             contents: [.text(body, uri: uri, mimeType: "application/json")]
@@ -280,7 +297,9 @@ extension ResourceHandlers {
     }
 
     static func readTrack(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
-        if let track = await cache.getTrack(at: index) {
+        let tracks = await cache.getTracks()
+        if tracks.indices.contains(index) {
+            let track = tracks[index]
             let json = encodeJSON(track)
             return ReadResource.Result(
                 contents: [.text(json, uri: uri, mimeType: "application/json")]
@@ -288,12 +307,28 @@ extension ResourceHandlers {
         }
         // Tracks are positionally indexed (`getTrack(at:)` uses `tracks.indices`),
         // so the valid set is 0..<count.
+        let collapsedStacks = collapsedTrackStacks(in: tracks)
+        let inventoryComplete = collapsedStacks.isEmpty
+        var extras: [String: Any] = [:]
+        if !inventoryComplete {
+            extras["reason"] = "collapsed_track_stack"
+            extras["collapsed_stacks"] = collapsedStacks
+        }
         return indexOutOfRangeResult(
             uri: uri,
             requestedIndex: index,
-            availableIndices: Array(0..<(await cache.getTracks().count)),
-            collection: "track"
+            availableIndices: Array(0..<tracks.count),
+            collection: "track",
+            inventoryComplete: inventoryComplete,
+            extras: extras
         )
+    }
+
+    private static func collapsedTrackStacks(in tracks: [TrackState]) -> [[String: Any]] {
+        tracks.enumerated().compactMap { index, track in
+            guard track.stackCollapsed == true else { return nil }
+            return ["index": index, "name": track.name]
+        }
     }
 
     /// B1 (#11) — `data_source` for `logic://mixer` strips. Strip volume/pan

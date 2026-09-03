@@ -72,6 +72,12 @@ struct VersionedCacheEnvelopeTests {
     /// noted rather than hidden; ADR-006 OFF still contributes nothing of its own, which is what
     /// this test exists to pin.
     ///
+    /// #748 — DELIBERATE PIN DIFF: `complete` is now present. A live list containing a collapsed
+    /// track stack describes fewer tracks than the project has, because AX exposes its header but
+    /// not its children. Nothing in this document previously said so; a caller needs `complete` to
+    /// distinguish readable visible rows from a complete project inventory. This is an additive
+    /// wire change, noted rather than hidden.
+    ///
     /// PRD-007 Part 2 — DELIBERATE PIN DIFF, `"data":[\n\n]` -> `"data":[]`.
     /// The expectation moved because `adr002TargetRef` is now default ON, which
     /// routes `logic://tracks` through the ref-capable `JSONSerialization`
@@ -89,7 +95,7 @@ struct VersionedCacheEnvelopeTests {
                 fileReader: headlessFileReader
             )
 
-            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"readable\":false,\"reason\":\"no_live_track_read_yet\",\"source\":\"default\",\"verified_empty\":false,\"data\":[]}")
+            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"complete\":false,\"readable\":false,\"reason\":\"no_live_track_read_yet\",\"source\":\"default\",\"verified_empty\":false,\"data\":[]}")
         }
     }
 
