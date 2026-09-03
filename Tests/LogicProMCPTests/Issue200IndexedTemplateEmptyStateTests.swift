@@ -72,6 +72,34 @@ struct Issue200IndexedTemplateEmptyStateTests {
         #expect(available == [0, 2, 4], "must report the actual trackIndex set, got: \(String(describing: available))")
     }
 
+    @Test("an out-of-range track read labels a collapsed-stack rail as incomplete")
+    func collapsedTrackStackMakesTrackIndexInventoryIncomplete() async throws {
+        let cache = StateCache()
+        await cache.updateTracks([
+            TrackState(
+                id: 0,
+                name: "Absolute Zero",
+                type: .softwareInstrument,
+                isStackHeader: true,
+                stackCollapsed: true
+            ),
+            TrackState(id: 1, name: "Audio 1", type: .audio),
+        ])
+
+        let result = try await ResourceHandlers.read(
+            uri: "logic://tracks/2", cache: cache, router: ChannelRouter()
+        )
+        let o = obj(result)
+
+        #expect(o?["error"] as? String == "index_out_of_range")
+        #expect(o?["reason"] as? String == "collapsed_track_stack")
+        #expect((o?["hint"] as? String)?.contains("inventory is incomplete") == true)
+        let collapsedStacks = o?["collapsed_stacks"] as? [[String: Any]]
+        #expect(collapsedStacks?.count == 1)
+        #expect(collapsedStacks?[0]["index"] as? Int == 0)
+        #expect(collapsedStacks?[0]["name"] as? String == "Absolute Zero")
+    }
+
     @Test("index_out_of_range is a terminal, classifiable error code")
     func indexOutOfRangeTerminal() {
         #expect(HonestContract.FailureError.indexOutOfRange.rawValue == "index_out_of_range")

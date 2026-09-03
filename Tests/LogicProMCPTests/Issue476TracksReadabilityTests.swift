@@ -37,6 +37,8 @@ struct Issue476TracksReadabilityTests {
 
         #expect(try #require(doc["source"] as? String) == "default")
         #expect(!(try #require(doc["readable"] as? Bool)))
+        let complete = try #require(doc["complete"] as? Bool)
+        #expect(!complete)
         #expect(!(try #require(doc["verified_empty"] as? Bool)))
         #expect(try #require(doc["reason"] as? String) == "no_live_track_read_yet")
     }
@@ -57,6 +59,91 @@ struct Issue476TracksReadabilityTests {
         #expect(try #require(doc["readable"] as? Bool))
         #expect(!(try #require(doc["verified_empty"] as? Bool)))
         #expect(doc["reason"] == nil)
+    }
+
+    @Test("a collapsed stack makes a live list incomplete without making its rows unreadable")
+    func collapsedStackMakesLiveListIncomplete() async throws {
+        let cache = StateCache()
+        await cache.updateTracks([
+            TrackState(
+                id: 0,
+                name: "Absolute Zero",
+                type: .softwareInstrument,
+                isStackHeader: true,
+                stackCollapsed: true
+            ),
+            TrackState(id: 1, name: "Audio 1", type: .audio),
+            TrackState(
+                id: 2,
+                name: "Drum Bus",
+                type: .bus,
+                isStackHeader: true,
+                stackCollapsed: true
+            ),
+        ])
+        let result = try await ResourceHandlers.readTracks(
+            cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+        )
+        let doc = try document(result)
+
+        let readable = try #require(doc["readable"] as? Bool)
+        #expect(readable)
+        let complete = try #require(doc["complete"] as? Bool)
+        #expect(!complete)
+        let reason = try #require(doc["reason"] as? String)
+        #expect(reason == "collapsed_track_stack")
+        let collapsedStacks = try #require(doc["collapsed_stacks"] as? [[String: Any]])
+        #expect(collapsedStacks.count == 2)
+        #expect(collapsedStacks[0]["index"] as? Int == 0)
+        #expect(collapsedStacks[0]["name"] as? String == "Absolute Zero")
+        #expect(collapsedStacks[1]["index"] as? Int == 2)
+        #expect(collapsedStacks[1]["name"] as? String == "Drum Bus")
+    }
+
+    @Test("a live list with no collapsed stack row is complete")
+    func expandedStackLeavesLiveListComplete() async throws {
+        let cache = StateCache()
+        await cache.updateTracks([
+            TrackState(
+                id: 0,
+                name: "Absolute Zero",
+                type: .softwareInstrument,
+                isStackHeader: true,
+                stackCollapsed: false
+            ),
+            TrackState(id: 1, name: "Audio 1", type: .audio),
+        ])
+        let result = try await ResourceHandlers.readTracks(
+            cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+        )
+        let doc = try document(result)
+
+        let complete = try #require(doc["complete"] as? Bool)
+        #expect(complete)
+        #expect(doc["reason"] == nil)
+    }
+
+    @Test("an incomplete live list is never reported as verified empty")
+    func incompleteLiveReadCannotVerifyEmptiness() async throws {
+        let cache = StateCache()
+        await cache.updateTracks([
+            TrackState(
+                id: 0,
+                name: "Absolute Zero",
+                type: .softwareInstrument,
+                isStackHeader: true,
+                stackCollapsed: true
+            ),
+        ])
+        let result = try await ResourceHandlers.readTracks(
+            cache: cache, uri: "logic://tracks", fileReader: headlessFileReader
+        )
+        let doc = try document(result)
+
+        let complete = try #require(doc["complete"] as? Bool)
+        #expect(!complete)
+        let verifiedEmpty = try #require(doc["verified_empty"] as? Bool)
+        #expect(!verifiedEmpty)
     }
 
     // The third tier — placeholder names synthesised from a project-file track count — reports
