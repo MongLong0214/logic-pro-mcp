@@ -275,6 +275,32 @@ enum AXLocalePolicy {
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
+    /// #304: Edit > Tempo > Show Tempo List. These are the only Tempo-menu labels this surface
+    /// may actuate. They were read from a live Korean Logic Pro 12.3 on 2026-09-02, where the
+    /// complete path was `편집 > 템포 > 템포 목록 보기` and opened a fully-classified AXTable.
+    /// English is the canonical identity; any locale other than the measured English/Korean pair
+    /// is refused by `TempoMapAX` before it tries this path.
+    static let tempoMenuItem = LabelSet(
+        canonical: "Tempo",
+        variants: ["템포"],
+        rationale: "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`."
+    )
+
+    static let showTempoListMenuItem = LabelSet(
+        canonical: "Show Tempo List",
+        variants: ["템포 목록 보기"],
+        rationale: "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table."
+    )
+
+    /// The Tempo List's independent count witness. On the measured Korean build its AXStaticText
+    /// has AXDescription `항목 수` and value `1개의 이벤트`; the reader compares that count with
+    /// the AXRow count and refuses a disagreement rather than publishing a shorter list.
+    static let tempoListNumberOfItemsLabel = LabelSet(
+        canonical: "Number of Items",
+        variants: ["항목 수"],
+        rationale: "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText."
+    )
+
     /// #519: the Navigate menu bar item. All three labels are MEASURED, none translated.
     ///
     /// `移動` was read off a live Logic 12.3 running `AppleLanguages=ja` on 2026-08-17. It is worth
@@ -1237,6 +1263,16 @@ enum AXLocalePolicy {
     )
     static let editUndoMenuPath = MenuPath(bar: editMenuBar, item: undoMenuItemPrefix, itemMode: .prefix)
 
+    /// #304: the complete, measured application-menu path. This deliberately does not name the
+    /// six disabled region-tempo actions or `Open Smart Tempo Editor`: neither surface was opened
+    /// or measured, so callers must refuse them rather than turn a plausible translation into a
+    /// menu target.
+    static let showTempoListMenuPath = [
+        editMenuBar,
+        tempoMenuItem,
+        showTempoListMenuItem,
+    ]
+
     static func elementMatches(
         _ element: AXUIElement,
         _ labels: LabelSet,
@@ -1485,6 +1521,9 @@ enum AXLocalePolicy {
         markerListDeleteMenuItem,
         undoMenuItemPrefix,
         undoPluginInsertMenuItem,
+        tempoMenuItem,
+        showTempoListMenuItem,
+        tempoListNumberOfItemsLabel,
         goToPositionDialogTitle,
         cancelButton,
         createButton,
