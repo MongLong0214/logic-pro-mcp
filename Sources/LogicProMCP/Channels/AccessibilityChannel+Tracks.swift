@@ -19,6 +19,31 @@ extension AccessibilityChannel {
 
     // MARK: - Verified track sort (#448)
 
+    /// How many times the post-sort arrangement is read before the loop gives up waiting for it to
+    /// move, and how long it waits before each read — including the first, which is the part #757
+    /// was about. Four reads at 75 ms is 300 ms of watching, which covered every landing observed
+    /// on an idle machine; the one drive that missed was under a full test suite.
+    private static let trackSortSettleAttempts = 4
+    private static let trackSortSettlePollMicroseconds: UInt32 = 75_000
+
+    /// Whether an observation of the post-sort order may be accepted as settled.
+    ///
+    /// Two conditions, and the first is the one #757 was missing. An order still equal to the
+    /// pre-sort order has not landed yet — `TrackSortVerifier.execute` refuses
+    /// `beforeOrder == expectedOrder` as unobservable, so wherever State A is reachable the
+    /// arrangement must move, and "unchanged" can never be the settled answer to a sort that is
+    /// going to succeed. The second is the original rule: two consecutive identical reads.
+    ///
+    /// `internal` rather than folded into the loop because a rule that decides the verdict and
+    /// cannot be reached from a test is how the previous one survived to a live drive.
+    static func trackSortObservationIsSettled(
+        current: [String],
+        previous: [String]?,
+        before: [String]
+    ) -> Bool {
+        current != before && previous == current
+    }
+
     /// Drives the measured Track > Sort Tracks By leaf and verifies the complete
     /// post-write arrangement order. This path must not reuse the cache: the
     /// poller can legitimately still hold the pre-sort rail while this mutation
@@ -200,14 +225,26 @@ extension AccessibilityChannel {
                 return pressSucceeded ? .actuated(observedItem) : .pressReportedFailure(observedItem)
             },
             after: {
+                // #757. The previous loop took its first read with NO delay and accepted the first
+                // pair of equal observations, so a sort landing slower than the poll had its own
+                // PRE-sort order reported as settled. Measured live 2026-09-03: 1 of 5 drives, under
+                // load, produced a receipt whose `after_tracks` were sorted beside an `after_order`
+                // that was not — the two halves came from different reads.
+                //
+                // What makes the rule decidable is upstream: `TrackSortVerifier.execute` refuses
+                // `beforeOrder == expectedOrder` as `alreadySortedCommandUnobservable`, so wherever
+                // State A is reachable at all the arrangement MUST move. An observation still equal
+                // to the before-order is therefore "has not landed", not "settled", and the loop
+                // keeps watching. Once it differs, two consecutive equal reads settle it.
+                //
+                // If the budget expires with nothing having moved, the unchanged order is returned
+                // rather than `.unavailable`: "the command produced no observable change" is an
+                // answer, and `execute` turns it into a mismatch. Reporting it as unreadable would
+                // claim the arrangement could not be read when it was read four times.
                 var previousOrder: [String]?
-                // Two equal, independently strict observations are required.
-                // We poll at most four times with 75 ms between later reads
-                // (225 ms after the first read). This bound replaces the old
-                // fixed 150 ms delay, but remains an unmeasured assumption until
-                // a live sort establishes Logic's settling distribution.
-                for attempt in 0..<4 {
-                    if attempt > 0 { usleep(75_000) }
+                var settledOrder: [String]?
+                for _ in 0..<trackSortSettleAttempts {
+                    usleep(trackSortSettlePollMicroseconds)
                     guard case .read(let afterRead) = strictTrackSortStateRead(runtime: runtime) else {
                         return .unavailable
                     }
@@ -220,12 +257,18 @@ extension AccessibilityChannel {
                         return .unavailable
                     }
                     afterReferences = resolvedAfterReferences
-                    if previousOrder == resolvedAfterReferences {
+                    settledOrder = resolvedAfterReferences
+                    if trackSortObservationIsSettled(
+                        current: resolvedAfterReferences,
+                        previous: previousOrder,
+                        before: beforeReferences
+                    ) {
                         return .read(resolvedAfterReferences)
                     }
                     previousOrder = resolvedAfterReferences
                 }
-                return .unavailable
+                guard let settledOrder else { return .unavailable }
+                return .read(settledOrder)
             }
         )
 
