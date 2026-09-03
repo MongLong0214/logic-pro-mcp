@@ -790,6 +790,13 @@ enum SagaWire {
         seconds: Double,
         gateReclaimAfterSec: Double
     ) -> SagaJournal.StoredOutcome {
+        // Hoisted for the same reason as the import hint (#749): a multi-way `+` chain inside a
+        // dictionary literal passed to `merging` with a trailing closure is one expression to the
+        // type-checker, and whether it solves inside the limit depends on the toolchain.
+        let recoveryHint = "The saga exceeded its lifecycle deadline and was abandoned so the "
+            + "stdio loop stays responsive. A dispatch may have crossed the write boundary with "
+            + "an unknown outcome; do NOT blindly retry. Reconcile with a live read "
+            + "(system.saga_status, or the relevant read operations)."
         let extras = sessionFields.merging([
             "idempotency_key": idempotencyKey,
             "duplicate": false,
@@ -803,10 +810,7 @@ enum SagaWire {
             "underlying_operation_stopped": false,
             "mutation_gate": "reclaimable_after_grace",
             "gate_reclaim_after_sec": gateReclaimAfterSec,
-            "recovery_hint": "The saga exceeded its lifecycle deadline and was abandoned so the "
-                + "stdio loop stays responsive. A dispatch may have crossed the write boundary with "
-                + "an unknown outcome; do NOT blindly retry. Reconcile with a live read "
-                + "(system.saga_status, or the relevant read operations).",
+            "recovery_hint": recoveryHint,
         ]) { _, new in new }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,

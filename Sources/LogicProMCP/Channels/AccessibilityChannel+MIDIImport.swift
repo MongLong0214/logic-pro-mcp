@@ -632,16 +632,21 @@ extension AccessibilityChannel {
                 extras["region_readback_complete"] = false
                 extras["region_readback_scope"] = AccessibilityChannel.regionReadbackScope
                 extras["region_readback_limit"] = AccessibilityChannel.regionReadbackLimitReason
+                // Built before the call rather than inside the dictionary literal. As one
+                // expression — a five-way `+` chain with interpolation, inside a dictionary
+                // literal, passed to `merging` with a trailing closure — Swift type-checks the
+                // whole thing at once, and whether that finishes inside the solver's limit depends
+                // on the toolchain: it compiled here and timed out for a contributor pulling main
+                // cold, which blocked their build entirely (#749).
+                let readbackHint = "midi.import_file created a new track, but no imported MIDI "
+                    + "region was visible to the region readback. That readback only covers the "
+                    + "\(AccessibilityChannel.regionReadbackScope), so this is not evidence "
+                    + "the import produced nothing — a track outside the visible arrangement "
+                    + "reads the same way. Do NOT retry blindly: the track-count delta shows "
+                    + "a track was already created, and a second call would create another."
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: extras.merging([
-                        "hint": "midi.import_file created a new track, but no imported MIDI region "
-                            + "was visible to the region readback. That readback only covers the "
-                            + "\(AccessibilityChannel.regionReadbackScope), so this is not evidence "
-                            + "the import produced nothing — a track outside the visible arrangement "
-                            + "reads the same way. Do NOT retry blindly: the track-count delta shows "
-                            + "a track was already created, and a second call would create another.",
-                    ]) { _, new in new }
+                    extras: extras.merging(["hint": readbackHint]) { _, new in new }
                 ))
             }
             return .success(HonestContract.encodeStateA(extras: extras))
