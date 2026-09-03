@@ -614,8 +614,11 @@ extension AccessibilityChannel {
             details["detail"] = "after_order_did_not_match_requested_criterion"
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: details))
         case .alreadySortedCommandUnobservable:
+            // The arrangement was read, four times, and matched the request. What cannot be read is
+            // whether the menu command did anything, because a correct sort of a sorted project is
+            // a no-op. `readbackUnavailable` said the opposite of what happened (#448).
             details["detail"] = "already_sorted_command_unobservable"
-            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: details))
+            return .success(HonestContract.encodeStateB(reason: .noopUnobservable, extras: details))
         }
     }
 

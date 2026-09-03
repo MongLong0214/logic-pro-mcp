@@ -31,6 +31,13 @@ enum HonestContract {
         /// may bounce silent. Downgrades State A → State B so a caller never treats
         /// a count-delta success as an audible arrangement. v3.6.x (#128).
         case importedAsGMDevice
+        /// The read-back succeeded and matched the request, but the target already held the
+        /// requested value before the write, so the read cannot tell "the command ran" from "the
+        /// command did nothing". Distinct from `readbackUnavailable`, which says the attribute could
+        /// not be read at all: here it was read, and the answer is that nothing observable happened.
+        /// Introduced for `tracks.sort_verified` on an already-sorted project (#448), which had been
+        /// answering `readback_unavailable` after four successful reads.
+        case noopUnobservable
         case sendOnlyNoReadback
         case sagaReconciliationRequired
         case sagaCancellationPending
@@ -42,6 +49,7 @@ enum HonestContract {
             case .readbackMismatch: return "readback_mismatch"
             case .retryExhausted: return "retry_exhausted"
             case .importedAsGMDevice: return "imported_as_gm_device"
+            case .noopUnobservable: return "noop_unobservable"
             case .sendOnlyNoReadback: return "send_only_no_readback"
             case .sagaReconciliationRequired: return "saga_reconciliation_required"
             case .sagaCancellationPending: return "saga_cancellation_pending"
