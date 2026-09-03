@@ -886,7 +886,14 @@ class Evidence:
     # the only sensible reading of "the run".
     current = None
 
-    def __init__(self, head, root, name=None):
+    # The surfaces a document may declare. Declaring one is a claim about the CHANGE under proof,
+    # made by the harness author, and `is_clean` reads it. There is deliberately no third value: a
+    # run that cannot say which it is has not thought about what it is proving.
+    SURFACES = ("ui", "non_ui")
+
+    def __init__(self, head, root, name=None, surface=None):
+        if surface is not None and surface not in self.SURFACES:
+            raise ValueError(f"surface must be one of {self.SURFACES}, not {surface!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", head or ""):
             # Not fatal: exploratory runs use a label. The gate will simply not find it, which is correct.
             pass
@@ -900,6 +907,13 @@ class Evidence:
         self.name = _safe_name(name) if name else _running_harness_name()
         self.records = []
         self._window_points = None
+        # #754. A change with no surface in Logic's UI cannot earn captures, visual assertions or a
+        # recording — there is nothing to photograph — and `is_clean` used to require all three of
+        # every run. A harness that proves such a change says so HERE, up front, as a record the
+        # summary can read; it is not inferred from which counters happen to be zero, because "the
+        # counters are zero" is also what a harness that did nothing looks like.
+        if surface is not None:
+            self.records.append({"kind": "declaration", "surface": surface})
         Evidence.current = self
 
     # -- locating a band ----------------------------------------------------
@@ -1333,6 +1347,14 @@ def summarize(recs, out=None):
         "checks_with_blocking_modal_unknown":
             sum(1 for c in checks if _modal_snapshot_is_unknown(c.get("blocking_modal"))),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
+        # The LAST declaration wins, and an absent or malformed one reads as None — which
+        # `is_clean` treats as the UI surface, the stricter of the two. A document that never
+        # declared itself is judged the way every document was judged before #754.
+        "declared_surface": next(
+            (r.get("surface") for r in reversed(recs)
+             if isinstance(r, dict) and r.get("kind") == "declaration"
+             and r.get("surface") in Evidence.SURFACES),
+            None),
         "checks_with_a_counterexample": sum(1 for c in checks if c.get("has_counterexample")),
         "counterexamples_not_rejected":
             sum(1 for c in checks if c.get("has_counterexample") and not c.get("counterexample_rejected")),
@@ -1378,8 +1400,30 @@ _REQUIRED_SUMMARY_KEYS = (
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
     "visual_assertions", "visual_failed", "visual_assertions_without_a_subject",
-    "recordings",
+    "recordings", "declared_surface",
 )
+
+
+def _non_vacuity_earned(summary):
+    """Whether the run looked at its subject, by an instrument that fits the subject.
+
+    For a change with a surface in Logic's UI that means what it always meant: a capture, a visual
+    assertion, and a recording, each earned. A run that photographed nothing has not looked.
+
+    For a change the document declares `non_ui` there is nothing to photograph — the stream
+    terminates inside the server — so those three counters are not evidence of anything and are
+    not required. In their place the run must carry at least one check with a COUNTEREXAMPLE, so
+    the assertion is shown to be able to fail (`counterexamples_not_rejected == 0` is enforced
+    beside this for every surface). A non_ui run that asserted nothing therefore still fails, which
+    is the property #754 exists to keep: the zeros are unearnable by silence on either surface.
+
+    An undeclared document is judged as UI. Silence is not a class.
+    """
+    if summary.get("declared_surface") == "non_ui":
+        return summary["checks_with_a_counterexample"] > 0
+    return (summary["captures"] > 0
+            and summary["visual_assertions"] > 0
+            and summary["recordings"] > 0)
 
 
 def is_clean(summary):
@@ -1443,10 +1487,9 @@ def is_clean(summary):
         and summary["checks_recorded_under_blocking_modal"] == 0
         and summary["checks_missing_blocking_modal_snapshot"] == 0
         and summary["checks_with_blocking_modal_unknown"] == 0
-        # Non-vacuity: the run has to have looked, driven, and recorded.
-        and summary["captures"] > 0
-        and summary["visual_assertions"] > 0
-        and summary["recordings"] > 0
+        # Non-vacuity: the run has to have looked, driven, and recorded. WHAT counts as having
+        # looked depends on the surface the document declared — see `_non_vacuity_earned`.
+        and _non_vacuity_earned(summary)
         and summary["mutation_claimed"] > 0
         and summary["counterexamples_not_rejected"] == 0
         and summary["operations_driven"] > 0
