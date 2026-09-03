@@ -93,7 +93,10 @@ struct Issue200IndexedTemplateEmptyStateTests {
 
         #expect(o?["error"] as? String == "index_out_of_range")
         #expect(o?["reason"] as? String == "collapsed_track_stack")
-        #expect((o?["hint"] as? String)?.contains("inventory is incomplete") == true)
+        // Bound, then asserted bare. Comparing an optional Bool against a literal passes even
+        // when the hint is absent, so the check could not fail for the reason it names.
+        let hint = try #require(o?["hint"] as? String)
+        #expect(hint.contains("inventory is incomplete"))
         let collapsedStacks = o?["collapsed_stacks"] as? [[String: Any]]
         #expect(collapsedStacks?.count == 1)
         #expect(collapsedStacks?[0]["index"] as? Int == 0)
