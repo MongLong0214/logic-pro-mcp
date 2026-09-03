@@ -80,6 +80,7 @@ private struct OperationTraceCoverageFixtures {
     let projectPath: String
     let outputRoot: String
     let midiPath: String
+    let sortExpectedOrder: [String]
 }
 
 /// Shared fixture for the #389 store-wide censuses: the same temp project /
@@ -89,6 +90,7 @@ private struct OperationTraceCensusContext {
     let fixtures: OperationTraceCoverageFixtures
     let router: ChannelRouter
     let cache: StateCache
+    let targetRegistry: TargetRegistry
     let mutatingSpecs: [OperationSpec]
     let cleanup: @Sendable () -> Void
 }
@@ -111,6 +113,16 @@ private func makeOperationTraceCensusContext() async throws -> OperationTraceCen
         await router.register(OperationTraceCoverageChannel(id: channelID))
     }
     let cache = StateCache()
+    let targetRegistry = TargetRegistry()
+    let trackDescriptor = TargetDescriptor(
+        trackIndex: 0,
+        trackName: operationTraceCoverageTrackName
+    )
+    let trackReference = await targetRegistry.bind(
+        kind: .track,
+        descriptor: trackDescriptor,
+        fingerprint: trackDescriptor.fingerprint
+    )
     await cache.updateMarkers([
         MarkerState(id: 0, name: "Coverage Marker", position: "1.1.1.1", positionSource: .parser),
     ])
@@ -118,10 +130,12 @@ private func makeOperationTraceCensusContext() async throws -> OperationTraceCen
         fixtures: OperationTraceCoverageFixtures(
             projectPath: project.path,
             outputRoot: outputRoot.path,
-            midiPath: midiFile.fileURL.path
+            midiPath: midiFile.fileURL.path,
+            sortExpectedOrder: [trackReference.rawValue]
         ),
         router: router,
         cache: cache,
+        targetRegistry: targetRegistry,
         mutatingSpecs: OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` },
         cleanup: {
             try? FileManager.default.removeItem(at: projectRoot)
@@ -169,10 +183,21 @@ extension OperationTraceTests {
         try Data([0x4D, 0x54, 0x68, 0x64]).write(to: midiFile.fileURL)
         defer { SMFWriter.cleanupTemporaryMIDIFile(midiFile) }
 
+        let targetRegistry = TargetRegistry()
+        let trackDescriptor = TargetDescriptor(
+            trackIndex: 0,
+            trackName: operationTraceCoverageTrackName
+        )
+        let trackReference = await targetRegistry.bind(
+            kind: .track,
+            descriptor: trackDescriptor,
+            fingerprint: trackDescriptor.fingerprint
+        )
         let fixtures = OperationTraceCoverageFixtures(
             projectPath: project.path,
             outputRoot: outputRoot.path,
-            midiPath: midiFile.fileURL.path
+            midiPath: midiFile.fileURL.path,
+            sortExpectedOrder: [trackReference.rawValue]
         )
         let router = ChannelRouter()
         for channelID in ChannelID.allCases {
@@ -186,8 +211,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 112)
-        #expect(mutatingSpecs.count == 89)   // #575 registered edit.move_to_playhead
+        #expect(OperationRegistry.specs.count == 113)
+        #expect(mutatingSpecs.count == 90)   // #448 registered tracks.sort_verified
 
         // A mutating op that refuses BEFORE dispatch starts its trace (the
         // consent-first setup_arm_key, #413) starts no trace with the coverage
@@ -201,7 +226,8 @@ extension OperationTraceTests {
                 spec,
                 params: operationTraceCoverageParams(for: spec.id, fixtures: fixtures),
                 router: router,
-                cache: cache
+                cache: cache,
+                targetRegistry: targetRegistry
             )
 
             let matchingTrace = await OperationTraceStore.shared.recent(limit: 128)
@@ -265,7 +291,8 @@ extension OperationTraceTests {
         let fixtures = OperationTraceCoverageFixtures(
             projectPath: project.path,
             outputRoot: outputRoot.path,
-            midiPath: midiFile.fileURL.path
+            midiPath: midiFile.fileURL.path,
+            sortExpectedOrder: []
         )
         let router = ChannelRouter()
         for channelID in ChannelID.allCases {
@@ -297,7 +324,7 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 112)
+        #expect(OperationRegistry.specs.count == 113)
         #expect(readOnlySpecs.count == 23)
         // Mutability is total: the mutating census (87) and this inverse gate
         // (23) together account for every registered spec, so a new operation
@@ -370,7 +397,8 @@ extension OperationTraceTests {
                     spec,
                     params: operationTraceCoverageParams(for: spec.id, fixtures: context.fixtures),
                     router: context.router,
-                    cache: context.cache
+                    cache: context.cache,
+                    targetRegistry: context.targetRegistry
                 )
             }
             for trace in await OperationTraceStore.shared.recent(limit: 128) {
@@ -432,7 +460,8 @@ extension OperationTraceTests {
                         spec,
                         params: operationTraceCoverageParams(for: spec.id, fixtures: context.fixtures),
                         router: context.router,
-                        cache: context.cache
+                        cache: context.cache,
+                        targetRegistry: context.targetRegistry
                     )
                 }
             }
@@ -540,7 +569,8 @@ private func dispatchOperationTraceCoverageSpec(
     _ spec: OperationSpec,
     params: [String: Value],
     router: ChannelRouter,
-    cache: StateCache
+    cache: StateCache,
+    targetRegistry: TargetRegistry? = nil
 ) async -> CallTool.Result {
     switch spec.tool {
     case .logicTransport:
@@ -627,6 +657,7 @@ private func dispatchOperationTraceCoverageSpec(
             params: params,
             router: router,
             cache: cache,
+            targetRegistry: targetRegistry,
             liveTrackNames: operationTraceCoverageLiveTrackNames
         )
     }
@@ -755,6 +786,12 @@ private func operationTraceCoverageParams(
         ]
     case .tracksRename:
         return ["index": .int(0), "name": .string("Trace Coverage")]
+    case .tracksSortVerified:
+        return [
+            "criterion": .string("track_name"),
+            "expected_order": .array(fixtures.sortExpectedOrder.map { .string($0) }),
+            "confirmed": .bool(true),
+        ]
     case .tracksMute, .tracksSolo, .tracksArm:
         return ["index": .int(0), "enabled": .bool(true)]
     case .tracksRecordSequence:

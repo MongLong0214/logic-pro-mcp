@@ -628,6 +628,18 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+        // #448 AccessibilityChannel+Tracks.defaultSortTracks: State A contains
+        // the complete independently re-read order, exactly matching expected.
+        .tracksSortVerified: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"track.sort_verified","criterion":"track_name",\
+                "actuated_criterion":"track_name","actuated_menu_item_label":"트랙 이름",\
+                "expected_order":["trk_bass","trk_kick"],"before_order":["trk_kick","trk_bass"],\
+                "after_order":["trk_bass","trk_kick"],"before_track_count":2,"after_track_count":2}
+                """,
+            readback: "{}"
+        ),
         // AccessibilityChannel+Tracks.defaultSetTrackToggle (Mute): requested==observed bool.
         // Mute's coordinate-free primary is exclusive-select + key 'm' (#106).
         .tracksMute: SemanticOracleFixture(

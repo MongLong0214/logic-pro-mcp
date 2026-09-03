@@ -105,6 +105,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case tracksArm = "tracks.arm"
     case tracksArmOnly = "tracks.arm_only"
     case tracksRecordSequence = "tracks.record_sequence"
+    case tracksSortVerified = "tracks.sort_verified"
     case tracksSetAutomation = "tracks.set_automation"
     case tracksSetInstrument = "tracks.set_instrument"
     case tracksListLibrary = "tracks.list_library"
@@ -336,7 +337,7 @@ enum OperationRegistry {
             "tracks.select", "tracks.create_audio", "tracks.create_instrument",
             "tracks.create_drummer", "tracks.create_external_midi", "tracks.delete",
             "tracks.duplicate", "tracks.rename", "tracks.mute", "tracks.solo", "tracks.arm",
-            "tracks.arm_only", "tracks.record_sequence", "tracks.set_automation",
+            "tracks.arm_only", "tracks.record_sequence", "tracks.sort_verified", "tracks.set_automation",
             "tracks.set_instrument", "tracks.list_library", "tracks.scan_library",
             "tracks.resolve_path", "tracks.scan_plugin_presets",
         ],
@@ -388,7 +389,7 @@ enum OperationRegistry {
         ToolID.logicTracks.rawValue: [
             "select", "create_audio", "create_instrument", "create_drummer",
             "create_external_midi", "delete", "duplicate", "rename", "mute", "solo", "arm",
-            "arm_only", "record_sequence", "set_automation", "set_instrument", "list_library",
+            "arm_only", "record_sequence", "sort_verified", "set_automation", "set_instrument", "list_library",
             "scan_library", "resolve_path", "scan_plugin_presets",
         ],
     ]
@@ -905,6 +906,10 @@ enum OperationRegistry {
         (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
         (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
+        // #448: the menu action globally reorders the arrange rail. It is
+        // structural rather than target-indexed, so it needs explicit L2
+        // confirmation but accepts no track target reference.
+        (.tracksSortVerified, "sort_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.none, ["confirmed", "criterion", "expected_order"]),
         (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "mode", "track"]),
         (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["category", "index", "path", "preset"]),
         (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, []),
@@ -917,7 +922,7 @@ enum OperationRegistry {
             tool: .logicTracks,
             command: entry.1,
             mutability: entry.2,
-            confirmation: .none,
+            confirmation: entry.0 == .tracksSortVerified ? .l2 : .none,
             target: entry.5,
             verification: entry.4,
             retry: .neverAutomatic,

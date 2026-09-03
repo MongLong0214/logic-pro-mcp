@@ -62,6 +62,10 @@ extension ChannelRouter {
         // the menu path AX query fails.
         "track.delete":               [.accessibility, .midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
+        // #448: menu-only structural reorder. The Accessibility channel reads
+        // the full order before and after the measured menu action; no fallback
+        // may substitute a different reorder semantics.
+        "track.sort_verified":        [.accessibility],
         // AX first: reads current checkbox state and only presses when it
         // differs from desired — idempotent. MCU fallback is last-resort because
         // its buttons are press-only (release is ignored by Logic), so

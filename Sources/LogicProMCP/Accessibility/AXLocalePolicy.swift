@@ -327,6 +327,63 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// #448 — Track > Sort Tracks By. Measured on 2026-09-02 on Logic Pro
+    /// 12.3 with a Korean UI as `트랙 › 트랙을 다음으로 정렬`. The menu bar is
+    /// only partly localized, so this policy deliberately has no inferred EN/JA
+    /// form: a locale without this measurement must refuse.
+    static let sortTracksByMenuItem = LabelSet(
+        canonical: "트랙을 다음으로 정렬",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label."
+    )
+
+    static let sortTracksMenuPath = MenuPath(
+        bar: trackMenuBar,
+        item: sortTracksByMenuItem
+    )
+
+    static let sortTracksByMIDIChannelMenuItem = LabelSet(
+        canonical: "MIDI 채널",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByAudioChannelMenuItem = LabelSet(
+        canonical: "오디오 채널",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByOutputChannelMenuItem = LabelSet(
+        canonical: "출력 채널",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByInstrumentNameMenuItem = LabelSet(
+        canonical: "악기 이름",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByTrackNameMenuItem = LabelSet(
+        canonical: "트랙 이름",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByUsedMenuItem = LabelSet(
+        canonical: "사용 여부",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
+    static let sortTracksByCreationDateMenuItem = LabelSet(
+        canonical: "생성일",
+        variants: [],
+        rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    )
+
     /// #519: File > Save As…
     ///
     /// The English label was MEASURED on 2026-08-19 by enumerating the File menu on a live Logic
@@ -1501,6 +1558,14 @@ enum AXLocalePolicy {
         editMenuBar,
         navigateMenuBar,
         trackMenuBar,
+        sortTracksByMenuItem,
+        sortTracksByMIDIChannelMenuItem,
+        sortTracksByAudioChannelMenuItem,
+        sortTracksByOutputChannelMenuItem,
+        sortTracksByInstrumentNameMenuItem,
+        sortTracksByTrackNameMenuItem,
+        sortTracksByUsedMenuItem,
+        sortTracksByCreationDateMenuItem,
         saveAsMenuItem,
         savePanelWindowTitle,
         savePanelPackageRadio,

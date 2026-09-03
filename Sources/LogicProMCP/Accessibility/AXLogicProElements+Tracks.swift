@@ -15,6 +15,14 @@ extension AXLogicProElements {
         case unreadable
     }
 
+    /// Failure-carrying counterpart for a mutation verdict. It is additive so
+    /// callers of `TrackHeaderRead` retain their existing enum contract.
+    enum VerifiedTrackHeaderRead {
+        case read([AXUIElement])
+        case unavailable
+        case unreadable(stage: String, status: String)
+    }
+
     /// Returns true when Logic's main window is the Choose Project picker
     /// (shown when no project is open). Any AXOutline/AXTable inside the picker
     /// describes template choices, NOT tracks — misidentifying them yields
@@ -215,24 +223,54 @@ extension AXLogicProElements {
             return .unavailable
         }
 
-        // Preserve `getTrackHeaders`' established locator order: named list,
-        // named scroll area, structural/labelled group, then trusted
-        // outline/table fallback. Candidate discovery is intentionally tolerant
-        // of an unrelated subtree being mid-load: the question is whether the
-        // Track Headers rail can be read, not whether every descendant of the
-        // arrange window can be read.
+        // Preserve this shared reader's historic tolerance for an unrelated
+        // subtree being mid-load. `allTrackHeadersVerifiedRead` below is the
+        // fail-closed variant used by a mutation verdict.
         let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax)
+        return readTrackHeaderCandidates(candidates, runtime: runtime.ax)
+    }
+
+    /// A verdict-only counterpart to `allTrackHeadersRead`. A generic AX
+    /// failure while finding the rail is not a missing rail; only -25205 and
+    /// -25212 are structural absence. Keeping this variant separate preserves
+    /// the legacy reader's best-effort contract for its existing callers.
+    static func allTrackHeadersVerifiedRead(
+        in window: AXUIElement,
+        runtime: Runtime = .production
+    ) -> VerifiedTrackHeaderRead {
+        guard !isProjectPickerWindow(window, runtime: runtime) else {
+            return .unavailable
+        }
+        switch verifiedTrackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax) {
+        case .complete(let candidates):
+            switch readTrackHeaderCandidates(candidates, runtime: runtime.ax) {
+            case .read(let headers):
+                return .read(headers)
+            case .unavailable:
+                return .unavailable
+            case .unreadable:
+                return .unreadable(stage: "track_header_rows", status: "unreadable")
+            }
+        case .unreadable(let stage, let status):
+            return .unreadable(stage: stage, status: status)
+        }
+    }
+
+    private static func readTrackHeaderCandidates(
+        _ candidates: TrackHeaderCandidates,
+        runtime: AXHelpers.Runtime
+    ) -> TrackHeaderRead {
         for candidate in candidates.lists {
-            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime)
         }
         for candidate in candidates.scrollAreas {
-            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime)
         }
         for candidate in candidates.groups {
-            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime)
         }
         for candidate in candidates.outlinesAndTables {
-            switch AXHelpers.childrenResult(candidate, runtime: runtime.ax) {
+            switch AXHelpers.childrenResult(candidate, runtime: runtime) {
             case .failure:
                 // This candidate was not established as the rail, so an
                 // unrelated outline/table loading underneath the arrange window
@@ -242,7 +280,7 @@ extension AXLogicProElements {
                 var hasLayoutItem = false
                 var childRoleUnreadable = false
                 for child in children {
-                    switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime.ax) {
+                    switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime) {
                     case .success(let role):
                         hasLayoutItem = hasLayoutItem || role == (kAXLayoutItemRole as String)
                     case .failure:
@@ -254,7 +292,7 @@ extension AXLogicProElements {
                 // separately readable rail unavailable.
                 guard !childRoleUnreadable else { continue }
                 if hasLayoutItem {
-                    return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+                    return enumerateTrackHeaderRows(in: candidate, runtime: runtime)
                 }
             }
         }
@@ -268,12 +306,13 @@ extension AXLogicProElements {
         var outlinesAndTables: [AXUIElement] = []
     }
 
-    /// Discover potential Track Headers rails without making an unrelated AX
-    /// branch part of the rail's read contract. Once a candidate is positively
-    /// identified, `enumerateTrackHeaderRows` resumes strict, status-preserving
-    /// traversal of that candidate itself. A depth cap or AX failure here only
-    /// stops this untrusted branch; it must not turn a separately readable empty
-    /// rail into `.unreadable`.
+    private enum TrackHeaderCandidatesRead {
+        case complete(TrackHeaderCandidates)
+        case unreadable(stage: String, status: String)
+    }
+
+    /// Historic candidate discovery for the shared best-effort read. A verified
+    /// mutation uses `verifiedTrackHeaderCandidates` instead.
     private static func trackHeaderCandidates(
         in root: AXUIElement,
         maxDepth: Int,
@@ -317,6 +356,75 @@ extension AXLogicProElements {
 
         visit(root, remainingDepth: maxDepth)
         return candidates
+    }
+
+    /// Discover potential Track Headers rails while preserving failure status.
+    /// A verified mutation asks whether its complete scope can be enumerated;
+    /// consequently a role or child traversal that cannot be read is not the
+    /// same observation as "no rail exists." The legacy best-effort APIs keep
+    /// their flattening behavior, but this verdict path refuses on every status
+    /// except AX's two definitive-absence answers (-25205/-25212).
+    private static func verifiedTrackHeaderCandidates(
+        in root: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> TrackHeaderCandidatesRead {
+        var candidates = TrackHeaderCandidates()
+        var encounteredUnreadableAX = false
+        var unreadableStage = "track_header_candidate"
+        var unreadableStatus = "unreadable"
+
+        func visit(_ element: AXUIElement, remainingDepth: Int) {
+            guard !encounteredUnreadableAX else { return }
+            switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
+            case .success(.some(let role)):
+                if role == (kAXListRole as String),
+                   case .success(let identifier) = trackStringAttribute(
+                        element, kAXIdentifierAttribute as String, runtime: runtime
+                   ),
+                   identifier == "Track Headers" {
+                    candidates.lists.append(element)
+                } else if role == (kAXScrollAreaRole as String),
+                          case .success(let identifier) = trackStringAttribute(
+                            element, kAXIdentifierAttribute as String, runtime: runtime
+                          ),
+                          identifier == "Tracks" {
+                    candidates.scrollAreas.append(element)
+                } else if role == (kAXGroupRole as String),
+                          isTrackHeadersGroup(element, runtime: runtime) {
+                    candidates.groups.append(element)
+                } else if role == (kAXOutlineRole as String) || role == (kAXTableRole as String) {
+                    candidates.outlinesAndTables.append(element)
+                }
+            case .success(.none):
+                break
+            case .failure(let error):
+                encounteredUnreadableAX = true
+                unreadableStage = "track_header_candidate_role"
+                unreadableStatus = error.diagnosticLabel
+                return
+            }
+
+            guard remainingDepth > 0 else { return }
+            switch AXHelpers.childrenResult(element, runtime: runtime) {
+            case .success(let children):
+                for child in children {
+                    visit(child, remainingDepth: remainingDepth - 1)
+                }
+            case .failure(let error) where error.isDefinitiveAbsence:
+                return
+            case .failure(let error):
+                encounteredUnreadableAX = true
+                unreadableStage = "track_header_candidate_children"
+                unreadableStatus = error.diagnosticLabel
+                return
+            }
+        }
+
+        visit(root, remainingDepth: maxDepth)
+        return encounteredUnreadableAX
+            ? .unreadable(stage: unreadableStage, status: unreadableStatus)
+            : .complete(candidates)
     }
 
     private enum TrackDescendantsRead {

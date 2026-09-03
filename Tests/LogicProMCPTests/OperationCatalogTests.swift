@@ -195,6 +195,7 @@ struct OperationCatalogTests {
         .tracksSolo: ["enabled"],
         .tracksArm: ["enabled"],
         .tracksRecordSequence: ["bar", "notes", "tempo"],
+        .tracksSortVerified: ["confirmed", "criterion", "expected_order"],
         .tracksSetAutomation: ["mode"],
         .tracksSetInstrument: ["category", "path", "preset"],
         .tracksScanLibrary: ["mode"],
@@ -399,7 +400,7 @@ struct OperationCatalogTests {
                     ("get_trace", "system.get_trace", ["trace_id"], .none),
                     ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
                 ]
-                #expect(OperationRegistry.specs.count == 112)
+                #expect(OperationRegistry.specs.count == 113)
                 for (command, operationID, allowedParams, confirmation) in expectedSpecs {
                     let spec = OperationRegistry.spec(tool: "logic_system", command: command)
                     #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
@@ -726,7 +727,7 @@ struct OperationCatalogTests {
 
     @Test("strict: every registered operation rejects unknown keys and accepts its pinned keys")
     func strictRegistryWideInvariant() throws {
-        #expect(OperationRegistry.specs.count == 112)
+        #expect(OperationRegistry.specs.count == 113)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
 
         for spec in OperationRegistry.specs {
@@ -893,7 +894,7 @@ struct OperationCatalogTests {
         #expect(sharedToolText(trackRejected).contains("port parameter not supported for record_sequence"))
     }
 
-    @Test("catalog: exact URI reads the generated 112-operation catalog")
+    @Test("catalog: exact URI reads the generated 113-operation catalog")
     func catalogReadsRegistryProjection() async throws {
         let result = try await ResourceHandlers.read(
             uri: Self.uri,
@@ -906,7 +907,7 @@ struct OperationCatalogTests {
         #expect(body["generated_at"] as? String != nil)
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
-        #expect(operations.count == 112)
+        #expect(operations.count == 113)
         #expect(!text.contains("\n"))
 
         let ids = operations.compactMap { $0["id"] as? String }
