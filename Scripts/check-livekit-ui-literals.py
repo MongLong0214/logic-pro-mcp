@@ -51,12 +51,12 @@ holds you to it.
 """
 import ast
 import glob
+import importlib.util
 import os
 import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-POLICY = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 LIVEKIT = os.path.join(REPO, "Scripts", "livekit")
 
 # Sites that existed when this rule was written, keyed by (file, literal) rather than by line, so
@@ -100,19 +100,18 @@ ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
 
 def localised_canonicals():
-    """Canonicals whose LabelSet carries at least one variant — the policy knows they are spelled
-    differently elsewhere. A one-letter canonical is skipped: `L` and `M` match everything."""
-    try:
-        body = open(POLICY, encoding="utf-8").read()
-    except OSError:
-        return {}
-    out = {}
-    for name, canonical, variants in re.findall(
-        r'static let (\w+) = LabelSet\(\s*canonical:\s*"([^"]*)",\s*variants:\s*\[([^\]]*)\]', body
-    ):
-        if variants.strip() and len(canonical) > 2:
-            out[canonical.lower()] = name
-    return out
+    """Canonicals whose LabelSet carries at least one variant, read from the JSON projection.
+
+    This guard used to re-parse `AXLocalePolicy.swift` itself, which made it a fourth reader of the
+    same vocabulary — the exact shape of the defect it exists to catch. `docs/locale/ui-labels.json`
+    is generated from the Swift and checked against it by `check-locale-labels-json.py`, so reading
+    it here is reading the policy, once.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "locale_labels", os.path.join(REPO, "Scripts", "locale_labels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.localised_canonicals()
 
 
 def _docstring_nodes(tree):
@@ -172,7 +171,8 @@ def offenders(known_canonicals):
 def main():
     canonicals = localised_canonicals()
     if not canonicals:
-        print("cannot read AXLocalePolicy — refusing to report a pass from an empty vocabulary")
+        print("docs/locale/ui-labels.json carries no localised label — refusing to report a pass "
+              "from an empty vocabulary; run Scripts/locale_labels.py --write")
         return 1
     found = offenders(canonicals)
     seen = {(base, literal) for base, literal, _, _ in found}
