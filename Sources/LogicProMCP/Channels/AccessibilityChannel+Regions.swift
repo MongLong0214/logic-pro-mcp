@@ -537,6 +537,22 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(logicProAppleScript.systemEventsProcessTarget)
                 set mainWin to first window
+                -- #767: this finds nothing. `entire contents` returns an empty list, WITHOUT
+                -- raising, for every application on macOS 26.3 — measured 2026-09-04 against
+                -- Logic (0 here against 464 by a manual descent of the same window) and against
+                -- nine other apps. So the filter below runs over nothing and the handler reports
+                -- NO_REGION for a project that has regions.
+                --
+                -- The size test is a second defect and survives fixing the first: every track
+                -- header satisfies `20 < w < 2000 and 20 < h < 200`, so `bestY`/`bestX` can land
+                -- on a header rather than a region whenever the bottom track carries none. AXHelp
+                -- separates them (headers open `트랙 헤더.`, regions `리전은 …`), and
+                -- `enumerateRegionItems` already applies exactly that rule — it read this same
+                -- window correctly while this script was blind.
+                --
+                -- Not repaired here: `region.select_last` is in `RoutingTable` and NOT in
+                -- `OperationRegistry`, so no tool reaches it and no caller is waiting. The fix is
+                -- to select from `enumerateRegionItems` rather than to write a better script.
                 set allItems to entire contents of mainWin
                 set bestY to 0
                 set bestX to 0
