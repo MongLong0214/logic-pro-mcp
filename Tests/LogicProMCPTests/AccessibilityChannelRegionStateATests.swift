@@ -647,11 +647,14 @@ private func makeRegionFixture(
     #expect((obj["verified"] as? Bool)!)
 }
 
-@Test func testSelectLastRefusesWhenTheWriteReportedFailureEvenIfTheStateMatches() async {
-    // The conjunct the earlier failed-write test cannot reach: that one leaves the selection empty
-    // and exits through State C. Here the write reports failure and the target IS selected
-    // afterwards — a state something else produced. The state is right and this call did not make
-    // it, which is State B and not State A.
+@Test func testSelectLastCertifiesAMatchingStateEvenWhenTheWriteReportedFailure() async {
+    // A write that LANDS and reports that it did not. An earlier cut refused this, on the theory
+    // that the write's answer said whether this call had established the selection. It does not:
+    // a `true` return excludes a concurrent actor no better than a `false` one, so requiring it
+    // only refused real successes — this exact shape, which is measured on this surface, where the
+    // return code is uninformative in both directions.
+    //
+    // So the state decides, and the write's answer is reported rather than gating.
     let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
 
     let fixture = makeRegionFixture(
@@ -675,8 +678,9 @@ private func makeRegionFixture(
 
     #expect(result.isSuccess)
     let obj = decodeJSON(result.message)
-    #expect(!((obj["verified"] as? Bool)!))
-    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["reason"] == nil)
+    // Reported, not gated: a caller can see that the write's answer disagreed with what happened.
     #expect(!((obj["write_reported_success"] as? Bool)!))
     #expect(obj["selected_count"] as? Int == 1)
 }
@@ -719,6 +723,123 @@ private func makeRegionFixture(
     #expect(!((obj["verified"] as? Bool)!))
     #expect(obj["reason"] as? String == "readback_mismatch")
     #expect(!((obj["target_is_still_last"] as? Bool)!))
+}
+
+/// Build a fixture menu bar shaped like Logic's: 편집 > its AXMenu > 선택 > its AXMenu > leaves.
+/// `extraLeaves` are added beside the `deselectAll:` leaf so a test can stage a duplicate.
+private func attachMenuBar(
+    to builder: FakeAXRuntimeBuilder,
+    app: AXUIElement,
+    leafIdentifier: String = "deselectAll:",
+    leafRole: String = kAXMenuItemRole as String,
+    extraLeaves: [(identifier: String, role: String)] = []
+) -> AXUIElement {
+    let menuBar = builder.element(4_000)
+    let editItem = builder.element(4_001)
+    let editMenu = builder.element(4_002)
+    let selectItem = builder.element(4_003)
+    let selectMenu = builder.element(4_004)
+    let leaf = builder.element(4_005)
+
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(editItem, kAXTitleAttribute as String, "편집")
+    builder.setChildren(menuBar, [editItem])
+    builder.setChildren(editItem, [editMenu])
+    builder.setAttribute(selectItem, kAXTitleAttribute as String, "선택")
+    builder.setChildren(editMenu, [selectItem])
+    builder.setChildren(selectItem, [selectMenu])
+    builder.setAttribute(leaf, kAXRoleAttribute as String, leafRole)
+    builder.setAttribute(leaf, kAXIdentifierAttribute as String, leafIdentifier)
+    builder.setAttribute(leaf, kAXEnabledAttribute as String, true)
+
+    var leaves = [leaf]
+    for (offset, spec) in extraLeaves.enumerated() {
+        let extra = builder.element(4_100 + offset)
+        builder.setAttribute(extra, kAXRoleAttribute as String, spec.role)
+        builder.setAttribute(extra, kAXIdentifierAttribute as String, spec.identifier)
+        builder.setAttribute(extra, kAXEnabledAttribute as String, true)
+        leaves.append(extra)
+    }
+    builder.setChildren(selectMenu, leaves)
+    return leaf
+}
+
+@Test func testMenuIdentifierLookupRefusesADuplicate() async {
+    // The uniqueness half. The press test alone cannot see this: with one matching element, a
+    // lookup that returns the first match without scanning behaves identically to one that scans.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1_000)
+    _ = attachMenuBar(to: builder, app: app,
+                      extraLeaves: [(identifier: "deselectAll:", role: kAXMenuItemRole as String)])
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    #expect(AXLogicProElements.menuItem(
+        identifier: "deselectAll:", inMenuBar: AXLocalePolicy.editMenuBar, runtime: runtime
+    ) == nil, "two items carrying the identifier means the caller's assumption is wrong here")
+}
+
+@Test func testMenuIdentifierLookupRefusesANonMenuItemRole() async {
+    // The role half, for the same reason.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1_000)
+    _ = attachMenuBar(to: builder, app: app, leafRole: kAXButtonRole as String)
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    #expect(AXLogicProElements.menuItem(
+        identifier: "deselectAll:", inMenuBar: AXLocalePolicy.editMenuBar, runtime: runtime
+    ) == nil, "something carrying the identifier is not automatically a pressable menu item")
+}
+
+@Test func testMenuIdentifierLookupRefusesWhenAnIdentifierIsUnreadable() async {
+    // The status-preserving half, which the default fixture cannot reach because it answers
+    // `.success` to everything. An element whose identifier will not read could be the duplicate,
+    // so the scan cannot claim uniqueness over it.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1_000)
+    _ = attachMenuBar(to: builder, app: app,
+                      extraLeaves: [(identifier: "localMenuItemAction:", role: kAXMenuItemRole as String)])
+    let opaque = builder.element(4_100)
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            guard element == opaque, attribute == (kAXIdentifierAttribute as String) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    #expect(AXLogicProElements.menuItem(
+        identifier: "deselectAll:", inMenuBar: AXLocalePolicy.editMenuBar, runtime: runtime
+    ) == nil, "an unreadable identifier could be the duplicate; uniqueness cannot be claimed over it")
+}
+
+@Test func testMenuIdentifierLookupIgnoresAnElementItsIdentifierExcludes() async throws {
+    // The other direction, which is a false REFUSAL rather than a false match. An element whose
+    // identifier read succeeded and did not match is excluded by that read alone — its role being
+    // unreadable cannot matter, because an excluded element is not a candidate for anything.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1_000)
+    let leaf = attachMenuBar(to: builder, app: app,
+                             extraLeaves: [(identifier: "localMenuItemAction:", role: kAXMenuItemRole as String)])
+    let excluded = builder.element(4_100)
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            guard element == excluded, attribute == (kAXRoleAttribute as String) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    let found = AXLogicProElements.menuItem(
+        identifier: "deselectAll:", inMenuBar: AXLocalePolicy.editMenuBar, runtime: runtime
+    )
+    // `?? false` would pass unconditionally when the lookup returned nil, hiding the very refusal
+    // this test exists to rule out. Bind first, then assert on the bound value.
+    let matched = try #require(found, "a nonmatching identifier excludes the element; its unreadable role is moot")
+    #expect(CFEqual(matched, leaf), "and the match must still be the real leaf")
 }
 
 @Test func testSelectLastRefusesWhenDeselectAllDidNotEmptyTheSelection() async {

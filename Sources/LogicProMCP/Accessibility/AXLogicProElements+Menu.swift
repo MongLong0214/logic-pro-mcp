@@ -174,7 +174,8 @@ extension AXLogicProElements {
         guard case .success(var frontier) = AXHelpers.childrenResult(menu, runtime: runtime.ax) else {
             return nil
         }
-        for _ in 0..<4 {
+        let maxDepth = 4
+        for depth in 0..<maxDepth {
             var next: [AXUIElement] = []
             for element in frontier {
                 let identifierRead: Result<String?, AXHelpers.AXStatusError> =
@@ -186,18 +187,36 @@ extension AXLogicProElements {
                 let roleRead: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                     element, kAXRoleAttribute as String, runtime: runtime.ax
                 )
-                switch (identifierRead, roleRead) {
-                case (.success(let identifierValue), .success(let role)):
-                    if identifierValue == identifier, role == (kAXMenuItemRole as String) {
-                        matches.append(element)
+                // Either read can EXCLUDE this element on its own, and an exclusion makes the other
+                // read irrelevant — so a failure only matters when it is still load-bearing. The
+                // first cut demanded both reads succeed, which meant an element conclusively
+                // excluded by its identifier (`localMenuItemAction:`, which most of Logic's items
+                // carry) still aborted the whole lookup if its role happened to be unreadable. That
+                // is a refusal the uniqueness claim does not need: an excluded element cannot be
+                // the duplicate the scan is looking for.
+                let identifierExcludes = (try? identifierRead.get()).map { $0 != identifier } ?? false
+                let roleExcludes = (try? roleRead.get()).map { $0 != (kAXMenuItemRole as String) } ?? false
+                if identifierExcludes || roleExcludes {
+                    // Not this item, decided by a read that succeeded.
+                } else {
+                    switch (identifierRead, roleRead) {
+                    case (.success(let identifierValue), .success(let role)):
+                        if identifierValue == identifier, role == (kAXMenuItemRole as String) {
+                            matches.append(element)
+                        }
+                    case (.failure(let error), _) where error.isDefinitiveAbsence:
+                        break       // no identifier at all: not this item, and a real answer
+                    case (_, .failure(let error)) where error.isDefinitiveAbsence:
+                        break       // no role at all: cannot be a menu item, and a real answer
+                    default:
+                        return nil  // still load-bearing, and unreadable
                     }
-                case (.failure(let error), _) where error.isDefinitiveAbsence:
-                    break           // no identifier at all: not this item, and a real answer
-                case (_, .failure(let error)) where error.isDefinitiveAbsence:
-                    break           // no role at all: cannot be a menu item, and a real answer
-                default:
-                    return nil      // an element the scan could not classify
                 }
+
+                // Children only matter while there is another level to scan. Reading them on the
+                // last iteration cannot find a duplicate — nothing will look at them — so failing
+                // there would refuse a healthy unique leaf to protect a claim that is already made.
+                guard depth + 1 < maxDepth else { continue }
                 switch AXHelpers.childrenResult(element, runtime: runtime.ax) {
                 case .success(let kids):
                     next.append(contentsOf: kids)

@@ -69,19 +69,34 @@ SHELL_COMMENT = re.compile(r"^\s*#")
 JS_COMMENT = re.compile(r"^\s*(//|/\*|\*)")
 
 
+SWIFT_UNICODE_ESCAPE = re.compile(r"\\u\{([0-9A-Fa-f]{1,8})\}")
+
+
+def _decode_swift(text):
+    """Resolve the escapes Swift resolves, so the rule reads what the compiler emits.
+
+    `"entire\\u{20}contents"` is the phrase; the source is not. Only the escapes that can hide a
+    character inside a word are handled — a rule that tried to be a full Swift lexer would be a
+    second thing to get wrong.
+    """
+    text = SWIFT_UNICODE_ESCAPE.sub(
+        lambda m: chr(int(m.group(1), 16)) if int(m.group(1), 16) < 0x110000 else m.group(0), text)
+    return text.replace("\\t", "\t").replace("\\n", "\n")
+
+
 def _swift_literals(source):
-    """(line number, text) for every string literal in a Swift source."""
+    """(line number, decoded text) for every string literal in a Swift source."""
     out = []
     consumed = []
     for m in SWIFT_MULTILINE.finditer(source):
-        out.append((source.count("\n", 0, m.start()) + 1, m.group(1)))
+        out.append((source.count("\n", 0, m.start()) + 1, _decode_swift(m.group(1))))
         consumed.append((m.start(), m.end()))
     def inside_multiline(pos):
         return any(a <= pos < b for a, b in consumed)
     for m in SWIFT_SINGLELINE.finditer(source):
         if inside_multiline(m.start()):
             continue
-        out.append((source.count("\n", 0, m.start()) + 1, m.group(1)))
+        out.append((source.count("\n", 0, m.start()) + 1, _decode_swift(m.group(1))))
     return out
 
 
@@ -142,8 +157,11 @@ def violations(repo_root):
                 source = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            if BANNED not in source:          # cheap reject before any parsing
-                continue
+            # No cheap reject on the raw source. `"entire\x20contents"` contains the phrase after
+            # Python decodes it and NOT before, so a substring test on the file text skips the file
+            # before `ast` ever sees the constant — one literal, not the assembled form this rule
+            # documents as out of scope. Swift's `\u{20}` is the same trick. Parsing every file is
+            # the price of a rule that reads what the language reads.
             if path.suffix == ".py":
                 literals = _python_literals(source, path)
                 if literals is None:

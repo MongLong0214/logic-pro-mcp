@@ -3,7 +3,7 @@
   "date": "2026-09-05",
   "subject": "region.move_to_playhead driven live, and the two pieces of session state that made it look broken",
   "question": "Does the operation move the selected region to the playhead on this host?",
-  "verdict": "works",
+  "verdict": "partial",
   "issues": [
     774
   ],
@@ -85,10 +85,11 @@
   "method_note": "The first run is kept in this record rather than deleted. A measurement that was wrong for a reason worth knowing is more useful than one that was never taken.",
   "conclusion": "`region.move_to_playhead` moves the selected region to the playhead on this host: 10 of 10 checks pass, the start bar goes from 1 to 9 with the playhead at 9, and a witness binary that is not the product agrees. The earlier reading that it moved nothing was a false RED produced by session state I had created and not restored — the Mixer was open, and while it holds the Edit menu the path this operation drives (편집 > 이동 > 재생헤드로) is not present at all. A second unrestored change, a window left at 1610x819, made the harness's visual band clamp to the wrong strip. Six green preconditions made the failure look like the product's, which is the trap: a harness can only assert the preconditions it knows about, and 'which Edit menu is on screen' was not one of them. What remains failing is the harness's own: with all checks green the visual assertion still reports no change, because the band is a fixed 500x300 window at a constant offset rather than the moved region's measured frame, and `is_clean` requires `visual_failed` to be 0.",
   "limits": [
+    "CONDITION, which is why this is `partial` rather than `works`: the arrange window must own the Edit menu. With the Mixer holding it the command is not on the menu at all and the operation cannot move anything. Whether other contextual windows — the Piano Roll, the Event List, a plug-in editor — take the Edit menu the same way was not measured.",
     "The question this record was originally opened for — whether a selection of TWO regions makes the operation report on one while moving both — is still unanswered. Every run here had exactly one region selected, which the harness asserts as a precondition, so nothing measured bears on it.",
     "One host, one project, one locale. Whether the Mixer coupling has the same shape in other languages was not checked, though the mechanism is Logic's menu being contextual rather than anything locale-specific.",
     "The visual band failure was reproduced but not diagnosed further: whether it is the zoom, the scroll position, or the constant offset that puts the change outside the band was not established.",
     "No fix is included here for either the harness band or the singular readback that part 1 of the issue describes."
   ],
-  "supersedes": null
+  "supersedes": "2026-09-04-move-to-playhead-moved-nothing"
 }

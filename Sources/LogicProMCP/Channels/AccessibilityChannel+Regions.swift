@@ -746,11 +746,18 @@ extension AccessibilityChannel {
         // post-state against a stale `expected` would certify the stale answer. Re-deriving costs
         // one enumeration and is the difference between "this is the last region" and "this was the
         // last region when I looked".
-        let lastNow = lastRegionItem(runtime: runtime)?.info
+        let lastNow = lastRegionItem(runtime: runtime)
         let targetIsStillLast = lastNow.map {
-            $0.name == expected.name && $0.startBar == expected.startBar
-                && $0.trackIndex == expected.trackIndex
+            $0.info.name == expected.name && $0.info.startBar == expected.startBar
+                && $0.info.trackIndex == expected.trackIndex
         } ?? false
+        // The FRESH coverage, not the one from three reads ago. Taking `.info` and dropping the
+        // rest threw away the only thing that could say the second enumeration had stopped seeing
+        // the whole arrangement: a region appearing outside the viewport during the settles leaves
+        // the target still matching by name and bar, so `targetIsStillLast` stays true while the
+        // answer has quietly narrowed. Reporting the first read's flag then claims
+        // `whole_arrangement` for a read that no longer covered it.
+        let coversNow = lastNow?.coversWholeArrangement ?? target.coversWholeArrangement
 
         var extras: [String: Any] = [
             "via": "deselect-all+ax-selected",
@@ -760,9 +767,9 @@ extension AccessibilityChannel {
             "expected_start_bar": expected.startBar,
             "expected_track_index": expected.trackIndex,
             "selected_count": selected.count,
-            "scope": target.coversWholeArrangement ? "whole_arrangement" : Self.regionReadbackScope
+            "scope": coversNow ? "whole_arrangement" : Self.regionReadbackScope
         ]
-        if !target.coversWholeArrangement {
+        if !coversNow {
             // "The last region Logic is showing" and "the last region" are different claims, and
             // only the enumeration can say which one this is.
             extras["scope_reason"] = Self.regionReadbackLimitReason
@@ -779,15 +786,18 @@ extension AccessibilityChannel {
         //
         //   * the set, because "the target is among the selected" is not a claim a consumer of the
         //     selection can act on;
-        //   * the write's own answer, because a target that something ELSE selected between the
-        //     empty readback and the verdict satisfies the set test while this call established
-        //     nothing — the readback is the verdict on the STATE, and it cannot speak to authorship;
         //   * the re-derived last, because the target was chosen three reads ago.
         //
-        // A write that reported failure over a selection that nevertheless matches is State B, not
-        // State C: the state is right and unexplained, which is exactly what unverified means.
+        // The write's own answer is NOT one of them, and that is a correction to an earlier cut of
+        // this function. Requiring it looked like it closed a race — a target something ELSE
+        // selected between the empty readback and the verdict satisfies the set test while this
+        // call established nothing. It does not: a `true` return excludes that actor no better than
+        // a `false` one, because on this surface the return code is uninformative in both
+        // directions. What it does do is refuse a real success whenever the write lands and reports
+        // that it did not, which is a shape measured on this very surface. Authorship is not
+        // establishable here, so the verdict is about the STATE and the write's answer is carried
+        // as `write_reported_success` for a caller who wants to see the two disagree.
         if selected.count == 1,
-           !writeReportedFailure,
            targetIsStillLast,
            let only = selected.first,
            only.name == expected.name,

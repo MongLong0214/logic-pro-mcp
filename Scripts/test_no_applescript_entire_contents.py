@@ -140,12 +140,24 @@ def main():
     check("bans the right phrase", guard.BANNED == "entire" + " " + "contents",
           f"the guard bans {guard.BANNED!r}, which is not the phrase this rule exists for")
 
-    # 11. The real ENTRY POINT, not just `violations`, over the real repository. Every case above
+    # 11. An escape that hides the space. `"entire\\x20contents"` carries the phrase only after the
+    #     language decodes it, so a substring test on the file text skips the file before `ast` can
+    #     see the constant — one literal, not the assembled form the rule documents as out of scope.
+    #     Swift's `\\u{20}` is the same trick, and the Swift side has to decode to see it.
+    found, _, _ = _scan({"Scripts/esc.py":
+                         'subprocess.run(["osascript","-e","get ' + P[:6] + '\\x20' + P[7:] + ' of window 1"])\n'})
+    check("python escaped space", found == {"Scripts/esc.py"}, f"expected the escape flagged, got {found}")
+
+    found, _, _ = _scan({"Sources/Esc.swift":
+                         'let s = "get ' + P[:6] + '\\u{20}' + P[7:] + ' of window 1"\n'})
+    check("swift escaped space", found == {"Sources/Esc.swift"}, f"expected the escape flagged, got {found}")
+
+    # 12. The real ENTRY POINT, not just `violations`, over the real repository. Every case above
     #    calls the rule directly, so a `main()` quietly changed to `return 0` would pass all of them.
     rc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", rc.returncode == 0, f"guard exited {rc.returncode}: {rc.stdout.strip()}")
 
-    # 12. ...and the same entry point over a tree with a planted violation must EXIT 1. This is the
+    # 13. ...and the same entry point over a tree with a planted violation must EXIT 1. This is the
     #     case that notices a gutted `main`; case 9 alone cannot tell "clean" from "always says yes".
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -160,7 +172,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print(f"{13} case(s) pass: the guard catches the defect and leaves the prose alone")
+    print(f"{15} case(s) pass: the guard catches the defect and leaves the prose alone")
     return 0
 
 
