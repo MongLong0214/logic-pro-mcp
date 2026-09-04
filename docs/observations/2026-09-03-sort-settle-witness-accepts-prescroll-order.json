@@ -1,0 +1,98 @@
+{
+  "id": "2026-09-03-sort-settle-witness-accepts-prescroll-order",
+  "date": "2026-09-03",
+  "subject": "the settle witness in sort_verified's after-read",
+  "question": "Can two immediate equal reads report a sort's own pre-sort order as settled?",
+  "verdict": "works",
+  "issues": [
+    757,
+    448
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.6"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Drive tracks.sort_verified with a criterion that must move the order, five times, at least once while a full test suite is running. Compare after_tracks against after_order in each receipt.",
+    "expected": "after the fix every drive reports State A with before_order != after_order; before the fix roughly one in five under load reported State B with sorted after_tracks beside an unsorted after_order",
+    "cost": "~5 min plus a concurrent load; the failure needs the machine busy"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:trackSortObservationIsSettled"
+  ],
+  "method": "Five live drives of a correct creation_date sort on a three-track project whose rail order disagreed with its creation order. One drive was made while a full ship-gate suite occupied the machine. Each receipt was read for state, reason, after_tracks and whether before_order equalled after_order.",
+  "observations": [
+    {
+      "witness_before_fix": "first read taken with no delay; two equal consecutive reads accepted as settled",
+      "poll_interval_ms": 75,
+      "attempts": 4,
+      "source": "AccessibilityChannel+Tracks.swift, the after: closure of the sort transaction"
+    },
+    {
+      "drive": 1,
+      "load": "ship-gate suite running",
+      "state": "B",
+      "reason": "readback_mismatch",
+      "before_tracks": [
+        "Alpha",
+        "Bravo",
+        "Zulu"
+      ],
+      "after_tracks": [
+        "Zulu",
+        "Alpha",
+        "Bravo"
+      ],
+      "before_order_equals_after_order": true
+    },
+    {
+      "drive": 2,
+      "load": "idle",
+      "state": "A",
+      "elapsed_s": 0.62,
+      "before_order_equals_after_order": false
+    },
+    {
+      "drive": 3,
+      "load": "idle",
+      "state": "A",
+      "elapsed_s": 0.59,
+      "before_order_equals_after_order": false
+    },
+    {
+      "drive": 4,
+      "load": "idle",
+      "state": "A",
+      "elapsed_s": 0.59,
+      "before_order_equals_after_order": false
+    },
+    {
+      "drive": 5,
+      "load": "idle",
+      "state": "A",
+      "elapsed_s": 0.59,
+      "before_order_equals_after_order": false
+    },
+    {
+      "after_fix": true,
+      "already_sorted_drive": {
+        "state": "B",
+        "elapsed_s": 0.94,
+        "detail": "already_sorted_command_unobservable"
+      }
+    }
+  ],
+  "conclusion": "The old witness took its first read with no delay and accepted the first pair of equal observations, so a sort landing slower than the 75 ms poll had its own pre-sort order accepted as settled. The failing receipt is self-contradictory in a way that identifies the cause: after_tracks were sorted while after_order was not, because the two halves came from different iterations. It reproduced once in five, under load. After the fix an unchanged order can never be settled, and the already-sorted case spends the whole budget watching before answering.",
+  "limits": [
+    "One in five is a rate on one machine under one kind of load, not a probability.",
+    "The failure needs a busy machine; an idle run does not reproduce it and is not evidence it is gone.",
+    "Three tracks and one criterion.",
+    "Says nothing about Logic's actual settling distribution — only that it can exceed one 75 ms poll."
+  ],
+  "supersedes": null
+}

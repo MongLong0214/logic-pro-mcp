@@ -24,8 +24,31 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROADMAP = os.path.join(REPO, "docs", "roadmap", "README.md")
 OBS = os.path.join(REPO, "docs", "observations")
 
-# "measured 2026-08-30", "Measured live 2026-09-04", "Driven live 2026-09-03"
-CLAIM = re.compile(r"\b(?:measured|driven)\b[^|]{0,24}?\b(20\d\d-\d\d-\d\d)\b", re.IGNORECASE)
+# What counts as claiming a live measurement. The first cut required one of two verbs within 24
+# characters of a date, and I refuted it against my own rows: `live-verified 2026-09-04`,
+# `observed live on 2026-09-04`, `drove this live`, `measured on a live Logic yesterday` and
+# `2026-09-04 measurement:` all walked straight through. A narrow pattern reads as a guard and is a
+# hole, which is the failure this whole directory exists to stop.
+#
+# So the trigger is two independent halves and either is enough:
+#   * a measurement VERB near a date, in any of the spellings people actually write; or
+#   * the word `live` next to a measurement word, with or without a date — an undated live claim is
+#     a weaker citation, not a weaker claim.
+_VERB = r"measur\w*|driven|drove|drive|observ\w*|verified|proven|proved|reproduc\w*|witnessed"
+CLAIM_DATED = re.compile(rf"\b(?:{_VERB})\b[^|]{{0,40}}?\b(20\d\d-\d\d-\d\d)\b", re.IGNORECASE)
+CLAIM_DATE_FIRST = re.compile(rf"\b(20\d\d-\d\d-\d\d)\b[^|]{{0,40}}?\b(?:{_VERB})\b", re.IGNORECASE)
+# `live-verified`, `observed live`, `drove this live`, `measured on a live Logic`
+CLAIM_LIVE = re.compile(rf"\blive\b[^|]{{0,40}}?\b(?:{_VERB})\b|\b(?:{_VERB})\b[^|]{{0,40}}?\blive\b",
+                        re.IGNORECASE)
+
+
+def claim_in(line):
+    """The claim and a date if it carries one; None when the row asserts no measurement."""
+    for rx in (CLAIM_DATED, CLAIM_DATE_FIRST):
+        m = rx.search(line)
+        if m:
+            return m.group(1)
+    return "undated" if CLAIM_LIVE.search(line) else None
 ISSUE = re.compile(r"#(\d+)")
 
 # Rows whose measurement predates the observation records themselves. Grandfathered explicitly, by
@@ -37,6 +60,7 @@ GRANDFATHERED = {
     292: "the 2026-08-30 Controls-view addressability reading (the 2026-09-04 popup wall IS recorded)",
     293: "ADR-010 Event List collector, measured 2026-08-29",
     299: "ADR-011 Compressor native-editor slider census, measured 2026-08-30",
+    300: "ADR-012, closed 2026-08-28 — seven acceptance criteria measured before records existed",
     301: "ADR-013 Channel EQ named-band writes, shipped and measured 2026-08-31",
     302: "ADR-014 kAXColumns reading, measured 2026-08-29",
     303: "ADR-015 TransformVerification dependency, measured 2026-08-29",
@@ -71,7 +95,7 @@ def main():
     for line in open(ROADMAP, encoding="utf-8"):
         if not line.startswith("|"):
             continue
-        claim = CLAIM.search(line)
+        claim = claim_in(line)
         if not claim:
             continue
         issues = {int(n) for n in ISSUE.findall(line)}
@@ -81,7 +105,7 @@ def main():
             continue
         if issues & set(GRANDFATHERED):
             continue
-        missing.append((sorted(issues), claim.group(1), line.strip()[:150]))
+        missing.append((sorted(issues), claim, line.strip()[:150]))
 
     if missing:
         print(f"{len(missing)} roadmap row(s) claim a live measurement with no observation record:")
