@@ -1,0 +1,115 @@
+{
+  "id": "2026-09-04-strip-slot-composition-carries-the-track-type",
+  "date": "2026-09-04",
+  "subject": "Whether a channel strip's slot composition identifies the track's type",
+  "question": "Is there a signal anywhere that distinguishes an audio track from a software instrument, given the track header has none?",
+  "verdict": "partial",
+  "issues": [
+    766
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "For each AXLayoutItem in the arrange window, walk to depth 6 and collect the first words of every AXHelp containing 슬롯 (or 'slot'). Compare the resulting sets across a known audio track, a known software instrument and an output strip.",
+    "expected": "the audio strip carries an input slot the instrument strips do not, and at least one instrument strip carries a MIDI effect slot no audio strip has",
+    "cost": "~3 min with the Mixer revealed; read-only"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "method": "Asked a different surface the question the track header could not answer. The header was already measured to carry identical type tokens on every row, so the point was not to re-read it more carefully but to look somewhere else.",
+  "observations": [
+    {
+      "strip": "Absolute Zero",
+      "known_type": "software instrument",
+      "slots": [
+        "그룹",
+        "출력",
+        "센드",
+        "오디오 이펙트",
+        "오디오 이펙트"
+      ]
+    },
+    {
+      "strip": "Audio 1",
+      "known_type": "audio",
+      "slots": [
+        "그룹",
+        "출력",
+        "센드",
+        "오디오 이펙트",
+        "오디오 이펙트",
+        "오디오 이펙트",
+        "오디오 이펙트",
+        "입력"
+      ]
+    },
+    {
+      "strip": "Studio Grand",
+      "known_type": "software instrument",
+      "slots": [
+        "그룹",
+        "출력",
+        "센드",
+        "오디오 이펙트",
+        "MIDI 이펙트"
+      ]
+    },
+    {
+      "strip": "Stereo Out",
+      "known_type": "output",
+      "slots": [
+        "그룹",
+        "오디오 이펙트",
+        "오디오 이펙트",
+        "오디오 이펙트",
+        "오디오 이펙트"
+      ],
+      "note": "no output slot and no send slot"
+    },
+    {
+      "strip": "Master",
+      "known_type": "master",
+      "slots": [
+        "그룹"
+      ]
+    },
+    {
+      "what": "what separates them",
+      "input_slot_present_on": [
+        "Audio 1"
+      ],
+      "midi_effect_slot_present_on": [
+        "Studio Grand"
+      ],
+      "strips_with_neither": [
+        "Absolute Zero"
+      ],
+      "strips_missing_output_and_send": [
+        "Stereo Out",
+        "Master"
+      ]
+    },
+    {
+      "what": "what the policy already says about the input slot",
+      "file": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+      "quoted": "A software-instrument strip has no such button at all, so an absent input there is the truth rather than a gap"
+    }
+  ],
+  "conclusion": "The strip carries type information the header does not, and it is not complete. An input slot appears on the audio strip and on neither instrument strip, which agrees with what inputSlotHelpKeyword's own comment already claimed. A MIDI effect slot appears on one instrument strip and no audio strip. Missing both an output and a send slot marks the output and master strips. The gap is Absolute Zero: a software instrument with neither an input slot nor a MIDI effect slot, so the pair classifies three of the four ordinary strips and leaves one undetermined. That is still strictly more than the track header offers, which is nothing -- but it means a strip-based classifier has to be able to answer unknown rather than pick the nearer of two.",
+  "limits": [
+    "One project, five strips, one of each type except software instrument which had two. A classifier built from this would be built on a sample of five.",
+    "Why Absolute Zero shows no MIDI effect slot was not established — strip height, a scrolled slot and a real difference between instrument kinds were all left open.",
+    "ko-KR only. The English renderings of these help strings were not read, so the same one-language gap this repository keeps finding would apply to any table built from this record alone.",
+    "Reading the strip requires the Mixer revealed, so a type read built on this is heavier than the header read it would replace. That cost was noted, not measured."
+  ],
+  "supersedes": null
+}
