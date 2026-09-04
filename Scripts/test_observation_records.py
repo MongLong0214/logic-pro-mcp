@@ -135,6 +135,30 @@ case("a command naming a file that does not exist is rejected",
 bad = problems(record(surface="arrange.invented"))
 case("an undeclared surface is rejected", any("surface" in b for b in bad), f"{bad!r}")
 
+# --- schema 2: `schema` and `evidence` (ADR-019 D5) -------------------------------------------
+# Both are optional, because a schema-1 record is still valid and is counted as a burn-down. A
+# record that DECLARES them has to mean them: a citation to a file that is missing, or that sits
+# outside the evidence directory, is a claim nobody can check. The escape case matters most —
+# `../locale/ui-labels.json` would let a record cite the very file whose claims it backs.
+case("a record without schema or evidence is still valid",
+     problems(record()) == [], f"{problems(record())!r}")
+
+bad = problems(record(schema=3))
+case("an unknown schema is rejected", any("schema" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence=["evidence/does-not-exist.json"]))
+case("evidence that does not exist is rejected", any("does not exist" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence=["../locale/ui-labels.json"]))
+case("evidence outside the evidence directory is rejected",
+     any("outside" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence="evidence/one.json"))
+case("evidence that is not a list is rejected", any("must be a list" in b for b in bad), f"{bad!r}")
+
+case("an empty evidence list is fine — it claims nothing",
+     problems(record(schema=2, evidence=[])) == [], f"{problems(record(schema=2, evidence=[]))!r}")
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

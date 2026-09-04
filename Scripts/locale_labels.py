@@ -188,11 +188,18 @@ def build(existing=None):
         # A claim of absence, or of identifier addressing, names the record that showed it — and
         # that citation has to survive regeneration exactly as provenance does, or every --write
         # would turn a measured `absent` back into `unmeasured` by erasing its evidence.
-        cites = {loc: rid for loc, rid in (prior.get("coverage_records") or {}).items()
-                 if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
-                 and loc not in present_in}
-        if cites:
-            entry["coverage_records"] = cites
+        # All THREE citation maps travel together. Carrying only the record id was a data-loss bug:
+        # the next `--write` stripped the role and the identifier, and the guard then rejected a
+        # claim that had been valid — regeneration turning evidence into a failure.
+        def carried(field):
+            return {loc: v for loc, v in (prior.get(field) or {}).items()
+                    if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
+                    and loc not in present_in}
+
+        for field in ("coverage_records", "coverage_roles", "coverage_identifiers"):
+            kept = carried(field)
+            if kept:
+                entry[field] = kept
         labels[name] = entry
     return {
         "schema": 2,

@@ -213,6 +213,19 @@ def main():
     case("cited measured survives", cov.get("en-US") == "measured", cov)
     case("uncited measured is dropped", cov.get("ko-KR") == "unmeasured", cov)
 
+    # All three citation maps must travel together. Carrying only the record id meant the next
+    # `--write` stripped the role and the identifier, and the guard then rejected a claim that had
+    # been valid — regeneration turning evidence into a failure.
+    v3 = {"schema": 2, "labels": {"inputSlotHelpKeyword": {
+        "coverage": {"en-US": "identifier", "ko-KR": "unmeasured", "ja-JP": "unmeasured"},
+        "coverage_records": {"en-US": "2026-09-05-en"},
+        "coverage_roles": {"en-US": "AXMenuButton"},
+        "coverage_identifiers": {"en-US": "markerEdit:"}}}}
+    built3 = labels.build(existing=v3)["labels"].get("inputSlotHelpKeyword") or {}
+    case("role survives regeneration", (built3.get("coverage_roles") or {}).get("en-US") == "AXMenuButton", built3)
+    case("identifier survives regeneration",
+         (built3.get("coverage_identifiers") or {}).get("en-US") == "markerEdit:", built3)
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
@@ -221,7 +234,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("29 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
+    print("31 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
     return 0
 
 

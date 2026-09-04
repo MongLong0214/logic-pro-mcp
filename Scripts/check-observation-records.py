@@ -166,6 +166,29 @@ def check(path):
                     bad.append(f"{stem}: depends names {symbol!r} in {rel}, "
                                f"but {part!r} does not appear there")
 
+    # `schema` and `evidence` are the schema-2 additions. Both are optional — a schema-1 record is
+    # still valid and is counted as a burn-down — but a record that DECLARES them must mean them:
+    # an evidence file that is missing, or that sits outside the evidence directory, is a citation
+    # to nothing. `../locale/ui-labels.json` would let a record cite the very file whose claims it
+    # backs, which is the shape the label guard refuses on the other side.
+    schema = doc.get("schema", 1)
+    if schema not in (1, 2):
+        bad.append(f"{stem}: schema is {schema!r}; this repository has 1 and 2")
+    evidence = doc.get("evidence")
+    if evidence is not None:
+        if not isinstance(evidence, list):
+            bad.append(f"{stem}: evidence must be a list of files under docs/observations/evidence/")
+        else:
+            for rel in evidence:
+                target = os.path.normpath(os.path.join(DIR, str(rel)))
+                inside = target.startswith(os.path.join(DIR, "evidence") + os.sep)
+                if not inside:
+                    bad.append(f"{stem}: evidence {rel!r} is outside docs/observations/evidence/ — a "
+                               f"record may not cite a file it does not carry")
+                elif not os.path.exists(target):
+                    bad.append(f"{stem}: evidence {rel!r} does not exist — a citation to a missing "
+                               f"file is a claim nobody can check")
+
     if doc["supersedes"] is not None:
         target = os.path.join(DIR, f"{doc['supersedes']}.json")
         if not os.path.exists(target):
