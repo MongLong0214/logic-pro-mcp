@@ -231,13 +231,45 @@ import Testing
 /// (folding accents would widen matching in non-EN/KO locales, the #60 hazard).
 @Test func testExtractTrackStateTrackTypeClassificationIsDiacriticSensitive() {
     let builder = FakeAXRuntimeBuilder()
-    let plain = builder.element(1)
-    let accented = builder.element(2)
-    builder.setAttribute(plain, kAXTitleAttribute as String, "Audio 1")
-    builder.setAttribute(accented, kAXTitleAttribute as String, "áudio 1")
 
+    // #766 — the signal sits on a CHILD, not on the header's title. The title is the track name,
+    // and the classifier subtracts the name from the aggregate now: a name a user typed is not a
+    // reading of what the track is. Carrying the fixture's signal in the name would test that
+    // exclusion rather than the diacritic sensitivity this case is about.
+    func strip(_ id: Int, signal: String) -> AXUIElement {
+        let header = builder.element(id)
+        let icon = builder.element(id + 100)
+        builder.setAttribute(header, kAXTitleAttribute as String, "Track \(id)")
+        builder.setAttribute(icon, kAXDescriptionAttribute as String, signal)
+        builder.setChildren(header, [icon])
+        return header
+    }
+
+    let plain = strip(1, signal: "Audio Channel Strip")
+    let accented = strip(2, signal: "áudio Channel Strip")
     let runtime = builder.makeAXRuntime()
 
     #expect(AXValueExtractors.extractTrackState(from: plain, index: 0, runtime: runtime).type == .audio)
     #expect(AXValueExtractors.extractTrackState(from: accented, index: 1, runtime: runtime).type == .unknown)
+}
+
+/// #766 — a track NAMED after a type is not classified by it. The name is user-editable, and the
+/// one branch that still answers confidently is the GM Device guard behind the silent-bounce risk;
+/// an outside review found `GM Device scratch` triggering it. Measured live the same day: an audio
+/// track renamed that way reads `unknown`, and a real `GM Device 5` strip still reads external MIDI.
+@Test func testTrackNamedAfterATypeIsNotClassifiedByItsName() {
+    let builder = FakeAXRuntimeBuilder()
+
+    let renamed = builder.element(20)
+    builder.setAttribute(renamed, kAXTitleAttribute as String, "GM Device scratch")
+    let realGM = builder.element(21)
+    builder.setAttribute(realGM, kAXTitleAttribute as String, "GM Device 5")
+    let namedAudio = builder.element(22)
+    builder.setAttribute(namedAudio, kAXTitleAttribute as String, "Audio 1")
+
+    let runtime = builder.makeAXRuntime()
+
+    #expect(AXValueExtractors.extractTrackState(from: renamed, index: 0, runtime: runtime).type == .unknown)
+    #expect(AXValueExtractors.extractTrackState(from: realGM, index: 1, runtime: runtime).type == .externalMIDI)
+    #expect(AXValueExtractors.extractTrackState(from: namedAudio, index: 2, runtime: runtime).type == .unknown)
 }

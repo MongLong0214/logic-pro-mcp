@@ -781,7 +781,26 @@ enum AXValueExtractors {
         // so this check MUST precede the `.audio` branch below or GM Device
         // strips get misclassified as audio tracks and the silent-bounce risk
         // is hidden before bounce. They are external-MIDI lanes, not audio.
-        if AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) { return .externalMIDI }
+        // #131 keeps its early return, and #766 narrows what can trigger it.
+        //
+        // Logic names these strips `GM Device N`, and that name is the ONLY signal they carry —
+        // the unit fixture proves it, putting the string in the title and a child's value and
+        // nothing else. So the name cannot simply be excluded, which is what the first attempt
+        // did: it made the fixture red and would have taken the silent-bounce guard with it.
+        //
+        // What CAN be excluded is a name that merely mentions the words. An outside review pointed
+        // out that a track renamed `GM Device scratch` was confidently classified external MIDI,
+        // and the silent-bounce guard fired on a string a user typed. The shape Logic produces is
+        // the words followed by a number and nothing else, so that is what is required — from the
+        // name, or from any other signal, since a real GM strip may carry it elsewhere too.
+        let gmShape = try? NSRegularExpression(pattern: "^gm device\\s*\\d*$")
+        let nameLooksGM = gmShape.map { regex in
+            let range = NSRange(trackName.startIndex..., in: trackName)
+            return regex.firstMatch(in: trackName, range: range) != nil
+        } ?? false
+        if nameLooksGM || AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) {
+            return .externalMIDI
+        }
 
         // #766 — the remaining sets are counted, not tried in order.
         //
