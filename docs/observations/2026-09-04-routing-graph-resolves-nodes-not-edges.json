@@ -1,0 +1,65 @@
+{
+  "id": "2026-09-04-routing-graph-resolves-nodes-not-edges",
+  "date": "2026-09-04",
+  "subject": "the published signal-flow graph in logic://mixer",
+  "question": "What stops the routing graph from completing — node identity, or something else?",
+  "verdict": "partial",
+  "issues": [
+    291
+  ],
+  "surface": "mixer.routing",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.6",
+    "project": "three plain audio tracks, no sends, default Stereo Out"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Read logic://mixer and note routing_graph.nodes/edges/partialReason. Then read logic://tracks so trk_ references are issued, read logic://mixer again, and compare.",
+    "expected": "nodes go from 0 to the track count once references exist; edges stay 0 with partialReason naming unreadable output destination endpoints",
+    "cost": "~1 min; needs a project with at least one track"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift",
+    "Sources/LogicProMCP/Resources/ResourceHandlers+StateReaders.swift"
+  ],
+  "method": "Read logic://mixer before and after reading logic://tracks in the same session, so the effect of issuing trk_ references on the graph is observed rather than reasoned about. partialReason was read in full both times.",
+  "observations": [
+    {
+      "phase": "before any track read",
+      "nodes": 0,
+      "edges": 0,
+      "complete": false,
+      "partialReason_head": "unresolved source endpoint for mixer strip track_index=0: no issued trk_ reference; unreadable output destination endpoint for source track_index=0",
+      "provenance": [
+        "axMixerStrip"
+      ]
+    },
+    {
+      "phase": "after logic://tracks issued 3 references",
+      "nodes": 3,
+      "edges": 0,
+      "complete": false,
+      "partialReason_head": "unreadable output destination endpoint for source track_index=0; unreadable output destination endpoint for source track_index=1; unreadable output destination endpoint for source track_index=2"
+    },
+    {
+      "tracks_readable": true,
+      "track_refs_issued": 3
+    },
+    {
+      "prior_decision": "an edge is published only when both endpoints resolve to an already-issued reference; a display string is never promoted to a node identity",
+      "shipped_in_pr": 740,
+      "source": "PR body on this repository"
+    }
+  ],
+  "conclusion": "The graph publishes and is honest about being partial. Node identity is settled and works: once logic://tracks issues trk_ references, nodes resolve from 0 to 3 and the 'no issued trk_ reference' clause disappears from partialReason. What remains is a different problem entirely — every edge is blocked by an unreadable output destination endpoint. ADR-008's row, which says node identity needs a decision, describes a question PR #740 already decided and shipped; the live blocker is reading the destination, not naming the node.",
+  "limits": [
+    "Three plain audio tracks with no sends and default routing. A project with busses or sends may fail differently, and sends were measured on #291 to be the harder half.",
+    "Says only that the destination endpoint is unreadable in this state — not why, and not whether it is readable in another.",
+    "Node resolution was observed for tracks; whether every node CLASS (busses, aux, master) resolves the same way is unmeasured."
+  ],
+  "supersedes": null
+}
