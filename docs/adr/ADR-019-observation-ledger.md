@@ -23,7 +23,7 @@ are not:
 
 | gap | kind of failure | what closes it |
 |---|---|---|
-| 255 variants with no reading | evidence integrity — a string the product matches with nothing behind it | D1: a variant must occur in the observations of the record it cites |
+| 255 variants with no reading | evidence integrity — a string the product matches with nothing behind it | D1 makes a NEW one impossible; only D4's campaign closes the existing 255, by measuring them |
 | 18 empty `variants` lists | state model — one shape for "measured, nothing distinct", "addressed by identifier", "never looked" | D2: a per-locale coverage state |
 | 113 with no Japanese | **measurement not performed** — no schema closes this | D4: a campaign, run |
 | `host.locale` inert | reporting — the field exists and nothing asks it anything | D3: a locale axis in the status tool |
@@ -56,8 +56,20 @@ catches a dangling id and a locale typo, and it is not evidence. A fabricated va
 same-locale record and paste itself into `observed`. What makes provenance a reading is one more
 check, and it is the load-bearing one:
 
-**the variant must occur verbatim in the cited record's raw `observations`** (or in a file that
-record lists under `evidence`), and the block's `date` must equal the record's.
+**the record must contain a SIGHTING of the variant**: an element of a named `role` whose named
+`attribute` carried that string. The block names both, and the guard walks the record's row-shaped
+readings (its own `observations`, plus any file under `docs/observations/evidence/`) looking for
+that element. The block's `date` must equal the record's.
+
+A sighting, not a substring. Searching the serialized record was the first cut, and it accepted two
+things it should not have: the variant `input` was satisfied by the KEY `with_input`, and
+`eventListColumnL`'s canonical `L` by any capital L in any path in any reading. An element and an
+attribute are also what a caller needs in order to find the thing again, so the evidence and the
+addressing are the same three fields.
+
+Evidence is read as JSON rows and must live under `docs/observations/evidence/`. A screenshot
+therefore cannot back a claim — it is worth keeping and it is not machine-checkable, and pretending
+otherwise would be the same fabrication one level up.
 
 A record that never saw the string cannot be cited for it. This holds today for both existing
 provenance entries — the mixer-slot record's `help` readings contain `입력 슬롯` and `출력 슬롯` —
@@ -81,10 +93,18 @@ earlier draft's four-state model was wrong. Three states are:
 | `identifier` | not matched by label at all — addressed by a locale-free `AXIdentifier`, and a record in this locale observed that identifier on that element | no |
 | `unmeasured` | nobody has looked | **yes** |
 
-**Data model.** `coverage[locale]` is one of those strings. `coverage_records[locale]` is the id of
-the record that backs a `measured` or `identifier`; it is derived when a variant with provenance in
-that locale exists, and required otherwise. The guard resolves it and requires containment exactly
-as D1 does. So a claim of `measured` cannot be typed any more than a claim of `present` could.
+**Data model.** `coverage[locale]` is one of those strings. When a variant with provenance in that
+locale exists, `measured` is DERIVED and no citation is stored — the provenance is the evidence.
+Otherwise three fields are required and the guard checks all three:
+
+| field | holds |
+|---|---|
+| `coverage_records[locale]` | the record id |
+| `coverage_roles[locale]` | the AX role the label addresses — `Edit` on a menu bar is not `Edit` on a toolbar button, and both `editMenuBar` and `markerListEditMenuButton` carry `Edit`, `편집`, `編集` |
+| `coverage_identifiers[locale]` | for `identifier` only: the AXIdentifier, which the record must have been seen carrying |
+
+Without the role, any record showing either element backs both, which is the same shared-string
+hole D1 closes for variants.
 
 There is no `absent`. "Logic shows the canonical here" is a `measured` whose record contains the
 canonical; "this element is unlabelled" is a `measured` whose record says so in its observations.
@@ -117,11 +137,16 @@ the JSON auditable against the ledger rather than beside it.
    and **verifies** the running UI is in that locale by reading the menu bar. A run that cannot
    prove its locale refuses;
 3. runs the census over the **navigation-free** surfaces first: the menu bar and every menu (AX
-   reads them without opening them), the track headers, regions and transport of the window that
-   opened. Those need no label in the new locale to reach. Surfaces behind a menu or a button —
-   mixer, plug-in editors, the Event List — are reached only with labels the first census produced,
-   so a locale's first campaign cannot be circular: it measures what needs no navigation, and the
-   second campaign uses what the first measured;
+   reads them without opening them) and the whole main window, classified by the labelled ancestry
+   the census writes into each path rather than by a label the new locale has not been measured for.
+   Surfaces behind a menu press or a button — plug-in editors, the Event List — are reached only
+   with labels the first census produced, so the second campaign uses what the first measured;
+
+   **The locale proof bootstraps and does not verify.** Confirming "this is ja-JP" by reading
+   `ファイル` needs a Japanese label that is itself unmeasured. So a locale's FIRST campaign records
+   the locale it *requested* along with the menu-bar titles that came up, and establishes them as
+   the witness; every later run checks against that record and refuses on a mismatch. The first run
+   is a measurement, not a check, and the record says which it was;
 4. writes one observation record per `(surface, locale)` with the census as `evidence`;
 5. proposes `provenance` for a label set only where a census element of the **same role**
    carries its canonical or a variant — `editMenuBar` and `markerListEditMenuButton` both say
@@ -165,19 +190,27 @@ disagreed. `kind: manual` is honest and is counted as debt.
   "schema_v1_records": 24, "manual_reverify": 19, "surfaces_without_records": 6 }
 ```
 
-A guard compares the live counts to the ceilings and fails on any count that rose, **and it
-takes each ceiling as the lower of the file's value and the merge-base's value** (`origin/main`, or
-the pull request's base in CI). A file anyone can edit is an obvious "make CI green" knob, and a
-commit that adds ten undocumented variants and raises the ceiling by ten would pass a guard that
-only read the file. Against the base it cannot: the base ceiling is still the old number. Raising
-therefore requires an entry under `raised` with a date and a reason, and the guard still fails —
-it names the reason and asks for the ceiling to move in a commit whose base then carries it. When
-the base is unreadable the guard says so and falls back to the file, loudly.
+**Sets of identities, not counts.** A count is defeated by a swap: add one undocumented variant,
+document a different one, and `variants - provenance` is unchanged while the ledger knows strictly
+less about a new string. So the file holds the members — `regionKindMidi→가짜`, not `255` — and a
+new member fails even when the total falls. The diff then says which claim appeared, which a number
+never could.
 
-Lowering a ceiling is an ordinary commit; a count that fell below its ceiling also fails, because a
-ceiling above reality lets the next regression hide under it. The constants this replaces sat beside
-the comments explaining them, which is a fair thing to lose; what is gained is one diff a reviewer
-looks at, and a check the reviewer does not have to remember to make.
+**The base is authoritative for growth, and it is a real merge base.** `git merge-base HEAD
+origin/main`, not that ref's tip, which a branch can outrun. The file is not consulted for the
+growth test at all: unioning the two is exactly what a same-commit raise exploits — add the member,
+add it to the file, and a union permits it. A member the base already allowed is therefore never a
+growth, which is what lets a branch drop one from its own file on the way to closing it. When the
+base is unreadable — a shallow CI clone, or the commit that introduces the file — the guard says so
+loudly and falls back.
+
+**A raise lands.** An entry under `raised` with a date and a reason passes, printing both and the
+new members. An earlier draft failed it anyway, which made `raised` unusable: the base can never
+acquire a member without merging a change that fails. The protection is that the raise is in the
+diff with its reason, and the base comparison is what catches a raise that has none.
+
+A member that CLOSED also fails, asking for its removal from the file — a list that lags reality
+lets the next regression hide inside it.
 
 ## Phases
 

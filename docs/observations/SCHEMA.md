@@ -134,9 +134,15 @@ screenshot the conclusion depends on cannot be cited and then lost.
 `host.locale` is still not a *drift* axis (rule 5), but it is a *coverage* axis: the same question
 measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
 which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
-schema 2) points INTO these records — a variant's `provenance.record` must exist here and its
-`host.locale` must equal the locale the variant claims — so a translated string that nobody read
-has nowhere to hide.
+schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role` and
+the `attribute` it was read from, and the guard requires the record to contain a **sighting** — an
+element of that role whose that attribute carried the string. Not a substring of the serialized
+record, which accepted the variant `input` on the strength of a key named `with_input`.
+
+So a record's `observations` are worth writing **row-shaped** — `{"role": …, "help": …}` — because
+that is the shape a claim can rest on. Evidence files must live under `docs/observations/evidence/`
+and are read as JSON rows; a screenshot is worth keeping and cannot back a claim, which is the
+honest position rather than a checkbox.
 
 ### What the ledger does not know
 
@@ -144,12 +150,17 @@ has nowhere to hide.
 Scripts/observations-status.py --unproven
 ```
 
-lists, as things a person can go and do: variants with no provenance; label sets unmeasured per
-locale; surfaces with no record per locale; records at schema 1; records whose `reverify` is
-manual prose; `depends` entries that no longer resolve. The counts behind those lists are the
-ceilings in `docs/observations/RATCHETS.json`, and `Scripts/check-observation-ratchets.py` fails
-CI if any count rises — or lags, since a ceiling above reality lets the next regression hide.
-Raising a ceiling requires a dated reason under `raised`, so the decision is in the diff.
+lists, **by name**, things a person can go and do: variants with no provenance; label sets
+unmeasured per locale; surfaces with no record per locale; records at schema 1; records whose
+`reverify` is manual prose; `depends` entries that no longer resolve. Names rather than counts,
+because a count is not a thing anyone can act on.
+
+`docs/observations/RATCHETS.json` holds those same things as **sets of identities**, and
+`Scripts/check-observation-ratchets.py` fails CI when a set gains a member — even if the total
+falls, which is how a swap hides inside a count. It compares against the real `git merge-base`,
+and the base is authoritative for growth: unioning it with the branch's own file is what a
+same-commit raise exploits. A member that closed also fails, asking to be removed. Raising takes a
+dated reason under `raised`, which lands and prints.
 
 `RATCHETS.json` sits beside the records and is not one: a record is a **date-prefixed** file, and
 every loader uses that rule rather than a name special-case.

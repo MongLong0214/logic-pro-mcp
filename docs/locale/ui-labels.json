@@ -579,9 +579,10 @@
           "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
           "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
           "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기의 입력 또는",
-          "on_element": "AXButton, AXDescription \"입력 1\"",
           "count_seen": 1,
-          "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase"
+          "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase",
+          "role": "AXButton",
+          "attribute": "help"
         }
       },
       "coverage": {
@@ -818,8 +819,9 @@
           "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
           "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
           "observed": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다.",
-          "on_element": "AXButton, AXDescription \"Stereo Output\"",
-          "count_seen": 4
+          "count_seen": 4,
+          "role": "AXButton",
+          "attribute": "help"
         }
       },
       "coverage": {

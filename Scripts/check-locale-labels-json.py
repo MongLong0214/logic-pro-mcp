@@ -93,6 +93,16 @@ def _record(record_id):
         return None
 
 
+# `LabelSet.matches` is exact for menus, buttons and titles; `containsAny` is how help keywords are
+# read. The evidence rule follows the product: a keyword may be a substring of the help string it was
+# read from, and a menu title may not be a substring of a different menu title.
+CONTAINS_SHAPES = ("HelpKeyword", "Keyword", "Hint", "Suffix", "Prefix", "Context")
+
+
+def _is_contains_shape(name):
+    return any(frag in name for frag in CONTAINS_SHAPES)
+
+
 def provenance_problems(name, entry):
     """Every way a provenance block can be three strings and a fourth string.
 
@@ -125,27 +135,74 @@ def provenance_problems(name, entry):
         # same-locale record and paste itself into `observed`. What makes this a READING is that the
         # record itself saw the string: it has to occur verbatim in the record's raw observations or
         # in a file the record lists as evidence. A record that never saw it cannot be cited for it.
-        if not _record_saw(rec, variant):
-            out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, whose "
-                       f"observations and evidence do not contain that string — a record that never "
-                       f"saw it cannot be cited for it")
+        role = block.get("role")
+        attribute = block.get("attribute")
+        if not role or attribute not in SIGHTING_ATTRS:
+            out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
+                       f"it was read from — a string with no element is not a sighting")
+        elif not sighting(rec, variant, role, attribute, exact=not _is_contains_shape(name)):
+            out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
+                       f"no {role} whose {attribute} carried it — a record that never saw it on that "
+                       f"element cannot be cited for it")
         if str(block.get("date")) != str(rec.get("date")):
             out.append(f"{name}: provenance for {variant!r} is dated {block.get('date')!r} but its "
                        f"record was measured {rec.get('date')!r}")
     return out
 
 
-def _record_saw(rec, text):
-    """Whether a record's raw readings, or a file it lists as evidence, contain `text` verbatim."""
-    if text and text in json.dumps(rec.get("observations") or [], ensure_ascii=False):
-        return True
+SIGHTING_ATTRS = ("title", "description", "help", "value", "identifier")
+
+
+def _rows(rec):
+    """Every element-shaped reading in a record: its own observations, plus any evidence file.
+
+    A "row" is an object carrying a `role` and at least one of the AX attributes. Records written by
+    the census have thousands; a hand-written record has whatever its author put in `observations`.
+    Anything that is not row-shaped is not a sighting and is not searched — which is the point.
+    """
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("role") and any(k in node for k in SIGHTING_ATTRS):
+                yield node
+            for v in node.values():
+                yield from walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from walk(v)
+
+    yield from walk(rec.get("observations") or [])
     for rel in rec.get("evidence") or []:
-        path = os.path.join(OBS, rel) if not os.path.isabs(rel) else rel
-        try:
-            if text in open(path, encoding="utf-8", errors="replace").read():
-                return True
-        except OSError:
+        # Evidence must live under the evidence directory. `../locale/ui-labels.json` would let a
+        # record cite the very file whose claims it is meant to back.
+        path = os.path.normpath(os.path.join(OBS, rel))
+        if not path.startswith(os.path.join(OBS, "evidence") + os.sep):
             continue
+        try:
+            yield from walk(json.load(open(path, encoding="utf-8")))
+        except (OSError, ValueError):
+            continue
+
+
+def sighting(rec, text, role=None, attribute=None, exact=True):
+    """Whether the record contains an element of `role` whose `attribute` carried `text`.
+
+    This replaces a substring search over `json.dumps(observations)`, which matched KEY names and
+    instrument vocabulary: the variant `input` was satisfied by the key `with_input`, and
+    `eventListColumnL`'s canonical `L` by any capital L in any path in any reading. A sighting is a
+    row, an attribute on that row, and the value that attribute carried — the same three things a
+    caller needs to find the element again.
+    """
+    if not text:
+        return False
+    for row in _rows(rec):
+        if role and row.get("role") != role:
+            continue
+        for attr in ([attribute] if attribute else SIGHTING_ATTRS):
+            value = row.get(attr)
+            if not isinstance(value, str):
+                continue
+            if (value.strip() == text.strip()) if exact else (text in value):
+                return True
     return False
 
 
@@ -187,9 +244,23 @@ def coverage_problems(name, entry, locales, values):
             out.append(f"{name}: coverage_records[{loc}] names a record measured in "
                        f"{(rec.get('host') or {}).get('locale')!r}, not {loc}")
             continue
-        if state == "measured" and not any(_record_saw(rec, t) for t in strings if t):
-            out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, whose "
-                       f"observations contain none of this label's strings")
+        role = (entry.get("coverage_roles") or {}).get(loc)
+        if not role:
+            out.append(f"{name}: coverage[{loc}] is {state!r} but names no role under "
+                       f"coverage_roles[{loc}] — `Edit` on a menu bar is not `Edit` on a toolbar "
+                       f"button, and without the role any record showing either backs both")
+        elif state == "measured" and not any(
+                sighting(rec, t, role, exact=not _is_contains_shape(name)) for t in strings if t):
+            out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which has "
+                       f"no {role} carrying any of this label's strings")
+        elif state == "identifier":
+            ident = (entry.get("coverage_identifiers") or {}).get(loc)
+            if not ident:
+                out.append(f"{name}: coverage[{loc}] is 'identifier' but names no AXIdentifier under "
+                           f"coverage_identifiers[{loc}] — the claim is that an identifier was seen")
+            elif not sighting(rec, ident, role, "identifier"):
+                out.append(f"{name}: coverage[{loc}] is 'identifier' citing {cites.get(loc)!r}, "
+                           f"which has no {role} whose identifier is {ident!r}")
     return out
 
 

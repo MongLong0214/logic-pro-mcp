@@ -37,32 +37,42 @@ OBS = os.path.join(REPO, "docs", "observations")
 SURFACES = os.path.join(OBS, "SURFACES.md")
 
 
-def live_counts(repo=REPO):
-    """Every gap the ledger can count, computed from the tree. Raises on unreadable input."""
+def live_state(repo=REPO):
+    """What the ledger does not know, as SETS of identities — not counts.
+
+    A count is defeated by a swap: add one undocumented variant, document a different one, and
+    `variants - provenance` is unchanged. The thing that must not grow is the SET, so the ratchet
+    holds identities and a new member fails even when the total falls. That also makes the diff say
+    which claim appeared, which a number never could.
+    """
     labels = json.load(open(os.path.join(repo, "docs", "locale", "ui-labels.json"), encoding="utf-8"))
     entries = labels.get("labels") or {}
     locales = tuple(labels.get("supported_locales") or ())
-    undocumented = 0
-    unmeasured = {loc: 0 for loc in locales}
-    for entry in entries.values():
+    undocumented = set()
+    unmeasured = {loc: set() for loc in locales}
+    for name, entry in entries.items():
         prov = entry.get("provenance") or {}
-        undocumented += sum(1 for v in (entry.get("variants") or []) if v not in prov)
+        for v in (entry.get("variants") or []):
+            if v not in prov:
+                undocumented.add(f"{name}\u2192{v}")
         for loc in locales:
             if (entry.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured":
-                unmeasured[loc] += 1
+                unmeasured[loc].add(name)
 
     obs_dir = os.path.join(repo, "docs", "observations")
-    # A record is a date-prefixed file, which is what the schema guard requires of one; that rule
-    # rather than a name special-case, so a second non-record file beside them is not a regression.
     records = [json.load(open(path, encoding="utf-8"))
                for path in sorted(glob.glob(os.path.join(obs_dir, "*.json")))
                if re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(path))]
-    schema_v1 = sum(1 for r in records if r.get("schema", 1) != 2)
-    manual = sum(1 for r in records if (r.get("reverify") or {}).get("kind") == "manual")
+    schema_v1 = {r.get("id") for r in records if r.get("schema", 1) != 2}
+    manual = {r.get("id") for r in records if (r.get("reverify") or {}).get("kind") == "manual"}
 
-    surfaces = re.findall(r"\|\s*`([a-z_]+\.[a-z_]+)`", open(os.path.join(obs_dir, "SURFACES.md"), encoding="utf-8").read())
-    covered = {r.get("surface") for r in records}
-    bare = sum(1 for s in surfaces if s not in covered)
+    surfaces = re.findall(r"\|\s*`([a-z_]+\.[a-z_]+)`",
+                          open(os.path.join(obs_dir, "SURFACES.md"), encoding="utf-8").read())
+    # Per locale: a surface measured in ko-KR is not measured in ja-JP, and a global count said it was.
+    bare = set()
+    for loc in locales:
+        seen = {r.get("surface") for r in records if (r.get("host") or {}).get("locale") == loc}
+        bare |= {f"{loc}\u2192{s}" for s in surfaces if s not in seen}
 
     return {
         "undocumented_variants": undocumented,
@@ -74,6 +84,7 @@ def live_counts(repo=REPO):
 
 
 def _flatten(d, prefix=""):
+    """`{"a": {"b": [...]}}` -> `("a.b", [...])`. Dicts nest; lists and sets are values."""
     for k, v in d.items():
         if isinstance(v, dict):
             yield from _flatten(v, f"{prefix}{k}.")
@@ -81,7 +92,7 @@ def _flatten(d, prefix=""):
             yield f"{prefix}{k}", v
 
 
-def base_ceilings(repo):
+def base_allowed(repo):
     """The ceilings at the merge base, so a raise in the same commit as a regression cannot hide it.
 
     A file anyone can edit is an obvious "make CI green" knob: add ten undocumented variants,
@@ -93,49 +104,58 @@ def base_ceilings(repo):
     seam = os.environ.get("LPM_RATCHET_BASE_JSON")
     if seam:
         try:
-            return dict(_flatten(json.load(open(seam, encoding="utf-8")).get("ceilings") or {})), seam
+            return dict(_flatten(json.load(open(seam, encoding="utf-8")).get("allowed") or {})), seam
         except (OSError, ValueError) as exc:
             return None, f"{seam}: {exc}"
     ref = os.environ.get("LPM_RATCHET_BASE_REF", "origin/main")
+
+    def git(*args):
+        try:
+            out = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return None, str(exc)
+        return (out.stdout.strip(), None) if out.returncode == 0 else (None, out.stderr.strip()[:120])
+
+    # The MERGE BASE, not the ref's tip. `git show origin/main:file` reads whatever main has now,
+    # which a branch can outrun; the merge base is the state this branch actually departed from.
+    merge_base, err = git("merge-base", "HEAD", ref)
+    if not merge_base:
+        return None, f"git merge-base HEAD {ref}: {err or 'not available'} (a shallow clone has no base)"
+    blob, err = git("show", f"{merge_base}:docs/observations/RATCHETS.json")
+    if blob is None:
+        return None, f"{merge_base[:8]}:RATCHETS.json: {err or 'not present'}"
     try:
-        out = subprocess.run(["git", "-C", repo, "show", f"{ref}:docs/observations/RATCHETS.json"],
-                             capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return None, f"git show {ref}: {exc}"
-    if out.returncode != 0:
-        return None, f"git show {ref}: {out.stderr.strip()[:120] or 'not available'}"
-    try:
-        return dict(_flatten(json.loads(out.stdout).get("ceilings") or {})), ref
+        return dict(_flatten(json.loads(blob).get("allowed") or {})), f"merge-base {merge_base[:8]}"
     except ValueError as exc:
-        return None, f"{ref}: {exc}"
+        return None, f"{merge_base[:8]}: {exc}"
 
 
 def compare(live, ratchets, base=None):
-    """(rises, lowerable, missing): each a list of (key, live, ceiling[, reason]).
+    """(grew, shrank, missing): each a list of (key, added|removed, allowed).
 
-    The ceiling used for the RISE test is the lower of the file's and the base's, so raising the
-    file in the same commit as the regression does not help. The LAG test uses the file's own
-    value: lowering it is the ordinary commit and must not be blocked by a base that is higher.
+    For GROWTH the base is authoritative when it is readable, and the file is not consulted at all:
+    unioning them is precisely what a same-commit raise exploits — add the member, add it to the
+    file, and a union permits it. A member the base already allowed is therefore never a growth,
+    which is what lets a branch drop one from its own file.
+
+    For LAG the file alone is used: shrinking is the ordinary commit, and the file is where the
+    closure gets recorded.
     """
-    ceilings = dict(_flatten(ratchets.get("ceilings") or {}))
+    allowed = dict(_flatten(ratchets.get("allowed") or {}))
     base = base or {}
-    raised = ratchets.get("raised") or {}
-    rises, lowerable, missing = [], [], []
-    for key, value in _flatten(live):
-        if key not in ceilings:
-            missing.append((key, value))
+    grew, shrank, missing = [], [], []
+    for key, values in _flatten(live):
+        if key not in allowed:
+            missing.append((key, values))
             continue
-        ceiling = ceilings[key]
-        rise_ceiling = min(ceiling, base[key]) if key in base else ceiling
-        if value > rise_ceiling:
-            ceiling = rise_ceiling
-            entry = raised.get(key) or {}
-            ok = bool(str(entry.get("reason") or "").strip()) and \
-                re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(entry.get("date") or "")) is not None
-            rises.append((key, value, ceiling, entry if ok else None))
-        elif value < ceiling:
-            lowerable.append((key, value, ceiling))
-    return rises, lowerable, missing
+        permitted = set(base[key]) if key in base else set(allowed[key])
+        added = sorted(set(values) - permitted)
+        removed = sorted(set(allowed[key]) - set(values))
+        if added:
+            grew.append((key, added, allowed[key]))
+        elif removed:
+            shrank.append((key, removed, allowed[key]))
+    return grew, shrank, missing
 
 
 def main(argv=None):
@@ -143,36 +163,54 @@ def main(argv=None):
     repo = os.path.abspath(argv[0]) if argv else REPO
     try:
         ratchets = json.load(open(os.path.join(repo, "docs", "observations", "RATCHETS.json"), encoding="utf-8"))
-        live = live_counts(repo)
+        live = live_state(repo)
     except (OSError, ValueError) as exc:
         print(f"could not read the ledger, so the ratchets cannot be checked: {exc}")
         return 2
 
-    base, where = base_ceilings(repo)
+    base, where = base_allowed(repo)
     if base is None:
-        print(f"note: base ceilings unreadable ({where}); comparing against the file alone, which a "
-              f"same-commit raise can defeat")
-    rises, lowerable, missing = compare(live, ratchets, base)
+        print(f"note: base sets unreadable ({where}); comparing against the file alone, which a "
+              f"same-commit edit can defeat")
+    grew, shrank, missing = compare(live, ratchets, base)
+    raised = ratchets.get("raised") or {}
     failed = False
-    for key, value in missing:
-        print(f"{key}: live count {value} has no ceiling in RATCHETS.json — add one, or the gap is uncounted")
+
+    for key, values in missing:
+        print(f"{key}: {len(values)} item(s) with no allowed set in RATCHETS.json — add one, or the gap is uncounted")
         failed = True
-    for key, value, ceiling, entry in rises:
-        if entry is None:
-            print(f"{key}: {value}, above the ceiling of {ceiling}. What the ledger does not know grew.")
-            print(f"  Either close the gap, or record why under `raised.{key}` with a date and a reason.")
-            failed = True
+    for key, added, allowed in grew:
+        entry = raised.get(key) or {}
+        ok = bool(str(entry.get("reason") or "").strip()) and \
+            re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(entry.get("date") or "")) is not None
+        if ok:
+            # A raise with a dated reason is a DECISION, and it lands. The diff carries the reason
+            # and the new members; refusing it outright made `raised` unusable, because the base
+            # could never acquire a ceiling without merging a failing change.
+            print(f"{key}: {len(added)} new item(s), raised {entry['date']}: {entry['reason']}")
+            for v in added[:8]:
+                print(f"    + {v}")
         else:
-            print(f"{key}: {value} above {ceiling}, raised {entry['date']}: {entry['reason']}")
-            print(f"  Move the ceiling to {value} and clear the `raised` entry in the same commit.")
+            print(f"{key}: {len(added)} item(s) the ledger did not know it did not know:")
+            for v in added[:8]:
+                print(f"    + {v}")
+            if len(added) > 8:
+                print(f"    … and {len(added) - 8} more")
+            print(f"  Close them, or record why under `raised.{key}` with a date and a reason.")
             failed = True
-    for key, value, ceiling in lowerable:
-        print(f"{key}: {value}, better than the ceiling of {ceiling} — lower it to {value} so the "
-              f"next regression cannot hide under the old number.")
+    for key, removed, allowed in shrank:
+        print(f"{key}: {len(removed)} item(s) closed — remove them from `allowed.{key}` so the next "
+              f"regression cannot hide under the old list:")
+        for v in removed[:8]:
+            print(f"    - {v}")
+        if len(removed) > 8:
+            print(f"    … and {len(removed) - 8} more")
         failed = True
+
     if failed:
         return 1
-    print("every ledger gap equals its ceiling: " + ", ".join(f"{k}={v}" for k, v in _flatten(live)))
+    print("every ledger gap is within its allowed set: "
+          + ", ".join(f"{k}={len(v)}" for k, v in _flatten(live)))
     return 0
 
 

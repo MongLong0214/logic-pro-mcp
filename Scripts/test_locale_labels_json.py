@@ -35,27 +35,45 @@ D = "2026-09-05"
 
 
 def _ledger(records):
-    """A temp observations dir: {id: (locale, [observation strings])}."""
+    """A temp observations dir. `records` is {id: (locale, [row dicts])} — rows are element-shaped
+    readings, because a sighting is an element and an attribute, not a string in a blob."""
     d = Path(tempfile.mkdtemp())
-    for rid, (locale, seen) in records.items():
+    for rid, (locale, rows) in records.items():
         (d / f"{rid}.json").write_text(json.dumps({
             "id": rid, "date": D, "host": {"locale": locale},
-            "observations": [{"what": "census", "seen": seen}]}, ensure_ascii=False), encoding="utf-8")
+            "observations": [{"what": "census", "rows": rows}]}, ensure_ascii=False), encoding="utf-8")
     return str(d)
 
 
-def _entry(variants, provenance=None, coverage=None, cites=None, canonical="input slot"):
+def _row(role, **attrs):
+    r = {"role": role, "title": None, "description": None, "help": None, "value": None, "identifier": None}
+    r.update(attrs)
+    return r
+
+
+def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, idents=None,
+           canonical="input slot"):
     e = {"canonical": canonical, "variants": variants, "rationale": "r"}
     if provenance is not None:
         e["provenance"] = provenance
     e["coverage"] = coverage if coverage is not None else {loc: "unmeasured" for loc in LOCALES}
     if cites:
         e["coverage_records"] = cites
+    if roles:
+        e["coverage_roles"] = roles
+    if idents:
+        e["coverage_identifiers"] = idents
     return e
 
 
-def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채널 스트립", date=D):
-    return {"record": record, "locale": locale, "observed": observed, "date": date}
+def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채널 스트립", date=D,
+          role="AXButton", attribute="help"):
+    b = {"record": record, "locale": locale, "observed": observed, "date": date}
+    if role:
+        b["role"] = role
+    if attribute:
+        b["attribute"] = attribute
+    return b
 
 
 def main():
@@ -66,100 +84,118 @@ def main():
             failures.append(f"{name}: {detail}")
 
     guard.OBS = _ledger({
-        "2026-09-05-ko":      ("ko-KR", ["입력 슬롯. 채널 스트립 입력 소스", "출력 슬롯"]),
-        "2026-09-05-ja":      ("ja-JP", ["入力スロット"]),
-        "2026-09-05-ko-blind": ("ko-KR", ["something unrelated entirely"]),
-        "2026-09-05-en":      ("en-US", ["input slot. Choose the channel strip input"]),
+        "2026-09-05-ko":       ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스", description="입력 1"),
+                                          _row("AXMenuBarItem", title="편집"),
+                                          _row("AXMenuButton", title="편집", identifier="markerEdit:")]),
+        "2026-09-05-ja":       ("ja-JP", [_row("AXButton", help="入力スロット")]),
+        "2026-09-05-ko-blind": ("ko-KR", [_row("AXStaticText", value="something with_input and an L in it")]),
+        "2026-09-05-en":       ("en-US", [_row("AXMenuItem", title="Export")]),
     })
     U = {loc: "unmeasured" for loc in LOCALES}
     ko_measured = dict(U, **{"ko-KR": "measured"})
 
-    def prov_problems(e): return guard.provenance_problems("L", e)
-    def cov_problems(e): return guard.coverage_problems("L", e, LOCALES, VALUES)
+    def pp(e): return guard.provenance_problems("inputSlotHelpKeyword", e)
+    def cp(e, name="inputSlotHelpKeyword"): return guard.coverage_problems(name, e, LOCALES, VALUES)
 
-    # 1. A fully backed entry has no problems.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, ko_measured)
-    case("clean entry", prov_problems(e) == [] and cov_problems(e) == [], prov_problems(e) + cov_problems(e))
+    # 1. A fully backed entry: the record has an AXButton whose help carried the keyword.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, ko_measured,
+               cites={"ko-KR": "2026-09-05-ko"}, roles={"ko-KR": "AXButton"})
+    case("clean entry", pp(e) == [] and cp(e) == [], pp(e) + cp(e))
 
-    # 2. Provenance naming a record that is not in the ledger.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(record="2026-09-05-nope")}, ko_measured)
-    case("missing record", any("not in docs/observations" in x for x in prov_problems(e)), prov_problems(e))
+    # 2-4. Referential integrity: the record must exist, match the locale, and match the date.
+    case("missing record", any("not in docs/observations" in x
+         for x in pp(_entry(["입력 슬롯"], {"입력 슬롯": _prov(record="nope")}, ko_measured))), "")
+    case("locale mismatch", any("measured in 'ja-JP'" in x
+         for x in pp(_entry(["입력 슬롯"], {"입력 슬롯": _prov(record="2026-09-05-ja")}, ko_measured))), "")
+    case("date mismatch", any("dated" in x
+         for x in pp(_entry(["입력 슬롯"], {"입력 슬롯": _prov(date="2026-09-01")}, ko_measured))), "")
 
-    # 3. Provenance whose record was measured in a different locale than it claims.
-    e = _entry(["入力スロット"], {"入力スロット": _prov(record="2026-09-05-ja", observed="入力スロット")}, ko_measured)
-    case("locale mismatch", any("measured in 'ja-JP'" in x for x in prov_problems(e)), prov_problems(e))
+    # 5. THE BLOB ATTACK. The old rule searched json.dumps(observations), so the variant `input`
+    #    was satisfied by the KEY `with_input`, and `L` by any capital L anywhere. A sighting is an
+    #    element and an attribute; neither of these is one.
+    blind = _entry(["input"], {"input": _prov(record="2026-09-05-ko-blind", observed="with_input",
+                                              role="AXStaticText", attribute="value")}, U)
+    case("a key is not a sighting", any("no AXStaticText whose value carried it" in x for x in
+         guard.provenance_problems("nonInsertButtonText", blind)),
+         guard.provenance_problems("nonInsertButtonText", blind))
+    ell = _entry(["L"], {"L": _prov(record="2026-09-05-ko-blind", observed="an L in it",
+                                    role="AXStaticText", attribute="value")}, U)
+    case("a letter inside a word is not a sighting",
+         any("carried it" in x for x in guard.provenance_problems("eventListColumnL", ell)),
+         guard.provenance_problems("eventListColumnL", ell))
 
-    # 4. THE LOAD-BEARING CASE. Record exists, locale matches, date is real, `observed` contains the
-    #    variant — and the record never saw the string. Referential integrity passes; evidence does not.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(record="2026-09-05-ko-blind")}, ko_measured)
-    p = prov_problems(e)
-    case("record never saw it", any("never saw it" in x for x in p), p)
+    # 6. A provenance block with no role or attribute is not a sighting at all.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(role=None, attribute=None)}, ko_measured)
+    case("role and attribute are required", any("is not a sighting" in x for x in pp(e)), pp(e))
 
-    # 5. A date that does not match the record's.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(date="2026-09-01")}, ko_measured)
-    case("date mismatch", any("was measured" in x and "dated" in x for x in prov_problems(e)), prov_problems(e))
+    # 7. The right string on the WRONG role is refused.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(role="AXMenuItem")}, ko_measured)
+    case("wrong role refused", any("no AXMenuItem whose help carried it" in x for x in pp(e)), pp(e))
 
-    # 6. `observed` that does not contain the variant.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="something else")}, ko_measured)
-    case("observed lacks variant", any("containing the variant" in x for x in prov_problems(e)), prov_problems(e))
+    # 8. `observed` that does not contain the variant, and provenance for a non-variant.
+    case("observed lacks variant", any("containing the variant" in x
+         for x in pp(_entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="else")}, ko_measured))), "")
+    case("stray provenance", any("not one of its variants" in x
+         for x in pp(_entry(["입력 슬롯"], {"출력 슬롯": _prov(observed="출력 슬롯")}, ko_measured))), "")
 
-    # 7. Provenance for a string that is not a variant at all.
-    e = _entry(["입력 슬롯"], {"출력 슬롯": _prov(observed="출력 슬롯")}, ko_measured)
-    case("stray provenance", any("not one of its variants" in x for x in prov_problems(e)), prov_problems(e))
+    # 9. THE SHARED-STRING ATTACK. `editMenuBar` and `markerListEditMenuButton` both say 편집. A
+    #    record showing the MENU BAR must not back the toolbar BUTTON, and the role is what says so.
+    bar = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
+                 roles={"ko-KR": "AXMenuBarItem"}, canonical="편집")
+    case("menu-bar record backs the menu-bar label", cp(bar, "editMenuBar") == [], cp(bar, "editMenuBar"))
+    btn = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
+                 roles={"ko-KR": "AXToolbarButton"}, canonical="편집")
+    case("...and not a role the record never showed",
+         any("no AXToolbarButton carrying" in x for x in cp(btn, "markerListEditMenuButton")),
+         cp(btn, "markerListEditMenuButton"))
 
-    # 8. `unmeasured` declared where a variant with provenance exists — the projection derives
-    #    `measured`, and a hand-written `unmeasured` there is a lie in the other direction.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, U)
-    case("unmeasured with provenance", any("it is measured" in x for x in cov_problems(e)), cov_problems(e))
+    # 10. Coverage bookkeeping: a claim needs a record, the right locale, and a role.
+    case("measured without record", any("claim of measurement" in x for x in cp(_entry([], None, ko_measured))), "")
+    case("measured wrong locale", any("not ko-KR" in x for x in
+         cp(_entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ja"}, roles={"ko-KR": "AXButton"}))), "")
+    case("measured without a role", any("names no role" in x for x in
+         cp(_entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"}))), "")
+    case("unmeasured with provenance", any("it is measured" in x for x in
+         cp(_entry(["입력 슬롯"], {"입력 슬롯": _prov()}, U))), "")
 
-    # 9. `measured` with no variant provenance and no citation.
-    e = _entry([], None, ko_measured)
-    case("measured without record", any("claim of measurement" in x for x in cov_problems(e)), cov_problems(e))
+    # 11. `identifier` names the identifier and the record must have SEEN it on that role. The
+    #     earlier version of this case asserted only that an arbitrary same-locale record was
+    #     accepted, and called that "backed".
+    ok = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
+                roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "markerEdit:"})
+    case("identifier backed by a sighting of that identifier", cp(ok) == [], cp(ok))
+    no_id = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
+                   roles={"ko-KR": "AXMenuButton"})
+    case("identifier without the identifier", any("names no AXIdentifier" in x for x in cp(no_id)), cp(no_id))
+    wrong_id = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
+                      roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "notThis:"})
+    case("identifier the record never saw", any("whose identifier is" in x for x in cp(wrong_id)), cp(wrong_id))
 
-    # 10. `measured` citing a record from the wrong locale.
-    e = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ja"})
-    case("measured wrong locale", any("not ko-KR" in x for x in cov_problems(e)), cov_problems(e))
+    # 12. Coverage that skips a locale, or uses a retired value.
+    case("missing locale", any("expected exactly" in x for x in cp(_entry([], None, {"en-US": "unmeasured"}))), "")
+    case("retired value refused", any("not one of" in x for x in cp(_entry([], None, dict(U, **{"ko-KR": "absent"})))), "")
 
-    # 11. `measured` citing a record that saw NONE of the label's strings.
-    e = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko-blind"})
-    case("measured but record saw nothing", any("none of this label's strings" in x for x in cov_problems(e)), cov_problems(e))
+    # 13. Evidence may not escape the evidence directory — a record could otherwise cite the very
+    #     file whose claims it backs.
+    outside = {"id": "x", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
+               "evidence": ["../locale/ui-labels.json"]}
+    case("evidence cannot escape", guard.sighting(outside, "입력 슬롯", "AXButton", "help") is False, "")
 
-    # 12. `measured` via the CANONICAL appearing in an en-US record — no variant needed.
-    e = _entry([], None, dict(U, **{"en-US": "measured"}), cites={"en-US": "2026-09-05-en"})
-    case("measured via canonical", cov_problems(e) == [], cov_problems(e))
-
-    # 13. `identifier` needs a record in that locale too.
-    e = _entry([], None, dict(U, **{"ko-KR": "identifier"}))
-    case("identifier without record", any("claim of measurement" in x for x in cov_problems(e)), cov_problems(e))
-    e = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"})
-    case("identifier backed", cov_problems(e) == [], cov_problems(e))
-
-    # 14. Coverage that skips a locale, or uses a value outside the three.
-    e = _entry([], None, {"en-US": "unmeasured", "ko-KR": "unmeasured"})
-    case("missing locale", any("expected exactly" in x for x in cov_problems(e)), "")
-    e = _entry([], None, dict(U, **{"ko-KR": "absent"}))
-    case("retired value refused", any("not one of" in x for x in cov_problems(e)), "")
-
-    # 15. Migration: a schema-1 `measured` block becomes `provenance` and derives `measured`.
+    # 14. Migration and carry-forward.
     v1 = {"schema": 1, "labels": {"inputSlotHelpKeyword": {"measured": {"입력 슬롯": _prov()}}}}
     built = labels.build(existing=v1)
-    entry = built["labels"].get("inputSlotHelpKeyword") or {}
-    case("measured block migrates", "입력 슬롯" in (entry.get("provenance") or {}), json.dumps(entry, ensure_ascii=False)[:160])
-    case("measured derived", (entry.get("coverage") or {}).get("ko-KR") == "measured", entry.get("coverage"))
+    ent = built["labels"].get("inputSlotHelpKeyword") or {}
+    case("measured block migrates", "입력 슬롯" in (ent.get("provenance") or {}), ent)
+    case("measured derived", (ent.get("coverage") or {}).get("ko-KR") == "measured", ent.get("coverage"))
     case("schema 2", built.get("schema") == 2, built.get("schema"))
-
-    # 16. Migration: a cited `measured` survives regeneration; an uncited one does not.
     v2 = {"schema": 2, "labels": {"inputSlotHelpKeyword": {
         "coverage": {"en-US": "measured", "ko-KR": "measured", "ja-JP": "unmeasured"},
         "coverage_records": {"en-US": "2026-09-05-en"}}}}
-    built = labels.build(existing=v2)
-    entry = built["labels"].get("inputSlotHelpKeyword") or {}
-    cov = entry.get("coverage") or {}
-    case("cited measured survives", cov.get("en-US") == "measured" and
-         (entry.get("coverage_records") or {}).get("en-US") == "2026-09-05-en", entry)
+    cov = (labels.build(existing=v2)["labels"].get("inputSlotHelpKeyword") or {}).get("coverage") or {}
+    case("cited measured survives", cov.get("en-US") == "measured", cov)
     case("uncited measured is dropped", cov.get("ko-KR") == "unmeasured", cov)
 
-    # 17. The real document is clean.
+    # 15. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
 
@@ -167,7 +203,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("19 case(s) pass: a claim is refused unless a record in that locale SAW the string")
+    print("28 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
     return 0
 
 

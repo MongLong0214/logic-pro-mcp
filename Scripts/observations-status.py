@@ -156,24 +156,35 @@ def unproven(records):
             print(f"  {name:40s} {', '.join(repr(v) for v in missing)}")
     print(f"\n  {n} variant(s)\n")
 
-    print("label sets unmeasured per locale — nobody has looked, which is not `absent`\n")
+    # NAMES, never counts. A count is not a thing anyone can go and do, and every line of this
+    # report claims to be one. Nothing is truncated either: a list that hides its tail is the same
+    # failure one step smaller.
+    print("label sets unmeasured per locale — nobody has looked, which is not `measured`\n")
     for loc in locales:
         gaps = [name for name, e in sorted(entries.items())
                 if (e.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured"]
         print(f"  {loc}: {len(gaps)} of {len(entries)}")
+        for i in range(0, len(gaps), 3):
+            print("      " + "  ".join(f"{n:36s}" for n in gaps[i:i + 3]).rstrip())
     print()
 
     print("surfaces with no record, per locale\n")
     for loc in locales:
         have = {d.get("surface") for d in docs if (d.get("host") or {}).get("locale") == loc}
         bare = [s for s in surfaces if s not in have]
-        print(f"  {loc}: {len(bare)} of {len(surfaces)}" + (f" — {', '.join(bare)}" if bare and len(bare) <= 8 else ""))
+        print(f"  {loc}: {len(bare)} of {len(surfaces)}")
+        for s_ in bare:
+            print(f"      {s_}")
     print()
 
     v1 = [d.get("id") for d in docs if d.get("schema", 1) != 2]
-    print(f"records at schema 1 (no `evidence`, no `schema`): {len(v1)}")
+    print(f"records at schema 1 — no `evidence`, no `schema`: {len(v1)}")
+    for r in sorted(v1):
+        print(f"      {r}")
     manual = [d.get("id") for d in docs if (d.get("reverify") or {}).get("kind") == "manual"]
-    print(f"records whose reverify is manual prose rather than a command: {len(manual)}")
+    print(f"\nrecords whose reverify is manual prose rather than a command: {len(manual)}")
+    for r in sorted(manual):
+        print(f"      {r}")
     broken = []
     for d in docs:
         for dep in d.get("depends") or []:

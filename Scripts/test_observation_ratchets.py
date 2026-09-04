@@ -31,7 +31,7 @@ def _record(rid, locale="ko-KR", surface="arrange.regions", schema=None, kind="s
     return d
 
 
-def _tree(labels, records, ceilings, raised=None, surfaces=("arrange.regions", "mixer.inserts")):
+def _tree(labels, records, allowed, raised=None, surfaces=("arrange.regions", "mixer.inserts"), git_init=False):
     """Write a throwaway repo and return its root."""
     tmp = tempfile.mkdtemp()
     root = Path(tmp)
@@ -44,7 +44,14 @@ def _tree(labels, records, ceilings, raised=None, surfaces=("arrange.regions", "
     (root / "docs" / "observations" / "SURFACES.md").write_text(
         "| surface | what |\n|---|---|\n" + "".join(f"| `{s}` | x |\n" for s in surfaces), encoding="utf-8")
     (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
-        "schema": 1, "ceilings": ceilings, "raised": raised or {}}), encoding="utf-8")
+        "schema": 2, "allowed": allowed, "raised": raised or {}}), encoding="utf-8")
+    if git_init:
+        # A real repository, so `git merge-base` has something to compute. The seam is fine for the
+        # set arithmetic; it cannot show that the git path works, and naming a case after an
+        # integration it never runs is how a test comes to promise more than it checks.
+        for cmd in (["init", "-q", "-b", "base"], ["add", "-A"], ["-c", "user.email=t@t", "-c", "user.name=t",
+                                                    "commit", "-qm", "base"]):
+            subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
     return root
 
 
@@ -63,98 +70,127 @@ def main():
         if not cond:
             failures.append(f"{name}: {detail}")
 
-    # A baseline tree: 2 variants, one documented; 2 records, one schema 2, one manual; 1 bare surface.
-    prov = {"a": {"locale": "ko-KR", "date": "2026-09-05", "observed": "a", "record": "2026-09-05-r1"}}
-    labels = {"L": _label(["a", "b"], prov, {"en-US": "unmeasured", "ko-KR": "present", "ja-JP": "unmeasured"})}
+    prov = {"a": {"locale": "ko-KR", "date": "2026-09-05", "observed": "a", "record": "2026-09-05-r1",
+                  "role": "AXMenuItem", "attribute": "title"}}
+    labels = {"L": _label(["a", "b"], prov, {"en-US": "unmeasured", "ko-KR": "measured", "ja-JP": "unmeasured"})}
     records = [_record("2026-09-05-r1", schema=2), _record("2026-09-05-r2", kind="manual")]
-    exact = {"undocumented_variants": 1,
-             "unmeasured_coverage": {"en-US": 1, "ko-KR": 0, "ja-JP": 1},
-             "schema_v1_records": 1, "manual_reverify": 1, "surfaces_without_records": 1}
+    exact = {
+        "undocumented_variants": ["L\u2192b"],
+        "unmeasured_coverage": {"en-US": ["L"], "ko-KR": [], "ja-JP": ["L"]},
+        "schema_v1_records": ["2026-09-05-r2"],
+        "manual_reverify": ["2026-09-05-r2"],
+        "surfaces_without_records": sorted(
+            f"{loc}\u2192{s_}" for loc in ("en-US", "ko-KR", "ja-JP")
+            for s_ in ("arrange.regions", "mixer.inserts")
+            if not (loc == "ko-KR" and s_ == "arrange.regions")),
+    }
 
-    # 1. Live equals ceilings: pass.
+    # 1. Live equals the allowed sets: pass.
     root = _tree(labels, records, exact)
-    check("equal passes", guard.main([str(root)]) == 0, "expected exit 0 at exact ceilings")
+    check("equal passes", guard.main([str(root)]) == 0, "expected exit 0 at the seeded sets")
 
-    # 2. The live counts are what the guard says they are (its own arithmetic, checked once).
-    live = guard.live_counts(str(root))
-    check("counts", live == exact, f"live_counts returned {live}")
+    # 2. The live sets are what the guard says they are.
+    live = {k: (sorted(v) if not isinstance(v, dict) else {kk: sorted(vv) for kk, vv in v.items()})
+            for k, v in guard.live_state(str(root)).items()}
+    check("state", live == exact, f"live_state returned {live}")
 
-    # 3. A RISE fails and says so — a second undocumented variant appears.
+    # 3. THE SWAP. One undocumented variant appears and a different one gains provenance, so the
+    #    COUNT is unchanged. A count-based ratchet passes this; a set-based one names the newcomer.
+    labels_swap = {"L": _label(["a", "b", "c"], dict(prov, b={"locale": "ko-KR", "date": "2026-09-05",
+                                                             "observed": "b", "record": "2026-09-05-r1",
+                                                             "role": "AXMenuItem", "attribute": "title"}),
+                               labels["L"]["coverage"])}
+    root = _tree(labels_swap, records, exact)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
+    check("swap is caught", proc.returncode == 1, f"exit {proc.returncode}")
+    check("swap names the newcomer", "L\u2192c" in proc.stdout, proc.stdout[:300])
+    check("the count was unchanged", len(guard.live_state(str(root))["undocumented_variants"]) == 1,
+          "the fixture did not actually keep the count equal")
+
+    # 4. A plain growth fails and names what appeared.
     labels2 = {"L": _label(["a", "b", "c"], prov, labels["L"]["coverage"])}
     root = _tree(labels2, records, exact)
-    check("rise fails", guard.main([str(root)]) == 1, "an undocumented variant was added and the guard passed")
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
+    check("growth fails", proc.returncode == 1 and "L\u2192c" in proc.stdout, proc.stdout[:200])
 
-    # 4. A rise with a dated reason under `raised` STILL fails, but names the reason and asks for
-    #    the ceiling to be moved — a raise is a decision in the diff, not a silent pass.
+    # 5. A growth WITH a dated reason lands — otherwise `raised` is unusable, because the base can
+    #    never acquire the new member without merging a failing change.
     root = _tree(labels2, records, exact,
                  raised={"undocumented_variants": {"date": "2026-09-05", "reason": "three new leaves"}})
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("raised is not a pass", proc.returncode == 1, f"exit {proc.returncode}")
+    check("raised lands", proc.returncode == 0, f"exit {proc.returncode}: {proc.stdout[:200]}")
     check("raised names its reason", "three new leaves" in proc.stdout, proc.stdout[:200])
 
-    # 5. A raise without a date is NOT a reason.
-    root = _tree(labels2, records, exact,
-                 raised={"undocumented_variants": {"reason": "because"}})
+    # 6. A raise without a date is not a reason.
+    root = _tree(labels2, records, exact, raised={"undocumented_variants": {"reason": "because"}})
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("undated raise is refused", "record why" in proc.stdout, proc.stdout[:200])
+    check("undated raise is refused", proc.returncode == 1 and "record why" in proc.stdout, proc.stdout[:200])
 
-    # 6. A count that FELL fails too, with the number to lower the ceiling to.
-    better = dict(exact, undocumented_variants=5)
-    root = _tree(labels, records, better)
+    # 7. A gap that CLOSED fails too, with the member to remove — a list that lags reality lets the
+    #    next regression hide inside it.
+    root = _tree(labels, records, dict(exact, undocumented_variants=["L\u2192b", "L\u2192gone"]))
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("lag fails", proc.returncode == 1, f"exit {proc.returncode}")
-    check("lag names the number", "lower it to 1" in proc.stdout, proc.stdout[:200])
+    check("lag fails", proc.returncode == 1 and "L\u2192gone" in proc.stdout, proc.stdout[:200])
 
-    # 7. A gap with no ceiling at all is reported, not ignored — an uncounted gap is the worst kind.
-    partial = {k: v for k, v in exact.items() if k != "manual_reverify"}
-    root = _tree(labels, records, partial)
+    # 8. A gap with no allowed set at all is reported, not ignored.
+    root = _tree(labels, records, {k: v for k, v in exact.items() if k != "manual_reverify"})
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("missing ceiling fails", proc.returncode == 1 and "no ceiling" in proc.stdout, proc.stdout[:200])
+    check("missing set fails", proc.returncode == 1 and "no allowed set" in proc.stdout, proc.stdout[:200])
 
-    # 8. RATCHETS.json beside the records is not itself counted as a record. If it were, every
-    #    tree would report one more schema-1 record than it has.
-    check("ratchets file is not a record", live["schema_v1_records"] == 1,
-          f"schema_v1_records={live['schema_v1_records']}, RATCHETS.json was counted")
-
-    # 9. THE MERGE-BASE CASE. The file's ceiling was raised in the same commit as the regression:
-    #    file says 2, live is 2, but the base still says 1. A guard reading only the file passes;
-    #    against the base it fails, and that is the whole reason the base is consulted.
-    root = _tree(labels2, records, dict(exact, undocumented_variants=2))
-    base = root / "base.json"
-    base.write_text(json.dumps({"ceilings": exact}), encoding="utf-8")
-    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(base))
+    # 9. THE MERGE BASE, over real git. The branch adds a member AND adds it to its own file — the
+    #    shape a union would permit. The base does not have it, and the base is authoritative.
+    root = _tree(labels, records, exact, git_init=True)
+    (root / "docs" / "locale" / "ui-labels.json").write_text(json.dumps({
+        "schema": 2, "supported_locales": LOCALES, "labels": labels2}), encoding="utf-8")
+    (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
+        "schema": 2, "allowed": dict(exact, undocumented_variants=["L\u2192b", "L\u2192c"]),
+        "raised": {}}), encoding="utf-8")
+    for cmd in (["checkout", "-qb", "branch"], ["add", "-A"],
+                ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "raise"]):
+        subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
+    env = dict(os.environ, LPM_RATCHET_BASE_REF="base")
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
-    check("same-commit raise is caught against the base", proc.returncode == 1 and "above the ceiling of 1" in proc.stdout,
+    check("same-commit raise is caught against the real merge base",
+          proc.returncode == 1 and "L\u2192c" in proc.stdout, f"exit {proc.returncode}: {proc.stdout[:300]}")
+    check("the base was actually consulted, not skipped", "base sets unreadable" not in proc.stdout,
+          f"the guard fell back to the file: {proc.stdout[:200]}")
+
+    # 10. A member the BASE already allowed is not a growth — which is what lets a branch drop it
+    #     from its own file on the way to closing it.
+    root = _tree(labels2, records, dict(exact, undocumented_variants=["L\u2192b", "L\u2192c"]), git_init=True)
+    (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
+        "schema": 2, "allowed": exact, "raised": {}}), encoding="utf-8")
+    for cmd in (["checkout", "-qb", "branch"], ["add", "-A"],
+                ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop"]):
+        subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("base membership is honoured", "did not know it did not know" not in proc.stdout,
+          f"a base-allowed member was reported as growth: {proc.stdout[:300]}")
+
+    # 11. An unreadable base is said out loud and is not itself fatal.
+    root = _tree(labels, records, exact)
+    env2 = dict(os.environ, LPM_RATCHET_BASE_JSON=str(root / "missing.json"))
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env2)
+    check("unreadable base is loud, not fatal", proc.returncode == 0 and "base sets unreadable" in proc.stdout,
           f"exit {proc.returncode}: {proc.stdout[:200]}")
 
-    # 10. ...and lowering the file below the base is an ordinary commit, not blocked by the base.
-    root = _tree(labels, records, exact)
-    base = root / "base.json"
-    base.write_text(json.dumps({"ceilings": dict(exact, undocumented_variants=9)}), encoding="utf-8")
-    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(base))
-    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
-    check("lowering below the base passes", proc.returncode == 0, f"exit {proc.returncode}: {proc.stdout[:200]}")
+    # 12. RATCHETS.json beside the records is not itself counted as one.
+    check("ratchets file is not a record", guard.live_state(str(root))["schema_v1_records"] == {"2026-09-05-r2"},
+          guard.live_state(str(root))["schema_v1_records"])
 
-    # 11. An unreadable base is said out loud and does not itself fail the run.
-    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(root / "missing.json"))
-    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
-    check("unreadable base is loud, not fatal", proc.returncode == 0 and "base ceilings unreadable" in proc.stdout,
-          f"exit {proc.returncode}: {proc.stdout[:200]}")
-
-    # 12. An unreadable ledger is exit 2, never a pass.
-    root = _tree(labels, records, exact)
+    # 13. An unreadable ledger is exit 2, never a pass.
     (root / "docs" / "observations" / "RATCHETS.json").write_text("{not json", encoding="utf-8")
     check("unreadable is exit 2", guard.main([str(root)]) == 2, "expected exit 2")
 
-    # 13. The real repository is at its ceilings right now.
+    # 14. The real repository is within its sets right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
-    check("repository is at its ceilings", proc.returncode == 0, proc.stdout.strip()[:200])
+    check("repository is clean", proc.returncode == 0, proc.stdout.strip()[:300])
 
     if failures:
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("13 case(s) pass: the ratchet fails on a rise, on a lag, on a missing ceiling, and on what it cannot read")
+    print("18 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
     return 0
 
 
