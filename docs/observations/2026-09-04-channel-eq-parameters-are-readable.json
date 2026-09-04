@@ -1,0 +1,82 @@
+{
+  "id": "2026-09-04-channel-eq-parameters-are-readable",
+  "date": "2026-09-04",
+  "subject": "Channel EQ's per-band parameters in the plug-in editor's graphical view",
+  "question": "Does the Channel EQ editor expose its band parameters to host-process AX, and can they be driven?",
+  "verdict": "works",
+  "issues": [
+    767
+  ],
+  "surface": "plugin.native_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Select a track whose strip carries a Channel EQ, press the 열기 AXButton inside the occupied slot's AXGroup to open the plug-in AXDialog, then swiftc a probe that walks that dialog to depth 12 counting roles and printing every AXSlider's AXDescription, AXValue and AXValueDescription. In the same run, ask AppleScript for `count of (entire contents of (first window whose subrole is \"AXDialog\"))`. Then write AXValue = current + 20 to the Peak 1 Gain slider six times, reading back after each, and write the original value back until the readback matches.",
+    "expected": "the manual descent finds ~70 elements and 26 named AXSliders while the AppleScript count is 0; each write returns success and moves the value by exactly 1 toward the target",
+    "cost": "~4 min, any project with a software-instrument track"
+  },
+  "depends": [
+    "docs/spikes/channel-eq-census.md",
+    "Scripts/check-no-applescript-entire-contents.py"
+  ],
+  "method": "Ran the discredited instrument and a working one against the same window in the same process, seconds apart, so the difference could not be attributed to state. Then asked the actuation question the way that separates a setter from something else: write the SAME distant target repeatedly and watch whether the value walks. A single write compared against the requested value would have reported 'did not set' for both a no-op and a one-step move, and those need different code.",
+  "observations": [
+    {
+      "what": "the same plug-in dialog, two instruments",
+      "dialog_title": "Studio Grand",
+      "manual_descent_elements": 70,
+      "manual_descent_max_depth": 3,
+      "applescript_entire_contents": 0,
+      "roles": "AXSlider×26, AXCheckBox×14, AXButton×9, AXLayoutItem×8, AXGroup×4, AXStaticText×3, AXPopUpButton×2, AXMenuButton×1, AXValueIndicator×1, AXLayoutArea×1, AXDisclosureTriangle×1"
+    },
+    {
+      "what": "the sliders are named per-band parameters carrying rendered units",
+      "sliders": 26,
+      "examples": [
+        "Low Cut Frequency = 111 «42.2 Hz»",
+        "Low Cut Order = 2 «18 dB/Oct»",
+        "Peak 1 Gain = 262 «+2.2 dB»",
+        "Peak 2 Frequency = 375 «250 Hz»",
+        "High Shelf Gain = 280 «+4.0 dB»",
+        "High Cut Frequency = 1050 «20000 Hz»"
+      ],
+      "bands_covered": "Low Cut, Low Shelf, Peak 1-4, High Shelf, High Cut, plus master Gain"
+    },
+    {
+      "what": "AXValue write on Peak 1 Gain, asking for before+20 six times",
+      "before": 262,
+      "settable": true,
+      "return_code_each": "success",
+      "values_after_each_write": [263, 264, 265, 266, 267, 268],
+      "reading": "one step toward the target per write, not a set"
+    },
+    {
+      "what": "restoring by repeated writes of the original value",
+      "writes_needed": 6,
+      "final_value": 262,
+      "final_value_description": "+2.2 dB"
+    },
+    {
+      "what": "how the editor is opened, since the occupied slot is not the control",
+      "occupied_slot_role": "AXGroup",
+      "occupied_slot_actions": [],
+      "press_on_slot_returns": -25200,
+      "children_that_act": "AXCheckBox «바이패스», AXButton «열기» (opens the editor), AXButton «목록»"
+    }
+  ],
+  "conclusion": "The Channel EQ editor's graphical view exposes all 26 per-band parameters to ordinary host-process AX: named AXSliders, each with a raw AXValue and a rendered AXValueDescription. The documented conclusion that it exposes none was a reading of a broken instrument — `entire contents` answered 0 for the same window in the same process while the manual descent found 70 elements. The parameters are also actuable, but AXValue is not a setter: each write moves the control exactly one step toward the requested value and returns success, so driving a parameter to a value is a bounded loop of write-then-readback rather than a single write. This is the same shape as the region AXSelected finding from the same day — the return code is uninformative and only repetition separates a setter from something else. The occupied insert slot itself is an inert AXGroup; the editor opens from the «열기» AXButton inside it.",
+  "limits": [
+    "One plug-in (Channel EQ), one instance, one host. Whether other stock plug-ins expose their parameters the same way was not tested here.",
+    "The step size was measured as 1 unit in the slider's own scale on one parameter (Peak 1 Gain). Whether the step is 1 for every parameter, or scales with range, was not established, so a convergence loop must be bounded by iterations rather than by an assumed step.",
+    "Actuation was measured by AXValue writes only. AXIncrement/AXDecrement were not tried on this parameter.",
+    "This record does not re-measure the AU parameter view under the Controls mode; it says only that the cited support for calling it opaque is void.",
+    "No registry entry was activated and no product code reads these sliders yet. This is a measurement of the surface, not a shipped capability."
+  ],
+  "supersedes": null
+}
