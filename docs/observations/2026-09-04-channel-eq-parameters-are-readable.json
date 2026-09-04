@@ -23,7 +23,8 @@
   },
   "depends": [
     "docs/spikes/channel-eq-census.md",
-    "Scripts/check-no-applescript-entire-contents.py"
+    "Scripts/check-no-applescript-entire-contents.py",
+    "docs/observations/2026-09-04-native-view-sliders-are-anonymous-and-names-live-on-text-fields.json"
   ],
   "method": "Ran the discredited instrument and a working one against the same window in the same process, seconds apart, so the difference could not be attributed to state. Then asked the actuation question the way that separates a setter from something else: write the SAME distant target repeatedly and watch whether the value walks. A single write compared against the requested value would have reported 'did not set' for both a no-op and a one-step move, and those need different code.",
   "observations": [
@@ -92,9 +93,19 @@
       },
       "applescript_entire_contents_each": 0,
       "reading": "Channel EQ is the exception, not the rule — the readable parameter surface is per plug-in"
+    },
+    {
+      "what": "cross-check against what this repository already recorded for another plug-in's native view",
+      "record": "2026-09-04-native-view-sliders-are-anonymous-and-names-live-on-text-fields",
+      "plug_in": "Compressor",
+      "sliders": 22,
+      "each_described": "슬라이더",
+      "carry_a_parameter_name": false,
+      "where_the_names_live": "the VALUE of separate AXTextFields (THRESHOLD, MIX, OUTPUT GAIN)",
+      "reading": "not a contradiction of this record — a third behaviour. Channel EQ's sliders ARE named; Compressor's are not; ChromaVerb and the instrument have none at all."
     }
   ],
-  "conclusion": "The Channel EQ editor's graphical view exposes all 26 per-band parameters to ordinary host-process AX: named AXSliders, each with a raw AXValue and a rendered AXValueDescription. The documented conclusion that it exposes none was a reading of a broken instrument — `entire contents` answered 0 for the same window in the same process while the manual descent found 70 elements. One parameter was also shown actuable, and AXValue is not a setter: each write moves the control exactly one step toward the requested value and returns success, so driving a parameter to a value is a bounded loop of write-then-readback rather than a single write. This is the same shape as the region AXSelected finding from the same day — the return code is uninformative and only repetition separates a setter from something else. This does NOT generalize: two other editors opened in the same session expose zero sliders (ChromaVerb 21 elements, the Studio Grand instrument 29), so the readable surface is a property of the plug-in rather than of the host. The spike's 'custom canvas, nothing exposed' description is accurate for those two and wrong for the one it was written about. The occupied insert slot itself is an inert AXGroup; the editor opens from the «열기» AXButton inside it.",
+  "conclusion": "The Channel EQ editor's graphical view exposes all 26 per-band parameters to ordinary host-process AX: named AXSliders, each with a raw AXValue and a rendered AXValueDescription. The documented conclusion that it exposes none was a reading of a broken instrument — `entire contents` answered 0 for the same window in the same process while the manual descent found 70 elements. One parameter was also shown actuable, and AXValue is not a setter: each write moves the control exactly one step toward the requested value and returns success, so driving a parameter to a value is a bounded loop of write-then-readback rather than a single write. This is the same shape as the region AXSelected finding from the same day — the return code is uninformative and only repetition separates a setter from something else. This does NOT generalize: two other editors opened in the same session expose zero sliders (ChromaVerb 21 elements, the Studio Grand instrument 29), so the readable surface is a property of the plug-in rather than of the host. The spike's 'custom canvas, nothing exposed' description is accurate for those two and wrong for the one it was written about. The occupied insert slot itself is an inert AXGroup; the editor opens from the «열기» AXButton inside it. Read together with the repository's existing Compressor measurement, the census has four points and three distinct behaviours: Channel EQ exposes 26 NAMED sliders, Compressor exposes 22 anonymous ones whose names live in separate text fields and therefore cannot be paired without positional identity, and ChromaVerb and the Studio Grand instrument expose none. The valuable property here is not that sliders exist but that they carry their own names — that is what makes a verified write addressable, and it is the rarer of the two.",
   "limits": [
     "Three plug-in editors were opened, all on one strip in one project: Channel EQ (26 sliders), ChromaVerb (0) and the Studio Grand instrument (0). Nothing here predicts a fourth, and no rule was found that says which plug-ins expose parameters.",
     "Actuation was shown for ONE slider (Peak 1 Gain). `AXValue` settability was not read on the other 25 and none of them was written, so nothing here says the whole parameter set is drivable.",
@@ -102,7 +113,8 @@
     "Actuation was measured by AXValue writes only. AXIncrement/AXDecrement were not tried on this parameter.",
     "This record does not re-measure the Channel EQ's CONTROLS view at all. A separate record measures Compressor's Controls view and finds a 29-row table, which refutes the general opacity framing but is a different plug-in — the Channel EQ's own Controls-view conclusion is unsupported rather than corrected.",
     "No registry entry was activated and no product code reads these sliders yet. This is a measurement of the surface, not a shipped capability.",
-    "26 sliders carry 25 distinct AXDescriptions: two are named `Gain`. A registry keyed by description alone would collide on that pair, so the census is not yet a usable key set without disambiguating them."
+    "26 sliders carry 25 distinct AXDescriptions: two are named `Gain`. A registry keyed by description alone would collide on that pair, so the census is not yet a usable key set without disambiguating them.",
+    "The four plug-ins split three ways, which is enough to say the behaviour is per plug-in and not enough to predict a fifth. In particular nothing here explains WHY Channel EQ names its sliders and Compressor does not."
   ],
   "supersedes": null
 }
