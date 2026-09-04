@@ -63,11 +63,29 @@ def tracks():
     return d.resource("logic://tracks").get("data", []) or []
 
 
+# The arrange window's title suffix, in every language this has been read in. Measured, not
+# translated: ko-KR and ja-JP are the spellings `AXLocalePolicy.arrangeWindowTitleSuffix` carries,
+# and `docs/locale/ui-labels.json` is where they now live for readers that cannot import Swift.
+ARRANGE_TITLE_SUFFIX = ("Tracks", "트랙", "トラック")
+
+
 def sheet_count():
-    script = ('tell application "System Events" to tell process "Logic Pro" to '
-              'get count of every sheet of (first window whose name ends with "Tracks")')
-    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return (r.stdout or "").strip()
+    """How many modal sheets are up, asked of whichever window title answers.
+
+    `first window whose name ends with "Tracks"` RAISES on a Logic that is not in English — the
+    window is `<project> - 트랙` — and osascript then returns an empty string, which this function
+    handed back as if it were a reading. The precondition compared it against "0", failed, and
+    reported "a sheet is already up" when what had happened is that the harness could not find the
+    window at all. Every spelling is tried, and the first that answers wins.
+    """
+    for suffix in ARRANGE_TITLE_SUFFIX:
+        script = ('tell application "System Events" to tell process "Logic Pro" to '
+                  f'get count of every sheet of (first window whose name ends with "{suffix}")')
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        out = (r.stdout or "").strip()
+        if out:
+            return out
+    return ""
 
 
 win = E.logic_window()

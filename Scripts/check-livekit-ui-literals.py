@@ -88,7 +88,6 @@ KNOWN = {
     ("live_523_marker_delete.py", "Marker"): 2,
     ("live_523_marker_delete.py", "Number of Items"): 2,
     ("live_538_modal_reconcile.py", "Tracks"): 2,
-    ("live_542_track_create_retry.py", "Tracks"): 2,
     ("live_549_cell_does_not_veto.py", "Cancel"): 2,
     ("live_549_cell_does_not_veto.py", "Delete"): 1,
     ("live_549_cell_does_not_veto.py", "Navigate"): 1,
