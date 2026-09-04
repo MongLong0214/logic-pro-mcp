@@ -126,6 +126,23 @@ def coverage(records):
     total = len(taxonomy())
     print(f"\n{total - len(empty)} of {total} surfaces have at least one record; "
           f"{len(records)} record(s) in total.")
+
+    # Per LOCALE, because that is the gap the ratchet counts and the reason the ledger exists: a
+    # surface measured only in Korean is unmeasured in Japanese, and a summary that says "has a
+    # record" hides exactly the drift a Logic release introduces one language at a time. Read from
+    # the ratchet guard's `live_state` so the report and the enforcement cannot disagree about what
+    # a gap is — two implementations of one definition agree until they do not.
+    per_locale = _gaps()["surfaces_without_records"]
+    if per_locale:
+        by_locale = {}
+        for item in per_locale:
+            loc, _, surface = str(item).partition("\u2192")
+            by_locale.setdefault(loc, []).append(surface)
+        print("\nby locale — a surface seen only in one language is unmeasured in the others\n")
+        for loc in sorted(by_locale):
+            missing = sorted(by_locale[loc])
+            print(f"  {loc:8s} {total - len(missing)} of {total} measured; missing "
+                  f"{', '.join(missing[:4])}" + (f" and {len(missing) - 4} more" if len(missing) > 4 else ""))
     return 0
 
 

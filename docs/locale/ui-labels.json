@@ -11,7 +11,8 @@
   "coverage_values": [
     "measured",
     "identifier",
-    "unmeasured"
+    "unmeasured",
+    "retired"
   ],
   "labels": {
     "allTracksAsAudioFilesMenuItem": {
@@ -474,10 +475,14 @@
         "밸런스"
       ],
       "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint.",
+      "retired": {
+        "reason": "Superseded by sliderPanHint. The track-header pan control this addressed is no longer read through this LabelSet, so no measurement in any locale can close it — left as `unmeasured` it was permanent debt that misreported the size of the gap.",
+        "since": "2026-09-05"
+      },
       "coverage": {
-        "en-US": "unmeasured",
-        "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "en-US": "retired",
+        "ko-KR": "retired",
+        "ja-JP": "retired"
       }
     },
     "hideAllPluginWindowsMenuItem": {
@@ -578,7 +583,7 @@
           "date": "2026-09-04",
           "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
           "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
-          "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기의 입력 또는",
+          "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…",
           "count_seen": 1,
           "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase",
           "role": "AXButton",
@@ -586,6 +591,9 @@
           "match": "contains"
         }
       },
+      "roles": [
+        "AXButton"
+      ],
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "measured",
@@ -819,13 +827,16 @@
           "date": "2026-09-04",
           "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
           "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
-          "observed": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다.",
+          "observed": "출력 슬롯. 채널 스트립 신호가 전송되는…",
           "count_seen": 4,
           "role": "AXButton",
           "attribute": "help",
           "match": "contains"
         }
       },
+      "roles": [
+        "AXButton"
+      ],
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "measured",

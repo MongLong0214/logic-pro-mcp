@@ -159,6 +159,15 @@ def provenance_problems(name, entry):
         role = block.get("role")
         attribute = block.get("attribute")
         mode = block.get("match")
+        declared = entry.get("roles") or []
+        if not declared:
+            out.append(f"{name}: has provenance but declares no `roles` — without the set of AX "
+                       f"roles this label may be read on, a sighting of a DIFFERENT element that "
+                       f"happens to carry the same string backs it (an `Edit` menu-bar item and an "
+                       f"`Edit` menu button are not the same label)")
+        elif role not in declared:
+            out.append(f"{name}: provenance for {variant!r} was read on a {role}, which is not one "
+                       f"of this label's declared roles {declared}")
         if not role or attribute not in SIGHTING_ATTRS:
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
@@ -169,10 +178,19 @@ def provenance_problems(name, entry):
         elif name in _containment and mode != "contains":
             out.append(f"{name}: provenance for {variant!r} claims match {mode!r}, but the product "
                        f"reads this set with `containsAny` — the evidence rule must be the product's")
-        elif not sighting(rec, variant, role, attribute, exact=(mode == "exact")):
+        elif (seen := sighting_value(rec, variant, role, attribute,
+                                     exact=(mode == "exact"))) is None:
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
                        f"no {role} whose {attribute} carried it — a record that never saw it on that "
                        f"element cannot be cited for it")
+        elif str(block.get("observed", "")).strip() != seen.strip():
+            # `observed` is a QUOTE of the string Logic carried, and the guard now holds it to that.
+            # Checking only that it CONTAINED the variant let the rest of the field be written
+            # freely: a real truncated reading was cited while `observed` claimed the untruncated
+            # text nobody had read. Whatever the record holds is what may be quoted.
+            out.append(f"{name}: provenance for {variant!r} quotes observed "
+                       f"{str(block.get('observed'))!r}, but the {attribute} the cited record "
+                       f"actually carried on that {role} was {seen!r}")
         if str(block.get("date")) != str(rec.get("date")):
             out.append(f"{name}: provenance for {variant!r} is dated {block.get('date')!r} but its "
                        f"record was measured {rec.get('date')!r}")
@@ -186,6 +204,14 @@ LABEL_ATTRS = ("title", "description", "help", "value")
 # happened to equal it, which is a sighting of a different kind of thing.
 SIGHTING_ATTRS = LABEL_ATTRS + ("identifier",)
 
+# Subtrees a record uses to state what it EXPECTED, predicted or is arguing against. These are
+# element-shaped on purpose — a counterexample has to name a role and an attribute to be legible —
+# and that shape let them be cited as sightings. A record saying "this is NOT what we see" backed a
+# claim that we do see it. Anything under one of these keys is not searched.
+HYPOTHESIS_KEYS = {"expected", "expectation", "counterexample", "counter_example", "hypothesis",
+                   "hypothetical", "predicted", "prediction", "proposed", "before", "example",
+                   "would_be", "if_broken", "negative_control"}
+
 
 def _rows(rec):
     """Every element-shaped reading in a record: its own observations, plus any evidence file.
@@ -198,7 +224,9 @@ def _rows(rec):
         if isinstance(node, dict):
             if node.get("role") and any(k in node for k in SIGHTING_ATTRS):
                 yield node
-            for v in node.values():
+            for key, v in node.items():
+                if str(key).lower() in HYPOTHESIS_KEYS:
+                    continue          # a prediction is not a reading — see HYPOTHESIS_KEYS
                 yield from walk(v)
         elif isinstance(node, list):
             for v in node:
@@ -208,8 +236,11 @@ def _rows(rec):
     for rel in rec.get("evidence") or []:
         # Evidence must live under the evidence directory. `../locale/ui-labels.json` would let a
         # record cite the very file whose claims it is meant to back.
-        path = os.path.normpath(os.path.join(OBS, rel))
-        if not path.startswith(os.path.join(OBS, "evidence") + os.sep):
+        # realpath, not normpath: `normpath` is lexical, so a symlink UNDER evidence/ pointing
+        # anywhere on disk passed a `startswith` test while resolving outside the directory.
+        root = os.path.realpath(os.path.join(OBS, "evidence"))
+        path = os.path.realpath(os.path.join(OBS, rel))
+        if not path.startswith(root + os.sep):
             continue
         try:
             yield from walk(json.load(open(path, encoding="utf-8")))
@@ -229,8 +260,18 @@ def sighting(rec, text, role=None, attribute=None, exact=True):
     row, an attribute on that row, and the value that attribute carried — the same three things a
     caller needs to find the element again.
     """
+    return sighting_value(rec, text, role, attribute, exact) is not None
+
+
+def sighting_value(rec, text, role=None, attribute=None, exact=True):
+    """The value the matching attribute actually carried, or None.
+
+    Returning the value rather than a bool is what lets a caller check that a provenance block's
+    `observed` is a QUOTE. Before this, `observed` was checked only for containing the variant, so
+    a real record could be cited while `observed` carried arbitrary extra text nobody ever read.
+    """
     if not text:
-        return False
+        return None
     for row in _rows(rec):
         if role and row.get("role") != role:
             continue
@@ -239,8 +280,8 @@ def sighting(rec, text, role=None, attribute=None, exact=True):
             if not isinstance(value, str):
                 continue
             if (value.strip() == text.strip()) if exact else (text in value):
-                return True
-    return False
+                return value
+    return None
 
 
 def coverage_problems(name, entry, locales, values):
@@ -265,6 +306,12 @@ def coverage_problems(name, entry, locales, values):
         if state not in values:
             out.append(f"{name}: coverage[{loc}] is {state!r}, not one of {values}")
             continue
+        if state == "retired":
+            reason = str(((entry.get("retired") or {}).get("reason")) or "").strip()
+            if not reason:
+                out.append(f"{name}: coverage[{loc}] is 'retired' but the label names no "
+                           f"`retired.reason` — a label excused from measurement says why")
+            continue
         if state == "unmeasured":
             if loc in present_in:
                 out.append(f"{name}: coverage[{loc}] is 'unmeasured' but a variant with provenance in "
@@ -282,10 +329,16 @@ def coverage_problems(name, entry, locales, values):
                        f"{(rec.get('host') or {}).get('locale')!r}, not {loc}")
             continue
         role = (entry.get("coverage_roles") or {}).get(loc)
+        declared = entry.get("roles") or []
         if not role:
             out.append(f"{name}: coverage[{loc}] is {state!r} but names no role under "
                        f"coverage_roles[{loc}] — `Edit` on a menu bar is not `Edit` on a toolbar "
                        f"button, and without the role any record showing either backs both")
+        elif not declared:
+            out.append(f"{name}: coverage[{loc}] is {state!r} but the label declares no `roles`")
+        elif role not in declared:
+            out.append(f"{name}: coverage[{loc}] cites a {role}, which is not one of this label's "
+                       f"declared roles {declared}")
         elif state == "measured" and not any(
                 sighting(rec, t, role, exact=(name not in _containment)) for t in strings if t):
             out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which has "

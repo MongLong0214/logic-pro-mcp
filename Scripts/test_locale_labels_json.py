@@ -30,7 +30,7 @@ guard = load("locale_labels_guard", "check-locale-labels-json.py")
 labels = load("locale_labels", "locale_labels.py")
 
 LOCALES = ("en-US", "ko-KR", "ja-JP")
-VALUES = ("measured", "identifier", "unmeasured")
+VALUES = ("measured", "identifier", "unmeasured", "retired")
 D = "2026-09-05"
 
 
@@ -52,8 +52,12 @@ def _row(role, **attrs):
 
 
 def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, idents=None,
-           canonical="input slot"):
+           canonical="input slot", declared=("AXButton",), retired=None):
     e = {"canonical": canonical, "variants": variants, "rationale": "r"}
+    if declared:
+        e["roles"] = list(declared)
+    if retired:
+        e["retired"] = retired
     if provenance is not None:
         e["provenance"] = provenance
     e["coverage"] = coverage if coverage is not None else {loc: "unmeasured" for loc in LOCALES}
@@ -66,7 +70,7 @@ def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, ide
     return e
 
 
-def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채널 스트립", date=D,
+def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채널 스트립 입력 소스", date=D,
           role="AXButton", attribute="help", match="contains"):
     b = {"record": record, "locale": locale, "observed": observed, "date": date}
     if match:
@@ -81,7 +85,13 @@ def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채�
 def main():
     failures = []
 
+    ran = [0]
+
     def case(name, condition, detail):
+        # Counted here rather than written into the closing line. The closing line used to carry a
+        # literal, and it was wrong the first time a case was added without editing it — a self-test
+        # whose own summary is unverified is the thing this file exists to argue against.
+        ran[0] += 1
         if not condition:
             failures.append(f"{name}: {detail}")
 
@@ -121,14 +131,16 @@ def main():
     #    here would make the guard stricter than the thing it documents.
     guard.OBS = _ledger({"2026-09-05-k": ("ko-KR", [_row("AXStaticText", with_input="x", value="unrelated")])})
     keyed = _entry(["input"], {"input": _prov(record="2026-09-05-k", observed="with_input",
-                                              role="AXStaticText", attribute="value", match="contains")}, U)
+                                              role="AXStaticText", attribute="value", match="contains")}, U,
+                   declared=("AXStaticText",))
     case("a KEY is not a sighting",
          any("carried it" in x for x in guard.provenance_problems("nonInsertButtonText", keyed)),
          guard.provenance_problems("nonInsertButtonText", keyed))
 
     guard.OBS = _ledger({"2026-09-05-l": ("ko-KR", [_row("AXStaticText", value="an L in it")])})
     ell = _entry(["L"], {"L": _prov(record="2026-09-05-l", observed="an L in it",
-                                    role="AXStaticText", attribute="value", match="exact")}, U)
+                                    role="AXStaticText", attribute="value", match="exact")}, U,
+                 declared=("AXStaticText",))
     case("a letter inside a word is not an exact sighting",
          any("carried it" in x for x in guard.provenance_problems("eventListColumnL", ell)),
          guard.provenance_problems("eventListColumnL", ell))
@@ -154,7 +166,8 @@ def main():
     # declares the mode rather than the guard inferring it everywhere.
     guard.OBS = _ledger({"2026-09-05-c": ("ko-KR", [_row("AXButton", help="취소 하시겠습니까")])})
     cancel = _entry(["취소"], {"취소": _prov(record="2026-09-05-c", observed="취소 하시겠습니까",
-                                            role="AXButton", attribute="help", match="exact")}, ko_measured)
+                                            role="AXButton", attribute="help", match="exact")}, ko_measured,
+                    declared=("AXButton",))
     case("claiming exact for a containsAny set is refused",
          any("reads this set with `containsAny`" in x
              for x in guard.provenance_problems("cancelButton", cancel)),
@@ -168,7 +181,8 @@ def main():
     # variant is a different command, which is the attack this mode exists to stop.
     guard.OBS = _ledger({"2026-09-05-m": ("ko-KR", [_row("AXMenuItem", title="사이클 끔")])})
     off = _entry(["끔"], {"끔": _prov(record="2026-09-05-m", observed="사이클 끔",
-                                     role="AXMenuItem", attribute="title", match="exact")}, ko_measured)
+                                     role="AXMenuItem", attribute="title", match="exact")}, ko_measured,
+                 declared=("AXMenuItem",))
     case("a longer menu title does not satisfy an exact match",
          any("carried it" in x for x in guard.provenance_problems("automationModeOff", off)),
          guard.provenance_problems("automationModeOff", off))
@@ -186,7 +200,8 @@ def main():
     case("role and attribute are required", any("is not a sighting" in x for x in pp(e)), pp(e))
 
     # 7. The right string on the WRONG role is refused.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(role="AXMenuItem")}, ko_measured)
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(role="AXMenuItem")}, ko_measured,
+               declared=("AXButton", "AXMenuItem"))
     case("wrong role refused", any("no AXMenuItem whose help carried it" in x for x in pp(e)), pp(e))
 
     # 8. `observed` that does not contain the variant, and provenance for a non-variant.
@@ -198,10 +213,10 @@ def main():
     # 9. THE SHARED-STRING ATTACK. `editMenuBar` and `markerListEditMenuButton` both say 편집. A
     #    record showing the MENU BAR must not back the toolbar BUTTON, and the role is what says so.
     bar = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
-                 roles={"ko-KR": "AXMenuBarItem"}, canonical="편집")
+                 roles={"ko-KR": "AXMenuBarItem"}, canonical="편집", declared=("AXMenuBarItem",))
     case("menu-bar record backs the menu-bar label", cp(bar, "editMenuBar") == [], cp(bar, "editMenuBar"))
     btn = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
-                 roles={"ko-KR": "AXToolbarButton"}, canonical="편집")
+                 roles={"ko-KR": "AXToolbarButton"}, canonical="편집", declared=("AXToolbarButton",))
     case("...and not a role the record never showed",
          any("no AXToolbarButton carrying" in x for x in cp(btn, "markerListEditMenuButton")),
          cp(btn, "markerListEditMenuButton"))
@@ -219,13 +234,15 @@ def main():
     #     earlier version of this case asserted only that an arbitrary same-locale record was
     #     accepted, and called that "backed".
     ok = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
-                roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "markerEdit:"})
+                roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "markerEdit:"},
+                declared=("AXMenuButton",))
     case("identifier backed by a sighting of that identifier", cp(ok) == [], cp(ok))
     no_id = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
-                   roles={"ko-KR": "AXMenuButton"})
+                   roles={"ko-KR": "AXMenuButton"}, declared=("AXMenuButton",))
     case("identifier without the identifier", any("names no AXIdentifier" in x for x in cp(no_id)), cp(no_id))
     wrong_id = _entry([], None, dict(U, **{"ko-KR": "identifier"}), cites={"ko-KR": "2026-09-05-ko"},
-                      roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "notThis:"})
+                      roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "notThis:"},
+                      declared=("AXMenuButton",))
     case("identifier the record never saw", any("whose identifier is" in x for x in cp(wrong_id)), cp(wrong_id))
 
     # 12. An AXIdentifier is not a label. A canonical that happens to equal some element's
@@ -233,7 +250,7 @@ def main():
     #     claim is about what Logic SHOWS.
     guard.OBS = _ledger({"2026-09-05-id": ("ko-KR", [_row("AXButton", identifier="편집", help="unrelated")])})
     ident_only = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-id"},
-                        roles={"ko-KR": "AXButton"}, canonical="편집")
+                        roles={"ko-KR": "AXButton"}, canonical="편집", declared=("AXButton",))
     case("an identifier is not a label sighting",
          any("carrying any of this label" in x for x in cp(ident_only, "editMenuBar")),
          cp(ident_only, "editMenuBar"))
@@ -248,13 +265,128 @@ def main():
 
     # 13. Coverage that skips a locale, or uses a retired value.
     case("missing locale", any("expected exactly" in x for x in cp(_entry([], None, {"en-US": "unmeasured"}))), "")
-    case("retired value refused", any("not one of" in x for x in cp(_entry([], None, dict(U, **{"ko-KR": "absent"})))), "")
+    case("unknown coverage value refused",
+         any("not one of" in x for x in cp(_entry([], None, dict(U, **{"ko-KR": "absent"})))), "")
 
     # 14. Evidence may not escape the evidence directory — a record could otherwise cite the very
     #     file whose claims it backs.
+    #
+    #     The earlier version of this case named `../locale/ui-labels.json`, which does not exist
+    #     beside a temp ledger. `json.load` therefore failed and the sighting was refused for that
+    #     reason — deleting the containment check entirely would not have failed the test. A control
+    #     that cannot see the thing it controls for is not a control, so the escape target is now
+    #     REAL and carries a row that would match if it were ever read.
+    # `.resolve()` because macOS hands out `/var/folders/...`, which is itself a symlink to
+    # `/private/var/...`. Left unresolved, a lexical containment check disagrees with a resolved one
+    # about the ROOT, so it rejects legitimate evidence too — and the symlink case below then passes
+    # under a broken implementation, for a reason that has nothing to do with symlinks.
+    sandbox = Path(tempfile.mkdtemp()).resolve()
+    (sandbox / "docs" / "observations" / "evidence").mkdir(parents=True)
+    (sandbox / "elsewhere").mkdir()
+    payload = json.dumps([_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스")], ensure_ascii=False)
+    (sandbox / "elsewhere" / "planted.json").write_text(payload, encoding="utf-8")
+    guard.OBS = str(sandbox / "docs" / "observations")
+
+    # First prove the fixture is live: the same bytes UNDER evidence/ are read and do match.
+    (sandbox / "docs" / "observations" / "evidence" / "real.json").write_text(payload, encoding="utf-8")
+    inside = {"id": "i", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
+              "evidence": ["evidence/real.json"]}
+    case("evidence under evidence/ IS read",
+         guard.sighting(inside, "입력 슬롯", "AXButton", "help", exact=False) is True,
+         "the escape cases below would pass vacuously if this did not")
+
     outside = {"id": "x", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
-               "evidence": ["../locale/ui-labels.json"]}
-    case("evidence cannot escape", guard.sighting(outside, "입력 슬롯", "AXButton", "help") is False, "")
+               "evidence": ["../../elsewhere/planted.json"]}
+    case("evidence cannot escape by relative path",
+         guard.sighting(outside, "입력 슬롯", "AXButton", "help", exact=False) is False, "")
+
+    # ...and not by a symlink either. `normpath` is lexical: `evidence/link.json` passed a
+    # `startswith` test while resolving to the planted file, which is why this resolves realpath.
+    try:
+        (sandbox / "docs" / "observations" / "evidence" / "link.json").symlink_to(
+            sandbox / "elsewhere" / "planted.json")
+        linked = {"id": "s", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
+                  "evidence": ["evidence/link.json"]}
+        case("evidence cannot escape by symlink",
+             guard.sighting(linked, "입력 슬롯", "AXButton", "help", exact=False) is False, "")
+    except OSError:
+        pass          # a filesystem without symlinks cannot host the attack either
+
+    guard.OBS = _ledger({
+        "2026-09-05-ko": ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스"),
+                                    _row("AXMenuBarItem", title="편집"),
+                                    _row("AXMenuButton", title="편집", identifier="markerEdit:")]),
+    })
+
+    # 16. `observed` is a QUOTE of what the record carried, not a field the author fills in. A real
+    #     record cited with invented extra text was accepted while only the variant was checked.
+    ok_quote = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, ko_measured)
+    case("an honest quote is accepted", pp(ok_quote) == [], pp(ok_quote))
+    padded = _entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="입력 슬롯. 채널 스트립 입력 소스 AND MORE")},
+                    ko_measured)
+    case("`observed` may not exceed what the record carried",
+         any("actually carried" in x for x in pp(padded)), pp(padded))
+    short = _entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="입력 슬롯")}, ko_measured)
+    case("...nor understate it", any("actually carried" in x for x in pp(short)), pp(short))
+
+    # 17. The role must be one the LABEL declares. Without this, `editMenuBar` was backed by an
+    #     AXMenuButton sighting belonging to a different label that shows the same string — the
+    #     shared-string attack, arriving through provenance instead of through coverage.
+    undeclared = _entry(["편집"], {"편집": _prov(role="AXMenuButton", attribute="title",
+                                                observed="편집", match="exact")},
+                        ko_measured, canonical="Edit", declared=("AXMenuBarItem",))
+    case("provenance on an undeclared role is refused",
+         any("not one of this label" in x for x in guard.provenance_problems("editMenuBar", undeclared)),
+         guard.provenance_problems("editMenuBar", undeclared))
+    nodecl = _entry(["편집"], {"편집": _prov(role="AXMenuBarItem", attribute="title",
+                                            observed="편집", match="exact")},
+                    ko_measured, canonical="Edit", declared=None)
+    case("provenance with no declared roles at all is refused",
+         any("declares no `roles`" in x for x in guard.provenance_problems("editMenuBar", nodecl)),
+         guard.provenance_problems("editMenuBar", nodecl))
+
+    # 18. A record's EXPECTATION is not a reading. These blocks are element-shaped on purpose, and
+    #     that shape let a counterexample — "this is NOT what we see" — back a claim that we do.
+    hyp = Path(tempfile.mkdtemp())
+    (hyp / "h.json").write_text(json.dumps({
+        "id": "h", "date": D, "host": {"locale": "ko-KR"},
+        "observations": [{"what": "we predicted this and it was wrong",
+                          "expected": _row("AXGroup", description="not 오토메이션 control")}]},
+        ensure_ascii=False), encoding="utf-8")
+    guard.OBS = str(hyp)
+    fixture = _entry(["오토메이션"], {"오토메이션": _prov(record="h", role="AXGroup",
+                                                       attribute="description", match="contains",
+                                                       observed="not 오토메이션 control")},
+                     ko_measured, declared=("AXGroup",))
+    case("an `expected` block is not a sighting",
+         any("carried it" in x for x in guard.provenance_problems("automationModeContext", fixture)),
+         guard.provenance_problems("automationModeContext", fixture))
+    # ...and the same bytes NOT under a hypothesis key are read, so the case above is not vacuous.
+    (hyp / "h2.json").write_text(json.dumps({
+        "id": "h2", "date": D, "host": {"locale": "ko-KR"},
+        "observations": [{"what": "seen", "row": _row("AXGroup", description="not 오토메이션 control")}]},
+        ensure_ascii=False), encoding="utf-8")
+    seen = _entry(["오토메이션"], {"오토메이션": _prov(record="h2", role="AXGroup",
+                                                    attribute="description", match="contains",
+                                                    observed="not 오토메이션 control")},
+                  ko_measured, declared=("AXGroup",))
+    case("...but the same row outside one is",
+         guard.provenance_problems("automationModeContext", seen) == [],
+         guard.provenance_problems("automationModeContext", seen))
+
+    # 19. `retired` excuses a label whose element Logic no longer shows, and it must say why —
+    #     otherwise it is just `unmeasured` with the debt hidden.
+    r_ok = _entry(["팬"], None, {loc: "retired" for loc in LOCALES},
+                  retired={"reason": "superseded by sliderPanHint", "since": D})
+    case("retired with a reason is accepted", cp(r_ok, "headerPanHint") == [], cp(r_ok, "headerPanHint"))
+    r_bad = _entry(["팬"], None, {loc: "retired" for loc in LOCALES})
+    case("retired without a reason is refused",
+         any("names no `retired.reason`" in x for x in cp(r_bad, "headerPanHint")),
+         cp(r_bad, "headerPanHint"))
+
+    guard.OBS = _ledger({
+        "2026-09-05-ko": ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스")]),
+    })
 
     # 15. Migration and carry-forward.
     v1 = {"schema": 1, "labels": {"inputSlotHelpKeyword": {"measured": {"입력 슬롯": _prov()}}}}
@@ -291,7 +423,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("35 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
+    print(f"{ran[0]} case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
     return 0
 
 

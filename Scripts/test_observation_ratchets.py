@@ -63,10 +63,27 @@ def _label(variants, provenance=None, coverage=None):
     return e
 
 
+def _branch(root, labels, allowed, raised=None):
+    """Commit `labels`/`allowed`/`raised` onto a branch off the fixture's base commit."""
+    (root / "docs" / "locale" / "ui-labels.json").write_text(json.dumps({
+        "schema": 2, "supported_locales": LOCALES, "labels": labels}), encoding="utf-8")
+    (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
+        "schema": 2, "allowed": allowed, "raised": raised or {}}), encoding="utf-8")
+    for cmd in (["checkout", "-qb", "branch"], ["add", "-A"],
+                ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"]):
+        subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
+    return dict(os.environ, LPM_RATCHET_BASE_REF="base")
+
+
 def main():
     failures = []
 
+    ran = [0]
+
     def check(name, cond, detail):
+        # Counted, not typed. The closing line carried a literal and was stale the first time a
+        # case was added without editing it.
+        ran[0] += 1
         if not cond:
             failures.append(f"{name}: {detail}")
 
@@ -115,16 +132,55 @@ def main():
 
     # 5. A growth WITH a dated reason lands — otherwise `raised` is unusable, because the base can
     #    never acquire the new member without merging a failing change.
-    root = _tree(labels2, records, exact,
-                 raised={"undocumented_variants": {"date": "2026-09-05", "reason": "three new leaves"}})
-    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("raised lands", proc.returncode == 0, f"exit {proc.returncode}: {proc.stdout[:200]}")
+    #
+    #    Over REAL GIT, because without a base there is no growth to authorise: the file is the
+    #    fallback ceiling, the file already lists the member, and the raise is never consulted. The
+    #    earlier fixture had no repository, so it asserted exit 0 on a path where nothing was tested.
+    grown = dict(exact, undocumented_variants=["L\u2192b", "L\u2192c"])
+    root = _tree(labels, records, exact, git_init=True)
+    env = _branch(root, labels2, grown,
+                  raised={"undocumented_variants": {"date": "2026-09-05", "reason": "three new leaves",
+                                                    "members": ["L\u2192c"]}})
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("raised lands over a real merge base", proc.returncode == 0,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
     check("raised names its reason", "three new leaves" in proc.stdout, proc.stdout[:200])
+    check("the base was consulted for the raise", "base sets unreadable" not in proc.stdout, proc.stdout[:200])
 
-    # 6. A raise without a date is not a reason.
-    root = _tree(labels2, records, exact, raised={"undocumented_variants": {"reason": "because"}})
-    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
-    check("undated raise is refused", proc.returncode == 1 and "record why" in proc.stdout, proc.stdout[:200])
+    # 5b. A raise authorises the members it NAMES and nothing else. Without this, one raise recorded
+    #     for one growth blessed every later, unrelated growth on the same key forever.
+    root = _tree(labels, records, exact, git_init=True)
+    env = _branch(root, labels2, grown,
+                  raised={"undocumented_variants": {"date": "2026-09-05", "reason": "an older decision",
+                                                    "members": ["L\u2192zzz"]}})
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("a stale raise does not authorise a new member",
+          proc.returncode == 1 and "outside the members it authorised" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
+
+    # 5c. ...and a raise that names no members at all authorises anything that ever appears.
+    root = _tree(labels, records, exact, git_init=True)
+    env = _branch(root, labels2, grown,
+                  raised={"undocumented_variants": {"date": "2026-09-05", "reason": "a real sentence"}})
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("a raise with no members is refused",
+          proc.returncode == 1 and "names no `members`" in proc.stdout, proc.stdout[:300])
+
+    # 6. A raise needs a REAL date and a reason with substance. `\u200b` survives strip(), and
+    #    `2026-99-99` matches a date-shaped regex while being no date at all.
+    for label, entry, want in (
+            ("undated raise is refused",
+             {"reason": "a real sentence about why", "members": ["L\u2192c"]}, "not a real calendar date"),
+            ("an impossible date is refused",
+             {"date": "2026-99-99", "reason": "a real sentence", "members": ["L\u2192c"]},
+             "not a real calendar date"),
+            ("an invisible reason is refused",
+             {"date": "2026-09-05", "reason": "\u200b\u200b\u200b", "members": ["L\u2192c"]},
+             "no substance")):
+        root = _tree(labels, records, exact, git_init=True)
+        env = _branch(root, labels2, grown, raised={"undocumented_variants": entry})
+        proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+        check(label, proc.returncode == 1 and want in proc.stdout, f"exit {proc.returncode}: {proc.stdout[:300]}")
 
     # 7. A gap that CLOSED fails too, with the member to remove — a list that lags reality lets the
     #    next regression hide inside it.
@@ -155,38 +211,78 @@ def main():
     check("the base was actually consulted, not skipped", "base sets unreadable" not in proc.stdout,
           f"the guard fell back to the file: {proc.stdout[:200]}")
 
-    # 10. A member the BASE already allowed is not a growth — which is what lets a branch drop it
-    #     from its own file on the way to closing it.
-    root = _tree(labels2, records, dict(exact, undocumented_variants=["L\u2192b", "L\u2192c"]), git_init=True)
-    (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
-        "schema": 2, "allowed": exact, "raised": {}}), encoding="utf-8")
-    for cmd in (["checkout", "-qb", "branch"], ["add", "-A"],
-                ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "drop"]):
-        subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
+    # 10. A member the BASE already allowed is not a growth, so a branch that genuinely CLOSES it
+    #     may drop it from its own file. `labels` has no L→c, so live no longer has it either.
+    root = _tree(labels2, records, grown, git_init=True)
+    env = _branch(root, labels, exact)
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
-    check("base membership is honoured", "did not know it did not know" not in proc.stdout,
-          f"a base-allowed member was reported as growth: {proc.stdout[:300]}")
+    check("a real closure passes", proc.returncode == 0,
+          f"closing a base-allowed member should pass: exit {proc.returncode}: {proc.stdout[:300]}")
+
+    # 10b. But dropping it from the file while it is STILL LIVE is not a closure — it is a ceiling
+    #      that under-reports. Against the base there is no growth and against the file no lag, so
+    #      this passed until understatement became a finding of its own. The previous version of
+    #      this case asserted exactly this shape and called it correct.
+    root = _tree(labels2, records, grown, git_init=True)
+    env = _branch(root, labels2, exact)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("a ceiling that hides live debt is refused",
+          proc.returncode == 1 and "under-reports the real gap" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
+
+    # 10c. A valid raise must not silence an unrelated closure recorded in the same commit. These
+    #      were an if/elif, so the first finding on a key suppressed the second.
+    live_both = {"k": {"kept", "added"}}
+    both = guard.compare(live_both, {"allowed": {"k": ["kept", "added", "goneStale"]}},
+                         {"k": ["kept", "goneStale"]})
+    check("growth does not mask lag",
+          both[0] and both[0][0][1] == ["added"] and both[1] and both[1][0][1] == ["goneStale"],
+          f"grew={both[0]} shrank={both[1]}")
 
     # 11. A key the BASE has never seen is entirely new, and every member is a growth. Adding
     #     `unmeasured_coverage.fr-FR` pre-populated with its own gaps would otherwise pass in
     #     silence — the file permits them and the base is never asked about a key it lacks.
     live_new = {"unmeasured_coverage": {"ko-KR": {"a"}, "fr-FR": {"x", "y", "z"}}}
     ratch_new = {"allowed": {"unmeasured_coverage": {"ko-KR": ["a"], "fr-FR": ["x", "y", "z"]}}}
-    grew, _, _ = guard.compare(live_new, ratch_new, {"unmeasured_coverage.ko-KR": ["a"]})
+    grew, _, _, _ = guard.compare(live_new, ratch_new, {"unmeasured_coverage.ko-KR": ["a"]})
     check("a new axis is not free", grew and grew[0][0] == "unmeasured_coverage.fr-FR"
           and sorted(grew[0][1]) == ["x", "y", "z"], grew)
 
     # 12. ...but with no base at all, the file is the fallback and says so rather than inventing
     #     a growth out of every key.
-    grew, _, _ = guard.compare(live_new, ratch_new, None)
+    grew, _, _, _ = guard.compare(live_new, ratch_new, None)
     check("no base falls back to the file", grew == [], grew)
 
-    # 13. An unreadable base is said out loud and is not itself fatal.
+    # 13. An unreadable base is said out loud. Locally that is a note; in CI it is a failure,
+    #     because CI is where the claim of enforcement is actually made and a shallow checkout
+    #     silently degrades the guard to comparing the branch against its own file.
     root = _tree(labels, records, exact)
     env2 = dict(os.environ, LPM_RATCHET_BASE_JSON=str(root / "missing.json"))
+    env2.pop("CI", None)
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env2)
-    check("unreadable base is loud, not fatal", proc.returncode == 0 and "base sets unreadable" in proc.stdout,
+    check("unreadable base is loud, not fatal locally",
+          proc.returncode == 0 and "base sets unreadable" in proc.stdout,
           f"exit {proc.returncode}: {proc.stdout[:200]}")
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
+                          env=dict(env2, CI="true"))
+    check("...and fatal under CI",
+          proc.returncode == 1 and "fetch-depth: 0" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:200]}")
+
+    # 13b. A merge base that RESOLVES but predates the ledger is not a shallow clone: it is the
+    #      commit introducing the file. Refusing it would make that commit unmergeable, so it is
+    #      allowed and named — and the branch can never take this path again once it lands.
+    root = _tree(labels, records, exact, git_init=True)
+    subprocess.run(["git", "-C", str(root), "rm", "-q", "--cached",
+                    "docs/observations/RATCHETS.json"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "before the ledger"], capture_output=True)
+    env3 = _branch(root, labels, exact)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
+                          env=dict(env3, CI="true"))
+    check("the introducing commit is not treated as a shallow clone",
+          proc.returncode == 0 and "bootstrap" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
 
     # 14. RATCHETS.json beside the records is not itself counted as one.
     check("ratchets file is not a record", guard.live_state(str(root))["schema_v1_records"] == {"2026-09-05-r2"},
@@ -220,7 +316,8 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("21 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
+    print(f"{ran[0]} case(s) pass: a swap is caught by name, a raise lands with a reason, "
+          f"and the base is real git")
     return 0
 
 

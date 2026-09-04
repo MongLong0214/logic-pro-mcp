@@ -142,7 +142,7 @@ def localised_canonicals(doc=None):
 
 
 SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
-COVERAGE_VALUES = ("measured", "identifier", "unmeasured")
+COVERAGE_VALUES = ("measured", "identifier", "unmeasured", "retired")
 
 
 def build(existing=None):
@@ -170,18 +170,29 @@ def build(existing=None):
         provenance = {k: v for k, v in provenance.items() if k in entry["variants"]}
         if provenance:
             entry["provenance"] = provenance
-        carried = prior.get("coverage") or {}
+        prior_coverage = prior.get("coverage") or {}
         cited = prior.get("coverage_records") or {}
         present_in = {str((b or {}).get("locale")) for b in provenance.values()}
+        # Author-typed constraints, carried verbatim. `roles` can only ever REFUSE evidence — a
+        # wrong one costs a false RED that someone fixes, never a false GREEN — so it is safe for a
+        # human to write where the AX role is not derivable from Swift. `retired` excuses a label
+        # whose element Logic no longer ships, which otherwise sits in the ledger as permanent debt
+        # nobody can ever close by measuring.
+        for field in ("roles", "retired"):
+            if prior.get(field):
+                entry[field] = prior[field]
+        retired = bool((entry.get("retired") or {}).get("reason"))
         coverage = {}
         for locale in SUPPORTED_LOCALES:
-            if locale in present_in:
+            if retired:
+                coverage[locale] = "retired"
+            elif locale in present_in:
                 coverage[locale] = "measured"
-            elif carried.get(locale) in ("measured", "identifier") and cited.get(locale):
+            elif prior_coverage.get(locale) in ("measured", "identifier") and cited.get(locale):
                 # A claim of measurement is carried only with the record that showed it. One nobody
                 # cited would otherwise ride through every regeneration as if it were evidence —
                 # the guard would refuse it, but the projection should not emit it.
-                coverage[locale] = carried[locale]
+                coverage[locale] = prior_coverage[locale]
             else:
                 coverage[locale] = "unmeasured"
         entry["coverage"] = coverage
@@ -191,13 +202,16 @@ def build(existing=None):
         # All THREE citation maps travel together. Carrying only the record id was a data-loss bug:
         # the next `--write` stripped the role and the identifier, and the guard then rejected a
         # claim that had been valid — regeneration turning evidence into a failure.
-        def carried(field):
+        # Named `carried_map` because `carried` was also the name of the prior-coverage dict a few
+        # lines above. It worked only because the dict is rebound at the top of every iteration;
+        # moving either line would have silently turned a dict lookup into a function object.
+        def carried_map(field):
             return {loc: v for loc, v in (prior.get(field) or {}).items()
                     if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
                     and loc not in present_in}
 
         for field in ("coverage_records", "coverage_roles", "coverage_identifiers"):
-            kept = carried(field)
+            kept = carried_map(field)
             if kept:
                 entry[field] = kept
         labels[name] = entry

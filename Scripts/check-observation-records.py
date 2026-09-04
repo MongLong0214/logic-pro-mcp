@@ -180,8 +180,14 @@ def check(path):
             bad.append(f"{stem}: evidence must be a list of files under docs/observations/evidence/")
         else:
             for rel in evidence:
-                target = os.path.normpath(os.path.join(DIR, str(rel)))
-                inside = target.startswith(os.path.join(DIR, "evidence") + os.sep)
+                # realpath on BOTH sides. A lexical check passes a symlink that sits under
+                # evidence/ and resolves anywhere on disk, and resolving only one side disagrees
+                # about the root wherever the path itself contains a symlink (macOS hands out
+                # /var/..., which is /private/var/...). The same hole was live in
+                # check-locale-labels-json.py; it is one property, so it is fixed in both.
+                root = os.path.realpath(os.path.join(DIR, "evidence"))
+                target = os.path.realpath(os.path.join(DIR, str(rel)))
+                inside = target.startswith(root + os.sep)
                 if not inside:
                     bad.append(f"{stem}: evidence {rel!r} is outside docs/observations/evidence/ — a "
                                f"record may not cite a file it does not carry")

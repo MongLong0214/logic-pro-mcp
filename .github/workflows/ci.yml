@@ -33,6 +33,13 @@ jobs:
       issues: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Guards in this repository compare the branch against its merge base — the observation
+          # ratchets are the load-bearing one: with a shallow clone the base is absent, so the
+          # check degrades to comparing the branch against its own file and a commit that adds a
+          # gap AND raises its own ceiling passes. The ratchet guard now fails outright when the
+          # base is unreadable under CI, and this is what makes that satisfiable.
+          fetch-depth: 0
 
       - name: Self-test the roadmap drift guard (#678)
         # Offline, fixtures only. Asserts the guard fails on a stale row, on an open issue nobody
@@ -45,10 +52,10 @@ jobs:
         # says" — so it lives in the same job: one ubuntu runner, one small download, `contents:
         # read` already granted, and the network this needs already available.
         #
-        # It runs on every build rather than only when `Formula/` changed. `actions/checkout` is
-        # shallow (no `fetch-depth`), so a `git diff` against the PR base is a `bad object` rather
-        # than a skip — and the answer can go stale without the file moving at all, because it is a
-        # claim about a RELEASE, not about this tree.
+        # It runs on every build rather than only when `Formula/` changed. Not because the base is
+        # unreachable — the checkout above is now full — but because the answer can go stale
+        # without the file moving at all: it is a claim about a RELEASE, not about this tree, so
+        # gating it on a diff would skip exactly the builds where it has newly become wrong.
         #
         # It cannot live in `run-repo-guards.py`: that job's contract is plain Python needing
         # neither Xcode nor a network, and the only way to know a hash is right is to ask the
@@ -73,6 +80,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Guards in this repository compare the branch against its merge base — the observation
+          # ratchets are the load-bearing one: with a shallow clone the base is absent, so the
+          # check degrades to comparing the branch against its own file and a commit that adds a
+          # gap AND raises its own ceiling passes. The ratchet guard now fails outright when the
+          # base is unreadable under CI, and this is what makes that satisfiable.
+          fetch-depth: 0
 
       - name: Forbid dead boolean #expect (#393 test-integrity)
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
@@ -137,6 +151,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Guards in this repository compare the branch against its merge base — the observation
+          # ratchets are the load-bearing one: with a shallow clone the base is absent, so the
+          # check degrades to comparing the branch against its own file and a commit that adds a
+          # gap AND raises its own ceiling passes. The ratchet guard now fails outright when the
+          # base is unreadable under CI, and this is what makes that satisfiable.
+          fetch-depth: 0
 
       - name: Forbid dead boolean #expect (#393 test-integrity)
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they

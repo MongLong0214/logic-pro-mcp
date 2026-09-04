@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location(
@@ -158,6 +159,30 @@ case("evidence that is not a list is rejected", any("must be a list" in b for b 
 
 case("an empty evidence list is fine — it claims nothing",
      problems(record(schema=2, evidence=[])) == [], f"{problems(record(schema=2, evidence=[]))!r}")
+
+# ...and not by a symlink. A lexical containment check passes `evidence/link.json` while it resolves
+# anywhere on disk. Driven against a temporary DIR so the real tree is never written to, and with a
+# positive control first — an escape case that cannot see legitimate evidence would pass under a
+# broken implementation for a reason that has nothing to do with escaping.
+_saved_dir = G.DIR
+_sandbox = Path(tempfile.mkdtemp()).resolve()
+(_sandbox / "evidence").mkdir()
+(_sandbox / "outside").mkdir()
+(_sandbox / "evidence" / "real.json").write_text("[]", encoding="utf-8")
+(_sandbox / "outside" / "planted.json").write_text("[]", encoding="utf-8")
+G.DIR = str(_sandbox)
+try:
+    ok = problems(record(schema=2, evidence=["evidence/real.json"]))
+    case("evidence under evidence/ is accepted", ok == [],
+         f"the escape case below would pass vacuously otherwise: {ok!r}")
+    try:
+        (_sandbox / "evidence" / "link.json").symlink_to(_sandbox / "outside" / "planted.json")
+        bad = problems(record(schema=2, evidence=["evidence/link.json"]))
+        case("evidence cannot escape by symlink", any("outside" in b for b in bad), f"{bad!r}")
+    except OSError:
+        pass          # a filesystem without symlinks cannot host the attack either
+finally:
+    G.DIR = _saved_dir
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")

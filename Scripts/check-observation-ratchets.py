@@ -23,12 +23,14 @@ The gaps, and where each is read from:
 
 Exit 0 when every count equals its ceiling, 1 otherwise, 2 if an input cannot be read.
 """
+import datetime
 import glob
 import json
 import os
 import re
 import subprocess
 import sys
+import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RATCHETS = os.path.join(REPO, "docs", "observations", "RATCHETS.json")
@@ -100,6 +102,12 @@ def base_allowed(repo):
     cannot — the base ceiling is still the old number. `LPM_RATCHET_BASE_JSON` is a test seam
     naming a file to use instead of git; `LPM_RATCHET_BASE_REF` picks the ref (default
     origin/main). Returns (ceilings, description) or (None, why) when nothing base-like is readable.
+
+    "Not readable" has two causes that must not be conflated. A merge base that does not RESOLVE is
+    a shallow clone, and comparing against the file alone is then the hole this guard exists to
+    close. A merge base that resolves but does not CONTAIN the ledger is the commit introducing it,
+    where there is no prior ceiling to compare against and never will be again. The second is
+    signalled by a `bootstrap:` prefix so the caller can allow one and refuse the other.
     """
     seam = os.environ.get("LPM_RATCHET_BASE_JSON")
     if seam:
@@ -123,15 +131,43 @@ def base_allowed(repo):
         return None, f"git merge-base HEAD {ref}: {err or 'not available'} (a shallow clone has no base)"
     blob, err = git("show", f"{merge_base}:docs/observations/RATCHETS.json")
     if blob is None:
-        return None, f"{merge_base[:8]}:RATCHETS.json: {err or 'not present'}"
+        return None, (f"bootstrap: the merge base {merge_base[:8]} has no RATCHETS.json, so this is "
+                      f"the commit that introduces the ledger and there is no prior ceiling")
     try:
         return dict(_flatten(json.loads(blob).get("allowed") or {})), f"merge-base {merge_base[:8]}"
     except ValueError as exc:
         return None, f"{merge_base[:8]}: {exc}"
 
 
+def _raise_authorizes(entry, added):
+    """Whether a `raised` entry is a real decision that covers exactly these members.
+
+    A raise used to be any truthy reason plus a date-SHAPED string, which let three things through:
+    an invisible reason (`"\u200b"` survives `strip()`), an impossible date (`2026-99-99` matches
+    the regex), and — the load-bearing one — a raise recorded for one growth authorising every
+    later, unrelated growth on the same key. Naming the members is what binds a decision to what it
+    decided; anything outside that list is a new decision and needs its own.
+    """
+    reason = "".join(c for c in str(entry.get("reason") or "")
+                     if c.isprintable() and not c.isspace() and unicodedata.category(c) != "Cf")
+    if len(reason) < 8:
+        return False, "its `reason` is empty or has no substance"
+    try:
+        datetime.date.fromisoformat(str(entry.get("date") or ""))
+    except ValueError:
+        return False, f"its `date` {entry.get('date')!r} is not a real calendar date"
+    members = entry.get("members")
+    if not isinstance(members, list):
+        return False, "it names no `members`, so it authorises anything that ever appears"
+    uncovered = sorted(set(added) - set(members))
+    if uncovered:
+        return False, (f"{len(uncovered)} of these are outside the members it authorised, "
+                       f"first {uncovered[0]!r}")
+    return True, ""
+
+
 def compare(live, ratchets, base=None):
-    """(grew, shrank, missing): each a list of (key, added|removed, allowed).
+    """(grew, shrank, missing, understated): each a list of (key, members, allowed).
 
     For GROWTH the base is authoritative when it is readable, and the file is not consulted at all:
     unioning them is precisely what a same-commit raise exploits — add the member, add it to the
@@ -143,10 +179,16 @@ def compare(live, ratchets, base=None):
 
     For LAG the file alone is used: shrinking is the ordinary commit, and the file is where the
     closure gets recorded.
+
+    UNDERSTATEMENT is its own finding, and it is the one a base-vs-file split hides. With base
+    {b,c}, a file listing only {b} and live still {b,c}, there is no growth against the base and no
+    lag against the file — yet the ceiling now under-reports real debt by one. A ceiling that does
+    not name everything live is not a ceiling, so the file must list every live member regardless
+    of what the base allowed.
     """
     allowed = dict(_flatten(ratchets.get("allowed") or {}))
     base = base or {}
-    grew, shrank, missing = [], [], []
+    grew, shrank, missing, understated = [], [], [], []
     for key, values in _flatten(live):
         if key not in allowed:
             missing.append((key, values))
@@ -163,11 +205,17 @@ def compare(live, ratchets, base=None):
             permitted = set(allowed[key])
         added = sorted(set(values) - permitted)
         removed = sorted(set(allowed[key]) - set(values))
+        unlisted = sorted(set(values) - set(allowed[key]))
         if added:
             grew.append((key, added, allowed[key]))
-        elif removed:
+        # Independent of growth. These were `elif`s, so one valid raise suppressed the report of
+        # everything else on that key: a change could add a member with a reason and silently drop
+        # an unrelated closed one from the file in the same commit.
+        if removed:
             shrank.append((key, removed, allowed[key]))
-    return grew, shrank, missing
+        if unlisted:
+            understated.append((key, unlisted, allowed[key]))
+    return grew, shrank, missing, understated
 
 
 def main(argv=None):
@@ -182,9 +230,24 @@ def main(argv=None):
 
     base, where = base_allowed(repo)
     if base is None:
-        print(f"note: base sets unreadable ({where}); comparing against the file alone, which a "
-              f"same-commit edit can defeat")
-    grew, shrank, missing = compare(live, ratchets, base)
+        # Fail-open here is the whole hole. CI checks out shallow by default, so the merge base is
+        # not in the clone, so the guard silently degrades to comparing the branch against itself —
+        # and a commit that adds a gap and adds it to its own `allowed` set passes. Locally the
+        # note is enough (a developer sees it); in CI, which is where the claim of enforcement is
+        # actually made, an unreadable base is a failure and the fix is `fetch-depth: 0`.
+        if where.startswith("bootstrap:"):
+            # Refusing this would make the introducing commit unmergeable, and after it lands the
+            # branch can never take this path again — the base has the file from then on.
+            print(f"note: {where}; the file is its own ceiling for this commit only")
+        elif os.environ.get("CI"):
+            print(f"base sets unreadable ({where}); comparing against the file alone, which a "
+                  f"same-commit edit can defeat.\n  In CI this is a failure, not a note: check out "
+                  f"with `fetch-depth: 0` so the merge base is present.")
+            return 1
+        else:
+            print(f"note: base sets unreadable ({where}); comparing against the file alone, which "
+                  f"a same-commit edit can defeat")
+    grew, shrank, missing, understated = compare(live, ratchets, base)
     raised = ratchets.get("raised") or {}
     failed = False
 
@@ -193,8 +256,7 @@ def main(argv=None):
         failed = True
     for key, added, allowed in grew:
         entry = raised.get(key) or {}
-        ok = bool(str(entry.get("reason") or "").strip()) and \
-            re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(entry.get("date") or "")) is not None
+        ok, why = _raise_authorizes(entry, added)
         if ok:
             # A raise with a dated reason is a DECISION, and it lands. The diff carries the reason
             # and the new members; refusing it outright made `raised` unusable, because the base
@@ -203,13 +265,22 @@ def main(argv=None):
             for v in added[:8]:
                 print(f"    + {v}")
         else:
-            print(f"{key}: {len(added)} item(s) the ledger did not know it did not know:")
+            print(f"{key}: {len(added)} item(s) the ledger did not know it did not know ({why}):")
             for v in added[:8]:
                 print(f"    + {v}")
             if len(added) > 8:
                 print(f"    … and {len(added) - 8} more")
-            print(f"  Close them, or record why under `raised.{key}` with a date and a reason.")
+            print(f"  Close them, or record why under `raised.{key}` with a real date, a reason, "
+                  f"and a `members` list naming exactly what is being allowed in.")
             failed = True
+    for key, unlisted, allowed in understated:
+        print(f"{key}: {len(unlisted)} item(s) are live but absent from `allowed.{key}`, so the "
+              f"ceiling under-reports the real gap:")
+        for v in unlisted[:8]:
+            print(f"    ? {v}")
+        if len(unlisted) > 8:
+            print(f"    … and {len(unlisted) - 8} more")
+        failed = True
     for key, removed, allowed in shrank:
         print(f"{key}: {len(removed)} item(s) closed — remove them from `allowed.{key}` so the next "
               f"regression cannot hide under the old list:")

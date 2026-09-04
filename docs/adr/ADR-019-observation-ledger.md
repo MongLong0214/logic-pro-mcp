@@ -41,15 +41,30 @@ running the campaign closes it, and a phase that ships without new measurement h
 `ui-labels.json` moves to `schema: 2`. Every variant carries a `provenance` block:
 
 ```jsonc
-"입력 슬롯": {
-  "record":     "2026-09-04-mixer-slot-readback-was-a-one-language-match",   // MUST exist
-  "locale":     "ko-KR",          // MUST equal that record's host.locale
-  "date":       "2026-09-04",     // a real date
-  "host":       "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-  "observed":   "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. …",  // MUST contain the variant
-  "on_element": "AXButton, AXDescription \"입력 1\""
+"roles": ["AXButton"],            // the AX roles THIS LABEL may be read on — see below
+"provenance": {
+  "입력 슬롯": {
+    "record":    "2026-09-04-mixer-slot-readback-was-a-one-language-match",   // MUST exist
+    "locale":    "ko-KR",         // MUST equal that record's host.locale
+    "date":      "2026-09-04",    // MUST equal that record's date, and be a real one
+    "role":      "AXButton",      // MUST be one of `roles`
+    "attribute": "help",          // which AX attribute carried it
+    "match":     "contains",      // `exact` or `contains`; MUST agree with how Swift reads the set
+    "observed":  "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…"   // a QUOTE, see below
+  }
 }
 ```
+
+`observed` is not a field an author fills in: it must equal, character for character, the value the
+cited record recorded on that element. Requiring only that it CONTAIN the variant left the rest of
+the string free, and a real truncated reading was cited while `observed` claimed the untruncated
+text nobody had read. If the record truncated, the quote is truncated.
+
+`roles` is declared per label, not per block, and every citation must name one of them. Without it
+the shared-string hole D2 closes for coverage stays open for provenance: `editMenuBar` could be
+backed by a sighting of `編集` on an `AXMenuButton` that belongs to `markerListEditMenuButton`. It is
+author-typed on purpose — the AX role is not derivable from the Swift, and a typed CONSTRAINT can
+only ever refuse evidence, never manufacture it, so a wrong one costs a false RED somebody fixes.
 
 Resolving `record` to a file and matching its `host.locale` is cheap referential integrity — it
 catches a dangling id and a locale typo, and it is not evidence. A fabricated variant could cite any
@@ -100,6 +115,7 @@ earlier draft's four-state model was wrong. Three states are:
 | `measured` | a record in this locale observed the surface this label lives on, and its observations contain at least one of this label's strings — a variant with provenance, or the canonical | no |
 | `identifier` | not matched by label at all — addressed by a locale-free `AXIdentifier`, and a record in this locale observed that identifier on that element | no |
 | `unmeasured` | nobody has looked | **yes** |
+| `retired` | the element this label addressed is no longer read through it, so no measurement in any locale can ever close it | no |
 
 **Data model.** `coverage[locale]` is one of those strings. When a variant with provenance in that
 locale exists, `measured` is DERIVED and no citation is stored — the provenance is the evidence.
@@ -114,6 +130,11 @@ Otherwise three fields are required and the guard checks all three:
 Without the role, any record showing either element backs both, which is the same shared-string
 hole D1 closes for variants.
 
+`retired` requires a label-level `retired.reason`. It exists because `headerPanHint` — superseded by
+`sliderPanHint` — sat in the ledger as three locales of `unmeasured`, which is debt nobody could
+discharge by measuring anything. A permanent gap overstates the real one and trains readers to
+ignore the number.
+
 There is no `absent`. "Logic shows the canonical here" is a `measured` whose record contains the
 canonical; "this element is unlabelled" is a `measured` whose record says so in its observations.
 Neither is a state of its own, and neither is manufactured: the campaign in D4 proposes nothing for a
@@ -124,12 +145,19 @@ may only fall. **#778 is the `ja-JP: unmeasured` count**; #768's eighteen empty 
 eighteen declared states, most of them `unmeasured`, which is the true one.
 
 `coverage` lives in the JSON, not in Swift. Swift stays the compiled source of the *strings*; the
-JSON carries what is known *about* them, and `Scripts/locale_labels.py --write` preserves it.
+JSON carries what is known *about* them, and `Scripts/locale_labels.py --write` preserves it —
+`provenance`, all three `coverage_*` maps, and the typed `roles` and `retired`, which travel
+together. Carrying only some of them was a data-loss bug: the next `--write` stripped the backing a
+claim needed and the guard then refused a claim that had been valid.
 
 ### D3 — Locale becomes an axis of the ledger
 
 `host.locale` stays a field and stops being inert. `observations-status.py --coverage` reports, per
-surface, which locales have a record. D1's cross-check (variant locale ⇔ record locale) is what makes
+surface, which locales have a record — and then per LOCALE, how many surfaces that locale has seen.
+The second half matters more than it sounds: on the day this landed, 13 of 19 surfaces had a record
+and every one of those records was Korean, so a locale-blind "13 of 19" was reporting coverage the
+ledger did not have. It reads the ratchet guard's `live_state`, so the report and the enforcement
+cannot drift into two definitions of a gap. D1's cross-check (variant locale ⇔ record locale) is what makes
 the JSON auditable against the ledger rather than beside it.
 
 ### D4 — A census tool and a campaign, so the gaps can actually be closed
@@ -194,8 +222,15 @@ disagreed. `kind: manual` is honest and is counted as debt.
 `docs/observations/RATCHETS.json` holds every burn-down ceiling:
 
 ```jsonc
-{ "undocumented_variants": 255, "unmeasured_coverage": {"en-US": …, "ko-KR": …, "ja-JP": …},
-  "schema_v1_records": 24, "manual_reverify": 19, "surfaces_without_records": 6 }
+{ "allowed": {
+    "undocumented_variants":    ["regionKindMidi→가짜", "…"],          // 255 members
+    "unmeasured_coverage":      {"en-US": ["…"], "ko-KR": ["…"], "ja-JP": ["…"]},
+    "schema_v1_records":        ["2026-08-30-…", "…"],
+    "manual_reverify":          ["…"],
+    "surfaces_without_records": ["en-US→arrange.regions", "…"] },
+  "raised": {
+    "undocumented_variants": { "date": "2026-09-05", "reason": "…",
+                               "members": ["regionKindMidi→가짜"] } } }   // exactly what it allows
 ```
 
 **Sets of identities, not counts.** A count is defeated by a swap: add one undocumented variant,
@@ -208,17 +243,31 @@ never could.
 origin/main`, not that ref's tip, which a branch can outrun. The file is not consulted for the
 growth test at all: unioning the two is exactly what a same-commit raise exploits — add the member,
 add it to the file, and a union permits it. A member the base already allowed is therefore never a
-growth, which is what lets a branch drop one from its own file on the way to closing it. When the
-base is unreadable — a shallow CI clone, or the commit that introduces the file — the guard says so
-loudly and falls back.
+growth, which is what lets a branch drop one from its own file once it has genuinely CLOSED it.
 
-**A raise lands.** An entry under `raised` with a date and a reason passes, printing both and the
-new members. An earlier draft failed it anyway, which made `raised` unusable: the base can never
-acquire a member without merging a change that fails. The protection is that the raise is in the
-diff with its reason, and the base comparison is what catches a raise that has none.
+**A ceiling must still name everything live.** Growth-against-base and lag-against-file leave a gap
+between them: with the base allowing `{b,c}`, a file listing only `{b}` and `c` still live, there is
+no growth and no lag, and the ceiling quietly under-reports by one. Understatement is therefore its
+own finding — every live member must appear in the file, whatever the base allowed. An earlier draft
+of this document described that shape as correct, and its self-test asserted it.
 
-A member that CLOSED also fails, asking for its removal from the file — a list that lags reality
-lets the next regression hide inside it.
+**Three findings, independently.** Growth, lag and understatement are reported separately. They were
+an if/elif, so one valid raise silenced the other two on the same key: a change could add a member
+with a reason and drop an unrelated closed one in the same commit, unremarked.
+
+**A raise lands, and only for what it names.** An entry under `raised` with a real calendar date, a
+reason with substance, and a `members` list passes — printing all of it. Refusing every raise made
+`raised` unusable, because the base can never acquire a member without merging a change that fails.
+But `members` is what binds the decision to what it decided: without it, one raise recorded for one
+growth authorised every later, unrelated growth on the same key forever. `2026-99-99` is date-SHAPED
+and is not a date; a `reason` of `"\u200b"` survives `strip()` and says nothing. Both are refused.
+
+**An unreadable base is a failure in CI.** GitHub's checkout is shallow by default, so the merge base
+is absent, so the guard silently degrades to comparing the branch against its own file — and a commit
+that adds a gap while raising its own ceiling passes. Under `CI` that is now an error naming the fix
+(`fetch-depth: 0`, which this repository's workflow sets); locally it stays a note. A base that
+RESOLVES but predates the ledger is a different thing — the commit introducing the file — and is
+allowed once, named as `bootstrap`, because refusing it would make that commit unmergeable.
 
 ## Phases
 
