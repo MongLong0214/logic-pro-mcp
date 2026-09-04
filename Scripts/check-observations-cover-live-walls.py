@@ -55,11 +55,13 @@ ISSUE = re.compile(r"#(\d+)")
 # issue, so the list can only shrink: a NEW row cannot join it without editing this file, which is
 # the point. Each entry names what would have to be re-measured to remove it.
 GRANDFATHERED = {
+    299: "ADR-011 native-editor slider census, measured 2026-08-30 before records existed",
     290: "ADR-007, closed 2026-08-30 — all seven criteria measured before records existed",
     300: "ADR-012, closed 2026-08-28 — seven acceptance criteria measured before records existed",
     301: "ADR-013 Channel EQ named-band writes, shipped and measured 2026-08-31",
     369: "export panel walls, measured across seven live rounds",
     747: "the Korean save_as path, measured 2026-09-03",
+    748: "the collapsed-stack truncation, measured 2026-09-03",
 }
 
 
@@ -75,6 +77,21 @@ def recorded_issues():
     return out
 
 
+def own_issue(line):
+    """The issue a row is about, read from its identity cells rather than its prose.
+
+    Both table shapes put it up front: `| ADR-011 | #299 | OPEN | ...` and `| #369 | closed |
+    ...`. Scanning the whole line instead lets any issue named in passing stand in as coverage --
+    ADR-011 claims a measurement about #299 and mentions "behind #292", and a record about #292
+    was accepted as covering it. Prose names dependencies; only the leading cells name the row.
+    """
+    cells = line.split("|")
+    for cell in cells[1:3]:
+        found = ISSUE.findall(cell)
+        if found:
+            return {int(found[0])}
+    return {int(n) for n in ISSUE.findall(line)}
+
 def main():
     if not os.path.exists(ROADMAP):
         print("no roadmap; nothing to check")
@@ -87,7 +104,7 @@ def main():
         claim = claim_in(line)
         if not claim:
             continue
-        issues = {int(n) for n in ISSUE.findall(line)}
+        issues = own_issue(line)
         if not issues:
             continue
         if issues & have:
