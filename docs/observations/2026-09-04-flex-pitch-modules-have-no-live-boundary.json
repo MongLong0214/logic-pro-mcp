@@ -1,0 +1,40 @@
+{
+  "id": "2026-09-04-flex-pitch-modules-have-no-live-boundary",
+  "date": "2026-09-04",
+  "subject": "ADR-017's Flex Pitch modules and their reachability",
+  "question": "Can any operation reach the Flex Pitch modules, so note identity could be exercised at all?",
+  "verdict": "wall",
+  "issues": [305],
+  "surface": "editor.audio_track",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6",
+           "note": "about the SERVER binary's wiring, not Logic; host recorded so drift is still dated"},
+  "reverify": {
+    "kind": "manual",
+    "command": "grep -rn FlexPitch Sources/ --include=*.swift | grep -v '^Sources/LogicProMCP/FlexPitch/' and check who reads FeatureFlags.adr017FlexPitch.",
+    "expected": "the only hit outside the module directory is the flag's own declaration, and the only reader is a test asserting the flag is off",
+    "cost": "~1 min, no Logic needed"
+  },
+  "depends": [
+    "Sources/LogicProMCP/FlexPitch/FlexPitchModel.swift",
+    "Sources/LogicProMCP/FlexPitch/FlexPitchEditGate.swift",
+    "Sources/LogicProMCP/FlexPitch/FlexPitchRefValidity.swift",
+    "Sources/LogicProMCP/Utilities/FeatureFlags.swift"
+  ],
+  "method": "Searched every reference to FlexPitch outside its own directory, and every reader of the ADR-017 feature flag, across Sources and Tests. This measures REACHABILITY, which is the precondition for any note-identity measurement: a surface no operation can enter cannot have its identity stability exercised.",
+  "observations": [
+    {"module_files": 3, "names": ["FlexPitchModel.swift", "FlexPitchEditGate.swift", "FlexPitchRefValidity.swift"]},
+    {"references_outside_the_module_directory": 1,
+     "the_one": "Sources/LogicProMCP/Utilities/FeatureFlags.swift:adr017FlexPitch — the flag's own declaration"},
+    {"flag": "LOGIC_MCP_ADR017_FLEX_PITCH", "default": "off (absent env var)",
+     "readers": ["Tests/LogicProMCPTests/FlexPitchTests.swift:184 — asserts the flag is off"]},
+    {"module_surface": ["isReferenceCurrent", "staleReferences", "editEligibility", "publicEditableReferences",
+                        "FlexPitchNoteReference", "FlexPitchNote", "FlexPitchSnapshot", "FlexProvenance"]}
+  ],
+  "conclusion": "The Flex Pitch modules are pure logic with no caller. Nothing outside their own directory references them, the feature flag defaults off, and its only reader is a test asserting it is off. So the note-identity-stability measurement this ADR needs cannot be made through the product — there is no path that produces a FlexPitchSnapshot from a live region. This is the same shape as ADR-015: the modules exist and the live ingestion boundary in front of them does not.",
+  "limits": [
+    "This measures reachability in the code, not Logic's Audio Track Editor. Whether Logic exposes stable note identity there is still unmeasured and is the ADR's actual question.",
+    "A walk of the Audio Track Editor's AX tree over a Flex-analysed region would answer that independently of wiring, and needs an audio region with Flex Pitch analysis — this project has none.",
+    "Says nothing about whether the modules' logic is correct; only that nothing calls it."
+  ],
+  "supersedes": null
+}
