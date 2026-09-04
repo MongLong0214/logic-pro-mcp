@@ -202,6 +202,25 @@ def unproven(records):
     print(f"\nrecords whose reverify is manual prose rather than a command: {len(manual)}")
     for r in manual:
         print(f"      {r}")
+    # Which claims rest on a machine-produced census, and which on a row the record's author typed.
+    # Both are legitimate — a record carries readings, and a person writing down what they saw is
+    # how most of this ledger was built. But the guard cannot tell them apart, and neither could a
+    # reader until now: it is the one thing the evidence rule explicitly does NOT check, so it is
+    # worth being able to see rather than only being written down in the ADR.
+    by_id = {d.get("id"): d for d in docs}
+    machine = author = 0
+    for entry in entries.values():
+        for block in (entry.get("provenance") or {}).values():
+            rec = by_id.get((block or {}).get("record"))
+            if rec and rec.get("evidence"):
+                machine += 1
+            else:
+                author += 1
+    print(f"\nprovenance resting on a record with an evidence FILE: {machine}")
+    print(f"provenance resting on a row the record's author wrote:  {author}")
+    print("  Neither is refused. The guard checks that the record SAW the string, not how the")
+    print("  record came to say so — the campaign produces the first kind, and a person the second.")
+
     broken = []
     for d in docs:
         for dep in d.get("depends") or []:

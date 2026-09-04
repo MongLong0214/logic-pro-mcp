@@ -142,6 +142,12 @@ NAME was wrong in both directions against the real call sites, and where the Swi
 `AXLocalePolicy.<name>.containsAny` — the guard requires the declaration to agree with it. Not a substring of the serialized
 record, which accepted the variant `input` on the strength of a key named `with_input`.
 
+What this does NOT check is whether a record's own rows were read or typed. A record carries
+readings, and a person writing down what they saw is how most of this ledger was built; the guard
+verifies that the record SAW the string, not how the record came to say so. That is the ledger's
+trust boundary, and `observations-status.py --unproven` now counts both kinds so it is visible
+rather than only written down here.
+
 So a record's `observations` are worth writing **row-shaped** — `{"role": …, "help": …}` — because
 that is the shape a claim can rest on. Evidence files must live under `docs/observations/evidence/`
 and are read as JSON rows; a screenshot is worth keeping and cannot back a claim, which is the
