@@ -137,10 +137,27 @@ which locales each surface has been looked at in. The label projection (`docs/lo
 schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role`, the
 `attribute` it was read from and the `match` mode (`exact` or `contains`), and the guard requires
 the record to contain a **sighting** — an element of that role whose that attribute carried the
-string under that mode. The mode is data because it cannot be guessed: inferring it from the label's
-NAME was wrong in both directions against the real call sites, and where the Swift *can* say —
-`AXLocalePolicy.<name>.containsAny` — the guard requires the declaration to agree with it. Not a substring of the serialized
-record, which accepted the variant `input` on the strength of a key named `with_input`.
+string under that mode. Three further rules make the citation hold:
+
+- **`observed` is a quote.** It must equal, character for character, the value the cited record
+  recorded on that element. Requiring only that it CONTAIN the variant left the rest of the field
+  free, and a real but truncated reading was cited while `observed` claimed untruncated text.
+- **The role must be one the label declares** in its `roles` list. Otherwise a sighting of the same
+  string on a different element backs the wrong label — `Edit` on a menu bar is not `Edit` on a
+  toolbar button. `roles` is author-typed: a constraint can only refuse evidence, never manufacture
+  it, so a wrong one costs a false RED rather than a false claim.
+- **A record's `expected` / `counterexample` subtrees are not readings.** They are element-shaped on
+  purpose, which is what let a counterexample back the claim it was written to deny.
+
+The mode is data because it cannot be guessed: inferring it from the label's NAME was wrong in both
+directions against the real call sites, and where the Swift *can* say —
+`AXLocalePolicy.<name>.containsAny` — the guard requires the declaration to agree with it. And a
+sighting is a row, an attribute and the value that attribute carried — not a substring of the
+serialized record, which accepted the variant `input` on the strength of a key named `with_input`.
+
+`coverage` adds `retired` to `measured` / `identifier` / `unmeasured`, for a label whose element is
+no longer read through it — permanent debt no measurement could ever discharge. It requires a
+reason.
 
 What this does NOT check is whether a record's own rows were read or typed. A record carries
 readings, and a person writing down what they saw is how most of this ledger was built; the guard
