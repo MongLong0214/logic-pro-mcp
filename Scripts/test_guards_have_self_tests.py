@@ -62,7 +62,9 @@ with tempfile.TemporaryDirectory() as tmp:
         tmp, "print(1)\n",
         'import importlib.util\n'
         'GUARD = os.path.join(REPO, "Scripts", "check-thing.py")\n'
-        'spec = importlib.util.spec_from_file_location("g", GUARD)\n')
+        'spec = importlib.util.spec_from_file_location("g", GUARD)\n'
+        'importlib.util.module_from_spec(spec)\n'
+        'spec.loader.exec_module(mod)\n')
     case("a guard referenced in code is covered",
          list(covered) == ["check-thing.py"] and bare == [], f"covered={covered!r} bare={bare!r}")
 
@@ -73,6 +75,18 @@ with tempfile.TemporaryDirectory() as tmp:
         tmp, "print(1)\n",
         '"""Scripts/check-thing.py proves every name a consumer references exists."""\nprint(2)\n')
     case("a guard named only in a docstring is still bare",
+         bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
+
+# 2b. Building a spec is not running one. `spec_from_file_location` creates a spec and executes
+#     nothing, so a test could name a guard through it and drive none of its code — a review found
+#     the rule counting exactly that, and the positive case above had the same shape.
+with tempfile.TemporaryDirectory() as tmp:
+    covered, bare = coverage_in(
+        tmp, "print(1)\n",
+        'import importlib.util\n'
+        'GUARD = os.path.join(REPO, "Scripts", "check-thing.py")\n'
+        'spec = importlib.util.spec_from_file_location("g", GUARD)\n')
+    case("naming a guard through a spec without executing it is bare",
          bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
 
 # 3b. A file that names the guard but runs NOTHING is bare, however the name is spelled.

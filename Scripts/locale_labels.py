@@ -52,6 +52,10 @@ INLINE = re.compile(
 # cannot read has to make the export refuse, not vanish from both sides of the comparison.
 ANY_LABELSET = re.compile(r'LabelSet\(')
 STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+# A `// comment` inside a variants array had its quoted text recorded as a variant. Swift line
+# comments are stripped before the strings are read; found by a review with
+# `variants: ["실제", // "disabled guess"\n]`.
+LINE_COMMENT = re.compile(r"//[^\n]*")
 
 
 def _unescape(text):
@@ -86,7 +90,7 @@ def from_swift(path=SWIFT):
         name, canonical, variants = match.group(1), match.group(2), match.group(3)
         out[name] = {
             "canonical": _unescape(canonical),
-            "variants": [_unescape(v) for v in STRING.findall(variants)],
+            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
             "rationale": _rationale(match.group("rationale")),
         }
     named_canonicals = {e["canonical"] for e in out.values()}
@@ -99,7 +103,7 @@ def from_swift(path=SWIFT):
             continue
         out[key] = {
             "canonical": canonical,
-            "variants": [_unescape(v) for v in STRING.findall(variants)],
+            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
             "rationale": _rationale(rationale),
         }
     if len(out) != declared:

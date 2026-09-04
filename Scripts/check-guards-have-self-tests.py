@@ -70,8 +70,11 @@ def tests():
 # An execution CONSTRUCT, not a word that could sit in a tuple beside the guard's name. An outside
 # review showed `MARKERS = ("check-thing.py", "subprocess")` satisfying both substring checks at
 # once, which is the cheapest possible sham. These require the call syntax.
-EXECUTES = ("spec_from_file_location(", "subprocess.run(", "subprocess.check_",
-            "exec_module(", "os.system(", "bash \"", "python3 \"", "bash $", "python3 $")
+# `spec_from_file_location` builds a spec and runs NOTHING — a review pointed out that a test
+# could name a guard through it and execute none of that guard's code while this reported coverage.
+# `exec_module` is the call that runs it, and the shell forms actually launch something.
+EXECUTES = ("exec_module(", "subprocess.run(", "subprocess.check_", "os.system(",
+            "bash \"", "python3 \"", "bash $", "python3 $")
 
 
 def code_text(path):

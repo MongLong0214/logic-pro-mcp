@@ -81,7 +81,6 @@ LIVEKIT = os.path.join(REPO, "Scripts", "livekit")
 # deduplicated before the comparison. A list that hides unbounded new copies of a defect is not a
 # ratchet. Counts may only fall; a site that gains one is reported.
 KNOWN = {
-    ("live_290_selectors_resolve_by_identity.py", "pan"): 1,
     ("live_290_shifted_strips_are_refused.py", "Mixer"): 1,
     ("live_290_shifted_strips_are_refused.py", "View"): 1,
     ("live_291_input_slot_is_read.py", "send"): 1,
@@ -92,28 +91,28 @@ KNOWN = {
     ("live_519_region_op_on_a_localized_logic.py", "Tracks"): 3,
     ("live_523_marker_delete.py", "Marker"): 2,
     ("live_523_marker_delete.py", "Number of Items"): 3,
-    ("live_538_modal_reconcile.py", "Tracks"): 2,
+    ("live_538_modal_reconcile.py", "Tracks"): 1,
     ("live_549_cell_does_not_veto.py", "Cancel"): 2,
     ("live_549_cell_does_not_veto.py", "Delete"): 1,
     ("live_549_cell_does_not_veto.py", "Navigate"): 1,
     ("live_549_cell_does_not_veto.py", "Open Marker List"): 1,
-    ("live_549_cell_does_not_veto.py", "Tracks"): 3,
-    ("live_549_receipt_names_the_node.py", "Tracks"): 2,
+    ("live_549_cell_does_not_veto.py", "Tracks"): 2,
+    ("live_549_receipt_names_the_node.py", "Tracks"): 1,
     ("live_572_record_sequence_first_call.py", "Tracks"): 1,
     ("live_575_move_to_playhead_identity.py", "Tracks"): 1,
     ("live_575_move_to_playhead_reachable.py", "Edit"): 2,
     ("live_575_region_stub_rows_retired.py", "Tracks"): 1,
     ("live_575_retired_routes_change_nothing.py", "Tracks"): 1,
-    ("live_576_completeness_is_measured.py", "Tracks"): 3,
+    ("live_576_completeness_is_measured.py", "Tracks"): 2,
     ("live_576_viewport_limited_region_readback.py", "Tracks"): 1,
     ("live_590_project_new_from_cold_launch.py", "Cancel"): 1,
     ("live_590_project_new_from_cold_launch.py", "Save"): 1,
     ("live_590_project_new_from_cold_launch.py", "Tracks"): 4,
     ("live_592_stub_rows_retired.py", "Tracks"): 1,
-    ("live_606_save_as_writes_the_file.py", "Save"): 3,
-    ("live_608_first_call_is_not_refused.py", "Save"): 4,
+    ("live_606_save_as_writes_the_file.py", "Save"): 2,
+    ("live_608_first_call_is_not_refused.py", "Save"): 3,
     ("live_608_first_call_is_not_refused.py", "Save As…"): 1,
-    ("live_614_the_refusal_it_can_still_reach.py", "Save"): 3,
+    ("live_614_the_refusal_it_can_still_reach.py", "Save"): 2,
     ("live_628_mixer_fallback_is_visible.py", "Mixer"): 1,
     ("live_628_mixer_fallback_is_visible.py", "View"): 1,
     ("test_evidence.py", "트랙 콘텐츠"): 1,
@@ -141,12 +140,25 @@ APPLESCRIPT_PREDICATES = [
 # missing `t.strip() == "Save"` and `blocked.get("dialog_title") == "Save"`, both live in
 # `live_608`: a comparison against a localised UI string is the defect whatever the expression on
 # the other side looks like.
+# Both quote styles: `help.startswith('Tracks')` is ordinary Python and escaped the
+# double-quote-only form. `(?P<q>["\'])` requires the same quote on both ends.
 PYTHON_PREDICATES = [
-    re.compile(r'\.(?:startswith|endswith)\(\s*"([^"]+)"'),
-    re.compile(r'(?:==|!=)\s*"([^"]+)"'),
-    re.compile(r'"([^"]+)"\s*(?:==|!=)'),
-    re.compile(r'"([^"]+)"\s+in\s+\w'),
+    re.compile(r'\.(?:startswith|endswith)\(\s*(?P<q>["\'])(?P<lit>[^"\']+)(?P=q)'),
+    re.compile(r'(?:==|!=)\s*(?P<q>["\'])(?P<lit>[^"\']+)(?P=q)'),
+    re.compile(r'(?P<q>["\'])(?P<lit>[^"\']+)(?P=q)\s*(?:==|!=)'),
+    re.compile(r'(?P<q>["\'])(?P<lit>[^"\']+)(?P=q)\s+in\s+\w'),
 ]
+
+# Comparisons against a PROTOCOL field, not against Logic's UI. `target_identity.control == "pan"`
+# reads a key this repository defines and ships; that the policy also happens to carry `pan` as a
+# slider hint does not make the envelope localised. A review found this one already baked into
+# KNOWN as a false positive. Keyed by the literal AND the expression it sits in, so the exemption
+# cannot quietly cover a real UI comparison against the same word.
+PROTOCOL_COMPARISONS = (
+    ('"control") == "pan"', "pan"),
+    ('get("control") == "pan"', "pan"),
+    ('["control"] == "pan"', "pan"),
+)
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
 
@@ -182,17 +194,34 @@ def _docstring_nodes(tree):
 
 
 def _hits(text, known_canonicals, patterns):
-    """(literal, policy name) for every UI-matching literal in `text` the policy knows is localised."""
+    """(literal, policy name) once per OCCURRENCE, not once per pattern that matched it.
+
+    Two patterns both match `whose name ends with "Tracks"`, so one matcher scored two hits. A
+    review turned that into an attack: replace it with a single `window "Tracks"` (one hit) and add
+    a second `window "Tracks"` elsewhere (one more) — the file now carries two defects instead of
+    one and the count is unchanged. Occurrences are deduplicated by their position in the text, so
+    a matcher counts once however many patterns recognise it.
+    """
     found = []
-    for line in text.splitlines():
+    seen_spans = set()
+    for lineno, line in enumerate(text.splitlines(), 1):
         stripped = line.strip()
         if stripped.startswith(("#", "//", "*")):
             continue
+        if any(marker in line for marker, _ in PROTOCOL_COMPARISONS):
+            continue
         for pattern in patterns:
-            for literal in pattern.findall(line):
+            for match in pattern.finditer(line):
+                literal = match.group("lit") if "lit" in (match.re.groupindex or {}) else match.group(1)
                 name = known_canonicals.get(literal.strip().lower())
-                if name:
-                    found.append((literal, name))
+                if not name:
+                    continue
+                span = (lineno, match.start("lit") if "lit" in (match.re.groupindex or {})
+                        else match.start(1), literal)
+                if span in seen_spans:
+                    continue
+                seen_spans.add(span)
+                found.append((literal, name))
     return found
 
 

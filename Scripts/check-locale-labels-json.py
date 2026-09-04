@@ -25,6 +25,7 @@ guard gets deleted rather than satisfied; `evidence.py` records the same reasoni
 `visual_assertions_without_a_subject`, counted for a release before it was gated. A ratchet that
 only moves one way gets there without a flag day.
 """
+import datetime
 import importlib.util
 import os
 import re
@@ -47,7 +48,13 @@ def _module():
 
 
 DOCUMENTED_KEYS = ("locale", "date", "observed")
-_ISO_DATE = re.compile(r"^20\d\d-\d\d-\d\d$")
+# A real calendar date, not a string shaped like one: `2099-99-99` satisfied the pattern.
+def _is_real_date(text):
+    try:
+        datetime.date.fromisoformat(str(text).strip())
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 def _is_documented(block, variant=""):
@@ -68,7 +75,7 @@ def _is_documented(block, variant=""):
         return False
     if not all(str(block.get(k) or "").strip() for k in DOCUMENTED_KEYS):
         return False
-    if not _ISO_DATE.match(str(block.get("date", "")).strip()):
+    if not _is_real_date(block.get("date", "")):
         return False
     return not variant or variant in str(block.get("observed", ""))
 

@@ -117,6 +117,27 @@ found = scan('ok = blocked.get("dialog_title") == "Tracks"\n', CANONICALS)
 case("a comparison against a dict lookup is a site",
      [f[1] for f in found] == ["Tracks"], f"found={found!r}")
 
+# 4b-iii. Single quotes are ordinary Python and escaped the double-quote-only form.
+found = scan("ok = help.startswith('Tracks')\n", CANONICALS)
+case("a single-quoted comparison is a site",
+     [f[1] for f in found] == ["Tracks"], f"found={found!r}")
+
+# 4b-iv. THE BALANCING ATTACK. Two patterns both match `whose name ends with "…"`, so one matcher
+#        used to score two hits: replacing it with a single `window "Tracks"` and adding a second
+#        elsewhere left the count unchanged while the file gained a defect. Occurrences are
+#        counted by position now, so one matcher is one.
+one = scan('S = \'first window whose name ends with "Tracks"\'\n', CANONICALS)
+two = scan('A = \'window "Tracks"\'\nB = \'window "Tracks"\'\n', CANONICALS)
+case("one matcher counts once however many patterns match it",
+     len(one) == 1 and len(two) == 2, f"one={len(one)} two={len(two)}")
+
+# 4b-v. A comparison against a protocol field this repository defines is not a UI matcher, even
+#       when the policy happens to carry the same word. `control == "pan"` was a false positive
+#       already baked into KNOWN.
+found = scan('ok = (envelope.get("target_identity") or {}).get("control") == "pan"\n',
+             {"pan": "sliderPanHint"})
+case("a protocol-field comparison is not a UI matcher", found == [], f"found={found!r}")
+
 # 4c. ...and the same shape quoted in a docstring is still prose.
 found = scan('"""Matched with help.startswith("Tracks") before #766."""\nX = 1\n', CANONICALS)
 case("a Python comparison quoted in a docstring is not a site", found == [], f"found={found!r}")
