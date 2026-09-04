@@ -99,7 +99,6 @@ KNOWN = {
     ("live_549_cell_does_not_veto.py", "Tracks"): 2,
     ("live_549_receipt_names_the_node.py", "Tracks"): 1,
     ("live_572_record_sequence_first_call.py", "Tracks"): 1,
-    ("live_575_move_to_playhead_identity.py", "Tracks"): 1,
     ("live_575_move_to_playhead_reachable.py", "Edit"): 2,
     ("live_575_region_stub_rows_retired.py", "Tracks"): 1,
     ("live_575_retired_routes_change_nothing.py", "Tracks"): 1,

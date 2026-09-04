@@ -417,10 +417,6 @@ private func axSizeHC(_ w: CGFloat, _ h: CGFloat) -> AXValue {
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: runtime,
-        executeScript: { _ in
-            builder.setAttribute(regionB, kAXSelectedAttribute as String, true)
-            return .success("SELECTED")
-        },
         settle: { }
     )
 

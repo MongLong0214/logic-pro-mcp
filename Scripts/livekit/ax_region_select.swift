@@ -14,9 +14,15 @@
 //
 // READ-ONLY, and that is a finding rather than a simplification. An earlier version of this tool
 // wrote `AXSelected` to put the selection on a chosen region. Measured on Logic 12.3, that write
-// does not behave as a setter: setting it true ADDS to the selection instead of replacing it, and a
-// pass that set it false on every other region left eighteen of them selected and the target NOT
-// selected — the opposite of both writes. The return codes were `.success` throughout.
+// does not behave as a setter. This note used to say it ADDS; re-measured 2026-09-04, the sharper
+// fact is that it TOGGLES — writing `true` to one region three times from an empty selection gives
+// selected, deselected, selected. Adding is what that looks like when the target happened to be
+// off, and toggling is also why a pass that wrote false on every other region left eighteen of them
+// selected and the target NOT selected. The return codes were `.success` throughout.
+//
+// A toggle IS usable, but only from a pre-state you established and read back: the product's
+// `region.select_last` empties the selection with Logic's own `Deselect All` first, and the clear
+// is what makes one write land on exactly one region.
 //
 // So the harness does not drive the selection. It reads it, requires exactly one, and lets the
 // product establish that one (an import leaves its new region selected). A witness that cannot

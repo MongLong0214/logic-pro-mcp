@@ -1,0 +1,101 @@
+{
+  "id": "2026-09-04-region-axselected-is-a-toggle",
+  "date": "2026-09-04",
+  "subject": "Actuating the arrange area's region selection over AX",
+  "question": "Is there an actuator on the arrange surface that SETS the region selection to one chosen region?",
+  "verdict": "partial",
+  "issues": [
+    767
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "swiftc a probe that walks the arrange window for AXLayoutItem elements whose AXHelp names a region, then: (1) from an emptied selection write AXSelected=true to ONE region three times, printing the whole selection vector after each write; (2) perform AXPress on a region from a 2-selected and from a 0-selected state; (3) read AXSelectedChildren settability on the enclosing AXLayoutArea; (4) click 편집 > 선택 > 전체 선택 해제 and re-read the vector.",
+    "expected": "the three writes give selected, DESELECTED, selected; AXPress leaves nothing selected from either start and returns success; AXSelectedChildren is settable=false; the menu item empties the selection",
+    "cost": "~3 min, any project with two or more regions"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift",
+    "Scripts/livekit/ax_region_select.swift"
+  ],
+  "method": "Asked what the actuators DO rather than what they return, because on this surface the return code is uninformative — every write and every action below reported success. Each candidate was driven from a pre-state that had been read back, and the whole selection vector was printed after each step, so an effect on a region other than the target could not hide. The decisive control was writing the SAME value to the SAME region repeatedly: a setter is idempotent and a toggle is not, and nothing else distinguishes them from a single write.",
+  "observations": [
+    {
+      "what": "AXSelected = true, written three times to one region from an emptied selection",
+      "regions": 2,
+      "selection_vector_after_each_write": [
+        "10",
+        "00",
+        "10"
+      ],
+      "return_code_each": "success",
+      "reading": "toggle, not setter"
+    },
+    {
+      "what": "AXSelected = true, single write to an unselected region while another was selected",
+      "selected_before": 1,
+      "selected_after": 2,
+      "return_code": "success",
+      "reading": "indistinguishable from 'adds' on one write — this is the observation the repository's earlier note generalised from"
+    },
+    {
+      "what": "AXPress on a region",
+      "from_2_selected": 0,
+      "from_0_selected": 0,
+      "return_code_each": "success",
+      "reading": "did not select from either start that was tried; no other pre-state was tested"
+    },
+    {
+      "what": "AXSelectedChildren on the enclosing AXLayoutArea",
+      "present": true,
+      "settable": false,
+      "area_description": "34개의 ‘Studio Grand’ 트랙"
+    },
+    {
+      "what": "Logic's own 편집 > 선택 > 전체 선택 해제",
+      "selected_before": 2,
+      "selected_after": 0,
+      "ax_enabled": true
+    },
+    {
+      "what": "the composition — Deselect All, then one AXSelected write",
+      "sequence": "2 selected -> 0 -> write -> 1",
+      "target_is_the_selected_one": true
+    },
+    {
+      "what": "AXIdentifier as a locale-free way to name the menu item",
+      "menu_bar_items_scanned": 12,
+      "menu_bar_items_with_identifier": 0,
+      "edit_menu_items_scanned": 151,
+      "deselect_all_identifier": "deselectAll:",
+      "deselect_all_identifier_hits": 1,
+      "shared_identifier_note": "10 of the 17 items in the Select submenu share the single value localMenuItemAction:, which names the dispatcher rather than the item"
+    },
+    {
+      "what": "the product's region.select_last driven live after the fix",
+      "pre_state": "one region selected, and NOT the last one",
+      "envelope_state": "A",
+      "selected_count": 1,
+      "independent_recheck": "exactly 1 selected and it is a different region than before",
+      "repeat_runs_from_an_already_correct_state": 3,
+      "repeat_results": "State A, count 1, same track index each time"
+    }
+  ],
+  "conclusion": "No single actuator on this surface sets the region selection. AXSelected is settable and returns success and is a toggle — 3 writes of the same value give selected, deselected, selected. AXPress returns success and did not select from either start that was tried, 2-selected and 0-selected; no other pre-state was tested. The enclosing AXLayoutArea publishes AXSelectedChildren but reports it settable=false. A toggle is still usable from a pre-state that has been established and READ BACK, and Logic's own Deselect All establishes one: 2 selected -> 0, then one write -> exactly 1. Driven live, region.select_last moved the selection off a non-last region onto the last one and reported State A with a count of 1, and 3 further runs from the already-correct state stayed State A with count 1 — which a toggle without the clear could not do. The menu item is reachable without a localized label because its AXIdentifier deselectAll: is unique among the Edit menu's 151 items; that is not a general escape from localization, since 12 of 12 menu-bar items publish no identifier and 10 of 17 items in one submenu share localMenuItemAction:.",
+  "limits": [
+    "One host, one locale, one Logic build. Whether the toggle is 12.3 behaviour or older was not established.",
+    "Measured with 2 regions on one project. A selection spanning many tracks was not driven, and the historical 18-region note it explains was not re-run.",
+    "The AXIdentifier census covers the Edit menu only. Other menus were not scanned beyond their menu-bar items.",
+    "region.select_last is routed and handled but is not registered in any dispatcher, so this operation cannot currently be reached from the MCP tool surface. It was driven through a temporary executable target linking the library, not through a shipped call path.",
+    "enumerateRegionItems drops regions outside the visible arrange area, so every count here is over visible regions."
+  ],
+  "supersedes": null
+}

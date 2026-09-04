@@ -77,11 +77,73 @@ def osa(script):
     return (r.stdout or "").strip()
 
 
-titles = osa('tell application "System Events" to tell process "Logic Pro" to '
-             'return name of every window')
-ev.check("575/precondition-an-arrange-window-is-open", "Tracks" in titles,
+# One name per LINE, not AppleScript's comma-joined list. The joined form cannot be split back
+# apart safely — a project called `Take 1, final` produces two items that were never two windows —
+# and the check below has to look at one title at a time to mean what its name says.
+# Subrole AND name, one window per line. A title is not enough to say what a window IS: Logic
+# titles a plug-in editor by the TRACK name, which the user controls, so a track called
+# `Backing - Tracks` opens an AXDialog whose title satisfies any title-only rule with no arrange
+# window on screen. The arrange window is an AXStandardWindow; the editor is an AXDialog.
+rows = osa('set AppleScript\'s text item delimiters to linefeed\n'
+           'tell application "System Events" to tell process "Logic Pro"\n'
+           '  set out to {}\n'
+           '  repeat with w in windows\n'
+           '    set r to ""\n'
+           '    try\n'
+           '      set r to (subrole of w) as text\n'
+           '    end try\n'
+           '    set n to ""\n'
+           '    try\n'
+           '      set n to (name of w) as text\n'
+           '    end try\n'
+           '    set end of out to r & "\t" & n\n'
+           '  end repeat\n'
+           'end tell\n'
+           'return out as text')
+windows = []
+for line in rows.splitlines():
+    if "\t" not in line:
+        continue
+    subrole, _, name = line.partition("\t")
+    windows.append((subrole.strip(), name.strip()))
+window_titles = [name for _, name in windows]
+# #767 — the window is `<project> - 트랙` on a Korean Logic, so `"Tracks" in titles` could not pass
+# and reported "no arrange window" for a window that was plainly open. Measured spellings;
+# `AXLocalePolicy.arrangeWindowTitleSuffix` carries the same three.
+#
+# It is a SUFFIX test, which the first fix only claimed to be: it asked whether the spelling appeared
+# anywhere in the comma-joined blob of every title, so a project literally named `Tracks notes` would
+# have satisfied the precondition with no arrange window open at all.
+#
+# And a bare `endswith` is still not the rule. Logic titles its plug-in editors with the TRACK or
+# patch name, which the user controls, so a track called `Backing Tracks` would open a dialog whose
+# title ends in the spelling with no arrange window anywhere. The product's own classifier
+# (`AccessibilityChannel+Project.swift`, `isArrangeWindowTitle`) requires the separator and a
+# non-empty project name in front of it — `<project> - <spelling>` — and this asks the same question
+# so the harness and the product cannot disagree about what an arrange window is.
+ARRANGE_TITLE_SUFFIX = ("Tracks", "트랙", "トラック")
+
+
+def _is_arrange_window(subrole, title):
+    """A standard window whose title is `<project> - <measured spelling>`.
+
+    Both halves are needed. The subrole alone would accept any standard window; the title alone
+    accepts a plug-in editor for a track someone named `Backing - Tracks`, which is a real Logic
+    window that no arrange window has to be open for.
+    """
+    if subrole != "AXStandardWindow":
+        return False
+    for label in ARRANGE_TITLE_SUFFIX:
+        suffix = " - " + label
+        if title.endswith(suffix) and len(title) > len(suffix):
+            return True
+    return False
+
+
+ev.check("575/precondition-an-arrange-window-is-open",
+         any(_is_arrange_window(sub, name) for sub, name in windows),
          "Logic is up with a project, so the region enumeration has something to read",
-         f"titles={titles!r}", None)
+         f"windows={windows!r}", None)
 
 rec = ev.record_screen(seconds=120)
 before = ev.shot("575/before", settle_region=HEADER_BAND)

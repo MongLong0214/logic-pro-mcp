@@ -122,6 +122,117 @@ extension AXLogicProElements {
         return current
     }
 
+    /// Locate a menu item under one menu-bar menu by its locale-free `AXIdentifier`.
+    ///
+    /// Measured on Logic 12.3 (ko-KR) 2026-09-04, walking the whole `편집` menu: 151 items, and
+    /// `AXIdentifier` is NOT a general escape from localized titles. The menu-BAR items publish no
+    /// identifier at all (12 of 12 `<none>`), and inside the Select submenu ten of seventeen items
+    /// share the single value `localMenuItemAction:` — an identifier that names the dispatcher, not
+    /// the item. Only the items Logic wires to a distinct selector carry a distinct value
+    /// (`selectAll:`, `deselectAll:`, `invertSelection:`), and for those the value is unique: a scan
+    /// of all 151 items found `deselectAll:` exactly once.
+    ///
+    /// So this addresses the leaf by identifier and still takes the containing menu by label,
+    /// because the menu bar leaves no other way to name it. A shared identifier resolves to NOTHING
+    /// rather than to whichever item traversal order reached first: the scan collects every match in
+    /// the bounded region and answers only when there is exactly one. That turns "the caller assumed
+    /// wrong about this build" into a refusal instead of into an action on an item nobody chose.
+    ///
+    /// "Every match in the bounded region" is only true if the region was fully READ, so the scan
+    /// uses status-preserving reads and refuses when one fails. The best-effort helpers return an
+    /// empty child array on failure, which would let an unreadable subtree hide the second match and
+    /// hand back the uniqueness the caller asked to have checked.
+    static func menuItem(
+        identifier: String,
+        inMenuBar menuBar: AXLocalePolicy.LabelSet,
+        runtime: Runtime = .production
+    ) -> AXUIElement? {
+        guard let bar = getMenuBar(runtime: runtime) else { return nil }
+        guard let menu = AXHelpers.getChildren(bar, runtime: runtime.ax).first(where: {
+            menuBar.matches(AXHelpers.getTitle($0, runtime: runtime.ax))
+        }) else { return nil }
+
+        // Four levels below the menu-bar item, because the AXMenu containers take a level each:
+        // menu-bar item -> AXMenu -> item -> AXMenu -> item. `deselectAll:` sits at the last of
+        // those (편집 > 선택 > 전체 선택 해제). A first cut stopped at three and never reached it,
+        // and the operation's pre-state gate is what caught that rather than a wrong answer. The
+        // bound stays tight so a mis-typed identifier cannot walk the whole tree.
+        //
+        // The whole bounded region is scanned before answering, rather than returning the first
+        // match. Returning early would make a SHARED identifier resolve to whichever item traversal
+        // order reached first — silently, and differently on another build — and a shared identifier
+        // is the common case here, not the exotic one: ten of the seventeen items in this very
+        // submenu publish `localMenuItemAction:`. Two matches is not a near miss to be broken by
+        // ordering; it means the caller's assumption about this identifier is wrong on this host,
+        // and the only safe answer is none.
+        // Status-preserving reads throughout, because "exactly one match" is a claim about the whole
+        // region and the best-effort helpers cannot make it. `AXHelpers.getChildren` turns a failed
+        // read into an EMPTY array, so an unreadable subtree would hide a duplicate and the scan
+        // would report the uniqueness it was asked to verify. A read that fails is not an absence;
+        // it is the scan being unable to answer, and the answer then has to be none.
+        var matches: [AXUIElement] = []
+        guard case .success(var frontier) = AXHelpers.childrenResult(menu, runtime: runtime.ax) else {
+            return nil
+        }
+        let maxDepth = 4
+        for depth in 0..<maxDepth {
+            var next: [AXUIElement] = []
+            for element in frontier {
+                let identifierRead: Result<String?, AXHelpers.AXStatusError> =
+                    AXHelpers.getAttributeResult(
+                        element, kAXIdentifierAttribute as String, runtime: runtime.ax
+                    )
+                // A menu item, not merely something carrying the identifier. Menus, groups and
+                // whatever else Logic hangs here are not pressable as items.
+                let roleRead: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    element, kAXRoleAttribute as String, runtime: runtime.ax
+                )
+                // Either read can EXCLUDE this element on its own, and an exclusion makes the other
+                // read irrelevant — so a failure only matters when it is still load-bearing. The
+                // first cut demanded both reads succeed, which meant an element conclusively
+                // excluded by its identifier (`localMenuItemAction:`, which most of Logic's items
+                // carry) still aborted the whole lookup if its role happened to be unreadable. That
+                // is a refusal the uniqueness claim does not need: an excluded element cannot be
+                // the duplicate the scan is looking for.
+                let identifierExcludes = (try? identifierRead.get()).map { $0 != identifier } ?? false
+                let roleExcludes = (try? roleRead.get()).map { $0 != (kAXMenuItemRole as String) } ?? false
+                if identifierExcludes || roleExcludes {
+                    // Not this item, decided by a read that succeeded.
+                } else {
+                    switch (identifierRead, roleRead) {
+                    case (.success(let identifierValue), .success(let role)):
+                        if identifierValue == identifier, role == (kAXMenuItemRole as String) {
+                            matches.append(element)
+                        }
+                    case (.failure(let error), _) where error.isDefinitiveAbsence:
+                        break       // no identifier at all: not this item, and a real answer
+                    case (_, .failure(let error)) where error.isDefinitiveAbsence:
+                        break       // no role at all: cannot be a menu item, and a real answer
+                    default:
+                        return nil  // still load-bearing, and unreadable
+                    }
+                }
+
+                // Children only matter while there is another level to scan. Reading them on the
+                // last iteration cannot find a duplicate — nothing will look at them — so failing
+                // there would refuse a healthy unique leaf to protect a claim that is already made.
+                guard depth + 1 < maxDepth else { continue }
+                switch AXHelpers.childrenResult(element, runtime: runtime.ax) {
+                case .success(let kids):
+                    next.append(contentsOf: kids)
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    continue
+                case .failure:
+                    return nil      // a subtree that could have held a duplicate
+                }
+            }
+            if next.isEmpty { break }
+            frontier = next
+        }
+        guard matches.count == 1 else { return nil }
+        return matches.first
+    }
+
     /// Status-preserving counterpart to the locale-resolved `menuItem` lookup.
     /// It is intentionally additive: ordinary callers retain the old
     /// best-effort result, while a mutation verifier can distinguish a missing
