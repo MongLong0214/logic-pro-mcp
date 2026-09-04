@@ -167,22 +167,36 @@ def main():
     check("base membership is honoured", "did not know it did not know" not in proc.stdout,
           f"a base-allowed member was reported as growth: {proc.stdout[:300]}")
 
-    # 11. An unreadable base is said out loud and is not itself fatal.
+    # 11. A key the BASE has never seen is entirely new, and every member is a growth. Adding
+    #     `unmeasured_coverage.fr-FR` pre-populated with its own gaps would otherwise pass in
+    #     silence — the file permits them and the base is never asked about a key it lacks.
+    live_new = {"unmeasured_coverage": {"ko-KR": {"a"}, "fr-FR": {"x", "y", "z"}}}
+    ratch_new = {"allowed": {"unmeasured_coverage": {"ko-KR": ["a"], "fr-FR": ["x", "y", "z"]}}}
+    grew, _, _ = guard.compare(live_new, ratch_new, {"unmeasured_coverage.ko-KR": ["a"]})
+    check("a new axis is not free", grew and grew[0][0] == "unmeasured_coverage.fr-FR"
+          and sorted(grew[0][1]) == ["x", "y", "z"], grew)
+
+    # 12. ...but with no base at all, the file is the fallback and says so rather than inventing
+    #     a growth out of every key.
+    grew, _, _ = guard.compare(live_new, ratch_new, None)
+    check("no base falls back to the file", grew == [], grew)
+
+    # 13. An unreadable base is said out loud and is not itself fatal.
     root = _tree(labels, records, exact)
     env2 = dict(os.environ, LPM_RATCHET_BASE_JSON=str(root / "missing.json"))
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env2)
     check("unreadable base is loud, not fatal", proc.returncode == 0 and "base sets unreadable" in proc.stdout,
           f"exit {proc.returncode}: {proc.stdout[:200]}")
 
-    # 12. RATCHETS.json beside the records is not itself counted as one.
+    # 14. RATCHETS.json beside the records is not itself counted as one.
     check("ratchets file is not a record", guard.live_state(str(root))["schema_v1_records"] == {"2026-09-05-r2"},
           guard.live_state(str(root))["schema_v1_records"])
 
-    # 13. An unreadable ledger is exit 2, never a pass.
+    # 15. An unreadable ledger is exit 2, never a pass.
     (root / "docs" / "observations" / "RATCHETS.json").write_text("{not json", encoding="utf-8")
     check("unreadable is exit 2", guard.main([str(root)]) == 2, "expected exit 2")
 
-    # 14. The real repository is within its sets right now.
+    # 16. The real repository is within its sets right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", proc.returncode == 0, proc.stdout.strip()[:300])
 
@@ -190,7 +204,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("18 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
+    print("20 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
     return 0
 
 

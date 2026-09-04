@@ -138,6 +138,9 @@ def compare(live, ratchets, base=None):
     file, and a union permits it. A member the base already allowed is therefore never a growth,
     which is what lets a branch drop one from its own file.
 
+    A key the base has never seen is entirely new, and every member of it is a growth — otherwise a
+    branch adds an axis pre-populated with its own gaps and nothing asks.
+
     For LAG the file alone is used: shrinking is the ordinary commit, and the file is where the
     closure gets recorded.
     """
@@ -148,7 +151,16 @@ def compare(live, ratchets, base=None):
         if key not in allowed:
             missing.append((key, values))
             continue
-        permitted = set(base[key]) if key in base else set(allowed[key])
+        if key in base:
+            permitted = set(base[key])
+        elif base:
+            # The base is readable and has never heard of this key, so every member is new. Adding
+            # `unmeasured_coverage.fr-FR` pre-populated with 142 gaps would otherwise pass in
+            # silence: the file permits them and the base is not asked. A new axis of ignorance is
+            # a decision, and it lands the same way any other growth does — with a dated reason.
+            permitted = set()
+        else:
+            permitted = set(allowed[key])
         added = sorted(set(values) - permitted)
         removed = sorted(set(allowed[key]) - set(values))
         if added:

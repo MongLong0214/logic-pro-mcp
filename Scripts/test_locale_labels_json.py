@@ -171,17 +171,35 @@ def main():
                       roles={"ko-KR": "AXMenuButton"}, idents={"ko-KR": "notThis:"})
     case("identifier the record never saw", any("whose identifier is" in x for x in cp(wrong_id)), cp(wrong_id))
 
-    # 12. Coverage that skips a locale, or uses a retired value.
+    # 12. An AXIdentifier is not a label. A canonical that happens to equal some element's
+    #     identifier must not make the label `measured` — identifiers are not localised, and the
+    #     claim is about what Logic SHOWS.
+    guard.OBS = _ledger({"2026-09-05-id": ("ko-KR", [_row("AXButton", identifier="편집", help="unrelated")])})
+    ident_only = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-id"},
+                        roles={"ko-KR": "AXButton"}, canonical="편집")
+    case("an identifier is not a label sighting",
+         any("carrying any of this label" in x for x in cp(ident_only, "editMenuBar")),
+         cp(ident_only, "editMenuBar"))
+    guard.OBS = _ledger({
+        "2026-09-05-ko":       ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스", description="입력 1"),
+                                          _row("AXMenuBarItem", title="편집"),
+                                          _row("AXMenuButton", title="편집", identifier="markerEdit:")]),
+        "2026-09-05-ja":       ("ja-JP", [_row("AXButton", help="入力スロット")]),
+        "2026-09-05-ko-blind": ("ko-KR", [_row("AXStaticText", value="something with_input and an L in it")]),
+        "2026-09-05-en":       ("en-US", [_row("AXMenuItem", title="Export")]),
+    })
+
+    # 13. Coverage that skips a locale, or uses a retired value.
     case("missing locale", any("expected exactly" in x for x in cp(_entry([], None, {"en-US": "unmeasured"}))), "")
     case("retired value refused", any("not one of" in x for x in cp(_entry([], None, dict(U, **{"ko-KR": "absent"})))), "")
 
-    # 13. Evidence may not escape the evidence directory — a record could otherwise cite the very
+    # 14. Evidence may not escape the evidence directory — a record could otherwise cite the very
     #     file whose claims it backs.
     outside = {"id": "x", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
                "evidence": ["../locale/ui-labels.json"]}
     case("evidence cannot escape", guard.sighting(outside, "입력 슬롯", "AXButton", "help") is False, "")
 
-    # 14. Migration and carry-forward.
+    # 15. Migration and carry-forward.
     v1 = {"schema": 1, "labels": {"inputSlotHelpKeyword": {"measured": {"입력 슬롯": _prov()}}}}
     built = labels.build(existing=v1)
     ent = built["labels"].get("inputSlotHelpKeyword") or {}
@@ -195,7 +213,7 @@ def main():
     case("cited measured survives", cov.get("en-US") == "measured", cov)
     case("uncited measured is dropped", cov.get("ko-KR") == "unmeasured", cov)
 
-    # 15. The real document is clean.
+    # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
 
@@ -203,7 +221,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("28 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
+    print("29 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
     return 0
 
 

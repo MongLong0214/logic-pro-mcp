@@ -150,7 +150,12 @@ def provenance_problems(name, entry):
     return out
 
 
-SIGHTING_ATTRS = ("title", "description", "help", "value", "identifier")
+# The attributes that carry a LABEL — what Logic shows a person, and what a LabelSet matches.
+LABEL_ATTRS = ("title", "description", "help", "value")
+# `identifier` is an AX identifier: not localised, not a label, and searched only when a block names
+# it. Folding it into the label search let a canonical be "seen" because some element's identifier
+# happened to equal it, which is a sighting of a different kind of thing.
+SIGHTING_ATTRS = LABEL_ATTRS + ("identifier",)
 
 
 def _rows(rec):
@@ -186,6 +191,9 @@ def _rows(rec):
 def sighting(rec, text, role=None, attribute=None, exact=True):
     """Whether the record contains an element of `role` whose `attribute` carried `text`.
 
+    With no `attribute` named, only the LABEL-bearing ones are searched — never `identifier`, which
+    is not a localised label and whose accidental equality with a canonical is not a sighting of it.
+
     This replaces a substring search over `json.dumps(observations)`, which matched KEY names and
     instrument vocabulary: the variant `input` was satisfied by the key `with_input`, and
     `eventListColumnL`'s canonical `L` by any capital L in any path in any reading. A sighting is a
@@ -197,7 +205,7 @@ def sighting(rec, text, role=None, attribute=None, exact=True):
     for row in _rows(rec):
         if role and row.get("role") != role:
             continue
-        for attr in ([attribute] if attribute else SIGHTING_ATTRS):
+        for attr in ([attribute] if attribute else LABEL_ATTRS):
             value = row.get(attr)
             if not isinstance(value, str):
                 continue
