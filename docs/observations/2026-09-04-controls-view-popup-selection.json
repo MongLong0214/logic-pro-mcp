@@ -1,0 +1,149 @@
+{
+  "id": "2026-09-04-controls-view-popup-selection",
+  "date": "2026-09-04",
+  "subject": "Controls-view AXPopUpButton selection on a stock plug-in",
+  "question": "Can a Controls-view popup parameter be set by selecting a named choice?",
+  "verdict": "wall",
+  "issues": [
+    292,
+    306
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.6",
+    "plugin": "Compressor (mono), inserted on an audio track"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-controls-view-popups.sh",
+    "expected": "each opened popup menu exposes only its current choice (plus an untitled disabled entry), or duplicate identical titles",
+    "cost": "needs a Compressor inserted and its editor in Controls view; ~1 min"
+  },
+  "depends": [
+    "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift:LocatorFailure.popupUnmeasured",
+    "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift:LocatedControl.popup"
+  ],
+  "method": "Inserted Compressor through the slot's named custom action, switched the editor to Controls view via the measured 보기 -> 컨트롤 path, then opened each popup with AXShowMenu (the action the control advertises) and read every item attribute. Item counts were POLLED until they stopped changing rather than read once after a fixed sleep, so a short menu is not a settling artifact. No item was pressed: selecting an unnamed entry is the thing under refusal.",
+  "observations": [
+    {
+      "popup": "Auto Gain:",
+      "value": "-12 dB",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": 4,
+      "item_titles": [
+        "-12 dB",
+        "-12 dB",
+        "-12 dB"
+      ],
+      "enabled": [
+        true,
+        true,
+        true
+      ],
+      "checkmark_on_index": 2
+    },
+    {
+      "popup": "Distortion:",
+      "value": "Off",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": 2,
+      "item_titles": [
+        "Off",
+        ""
+      ],
+      "enabled": [
+        true,
+        false
+      ],
+      "checkmark_on_index": 0
+    },
+    {
+      "popup": "Circuit Type:",
+      "value": "Platinum Digital",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": 2,
+      "item_titles": [
+        "Platinum Digital",
+        ""
+      ],
+      "enabled": [
+        true,
+        false
+      ],
+      "checkmark_on_index": 0
+    },
+    {
+      "popup": "Mode:",
+      "value": "LP",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": 2,
+      "item_titles": [
+        "LP",
+        ""
+      ],
+      "enabled": [
+        true,
+        false
+      ],
+      "checkmark_on_index": 0
+    },
+    {
+      "popup": "State:",
+      "value": "Off",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": null,
+      "item_titles": null,
+      "note": "census only; menu not opened"
+    },
+    {
+      "popup": "View Select:",
+      "value": "Output",
+      "value_settable": false,
+      "actions": [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "menu_items": null,
+      "item_titles": null,
+      "note": "census only; menu not opened"
+    },
+    {
+      "table_rows": 29,
+      "popup_count": 6,
+      "note": "reading label and current value works for every popup"
+    }
+  ],
+  "conclusion": "A Controls-view popup cannot be set by name. Three of the four opened menus expose only the current choice plus one untitled disabled item, while the visible UI offers several — Circuit Type shows one of Platinum Digital / Studio VCA / Classic VCA. Auto Gain is the decisive case: three enabled items whose titles are all '-12 dB', so the choices are indistinguishable and only the checkmark identifies the current one. Selecting by ordinal would be selecting by position, which this repository refuses as an identity everywhere else.",
+  "limits": [
+    "State: and View Select: were censused but their menus were not opened.",
+    "No item was pressed, so this does not establish what pressing an untitled disabled entry does.",
+    "Compressor only. Other stock plug-ins may expose their popups differently.",
+    "Third-party plug-ins are entirely unmeasured.",
+    "This says nothing about whether Logic offers a non-AX route to the same parameters."
+  ],
+  "supersedes": null
+}

@@ -1,0 +1,59 @@
+{
+  "id": "2026-09-03-track-header-elements-do-not-move-on-sort",
+  "date": "2026-09-03",
+  "subject": "AXUIElement identity of track headers across a Logic sort",
+  "question": "Do the track-header elements move with their rows when Logic reorders tracks?",
+  "verdict": "wall",
+  "issues": [
+    448
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.6"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-header-element-identity.sh",
+    "expected": "after a sort that moves rows, every after-element is CFEqual to the before-element at the SAME index",
+    "cost": "needs 3+ tracks whose creation order differs from their name order; ~1 min"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:trackSortAfterOrder"
+  ],
+  "method": "Read the track-header rail's AXLayoutItem children and their AXDescriptions, drove a sort through Logic's own Track > Sort Tracks by menu, re-read, then matched every after-element to the before-elements with CFEqual.",
+  "observations": [
+    {
+      "phase": "before",
+      "rows": [
+        "1개의 'Bravo' 트랙",
+        "2개의 'Yankee' 트랙",
+        "3개의 'Zulu' 트랙"
+      ]
+    },
+    {
+      "phase": "after",
+      "rows": [
+        "1개의 'Yankee' 트랙",
+        "2개의 'Bravo' 트랙",
+        "3개의 'Zulu' 트랙"
+      ]
+    },
+    {
+      "cfequal_map": {
+        "after[0]": "before[0]",
+        "after[1]": "before[1]",
+        "after[2]": "before[2]"
+      }
+    }
+  ],
+  "conclusion": "Logic keeps the same AXUIElement objects at the same rail positions and swaps their CONTENT. Element 0 held Bravo before and Yankee after. A join on element identity therefore returns the identity permutation for every sort, which is why sort_verified's after_order always equalled before_order and State A was unreachable.",
+  "limits": [
+    "Three tracks, one sort criterion (creation date). Not swept across criteria or larger arrangements.",
+    "Says nothing about element identity across operations other than sorting."
+  ],
+  "supersedes": null
+}

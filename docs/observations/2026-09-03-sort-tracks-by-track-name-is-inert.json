@@ -1,0 +1,106 @@
+{
+  "id": "2026-09-03-sort-tracks-by-track-name-is-inert",
+  "date": "2026-09-03",
+  "subject": "Logic's Track > Sort Tracks by submenu leaves",
+  "question": "Which sort criteria actually reorder the arrangement?",
+  "verdict": "partial",
+  "issues": [
+    448
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.6"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With 3 plain audio tracks not in name order: read the Edit menu undo entry, click Track > Sort Tracks by > 트랙 이름, re-read the undo entry and the order. A real sort leaves «트랙 정렬 실행 취소».",
+    "expected": "no undo entry is created and the order does not move",
+    "cost": "~2 min; no script because driving that menu is what the product does, and a copy here would test the copy"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/TrackSortVerification.swift:TrackSortCriterion.trackName",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:sortTracksByTrackNameMenuItem"
+  ],
+  "method": "Three plain audio tracks. For each leaf: read the Edit menu's undo entry, click the leaf, re-read the undo entry and the track order. A real sort leaves «트랙 정렬 실행 취소»; a no-op leaves whatever was there before. Reproduced from two starting orders and through both AXPress and a System Events click.",
+  "observations": [
+    {
+      "leaf": "MIDI 채널",
+      "ax_enabled": true,
+      "undo_created": false,
+      "order_moved": false
+    },
+    {
+      "leaf": "오디오 채널",
+      "ax_enabled": true,
+      "undo_created": false,
+      "order_moved": false
+    },
+    {
+      "leaf": "출력 채널",
+      "ax_enabled": true,
+      "undo_created": false,
+      "order_moved": false
+    },
+    {
+      "leaf": "악기 이름",
+      "ax_enabled": true,
+      "undo_created": true,
+      "order_moved": true,
+      "from": [
+        "Zeta",
+        "Bravo",
+        "Zulu"
+      ],
+      "to": [
+        "Bravo",
+        "Zeta",
+        "Zulu"
+      ]
+    },
+    {
+      "leaf": "트랙 이름",
+      "ax_enabled": true,
+      "undo_created": false,
+      "order_moved": false,
+      "from": [
+        "Yankee",
+        "Bravo",
+        "Zulu"
+      ],
+      "note": "not name-sorted, so it should have moved"
+    },
+    {
+      "leaf": "사용 여부",
+      "ax_enabled": true,
+      "undo_created": false,
+      "order_moved": false
+    },
+    {
+      "leaf": "생성일",
+      "ax_enabled": true,
+      "undo_created": true,
+      "order_moved": true,
+      "from": [
+        "Bravo",
+        "Zeta",
+        "Zulu"
+      ],
+      "to": [
+        "Zeta",
+        "Bravo",
+        "Zulu"
+      ]
+    }
+  ],
+  "conclusion": "Sorting works for 악기 이름 and 생성일 and performs no operation at all for 트랙 이름 — no undo entry, no reorder, from an order that was demonstrably not name-sorted. All seven leaves report AXEnabled = true, so a disabled-item guard cannot catch it. The three channel criteria plausibly tie on these tracks and are not evidence either way.",
+  "limits": [
+    "Three plain audio tracks with no MIDI or output-channel variation, so the three channel criteria were never given a case where they should move.",
+    "One Logic build. A future build may fix 트랙 이름.",
+    "On plain audio tracks 악기 이름 happened to produce name order; that is an observation about these tracks, not a documented equivalence."
+  ],
+  "supersedes": null
+}
