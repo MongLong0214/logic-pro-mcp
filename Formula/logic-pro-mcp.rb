@@ -13,9 +13,15 @@ class LogicProMcp < Formula
   #
   # SHA256 is copied from the published SHA256SUMS.txt for the current
   # LogicProMCP-macOS-universal.tar.gz release artifact.
+  #
+  # #775: v3.15.0 shipped with the v3.14.0 hash still here, so every
+  # `brew install` failed on the documented install path. The copy is a
+  # manual step and nothing compared its result to the release it names;
+  # `Scripts/ci-verify-formula-sha.sh` now does, on every change to this
+  # file. Bump `version` and this line together, and let CI confirm it.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"
-    sha256 "0a0e221cadb7f61b28b77c97ade70650d41ef09cee47394914030c2a66a1a45e"
+    sha256 "0776b0d257606460164b3e197f6542223c9d0657501f97e96f5f9a250b994788"
   end
 
   depends_on :macos => :sonoma

@@ -40,6 +40,23 @@ jobs:
         # reporting clean on a truncated issue list or a table it could not parse.
         run: bash Scripts/test-roadmap-table-guard.sh
 
+      - name: Formula sha256 matches the release its version names (#775)
+        # Same family as the check below — "does the repository agree with what GitHub actually
+        # says" — so it lives in the same job: one ubuntu runner, one small download, `contents:
+        # read` already granted, and the network this needs already available.
+        #
+        # It runs on every build rather than only when `Formula/` changed. `actions/checkout` is
+        # shallow (no `fetch-depth`), so a `git diff` against the PR base is a `bad object` rather
+        # than a skip — and the answer can go stale without the file moving at all, because it is a
+        # claim about a RELEASE, not about this tree.
+        #
+        # It cannot live in `run-repo-guards.py`: that job's contract is plain Python needing
+        # neither Xcode nor a network, and the only way to know a hash is right is to ask the
+        # release what it published.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash Scripts/ci-verify-formula-sha.sh
+
       - name: Roadmap table matches GitHub (#678)
         # `--pr` is passed only on a pull request, and only so the table may mark closed the issues
         # THAT pull request says it closes. Without it a PR closing an issue has no truthful row to
@@ -83,6 +100,7 @@ jobs:
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
 
       - name: Guards and headless drives (discovered, not listed)
         # Each of these used to be its own step, duplicated across compile and test, and the file
@@ -146,6 +164,7 @@ jobs:
         # AXLocalePolicy already records for that menu. Fail fast before the build if one
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
 
       - name: Guards and headless drives (discovered, not listed)
         # Each of these used to be its own step, duplicated across compile and test, and the file
