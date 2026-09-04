@@ -737,14 +737,34 @@ enum AXValueExtractors {
     private static func inferTrackType(from header: AXUIElement, runtime: AXHelpers.Runtime) -> TrackType {
         // Logic 12.2 often puts the human track name on the AXLayoutItem and
         // the type hint on a descendant icon/control, so scan both levels.
-        // #766 — the track NAME is deliberately not here. It is user-editable text, and the GM
-        // Device branch below returns early and confidently: with the name in the aggregate,
-        // renaming any track "GM Device scratch" classified it as external MIDI and took the
-        // silent-bounce guard with it. A name a user typed is not a reading of what the track is.
-        // Found by an outside review after the ambiguity fix, which made the one remaining
-        // confident branch worth looking at.
+        // #766 — the aggregate is built from Logic-AUTHORED text only. A name a user typed is not
+        // a reading of what the track is, and the attributes that carry it are excluded rather
+        // than filtered out of the ones that do not.
+        //
+        // Subtracting the name string from every signal was the previous attempt and a review
+        // broke it in one line: the header help reads "…되지 않은 오디오 또는 소프트웨어 악기
+        // 트랙에서…", so a track renamed exactly `오디오` had that word deleted from Logic's own
+        // sentence, leaving `악기` as the only candidate and turning an ambiguous header into a
+        // confident `.softwareInstrument`. Subtracting a user's string from measured text destroys
+        // the measurement.
+        //
+        // Excluded: the quoted name inside the header's AXDescription, and every descendant's
+        // VALUE — the name field's contents. Kept: help, identifier, the header title, and
+        // descendant descriptions and titles, which Logic writes. The icon described
+        // `Audio Channel Strip` is a real signal and stays.
+        // The header's AXDescription reads `1개의 ‘name’ 트랙` — a count, the name in typographic
+        // quotes, and the word for track. Only the quoted part is dropped, so any type signal the
+        // description carries in another locale or Logic version survives; a colour or a kind
+        // written outside the quotes is untouched.
+        let namelessDescription = AXHelpers.getDescription(header, runtime: runtime)
+            .map { text -> String in
+                guard let quoted = extractQuotedTrackName(from: text), !quoted.isEmpty else {
+                    return text
+                }
+                return text.replacingOccurrences(of: quoted, with: " ")
+            }
         var signals = [
-            AXHelpers.getDescription(header, runtime: runtime),
+            namelessDescription,
             AXHelpers.getTitle(header, runtime: runtime),
             AXHelpers.getIdentifier(header, runtime: runtime),
             AXHelpers.getHelp(header, runtime: runtime)
@@ -755,24 +775,23 @@ enum AXValueExtractors {
                 AXHelpers.getDescription(element, runtime: runtime),
                 AXHelpers.getTitle(element, runtime: runtime),
                 AXHelpers.getIdentifier(element, runtime: runtime),
-                AXHelpers.getHelp(element, runtime: runtime),
-                extractTextValue(element, runtime: runtime)
+                AXHelpers.getHelp(element, runtime: runtime)
             ])
         }
-        // Removing the name from `signals` was not enough, and a live read is what said so: the
-        // header's own AXDescription embeds it — `1개의 ‘GM Device scratch’ 트랙` — so a track
-        // renamed after a type still classified as that type. The name is subtracted from the
-        // aggregate instead, wherever it appears.
         let trackName = extractTrackName(from: header, runtime: runtime).name
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        // A signal that IS the track name is the name, not a reading of the track. The name field
+        // carries it verbatim in its own AXDescription — measured: a header renamed
+        // `GM Device scratch` had the string in two places, the header description's quoted part
+        // and that field — so dropping equal-to-the-name signals catches the second while leaving
+        // every Logic-authored sentence intact. Subtracting the name from inside those sentences
+        // was the earlier shape and a review broke it: renaming a track `오디오` deleted that word
+        // out of Logic's own help text and made an ambiguous header confidently wrong.
         let combined = signals
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
-            .map { signal -> String in
-                guard trackName.count > 1 else { return signal }
-                return signal.replacingOccurrences(of: trackName, with: " ")
-            }
+            .filter { trackName.count < 2 || $0 != trackName }
             .joined(separator: " ")
 
         // #131 — Logic's multichannel SMF open creates "GM Device N" channel
@@ -791,9 +810,9 @@ enum AXValueExtractors {
         // What CAN be excluded is a name that merely mentions the words. An outside review pointed
         // out that a track renamed `GM Device scratch` was confidently classified external MIDI,
         // and the silent-bounce guard fired on a string a user typed. The shape Logic produces is
-        // the words followed by a number and nothing else, so that is what is required — from the
-        // name, or from any other signal, since a real GM strip may carry it elsewhere too.
-        let gmShape = try? NSRegularExpression(pattern: "^gm device\\s*\\d*$")
+        // the words, whitespace, and a number, and nothing else — `\\s+\\d+`, not `\\s*\\d*`,
+        // which a review pointed out admitted the bare `GM Device` and `GM Device5` as well.
+        let gmShape = try? NSRegularExpression(pattern: "^gm device\\s+\\d+$")
         let nameLooksGM = gmShape.map { regex in
             let range = NSRange(trackName.startIndex..., in: trackName)
             return regex.firstMatch(in: trackName, range: range) != nil
