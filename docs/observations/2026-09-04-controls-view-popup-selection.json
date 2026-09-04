@@ -14,7 +14,7 @@
     "version": "12.3",
     "build": "6674",
     "locale": "ko-KR",
-    "os": "macOS 26.6",
+    "os": "macOS 26.3 (25D125)",
     "plugin": "Compressor (mono), inserted on an audio track"
   },
   "reverify": {

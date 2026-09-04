@@ -18,6 +18,7 @@ off within a week. The CI guards beside this one check the records themselves; t
 """
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import plistlib
@@ -29,15 +30,19 @@ LOGIC_PLIST = "/Applications/Logic Pro.app/Contents/Info.plist"
 
 
 def installed_host():
-    """The Logic actually on this machine, or None when it is not installed."""
-    try:
-        with open(LOGIC_PLIST, "rb") as fh:
-            info = plistlib.load(fh)
-    except (OSError, plistlib.InvalidFileException):
-        return None
-    return {"app": "Logic Pro",
-            "version": info.get("CFBundleShortVersionString"),
-            "build": info.get("CFBundleVersion")}
+    """This machine, or None when Logic is not installed here.
+
+    Delegates to `observation_host.host()` so the one place that formats a host block is
+    the one place records are generated from. Restating `macOS {version} ({build})` here
+    would mark every record stale the moment the two spellings drifted apart.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "observation_host", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "observation_host.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    block = module.host()
+    return block if block.get("version") else None
 
 
 def load():
@@ -64,7 +69,7 @@ def classify(records, host):
             rows.append((rid, "unknown", "Logic is not installed here, so drift cannot be computed", doc))
             continue
         drift = [f"{k}: recorded {rec_host.get(k)!r}, installed {host.get(k)!r}"
-                 for k in ("version", "build")
+                 for k in ("version", "build", "os")
                  if rec_host.get(k) != host.get(k)]
         if drift:
             rows.append((rid, "stale", "; ".join(drift), doc))
@@ -142,7 +147,10 @@ def main():
     if host is None:
         print("Logic Pro is not installed here; host drift cannot be computed.\n")
     else:
-        print(f"installed: Logic Pro {host['version']} (build {host['build']})\n")
+        # Name every drift axis, not just Logic's: an OS bump moves the AX surface too,
+        # and a header that hides the axis it judges on cannot be checked by the reader.
+        print(f"installed: Logic Pro {host['version']} (build {host['build']})"
+              f" on {host.get('os', 'unknown OS')}\n")
 
     order = {"stale": 0, "unknown": 1, "current": 2, "superseded": 3}
     for rid, status, why, doc in sorted(rows, key=lambda r: (order.get(r[1], 9), r[0])):

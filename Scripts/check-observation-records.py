@@ -28,8 +28,11 @@ REQUIRED = ("id", "date", "subject", "question", "verdict", "issues", "surface",
             "host", "reverify", "depends",
             "method", "observations", "conclusion", "limits", "supersedes")
 # version AND build: Logic ships updates that keep the marketing version and move the build, so
-# version alone cannot detect drift.
-HOST_KEYS = ("app", "version", "build")
+# version alone cannot detect drift. `os` is here for the same reason and was added after all
+# nine records in the tree were found carrying an OS the machine had never run — a value typed
+# once and inherited by copy. Generate the block with `Scripts/observation_host.py` instead of
+# writing it: a copied field is not a measurement.
+HOST_KEYS = ("app", "version", "build", "os")
 REVERIFY_KINDS = ("script", "harness", "manual")
 SURFACES_DOC = os.path.join(REPO, "docs", "observations", "SURFACES.md")
 

@@ -50,7 +50,7 @@ true of a different application.
     "version": "12.3",               // CFBundleShortVersionString
     "build": "6674",                 // CFBundleVersion — moves on updates that keep the version
     "locale": "ko-KR",               // AX labels are localised; a locale change can invalidate
-    "os": "macOS 26.6"
+    "os": "macOS 26.3 (25D125)"      // also a drift axis: an OS bump moves the AX surface too
   },
 
   "reverify": {                      // HOW TO RUN IT AGAIN. Required — see rule 6.
@@ -93,8 +93,19 @@ true of a different application.
    about the world. Record what was observed afterwards.
 4. **Supersede, never edit.** A later run that disagrees gets its own record with `supersedes` set.
    Two runs disagreeing is exactly what you want to be able to see.
-5. **`host` is what the claim is true of.** Enforced: `version` and `build` are required, and
-   `Scripts/observations-status.py` reports every record whose host differs from the installed Logic.
+5. **`host` is what the claim is true of. Generate it, never type it.**
+   `Scripts/observation_host.py` prints the block measured from the machine you are on;
+   `--check` compares existing records against it. `app`, `version`, `build` and `os` are
+   required, and `Scripts/observations-status.py` reports every record whose `version`,
+   `build` or `os` differs from what is installed.
+
+   This rule is written the strong way because of what happened without it: on 2026-09-04 all
+   nine records in the tree claimed `macOS 26.6` on a machine that has run `macOS 26.3` since
+   February. The first block was written by hand and every later record inherited it by copy,
+   so the error propagated exactly as fast as the records did. Nothing caught it — a copied
+   field looks identical to a measured one. `locale` is recorded but is deliberately not a
+   drift axis: a ko-KR record does not become untrue when the machine switches to en-US, it
+   becomes a claim about a different host.
 6. **`reverify` is required**, because a claim nobody can re-run is a claim nobody can retire. Use
    `"kind": "manual"` with steps in `command` when no script exists yet — that is honest and still
    actionable; a missing field is neither.

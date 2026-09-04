@@ -6,7 +6,7 @@
   "verdict": "wall",
   "issues": [303, 305, 306],
   "surface": "plugin.controls_view",
-  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.3 (25D125)",
            "note": "about the SERVER binary's wiring, not Logic"},
   "reverify": {
     "kind": "manual",

@@ -6,7 +6,7 @@
   "verdict": "partial",
   "issues": [302],
   "surface": "editor.event_list",
-  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6"},
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.3 (25D125)"},
   "reverify": {
     "kind": "manual",
     "command": "View > 목록 편집기 보기, select the 이벤트 tab (an AXRadioButton described 이벤트 with an empty AXTitle), then read the pane's AXTable: AXColumns status and count, each column's AXTitle and AXDescription, and the AXHeader's sort-button titles.",

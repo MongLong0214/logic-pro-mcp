@@ -6,7 +6,7 @@
   "verdict": "wall",
   "issues": [305],
   "surface": "editor.audio_track",
-  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.3 (25D125)",
            "note": "about the SERVER binary's wiring, not Logic; host recorded so drift is still dated"},
   "reverify": {
     "kind": "manual",
