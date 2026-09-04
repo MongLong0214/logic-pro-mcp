@@ -1,0 +1,109 @@
+{
+  "id": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+  "date": "2026-09-04",
+  "subject": "Why logic://mixer published no input and no output on any strip",
+  "question": "Is the strip input/output readback unimplemented, or implemented and unable to match?",
+  "verdict": "works",
+  "issues": [
+    291
+  ],
+  "surface": "mixer.routing",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_291_input_slot_is_read.py <worktree> <head-sha>",
+    "expected": "every check passes, including the-mixer-readback-carries-an-input and -an-output",
+    "cost": "~4 min with the fixture project open and no plug-in editor open"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:outputSlotHelpKeyword",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:inputSlotHelpKeyword",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift:slotDescription",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Mixer.swift"
+  ],
+  "method": "Held the product's envelope against a second instrument reading the same screen, then followed the difference back rather than treating the empty field as missing work. The readers and the model fields already existed; only the vocabulary they matched against was short.",
+  "observations": [
+    {
+      "what": "what the product published before the change",
+      "resource": "logic://mixer",
+      "data_source": "ax_poll",
+      "strips": 5,
+      "with_input": 0,
+      "with_output": 0
+    },
+    {
+      "what": "what a second instrument read off the same screen",
+      "output_slots": 4,
+      "send_slots": 4,
+      "input_slots": 1,
+      "monitoring_buttons": 1,
+      "sample_output": {
+        "role": "AXButton",
+        "description": "Stereo Output",
+        "help": "출력 슬롯. 채널 스트립 신호가 전송되는…"
+      },
+      "sample_input": {
+        "role": "AXButton",
+        "description": "입력 1",
+        "help": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…"
+      }
+    },
+    {
+      "what": "the vocabulary the readers matched against",
+      "file": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+      "outputSlotHelpKeyword": {
+        "canonical": "output slot",
+        "variants": []
+      },
+      "inputSlotHelpKeyword": {
+        "canonical": "input slot",
+        "variants": []
+      },
+      "match_mode": "case-insensitive substring, no diacritic folding"
+    },
+    {
+      "what": "the depth limit was not the cause",
+      "reader": "findAllDescendants(of: strip, role: kAXButtonRole, maxDepth: 4)",
+      "layout_items_in_window": 12,
+      "containing_an_output_slot_within_depth_4": 4,
+      "containing_one_within_depth_8": 4,
+      "depth_cap_searched": 4,
+      "depth_cap_compared_against": 8
+    },
+    {
+      "what": "the same read after adding the measured variants",
+      "strips": 5,
+      "with_input": 1,
+      "with_output": 3,
+      "values": [
+        "입력 1 on trackIndex 1",
+        "Stereo Output on three strips"
+      ]
+    },
+    {
+      "what": "the harnesses at this head, once their own witness was repaired",
+      "live_291_input_slot_is_read": "13/13",
+      "live_291_output_slot_is_read": "9/9"
+    },
+    {
+      "what": "the AX string normalisation, checked before trusting the literal",
+      "live_help_is_NFC": true,
+      "literal_is_NFC": true,
+      "matches_after_lowercasing": true
+    }
+  ],
+  "conclusion": "The readback was implemented and could not match. `logic://mixer` reported 0 strips with an input and 0 with an output while a second instrument read 1 input slot and 4 output slots off the same screen, and the difference was two empty `variants` lists: the only strings either keyword could match were `output slot` and `input slot`. Adding the measured ko-KR renderings takes the same project to 1 with_input and 3 with_output, and both harnesses go clean. Two things were ruled out rather than assumed along the way — the depth 4 search radius, which reaches an output slot in 4 of the 12 layout items and gains nothing at depth 8, and Korean normalisation, since the live help is NFC and matches the literal after lowercasing. The neighbour hazard the English keyword was chosen to avoid survives translation at the same width: 입력 모니터링 shares its first word with 입력 슬롯 exactly as Input Monitoring does with Input slot.",
+  "limits": [
+    "ko-KR and English only. The other Logic languages are still one-language matches here.",
+    "One project, five strips. The witness saw 4 output slots and the product publishes 3; the extra is most likely the Inspector strip rather than a Mixer strip, but that was not confirmed.",
+    "This is the slot readback half of ADR-008. It says nothing about the routing graph's edges, which is the rest of that ADR.",
+    "Sends were not addressed: a send slot names no destination in either language, which is a property of the surface rather than of the match."
+  ],
+  "supersedes": null
+}
