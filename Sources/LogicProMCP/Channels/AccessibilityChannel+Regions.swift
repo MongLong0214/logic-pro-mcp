@@ -294,24 +294,41 @@ extension AccessibilityChannel {
     /// the operations that consume the selection then act on all four. The verifiable question is
     /// "is the selection exactly this one region?", and it needs the whole set.
     ///
-    /// `nil` and `[]` are different answers and the callers depend on the difference: `nil` means
-    /// the arrange area could not be enumerated at all, `[]` means it was and nothing is selected.
-    /// The singular version below cannot tell those apart, which is the other half of why it is not
-    /// enough. Note that a region whose `AXSelected` is UNREADABLE counts as not selected here — an
-    /// unreadable attribute cannot be evidence of selection, and a caller demanding an exact set
-    /// will fail closed on it rather than certify.
+    /// `nil` and `[]` are different answers and the callers depend on the difference: `nil` means the
+    /// set is UNKNOWN, `[]` means it was read and is empty. The singular version below cannot tell
+    /// those apart, which is the other half of why it is not enough.
+    ///
+    /// One unreadable `AXSelected` makes the whole set unknown, and that is the point rather than an
+    /// inconvenience. Treating an unreadable attribute as "not selected" — which the first version of
+    /// this function did — fails OPEN in exactly the shape this function exists to close: a region
+    /// that stays selected because the clear missed it, and whose attribute happens to be unreadable,
+    /// drops out of both the pre-read and the post-read, so an exact-set test sees the target alone
+    /// and certifies a selection of two. A caller cannot demand "exactly this one region" from a set
+    /// it could not finish reading. `-25205`/`-25212` are the exception: those mean the attribute is
+    /// definitively absent, which is a real answer and reads as not selected.
     static func selectedRegionInfos(
         runtime: AXLogicProElements.Runtime = .production
     ) -> [RegionInfo]? {
         guard case .success(let result) = enumerateRegionItems(runtime: runtime) else {
             return nil
         }
-        return result.regions.filter { entry in
-            guard let value: AnyObject = AXHelpers.getAttribute(
+        var selected: [RegionInfo] = []
+        for entry in result.regions {
+            let read: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                 entry.item, kAXSelectedAttribute, runtime: runtime.ax
-            ), let number = value as? NSNumber else { return false }
-            return number.boolValue
-        }.map(\.info)
+            )
+            switch read {
+            case .success(.some(let flag)):
+                if flag.boolValue { selected.append(entry.info) }
+            case .success(.none):
+                continue
+            case .failure(let error) where error.isDefinitiveAbsence:
+                continue
+            case .failure:
+                return nil
+            }
+        }
+        return selected
     }
 
     /// Currently selected region (AXLayoutItem with AXSelected=true) inside
@@ -629,10 +646,11 @@ extension AccessibilityChannel {
         // #767 — this used to drive an AppleScript that walked `entire contents` and picked the
         // largest screen coordinates. Two defects, either sufficient:
         //
-        //   * `entire contents` returns an EMPTY list, without raising, for every application on
-        //     macOS 26.3 — measured 2026-09-04 at 0 against 464 by a manual descent of the same
-        //     window. The filter therefore ran over nothing and the handler reported NO_REGION for
-        //     a project that had regions.
+        //   * `entire contents` returns an EMPTY list, without raising, for every one of the ten applications it was tried on — Logic plus nine others, each of which has direct children on
+        //     this host — measured 2026-09-04 at 0 against 464 by a manual descent of the same
+        //     window. Ten is what was tried, not a claim about every installed application. The
+        //     filter therefore ran over nothing and the handler reported NO_REGION for a project
+        //     that had regions.
         //   * the filter was `20 < w < 2000 and 20 < h < 200`, which every TRACK HEADER satisfies.
         //     Measured on one window: 4 candidates, 3 of them headers. Picking the greatest Y then
         //     X landed on the region by a pixel of luck, and a project whose bottom track carries

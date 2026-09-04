@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """Prove `Scripts/check-no-applescript-entire-contents.py` can fail.
 
+If you MUTATION-TEST this — break the guard on purpose and check that a case reddens — clear the
+bytecode cache between the mutation and the restore. Apple's python3 sets
+`sys.pycache_prefix = ~/Library/Caches/com.apple.python`, so the `.pyc` lives outside the tree where
+`find . -name __pycache__` will not show it, and the cache is keyed on (size, mtime). A mutation that
+keeps the length — `contents` to `contentz`, say — restores to an identical size within the same
+second, and the stale bytecode is reused: the restored guard keeps banning the mutated phrase and
+the test keeps failing for a defect that is no longer in the source. Measured 2026-09-04; it cost a
+confusing ten minutes.
+
+    find ~/Library/Caches/com.apple.python -path '*<worktree>*' -name '*.pyc' -delete
+
+
 A guard that only ever passes is indistinguishable from a guard that cannot see. Each case below
 plants the thing the rule is about and requires the guard to catch it, or plants the thing the rule
 deliberately allows and requires the guard to stay quiet — the two halves together are what say the
@@ -115,12 +127,25 @@ def main():
           f"the guard now catches an assembled phrase — good; update the boundary paragraph in "
           f"check-no-applescript-entire-contents.py and this case. got {found}")
 
-    # 9. The real ENTRY POINT, not just `violations`, over the real repository. Every case above
+    # 9. A bytes literal reaches osascript exactly like a text one and contains no str constant, so
+    #    a str-only rule reads the file as clean with the phrase plainly in the source.
+    found, _, _ = _scan({"Scripts/b.py":
+                         'import subprocess\n'
+                         'subprocess.run([b"osascript", b"-e", b"count of (' + P + ' of window 1)"])\n'})
+    check("bytes literal", found == {"Scripts/b.py"}, f"expected the bytes payload flagged, got {found}")
+
+    # 10. The guard bans the phrase it is supposed to ban. Every case above takes the phrase FROM the
+    #     guard, so all of them would follow `BANNED` to a wrong value and stay green — this one is
+    #     the independent statement of what the ban is for, assembled so it is not itself a use.
+    check("bans the right phrase", guard.BANNED == "entire" + " " + "contents",
+          f"the guard bans {guard.BANNED!r}, which is not the phrase this rule exists for")
+
+    # 11. The real ENTRY POINT, not just `violations`, over the real repository. Every case above
     #    calls the rule directly, so a `main()` quietly changed to `return 0` would pass all of them.
     rc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", rc.returncode == 0, f"guard exited {rc.returncode}: {rc.stdout.strip()}")
 
-    # 10. ...and the same entry point over a tree with a planted violation must EXIT 1. This is the
+    # 12. ...and the same entry point over a tree with a planted violation must EXIT 1. This is the
     #     case that notices a gutted `main`; case 9 alone cannot tell "clean" from "always says yes".
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -135,7 +160,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print(f"{11} case(s) pass: the guard catches the defect and leaves the prose alone")
+    print(f"{13} case(s) pass: the guard catches the defect and leaves the prose alone")
     return 0
 
 

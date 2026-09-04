@@ -52,11 +52,12 @@
       "region_start_bar_after": 1
     },
     {
-      "what": "the harness named after this operation, read for what it drives",
+      "what": "the harness I looked at, and the one I did not",
       "file": "Scripts/livekit/live_575_move_to_playhead_identity.py",
       "visual_assertion_expect_change": false,
       "drives_move_to_playhead": false,
-      "its_own_words": "every call in this run is a read"
+      "its_own_words": "every call in this run is a read",
+      "correction": "there are four live_575_* harnesses; live_575_move_to_playhead_reachable.py DOES drive the operation and checks State A against the same region it started with. Reporting the first file's silence as absence was wrong."
     },
     {
       "what": "the code reading that prompted the run",
@@ -65,12 +66,13 @@
       "identity_check": "post.name == pre.name && post.trackIndex == pre.trackIndex"
     }
   ],
-  "conclusion": "The run is inconclusive and the control is why. With the playhead at bar 5, `move_to_playhead` reported `no position change` and left every region at bar 1 — with two regions selected AND with one. An operation that moves nothing produces the same envelope in both arms, so nothing here supports or refutes the question that was asked. What the run does establish is narrower and still worth having: on this host, in this project, the operation did not move a region in either configuration, and it said so honestly rather than reporting a success. Separately, and by reading rather than measurement, the operation's pre/post readback is `selectedRegionInfo`, which answers with the first selected region while Logic's command acts on the whole selection — the same blind spot that `region.select_last` closed by reading the selection as a set. That remains a code reading, not a demonstrated defect.",
+  "conclusion": "The run is inconclusive and the control is why. With the playhead at bar 5, `move_to_playhead` reported `no position change` and left every region at bar 1 — with two regions selected AND with one. An operation that moves nothing produces the same envelope in both arms, so nothing here supports or refutes the question that was asked. One claim made from this run has been WITHDRAWN: that nothing drives the operation. That came from looking at one of four similarly named harnesses; another of them exists to drive it. What the run does establish is narrower and still worth having: on this host, in this project, the operation did not move a region in either configuration, and it said so honestly rather than reporting a success. Separately, and by reading rather than measurement, the operation's pre/post readback is `selectedRegionInfo`, which answers with the first selected region while Logic's command acts on the whole selection — the same blind spot that `region.select_last` closed by reading the selection as a set. That remains a code reading, not a demonstrated defect.",
   "limits": [
     "The reason the operation moved nothing was not established. Focus, which editor is active, and whether the arrange area accepts the menu command in this state were all unexamined.",
     "One project, one host, one session. No attempt was made on a second project or after restarting Logic.",
     "The blind-spot question is UNANSWERED by this run. Do not cite it as evidence that the defect exists or that it does not.",
-    "The playhead move that set up the run reported State B `readback_unavailable` itself, with subdivision and tick unobserved, so `playhead_bar: 5` is the operation's own reading rather than an independent one."
+    "The playhead move that set up the run reported State B `readback_unavailable` itself, with subdivision and tick unobserved, so `playhead_bar: 5` is the operation's own reading rather than an independent one.",
+    "The obvious next step was not taken here: `live_575_move_to_playhead_reachable.py` establishes the preconditions this operation needs and drives it, and running that is how to settle what hand-driving could not."
   ],
   "supersedes": null
 }

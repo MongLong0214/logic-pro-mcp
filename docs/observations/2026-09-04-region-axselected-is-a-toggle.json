@@ -31,7 +31,11 @@
     {
       "what": "AXSelected = true, written three times to one region from an emptied selection",
       "regions": 2,
-      "selection_vector_after_each_write": ["10", "00", "10"],
+      "selection_vector_after_each_write": [
+        "10",
+        "00",
+        "10"
+      ],
       "return_code_each": "success",
       "reading": "toggle, not setter"
     },
@@ -47,7 +51,7 @@
       "from_2_selected": 0,
       "from_0_selected": 0,
       "return_code_each": "success",
-      "reading": "never selects, from any pre-state"
+      "reading": "did not select from either start that was tried; no other pre-state was tested"
     },
     {
       "what": "AXSelectedChildren on the enclosing AXLayoutArea",
@@ -85,7 +89,7 @@
       "repeat_results": "State A, count 1, same track index each time"
     }
   ],
-  "conclusion": "No single actuator on this surface sets the region selection. AXSelected is settable and returns success and is a toggle — 3 writes of the same value give selected, deselected, selected. AXPress returns success and never selects, from either a 2-selected or a 0-selected start. The enclosing AXLayoutArea publishes AXSelectedChildren but reports it settable=false. A toggle is still usable from a pre-state that has been established and READ BACK, and Logic's own Deselect All establishes one: 2 selected -> 0, then one write -> exactly 1. Driven live, region.select_last moved the selection off a non-last region onto the last one and reported State A with a count of 1, and 3 further runs from the already-correct state stayed State A with count 1 — which a toggle without the clear could not do. The menu item is reachable without a localized label because its AXIdentifier deselectAll: is unique among the Edit menu's 151 items; that is not a general escape from localization, since 12 of 12 menu-bar items publish no identifier and 10 of 17 items in one submenu share localMenuItemAction:.",
+  "conclusion": "No single actuator on this surface sets the region selection. AXSelected is settable and returns success and is a toggle — 3 writes of the same value give selected, deselected, selected. AXPress returns success and did not select from either start that was tried, 2-selected and 0-selected; no other pre-state was tested. The enclosing AXLayoutArea publishes AXSelectedChildren but reports it settable=false. A toggle is still usable from a pre-state that has been established and READ BACK, and Logic's own Deselect All establishes one: 2 selected -> 0, then one write -> exactly 1. Driven live, region.select_last moved the selection off a non-last region onto the last one and reported State A with a count of 1, and 3 further runs from the already-correct state stayed State A with count 1 — which a toggle without the clear could not do. The menu item is reachable without a localized label because its AXIdentifier deselectAll: is unique among the Edit menu's 151 items; that is not a general escape from localization, since 12 of 12 menu-bar items publish no identifier and 10 of 17 items in one submenu share localMenuItemAction:.",
   "limits": [
     "One host, one locale, one Logic build. Whether the toggle is 12.3 behaviour or older was not established.",
     "Measured with 2 regions on one project. A selection spanning many tracks was not driven, and the historical 18-region note it explains was not re-run.",

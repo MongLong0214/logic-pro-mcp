@@ -526,8 +526,12 @@ private func makeRegionFixture(
     // The fixture has no menu bar, so the production Deselect All lookup can only return nil. Left
     // alone, this test would pass with the identifier lookup, the descent bound, the AXEnabled gate
     // and the press ALL broken — the regions start unselected, so the pre-state gate is satisfied by
-    // an accident of the fixture rather than by anything the code did. Injecting the clear and
-    // recording it is what makes the test about the composition.
+    // an accident of the fixture rather than by anything the code did.
+    //
+    // Injecting the clear and recording it says the operation ASKS for a clear before it writes, and
+    // that is all it says: an injected seam cannot exercise the production lookup behind it. What
+    // covers that is `testSelectLastPressesTheRealDeselectAllItem` below, which gives the fixture a
+    // menu bar and lets the real closure run.
     let cleared = Recorder()
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
@@ -578,6 +582,143 @@ private func makeRegionFixture(
     #expect(obj["scope"] as? String == "whole_arrangement")
     #expect(obj["scope_reason"] == nil)
     #expect(obj["selected_name"] as? String == "RegionB")
+}
+
+@Test func testSelectLastPressesTheRealDeselectAllItem() async {
+    // The production clear, not an injected stand-in: the fixture publishes a menu bar shaped like
+    // Logic's — menu-bar item, its AXMenu, the Select item, its AXMenu, the leaf carrying
+    // `AXIdentifier = deselectAll:` — and the operation has to find that leaf and press it. Without
+    // this, every other test here injects past the lookup, the descent bound and the AXEnabled gate.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+    let builder = fixture.builder
+    let app = builder.element(1_000)
+    let menuBar = builder.element(4_000)
+    let editItem = builder.element(4_001)
+    let editMenu = builder.element(4_002)
+    let selectItem = builder.element(4_003)
+    let selectMenu = builder.element(4_004)
+    let deselectAllItem = builder.element(4_005)
+    let decoyItem = builder.element(4_006)
+
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(editItem, kAXTitleAttribute as String, "편집")
+    builder.setChildren(menuBar, [editItem])
+    builder.setChildren(editItem, [editMenu])
+    builder.setAttribute(selectItem, kAXTitleAttribute as String, "선택")
+    // A sibling that shares the DISPATCHER identifier Logic gives most items, so the scan has
+    // something realistic to walk past.
+    builder.setAttribute(decoyItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(decoyItem, kAXIdentifierAttribute as String, "localMenuItemAction:")
+    builder.setChildren(editMenu, [selectItem, decoyItem])
+    builder.setChildren(selectItem, [selectMenu])
+    builder.setAttribute(deselectAllItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(deselectAllItem, kAXIdentifierAttribute as String, "deselectAll:")
+    builder.setAttribute(deselectAllItem, kAXEnabledAttribute as String, true)
+    builder.setChildren(selectMenu, [deselectAllItem])
+
+    // Isolated first, so a failure says which piece broke rather than only that the press is missing.
+    #expect(AXLogicProElements.getMenuBar(runtime: fixture.runtime) != nil, "fixture publishes a menu bar")
+    #expect(AXLogicProElements.menuItem(
+        identifier: "deselectAll:", inMenuBar: AXLocalePolicy.editMenuBar, runtime: fixture.runtime
+    ) != nil, "the identifier lookup reaches the leaf four levels down")
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        settle: { }
+    )
+
+    // `actionCalls` keys by the element's ADDRESS, not by the fixture id, so identity is compared the
+    // same way the recorder computes it. Comparing against 4_005 silently never matches.
+    let deselectAllKey = Int(bitPattern: Unmanaged.passUnretained(deselectAllItem).toOpaque())
+    #expect(builder.actionCalls.contains {
+        $0.elementID == deselectAllKey && $0.action == kAXPressAction as String
+    }, "the operation must press the leaf carrying the identifier, not the decoy or its menu")
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect((obj["verified"] as? Bool)!)
+}
+
+@Test func testSelectLastRefusesWhenTheWriteReportedFailureEvenIfTheStateMatches() async {
+    // The conjunct the earlier failed-write test cannot reach: that one leaves the selection empty
+    // and exits through State C. Here the write reports failure and the target IS selected
+    // afterwards — a state something else produced. The state is right and this call did not make
+    // it, which is State B and not State A.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        selectRegion: { element, runtime in
+            _ = AXHelpers.setAttribute(element, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
+            return false            // the write lands and reports that it did not
+        },
+        deselectAll: { _ in true },
+        settle: { }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect(!((obj["verified"] as? Bool)!))
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect(!((obj["write_reported_success"] as? Bool)!))
+    #expect(obj["selected_count"] as? Int == 1)
+}
+
+@Test func testSelectLastRefusesWhenTheArrangementMovedUnderIt() async {
+    // The other new conjunct. The target is chosen before the clear and two settle windows; if the
+    // arrangement changes in between, the region that is last NOW is not the one this acted on.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false),
+            (name: "RegionB", help: regionBHelp,
+             pos: axPoint(400, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+    let builder = fixture.builder
+    let regionA = builder.element(3_000)
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        selectRegion: { element, runtime in
+            let wrote = AXHelpers.setAttribute(
+                element, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax
+            )
+            // RegionA is dragged past RegionB while the operation is mid-flight.
+            builder.setAttribute(regionA, kAXHelpAttribute as String,
+                                 "리전은 9 마디 에서 시작하여 11 마디 에서 끝납니다., MIDI 리전.")
+            return wrote
+        },
+        deselectAll: { _ in true },
+        settle: { }
+    )
+
+    let obj = decodeJSON(result.message)
+    #expect(!((obj["verified"] as? Bool)!))
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect(!((obj["target_is_still_last"] as? Bool)!))
 }
 
 @Test func testSelectLastRefusesWhenDeselectAllDidNotEmptyTheSelection() async {

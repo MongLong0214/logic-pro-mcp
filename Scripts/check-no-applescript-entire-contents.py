@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Refuse `entire contents` inside a string literal.
 
-`entire contents of <window>` returns an EMPTY list, without raising, for every application on this
-host — measured 2026-09-04 at 0 against 464 elements found by a manual descent of the same Logic
-window, and at 0 for nine other foreground applications, each of which has direct children. #767.
+`entire contents of <window>` returns an EMPTY list, without raising, for every application it was
+tried on here — measured 2026-09-04 at 0 against 464 elements found by a manual descent of the same
+Logic window, and at 0 for nine other foreground applications, each of which has direct children.
+Ten applications is what was tested; it is not a statement about every installed one. #767.
 
 That silence is the whole problem. A traversal built on it does not fail; it reports that the thing
 it was looking for is absent, and every caller reads absence as a fact about the application. It
@@ -13,7 +14,8 @@ of them said the Channel EQ exposes no per-band slider; a manual descent of the 
 twenty-six of them, each named and carrying a value.
 
 **The rule is about string literals, not about the words.** A comment explaining why the instrument
-is broken is exactly what a repository should keep, and there are eleven of those. What must not
+is broken is exactly what a repository should keep, and there are eleven such occurrences across
+six files under `Sources/` and `Scripts/`, outside this guard and its test. What must not
 come back is the phrase in something that gets sent to AppleScript. Checking literals rather than
 lines is what lets those two coexist without an allowlist — and an allowlist is what this guard
 must not have, because a list of permitted uses is how a banned instrument returns.
@@ -114,8 +116,15 @@ def _python_literals(source, path):
     skip = _exempt_nodes(tree)
     out = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip:
+        if not isinstance(node, ast.Constant) or id(node) in skip:
+            continue
+        # bytes as well as str: `subprocess.run([b"osascript", b"-e", b"…"])` reaches osascript
+        # exactly like the text form and contains no str constant at all, so a str-only rule reads
+        # the file as clean while the phrase is right there in the source.
+        if isinstance(node.value, str):
             out.append((node.lineno, node.value))
+        elif isinstance(node.value, bytes):
+            out.append((node.lineno, node.value.decode("utf-8", "replace")))
     return out
 
 

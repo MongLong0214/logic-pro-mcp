@@ -137,6 +137,11 @@ extension AXLogicProElements {
     /// rather than to whichever item traversal order reached first: the scan collects every match in
     /// the bounded region and answers only when there is exactly one. That turns "the caller assumed
     /// wrong about this build" into a refusal instead of into an action on an item nobody chose.
+    ///
+    /// "Every match in the bounded region" is only true if the region was fully READ, so the scan
+    /// uses status-preserving reads and refuses when one fails. The best-effort helpers return an
+    /// empty child array on failure, which would let an unreadable subtree hide the second match and
+    /// hand back the uniqueness the caller asked to have checked.
     static func menuItem(
         identifier: String,
         inMenuBar menuBar: AXLocalePolicy.LabelSet,
@@ -160,23 +165,47 @@ extension AXLogicProElements {
         // submenu publish `localMenuItemAction:`. Two matches is not a near miss to be broken by
         // ordering; it means the caller's assumption about this identifier is wrong on this host,
         // and the only safe answer is none.
+        // Status-preserving reads throughout, because "exactly one match" is a claim about the whole
+        // region and the best-effort helpers cannot make it. `AXHelpers.getChildren` turns a failed
+        // read into an EMPTY array, so an unreadable subtree would hide a duplicate and the scan
+        // would report the uniqueness it was asked to verify. A read that fails is not an absence;
+        // it is the scan being unable to answer, and the answer then has to be none.
         var matches: [AXUIElement] = []
-        var frontier = AXHelpers.getChildren(menu, runtime: runtime.ax)
+        guard case .success(var frontier) = AXHelpers.childrenResult(menu, runtime: runtime.ax) else {
+            return nil
+        }
         for _ in 0..<4 {
             var next: [AXUIElement] = []
             for element in frontier {
-                let identifierValue: String? = AXHelpers.getAttribute(
-                    element, kAXIdentifierAttribute as String, runtime: runtime.ax
-                )
+                let identifierRead: Result<String?, AXHelpers.AXStatusError> =
+                    AXHelpers.getAttributeResult(
+                        element, kAXIdentifierAttribute as String, runtime: runtime.ax
+                    )
                 // A menu item, not merely something carrying the identifier. Menus, groups and
                 // whatever else Logic hangs here are not pressable as items.
-                let role: String? = AXHelpers.getAttribute(
+                let roleRead: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                     element, kAXRoleAttribute as String, runtime: runtime.ax
                 )
-                if identifierValue == identifier, role == (kAXMenuItemRole as String) {
-                    matches.append(element)
+                switch (identifierRead, roleRead) {
+                case (.success(let identifierValue), .success(let role)):
+                    if identifierValue == identifier, role == (kAXMenuItemRole as String) {
+                        matches.append(element)
+                    }
+                case (.failure(let error), _) where error.isDefinitiveAbsence:
+                    break           // no identifier at all: not this item, and a real answer
+                case (_, .failure(let error)) where error.isDefinitiveAbsence:
+                    break           // no role at all: cannot be a menu item, and a real answer
+                default:
+                    return nil      // an element the scan could not classify
                 }
-                next.append(contentsOf: AXHelpers.getChildren(element, runtime: runtime.ax))
+                switch AXHelpers.childrenResult(element, runtime: runtime.ax) {
+                case .success(let kids):
+                    next.append(contentsOf: kids)
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    continue
+                case .failure:
+                    return nil      // a subtree that could have held a duplicate
+                }
             }
             if next.isEmpty { break }
             frontier = next

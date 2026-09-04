@@ -92,10 +92,26 @@ window_titles = [t.strip() for t in titles.splitlines() if t.strip()]
 # It is a SUFFIX test, which the first fix only claimed to be: it asked whether the spelling appeared
 # anywhere in the comma-joined blob of every title, so a project literally named `Tracks notes` would
 # have satisfied the precondition with no arrange window open at all.
+#
+# And a bare `endswith` is still not the rule. Logic titles its plug-in editors with the TRACK or
+# patch name, which the user controls, so a track called `Backing Tracks` would open a dialog whose
+# title ends in the spelling with no arrange window anywhere. The product's own classifier
+# (`AccessibilityChannel+Project.swift`, `isArrangeWindowTitle`) requires the separator and a
+# non-empty project name in front of it — `<project> - <spelling>` — and this asks the same question
+# so the harness and the product cannot disagree about what an arrange window is.
 ARRANGE_TITLE_SUFFIX = ("Tracks", "트랙", "トラック")
 
+
+def _is_arrange_title(title):
+    for label in ARRANGE_TITLE_SUFFIX:
+        suffix = " - " + label
+        if title.endswith(suffix) and len(title) > len(suffix):
+            return True
+    return False
+
+
 ev.check("575/precondition-an-arrange-window-is-open",
-         any(t.endswith(suffix) for t in window_titles for suffix in ARRANGE_TITLE_SUFFIX),
+         any(_is_arrange_title(t) for t in window_titles),
          "Logic is up with a project, so the region enumeration has something to read",
          f"window_titles={window_titles!r}", None)
 
