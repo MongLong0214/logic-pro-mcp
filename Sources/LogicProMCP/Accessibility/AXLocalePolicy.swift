@@ -619,9 +619,18 @@ enum AXLocalePolicy {
     )
 
     /// #346/#350/#545: primary destructive button on the track-delete confirm sheets.
-    /// English forms are live-measured; non-English forms are NOT, so they are absent
-    /// rather than guessed and those locales degrade to fail-closed structural matching
-    /// (a wrong-title guess or keyboard fallback is never fabricated).
+    ///
+    /// This comment said non-English forms "are absent rather than guessed" while `삭제` and `削除`
+    /// sat in the variants list immediately below it — stale safety documentation on a destructive
+    /// button, found 2026-09-04 by an outside review. Corrected here rather than by deleting the
+    /// variants: they may be load-bearing on a shipped path, and removing a matcher on a
+    /// fail-closed delete without measuring first is the more dangerous edit of the two.
+    ///
+    /// What is true: the English forms are live-measured. Where `삭제` and `削除` came from is not
+    /// recorded anywhere, which is exactly what `docs/locale/ui-labels.json`'s `measured` blocks
+    /// exist to make visible — both are counted there as variants with no reading behind them.
+    /// A locale whose form is genuinely absent still degrades to fail-closed structural matching;
+    /// a wrong-title guess or keyboard fallback is never fabricated.
     static let deleteTracksPrimaryButton = LabelSet(
         canonical: "Delete Tracks and Content",
         variants: ["Delete", "삭제", "削除"],

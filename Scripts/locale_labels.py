@@ -27,7 +27,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SWIFT = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 JSON_PATH = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
-# canonical / variants / rationale, in the shape every one of the 138 declarations uses.
+# canonical / variants / rationale, in the named `static let X = LabelSet(...)` shape.
 DECL = re.compile(
     r'static let (\w+) = LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
@@ -35,6 +35,22 @@ DECL = re.compile(
     r'rationale:\s*"((?:[^"\\]|\\.)*)"',
     re.S,
 )
+
+# ...and the same thing written inline inside an array, which the named pattern cannot see. An
+# outside review found four of these in `pluginFormatLeafPriority`, each carrying a real Korean
+# variant (`스테레오`, `모노`, …). They were absent from the projection AND from its declaration
+# count, so editing one changed Swift behaviour while the guard stayed green — the exact drift the
+# projection exists to stop, hiding in the shape the parser happened not to read.
+INLINE = re.compile(
+    r'(?<!= )LabelSet\(\s*'
+    r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
+    r'variants:\s*\[([^\]]*)\],\s*'
+    r'rationale:\s*"((?:[^"\\]|\\.)*)"',
+    re.S,
+)
+# The denominator counts EVERY LabelSet, not every one this parser knows how to spell. A shape it
+# cannot read has to make the export refuse, not vanish from both sides of the comparison.
+ANY_LABELSET = re.compile(r'LabelSet\(')
 STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
 
@@ -43,13 +59,29 @@ def _unescape(text):
 
 
 def from_swift(path=SWIFT):
-    """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}."""
+    """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}.
+
+    Inline sets have no name of their own, so they are keyed by their canonical with an `inline:`
+    prefix — stable across edits that do not change the string, and obviously not a Swift symbol.
+    """
     body = open(path, encoding="utf-8").read()
-    declared = len(re.findall(r"static let \w+ = LabelSet\(", body))
+    declared = len(ANY_LABELSET.findall(body))
     out = {}
     for name, canonical, variants, rationale in DECL.findall(body):
         out[name] = {
             "canonical": _unescape(canonical),
+            "variants": [_unescape(v) for v in STRING.findall(variants)],
+            "rationale": _unescape(rationale),
+        }
+    named_canonicals = {e["canonical"] for e in out.values()}
+    for canonical, variants, rationale in INLINE.findall(body):
+        canonical = _unescape(canonical)
+        key = f"inline:{canonical}"
+        if canonical in named_canonicals and key not in out:
+            # a named set the inline pattern also matched; the named entry already has it
+            continue
+        out[key] = {
+            "canonical": canonical,
             "variants": [_unescape(v) for v in STRING.findall(variants)],
             "rationale": _unescape(rationale),
         }

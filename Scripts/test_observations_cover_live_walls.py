@@ -52,6 +52,13 @@ case("every wording that escaped the first trigger is caught now", missed == [],
 quiet = "| ADR-0 | #1 | OPEN | this is waiting on a decision about node identity |"
 case("a row asserting nothing is not treated as a claim", not G.claim_in(quiet), repr(quiet[:60]))
 
+# 2b. It fires on a dated measurement whether or not the row says "live". An outside review read
+#     the old wording as a promise that it required a `live` token; the behaviour is wider and the
+#     wider behaviour is the wanted one — a dated measurement deserves a record either way.
+static_claim = "| ADR-0 | #1 | OPEN | Measured 2026-09-04 by static source inspection |"
+case("a dated measurement with no `live` token is still a claim",
+     bool(G.claim_in(static_claim)), repr(static_claim[:60]))
+
 # 3. THE ATTRIBUTION. A row is about the issue in its identity cells, not about every issue its
 #    prose happens to name. ADR-011 claims about #299 and mentions "behind #292"; before this,
 #    a #292 record covered it.

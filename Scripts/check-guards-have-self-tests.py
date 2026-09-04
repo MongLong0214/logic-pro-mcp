@@ -20,10 +20,17 @@ patterns, and a replacement clause that measured to change nothing.
 
 ## What counts as covered
 
-The guard's filename must appear in a test **in code, not in prose**. Three tests mention
-`check-python-contracts.py` in their opening paragraph and none of them run it; counting those
-would make this rule flatter itself, which is the failure it exists to name. Python tests are
-parsed and their docstrings skipped; shell tests ignore comment lines.
+The guard's filename must appear in a test **in code, not in prose**, and that test must contain a
+construct that runs something — `spec_from_file_location`, `subprocess`, or an interpreter invoked
+by name. Three tests mention `check-python-contracts.py` in their opening paragraph and none of
+them run it; counting those would make this rule flatter itself, which is the failure it exists to
+name. Python tests are parsed and their docstrings skipped; shell tests ignore comment lines.
+
+**The residual, stated rather than papered over.** This is static, so a dead mention still counts:
+`if False: marker = "check-thing.py"` in a file that also runs something else passes. An outside
+review found exactly that. Closing it properly means running each test with its guard mutated and
+watching the test fail, which is a different and much heavier rule; what is here is a floor that
+makes the cheap omission visible, not a proof that a listed test is a real one.
 
 The known list only shrinks. Turning nine guards red at once is how a rule gets deleted rather than
 satisfied.
@@ -60,6 +67,9 @@ def tests():
            sorted(glob.glob(os.path.join(REPO, "Scripts", "livekit", "test_*.py")))
 
 
+EXECUTES = ("spec_from_file_location", "subprocess", "python3 ", "bash ", "sh ", "./")
+
+
 def code_text(path):
     """The parts of a test that are code. Prose naming a guard is not a test of it."""
     source = open(path, encoding="utf-8", errors="replace").read()
@@ -92,7 +102,10 @@ def coverage():
     covered, bare = {}, []
     for guard in guards():
         base = os.path.basename(guard)
-        hits = sorted(name for name, body in bodies.items() if base in body)
+        # Naming the guard is not enough: the test has to run SOMETHING. A file with no execution
+        # construct at all cannot be driving anything.
+        hits = sorted(name for name, body in bodies.items()
+                      if base in body and any(marker in body for marker in EXECUTES))
         if hits:
             covered[base] = hits
         else:

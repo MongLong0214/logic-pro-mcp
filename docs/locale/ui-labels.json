@@ -303,6 +303,34 @@
       ],
       "rationale": "File menu entry that opens the Import submenu used by midi.import_file."
     },
+    "inline:Dual Mono": {
+      "canonical": "Dual Mono",
+      "variants": [
+        "듀얼 모노"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Mono": {
+      "canonical": "Mono",
+      "variants": [
+        "모노"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Mono->Stereo": {
+      "canonical": "Mono->Stereo",
+      "variants": [
+        "모노->스테레오"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Stereo": {
+      "canonical": "Stereo",
+      "variants": [
+        "스테레오"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
     "inputSlotHelpKeyword": {
       "canonical": "input slot",
       "variants": [

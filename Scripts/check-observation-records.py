@@ -25,6 +25,12 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(REPO, "docs", "observations")
 
+# WHAT THE NUMBER CHECK IS. It asks whether the numeral appears anywhere in `observations`, not
+# whether the conclusion's use of it follows from that reading — an outside review put it exactly:
+# an observation `{"retry_count": 3}` lets the unrelated conclusion "Latency was 3 seconds" pass.
+# Tying a numeral to its meaning is not something a static check can do, and pretending otherwise
+# is the failure this repository keeps finding in its own rules. What it does catch is the case it
+# was written for and has caught three times: a number asserted with NO reading behind it at all.
 REQUIRED = ("id", "date", "subject", "question", "verdict", "issues", "surface",
             "host", "reverify", "depends",
             "method", "observations", "conclusion", "limits", "supersedes")

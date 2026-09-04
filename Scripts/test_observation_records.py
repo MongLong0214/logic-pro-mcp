@@ -85,6 +85,14 @@ bad = problems(record(conclusion="There were 7 of them."))
 case("a number in the conclusion with no reading behind it is rejected",
      any("appears in no observation" in b for b in bad), f"{bad!r}")
 
+# 2b. What the number check does NOT do, pinned so nobody reads more into it. An outside review
+#     put it exactly: an observation `{"retry_count": 3}` lets the unrelated conclusion "Latency
+#     was 3 seconds" pass. Tying a numeral to its meaning is not something a static check can do,
+#     and this case exists so the limit is visible rather than discovered later.
+good = problems(record(observations=[{"retry_count": 3}], conclusion="Latency was 3 seconds."))
+case("an unrelated numeral satisfies the check — a known limit, not a claim",
+     good == [], f"{good!r}")
+
 # 3. `limits` is where a record says what it does not cover. Empty is not a limit, it is a claim of
 #    completeness nothing here can support.
 bad = problems(record(limits=[]))

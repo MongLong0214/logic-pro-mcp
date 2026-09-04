@@ -85,13 +85,31 @@ found = scan('SCRIPT = \'\'\'\ntell application "System Events"\n'
              '  set w to first window whose name ends with "Tracks"\n'
              'end tell\n\'\'\'\n', CANONICALS)
 case("the same predicate in an AppleScript payload is a site",
+     {f[1] for f in found} == {"Tracks"}, f"found={found!r}")
+
+# 4a. Two predicate patterns match `whose name ends with "…"`, so the same matcher yields more than
+#     one raw hit. That is fine and is now load-bearing — `main` aggregates by (file, literal) and
+#     compares the COUNT against KNOWN — but the REPORT must still name a site once. Deduplicating
+#     inside `offenders` was the earlier shape, and it threw away the number the ratchet needs.
+sites = {(f[0], f[1]) for f in found}
+case("however many patterns match, the report names one site",
+     len(sites) == 1 and len(found) >= 1, f"{len(found)} hit(s) over {len(sites)} site(s)")
+
+# 4b. THE ONE AN OUTSIDE REVIEW FOUND. The rule advertised Python `.startswith(...)` and
+#     `help == "..."` and caught neither: `_hits` was handed the CONTENTS of a string constant
+#     (`Tracks`), while the pattern demanded the surrounding source (`help.startswith("Tracks")`).
+#     Three advertised shapes could never fire, and the first version of this test did not ask.
+found = scan('def f(help):\n    return help.startswith("Tracks")\n', CANONICALS)
+case("a Python .startswith comparison is a site",
      [f[1] for f in found] == ["Tracks"], f"found={found!r}")
 
-# 4a. Two predicate patterns match `whose name ends with "…"`, and before results were deduplicated
-#     the report listed the same site twice — 35 hits for 21 sites. A count that overstates is a
-#     count nobody can act on.
-case("a site matched by two patterns is reported once",
-     len(found) == len({(f[0], f[1]) for f in found}), f"{len(found)} hit(s)")
+found = scan('def f(help):\n    return help == "Tracks"\n', CANONICALS)
+case("a Python == comparison is a site",
+     [f[1] for f in found] == ["Tracks"], f"found={found!r}")
+
+# 4c. ...and the same shape quoted in a docstring is still prose.
+found = scan('"""Matched with help.startswith("Tracks") before #766."""\nX = 1\n', CANONICALS)
+case("a Python comparison quoted in a docstring is not a site", found == [], f"found={found!r}")
 
 # 5. A literal the policy has no variant for is not this guard's business: it may be invariant, or
 #    nobody has looked. Flagging it would make the rule noisy enough to delete — 347 sites against
@@ -104,12 +122,26 @@ canonicals = G.localised_canonicals()
 case("the live vocabulary is non-empty and read from one place",
      isinstance(canonicals, dict) and len(canonicals) > 50, f"{len(canonicals)} localised canonicals")
 
-# 7. The known list is content-keyed. Line numbers move whenever anything above them is edited, and
-#    an allowlist that re-arms on an unrelated edit is worse than none.
+# 7. The known list is content-keyed AND counts. Line numbers move whenever anything above them is
+#    edited, so an allowlist keyed on them re-arms on an unrelated edit. Keyed on (file, literal)
+#    ALONE it had the opposite fault, which an outside review found: a file already listed for
+#    "View" could gain any number of further "View" matchers and pass, because occurrences were
+#    deduplicated before the comparison.
 case("the known list is keyed by (file, literal) and not by line",
      all(isinstance(k, tuple) and len(k) == 2 and all(isinstance(p, str) for p in k)
          for k in G.KNOWN),
      f"{len(G.KNOWN)} entries")
+
+case("every known entry carries how many matchers the site has",
+     all(isinstance(v, int) and v >= 1 for v in G.KNOWN.values()),
+     f"{sum(G.KNOWN.values())} matchers across {len(G.KNOWN)} sites")
+
+# 8. And occurrences reach the caller, because the count is what the ratchet compares. Returning a
+#    deduplicated list here is what let a site absorb new copies silently.
+found = scan('A = \'click menu bar item "Mixer" of menu bar 1\'\n'
+             'B = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)
+case("two matchers for the same literal are both returned",
+     len(found) == 2, f"{len(found)} occurrence(s)")
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
