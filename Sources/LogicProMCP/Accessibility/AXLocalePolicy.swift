@@ -1277,13 +1277,18 @@ enum AXLocalePolicy {
     /// when empty, exposes no `AXValue`, `AXValueDescription` or `AXTitle` at all — so an output can
     /// be read and a send destination cannot.
     ///
-    /// Only the English rendering is measured. A Logic in another language yields no match, which
-    /// makes the reader report nothing rather than guess — and the caller sees an absent output
-    /// rather than a wrong one. The variants list grows when a locale is actually observed, not when
-    /// one is translated.
+    /// The variants list grows when a locale is actually observed, not when one is translated.
+    /// ko-KR observed 2026-09-04 on Logic 12.3 (6674): four output slots on the open project, each
+    /// `AXButton` help `출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게
+    /// 클릭합니다.` and each described `Stereo Output` — so the description stays English here while
+    /// the help does not, and the help is what identifies the slot.
+    ///
+    /// Until that reading existed the list was empty and this reader returned nil on every strip of
+    /// a Korean Logic. `live_291_output_slot_is_read` is what surfaced it: the product published no
+    /// output while a second instrument read four off the same screen.
     static let outputSlotHelpKeyword = LabelSet(
         canonical: "output slot",
-        variants: [],
+        variants: ["출력 슬롯"],
         rationale: "Detects a channel strip's output slot by its AXHelp string; read-only classifier."
     )
 
@@ -1298,11 +1303,16 @@ enum AXLocalePolicy {
     /// `AXButton` whose help begins "Input Monitoring button. Hear incoming signal…" — a prefix match
     /// on the word alone would publish the monitoring toggle as an input source.
     ///
-    /// Only the English rendering is measured; the empty variants list is the same fail-closed choice
-    /// as `outputSlotHelpKeyword`.
+    /// ko-KR observed 2026-09-04 on Logic 12.3 (6674): one input slot on the open project, help
+    /// `입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기…`, described `입력 1`.
+    ///
+    /// The neighbour hazard survives translation and is one word wide on both sides: the monitoring
+    /// button's help reads `입력 모니터링 버튼. 녹음 활성화가 되지 않은…`, which shares its first word
+    /// with `입력 슬롯` exactly as `Input Monitoring` shares one with `Input slot`. Matching the full
+    /// phrase rather than the word is what keeps the toggle from being published as a source.
     static let inputSlotHelpKeyword = LabelSet(
         canonical: "input slot",
-        variants: [],
+        variants: ["입력 슬롯"],
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
     )
 

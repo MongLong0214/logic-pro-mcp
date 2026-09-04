@@ -18,6 +18,7 @@ properties keep it usable, and each is a real failure this repository has had:
 import glob
 import json
 import os
+import shlex
 import re
 import sys
 
@@ -112,11 +113,20 @@ def check(path):
         if not rv.get("command"):
             bad.append(f"{stem}: reverify.command is required — manual steps count, absence does not")
         elif rv.get("kind") in ("script", "harness"):
-            target = os.path.join(REPO, rv["command"])
-            if not os.path.exists(target):
-                bad.append(f"{stem}: reverify.command {rv['command']!r} does not exist")
-            elif not os.access(target, os.X_OK):
-                bad.append(f"{stem}: reverify.command {rv['command']!r} is not executable")
+            # The requirement is that the command runs AS WRITTEN, which is not the same as the
+            # file carrying an exec bit: 41 of the 42 harnesses in Scripts/livekit are mode 644 and
+            # are run `python3 <path>`. Demanding executability rejected a correct record and would
+            # have pushed the next one into `kind: manual` to get past the guard.
+            parts = shlex.split(rv["command"])
+            interpreters = {"python3", "python", "bash", "sh", "zsh", "swift", "osascript"}
+            direct = bool(parts) and os.path.basename(parts[0]) not in interpreters
+            path = parts[0] if direct else (parts[1] if len(parts) > 1 else "")
+            target = os.path.join(REPO, path) if path else ""
+            if not path or not os.path.exists(target):
+                bad.append(f"{stem}: reverify.command {rv['command']!r} names no file that exists")
+            elif direct and not os.access(target, os.X_OK):
+                bad.append(f"{stem}: reverify.command {rv['command']!r} is invoked directly but "
+                           f"{path} is not executable — name an interpreter or chmod it")
         if not rv.get("expected"):
             bad.append(f"{stem}: reverify.expected is required — a re-run with no expected reading "
                        f"cannot disagree with the record")

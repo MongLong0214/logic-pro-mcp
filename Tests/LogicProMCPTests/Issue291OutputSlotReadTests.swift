@@ -91,21 +91,43 @@ struct Issue291OutputSlotReadTests {
         #expect(read == nil)
     }
 
-    /// Only the English help string is measured. A Logic in another language must yield nothing —
-    /// the caller then sees an absent output rather than a wrong one, and the variants list grows
-    /// when a locale is observed, not when one is translated.
+    /// A Logic in a language nobody has read must yield nothing — the caller then sees an absent
+    /// output rather than a wrong one, and the variants list grows when a locale is observed, not
+    /// when one is translated.
+    ///
+    /// This test used to make that point with Korean, which stopped being true on 2026-09-04 when
+    /// the ko-KR rendering was measured. Keeping the fixture would have made the test assert the
+    /// opposite of the shipped behaviour, so the fixture moved to a locale that really is unread
+    /// and the Korean case became its own test below. The intent is unchanged; the example had to.
     @Test("an unmeasured locale yields no output rather than a guess")
     func unmeasuredLocaleYieldsNothing() {
         let builder = FakeAXRuntimeBuilder()
         let element = strip(
             builder, id: 29_400,
-            outputHelp: "출력 슬롯. 클릭한 상태를 유지하여 채널 스트립 출력을 선택하십시오.",
-            outputDescription: "스테레오 출력"
+            outputHelp: "出力スロット。クリックしたまま押さえてチャンネルストリップの出力先を選択します。",
+            outputDescription: "ステレオ出力"
         )
         let read = AXLogicProElements.outputSlotDestination(
             in: element, runtime: builder.makeAXRuntime()
         )
         #expect(read == nil)
+    }
+
+    /// The ko-KR rendering, measured on Logic 12.3 (6674) 2026-09-04. Before the variant was added,
+    /// `logic://mixer` published `output: null` on every strip of a Korean Logic while a second
+    /// instrument read four output slots off the same screen.
+    @Test("the measured Korean locale yields the destination")
+    func measuredKoreanLocaleYieldsTheDestination() {
+        let builder = FakeAXRuntimeBuilder()
+        let element = strip(
+            builder, id: 29_450,
+            outputHelp: "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다.",
+            outputDescription: "Stereo Output"
+        )
+        let read = AXLogicProElements.outputSlotDestination(
+            in: element, runtime: builder.makeAXRuntime()
+        )
+        #expect(read == "Stereo Output")
     }
 
     /// `sends` was `[SendState] = []`, so every strip of every project serialised `"sends": []` while
@@ -181,7 +203,9 @@ struct Issue291InputSlotReadTests {
         _ builder: FakeAXRuntimeBuilder,
         id: Int,
         inputHelp: String?,
-        inputDescription: String?
+        inputDescription: String?,
+        monitoringHelp: String = "Input Monitoring button. Hear incoming signal while recording.",
+        monitoringDescription: String = "monitoring"
     ) -> AXUIElement {
         let strip = builder.element(id)
         builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
@@ -190,9 +214,8 @@ struct Issue291InputSlotReadTests {
         // prefix match on the word alone publishes this toggle as an input source.
         let monitoring = builder.element(id + 1)
         builder.setAttribute(monitoring, kAXRoleAttribute as String, kAXButtonRole as String)
-        builder.setAttribute(monitoring, kAXHelpAttribute as String,
-                             "Input Monitoring button. Hear incoming signal while recording.")
-        builder.setAttribute(monitoring, kAXDescriptionAttribute as String, "monitoring")
+        builder.setAttribute(monitoring, kAXHelpAttribute as String, monitoringHelp)
+        builder.setAttribute(monitoring, kAXDescriptionAttribute as String, monitoringDescription)
         children.append(monitoring)
         if let inputHelp {
             let slot = builder.element(id + 2)
@@ -225,6 +248,41 @@ struct Issue291InputSlotReadTests {
     func monitoringIsNotASource() {
         let builder = FakeAXRuntimeBuilder()
         let strip = audioStrip(builder, id: 29_900, inputHelp: nil, inputDescription: nil)
+        let read = AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime())
+        #expect(read == nil)
+    }
+
+    /// The ko-KR renderings, measured on Logic 12.3 (6674) 2026-09-04. Both are here because adding
+    /// the Korean variant is what made this pair reachable at all — before it, neither string could
+    /// match and the reader returned nil for the right answer and the wrong one alike.
+    ///
+    /// The hazard survives translation at the same width: `입력 모니터링` shares its first word with
+    /// `입력 슬롯`, exactly as `Input Monitoring` does with `Input slot`. The monitoring button is
+    /// listed first here for the same reason it is in the English fixture.
+    @Test("the measured Korean locale reads the source and not its neighbour")
+    func koreanSourceIsReadAndMonitoringIsNot() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = audioStrip(
+            builder, id: 30_100,
+            inputHelp: "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기의 입력 또는",
+            inputDescription: "입력 1",
+            monitoringHelp: "입력 모니터링 버튼. 녹음 활성화가 되지 않은 오디오 또는 소프트웨어 악기 트랙에서",
+            monitoringDescription: "입력 모니터링"
+        )
+        let read = AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime())
+        #expect(try #require(read) == "입력 1")
+    }
+
+    @Test("a Korean strip with only the monitoring button reports no source")
+    func koreanMonitoringAloneIsNotASource() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = audioStrip(
+            builder, id: 30_200,
+            inputHelp: nil,
+            inputDescription: nil,
+            monitoringHelp: "입력 모니터링 버튼. 녹음 활성화가 되지 않은 오디오 또는 소프트웨어 악기 트랙에서",
+            monitoringDescription: "입력 모니터링"
+        )
         let read = AXLogicProElements.inputSlotSource(in: strip, runtime: builder.makeAXRuntime())
         #expect(read == nil)
     }

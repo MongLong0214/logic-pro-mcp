@@ -1,0 +1,1094 @@
+{
+  "schema": 1,
+  "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+  "how_to_regenerate": "Scripts/locale_labels.py --write",
+  "note": "Swift is the compiled source of truth; this is its projection for everything that cannot import Swift. `measured` records where a variant was READ — the rule is that the list grows when a locale is observed, not when one is translated.",
+  "labels": {
+    "allTracksAsAudioFilesMenuItem": {
+      "canonical": "All Tracks as Audio Files…",
+      "variants": [
+        "모든 트랙을 오디오 파일로…"
+      ],
+      "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`."
+    },
+    "arrangeWindowTitleSuffix": {
+      "canonical": "Tracks",
+      "variants": [
+        "트랙",
+        "トラック"
+      ],
+      "rationale": "Witnesses that an arrange window exists after project.new; read-only classification."
+    },
+    "audioPluginSlotLabel": {
+      "canonical": "audio plugin",
+      "variants": [
+        "audio effect",
+        "오디오 플러그인",
+        "오디오 이펙트"
+      ],
+      "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists)."
+    },
+    "automationModeContext": {
+      "canonical": "automation",
+      "variants": [
+        "오토메이션"
+      ],
+      "rationale": "Gates the track-header automation-mode read to the automation control; read-only classifier."
+    },
+    "automationModeLatch": {
+      "canonical": "latch",
+      "variants": [
+        "래치"
+      ],
+      "rationale": "Classifies the track-header automation mode as Latch; read-only classifier."
+    },
+    "automationModeOff": {
+      "canonical": "off",
+      "variants": [
+        "끔"
+      ],
+      "rationale": "Classifies an explicit track-header automation Off token; read-only classifier."
+    },
+    "automationModeRead": {
+      "canonical": "read",
+      "variants": [
+        "읽기"
+      ],
+      "rationale": "Classifies the track-header automation mode as Read; read-only classifier."
+    },
+    "automationModeTouch": {
+      "canonical": "touch",
+      "variants": [
+        "터치"
+      ],
+      "rationale": "Classifies the track-header automation mode as Touch; read-only classifier."
+    },
+    "automationModeTrim": {
+      "canonical": "trim",
+      "variants": [
+        "트림"
+      ],
+      "rationale": "Classifies the track-header automation mode as Trim; read-only classifier."
+    },
+    "automationModeWrite": {
+      "canonical": "write",
+      "variants": [
+        "쓰기"
+      ],
+      "rationale": "Classifies the track-header automation mode as Write; read-only classifier."
+    },
+    "barSliderLabel": {
+      "canonical": "bar",
+      "variants": [
+        "마디"
+      ],
+      "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only."
+    },
+    "beatSliderLabel": {
+      "canonical": "beat",
+      "variants": [
+        "비트"
+      ],
+      "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only."
+    },
+    "bounceMenuItem": {
+      "canonical": "Bounce",
+      "variants": [
+        "바운스"
+      ],
+      "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path."
+    },
+    "cancelButton": {
+      "canonical": "Cancel",
+      "variants": [
+        "취소",
+        "キャンセル"
+      ],
+      "rationale": "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`)."
+    },
+    "controlBarGroupLabel": {
+      "canonical": "control bar",
+      "variants": [
+        "컨트롤 막대",
+        "コントロールバー"
+      ],
+      "rationale": "Identifies the control-bar AXGroup by description; read-only locator."
+    },
+    "createButton": {
+      "canonical": "Create",
+      "variants": [
+        "생성",
+        "作成"
+      ],
+      "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
+    },
+    "createMarkerMenuItem": {
+      "canonical": "Create Marker",
+      "variants": [
+        "마커 생성",
+        "マーカーを作成"
+      ],
+      "rationale": "Navigate menu entry that creates a marker at the playhead."
+    },
+    "deleteTracksPrimaryButton": {
+      "canonical": "Delete Tracks and Content",
+      "variants": [
+        "Delete",
+        "삭제",
+        "削除"
+      ],
+      "rationale": ""
+    },
+    "editMenuBar": {
+      "canonical": "Edit",
+      "variants": [
+        "편집",
+        "編集"
+      ],
+      "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
+    },
+    "eventListColumnChannel": {
+      "canonical": "Ch",
+      "variants": [
+        "채널"
+      ],
+      "rationale": "Event List channel column; identity is the canonical English form."
+    },
+    "eventListColumnL": {
+      "canonical": "L",
+      "variants": [],
+      "rationale": "Event List lock column; unlabelled in every locale measured."
+    },
+    "eventListColumnLength": {
+      "canonical": "Length",
+      "variants": [
+        "길이"
+      ],
+      "rationale": "Region-level length column; distinguishes the region list from the event list."
+    },
+    "eventListColumnLengthInfo": {
+      "canonical": "Length/Info",
+      "variants": [
+        "길이/정보"
+      ],
+      "rationale": "Event List length column; identity is the canonical English form."
+    },
+    "eventListColumnM": {
+      "canonical": "M",
+      "variants": [],
+      "rationale": "Event List mute column; unlabelled in every locale measured."
+    },
+    "eventListColumnName": {
+      "canonical": "Name",
+      "variants": [
+        "이름"
+      ],
+      "rationale": "Region-level name column; distinguishes the region list from the event list."
+    },
+    "eventListColumnNumber": {
+      "canonical": "Num",
+      "variants": [
+        "번호"
+      ],
+      "rationale": "Event List number column; identity is the canonical English form."
+    },
+    "eventListColumnPosition": {
+      "canonical": "Position",
+      "variants": [
+        "위치"
+      ],
+      "rationale": "Event List position column; identity is the canonical English form."
+    },
+    "eventListColumnStatus": {
+      "canonical": "Status",
+      "variants": [
+        "상태"
+      ],
+      "rationale": "Event List status column; identity is the canonical English form."
+    },
+    "eventListColumnTrack": {
+      "canonical": "Trk",
+      "variants": [
+        "트랙"
+      ],
+      "rationale": "Region-level track column; distinguishes the region list from the event list."
+    },
+    "eventListColumnValue": {
+      "canonical": "Val",
+      "variants": [
+        "값"
+      ],
+      "rationale": "Event List value column; identity is the canonical English form."
+    },
+    "eventListTab": {
+      "canonical": "event",
+      "variants": [
+        "이벤트",
+        "イベント"
+      ],
+      "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it."
+    },
+    "eventPositionAsTimeMenuItem": {
+      "canonical": "Event Position and Length as Time",
+      "variants": [],
+      "rationale": "Decides whether Event List positions are bar/beat or timecode; read-only."
+    },
+    "exportMenuItem": {
+      "canonical": "Export",
+      "variants": [
+        "내보내기"
+      ],
+      "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label."
+    },
+    "fileMenuBar": {
+      "canonical": "File",
+      "variants": [
+        "파일",
+        "ファイル"
+      ],
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+    },
+    "goToMenuItem": {
+      "canonical": "Go To",
+      "variants": [
+        "이동",
+        "移動"
+      ],
+      "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position."
+    },
+    "goToPositionDialogTitle": {
+      "canonical": "Go To Position",
+      "variants": [
+        "위치로 이동",
+        "位置の移動"
+      ],
+      "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately."
+    },
+    "goToPositionMenuItem": {
+      "canonical": "Position…",
+      "variants": [
+        "위치…",
+        "位置…"
+      ],
+      "rationale": "Go To submenu leaf that opens the Go To Position dialog."
+    },
+    "headerPanHint": {
+      "canonical": "pan",
+      "variants": [
+        "팬",
+        "밸런스"
+      ],
+      "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint."
+    },
+    "hideAllPluginWindowsMenuItem": {
+      "canonical": "Hide All Plug-in Windows",
+      "variants": [
+        "모든 플러그인 윈도우 가리기"
+      ],
+      "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus."
+    },
+    "horizontalZoomSlider": {
+      "canonical": "Horizontal Zoom",
+      "variants": [
+        "가로 확대/축소",
+        "가로 확대"
+      ],
+      "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match."
+    },
+    "importMenuItem": {
+      "canonical": "Import",
+      "variants": [
+        "가져오기",
+        "読み込む"
+      ],
+      "rationale": "File menu entry that opens the Import submenu used by midi.import_file."
+    },
+    "inputSlotHelpKeyword": {
+      "canonical": "input slot",
+      "variants": [
+        "입력 슬롯"
+      ],
+      "rationale": "Detects a channel strip's input slot by its AXHelp string; read-only classifier.",
+      "measured": {
+        "입력 슬롯": {
+          "locale": "ko-KR",
+          "date": "2026-09-04",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+          "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다. 오디오 기기의 입력 또는",
+          "on_element": "AXButton, AXDescription \"입력 1\"",
+          "count_seen": 1,
+          "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase"
+        }
+      }
+    },
+    "libraryPanelLabel": {
+      "canonical": "library",
+      "variants": [
+        "라이브러리"
+      ],
+      "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists)."
+    },
+    "markerContainerKeywords": {
+      "canonical": "marker",
+      "variants": [
+        "마커"
+      ],
+      "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan."
+    },
+    "markerListDeleteMenuItem": {
+      "canonical": "Delete",
+      "variants": [
+        "削除",
+        "삭제"
+      ],
+      "rationale": "Live-confirmed on Logic 12.3: Marker List Delete is `削除` in Japanese and `삭제` in Korean. It is used only with exactStrict because the Edit menu also has Delete-Undo-History entries; prefix or containment matching can reach a different destructive command."
+    },
+    "markerListEditMenuButton": {
+      "canonical": "Edit",
+      "variants": [
+        "編集",
+        "편집"
+      ],
+      "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
+    },
+    "markerListNumberOfItemsLabel": {
+      "canonical": "Number of Items",
+      "variants": [
+        "항목 수",
+        "項目数"
+      ],
+      "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule."
+    },
+    "midiFileMenuItem": {
+      "canonical": "MIDI File…",
+      "variants": [
+        "MIDI 파일…",
+        "MIDIファイル…"
+      ],
+      "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file."
+    },
+    "mixerInspectorContext": {
+      "canonical": "inspector",
+      "variants": [
+        "인스펙터"
+      ],
+      "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier."
+    },
+    "mixerNamedElement": {
+      "canonical": "mixer",
+      "variants": [
+        "믹서"
+      ],
+      "rationale": "Identifies the mixer container by exact normalized name; read-only classifier."
+    },
+    "moveMenuItem": {
+      "canonical": "Move",
+      "variants": [
+        "이동"
+      ],
+      "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region."
+    },
+    "navigateMenuBar": {
+      "canonical": "Navigate",
+      "variants": [
+        "탐색",
+        "移動"
+      ],
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+    },
+    "newProjectMenuItem": {
+      "canonical": "New",
+      "variants": [
+        "신규",
+        "新規"
+      ],
+      "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it."
+    },
+    "newTrackSheetDescription": {
+      "canonical": "New Track",
+      "variants": [
+        "새로운 트랙",
+        "新規トラック"
+      ],
+      "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
+    },
+    "nonInsertButtonText": {
+      "canonical": "send",
+      "variants": [
+        "센드",
+        "input",
+        "입력",
+        "output",
+        "출력",
+        "group",
+        "그룹",
+        "channel mode",
+        "채널 모드",
+        "eq",
+        "setting",
+        "설정",
+        "gain reduction",
+        "게인 축소",
+        "mute",
+        "음소거",
+        "solo",
+        "record",
+        "녹음",
+        "monitor",
+        "모니터링",
+        "volume",
+        "볼륨",
+        "fader",
+        "페이더",
+        "pan",
+        "패닝",
+        "밸런스"
+      ],
+      "rationale": "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only."
+    },
+    "oneFilePerTrackPopupValue": {
+      "canonical": "One File per Track",
+      "variants": [
+        "트랙당 하나의 파일"
+      ],
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    },
+    "openMarkerListMenuItem": {
+      "canonical": "Open Marker List",
+      "variants": [
+        "마커 목록 열기",
+        "マーカーリストを開く"
+      ],
+      "rationale": "Navigate menu entry that opens the Marker List window."
+    },
+    "outputSlotHelpKeyword": {
+      "canonical": "output slot",
+      "variants": [
+        "출력 슬롯"
+      ],
+      "rationale": "Detects a channel strip's output slot by its AXHelp string; read-only classifier.",
+      "measured": {
+        "출력 슬롯": {
+          "locale": "ko-KR",
+          "date": "2026-09-04",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+          "observed": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다.",
+          "on_element": "AXButton, AXDescription \"Stereo Output\"",
+          "count_seen": 4
+        }
+      }
+    },
+    "playheadPositionFieldLabel": {
+      "canonical": "position",
+      "variants": [
+        "재생헤드 위치"
+      ],
+      "rationale": "Identifies the playhead position text field description; read-only."
+    },
+    "playheadPositionGroupLabel": {
+      "canonical": "playhead position",
+      "variants": [
+        "재생헤드 위치",
+        "再生ヘッド位置"
+      ],
+      "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
+    },
+    "pluginAutomationLabelExact": {
+      "canonical": "읽기, 오토메이션이 활성화됨",
+      "variants": [
+        "read"
+      ],
+      "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter."
+    },
+    "pluginAutomationLabelSubstring": {
+      "canonical": "automation",
+      "variants": [
+        "오토메이션"
+      ],
+      "rationale": "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter."
+    },
+    "pluginBypassControl": {
+      "canonical": "bypass",
+      "variants": [
+        "바이패스"
+      ],
+      "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists)."
+    },
+    "pluginOpenOrListControl": {
+      "canonical": "open",
+      "variants": [
+        "열기",
+        "list",
+        "목록"
+      ],
+      "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
+    },
+    "pluginWindowControlsViewMenuItem": {
+      "canonical": "Controls",
+      "variants": [
+        "컨트롤"
+      ],
+      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only."
+    },
+    "pluginWindowEditorViewMenuItem": {
+      "canonical": "Editor",
+      "variants": [
+        "편집기"
+      ],
+      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; paired evidence for Controls/컨트롤."
+    },
+    "pluginWindowSmartControlsControl": {
+      "canonical": "smart controls",
+      "variants": [],
+      "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier."
+    },
+    "pluginWindowViewSwitcher": {
+      "canonical": "View",
+      "variants": [
+        "보기"
+      ],
+      "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback."
+    },
+    "projectOrSectionMenuItem": {
+      "canonical": "Project or Section…",
+      "variants": [
+        "프로젝트 또는 섹션…",
+        "Project or Section...",
+        "프로젝트 또는 섹션..."
+      ],
+      "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds."
+    },
+    "projectPickerWindow": {
+      "canonical": "프로젝트 선택",
+      "variants": [
+        "choose a project",
+        "choose project",
+        "new from template"
+      ],
+      "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier."
+    },
+    "regionHelpKeyword": {
+      "canonical": "region",
+      "variants": [
+        "리전"
+      ],
+      "rationale": "Detects an arrange region by its AXHelp string; read-only classifier."
+    },
+    "regionKindAudio": {
+      "canonical": "audio",
+      "variants": [
+        "오디오"
+      ],
+      "rationale": "Classifies a region as audio content; read-only."
+    },
+    "regionKindDrummer": {
+      "canonical": "drummer",
+      "variants": [
+        "session player",
+        "드러머",
+        "세션 플레이어"
+      ],
+      "rationale": "Classifies a region as drummer/session-player content; read-only."
+    },
+    "regionKindMidi": {
+      "canonical": "midi",
+      "variants": [],
+      "rationale": "Classifies a region as MIDI content; read-only."
+    },
+    "saveAsMenuItem": {
+      "canonical": "Save As…",
+      "variants": [
+        "별도 저장…"
+      ],
+      "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as."
+    },
+    "saveConfirmationButton": {
+      "canonical": "Save",
+      "variants": [
+        "저장",
+        "OK",
+        "확인"
+      ],
+      "rationale": "Save As dialog commit button; file existence verifies the result."
+    },
+    "savePanelFolderRadio": {
+      "canonical": "Folder",
+      "variants": [
+        "폴더"
+      ],
+      "rationale": "One of the two project-organisation radios that identify the Save As panel."
+    },
+    "savePanelPackageRadio": {
+      "canonical": "Package",
+      "variants": [
+        "패키지"
+      ],
+      "rationale": "One of the two project-organisation radios that identify the Save As panel."
+    },
+    "savePanelWindowTitle": {
+      "canonical": "Save",
+      "variants": [
+        "저장"
+      ],
+      "rationale": "Title of the Save As panel window; the structural classifier matches it exactly."
+    },
+    "sendOrIOControlLabel": {
+      "canonical": "send",
+      "variants": [
+        "센드",
+        "input",
+        "output",
+        "입력",
+        "출력"
+      ],
+      "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection; read-only."
+    },
+    "setLocatorsMenuItem": {
+      "canonical": "Set Locators…",
+      "variants": [
+        "로케이터 설정…"
+      ],
+      "rationale": "Navigate menu entry that opens the cycle-range locator dialog."
+    },
+    "settingPopupValue": {
+      "canonical": "Preset",
+      "variants": [
+        "프리셋",
+        "Default",
+        "기본"
+      ],
+      "rationale": "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator."
+    },
+    "showMixerMenuItem": {
+      "canonical": "Show Mixer",
+      "variants": [
+        "믹서 보기"
+      ],
+      "rationale": "Used only as a best-effort mixer reveal before structural mixer readback."
+    },
+    "showStepInputKeyboardMenuItem": {
+      "canonical": "Show Step Input Keyboard",
+      "variants": [
+        "스텝 입력 키보드 보기"
+      ],
+      "rationale": "Native Window-menu toggle used with independent window-state readback."
+    },
+    "showTempoListMenuItem": {
+      "canonical": "Show Tempo List",
+      "variants": [
+        "템포 목록 보기"
+      ],
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table."
+    },
+    "sliderPanHint": {
+      "canonical": "pan",
+      "variants": [
+        "panning",
+        "패닝",
+        "밸런스"
+      ],
+      "rationale": "Classifies a slider as a pan control; read-only."
+    },
+    "sliderSendHint": {
+      "canonical": "send",
+      "variants": [
+        "센드"
+      ],
+      "rationale": "Classifies a slider as a send control; read-only."
+    },
+    "sliderVolumeHint": {
+      "canonical": "volume",
+      "variants": [
+        "fader",
+        "볼륨"
+      ],
+      "rationale": "Classifies a slider as a volume fader; read-only."
+    },
+    "sliderZoomHint": {
+      "canonical": "zoom",
+      "variants": [
+        "확대"
+      ],
+      "rationale": "Classifies a slider as a zoom control; read-only."
+    },
+    "sortTracksByAudioChannelMenuItem": {
+      "canonical": "오디오 채널",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByCreationDateMenuItem": {
+      "canonical": "생성일",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByInstrumentNameMenuItem": {
+      "canonical": "악기 이름",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByMIDIChannelMenuItem": {
+      "canonical": "MIDI 채널",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByMenuItem": {
+      "canonical": "트랙을 다음으로 정렬",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label."
+    },
+    "sortTracksByOutputChannelMenuItem": {
+      "canonical": "출력 채널",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByTrackNameMenuItem": {
+      "canonical": "트랙 이름",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "sortTracksByUsedMenuItem": {
+      "canonical": "사용 여부",
+      "variants": [],
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+    },
+    "stemExportCommitButton": {
+      "canonical": "Export",
+      "variants": [
+        "내보내기"
+      ],
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    },
+    "stemExportDismissButton": {
+      "canonical": "Cancel",
+      "variants": [
+        "취소"
+      ],
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+    },
+    "stemExportProgressWindowTitle": {
+      "canonical": "Logic Pro",
+      "variants": [],
+      "rationale": "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+    },
+    "stepInputKeyboardWindowTitle": {
+      "canonical": "Step Input Keyboard",
+      "variants": [
+        "스텝 입력 키보드"
+      ],
+      "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action."
+    },
+    "tempoFieldLabel": {
+      "canonical": "tempo",
+      "variants": [
+        "bpm",
+        "템포"
+      ],
+      "rationale": "Identifies a tempo text field/slider description; read-only."
+    },
+    "tempoListNumberOfItemsLabel": {
+      "canonical": "Number of Items",
+      "variants": [
+        "항목 수"
+      ],
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText."
+    },
+    "tempoMenuItem": {
+      "canonical": "Tempo",
+      "variants": [
+        "템포"
+      ],
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`."
+    },
+    "tempoSliderContainsLabel": {
+      "canonical": "tempo",
+      "variants": [
+        "템포"
+      ],
+      "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only."
+    },
+    "tempoSliderLabel": {
+      "canonical": "tempo",
+      "variants": [
+        "bpm",
+        "템포"
+      ],
+      "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only."
+    },
+    "toPlayheadMenuItem": {
+      "canonical": "To Playhead",
+      "variants": [
+        "재생헤드로"
+      ],
+      "rationale": "Move submenu leaf that repositions the selected region to the playhead."
+    },
+    "trackContentExplicit": {
+      "canonical": "트랙 콘텐츠",
+      "variants": [
+        "track content",
+        "track contents",
+        "tracks content",
+        "tracks contents"
+      ],
+      "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier."
+    },
+    "trackContentGeneric": {
+      "canonical": "콘텐츠",
+      "variants": [
+        "content",
+        "contents"
+      ],
+      "rationale": "Generic content-group fallback by normalized description; read-only classifier."
+    },
+    "trackHeadersDescription": {
+      "canonical": "track headers",
+      "variants": [
+        "track header",
+        "tracks header",
+        "tracks headers",
+        "트랙 헤더"
+      ],
+      "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred)."
+    },
+    "trackMenuBar": {
+      "canonical": "Track",
+      "variants": [
+        "트랙",
+        "トラック"
+      ],
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+    },
+    "trackMuteButton": {
+      "canonical": "Mute",
+      "variants": [
+        "음소거"
+      ],
+      "rationale": "Identifies the track Mute button by description substring; read-only state extraction."
+    },
+    "trackRecordButton": {
+      "canonical": "Record",
+      "variants": [
+        "Rec",
+        "녹음 활성화",
+        "레코드 활성화"
+      ],
+      "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction."
+    },
+    "trackRecordEnableCheckbox": {
+      "canonical": "녹음 활성화",
+      "variants": [
+        "Record Enable",
+        "Record"
+      ],
+      "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
+    },
+    "trackSoloButton": {
+      "canonical": "Solo",
+      "variants": [
+        "솔로"
+      ],
+      "rationale": "Identifies the track Solo button by description substring; read-only state extraction."
+    },
+    "trackTypeAudio": {
+      "canonical": "audio",
+      "variants": [
+        "오디오"
+      ],
+      "rationale": "Classifies an audio track by header aggregate; read-only classifier."
+    },
+    "trackTypeAux": {
+      "canonical": "aux",
+      "variants": [],
+      "rationale": "Classifies an aux track; read-only classifier."
+    },
+    "trackTypeBus": {
+      "canonical": "bus",
+      "variants": [],
+      "rationale": "Classifies a bus track; read-only classifier."
+    },
+    "trackTypeDrummer": {
+      "canonical": "drummer",
+      "variants": [],
+      "rationale": "Classifies a drummer track; read-only classifier."
+    },
+    "trackTypeExternalMIDI": {
+      "canonical": "external",
+      "variants": [
+        "midi"
+      ],
+      "rationale": "Classifies an external-MIDI track; read-only classifier."
+    },
+    "trackTypeGMDevice": {
+      "canonical": "gm device",
+      "variants": [],
+      "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only."
+    },
+    "trackTypeInstrument": {
+      "canonical": "instrument",
+      "variants": [
+        "software",
+        "악기"
+      ],
+      "rationale": "Classifies a software-instrument track; read-only classifier."
+    },
+    "trackTypeMaster": {
+      "canonical": "master",
+      "variants": [
+        "stereo out"
+      ],
+      "rationale": "Classifies the master / stereo-out track; read-only classifier."
+    },
+    "transportAutopunchControl": {
+      "canonical": "Autopunch",
+      "variants": [
+        "Auto Punch",
+        "Auto-Punch"
+      ],
+      "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback."
+    },
+    "transportContainerControlKeywords": {
+      "canonical": "play",
+      "variants": [
+        "stop",
+        "record",
+        "cycle",
+        "loop",
+        "metronome",
+        "rewind",
+        "forward",
+        "재생",
+        "녹음",
+        "사이클",
+        "메트로놈",
+        "클릭",
+        "再生",
+        "録音",
+        "サイクル",
+        "メトロノーム",
+        "クリック"
+      ],
+      "rationale": "Counts distinct transport-control labels to classify the control bar; read-only."
+    },
+    "transportContainerMetadata": {
+      "canonical": "transport",
+      "variants": [
+        "control bar",
+        "컨트롤 막대",
+        "コントロールバー"
+      ],
+      "rationale": "Classifies the transport/control-bar container by metadata substring; read-only."
+    },
+    "transportCycleControl": {
+      "canonical": "cycle",
+      "variants": [
+        "loop",
+        "사이클",
+        "サイクル"
+      ],
+      "rationale": "Identifies the Cycle/Loop transport control; read-only."
+    },
+    "transportKeywordFalseFriends": {
+      "canonical": "catch playhead",
+      "variants": [
+        "playhead position",
+        "playhead thumb",
+        "loop browser",
+        "session player",
+        "show/hide live loops grid",
+        "live loops grid",
+        "재생헤드 캐치",
+        "재생헤드 위치",
+        "재생헤드 썸네일",
+        "루프 브라우저",
+        "live loop 그리드 보기/가리기"
+      ],
+      "rationale": "Negative guard: labels carrying a transport keyword that are not transport "
+    },
+    "transportMetronomeControl": {
+      "canonical": "metronome",
+      "variants": [
+        "click",
+        "메트로놈",
+        "클릭",
+        "メトロノームクリック",
+        "メトロノーム",
+        "クリック"
+      ],
+      "rationale": "Identifies the Metronome/Click transport control; read-only."
+    },
+    "transportPlayControl": {
+      "canonical": "play",
+      "variants": [
+        "재생",
+        "再生"
+      ],
+      "rationale": "Identifies the Play transport control when reading TransportState; read-only."
+    },
+    "transportRecordArmExclusion": {
+      "canonical": "arm",
+      "variants": [
+        "활성화"
+      ],
+      "rationale": "Negative guard: distinguishes per-track record-arm from transport Record; read-only."
+    },
+    "transportRecordControl": {
+      "canonical": "record",
+      "variants": [
+        "녹음",
+        "録音"
+      ],
+      "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only."
+    },
+    "transportSliderHints": {
+      "canonical": "tempo",
+      "variants": [
+        "bpm",
+        "position",
+        "템포",
+        "재생헤드 위치",
+        "마디",
+        "비트"
+      ],
+      "rationale": "Classifies tempo/position sliders inside the transport container; read-only."
+    },
+    "transportTextFieldHint": {
+      "canonical": "tempo",
+      "variants": [
+        "bpm",
+        "position",
+        "템포",
+        "재생헤드 위치"
+      ],
+      "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only."
+    },
+    "undoMenuItemPrefix": {
+      "canonical": "Undo",
+      "variants": [
+        "실행 취소"
+      ],
+      "rationale": "Menu item includes the operation name after the localized Undo prefix."
+    },
+    "undoPluginInsertMenuItem": {
+      "canonical": "Insert Plug-in in Channel Strip",
+      "variants": [
+        "채널 스트립에 플러그인 삽입"
+      ],
+      "rationale": "Confirms the Undo entry describes OUR insert before a rollback presses it."
+    },
+    "viewMenuBar": {
+      "canonical": "View",
+      "variants": [
+        "보기"
+      ],
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+    },
+    "windowMenuBar": {
+      "canonical": "Window",
+      "variants": [
+        "윈도우"
+      ],
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+    }
+  }
+}

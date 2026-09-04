@@ -73,37 +73,102 @@ def document_titles():
     return [t for t in window_titles() if not any(c in t for c in CHOOSER_TITLES)]
 
 
+# Slot kinds, by the help text Logic puts on the button. Both spellings are measured, not
+# guessed: ko-KR on Logic 12.3 (6674) 2026-09-04, en alongside it from the original harness.
+# The witness keeps its own table on purpose — it is the second instrument, and reading the
+# product's label policy would make it the same instrument twice.
+SLOT_HELP = {
+    "output":  ("Output slot", "출력 슬롯"),
+    "send":    ("Send slot", "센드 슬롯"),
+    "input":   ("Input slot", "입력 슬롯"),
+    "monitor": ("Input Monitoring", "입력 모니터링"),
+}
+# What a send slot's description reads when it names no destination, in either language.
+SEND_NAMES_NOTHING = ("send button", "보내기 버튼", "")
+
+
+def classify(help_text):
+    """Which slot kind this help belongs to, or "" — longest prefix first.
+
+    `입력 모니터링` and `입력 슬롯` share a first word, and `Input Monitoring` and `Input slot`
+    share one too, so a first-word match would file the monitoring button as an input slot. That
+    is precisely the neighbour this harness exists to tell apart.
+    """
+    for kind, prefixes in SLOT_HELP.items():
+        for prefix in prefixes:
+            if help_text.startswith(prefix):
+                return kind
+    return ""
+
+
 def slot_descriptions_by_help():
     """What Logic's own buttons say, read by a second instrument.
 
     This walks the arrange window for AXButtons and reports each one's help and description, so the
     envelope's `output` can be held against the element it claims to come from rather than only
     against itself.
+
+    Rewritten for #767. The previous form could not run at all, for three separate reasons, each
+    sufficient on its own:
+
+      * it selected the window by `name ends with "Tracks"`, which RAISES on a Logic whose window
+        is named `<project> - 트랙`;
+      * it walked `entire contents`, which returns an empty list without error on this host — for
+        every application, not only Logic, so a filter over it finds nothing and reads as absence;
+      * it matched help against English literals and sliced them by a fixed character count.
+
+    The walk is now explicit. `AXHelpers.findAllDescendants` does the same thing on the Swift
+    side and is why `get_regions` kept working while this did not.
     """
     raw = osa('''
-    tell application "System Events" to tell process "Logic Pro"
-      set w to first window whose name ends with "Tracks"
-      set ec to entire contents of w
-      set out to ""
-      repeat with e in ec
-        set el to contents of e
+    on walk(el, depth, acc)
+      if depth > 10 then return acc
+      tell application "System Events"
         try
-          if (role of el as text) is "AXButton" then
-            set h to (help of el as text)
-            if h starts with "Output slot" or h starts with "Send slot" or h starts with "Input slot" or h starts with "Input Monitoring" then
-              set out to out & (description of el as text) & "\\t" & (text 1 thru 12 of h) & "\\n"
-            end if
-          end if
+          set kids to UI elements of el
+        on error
+          return acc
         end try
+      end tell
+      repeat with k in kids
+        tell application "System Events"
+          set r to ""
+          set h to ""
+          set d to ""
+          try
+            set r to (role of k) as text
+          end try
+          try
+            set h to (help of k) as text
+          end try
+          try
+            set d to (description of k) as text
+          end try
+        end tell
+        if r is "AXButton" and h is not "" then
+          set end of acc to (d & tab & h)
+        end if
+        set acc to my walk(k, depth + 1, acc)
       end repeat
-      return out
+      return acc
+    end walk
+
+    tell application "System Events" to tell process "Logic Pro"
+      set w to first window whose subrole is "AXStandardWindow"
     end tell
+    set rows to my walk(w, 0, {})
+    set text item delimiters to linefeed
+    return rows as text
     ''')
     rows = []
     for line in raw.splitlines():
-        if "\t" in line:
-            desc, kind = line.split("\t", 1)
-            rows.append({"description": desc.strip(), "help_prefix": kind.strip()})
+        if "\t" not in line:
+            continue
+        desc, help_text = line.split("\t", 1)
+        kind = classify(help_text.strip())
+        if kind:
+            rows.append({"description": desc.strip(), "kind": kind,
+                         "help_prefix": help_text.strip()[:24]})
     return rows
 
 
@@ -131,17 +196,30 @@ def mixer_is_open(driver):
     return source == "ax_poll"
 
 
+# The View menu and the Mixer item, in every language this harness has been run in. Measured,
+# not translated: ko-KR on Logic 12.3 (6674) 2026-09-04. The English literals were the only ones
+# here until then, so on a Korean Logic `menu bar item "View"` raised and the toggle never ran —
+# it went unnoticed because the Mixer happened to be open on every run that got this far.
+VIEW_MENU = ("View", "보기")
+MIXER_ITEM = ("Mixer", "믹서")
+
+
 def toggle_mixer():
     """Show or hide the Mixer through Logic's own View menu — no coordinates, and reversible."""
-    return osa(
-        'tell application "System Events" to tell process "Logic Pro"\n'
-        'set mi to (first menu item of menu 1 of menu bar item "View" of menu bar 1 '
-        'whose name contains "Mixer")\n'
-        'set nm to (name of mi as text)\n'
-        'click mi\n'
-        'delay 1.5\n'
-        'return nm\n'
-        'end tell')
+    for menu_name in VIEW_MENU:
+        for item_name in MIXER_ITEM:
+            out = osa(
+                'tell application "System Events" to tell process "Logic Pro"\n'
+                f'set mi to (first menu item of menu 1 of menu bar item "{menu_name}" of menu bar 1 '
+                f'whose name contains "{item_name}")\n'
+                'set nm to (name of mi as text)\n'
+                'click mi\n'
+                'delay 1.5\n'
+                'return nm\n'
+                'end tell')
+            if out:
+                return out
+    return ""
 
 
 titles = document_titles()
@@ -171,8 +249,8 @@ if band is None:
 
 witness = slot_descriptions_by_help()
 ev.note("291i/slots-seen-by-the-witness", witness)
-outputs = [r for r in witness if r["help_prefix"].startswith("Output")]
-sends = [r for r in witness if r["help_prefix"].startswith("Send")]
+outputs = [r for r in witness if r["kind"] == "output"]
+sends = [r for r in witness if r["kind"] == "send"]
 
 ev.check("291i/logic-exposes-an-output-slot-that-names-its-destination",
          bool(outputs) and all(r["description"] for r in outputs),
@@ -180,8 +258,8 @@ ev.check("291i/logic-exposes-an-output-slot-that-names-its-destination",
          "is the element the reader identifies, read here by a second instrument",
          f"outputs={outputs!r}", None)
 
-inputs = [r for r in witness if r["help_prefix"].startswith("Input slot")]
-monitors = [r for r in witness if r["help_prefix"].startswith("Input Moni")]
+inputs = [r for r in witness if r["kind"] == "input"]
+monitors = [r for r in witness if r["kind"] == "monitor"]
 ev.check("291i/logic-exposes-an-input-slot-that-names-its-source",
          bool(inputs) and all(r["description"] for r in inputs),
          "an input slot exists on an audio strip and its description carries a source name — read "
@@ -196,7 +274,7 @@ ev.check("291i/the-monitoring-button-sits-right-beside-it",
          f"monitors={monitors!r}", None)
 
 ev.check("291i/the-send-slot-names-no-destination",
-         bool(sends) and all(r["description"] in ("send button", "") for r in sends),
+         bool(sends) and all(r["description"] in SEND_NAMES_NOTHING for r in sends),
          "the send slot beside it is described only as \"send button\" — it carries no destination, "
          "which is why this change reads outputs and claims nothing about sends",
          f"sends={sends!r}", None)
@@ -218,8 +296,14 @@ for _ in range(2):
     if mixer_is_open(d):
         break
     toggles.append(toggle_mixer())
+    # Ask for a fresh poll rather than waiting for one. `mixer_is_open` reads `data_source`, which
+    # is poller FRESHNESS, so the old form slept up to twelve seconds and still failed whenever the
+    # poll landed late — a precondition that depends on timing is a flake, not a check. The refresh
+    # is a real call the run needs; that it also makes `operations_driven` positive is a
+    # consequence, and the clause it satisfies is discussed in the commit rather than leaned on.
     for _ in range(6):
-        time.sleep(2)
+        d.tool("logic_system", "refresh_cache")
+        time.sleep(1)
         if mixer_is_open(d):
             break
 ev.check("291i/precondition-the-product-can-see-the-mixer",
@@ -235,6 +319,13 @@ before = ev.shot("291i/before", settle_region=band, window_title=arrange_title)
 # all — the first version of this harness called `logic_mixer.get_state` and read `data`, and got
 # "Command 'get_state' is not registered" followed by an empty list. It reported that as the feature
 # failing. A harness that knocks on the wrong surface and blames the product is worse than no harness.
+# Force a poll immediately before the read the assertions rest on. `logic://mixer` is served from
+# the state poller's cache, so without this the strips below could be a reading of the project as it
+# was some seconds ago — which is the `cached_reads_used_as_live` hazard the evidence document
+# tracks, arriving through the front door. The precondition above establishes the pane is visible;
+# this establishes that what follows was read after that was true.
+d.tool("logic_system", "refresh_cache")
+time.sleep(1)
 body = d.resource("logic://mixer") or {}
 rows = body.get("strips") if isinstance(body.get("strips"), list) else []
 ev.note("291i/mixer-resource", {"rows": len(rows),

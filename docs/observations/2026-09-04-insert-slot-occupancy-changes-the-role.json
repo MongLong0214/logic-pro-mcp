@@ -1,0 +1,98 @@
+{
+  "id": "2026-09-04-insert-slot-occupancy-changes-the-role",
+  "date": "2026-09-04",
+  "subject": "How an occupied insert slot differs from an empty one in the channel strip",
+  "question": "Can an insert slot's occupancy and its plug-in be read, and by which attribute?",
+  "verdict": "works",
+  "issues": [],
+  "surface": "mixer.inserts",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Open a project with a plug-in on at least one insert. Walk the arrange window to depth 10 collecting role, description, help and position for every element whose description names the plug-in or whose help begins with the audio-effect-slot string. Compare an occupied row against an empty one on the same strip.",
+    "expected": "occupied reads AXGroup with the plug-in name as its description and no help; empty reads AXButton with a generic description and the slot help",
+    "cost": "~3 min with a project open; read-only"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Mixer.swift"
+  ],
+  "method": "Enumerated without narrowing the role first. An earlier pass filtered on the slot help string, found every match identical, and would have supported the opposite conclusion -- the occupied slots were not AXButtons and carry no help, so a help filter cannot see them at all.",
+  "observations": [
+    {
+      "what": "one strip, four insert rows, top to bottom",
+      "rows": [
+        {
+          "y": 602,
+          "role": "AXGroup",
+          "description": "Compressor",
+          "help": null
+        },
+        {
+          "y": 618,
+          "role": "AXButton",
+          "description": "오디오 플러그인",
+          "help": "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다…"
+        },
+        {
+          "y": 635,
+          "role": "AXGroup",
+          "description": "Compressor",
+          "help": null
+        },
+        {
+          "y": 652,
+          "role": "AXButton",
+          "description": "오디오 플러그인",
+          "help": "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다…"
+        }
+      ]
+    },
+    {
+      "what": "a strip with nothing inserted",
+      "x": 507,
+      "rows_all_AXButton": 4,
+      "descriptions_all": "오디오 플러그인",
+      "AXGroup_rows": 0
+    },
+    {
+      "what": "the neighbour that also carries the plug-in name",
+      "role": "AXButton",
+      "description": "라이브러리 표시기, Compressor",
+      "help": "라이브러리 포커스 삼각형. 강조 표시된 슬롯의…",
+      "position_relative_to_the_slot": "same row, to the left (x 366 against 389)"
+    },
+    {
+      "what": "an earlier pass that aimed only at the slot help",
+      "matches": 17,
+      "all_AXButton": true,
+      "all_described": "오디오 플러그인",
+      "occupied_slots_seen": 0,
+      "note": "the fixture had two plug-ins inserted at the time"
+    },
+    {
+      "what": "what the product reports for the same track",
+      "operation": "logic_plugins.get_inventory",
+      "complete": true,
+      "insert_0": {
+        "name": "Compressor",
+        "occupied": true,
+        "read_status": "ok"
+      }
+    }
+  ],
+  "conclusion": "Occupancy changes the element, not a property of it. An empty insert is an AXButton described 오디오 플러그인 and carrying the audio-effect-slot help; an occupied one is an AXGroup described with the plug-in name and carrying no help at all. So help identifies an empty slot and cannot identify a full one, and a reader that filters by the slot help string sees only the empty slots -- an earlier pass here matched 17 of them, every one an AXButton, while two plug-ins were inserted. Description identifies a full slot, but not alone: the library focus triangle sits in the same row and is described 라이브러리 표시기, Compressor, so a description containing the plug-in name is satisfied by the neighbour too. Role plus description together separate all four cases. The product's own get_inventory already reports this correctly.",
+  "limits": [
+    "One plug-in (Compressor), one project, ko-KR. Whether every plug-in's occupied slot is an AXGroup, or whether some expose help, was not measured.",
+    "Bypassed and disabled slots were not exercised; only occupied and empty.",
+    "This is a reading of the surface, not of any write path. Nothing here says an insert can be set or cleared.",
+    "The strips were read where they were rendered; no attempt was made to distinguish the Inspector strip from Mixer strips, so the row counts are per rendered strip rather than per track."
+  ],
+  "supersedes": null
+}
