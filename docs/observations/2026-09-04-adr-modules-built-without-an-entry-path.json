@@ -1,0 +1,46 @@
+{
+  "id": "2026-09-04-adr-modules-built-without-an-entry-path",
+  "date": "2026-09-04",
+  "subject": "reachability of the ADR-015 / 017 / 018 module sets",
+  "question": "Can any operation reach the modules these three ADRs are waiting on?",
+  "verdict": "wall",
+  "issues": [303, 305, 306],
+  "surface": "plugin.controls_view",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6",
+           "note": "about the SERVER binary's wiring, not Logic"},
+  "reverify": {
+    "kind": "manual",
+    "command": "For each module directory M in FlexPitch/ and HostParameters/, run: grep -rn <TypeName> Sources/ | grep -v '^Sources/LogicProMCP/M/' | wc -l. Then find the readers of FeatureFlags.adr017FlexPitch and .adr018HostParams.",
+    "expected": "zero external references per type, and the only flag readers are tests asserting the flags are off",
+    "cost": "~2 min, no Logic needed"
+  },
+  "depends": [
+    "Sources/LogicProMCP/FlexPitch/FlexPitchModel.swift",
+    "Sources/LogicProMCP/HostParameters/PluginCapabilityManifest.swift",
+    "Sources/LogicProMCP/HostParameters/HostParameterGate.swift",
+    "Sources/LogicProMCP/HostParameters/ControlsViewParameterEnumerator.swift",
+    "Sources/LogicProMCP/MIDIReadback/MIDINoteIndependentVerification.swift",
+    "Sources/LogicProMCP/Utilities/FeatureFlags.swift"
+  ],
+  "method": "Counted references to each module type from outside its own directory, and located every reader of the two ADR feature flags, across Sources and Tests. Reachability is measured rather than inferred from whether an operation name exists.",
+  "observations": [
+    {"adr": "018", "type": "PluginCapabilityManifest", "external_refs": 0},
+    {"adr": "018", "type": "HostParameterGate", "external_refs": 0},
+    {"adr": "018", "type": "HostParameterPlane", "external_refs": 0},
+    {"adr": "018", "type": "ControlsViewParameterEnumerator", "external_refs": 0,
+     "note": "its own doc comment says: 'No operation calls this producer yet.'"},
+    {"adr": "017", "types": ["FlexPitchModel", "FlexPitchEditGate", "FlexPitchRefValidity"],
+     "external_refs": 1, "the_one": "the feature flag's own declaration"},
+    {"adr": "015", "type": "IndependentExpectedSeam", "availability": "debug only",
+     "release_symbols": 0},
+    {"flags": {"adr017FlexPitch": {"default": "off", "readers": ["FlexPitchTests.swift:184 asserts it is off"]},
+               "adr018HostParams": {"default": "off", "readers": ["HostParameterTests.swift:272 asserts it is off"]}}}
+  ],
+  "conclusion": "Three ADRs are waiting on module sets that are already written and that nothing can enter. Every type counts zero references outside its own directory, both feature flags default off, and the only readers of those flags are tests asserting they are off. So none of the three is short of logic — each is short of a live ingestion boundary in front of the logic. That is a different kind of work from what 'NOT STARTED' suggests, and it is shared across all three rather than being each one's separate problem.",
+  "limits": [
+    "This measures reachability in the code. It says nothing about whether each module's logic is correct, or whether the Logic-side surface each needs is workable.",
+    "ControlsViewParameterEnumerator's zero is corroborated by its own doc comment; the other zeros are the grep alone.",
+    "A boundary may be deliberately withheld pending a public-claim gate. This records that none exists, not that one was forgotten."
+  ],
+  "supersedes": null
+}
