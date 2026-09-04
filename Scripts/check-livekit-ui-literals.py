@@ -32,7 +32,20 @@ most of them JSON keys and prose; with it, 28, and every one is a live harness t
 outside English. It also means the guard grows by itself: measure a new locale into a LabelSet and
 every harness hardcoding that string becomes an error the same day.
 
-A line carrying a non-ASCII literal is exempt: that is an alias table, which is the fix.
+There is no exemption, and there were two attempts at one before that was the answer.
+
+The first asked whether the line held any non-ASCII character. `click menu item "Save As…"`
+satisfied it on the strength of a HORIZONTAL ELLIPSIS while being exactly the defect — the Korean
+menu reads `별도 저장…` — and an em dash or a curly quote would have done the same.
+
+The second asked the question that was actually meant: does a measured variant of THIS label appear
+on the line? Precise, and measured to change nothing. Python here is parsed, so the text a rule sees
+is the inside of a string constant, and a table declared beside it is not on that line at all.
+
+So the rule is simply that the literal must not be there. The fix is to interpolate the spelling
+from a table — `f'menu bar item "{name}"'` over every entry — which is what `live_291` does and
+what leaves nothing to exempt. A clause that changes nothing is a clause that will be trusted to do
+something.
 
 Python files are parsed rather than scanned line by line, because these harnesses hold their
 AppleScript in triple-quoted strings and a line-based reader cannot tell one from a docstring. The
@@ -80,6 +93,9 @@ KNOWN = {
     ("live_590_project_new_from_cold_launch.py", "Cancel"),
     ("live_606_save_as_writes_the_file.py", "Save"),
     ("live_608_first_call_is_not_refused.py", "Save"),
+    # surfaced only once the exemption stopped accepting a HORIZONTAL ELLIPSIS as an
+    # alias table; the Korean menu reads 별도 저장…
+    ("live_608_first_call_is_not_refused.py", "Save As…"),
     ("live_614_the_refusal_it_can_still_reach.py", "Save"),
     ("live_628_mixer_fallback_is_visible.py", "View"),
     ("live_628_mixer_fallback_is_visible.py", "Mixer"),
@@ -99,6 +115,14 @@ PREDICATES = [
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
 
+def _labels_module():
+    spec = importlib.util.spec_from_file_location(
+        "locale_labels", os.path.join(REPO, "Scripts", "locale_labels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def localised_canonicals():
     """Canonicals whose LabelSet carries at least one variant, read from the JSON projection.
 
@@ -107,11 +131,7 @@ def localised_canonicals():
     is generated from the Swift and checked against it by `check-locale-labels-json.py`, so reading
     it here is reading the policy, once.
     """
-    spec = importlib.util.spec_from_file_location(
-        "locale_labels", os.path.join(REPO, "Scripts", "locale_labels.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.localised_canonicals()
+    return _labels_module().localised_canonicals()
 
 
 def _docstring_nodes(tree):
@@ -133,9 +153,6 @@ def _hits(text, known_canonicals):
         stripped = line.strip()
         if stripped.startswith(("#", "//", "*")):
             continue
-        literals = ANY_LITERAL.findall(line)
-        if any(any(ord(ch) > 127 for ch in lit) for lit in literals):
-            continue                          # an alias table: the English spelling has company
         for pattern in PREDICATES:
             for literal in pattern.findall(line):
                 name = known_canonicals.get(literal.strip().lower())
@@ -165,7 +182,15 @@ def offenders(known_canonicals):
         for lineno, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
             for literal, name in _hits(line, known_canonicals):
                 found.append((base, literal, lineno, name))
-    return found
+    seen = set()
+    unique = []
+    for base, literal, lineno, name in found:
+        key = (base, literal)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((base, literal, lineno, name))
+    return unique
 
 
 def main():
@@ -184,8 +209,9 @@ def main():
         print(f"{len(new)} live-harness UI literal(s) that only one language spells that way:")
         for base, literal, lineno, policy_name in new:
             print(f"  {base}:{lineno}  {literal!r} — AXLocalePolicy.{policy_name} carries variants")
-        print("\n  Put the spellings in a table beside it, measured rather than translated, and match")
-        print("  against every entry. A line carrying a non-ASCII literal is exempt.")
+        print("\n  Interpolate the spelling from a table instead of writing it in:")
+        print("    for name in NAMES:  osa(f\'... menu bar item \"{name}\" ...\')")
+        print("  measured rather than translated, and tried in turn until one answers.")
     if stale:
         print(f"\n{len(stale)} known-list entr(y|ies) no longer present — delete them, the list only shrinks:")
         for base, literal in stale:
