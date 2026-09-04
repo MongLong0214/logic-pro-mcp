@@ -362,15 +362,6 @@ private func makeRegionFixture(
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
-        executeScript: { _ in
-            // Logic flipped AXSelected=true on RegionB.
-            fixture.builder.setAttribute(
-                fixture.builder.element(3_001),
-                kAXSelectedAttribute as String,
-                true
-            )
-            return .success("SELECTED")
-        },
         settle: { }
     )
 
@@ -402,7 +393,7 @@ private func makeRegionFixture(
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
-        executeScript: { _ in .success("SELECT_FAILED") },
+        selectRegion: { _, _ in false },
         settle: { }
     )
 
@@ -434,13 +425,16 @@ private func makeRegionFixture(
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
-        executeScript: { _ in
+        selectRegion: { _, _ in
+            // #767 — the seam is the SELECTION now, not a script. Logic lands on the wrong
+            // region: the write goes to RegionA while the last region is RegionB, which is
+            // exactly the state the readback exists to notice.
             fixture.builder.setAttribute(
-                fixture.builder.element(3_000),  // RegionA — the wrong one
+                fixture.builder.element(3_000),
                 kAXSelectedAttribute as String,
                 true
             )
-            return .success("SELECTED")
+            return true
         },
         settle: { }
     )
@@ -470,7 +464,11 @@ private func makeRegionFixture(
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
-        executeScript: { _ in .success("SELECTED") },
+        selectRegion: { _, _ in
+            // The write reports success and nothing is selected afterwards — AX return codes
+            // lie, so the readback is the verdict and this is the case that proves it.
+            true
+        },
         settle: { }
     )
 
@@ -491,7 +489,6 @@ private func makeRegionFixture(
 
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
-        executeScript: { _ in .success("NO_REGION") },
         settle: { }
     )
 

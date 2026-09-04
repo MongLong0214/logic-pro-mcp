@@ -307,6 +307,26 @@ extension AccessibilityChannel {
     /// Right-most / latest region. "Last" = the entry with the largest
     /// `startBar`; ties broken by larger `trackIndex`. Used by
     /// `region.select_last` post-state verification.
+    /// The last region AND the element that carries it, by the same rule `lastRegionInfo` uses.
+    ///
+    /// #767 — `defaultSelectLastRegion` verified its work with `lastRegionInfo`, which sorts by
+    /// `startBar` then `trackIndex`, while SELECTING with an AppleScript that walked
+    /// `entire contents` and picked the largest screen coordinates. Two rules for "last" in one
+    /// function: the check was right and the action was not, so the check could only ever report
+    /// that the action had missed.
+    static func lastRegionItem(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> (item: AXUIElement, info: RegionInfo)? {
+        guard case .success(let result) = enumerateRegionItems(runtime: runtime),
+              !result.regions.isEmpty else {
+            return nil
+        }
+        return result.regions.sorted { a, b in
+            if a.info.startBar != b.info.startBar { return a.info.startBar < b.info.startBar }
+            return a.info.trackIndex < b.info.trackIndex
+        }.last
+    }
+
     static func lastRegionInfo(
         runtime: AXLogicProElements.Runtime = .production
     ) -> RegionInfo? {
@@ -527,73 +547,44 @@ extension AccessibilityChannel {
     /// otherwise State B `readback_mismatch` / `readback_unavailable`.
     static func defaultSelectLastRegion(
         runtime: AXLogicProElements.Runtime = .production,
-        executeScript: @Sendable (String) async -> ChannelResult = { await AppleScriptChannel.executeAppleScript($0) },
+        selectRegion: (@Sendable (AXUIElement, AXLogicProElements.Runtime) -> Bool)? = nil,
         settle: @Sendable () async -> Void = { try? await Task.sleep(nanoseconds: 350_000_000) }
     ) async -> ChannelResult {
-        let logicProAppleScript = LogicProTarget.appleScriptTarget()
-        let script = """
-        \(logicProAppleScript.activateByBundleID)
-        delay 0.1
-        tell application "System Events"
-            tell \(logicProAppleScript.systemEventsProcessTarget)
-                set mainWin to first window
-                -- #767: this finds nothing. `entire contents` returns an empty list, WITHOUT
-                -- raising, for every application on macOS 26.3 — measured 2026-09-04 against
-                -- Logic (0 here against 464 by a manual descent of the same window) and against
-                -- nine other apps. So the filter below runs over nothing and the handler reports
-                -- NO_REGION for a project that has regions.
-                --
-                -- The size test is a second defect and survives fixing the first: every track
-                -- header satisfies `20 < w < 2000 and 20 < h < 200`, so `bestY`/`bestX` can land
-                -- on a header rather than a region whenever the bottom track carries none. AXHelp
-                -- separates them (headers open `트랙 헤더.`, regions `리전은 …`), and
-                -- `enumerateRegionItems` already applies exactly that rule — it read this same
-                -- window correctly while this script was blind.
-                --
-                -- Not repaired here: `region.select_last` is in `RoutingTable` and NOT in
-                -- `OperationRegistry`, so no tool reaches it and no caller is waiting. The fix is
-                -- to select from `enumerateRegionItems` rather than to write a better script.
-                set allItems to entire contents of mainWin
-                set bestY to 0
-                set bestX to 0
-                set target to missing value
-                repeat with anItem in allItems
-                    try
-                        if role of anItem is "AXLayoutItem" then
-                            set s to size of anItem
-                            set w to item 1 of s
-                            set h to item 2 of s
-                            -- Region heuristic: 20 < width < 2000, 20 < height < 200
-                            if w > 20 and w < 2000 and h > 20 and h < 200 then
-                                set p to position of anItem
-                                set x to item 1 of p
-                                set y to item 2 of p
-                                if y > bestY or (y = bestY and x > bestX) then
-                                    set bestY to y
-                                    set bestX to x
-                                    set target to anItem
-                                end if
-                            end if
-                        end if
-                    end try
-                end repeat
-                if target is missing value then
-                    return "NO_REGION"
-                end if
-                -- Use AXPress / AXShowMenu may open contextual menu; instead set AXSelected.
-                -- No coordinate fallback: a failed AXSelected write returns a typed
-                -- marker and the handler fails closed (coordinate-free policy — the
-                -- former `click at {center}` fallback was removed with the campaign).
-                try
-                    set selected of target to true
-                    return "SELECTED"
-                on error
-                    return "SELECT_FAILED"
-                end try
-            end tell
-        end tell
-        """
-        let result = await executeScript(script)
+        // #767 — this used to drive an AppleScript that walked `entire contents` and picked the
+        // largest screen coordinates. Two defects, either sufficient:
+        //
+        //   * `entire contents` returns an EMPTY list, without raising, for every application on
+        //     macOS 26.3 — measured 2026-09-04 at 0 against 464 by a manual descent of the same
+        //     window. The filter therefore ran over nothing and the handler reported NO_REGION for
+        //     a project that had regions.
+        //   * the filter was `20 < w < 2000 and 20 < h < 200`, which every TRACK HEADER satisfies.
+        //     Measured on one window: 4 candidates, 3 of them headers. Picking the greatest Y then
+        //     X landed on the region by a pixel of luck, and a project whose bottom track carries
+        //     no region would have selected a header and called it the last region.
+        //
+        // The rule was already here and already right — one function below, `lastRegionInfo` sorts
+        // by `startBar` then `trackIndex`, and this function used it to VERIFY the selection it
+        // had just made by a different rule. The check was correct and the action was not, so the
+        // check could only ever report that the action had missed. `lastRegionItem` is that same
+        // ordering carrying the element, and the selection is a Swift AX write on it.
+        let target = lastRegionItem(runtime: runtime)
+        let writeSelected = selectRegion ?? { element, runtime in
+            AXHelpers.setAttribute(element, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
+        }
+        // AX return codes lie, so the write's answer is not the verdict on its own — the readback
+        // below is, and a selection that LANDED is reported however the setter answered. The
+        // answer is kept for the one case where the two agree: the write said no and nothing is
+        // selected afterwards. That pair is a real failure and the contract fails closed on it,
+        // rather than reporting an unreadable state B for something that plainly did not happen.
+        var writeReportedFailure = false
+        let result: ChannelResult
+        if let target {
+            writeReportedFailure = !writeSelected(target.item, runtime)
+            result = .success("SELECTED")
+        } else {
+            result = .success("NO_REGION")
+        }
+
         switch result {
         case .success(let output):
             if output.contains("NO_REGION") {
@@ -631,6 +622,13 @@ extension AccessibilityChannel {
             }
 
             // No selected region readback (AXSelected never came back true).
+            if selected == nil, writeReportedFailure {
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "region.select_last: the target region's AXSelected attribute could not be "
+                        + "written and nothing is selected; no fallback was attempted"
+                ))
+            }
             guard let selected = selected else {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
