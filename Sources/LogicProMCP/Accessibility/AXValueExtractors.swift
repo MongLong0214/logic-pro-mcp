@@ -737,12 +737,37 @@ enum AXValueExtractors {
     private static func inferTrackType(from header: AXUIElement, runtime: AXHelpers.Runtime) -> TrackType {
         // Logic 12.2 often puts the human track name on the AXLayoutItem and
         // the type hint on a descendant icon/control, so scan both levels.
+        // #766 — the aggregate is built from Logic-AUTHORED text only. A name a user typed is not
+        // a reading of what the track is, and the attributes that carry it are excluded rather
+        // than filtered out of the ones that do not.
+        //
+        // Subtracting the name string from every signal was the previous attempt and a review
+        // broke it in one line: the header help reads "…되지 않은 오디오 또는 소프트웨어 악기
+        // 트랙에서…", so a track renamed exactly `오디오` had that word deleted from Logic's own
+        // sentence, leaving `악기` as the only candidate and turning an ambiguous header into a
+        // confident `.softwareInstrument`. Subtracting a user's string from measured text destroys
+        // the measurement.
+        //
+        // Excluded: the quoted name inside the header's AXDescription, and every descendant's
+        // VALUE — the name field's contents. Kept: help, identifier, the header title, and
+        // descendant descriptions and titles, which Logic writes. The icon described
+        // `Audio Channel Strip` is a real signal and stays.
+        // The header's AXDescription reads `1개의 ‘name’ 트랙` — a count, the name in typographic
+        // quotes, and the word for track. Only the quoted part is dropped, so any type signal the
+        // description carries in another locale or Logic version survives; a colour or a kind
+        // written outside the quotes is untouched.
+        let namelessDescription = AXHelpers.getDescription(header, runtime: runtime)
+            .map { text -> String in
+                guard let quoted = extractQuotedTrackName(from: text), !quoted.isEmpty else {
+                    return text
+                }
+                return text.replacingOccurrences(of: quoted, with: " ")
+            }
         var signals = [
-            AXHelpers.getDescription(header, runtime: runtime),
+            namelessDescription,
             AXHelpers.getTitle(header, runtime: runtime),
             AXHelpers.getIdentifier(header, runtime: runtime),
-            AXHelpers.getHelp(header, runtime: runtime),
-            extractTrackName(from: header, runtime: runtime).name
+            AXHelpers.getHelp(header, runtime: runtime)
         ]
         let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
         for element in descendants {
@@ -750,13 +775,23 @@ enum AXValueExtractors {
                 AXHelpers.getDescription(element, runtime: runtime),
                 AXHelpers.getTitle(element, runtime: runtime),
                 AXHelpers.getIdentifier(element, runtime: runtime),
-                AXHelpers.getHelp(element, runtime: runtime),
-                extractTextValue(element, runtime: runtime)
+                AXHelpers.getHelp(element, runtime: runtime)
             ])
         }
+        let trackName = extractTrackName(from: header, runtime: runtime).name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        // A signal that IS the track name is the name, not a reading of the track. The name field
+        // carries it verbatim in its own AXDescription — measured: a header renamed
+        // `GM Device scratch` had the string in two places, the header description's quoted part
+        // and that field — so dropping equal-to-the-name signals catches the second while leaving
+        // every Logic-authored sentence intact. Subtracting the name from inside those sentences
+        // was the earlier shape and a review broke it: renaming a track `오디오` deleted that word
+        // out of Logic's own help text and made an ambiguous header confidently wrong.
         let combined = signals
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
+            .filter { trackName.count < 2 || $0 != trackName }
             .joined(separator: " ")
 
         // #131 — Logic's multichannel SMF open creates "GM Device N" channel
@@ -765,15 +800,62 @@ enum AXValueExtractors {
         // so this check MUST precede the `.audio` branch below or GM Device
         // strips get misclassified as audio tracks and the silent-bounce risk
         // is hidden before bounce. They are external-MIDI lanes, not audio.
-        if AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) { return .externalMIDI }
-        if AXLocalePolicy.trackTypeAudio.containsAny(in: combined) { return .audio }
-        if AXLocalePolicy.trackTypeInstrument.containsAny(in: combined) { return .softwareInstrument }
-        if AXLocalePolicy.trackTypeDrummer.containsAny(in: combined) { return .drummer }
-        if AXLocalePolicy.trackTypeExternalMIDI.containsAny(in: combined) { return .externalMIDI }
-        if AXLocalePolicy.trackTypeAux.containsAny(in: combined) { return .aux }
-        if AXLocalePolicy.trackTypeBus.containsAny(in: combined) { return .bus }
-        if AXLocalePolicy.trackTypeMaster.containsAny(in: combined) { return .master }
-        return .unknown
+        // #131 keeps its early return, and #766 narrows what can trigger it.
+        //
+        // Logic names these strips `GM Device N`, and that name is the ONLY signal they carry —
+        // the unit fixture proves it, putting the string in the title and a child's value and
+        // nothing else. So the name cannot simply be excluded, which is what the first attempt
+        // did: it made the fixture red and would have taken the silent-bounce guard with it.
+        //
+        // What CAN be excluded is a name that merely mentions the words. An outside review pointed
+        // out that a track renamed `GM Device scratch` was confidently classified external MIDI,
+        // and the silent-bounce guard fired on a string a user typed. The shape Logic produces is
+        // the words, whitespace, and a number, and nothing else — `\\s+\\d+`, not `\\s*\\d*`,
+        // which a review pointed out admitted the bare `GM Device` and `GM Device5` as well.
+        let gmShape = try? NSRegularExpression(pattern: "^gm device\\s+\\d+$")
+        let nameLooksGM = gmShape.map { regex in
+            let range = NSRange(trackName.startIndex..., in: trackName)
+            return regex.firstMatch(in: trackName, range: range) != nil
+        } ?? false
+        if nameLooksGM || AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) {
+            return .externalMIDI
+        }
+
+        // #766 — the remaining sets are counted, not tried in order.
+        //
+        // Measured 2026-09-04 on Logic 12.3 (6674): three tracks created back to back — a software
+        // instrument, an audio track and a drummer — all answered `.audio`, and dumping the
+        // aggregate for all seven headers in the project gave IDENTICAL type-token sets. The
+        // Input Monitoring button sits on every header and its help names an audio track and a
+        // software instrument track in the same sentence, so `trackTypeAudio` and
+        // `trackTypeInstrument` both match everywhere and whichever ran first won. Reversing the
+        // order would have answered `.softwareInstrument` for every track instead: no ordering
+        // repairs a signal that does not discriminate.
+        //
+        // Reading deeper does not help either. The same dump at depth 8 differs between an audio
+        // track and a software instrument only in the track NAME and in track-stack tokens.
+        //
+        // So when more than one set matches, this aggregate cannot tell them apart, and
+        // `.unknown` is the true answer — a caller that knows it does not know can go and look
+        // somewhere else, which a confident wrong answer forecloses. Where the type signal DOES
+        // live is the channel strip: an input slot marks an audio strip and a MIDI effect slot
+        // marks an instrument one, measured the same day and recorded, and reading it needs the
+        // Mixer revealed. That is a different read and is not attempted here.
+        //
+        // GM Device keeps its head start above: #131 measured that those strips carry an
+        // audio-shaped signal, and the silent-bounce risk it guards is worth an early return.
+        let candidates: [(AXLocalePolicy.LabelSet, TrackType)] = [
+            (AXLocalePolicy.trackTypeAudio, .audio),
+            (AXLocalePolicy.trackTypeInstrument, .softwareInstrument),
+            (AXLocalePolicy.trackTypeDrummer, .drummer),
+            (AXLocalePolicy.trackTypeExternalMIDI, .externalMIDI),
+            (AXLocalePolicy.trackTypeAux, .aux),
+            (AXLocalePolicy.trackTypeBus, .bus),
+            (AXLocalePolicy.trackTypeMaster, .master),
+        ]
+        let matched = candidates.filter { $0.0.containsAny(in: combined) }
+        guard matched.count == 1, let only = matched.first else { return .unknown }
+        return only.1
     }
 
     private static func extractQuotedTrackName(from description: String) -> String? {

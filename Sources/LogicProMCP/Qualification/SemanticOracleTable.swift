@@ -1957,16 +1957,39 @@ enum SemanticOracleTable {
     // `verification_source:"track_count_delta"` is how it was verified, and
     // `track_type_verification_source:"observed_header"` records that the type
     // came from the newly observed header rather than from the requested menu
-    // item. `observed_track_type` is the PER-OP discriminator — the four
-    // create_* handlers pass distinct expected types (audio / softwareInstrument
-    // / drummer / externalMIDI), so pinning it rejects a create that produced a
-    // different observed type.
-    private static func createTrackSemantics(observedType: String) -> [OracleConstraint] {
+    // item.
+    //
+    // #766 — `observed_track_type` was pinned here as "the PER-OP discriminator", and it
+    // discriminated nothing. Measured 2026-09-04: the header aggregate carries identical type
+    // tokens for every track, because the Input Monitoring button's help names an audio track and
+    // a software instrument track in the same sentence, so the classifier answered `audio` for all
+    // four operations. Three of these four oracles could not pass against live Logic, and nothing
+    // reported that because no live qualification run had exercised them — the unit fixtures hand
+    // the oracle a canned response carrying the value the product cannot produce.
+    //
+    // The first fix here moved the pin to `requested_track_type`, and an outside review showed that
+    // is worse rather than better: that field is `expectedTrackType.rawValue`, assigned from the
+    // argument BEFORE anything is verified, so pinning it checks that the handler echoed its own
+    // input. A response claiming `requested_track_type:"audio"` alongside
+    // `observed_track_type:"drummer"` would have passed.
+    //
+    // So there is no per-op pin. With the type unreadable from the header there is nothing in this
+    // response that distinguishes one create from another, and saying so is the honest state:
+    // these four oracles check that A track was created and that the envelope is well formed, not
+    // WHICH kind. Both fields are pinned as typed fields so a missing one is still caught.
+    //
+    // What would restore a real discriminator is reading the type from the channel strip, where an
+    // input slot marks audio and a MIDI effect slot marks an instrument. That read needs the Mixer
+    // revealed and one of four strips measured was undetermined, so it is not attempted yet — and
+    // until it is, an oracle that claims to tell these apart would be claiming more than the
+    // product can see.
+    private static func createTrackSemantics() -> [OracleConstraint] {
         [
             .valueEquals(key: "requested_delta", expected: .number(1)),
             .valueEquals(key: "verification_source", expected: .string("track_count_delta")),
             .valueEquals(key: "track_type_verification_source", expected: .string("observed_header")),
-            .valueEquals(key: "observed_track_type", expected: .string(observedType)),
+            .typedField(key: "requested_track_type", type: .string),
+            .typedField(key: "observed_track_type", type: .string),
             .numericRange(key: "observed_delta", min: 1, max: 10_000),
             .typedField(key: "track_count_before", type: .number),
             .typedField(key: "track_count_after", type: .number),
@@ -1978,27 +2001,27 @@ enum SemanticOracleTable {
     // expectedTrackType `.audio` (TrackType.audio.rawValue == "audio").
     static let tracksCreateAudio = SafeMutationOracle.oracle(
         .tracksCreateAudio,
-        semantics: createTrackSemantics(observedType: "audio")
+        semantics: createTrackSemantics()
     )
 
     // create_instrument → expectedTrackType `.softwareInstrument`
     // (TrackType.softwareInstrument.rawValue == "software_instrument").
     static let tracksCreateInstrument = SafeMutationOracle.oracle(
         .tracksCreateInstrument,
-        semantics: createTrackSemantics(observedType: "software_instrument")
+        semantics: createTrackSemantics()
     )
 
     // create_drummer → expectedTrackType `.drummer` (rawValue == "drummer").
     static let tracksCreateDrummer = SafeMutationOracle.oracle(
         .tracksCreateDrummer,
-        semantics: createTrackSemantics(observedType: "drummer")
+        semantics: createTrackSemantics()
     )
 
     // create_external_midi → expectedTrackType `.externalMIDI`
     // (TrackType.externalMIDI.rawValue == "external_midi").
     static let tracksCreateExternalMIDI = SafeMutationOracle.oracle(
         .tracksCreateExternalMIDI,
-        semantics: createTrackSemantics(observedType: "external_midi")
+        semantics: createTrackSemantics()
     )
 
     // AccessibilityChannel+Tracks `defaultDeleteTrack` → encodeStateA (chain

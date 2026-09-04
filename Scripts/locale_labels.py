@@ -27,31 +27,84 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SWIFT = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 JSON_PATH = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
-# canonical / variants / rationale, in the shape every one of the 138 declarations uses.
+# canonical / variants / rationale, in the named `static let X = LabelSet(...)` shape.
 DECL = re.compile(
     r'static let (\w+) = LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
     r'variants:\s*\[([^\]]*)\],\s*'
-    r'rationale:\s*"((?:[^"\\]|\\.)*)"',
+    r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
     re.S,
 )
+
+# ...and the same thing written inline inside an array, which the named pattern cannot see. An
+# outside review found four of these in `pluginFormatLeafPriority`, each carrying a real Korean
+# variant (`스테레오`, `모노`, …). They were absent from the projection AND from its declaration
+# count, so editing one changed Swift behaviour while the guard stayed green — the exact drift the
+# projection exists to stop, hiding in the shape the parser happened not to read.
+INLINE = re.compile(
+    r'(?<!= )LabelSet\(\s*'
+    r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
+    r'variants:\s*\[([^\]]*)\],\s*'
+    r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
+    re.S,
+)
+# The denominator counts EVERY LabelSet, not every one this parser knows how to spell. A shape it
+# cannot read has to make the export refuse, not vanish from both sides of the comparison.
+ANY_LABELSET = re.compile(r'LabelSet\(')
 STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+# A `// comment` inside a variants array had its quoted text recorded as a variant. Swift line
+# comments are stripped before the strings are read; found by a review with
+# `variants: ["실제", // "disabled guess"\n]`.
+LINE_COMMENT = re.compile(r"//[^\n]*")
 
 
 def _unescape(text):
     return text.replace('\\"', '"').replace("\\\\", "\\")
 
 
+def _rationale(raw):
+    """The rationale's text, whichever quoting Swift used.
+
+    A triple-quoted rationale — `deleteTracksPrimaryButton` has one — matched the ordinary-string
+    pattern as an EMPTY string between the first two quotes, so the projection recorded `""` for a
+    destructive button's entire justification and the comparison was happy because both sides
+    agreed on the wrong value. Found 2026-09-04 by an outside review.
+    """
+    if raw.startswith('"""') and raw.endswith('"""'):
+        body = raw[3:-3]
+        # Swift's multiline literals continue a line with a trailing backslash; join those.
+        return _unescape(re.sub(r"\\\n\s*", "", body)).strip()
+    return _unescape(raw[1:-1])
+
+
 def from_swift(path=SWIFT):
-    """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}."""
+    """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}.
+
+    Inline sets have no name of their own, so they are keyed by their canonical with an `inline:`
+    prefix — stable across edits that do not change the string, and obviously not a Swift symbol.
+    """
     body = open(path, encoding="utf-8").read()
-    declared = len(re.findall(r"static let \w+ = LabelSet\(", body))
+    declared = len(ANY_LABELSET.findall(body))
     out = {}
-    for name, canonical, variants, rationale in DECL.findall(body):
+    for match in DECL.finditer(body):
+        name, canonical, variants = match.group(1), match.group(2), match.group(3)
         out[name] = {
             "canonical": _unescape(canonical),
-            "variants": [_unescape(v) for v in STRING.findall(variants)],
-            "rationale": _unescape(rationale),
+            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
+            "rationale": _rationale(match.group("rationale")),
+        }
+    named_canonicals = {e["canonical"] for e in out.values()}
+    for match in INLINE.finditer(body):
+        canonical, variants = _unescape(match.group(1)), match.group(2)
+        rationale = match.group("rationale")
+        key = f"inline:{canonical}"
+        if canonical in named_canonicals and key not in out:
+            # a named set the inline pattern also matched; the named entry already has it
+            continue
+        out[key] = {
+            "canonical": canonical,
+            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
+            "rationale": _rationale(rationale),
         }
     if len(out) != declared:
         # A declaration written in a shape this parser does not read would silently vanish from the

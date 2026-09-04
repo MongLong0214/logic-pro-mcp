@@ -137,7 +137,7 @@
         "삭제",
         "削除"
       ],
-      "rationale": ""
+      "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button."
     },
     "editMenuBar": {
       "canonical": "Edit",
@@ -302,6 +302,34 @@
         "読み込む"
       ],
       "rationale": "File menu entry that opens the Import submenu used by midi.import_file."
+    },
+    "inline:Dual Mono": {
+      "canonical": "Dual Mono",
+      "variants": [
+        "듀얼 모노"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Mono": {
+      "canonical": "Mono",
+      "variants": [
+        "모노"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Mono->Stereo": {
+      "canonical": "Mono->Stereo",
+      "variants": [
+        "모노->스테레오"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
+    },
+    "inline:Stereo": {
+      "canonical": "Stereo",
+      "variants": [
+        "스테레오"
+      ],
+      "rationale": "Plugin format leaf after exact plugin selection."
     },
     "inputSlotHelpKeyword": {
       "canonical": "input slot",

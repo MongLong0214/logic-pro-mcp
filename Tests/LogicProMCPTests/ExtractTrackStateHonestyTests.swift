@@ -231,13 +231,103 @@ import Testing
 /// (folding accents would widen matching in non-EN/KO locales, the #60 hazard).
 @Test func testExtractTrackStateTrackTypeClassificationIsDiacriticSensitive() {
     let builder = FakeAXRuntimeBuilder()
-    let plain = builder.element(1)
-    let accented = builder.element(2)
-    builder.setAttribute(plain, kAXTitleAttribute as String, "Audio 1")
-    builder.setAttribute(accented, kAXTitleAttribute as String, "áudio 1")
 
+    // #766 — the signal sits on a CHILD, not on the header's title. The title is the track name,
+    // and the classifier subtracts the name from the aggregate now: a name a user typed is not a
+    // reading of what the track is. Carrying the fixture's signal in the name would test that
+    // exclusion rather than the diacritic sensitivity this case is about.
+    func strip(_ id: Int, signal: String) -> AXUIElement {
+        let header = builder.element(id)
+        let icon = builder.element(id + 100)
+        builder.setAttribute(header, kAXTitleAttribute as String, "Track \(id)")
+        builder.setAttribute(icon, kAXDescriptionAttribute as String, signal)
+        builder.setChildren(header, [icon])
+        return header
+    }
+
+    let plain = strip(1, signal: "Audio Channel Strip")
+    let accented = strip(2, signal: "áudio Channel Strip")
     let runtime = builder.makeAXRuntime()
 
     #expect(AXValueExtractors.extractTrackState(from: plain, index: 0, runtime: runtime).type == .audio)
     #expect(AXValueExtractors.extractTrackState(from: accented, index: 1, runtime: runtime).type == .unknown)
+}
+
+/// #766 — the attack a review used to break the previous shape of this fix. Subtracting the name
+/// from every signal deleted `오디오` out of Logic's own Input Monitoring sentence, so a track
+/// renamed exactly `오디오` lost the audio candidate and became a confident `.softwareInstrument`.
+/// The header now excludes the attributes that carry the name instead, so renaming a track after
+/// a type changes nothing about how it classifies.
+@Test func testRenamingATrackAfterATypeCannotFlipItsClassification() {
+    let builder = FakeAXRuntimeBuilder()
+
+    // The real header shape: the name lives in the header's AXDescription and in a field's value,
+    // and the type tokens live in a Logic-authored help string that names BOTH types.
+    func header(named name: String, id: Int) -> AXUIElement {
+        let header = builder.element(id)
+        let field = builder.element(id + 1)
+        let monitoring = builder.element(id + 2)
+        builder.setAttribute(header, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
+        builder.setAttribute(field, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        builder.setAttribute(field, kAXValueAttribute as String, name)
+        builder.setAttribute(monitoring, kAXHelpAttribute as String,
+                             "입력 모니터링 버튼. 녹음 활성화가 되지 않은 오디오 또는 소프트웨어 악기 트랙에서")
+        builder.setChildren(header, [field, monitoring])
+        return header
+    }
+
+    let runtime = builder.makeAXRuntime()
+    // Both tokens are present in the help, so the honest answer is unknown whatever the name is.
+    for (index, name) in ["보통 트랙", "오디오", "악기", "Audio", "Instrument"].enumerated() {
+        let element = header(named: name, id: 400 + index * 10)
+        let type = AXValueExtractors.extractTrackState(
+            from: element, index: index, runtime: runtime
+        ).type
+        #expect(type == .unknown)
+    }
+}
+
+/// #766 — a track NAMED after a type is not classified by it. The name is user-editable, and the
+/// one branch that still answers confidently is the GM Device guard behind the silent-bounce risk;
+/// an outside review found `GM Device scratch` triggering it. Measured live the same day: an audio
+/// track renamed that way reads `unknown`, and a real `GM Device 5` strip still reads external MIDI.
+@Test func testTrackNamedAfterATypeIsNotClassifiedByItsName() {
+    let builder = FakeAXRuntimeBuilder()
+
+    // The real shape, measured 2026-09-04: a track header has NO AXTitle at all — six of six read
+    // `<<absent>>` — and the name lives inside typographic quotes in the AXDescription,
+    // `27개의 ‘GM Device scratch’ 트랙`. An earlier version of this case put the name in the title,
+    // which is not a place Logic uses, and it passed for the wrong reason.
+    func header(named name: String, id: Int) -> AXUIElement {
+        let element = builder.element(id)
+        builder.setAttribute(element, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
+        return element
+    }
+
+    // The real header carries the name TWICE — the quoted part of its own AXDescription, and the
+    // name field's own description, verbatim. Measured on a live header renamed
+    // `GM Device scratch`; a fixture with only the first place passed while the product did not.
+    func headerWithNameField(named name: String, id: Int) -> AXUIElement {
+        let element = builder.element(id)
+        let field = builder.element(id + 5)
+        builder.setAttribute(element, kAXDescriptionAttribute as String, "27개의 ‘\(name)’ 트랙")
+        builder.setAttribute(field, kAXDescriptionAttribute as String, name)
+        builder.setAttribute(field, kAXHelpAttribute as String, "이름 필드. 트랙 이름을 변경하려면 두 번 클릭합니다.")
+        builder.setChildren(element, [field])
+        return element
+    }
+
+    let renamedWithField = headerWithNameField(named: "GM Device scratch", id: 30)
+    #expect(AXValueExtractors.extractTrackState(
+        from: renamedWithField, index: 9, runtime: builder.makeAXRuntime()).type == .unknown)
+
+    let renamed = header(named: "GM Device scratch", id: 20)
+    let realGM = header(named: "GM Device 5", id: 21)
+    let namedAudio = header(named: "Audio 1", id: 22)
+
+    let runtime = builder.makeAXRuntime()
+
+    #expect(AXValueExtractors.extractTrackState(from: renamed, index: 0, runtime: runtime).type == .unknown)
+    #expect(AXValueExtractors.extractTrackState(from: realGM, index: 1, runtime: runtime).type == .externalMIDI)
+    #expect(AXValueExtractors.extractTrackState(from: namedAudio, index: 2, runtime: runtime).type == .unknown)
 }

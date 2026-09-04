@@ -44,31 +44,60 @@ case("the committed projection agrees with AXLocalePolicy",
      (live.get("labels") or {}) == L.build(existing=live)["labels"],
      f"{len(live.get('labels') or {})} labels")
 
-# 2. The counters are what the floor is measured against.
+# 2. Two numbers, not one. The first shape tracked `total - documented`, and an outside review
+#    showed it could be held level while both halves moved: add an undocumented variant AND
+#    document a different one, and the difference is unchanged.
 total, documented = G.counts(live)
-case("the floor equals the tree's undocumented variant count",
-     total - documented == G.UNDOCUMENTED_VARIANT_FLOOR,
-     f"{documented} of {total} documented, floor={G.UNDOCUMENTED_VARIANT_FLOOR}")
+case("the recorded ceiling and floor equal the tree",
+     total == G.TOTAL_VARIANT_CEILING and documented == G.DOCUMENTED_VARIANT_FLOOR,
+     f"{documented} of {total}, recorded {G.DOCUMENTED_VARIANT_FLOOR} of {G.TOTAL_VARIANT_CEILING}")
 
-# 3. A variant arriving with no `measured` block raises the count above the floor. This is the
-#    case the rule exists for: a translated string is not a measured one.
+# 3. The defeat the review described, run as a case: it now raises the total past the ceiling.
 drifted = copy.deepcopy(live)
-some_label = next(iter(drifted["labels"]))
-drifted["labels"][some_label].setdefault("variants", []).append("キャンセル")
+a = next(n for n, e in drifted["labels"].items() if e.get("variants") and not e.get("measured"))
+b = next(n for n, e in drifted["labels"].items()
+         if e.get("variants") and not e.get("measured") and n != a)
+drifted["labels"][a]["variants"].append("キャンセル")
+drifted["labels"][b]["measured"] = {drifted["labels"][b]["variants"][0]:
+                                    {"locale": "ko-KR", "date": "2026-09-04", "observed": "x"}}
 t2, d2 = G.counts(drifted)
-case("a variant with no reading behind it raises the count above the floor",
-     t2 - d2 == G.UNDOCUMENTED_VARIANT_FLOOR + 1, f"{t2 - d2} undocumented")
+case("adding an undocumented variant while documenting another still fails",
+     t2 > G.TOTAL_VARIANT_CEILING, f"total={t2} ceiling={G.TOTAL_VARIANT_CEILING}")
 
-# 4. And the ratchet bites the other way: adding provenance without lowering the floor is also an
-#    error, or the next regression is free to fall back to the old number.
-improved = copy.deepcopy(live)
-label = next(n for n, e in improved["labels"].items()
-             if e.get("variants") and not e.get("measured"))
-improved["labels"][label]["measured"] = {
-    improved["labels"][label]["variants"][0]: {"locale": "ko-KR", "date": "2026-09-04"}}
-t3, d3 = G.counts(improved)
-case("adding provenance drops the count below the floor, which is also reported",
-     t3 - d3 == G.UNDOCUMENTED_VARIANT_FLOOR - 1, f"{t3 - d3} undocumented")
+# 4. An EMPTY provenance object counted as documentation while only its length was read, so a
+#    variant could be marked measured without anything having been measured.
+hollow = copy.deepcopy(live)
+c = next(n for n, e in hollow["labels"].items() if e.get("variants") and not e.get("measured"))
+hollow["labels"][c]["measured"] = {hollow["labels"][c]["variants"][0]: {}}
+case("an empty provenance block is not a reading",
+     G.counts(hollow)[1] == documented, f"documented={G.counts(hollow)[1]}")
+
+real = copy.deepcopy(live)
+rv = real["labels"][c]["variants"][0]
+real["labels"][c]["measured"] = {rv: {"locale": "ko-KR", "date": "2026-09-04",
+                                      "observed": f"{rv} 를 이 화면에서 읽었다"}}
+case("a block whose observed string contains the variant is a reading",
+     G.counts(real)[1] == documented + 1, f"documented={G.counts(real)[1]}")
+
+# 4b. Three non-empty strings are not a reading. A second review attached
+#     `{"locale":"x","date":"x","observed":"x"}` to a fabricated variant and the totals did not
+#     move; `observed` must now contain the variant it documents, and the date must be a date.
+junk = copy.deepcopy(live)
+jl = next(n for n, e in junk["labels"].items() if e.get("variants") and not e.get("measured"))
+jv = junk["labels"][jl]["variants"][0]
+junk["labels"][jl]["measured"] = {jv: {"locale": "x", "date": "x", "observed": "x"}}
+case("junk strings are not a reading", G.counts(junk)[1] == documented, f"{G.counts(junk)[1]}")
+
+junk["labels"][jl]["measured"] = {jv: {"locale": "ko-KR", "date": "2026-09-04",
+                                       "observed": "nothing like it"}}
+case("an observed string that does not contain the variant is not a reading",
+     G.counts(junk)[1] == documented, f"{G.counts(junk)[1]}")
+
+# 4c. A triple-quoted rationale was recorded as an empty string, so a destructive button's entire
+#     justification vanished from the projection while both sides agreed on the wrong value.
+case("no label carries an empty rationale",
+     all((e.get("rationale") or "").strip() for e in live["labels"].values()),
+     f"{sum(1 for e in live['labels'].values() if not (e.get('rationale') or '').strip())} empty")
 
 # 5. The export refuses to write a short projection. A label the parser cannot read would vanish
 #    silently, and a missing label is the failure the projection exists to stop.

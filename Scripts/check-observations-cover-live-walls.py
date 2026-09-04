@@ -10,7 +10,12 @@ fact — `NOT STARTED`, `measured 2026-08-30`, `AXPress is inert`. A row that cl
 measurement while `docs/observations/` holds nothing for that issue is a claim with no evidence
 anyone can re-check, which is exactly the drift the roadmap table exists to prevent for issue state.
 
-The rule is deliberately narrow. It fires only on rows that CLAIM a dated live measurement, because
+The rule is deliberately narrow. It fires on rows that CLAIM a dated measurement — an outside
+review noted that `CLAIM_DATED` requires no `live` token, so "Measured 2026-09-04 by static source
+inspection" is caught too. That is the behaviour I want and the earlier wording was narrower than
+it: a dated measurement deserves a record whether Logic was running or not, and the records already
+carry readings of the binary and of the source. The name of the file is now the narrow thing.
+It fires on claims rather than on every row, because
 that is a claim about the world rather than a plan, and only for issues whose row says so. Prose
 about intent, dependencies, or what is still open is not covered and should not be.
 """

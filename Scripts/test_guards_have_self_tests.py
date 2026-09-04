@@ -54,11 +54,17 @@ with tempfile.TemporaryDirectory() as tmp:
     covered, bare = coverage_in(tmp, "print(1)\n", None)
     case("a guard with no test is bare", bare == ["check-thing.py"], f"bare={bare!r}")
 
-# 2. A guard a test loads is covered.
+# 2. A guard a test LOADS is covered. Naming it is not enough — the file has to run something,
+#    which an outside review is the reason for: a dead `if False: marker = "check-thing.py"`
+#    counted as coverage while only a substring was read.
 with tempfile.TemporaryDirectory() as tmp:
     covered, bare = coverage_in(
         tmp, "print(1)\n",
-        'GUARD = os.path.join(REPO, "Scripts", "check-thing.py")\nprint(GUARD)\n')
+        'import importlib.util\n'
+        'GUARD = os.path.join(REPO, "Scripts", "check-thing.py")\n'
+        'spec = importlib.util.spec_from_file_location("g", GUARD)\n'
+        'importlib.util.module_from_spec(spec)\n'
+        'spec.loader.exec_module(mod)\n')
     case("a guard referenced in code is covered",
          list(covered) == ["check-thing.py"] and bare == [], f"covered={covered!r} bare={bare!r}")
 
@@ -71,10 +77,37 @@ with tempfile.TemporaryDirectory() as tmp:
     case("a guard named only in a docstring is still bare",
          bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
 
+# 2b. Building a spec is not running one. `spec_from_file_location` creates a spec and executes
+#     nothing, so a test could name a guard through it and drive none of its code — a review found
+#     the rule counting exactly that, and the positive case above had the same shape.
+with tempfile.TemporaryDirectory() as tmp:
+    covered, bare = coverage_in(
+        tmp, "print(1)\n",
+        'import importlib.util\n'
+        'GUARD = os.path.join(REPO, "Scripts", "check-thing.py")\n'
+        'spec = importlib.util.spec_from_file_location("g", GUARD)\n')
+    case("naming a guard through a spec without executing it is bare",
+         bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
+
+# 3b. A file that names the guard but runs NOTHING is bare, however the name is spelled.
+with tempfile.TemporaryDirectory() as tmp:
+    covered, bare = coverage_in(
+        tmp, "print(1)\n", 'if False:\n    marker = "check-thing.py"\n')
+    case("a guard named in a file that executes nothing is bare",
+         bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
+
+# 3c. A tuple naming the guard AND an execution word satisfies two substring checks at once, which
+#     is the cheapest possible sham. A second review found it; the markers require call syntax now.
+with tempfile.TemporaryDirectory() as tmp:
+    covered, bare = coverage_in(
+        tmp, "print(1)\n", 'MARKERS = ("check-thing.py", "subprocess")\n')
+    case("a marker tuple naming the guard and an execution word is still bare",
+         bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
+
 # 4. And named only in a comment, for the shell tests, which have no docstrings.
 with tempfile.TemporaryDirectory() as tmp:
     covered, bare = coverage_in(
-        tmp, "print(1)\n", "# Self-test for check-thing.py\necho hi\n", test_name="test-thing.sh")
+        tmp, "print(1)\n", "# Self-test for check-thing.py\nbash /dev/null\n", test_name="test-thing.sh")
     case("a guard named only in a comment is still bare",
          bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
 
