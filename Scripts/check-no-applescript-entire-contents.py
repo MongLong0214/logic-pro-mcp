@@ -18,6 +18,20 @@ come back is the phrase in something that gets sent to AppleScript. Checking lit
 lines is what lets those two coexist without an allowlist — and an allowlist is what this guard
 must not have, because a list of permitted uses is how a banned instrument returns.
 
+## What this does NOT catch, said plainly
+
+A literal rule sees literals. `"entire" + " contents"`, an f-string interpolating the phrase from a
+variable, or a script read at run time from a file all reach AppleScript without any single literal
+carrying the words, and this guard passes them. That hole cannot be closed by pattern-matching
+harder — `"ent" + "ire contents"` defeats any pair rule — and it is not hypothetical: this guard's
+own self-test assembles its fixtures exactly that way, for the good reason that a test for a banned
+phrase should not contain it.
+
+So the boundary is: this stops the phrase from being TYPED back into a call, which is how it got
+here the first time and how it would return. It does not stop someone who is deliberately routing
+around it. That is the honest shape of the rule, and a guard that claimed more would be the second
+instrument in this story that answered a question it could not see.
+
 Exit 0 when clean, 1 with the offending sites otherwise.
 """
 import ast
@@ -27,13 +41,22 @@ from pathlib import Path
 
 BANNED = "entire contents"
 
-ROOTS = ("Sources", "Scripts")
+# `docs/` is in scope too: the evidence runners under docs/tickets shell out to osascript, and a
+# script is a script wherever it is filed.
+ROOTS = ("Sources", "Scripts", "docs")
 
 # Swift has no stdlib parser here, so the literals are found by pattern. Triple-quoted first, because
 # a multi-line AppleScript block is the shape that actually carries this call, and matching `"..."`
 # first would cut those blocks apart at the wrong quotes.
 SWIFT_MULTILINE = re.compile(r'"""(.*?)"""', re.S)
 SWIFT_SINGLELINE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
+# Shell and JavaScript get a LINE rule rather than a literal rule. Neither can be parsed for string
+# literals here, and both can reach osascript — `Scripts` carries 25 shell scripts and two of them
+# already shell out to it. A line rule over-approximates, and over-approximating is the right
+# direction: the cost is that prose has to live in a comment, which is where prose lives anyway.
+SHELL_COMMENT = re.compile(r"^\s*#")
+JS_COMMENT = re.compile(r"^\s*(//|/\*|\*)")
 
 
 def _swift_literals(source):
@@ -102,7 +125,7 @@ def violations(repo_root):
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*")):
-            if path.suffix not in (".swift", ".py"):
+            if path.suffix not in (".swift", ".py", ".sh", ".js"):
                 continue
             try:
                 source = path.read_text(encoding="utf-8")
@@ -115,8 +138,12 @@ def violations(repo_root):
                 if literals is None:
                     unparsed.append(path.relative_to(repo_root))
                     continue
-            else:
+            elif path.suffix == ".swift":
                 literals = _swift_literals(source)
+            else:
+                comment = SHELL_COMMENT if path.suffix == ".sh" else JS_COMMENT
+                literals = [(n, line) for n, line in enumerate(source.splitlines(), 1)
+                            if not comment.match(line)]
             for lineno, text in literals:
                 if BANNED in text:
                     found.append((path.relative_to(repo_root), lineno, text.strip()[:90]))

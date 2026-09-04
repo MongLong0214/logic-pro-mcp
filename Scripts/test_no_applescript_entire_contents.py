@@ -77,13 +77,33 @@ def main():
     check("docstring exemption is narrow", found == {"Scripts/sneaky.py"},
           f"expected the returned literal to be flagged, got {found}")
 
-    # 5. A file the parser cannot read is REPORTED, never cleared. Silence on an unreadable file is
+    # 5. A shell script reaching osascript is caught — `Scripts` has 25 of them and two evidence
+    #    runners under docs/ already shell out to it, so leaving .sh unscanned would have been a
+    #    hole the size of the ban.
+    found, _ = _scan({"Scripts/run.sh":
+                      "osascript -e 'tell app \"X\" to count of (" + P + " of window 1)'\n"})
+    check("shell script", found == {"Scripts/run.sh"}, f"expected the shell script flagged, got {found}")
+
+    # 6. ...and a shell COMMENT about it is not.
+    found, _ = _scan({"Scripts/fine.sh": "# the old runner used " + P + ", which answers 0\n"})
+    check("shell comment allowed", found == set(), f"expected no flags, got {found}")
+
+    # 7. A file the parser cannot read is REPORTED, never cleared. Silence on an unreadable file is
     #    the same mistake the banned instrument makes.
     _, unparsed = _scan({"Scripts/broken.py": 'S = "' + P + '"\ndef (\n'})
     check("unparsable is not cleared", unparsed == {"Scripts/broken.py"},
           f"expected the file to be reported as unparsed, got {unparsed}")
 
-    # 6. The guard passes over the real repository, and its own BANNED definition does not trip it.
+    # 8. A KNOWN BOUNDARY, asserted so it stays known. Assembling the phrase defeats the rule, and
+    #    the guard's docstring says so. If someone closes this, this case fails and sends them to
+    #    that paragraph — which is the point of pinning a miss rather than leaving it unmentioned.
+    found, _ = _scan({"Sources/Sneak.swift":
+                      'let s = "count of (' + P[:6] + '" + "' + P[6:] + ' of window 1)"\n'})
+    check("assembled phrase is a known miss", found == set(),
+          f"the guard now catches an assembled phrase — good; update the boundary paragraph in "
+          f"check-no-applescript-entire-contents.py and this case. got {found}")
+
+    # 9. The guard passes over the real repository, and its own BANNED definition does not trip it.
     rc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", rc.returncode == 0, f"guard exited {rc.returncode}: {rc.stdout.strip()}")
 
@@ -91,7 +111,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print(f"{6} case(s) pass: the guard catches the defect and leaves the prose alone")
+    print(f"{9} case(s) pass: the guard catches the defect and leaves the prose alone")
     return 0
 
 
