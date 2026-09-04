@@ -73,37 +73,102 @@ def document_titles():
     return [t for t in window_titles() if not any(c in t for c in CHOOSER_TITLES)]
 
 
+# Slot kinds, by the help text Logic puts on the button. Both spellings are measured, not
+# guessed: ko-KR on Logic 12.3 (6674) 2026-09-04, en alongside it from the original harness.
+# The witness keeps its own table on purpose — it is the second instrument, and reading the
+# product's label policy would make it the same instrument twice.
+SLOT_HELP = {
+    "output":  ("Output slot", "출력 슬롯"),
+    "send":    ("Send slot", "센드 슬롯"),
+    "input":   ("Input slot", "입력 슬롯"),
+    "monitor": ("Input Monitoring", "입력 모니터링"),
+}
+# What a send slot's description reads when it names no destination, in either language.
+SEND_NAMES_NOTHING = ("send button", "보내기 버튼", "")
+
+
+def classify(help_text):
+    """Which slot kind this help belongs to, or "" — longest prefix first.
+
+    `입력 모니터링` and `입력 슬롯` share a first word, and `Input Monitoring` and `Input slot`
+    share one too, so a first-word match would file the monitoring button as an input slot. That
+    is precisely the neighbour this harness exists to tell apart.
+    """
+    for kind, prefixes in SLOT_HELP.items():
+        for prefix in prefixes:
+            if help_text.startswith(prefix):
+                return kind
+    return ""
+
+
 def slot_descriptions_by_help():
     """What Logic's own buttons say, read by a second instrument.
 
     This walks the arrange window for AXButtons and reports each one's help and description, so the
     envelope's `output` can be held against the element it claims to come from rather than only
     against itself.
+
+    Rewritten for #767. The previous form could not run at all, for three separate reasons, each
+    sufficient on its own:
+
+      * it selected the window by `name ends with "Tracks"`, which RAISES on a Logic whose window
+        is named `<project> - 트랙`;
+      * it walked `entire contents`, which returns an empty list without error on this host — for
+        every application, not only Logic, so a filter over it finds nothing and reads as absence;
+      * it matched help against English literals and sliced them by a fixed character count.
+
+    The walk is now explicit. `AXHelpers.findAllDescendants` does the same thing on the Swift
+    side and is why `get_regions` kept working while this did not.
     """
     raw = osa('''
-    tell application "System Events" to tell process "Logic Pro"
-      set w to first window whose name ends with "Tracks"
-      set ec to entire contents of w
-      set out to ""
-      repeat with e in ec
-        set el to contents of e
+    on walk(el, depth, acc)
+      if depth > 10 then return acc
+      tell application "System Events"
         try
-          if (role of el as text) is "AXButton" then
-            set h to (help of el as text)
-            if h starts with "Output slot" or h starts with "Send slot" then
-              set out to out & (description of el as text) & "\\t" & (text 1 thru 10 of h) & "\\n"
-            end if
-          end if
+          set kids to UI elements of el
+        on error
+          return acc
         end try
+      end tell
+      repeat with k in kids
+        tell application "System Events"
+          set r to ""
+          set h to ""
+          set d to ""
+          try
+            set r to (role of k) as text
+          end try
+          try
+            set h to (help of k) as text
+          end try
+          try
+            set d to (description of k) as text
+          end try
+        end tell
+        if r is "AXButton" and h is not "" then
+          set end of acc to (d & tab & h)
+        end if
+        set acc to my walk(k, depth + 1, acc)
       end repeat
-      return out
+      return acc
+    end walk
+
+    tell application "System Events" to tell process "Logic Pro"
+      set w to first window whose subrole is "AXStandardWindow"
     end tell
+    set rows to my walk(w, 0, {})
+    set text item delimiters to linefeed
+    return rows as text
     ''')
     rows = []
     for line in raw.splitlines():
-        if "\t" in line:
-            desc, kind = line.split("\t", 1)
-            rows.append({"description": desc.strip(), "help_prefix": kind.strip()})
+        if "\t" not in line:
+            continue
+        desc, help_text = line.split("\t", 1)
+        kind = classify(help_text.strip())
+        if kind:
+            rows.append({"description": desc.strip(), "kind": kind,
+                         "help_prefix": help_text.strip()[:24]})
     return rows
 
 
@@ -171,8 +236,8 @@ if band is None:
 
 witness = slot_descriptions_by_help()
 ev.note("291/slots-seen-by-the-witness", witness)
-outputs = [r for r in witness if r["help_prefix"].startswith("Output")]
-sends = [r for r in witness if r["help_prefix"].startswith("Send")]
+outputs = [r for r in witness if r["kind"] == "output"]
+sends = [r for r in witness if r["kind"] == "send"]
 
 ev.check("291/logic-exposes-an-output-slot-that-names-its-destination",
          bool(outputs) and all(r["description"] for r in outputs),
@@ -181,7 +246,7 @@ ev.check("291/logic-exposes-an-output-slot-that-names-its-destination",
          f"outputs={outputs!r}", None)
 
 ev.check("291/the-send-slot-names-no-destination",
-         bool(sends) and all(r["description"] in ("send button", "") for r in sends),
+         bool(sends) and all(r["description"] in SEND_NAMES_NOTHING for r in sends),
          "the send slot beside it is described only as \"send button\" — it carries no destination, "
          "which is why this change reads outputs and claims nothing about sends",
          f"sends={sends!r}", None)
