@@ -36,14 +36,13 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Guards with no test that drives them, measured 2026-09-04. This list may only shrink.
+# Guards with no test that drives them. This list may only shrink — it was nine when the rule
+# was written and the three that went first are the three this session had to correct four
+# times in a day, which is what made the rule worth writing.
 KNOWN_BARE = {
     "check-ax-locator-census.py",
     "check-livekit-locale-aliases.py",
-    "check-locale-labels-json.py",
     "check-locale-policy-coverage.py",
-    "check-observation-records.py",
-    "check-observations-cover-live-walls.py",
     "check-python-contracts.py",
     "check-shipped-variant-claims.py",
     "ci-forbid-dead-expect.sh",

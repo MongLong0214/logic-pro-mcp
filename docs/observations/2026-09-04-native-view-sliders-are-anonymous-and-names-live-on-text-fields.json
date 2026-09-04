@@ -1,0 +1,83 @@
+{
+  "id": "2026-09-04-native-view-sliders-are-anonymous-and-names-live-on-text-fields",
+  "date": "2026-09-04",
+  "subject": "Whether a plug-in's own UI names the control that carries each value",
+  "question": "In the native view, can a parameter's value be read together with the name of the parameter it belongs to?",
+  "verdict": "wall",
+  "issues": [
+    299
+  ],
+  "surface": "plugin.native_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Open a Compressor editor in its native view and walk it to depth 4 recording role, AXDescription and AXValue for every element. Compare what the AXSliders carry against what the AXTextFields carry.",
+    "expected": "sliders hold numbers and are described only 슬라이더; the parameter names appear as the VALUE of separate AXTextFields",
+    "cost": "~3 min; close the editor afterwards"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/StockPluginCatalog.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift"
+  ],
+  "method": "Read description and value on every element rather than looking for named sliders, because the earlier census had already reported many sliders and one name and did not say where the other names were.",
+  "observations": [
+    {
+      "what": "sliders",
+      "count": 22,
+      "description_each": "슬라이더",
+      "values_seen": [
+        200.0,
+        0.0,
+        100.0,
+        60.0,
+        7.0,
+        40.0
+      ],
+      "carry_a_parameter_name": false
+    },
+    {
+      "what": "text fields",
+      "count": 10,
+      "values_seen": [
+        "THRESHOLD",
+        "MIX",
+        "OUTPUT GAIN"
+      ],
+      "note": "the parameter name is the FIELD'S VALUE, not its description"
+    },
+    {
+      "what": "buttons carrying a setting in their title",
+      "titles_seen": [
+        "ON",
+        "OFF",
+        "0 dB",
+        "-12 dB",
+        "AUTO",
+        "Output",
+        "Side Chain"
+      ]
+    },
+    {
+      "what": "what the earlier census reported for this plug-in",
+      "sliders": 22,
+      "named": 1,
+      "named_parameter": "Threshold",
+      "unnamed": 21
+    }
+  ],
+  "conclusion": "The native view splits the name from the value across two elements. All 22 sliders are described 슬라이더 and carry only a number; the parameter names -- THRESHOLD, MIX, OUTPUT GAIN -- appear as the VALUE of separate AXTextFields, and several settings live in button titles instead (ON, OFF, 0 dB, -12 dB, AUTO). So a reader can obtain every value and every name and cannot tell which belongs to which from the elements themselves. That is the same 22-and-1 the earlier census reported, explained: the one named parameter is named somewhere else, and the other 21 are not anonymous by accident but by construction. Pairing them would mean pairing by AX order or by position, which is the identity this repository refuses everywhere, so the native view is a wall for verified writes unless a non-positional pairing is found.",
+  "limits": [
+    "One plug-in, one instance. Whether every stock plug-in's native view splits name from value this way was not measured.",
+    "Depth 4. A slider might carry a name deeper in its own subtree; the two AXSlider children seen at depth 2 had no value at all, and were not inspected further.",
+    "ko-KR. The parameter names happen to be English here because the plug-in draws them, but the roles' descriptions are localised.",
+    "This says nothing about whether a slider can be written. It says a written value could not be attributed to a named parameter, which is what verified writing requires.",
+    "The 22-sliders/11-settable census is CITED from the 2026-08-30 reading, not re-measured here. This record explains that count; it does not re-establish it, and no observation record covers that earlier census."
+  ],
+  "supersedes": null
+}

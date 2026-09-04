@@ -1,0 +1,103 @@
+{
+  "id": "2026-09-04-plugin-window-is-titled-by-the-track-not-the-plugin",
+  "date": "2026-09-04",
+  "subject": "The plug-in editor window frame: what identifies it and what its chrome exposes",
+  "question": "How is an open plug-in editor identified, and what does its frame expose?",
+  "verdict": "partial",
+  "issues": [],
+  "surface": "plugin.window",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On an occupied insert slot (an AXGroup described with the plug-in name) press the child AXButton described 열기 / open, then walk the resulting AXDialog to depth 4 recording role, AXDescription, AXTitle and AXValue.",
+    "expected": "the window is named after the track or patch, not the plug-in; the preset selector is an AXPopUpButton whose value is the preset name",
+    "cost": "~3 min; close the window afterwards or later harness runs fail their zero-editors precondition"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift"
+  ],
+  "method": "Opened the editor through the element the strip actually offers rather than by a menu, then read the frame before reading anything inside it -- the frame is what a caller has to bind to, and binding to the wrong thing is how the earlier duplicate-editor defects happened.",
+  "observations": [
+    {
+      "what": "how the slot offers to open",
+      "occupied_slot_role": "AXGroup",
+      "occupied_slot_description": "Compressor",
+      "children": [
+        "AXCheckBox 바이패스",
+        "AXButton 열기",
+        "AXButton 목록"
+      ],
+      "actions_on_the_group_itself": "none"
+    },
+    {
+      "what": "the window that opened",
+      "subrole": "AXDialog",
+      "name": "Absolute Zero",
+      "note": "that is the track and patch name; the plug-in is Compressor and appears nowhere in the title"
+    },
+    {
+      "what": "the frame's chrome, depth 0",
+      "elements": [
+        "AXButton 닫기",
+        "AXButton 도구 막대",
+        "AXCheckBox 링크",
+        "AXMenuButton 보기 (title 100%)",
+        "AXStaticText 보기:",
+        "AXPopUpButton value 내부",
+        "AXStaticText 사이드 체인:",
+        "AXButton 바이패스",
+        "AXCheckBox 비교 (value 1)"
+      ]
+    },
+    {
+      "what": "grouped controls, depth 1",
+      "groups": [
+        [
+          "AXButton 이전",
+          "AXButton 다음"
+        ],
+        [
+          "AXButton 복사",
+          "AXButton 붙여넣기"
+        ],
+        [
+          "AXButton 실행 취소",
+          "AXButton 실행 복귀"
+        ]
+      ]
+    },
+    {
+      "what": "the preset selector",
+      "role": "AXPopUpButton",
+      "value": "기본 프리셋"
+    },
+    {
+      "what": "the whole window",
+      "elements_to_depth_4": 71,
+      "roles": {
+        "AXButton": 25,
+        "AXSlider": 22,
+        "AXTextField": 10,
+        "AXGroup": 5,
+        "AXStaticText": 4,
+        "AXPopUpButton": 2,
+        "AXCheckBox": 2,
+        "AXMenuButton": 1
+      }
+    }
+  ],
+  "conclusion": "A plug-in editor window is named after the track or patch, never after the plug-in. The Compressor's editor opened as an AXDialog titled Absolute Zero, which is the instrument on that track -- so a caller matching a window by plug-in name finds nothing, and one matching by track name finds the right window for the wrong reason if two plug-ins on the same track are open. The frame itself reads cleanly: close, toolbar, link, a zoom AXMenuButton whose title is 100%, bypass, a compare AXCheckBox, three pairs of grouped buttons (previous/next, copy/paste, undo/redo) and a preset AXPopUpButton carrying 기본 프리셋 as its value. The route in is the occupied slot's own child AXButton 열기; the AXGroup that represents the slot advertises no actions at all.",
+  "limits": [
+    "One plug-in on one track. Whether every plug-in editor is titled by the track, and what happens when two are open on the same track, was not measured.",
+    "ko-KR only. Every description here is localised and none of the English renderings were read.",
+    "The 보기: label and the AXPopUpButton reading 내부 sit next to each other in AX order, and 사이드 체인: follows. Which label owns which popup was NOT established — AX order is not visual pairing, and this record does not claim it is.",
+    "Nothing was actuated. The preset popup, the compare checkbox and the view menu were read, not exercised."
+  ],
+  "supersedes": null
+}
