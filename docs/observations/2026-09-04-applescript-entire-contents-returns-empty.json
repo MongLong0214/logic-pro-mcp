@@ -1,0 +1,109 @@
+{
+  "id": "2026-09-04-applescript-entire-contents-returns-empty",
+  "date": "2026-09-04",
+  "subject": "AppleScript `entire contents` as an instrument for walking Logic's AX tree",
+  "question": "Does `entire contents of window` enumerate an application's accessibility tree on this host?",
+  "verdict": "wall",
+  "issues": [
+    767
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "osascript: for each window of process \"Logic Pro\", compare `count of (entire contents of w)` against a manual recursive count of UI elements to depth 6. Then repeat the `entire contents` half for every other process whose `background only` is false.",
+    "expected": "entire contents returns 0 with no error while the manual walk finds hundreds, and the zero repeats for every other application",
+    "cost": "~1 min, any project open"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift",
+    "Scripts/livekit/live_291_input_slot_is_read.py",
+    "Scripts/livekit/live_291_output_slot_is_read.py",
+    "Scripts/livekit/ax_event_tab.swift",
+    "docs/spikes/channel-eq-census.md"
+  ],
+  "method": "Compared the instrument against a second instrument on the same subject, then ran the control the first framing needed: if the emptiness were a property of Logic's AX tree it would not repeat on unrelated applications. It repeated on all of them, which refuted the Logic-specific reading I started with.",
+  "observations": [
+    {
+      "what": "Logic's arrange window, both ways",
+      "window": "lpm-606-warm - 트랙",
+      "entire_contents": 0,
+      "error_raised": false,
+      "manual_recursive_count": 464,
+      "manual_depth": 6,
+      "runs": 2,
+      "results_identical": true
+    },
+    {
+      "what": "control — the same call on every other foreground application",
+      "applications_tested": 9,
+      "entire_contents_each": 0,
+      "direct_children_range": "4 to 17",
+      "named": [
+        "iTerm2",
+        "Google Chrome",
+        "OrbStack",
+        "Telegram",
+        "ChatGPT",
+        "webstorm",
+        "System Settings"
+      ]
+    },
+    {
+      "what": "earlier readings this explains",
+      "looking_for": [
+        "MIDI regions in the arrangement",
+        "the track-header group"
+      ],
+      "reported": "none found",
+      "actually_present": true,
+      "found_by": "manual descent, immediately"
+    },
+    {
+      "what": "the one product site",
+      "file": "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift",
+      "line": 540,
+      "operation": "region.select_last",
+      "registered_in_OperationRegistry": false,
+      "in_RoutingTable": true,
+      "product_sites_in_Sources_using_it": 1,
+      "harness_files_using_it": 2
+    },
+    {
+      "what": "the harnesses that build a witness from it",
+      "files": [
+        "Scripts/livekit/live_291_input_slot_is_read.py",
+        "Scripts/livekit/live_291_output_slot_is_read.py"
+      ],
+      "checks_require_non_empty": true,
+      "so_they": "fail closed rather than passing over an empty witness"
+    },
+    {
+      "what": "a second, independent stop in those same harnesses",
+      "selector": "first window whose name ends with \"Tracks\"",
+      "actual_window_name": "lpm-606-warm - 트랙",
+      "result": "raises before any traversal runs"
+    },
+    {
+      "what": "documented conclusions that rest on the instrument",
+      "file": "docs/spikes/channel-eq-census.md",
+      "lines": "27-28",
+      "claim": "no per-band AXSlider exposed; the AU parameter view is opaque to host-process AX recursion",
+      "evidence_cited": "entire contents filtered for slider roles = empty"
+    }
+  ],
+  "conclusion": "`entire contents` is not a working instrument on this host. It returns 0 for Logic's arrange window while a manual descent to depth 6 of the same window finds 464 elements, and it returns 0 for all 9 other foreground applications tested, each of which has direct children. It raises nothing, so every caller reads the emptiness as absence — which is how I read it twice today about things that were there. The reading matters less for the product than for the record: exactly 1 product site uses it, and that operation is not registered, so no shipped call is affected. What is affected is evidence. Two live harnesses build their independent witness from it and cannot pass here, though they fail closed rather than falsely; and at least one documented AX-opacity conclusion cites an empty `entire contents` as its reading, which is not a reading at all.",
+  "limits": [
+    "Measured on one machine at macOS 26.3 (25D125). Whether this is an OS regression, a permissions state, or long-standing was not established, and no other OS version was tried.",
+    "The manual count is depth-capped at 6, so 464 is a lower bound on the tree, not its size.",
+    "This record does not re-measure the Channel EQ or the AU parameter view. It says the cited evidence for their opacity is void, not that they are addressable.",
+    "The #291 harnesses were not run end to end; the two stops were reproduced individually against live Logic."
+  ],
+  "supersedes": null
+}

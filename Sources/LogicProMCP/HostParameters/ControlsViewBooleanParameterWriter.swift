@@ -8,7 +8,9 @@ import Foundation
 ///
 /// Only AXCheckBox actuation is qualified. AXSlider's advertised settable
 /// value/increment actions were measured on 2026-09-02 to be inert;
-/// AXPopUpButton selection has not been measured. Both roles are returned as
+/// AXPopUpButton selection was measured on 2026-09-04: the menu opens, but it
+/// exposes only the current choice or several identically-titled options, so no
+/// choice can be named. Both roles are returned as
 /// explicit refusals and are never actuated here.
 enum ControlsViewBooleanParameterWriter {
     enum LocatorFailure: String, Sendable, Equatable {
@@ -24,7 +26,7 @@ enum ControlsViewBooleanParameterWriter {
         case accessibilityReadMalformed
         case checkboxNotFound
         case sliderNotActuable
-        case popupUnmeasured
+        case popupNotAddressableByName
         case unsupportedControlRole
 
         var observation: String {
@@ -53,8 +55,8 @@ enum ControlsViewBooleanParameterWriter {
                 return "the labelled Controls-view AXRow did not resolve to an AXCheckBox"
             case .sliderNotActuable:
                 return "Controls-view AXSlider actuation is refused: on 2026-09-02 direct AXValue set and AXIncrement both reported success but the measured slider did not change"
-            case .popupUnmeasured:
-                return "Controls-view AXPopUpButton actuation is refused: selection has not been measured, so no menu action is guessed"
+            case .popupNotAddressableByName:
+                return "Controls-view AXPopUpButton actuation is refused: measured 2026-09-04, an opened menu exposes only the current choice or several identically-titled options, so no choice can be named and no menu action is guessed"
             case .unsupportedControlRole:
                 return "the labelled Controls-view row resolved to an unsupported control role"
             }
@@ -281,7 +283,7 @@ enum ControlsViewBooleanParameterWriter {
             case .slider:
                 return .sliderNotActuable
             case .popup:
-                return .popupUnmeasured
+                return .popupNotAddressableByName
             case .unsupported:
                 return .unsupportedControlRole
             }

@@ -402,7 +402,7 @@ struct ControlsViewBooleanParameterWriterTests {
         #expect(refused)
     }
 
-    @Test func controlsViewPopupIsRefusedAsUnmeasuredWithoutAMenuAction() {
+    @Test func controlsViewPopupIsRefusedAsUnnameableWithoutAMenuAction() {
         let fixture = fixture(label: "Circuit Type", controlRoles: [kAXPopUpButtonRole as String])
         let result = ControlsViewBooleanParameterWriter.locate(
             label: "Circuit Type",
@@ -412,7 +412,7 @@ struct ControlsViewBooleanParameterWriterTests {
 
         let refused: Bool
         if case .found(let control) = result,
-           control.failure == .popupUnmeasured {
+           control.failure == .popupNotAddressableByName {
             refused = true
         } else {
             refused = false

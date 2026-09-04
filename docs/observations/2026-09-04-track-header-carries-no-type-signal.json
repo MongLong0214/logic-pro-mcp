@@ -1,0 +1,137 @@
+{
+  "id": "2026-09-04-track-header-carries-no-type-signal",
+  "date": "2026-09-04",
+  "subject": "Track type inference from the arrangement track header",
+  "question": "Can inferTrackType tell one track type from another using the header aggregate it reads?",
+  "verdict": "wall",
+  "issues": [
+    766
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With a project open, run logic_tracks create_instrument, create_audio and create_drummer back to back and compare observed_track_type across the three responses. Then dump the header aggregate: for each AXLayoutItem in the track-header group, join AXDescription/AXTitle/AXHelp/AXIdentifier of it and every descendant to depth 4, and count the AXLocalePolicy tokens for audio and instrument.",
+    "expected": "three different track types, one observed_track_type; and the audio and instrument token counts non-zero on every header",
+    "cost": "~5 min with Logic open; creates three disposable tracks"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    "Sources/LogicProMCP/Qualification/SemanticOracleTable.swift",
+    "Sources/LogicProMCP/Workflows/ProjectSessionAudit.swift"
+  ],
+  "method": "Created three tracks of three different types through the product and read the observed_track_type each returned. Then dumped the exact string inferTrackType builds -- header plus every descendant to depth 4, over AXDescription/AXTitle/AXHelp/AXIdentifier -- for every header in the project, and counted the locale tokens the classifier tests for. Reading the classifier alone would have shown the ordering but not that the ordering is unfixable.",
+  "observations": [
+    {
+      "what": "create_instrument response",
+      "observed_track_name": "Deluxe Classic",
+      "observed_track_type": "audio",
+      "state": "A"
+    },
+    {
+      "what": "create_audio response",
+      "observed_track_name": "오디오 4",
+      "observed_track_type": "audio",
+      "state": "A"
+    },
+    {
+      "what": "create_drummer response",
+      "observed_track_name": "SoCal",
+      "observed_track_type": "audio",
+      "state": "A"
+    },
+    {
+      "what": "the aggregate the classifier reads, per header",
+      "headers_in_project": 7,
+      "descendant_depth_scanned": 4,
+      "token_counts": [
+        {
+          "track": "Zulu",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "Deluxe Classic",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "오디오 4",
+          "audio": 3,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "SoCal",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "Alpha",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "Bravo",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        },
+        {
+          "track": "Studio Grand",
+          "audio": 1,
+          "instrument": 2,
+          "drummer": 0,
+          "external": 0
+        }
+      ],
+      "identical_token_sets_on_every_header": true,
+      "note": "the only variation is the audio track, and it comes from its NAME containing the word, not from a type signal"
+    },
+    {
+      "what": "where the tokens come from",
+      "element": "Input Monitoring button, present on every track header",
+      "AXHelp": "입력 모니터링 버튼. 녹음 활성화가 되지 않은 오디오 또는 소프트웨어 악기 트랙에서 수신 신호를 들을 수 있습니다.",
+      "why_it_matters": "one sentence satisfies AXLocalePolicy.trackTypeAudio and AXLocalePolicy.trackTypeInstrument at once"
+    },
+    {
+      "what": "the ordering in the classifier",
+      "file": "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+      "gm_device_checked_at_line": 768,
+      "audio_checked_at_line": 769,
+      "instrument_checked_at_line": 770,
+      "consequence": "audio is tested first, so audio always wins; reversing the order would make everything software_instrument instead"
+    },
+    {
+      "what": "what the oracle expects of the field",
+      "file": "Sources/LogicProMCP/Qualification/SemanticOracleTable.swift",
+      "comment_at_line": 1960,
+      "quoted": "observed_track_type is the PER-OP discriminator ... pinning it rejects a create that produced a different observed type"
+    }
+  ],
+  "conclusion": "The signal inferTrackType reads carries no type information. All 7 headers in the project -- covering at least three distinct track types -- produce identical token sets, because the Input Monitoring help text present on every header names both an audio track and a software instrument track in the same sentence. Ordering decides the answer, and every ordering is constant: audio first makes everything audio, instrument first would make everything software_instrument. So this is not a branch-ordering bug that a swap repairs; within the depth 4 radius the classifier searches there is nothing to discriminate on. observed_track_type is documented as the per-op discriminator and discriminates nothing, which leaves three of the four create_* oracles unable to pass against live Logic. The verified envelope is not itself false -- creation verifies by track-count delta and never compares the expected type -- but it carries a confidently wrong field.",
+  "limits": [
+    "Measured in ko-KR only. The Korean help string translates an English one that also names both types, so the same collapse is expected in English, but that is inference and was not measured.",
+    "Only arrangement track headers were dumped. aux, bus and master strips live in the Mixer, not the header rail, so the unreachability of those branches was not observed.",
+    "Whether a discriminating signal exists OUTSIDE the header -- channel strip, track icon, inspector -- was not measured. This record says the header lacks one, not that Logic lacks one.",
+    "The GM Device branch is tested before audio and was not exercised here; the silent-bounce guard it backs was not shown to be affected either way."
+  ],
+  "supersedes": null
+}

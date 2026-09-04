@@ -22,6 +22,15 @@ Enumerator: `logic_plugins.get_inventory` for insert-slot readback, then read-on
 
 ## The wall (why parameter census + registry activation is deferred)
 
+> **2026-09-04 — the instrument behind the next two readings was broken (#767).** `entire
+> contents` returns an empty list, without raising, for every application on this host: 0 for a
+> Logic window where a manual descent of the same window finds 464 elements, and 0 for nine other
+> applications. An empty result from it is not a reading. **Both bullets below cite exactly that
+> as their evidence, so their support is void** — which does not make their conclusions false, only
+> unevidenced. Re-measure with an explicit descent before citing them. Worth noting while you do:
+> `plugins.set_eq_band_verified` shipped in ADR-013 with all 24 named band parameters, which sits
+> oddly beside "no per-band `AXSlider` exposed".
+
 The Channel EQ **parameter controls are not reachable through standard AX traversal** in either view mode:
 
 - **Editor (graphical) view**: parameters are drawn on a custom `AXGroup` (desc=`EQ`) canvas — no per-band `AXSlider`/`AXValueIndicator` exposed. `entire contents` of the window filtered for slider/value roles = empty.

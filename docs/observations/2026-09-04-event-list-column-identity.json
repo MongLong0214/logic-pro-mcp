@@ -1,0 +1,37 @@
+{
+  "id": "2026-09-04-event-list-column-identity",
+  "date": "2026-09-04",
+  "subject": "Event List table column identity in the List Editors pane",
+  "question": "Does the Event List expose AXColumns, and do those columns carry names?",
+  "verdict": "partial",
+  "issues": [302],
+  "surface": "editor.event_list",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.3 (25D125)"},
+  "reverify": {
+    "kind": "manual",
+    "command": "View > 목록 편집기 보기, select the 이벤트 tab (an AXRadioButton described 이벤트 with an empty AXTitle), then read the pane's AXTable: AXColumns status and count, each column's AXTitle and AXDescription, and the AXHeader's sort-button titles.",
+    "expected": "AXColumns resolves with a count > 0, every column title and description is empty, and the header sort buttons carry the names",
+    "cost": "~1 min; needs a project open"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift:sortButtonTitles",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:eventListColumnPosition"
+  ],
+  "method": "Opened the List Editors pane from the View menu, located the Event tab by the collector's own discriminator (AXRadioButton whose AXDescription matches the measured 이벤트 label and whose AXTitle is empty), confirmed it was selected, then read the pane's AXTable directly. AXColumns was read for STATUS as well as value, so 'absent' and 'present but unnamed' are distinguished rather than collapsed.",
+  "observations": [
+    {"event_tabs_found": 1, "tab_was_selected": true, "tab_selected_now": true},
+    {"AXColumns_status": 0, "AXColumns_count": 6,
+     "column_titles": ["", "", "", "", "", ""],
+     "column_descriptions": ["", "", "", "", "", ""]},
+    {"has_AXHeader": true,
+     "header_sort_button_titles": ["L", "M", "위치", "이름", "트랙", "길이"]},
+    {"row_count": 0, "note": "no region selected, so the table is empty; column structure is independent of content"}
+  ],
+  "conclusion": "AXColumns is present and resolves — status 0 with a count of 6 — so a claim that it is absent is wrong. But every column's AXTitle and AXDescription is empty, so the columns carry no identity of their own. The names live on the AXHeader's sort buttons, which is the route EventListReadbackCollector.sortButtonTitles already takes. Column identity for this table is therefore available, just not from the columns.",
+  "limits": [
+    "No region was selected, so the table had no rows. This measures column structure, not cell content or the row-to-field mapping.",
+    "One locale. The sort-button titles are localised and two of the six are unlabelled in every locale measured so far.",
+    "Says nothing about whether the count varies with Logic's own column-visibility settings — six is what this project's pane exposed, not a constant."
+  ],
+  "supersedes": null
+}

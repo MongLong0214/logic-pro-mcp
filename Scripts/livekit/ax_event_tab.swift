@@ -8,6 +8,11 @@
 // explicit walk of `entire contents` finds no such element. Measured on Logic 12.3 while the pane
 // was open and the probe was reading its rows.
 //
+// #767, 2026-09-04: the third of those three is void. `entire contents` returns an empty list —
+// without raising — for every application on this host, so walking it proves nothing about what
+// is there. The first two are independent of it and still stand, and this driver exists either
+// way; the leg is called out so the next reader does not rebuild an argument on it.
+//
 //   swiftc -O ax_event_tab.swift -o ax_event_tab
 //   ./ax_event_tab                      -> {"tabs":[{"description":"Event","selected":true}, …]}
 //   ./ax_event_tab select Event         -> the same, plus "pressed", AFTER re-reading

@@ -1,0 +1,80 @@
+{
+  "id": "2026-09-04-event-list-provider-has-no-release-mint",
+  "date": "2026-09-04",
+  "subject": "Reachability of the Event List note-readback provider in a shipped binary",
+  "question": "Can a release build call EventListReadbackCollector.collect, or the provider that wraps it?",
+  "verdict": "wall",
+  "issues": [
+    293
+  ],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "grep -c 'RegistryResolvedIdentityProof(' Sources/LogicProMCP/MIDIReadback/RegionIdentityRegistry.swift and check whether every hit sits inside the #if QUALIFICATION_FAULT_SEAM block; confirm Package.swift still gates that define on .debug; then `nm -U .build/release/LogicProMCP | grep -c RegistryResolvedIdentityProof.*mint`.",
+    "expected": "the only construction is inside the seam, the define is still debug-only, and the release binary exports no mint symbol",
+    "cost": "~2 min, no Logic needed"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/RegionIdentityRegistry.swift",
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift",
+    "Sources/LogicProMCP/MIDIReadback/EventListMIDINoteReadbackProvider.swift",
+    "Package.swift"
+  ],
+  "method": "Followed the argument the entry point needs, backwards from the call site to the type that mints it, and then confirmed the consequence in the shipped artifact with nm rather than inferring it from the source.",
+  "observations": [
+    {
+      "what": "the type collect requires",
+      "argument": "RegistryResolvedIdentityProof",
+      "file": "Sources/LogicProMCP/MIDIReadback/RegionIdentityRegistry.swift",
+      "file_lines": 38,
+      "constructions_in_file": 1,
+      "construction_at_line": 35,
+      "enclosing_guard": "#if QUALIFICATION_FAULT_SEAM",
+      "guard_opens_at_line": 26,
+      "guard_closes_at_line": 38,
+      "init_visibility": "fileprivate"
+    },
+    {
+      "what": "how the define is scoped",
+      "file": "Package.swift",
+      "define": "QUALIFICATION_FAULT_SEAM",
+      "condition": ".when(configuration: .debug)"
+    },
+    {
+      "what": "the shipped artifact",
+      "command": "nm -U .build/release/LogicProMCP | grep -c RegistryResolvedIdentityProof.*mint",
+      "result": 0
+    },
+    {
+      "what": "who calls collect",
+      "callers_outside_the_collector_file": 1,
+      "caller": "Sources/LogicProMCP/MIDIReadback/EventListMIDINoteReadbackProvider.swift"
+    },
+    {
+      "what": "who registers the provider",
+      "registrations_found": 0,
+      "searched": "all of Sources/ outside Sources/LogicProMCP/MIDIReadback/"
+    },
+    {
+      "what": "the workaround already in the tree",
+      "flag": "--probe-event-list",
+      "file": "Sources/LogicProMCP/MainEntrypoint.swift",
+      "stated_scope": "observation only: mints no identity, calls no assessReadback, completes no qualification, adds no MCP surface"
+    }
+  ],
+  "conclusion": "A release build cannot enter this code. The proof that collect requires has exactly one construction, it sits inside a block compiled only under QUALIFICATION_FAULT_SEAM, and that define is scoped to debug -- so the shipped binary exports no mint at all. The chain closes twice over: nothing can build the argument, and nothing registers the provider that would pass it. The probe flag reaches the same readHeaders and readRows path from the hashed artifact, which is what made the companion round-trip measurement possible, but by its own description it mints no identity and adds no MCP surface, so it is a way to watch the path rather than a way to ship it. This is the same shape as the seam recorded for the piano-roll modules and for the three ADRs with no entry path, reached by a different mechanism: not an unreferenced module, but a type whose constructor a release build does not contain.",
+  "limits": [
+    "Nothing here says the code is wrong. It says a release build cannot run it, so no live measurement of assessReadback can score against the shipped artifact.",
+    "The seam is a test seam by its own comment, not a security boundary; this record does not treat its absence as a protection.",
+    "Whether an identity resolver SHOULD mint the proof live, and what it would bind to, is design work this record does not touch.",
+    "nm was run against a local release build, not against a notarised release artifact."
+  ],
+  "supersedes": null
+}
