@@ -134,9 +134,12 @@ screenshot the conclusion depends on cannot be cited and then lost.
 `host.locale` is still not a *drift* axis (rule 5), but it is a *coverage* axis: the same question
 measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
 which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
-schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role` and
-the `attribute` it was read from, and the guard requires the record to contain a **sighting** — an
-element of that role whose that attribute carried the string. Not a substring of the serialized
+schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role`, the
+`attribute` it was read from and the `match` mode (`exact` or `contains`), and the guard requires
+the record to contain a **sighting** — an element of that role whose that attribute carried the
+string under that mode. The mode is data because it cannot be guessed: inferring it from the label's
+NAME was wrong in both directions against the real call sites, and where the Swift *can* say —
+`AXLocalePolicy.<name>.containsAny` — the guard requires the declaration to agree with it. Not a substring of the serialized
 record, which accepted the variant `input` on the strength of a key named `with_input`.
 
 So a record's `observations` are worth writing **row-shaped** — `{"role": …, "help": …}` — because

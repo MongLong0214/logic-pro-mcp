@@ -67,8 +67,10 @@ def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, ide
 
 
 def _prov(record="2026-09-05-ko", locale="ko-KR", observed="입력 슬롯. 채널 스트립", date=D,
-          role="AXButton", attribute="help"):
+          role="AXButton", attribute="help", match="contains"):
     b = {"record": record, "locale": locale, "observed": observed, "date": date}
+    if match:
+        b["match"] = match
     if role:
         b["role"] = role
     if attribute:
@@ -110,21 +112,76 @@ def main():
     case("date mismatch", any("dated" in x
          for x in pp(_entry(["입력 슬롯"], {"입력 슬롯": _prov(date="2026-09-01")}, ko_measured))), "")
 
-    # 5. THE BLOB ATTACK. The old rule searched json.dumps(observations), so the variant `input`
-    #    was satisfied by the KEY `with_input`, and `L` by any capital L anywhere. A sighting is an
-    #    element and an attribute; neither of these is one.
-    blind = _entry(["input"], {"input": _prov(record="2026-09-05-ko-blind", observed="with_input",
-                                              role="AXStaticText", attribute="value")}, U)
-    case("a key is not a sighting", any("no AXStaticText whose value carried it" in x for x in
-         guard.provenance_problems("nonInsertButtonText", blind)),
-         guard.provenance_problems("nonInsertButtonText", blind))
-    ell = _entry(["L"], {"L": _prov(record="2026-09-05-ko-blind", observed="an L in it",
-                                    role="AXStaticText", attribute="value")}, U)
-    case("a letter inside a word is not a sighting",
+    # 5. THE BLOB ATTACK, in its two halves. The old rule searched json.dumps(observations), so a
+    #    KEY name satisfied a variant and a letter inside a word satisfied a canonical. Keys are no
+    #    longer searched at all, and an exact-matched label is not satisfied by a longer string.
+    #
+    #    What IS accepted, deliberately: a contains-matched label found inside a longer VALUE. The
+    #    product reads those sets with `containsAny` and would match the same string, so refusing it
+    #    here would make the guard stricter than the thing it documents.
+    guard.OBS = _ledger({"2026-09-05-k": ("ko-KR", [_row("AXStaticText", with_input="x", value="unrelated")])})
+    keyed = _entry(["input"], {"input": _prov(record="2026-09-05-k", observed="with_input",
+                                              role="AXStaticText", attribute="value", match="contains")}, U)
+    case("a KEY is not a sighting",
+         any("carried it" in x for x in guard.provenance_problems("nonInsertButtonText", keyed)),
+         guard.provenance_problems("nonInsertButtonText", keyed))
+
+    guard.OBS = _ledger({"2026-09-05-l": ("ko-KR", [_row("AXStaticText", value="an L in it")])})
+    ell = _entry(["L"], {"L": _prov(record="2026-09-05-l", observed="an L in it",
+                                    role="AXStaticText", attribute="value", match="exact")}, U)
+    case("a letter inside a word is not an exact sighting",
          any("carried it" in x for x in guard.provenance_problems("eventListColumnL", ell)),
          guard.provenance_problems("eventListColumnL", ell))
 
-    # 6. A provenance block with no role or attribute is not a sighting at all.
+    guard.OBS = _ledger({
+        "2026-09-05-ko":       ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스", description="입력 1"),
+                                          _row("AXMenuBarItem", title="편집"),
+                                          _row("AXMenuButton", title="편집", identifier="markerEdit:")]),
+        "2026-09-05-ja":       ("ja-JP", [_row("AXButton", help="入力スロット")]),
+        "2026-09-05-ko-blind": ("ko-KR", [_row("AXStaticText", value="something with_input and an L in it")]),
+        "2026-09-05-en":       ("en-US", [_row("AXMenuItem", title="Export")]),
+    })
+
+    # 6. The MATCH MODE is data, not a guess from the label's name. An earlier cut inferred it from
+    #    the name — `*Keyword` meant containment — and that was wrong in both directions against the
+    #    real call sites. A block must declare it, and it must agree with how the product reads the
+    #    set where the Swift can say.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(match=None)}, ko_measured)
+    case("match mode is required", any("must name `match`" in x for x in pp(e)), pp(e))
+
+    # `cancelButton` IS read with containsAny at a call site, so the Swift can contradict the claim.
+    # `inputSlotHelpKeyword` is passed to a helper and cannot be derived, which is why the block
+    # declares the mode rather than the guard inferring it everywhere.
+    guard.OBS = _ledger({"2026-09-05-c": ("ko-KR", [_row("AXButton", help="취소 하시겠습니까")])})
+    cancel = _entry(["취소"], {"취소": _prov(record="2026-09-05-c", observed="취소 하시겠습니까",
+                                            role="AXButton", attribute="help", match="exact")}, ko_measured)
+    case("claiming exact for a containsAny set is refused",
+         any("reads this set with `containsAny`" in x
+             for x in guard.provenance_problems("cancelButton", cancel)),
+         guard.provenance_problems("cancelButton", cancel))
+    cancel["provenance"]["취소"]["match"] = "contains"
+    case("...and declaring it correctly is accepted",
+         guard.provenance_problems("cancelButton", cancel) == [],
+         guard.provenance_problems("cancelButton", cancel))
+
+    # ...and an exact-matched set really is checked exactly: a menu title that merely CONTAINS the
+    # variant is a different command, which is the attack this mode exists to stop.
+    guard.OBS = _ledger({"2026-09-05-m": ("ko-KR", [_row("AXMenuItem", title="사이클 끔")])})
+    off = _entry(["끔"], {"끔": _prov(record="2026-09-05-m", observed="사이클 끔",
+                                     role="AXMenuItem", attribute="title", match="exact")}, ko_measured)
+    case("a longer menu title does not satisfy an exact match",
+         any("carried it" in x for x in guard.provenance_problems("automationModeOff", off)),
+         guard.provenance_problems("automationModeOff", off))
+    guard.OBS = _ledger({
+        "2026-09-05-ko":       ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스", description="입력 1"),
+                                          _row("AXMenuBarItem", title="편집"),
+                                          _row("AXMenuButton", title="편집", identifier="markerEdit:")]),
+        "2026-09-05-ja":       ("ja-JP", [_row("AXButton", help="入力スロット")]),
+        "2026-09-05-ko-blind": ("ko-KR", [_row("AXStaticText", value="something with_input and an L in it")]),
+        "2026-09-05-en":       ("en-US", [_row("AXMenuItem", title="Export")]),
+    })
+
+    # 7. A provenance block with no role or attribute is not a sighting at all.
     e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(role=None, attribute=None)}, ko_measured)
     case("role and attribute are required", any("is not a sighting" in x for x in pp(e)), pp(e))
 
@@ -234,7 +291,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("31 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
+    print("35 case(s) pass: a claim needs an element, an attribute and a role — a string in a blob is not a sighting")
     return 0
 
 

@@ -57,7 +57,8 @@ same-locale record and paste itself into `observed`. What makes provenance a rea
 check, and it is the load-bearing one:
 
 **the record must contain a SIGHTING of the variant**: an element of a named `role` whose named
-`attribute` carried that string. The block names both, and the guard walks the record's row-shaped
+`attribute` carried that string, under a named `match` mode. The block names all three, and the
+guard walks the record's row-shaped
 readings (its own `observations`, plus any file under `docs/observations/evidence/`) looking for
 that element. The block's `date` must equal the record's.
 
@@ -66,6 +67,13 @@ things it should not have: the variant `input` was satisfied by the KEY `with_in
 `eventListColumnL`'s canonical `L` by any capital L in any path in any reading. An element and an
 attribute are also what a caller needs in order to find the thing again, so the evidence and the
 addressing are the same three fields.
+
+`match` is `exact` or `contains`, and it is data rather than a guess. An earlier cut inferred it
+from the label's NAME — `*Keyword` meant containment — and measured against the product's real call
+sites it was wrong in both directions: `cancelButton` and `audioPluginSlotLabel` are read with
+`containsAny`, while `inputSlotHelpKeyword` appears at no call site at all because it is passed to a
+helper that does the matching. So the block declares it, and where the Swift *can* say, the guard
+requires the declaration to agree.
 
 Evidence is read as JSON rows and must live under `docs/observations/evidence/`. A screenshot
 therefore cannot back a claim — it is worth keeping and it is not machine-checkable, and pretending

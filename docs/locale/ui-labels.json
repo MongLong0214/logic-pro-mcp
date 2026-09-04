@@ -582,7 +582,8 @@
           "count_seen": 1,
           "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase",
           "role": "AXButton",
-          "attribute": "help"
+          "attribute": "help",
+          "match": "contains"
         }
       },
       "coverage": {
@@ -821,7 +822,8 @@
           "observed": "출력 슬롯. 채널 스트립 신호가 전송되는 채널 스트립 출력 대상을 선택하려면 길게 클릭합니다.",
           "count_seen": 4,
           "role": "AXButton",
-          "attribute": "help"
+          "attribute": "help",
+          "match": "contains"
         }
       },
       "coverage": {

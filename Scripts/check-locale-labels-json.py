@@ -93,14 +93,35 @@ def _record(record_id):
         return None
 
 
-# `LabelSet.matches` is exact for menus, buttons and titles; `containsAny` is how help keywords are
-# read. The evidence rule follows the product: a keyword may be a substring of the help string it was
-# read from, and a menu title may not be a substring of a different menu title.
-CONTAINS_SHAPES = ("HelpKeyword", "Keyword", "Hint", "Suffix", "Prefix", "Context")
+MATCH_MODES = ("exact", "contains")
 
 
-def _is_contains_shape(name):
-    return any(frag in name for frag in CONTAINS_SHAPES)
+def swift_containment(repo=REPO):
+    """LabelSet names the product demonstrably reads by CONTAINMENT, read from the Swift.
+
+    Derived, not guessed. An earlier cut inferred the mode from the label's NAME — `*Keyword` and
+    `*Hint` meant containment — and it was wrong in both directions against the real call sites:
+    `cancelButton` and `audioPluginSlotLabel` are read with `containsAny` while `inputSlotHelpKeyword`
+    is not read at any call site at all, because it is PASSED to a helper that does the matching.
+
+    That last shape is why this returns only what it can see. A name absent from this set is not
+    known to be exact; it is not derivable here, and the caller says so rather than assuming.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.containsAny", body))
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.matches\([^)]*mode:\s*\.contains", body))
+    return names
+
+
+_containment = swift_containment()
 
 
 def provenance_problems(name, entry):
@@ -137,10 +158,18 @@ def provenance_problems(name, entry):
         # in a file the record lists as evidence. A record that never saw it cannot be cited for it.
         role = block.get("role")
         attribute = block.get("attribute")
+        mode = block.get("match")
         if not role or attribute not in SIGHTING_ATTRS:
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
-        elif not sighting(rec, variant, role, attribute, exact=not _is_contains_shape(name)):
+        elif mode not in MATCH_MODES:
+            out.append(f"{name}: provenance for {variant!r} must name `match` as one of {MATCH_MODES} "
+                       f"— whether Logic's string EQUALS this variant or merely contains it is the "
+                       f"difference between a sighting and a coincidence")
+        elif name in _containment and mode != "contains":
+            out.append(f"{name}: provenance for {variant!r} claims match {mode!r}, but the product "
+                       f"reads this set with `containsAny` — the evidence rule must be the product's")
+        elif not sighting(rec, variant, role, attribute, exact=(mode == "exact")):
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
                        f"no {role} whose {attribute} carried it — a record that never saw it on that "
                        f"element cannot be cited for it")
@@ -258,7 +287,7 @@ def coverage_problems(name, entry, locales, values):
                        f"coverage_roles[{loc}] — `Edit` on a menu bar is not `Edit` on a toolbar "
                        f"button, and without the role any record showing either backs both")
         elif state == "measured" and not any(
-                sighting(rec, t, role, exact=not _is_contains_shape(name)) for t in strings if t):
+                sighting(rec, t, role, exact=(name not in _containment)) for t in strings if t):
             out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which has "
                        f"no {role} carrying any of this label's strings")
         elif state == "identifier":
