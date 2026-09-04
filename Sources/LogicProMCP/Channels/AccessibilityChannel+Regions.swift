@@ -285,10 +285,6 @@ extension AccessibilityChannel {
         ))
     }
 
-    /// Currently selected region (AXLayoutItem with AXSelected=true) inside
-    /// the arrange area. Returns nil when no AXLayoutItem reports
-    /// `kAXSelectedAttribute = true`. Used by `region.move_to_playhead` for
-    /// pre/post startBar diff.
     /// EVERY region Logic reports as selected, in enumeration order.
     ///
     /// `selectedRegionInfo` answers with the first one and that is not enough to verify a
@@ -297,6 +293,13 @@ extension AccessibilityChannel {
     /// Asking "is the last region selected?" gets a yes while three others are also selected, and
     /// the operations that consume the selection then act on all four. The verifiable question is
     /// "is the selection exactly this one region?", and it needs the whole set.
+    ///
+    /// `nil` and `[]` are different answers and the callers depend on the difference: `nil` means
+    /// the arrange area could not be enumerated at all, `[]` means it was and nothing is selected.
+    /// The singular version below cannot tell those apart, which is the other half of why it is not
+    /// enough. Note that a region whose `AXSelected` is UNREADABLE counts as not selected here — an
+    /// unreadable attribute cannot be evidence of selection, and a caller demanding an exact set
+    /// will fail closed on it rather than certify.
     static func selectedRegionInfos(
         runtime: AXLogicProElements.Runtime = .production
     ) -> [RegionInfo]? {
@@ -311,6 +314,13 @@ extension AccessibilityChannel {
         }.map(\.info)
     }
 
+    /// Currently selected region (AXLayoutItem with AXSelected=true) inside
+    /// the arrange area. Returns nil when no AXLayoutItem reports
+    /// `kAXSelectedAttribute = true`. Used by `region.move_to_playhead` for
+    /// pre/post startBar diff.
+    ///
+    /// Answers with the FIRST such region and cannot say how many there are; see
+    /// `selectedRegionInfos` for why that is not enough to verify a selection.
     static func selectedRegionInfo(
         runtime: AXLogicProElements.Runtime = .production
     ) -> RegionInfo? {
@@ -713,8 +723,21 @@ extension AccessibilityChannel {
             ))
         }
 
+        // The target was chosen BEFORE the clear and two settle windows. If the arrangement moved
+        // in between, the region that is last now is not the one this acted on, and matching the
+        // post-state against a stale `expected` would certify the stale answer. Re-deriving costs
+        // one enumeration and is the difference between "this is the last region" and "this was the
+        // last region when I looked".
+        let lastNow = lastRegionItem(runtime: runtime)?.info
+        let targetIsStillLast = lastNow.map {
+            $0.name == expected.name && $0.startBar == expected.startBar
+                && $0.trackIndex == expected.trackIndex
+        } ?? false
+
         var extras: [String: Any] = [
             "via": "deselect-all+ax-selected",
+            "write_reported_success": !writeReportedFailure,
+            "target_is_still_last": targetIsStillLast,
             "expected_name": expected.name,
             "expected_start_bar": expected.startBar,
             "expected_track_index": expected.trackIndex,
@@ -732,9 +755,22 @@ extension AccessibilityChannel {
             extras["selected_track_index"] = only.trackIndex
         }
 
-        // State A is the whole selection being this one region. "The target is among the selected"
-        // is not the same claim and is not the one the consumers of a selection can use.
+        // State A is the whole selection being this one region, established BY THIS CALL, and still
+        // the last region when the verdict is given. Three conditions, because dropping any one of
+        // them certifies something that was not shown:
+        //
+        //   * the set, because "the target is among the selected" is not a claim a consumer of the
+        //     selection can act on;
+        //   * the write's own answer, because a target that something ELSE selected between the
+        //     empty readback and the verdict satisfies the set test while this call established
+        //     nothing — the readback is the verdict on the STATE, and it cannot speak to authorship;
+        //   * the re-derived last, because the target was chosen three reads ago.
+        //
+        // A write that reported failure over a selection that nevertheless matches is State B, not
+        // State C: the state is right and unexplained, which is exactly what unverified means.
         if selected.count == 1,
+           !writeReportedFailure,
+           targetIsStillLast,
            let only = selected.first,
            only.name == expected.name,
            only.startBar == expected.startBar,
@@ -748,8 +784,15 @@ extension AccessibilityChannel {
         ))
     }
 
-    /// Logic's `Edit > Select > Deselect All`. The value is the AppKit selector Logic wires the
-    /// item to, and it is the same in every language Logic ships.
+    /// Logic's `Edit > Select > Deselect All`, addressed by the AppKit selector Logic wires the item
+    /// to rather than by its title.
+    ///
+    /// A selector is not a translated string, so this SHOULD hold across locales — but "should" is
+    /// the honest word: it was measured on one host, one build and one locale (ko-KR, 12.3, 6674),
+    /// and the record that carries the measurement says exactly that in its limits. The lookup does
+    /// not rely on the guess: it refuses when the identifier is absent, and refuses again when more
+    /// than one item in the bounded region carries it, so a build where this assumption is wrong
+    /// produces a refusal rather than a press on the wrong item.
     private static let deselectAllMenuIdentifier = "deselectAll:"
 
 }

@@ -26,6 +26,14 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 /// `regions` is `(name, help, position, size, selected)`. `headers` is
 /// `(position, size)`. `playheadPosition` is the "Bar.Beat.Division.Tick"
 /// value extracted from the transport bar.
+/// A @Sendable call counter, so a test can require that an injected step ran — or did not.
+private final class Recorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = 0
+    func fire() { lock.lock(); fired += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return fired }
+}
+
 private struct RegionFakeFixture {
     let builder: FakeAXRuntimeBuilder
     let runtime: AXLogicProElements.Runtime
@@ -343,9 +351,10 @@ private func makeRegionFixture(
 // MARK: - region.select_last — State A path
 
 @Test func testSelectLastReturnsStateAOnMatch() async {
-    // Two regions; the second (bar 5) is the last. AppleScript executor
-    // simulates Logic selecting it. Post-read finds AXSelected on the
-    // last region → State A.
+    // Two regions; the second (bar 5) is the last. There is no AppleScript executor in this call
+    // any more — #767 replaced the script with a Swift AX write, and the fake runtime's setter is
+    // what makes the target read back as selected. Post-read finds exactly that one region
+    // selected → State A.
     let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
     let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
 
@@ -407,8 +416,9 @@ private func makeRegionFixture(
 }
 
 @Test func testSelectLastReturnsStateBOnMismatch() async {
-    // AppleScript flips selection on the WRONG region (RegionA / bar 1)
-    // even though "last" is RegionB / bar 5 → State B readback_mismatch.
+    // The injected write lands on the WRONG region (RegionA / bar 1) even though "last" is
+    // RegionB / bar 5 → State B readback_mismatch. Injected rather than scripted: the production
+    // path writes AXSelected directly, so a wrong-target case has to be staged at that seam.
     let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
     let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
 
@@ -513,11 +523,19 @@ private func makeRegionFixture(
     fixture.builder.setAttribute(window, kAXPositionAttribute as String, axPoint(0, 0))
     fixture.builder.setAttribute(window, kAXSizeAttribute as String, axSize(600, 400))
 
+    // The fixture has no menu bar, so the production Deselect All lookup can only return nil. Left
+    // alone, this test would pass with the identifier lookup, the descent bound, the AXEnabled gate
+    // and the press ALL broken — the regions start unselected, so the pre-state gate is satisfied by
+    // an accident of the fixture rather than by anything the code did. Injecting the clear and
+    // recording it is what makes the test about the composition.
+    let cleared = Recorder()
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
+        deselectAll: { _ in cleared.fire(); return true },
         settle: { }
     )
 
+    #expect(cleared.count == 1, "the operation must clear the selection before it writes")
     #expect(result.isSuccess)
     let obj = decodeJSON(result.message)
     #expect((obj["verified"] as? Bool)!)
@@ -547,11 +565,14 @@ private func makeRegionFixture(
     fixture.builder.setAttribute(window, kAXPositionAttribute as String, axPoint(0, 0))
     fixture.builder.setAttribute(window, kAXSizeAttribute as String, axSize(600, 400))
 
+    let cleared = Recorder()
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
+        deselectAll: { _ in cleared.fire(); return true },
         settle: { }
     )
 
+    #expect(cleared.count == 1, "the operation must clear the selection before it writes")
     let obj = decodeJSON(result.message)
     #expect((obj["verified"] as? Bool)!)
     #expect(obj["scope"] as? String == "whole_arrangement")
@@ -579,12 +600,18 @@ private func makeRegionFixture(
         playheadPosition: "1.1.1.1"
     )
 
+    // The envelope refusing is half of it. An implementation that wrote FIRST and then produced the
+    // same refusal would satisfy every assertion about the envelope while having toggled a region,
+    // so the write is recorded and required not to have happened.
+    let wrote = Recorder()
     let result = await AccessibilityChannel.defaultSelectLastRegion(
         runtime: fixture.runtime,
+        selectRegion: { _, _ in wrote.fire(); return true },
         deselectAll: { _ in true },   // reports success, clears nothing
         settle: { }
     )
 
+    #expect(wrote.count == 0, "a refused pre-state must not be written through")
     #expect(result.isSuccess)
     let obj = decodeJSON(result.message)
     #expect((obj["success"] as? Bool)!)

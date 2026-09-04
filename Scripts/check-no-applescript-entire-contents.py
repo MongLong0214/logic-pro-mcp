@@ -27,6 +27,11 @@ harder — `"ent" + "ire contents"` defeats any pair rule — and it is not hypo
 own self-test assembles its fixtures exactly that way, for the good reason that a test for a banned
 phrase should not contain it.
 
+Docstrings are exempt because they are prose, and a docstring is also reachable at run time as
+`__doc__` — so `subprocess.run(["osascript", "-e", payload.__doc__])` passes. That is left open on
+purpose: closing it means flagging every paragraph in the tree that explains why this instrument is
+broken, and those paragraphs are the reason anyone will understand a future failure.
+
 So the boundary is: this stops the phrase from being TYPED back into a call, which is how it got
 here the first time and how it would return. It does not stop someone who is deliberately routing
 around it. That is the honest shape of the rule, and a guard that claimed more would be the second
@@ -39,7 +44,10 @@ import re
 import sys
 from pathlib import Path
 
-BANNED = "entire contents"
+# Assembled, not written out. A literal here would either trip the rule or need an exemption,
+# and an exemption keyed on the NAME `BANNED` was exactly the hole: any file in the tree could
+# declare `BANNED = "…"` and then use it. Assembling costs one line and removes the rule.
+BANNED = "entire" + " " + "contents"
 
 # `docs/` is in scope too: the evidence runners under docs/tickets shell out to osascript, and a
 # script is a script wherever it is filed.
@@ -76,7 +84,7 @@ def _swift_literals(source):
 
 
 def _exempt_nodes(tree):
-    """Every Constant that is prose or a definition rather than a call, by identity.
+    """Every Constant that is a docstring, by identity.
 
     A docstring is a string literal to the parser and prose to everyone else, and the prose about
     this instrument is worth keeping — this file's own header is an example. Skipping them by
@@ -84,12 +92,6 @@ def _exempt_nodes(tree):
     from being skipped along with them.
     """
     out = set()
-    # The literal that DEFINES the banned phrase is not a use of it, and exempting it by rule beats
-    # exempting this file by name: a path allowlist would clear every future use in this file too.
-    for node in getattr(tree, "body", []):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) \
-                and any(isinstance(t, ast.Name) and t.id == "BANNED" for t in node.targets):
-            out.add(id(node.value))
     for node in ast.walk(tree):
         if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -150,8 +152,11 @@ def violations(repo_root):
     return found, unparsed
 
 
-def main():
-    repo_root = Path(__file__).resolve().parent.parent
+def main(argv=None):
+    # An optional root so the self-test can run this entry point — not just `violations` — over a
+    # tree with a planted violation. Without it a `main` gutted to `return 0` would pass every test.
+    argv = list(sys.argv[1:] if argv is None else argv)
+    repo_root = Path(argv[0]).resolve() if argv else Path(__file__).resolve().parent.parent
     found, unparsed = violations(repo_root)
     if not found and not unparsed:
         print(f"no string literal sends `{BANNED}` to AppleScript")

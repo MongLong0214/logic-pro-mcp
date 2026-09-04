@@ -133,9 +133,10 @@ extension AXLogicProElements {
     /// of all 151 items found `deselectAll:` exactly once.
     ///
     /// So this addresses the leaf by identifier and still takes the containing menu by label,
-    /// because the menu bar leaves no other way to name it. Callers must satisfy themselves that
-    /// the identifier they pass is distinctive; a shared one like `localMenuItemAction:` would match
-    /// whichever item happened to come first.
+    /// because the menu bar leaves no other way to name it. A shared identifier resolves to NOTHING
+    /// rather than to whichever item traversal order reached first: the scan collects every match in
+    /// the bounded region and answers only when there is exactly one. That turns "the caller assumed
+    /// wrong about this build" into a refusal instead of into an action on an item nobody chose.
     static func menuItem(
         identifier: String,
         inMenuBar menuBar: AXLocalePolicy.LabelSet,
@@ -151,6 +152,15 @@ extension AXLogicProElements {
         // those (편집 > 선택 > 전체 선택 해제). A first cut stopped at three and never reached it,
         // and the operation's pre-state gate is what caught that rather than a wrong answer. The
         // bound stays tight so a mis-typed identifier cannot walk the whole tree.
+        //
+        // The whole bounded region is scanned before answering, rather than returning the first
+        // match. Returning early would make a SHARED identifier resolve to whichever item traversal
+        // order reached first — silently, and differently on another build — and a shared identifier
+        // is the common case here, not the exotic one: ten of the seventeen items in this very
+        // submenu publish `localMenuItemAction:`. Two matches is not a near miss to be broken by
+        // ordering; it means the caller's assumption about this identifier is wrong on this host,
+        // and the only safe answer is none.
+        var matches: [AXUIElement] = []
         var frontier = AXHelpers.getChildren(menu, runtime: runtime.ax)
         for _ in 0..<4 {
             var next: [AXUIElement] = []
@@ -158,13 +168,21 @@ extension AXLogicProElements {
                 let identifierValue: String? = AXHelpers.getAttribute(
                     element, kAXIdentifierAttribute as String, runtime: runtime.ax
                 )
-                if identifierValue == identifier { return element }
+                // A menu item, not merely something carrying the identifier. Menus, groups and
+                // whatever else Logic hangs here are not pressable as items.
+                let role: String? = AXHelpers.getAttribute(
+                    element, kAXRoleAttribute as String, runtime: runtime.ax
+                )
+                if identifierValue == identifier, role == (kAXMenuItemRole as String) {
+                    matches.append(element)
+                }
                 next.append(contentsOf: AXHelpers.getChildren(element, runtime: runtime.ax))
             }
-            if next.isEmpty { return nil }
+            if next.isEmpty { break }
             frontier = next
         }
-        return nil
+        guard matches.count == 1 else { return nil }
+        return matches.first
     }
 
     /// Status-preserving counterpart to the locale-resolved `menuItem` lookup.

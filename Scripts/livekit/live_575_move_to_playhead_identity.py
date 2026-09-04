@@ -77,17 +77,27 @@ def osa(script):
     return (r.stdout or "").strip()
 
 
-titles = osa('tell application "System Events" to tell process "Logic Pro" to '
-             'return name of every window')
+# One name per LINE, not AppleScript's comma-joined list. The joined form cannot be split back
+# apart safely — a project called `Take 1, final` produces two items that were never two windows —
+# and the check below has to look at one title at a time to mean what its name says.
+titles = osa('set AppleScript\'s text item delimiters to linefeed\n'
+             'tell application "System Events" to tell process "Logic Pro" to '
+             'set ns to name of every window\n'
+             'return ns as text')
+window_titles = [t.strip() for t in titles.splitlines() if t.strip()]
 # #767 — the window is `<project> - 트랙` on a Korean Logic, so `"Tracks" in titles` could not pass
-# and reported "no arrange window" for a window that was plainly open. Measured spellings, tried in
-# turn; `AXLocalePolicy.arrangeWindowTitleSuffix` carries the same three.
+# and reported "no arrange window" for a window that was plainly open. Measured spellings;
+# `AXLocalePolicy.arrangeWindowTitleSuffix` carries the same three.
+#
+# It is a SUFFIX test, which the first fix only claimed to be: it asked whether the spelling appeared
+# anywhere in the comma-joined blob of every title, so a project literally named `Tracks notes` would
+# have satisfied the precondition with no arrange window open at all.
 ARRANGE_TITLE_SUFFIX = ("Tracks", "트랙", "トラック")
 
 ev.check("575/precondition-an-arrange-window-is-open",
-         any(suffix in titles for suffix in ARRANGE_TITLE_SUFFIX),
+         any(t.endswith(suffix) for t in window_titles for suffix in ARRANGE_TITLE_SUFFIX),
          "Logic is up with a project, so the region enumeration has something to read",
-         f"titles={titles!r}", None)
+         f"window_titles={window_titles!r}", None)
 
 rec = ev.record_screen(seconds=120)
 before = ev.shot("575/before", settle_region=HEADER_BAND)
