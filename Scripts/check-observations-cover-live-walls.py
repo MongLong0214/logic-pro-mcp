@@ -56,21 +56,10 @@ ISSUE = re.compile(r"#(\d+)")
 # the point. Each entry names what would have to be re-measured to remove it.
 GRANDFATHERED = {
     290: "ADR-007, closed 2026-08-30 — all seven criteria measured before records existed",
-    291: "ADR-008 routing-graph node identity, measured before records existed",
-    292: "the 2026-08-30 Controls-view addressability reading (the 2026-09-04 popup wall IS recorded)",
-    293: "ADR-010 Event List collector, measured 2026-08-29",
-    299: "ADR-011 Compressor native-editor slider census, measured 2026-08-30",
     300: "ADR-012, closed 2026-08-28 — seven acceptance criteria measured before records existed",
     301: "ADR-013 Channel EQ named-band writes, shipped and measured 2026-08-31",
-    302: "ADR-014 kAXColumns reading, measured 2026-08-29",
-    303: "ADR-015 TransformVerification dependency, measured 2026-08-29",
-    304: "ADR-016 tempo-map bounds",
-    305: "ADR-017 Flex Pitch surface correction",
-    306: "ADR-018 Tier B addressability, measured 2026-08-30",
     369: "export panel walls, measured across seven live rounds",
-    736: "the reporter's own MCU/port measurements, made outside this repository",
     747: "the Korean save_as path, measured 2026-09-03",
-    748: "the collapsed-stack truncation, measured 2026-09-03",
 }
 
 

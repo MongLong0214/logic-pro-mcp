@@ -1,0 +1,74 @@
+{
+  "id": "2026-09-04-event-list-note-table-round-trip",
+  "date": "2026-09-04",
+  "subject": "Event List note readback against a region the product just wrote",
+  "question": "Does the Event List collector read back the notes of a recorded MIDI region accurately?",
+  "verdict": "works",
+  "issues": [
+    293
+  ],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Create a software instrument track, run logic_tracks record_sequence with notes \"60,0,500,100,1; 67,500,500,90,1\", select the region (logic_edit select_all with one region present), then run `.build/release/LogicProMCP --probe-event-list` and compare the rows against what was written.",
+    "expected": "two rows: pitch 60 velocity 100 at position 1 1 1 1, and pitch 67 velocity 90 at position 1 2 1 1",
+    "cost": "~4 min with Logic open; creates one disposable track and region"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift",
+    "Sources/LogicProMCP/MainEntrypoint.swift"
+  ],
+  "method": "Wrote a region through the product's own record_sequence, then read it back through the observation-only probe compiled into the shipped artifact. Writing and reading through different paths makes the comparison a round trip rather than a restatement.",
+  "observations": [
+    {
+      "what": "what was written",
+      "notes": "60,0,500,100,1; 67,500,500,90,1",
+      "method": "smf_import",
+      "note_count": 2
+    },
+    {
+      "what": "row 0 as read back",
+      "Num": 60,
+      "Val": "100",
+      "Ch": 1,
+      "Position": "1 1 1 1",
+      "Length/Info": "0 1 0 0",
+      "Status": "노트"
+    },
+    {
+      "what": "row 1 as read back",
+      "Num": 67,
+      "Val": "90",
+      "Ch": 1,
+      "Position": "1 2 1 1",
+      "Length/Info": "0 1 0 0",
+      "Status": "노트"
+    },
+    {
+      "what": "precondition the probe enforces",
+      "refusal_when_unmet": "Event List is at region level; event-level rows are unavailable.",
+      "how_it_was_met": "selecting the region makes the List Editors pane descend into it"
+    },
+    {
+      "what": "Status column is localised",
+      "read_value": "노트",
+      "canonical_english": "Note",
+      "checked": "no literal \"Note\" comparison exists anywhere under Sources/LogicProMCP/MIDIReadback/"
+    }
+  ],
+  "conclusion": "The Event List collector reads a real note table correctly. Both notes came back with the pitch, velocity, channel and position that were written -- 60 at velocity 100 on the downbeat, 67 at velocity 90 one beat later -- so the roadmap's claim for this collector reproduces. Two things the reading adds. The probe refuses honestly when the pane is at region level rather than returning an empty table, which is why an unselected region reads as a refusal and not as a region with no notes. And the Status column comes back localised, so a future comparison against the literal Note would fail the same way the Event tab literal failed before it; today no such comparison exists.",
+  "limits": [
+    "Two notes, one region, one channel. Nothing here measures the completeness trap recorded for larger regions, where rows outside the viewport read hollow.",
+    "ko-KR only. Status was read as 노트; the English spelling was not exercised.",
+    "This measures the collector reading a table. It says nothing about whether any shipped operation can reach that collector -- see the companion record on the release mint.",
+    "The region was written by the product's own SMF import, so a systematic error shared by the writer and the reader would not show up as a mismatch."
+  ],
+  "supersedes": null
+}
