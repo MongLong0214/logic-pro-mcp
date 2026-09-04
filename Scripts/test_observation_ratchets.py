@@ -196,7 +196,23 @@ def main():
     (root / "docs" / "observations" / "RATCHETS.json").write_text("{not json", encoding="utf-8")
     check("unreadable is exit 2", guard.main([str(root)]) == 2, "expected exit 2")
 
-    # 16. The real repository is within its sets right now.
+    # 16. The REPORT and the RATCHET must never disagree about what a gap is. They read the same
+    #     `live_state`, and this asserts it rather than trusting that two implementations agree —
+    #     two definitions of a gap drifting apart is the failure this ledger exists to catch, one
+    #     level up.
+    out = subprocess.run([sys.executable, str(GUARD.parent / "observations-status.py"), "--unproven"],
+                         capture_output=True, text=True).stdout
+    real = guard.live_state()
+    import re as _re
+    for key, pat in (("undocumented_variants", r"(\d+) variant\(s\)"),
+                     ("schema_v1_records", r"schema 1[^:]*: (\d+)"),
+                     ("manual_reverify", r"manual prose rather than a command: (\d+)")):
+        m = _re.search(pat, out)
+        check(f"report agrees with the ratchet on {key}",
+              m and int(m.group(1)) == len(real[key]),
+              f"report {m.group(1) if m else '?'} vs ratchet {len(real[key])}")
+
+    # 17. The real repository is within its sets right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", proc.returncode == 0, proc.stdout.strip()[:300])
 
@@ -204,7 +220,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("20 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
+    print("21 case(s) pass: a swap is caught by name, a raise lands with a reason, and the base is real git")
     return 0
 
 

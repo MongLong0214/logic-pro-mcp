@@ -132,12 +132,30 @@ def coverage(records):
 LABELS = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
 
+def _gaps():
+    """The ledger's gaps, from the ONE place that defines them.
+
+    `check-observation-ratchets.py` decides what counts as an undocumented variant, an unmeasured
+    locale, a bare surface. Recomputing that here would be a second definition of the same thing,
+    and two definitions of a gap drift — which is the failure this whole ledger exists to catch,
+    one level up. The ratchet enforces; this reports; both read the same function.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "ratchets", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "check-observation-ratchets.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.live_state(REPO)
+
+
 def unproven(records):
     """Every gap the ledger can name, as things a person can go and do. ADR-019 D6.
 
-    The counts behind these lists are the ceilings in RATCHETS.json; this is the list form, so a
-    ceiling of 255 is 255 named strings rather than a number nobody can act on.
+    The same sets the ratchet holds, printed as names. A ceiling of 255 is 255 named strings rather
+    than a number nobody can act on — and because both read `live_state`, the list and the count
+    cannot disagree about what a gap is.
     """
+    gaps = _gaps()
     try:
         labels = json.load(open(LABELS, encoding="utf-8"))
     except (OSError, ValueError):
@@ -148,42 +166,41 @@ def unproven(records):
     surfaces = [s for s, _ in taxonomy()]
 
     print("variants with no provenance — strings the product matches that nobody has recorded reading\n")
-    n = 0
-    for name, e in sorted(entries.items()):
-        missing = [v for v in (e.get("variants") or []) if v not in (e.get("provenance") or {})]
-        if missing:
-            n += len(missing)
-            print(f"  {name:40s} {', '.join(repr(v) for v in missing)}")
-    print(f"\n  {n} variant(s)\n")
+    by_label = {}
+    for item in sorted(gaps["undocumented_variants"]):
+        label, _, variant = item.partition("\u2192")
+        by_label.setdefault(label, []).append(variant)
+    for label, variants in sorted(by_label.items()):
+        print(f"  {label:40s} {', '.join(repr(v) for v in variants)}")
+    print(f"\n  {len(gaps['undocumented_variants'])} variant(s)\n")
 
     # NAMES, never counts. A count is not a thing anyone can go and do, and every line of this
     # report claims to be one. Nothing is truncated either: a list that hides its tail is the same
     # failure one step smaller.
     print("label sets unmeasured per locale — nobody has looked, which is not `measured`\n")
     for loc in locales:
-        gaps = [name for name, e in sorted(entries.items())
-                if (e.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured"]
-        print(f"  {loc}: {len(gaps)} of {len(entries)}")
-        for i in range(0, len(gaps), 3):
-            print("      " + "  ".join(f"{n:36s}" for n in gaps[i:i + 3]).rstrip())
+        names = sorted(gaps["unmeasured_coverage"].get(loc, ()))
+        print(f"  {loc}: {len(names)} of {len(entries)}")
+        for i in range(0, len(names), 3):
+            print("      " + "  ".join(f"{n:36s}" for n in names[i:i + 3]).rstrip())
     print()
 
     print("surfaces with no record, per locale\n")
     for loc in locales:
-        have = {d.get("surface") for d in docs if (d.get("host") or {}).get("locale") == loc}
-        bare = [s for s in surfaces if s not in have]
+        bare = sorted(x.partition("\u2192")[2] for x in gaps["surfaces_without_records"]
+                      if x.startswith(f"{loc}\u2192"))
         print(f"  {loc}: {len(bare)} of {len(surfaces)}")
         for s_ in bare:
             print(f"      {s_}")
     print()
 
-    v1 = [d.get("id") for d in docs if d.get("schema", 1) != 2]
+    v1 = sorted(gaps["schema_v1_records"])
     print(f"records at schema 1 — no `evidence`, no `schema`: {len(v1)}")
-    for r in sorted(v1):
+    for r in v1:
         print(f"      {r}")
-    manual = [d.get("id") for d in docs if (d.get("reverify") or {}).get("kind") == "manual"]
+    manual = sorted(gaps["manual_reverify"])
     print(f"\nrecords whose reverify is manual prose rather than a command: {len(manual)}")
-    for r in sorted(manual):
+    for r in manual:
         print(f"      {r}")
     broken = []
     for d in docs:
