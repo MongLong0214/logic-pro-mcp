@@ -79,7 +79,13 @@ def osa(script):
 
 titles = osa('tell application "System Events" to tell process "Logic Pro" to '
              'return name of every window')
-ev.check("575/precondition-an-arrange-window-is-open", "Tracks" in titles,
+# #767 — the window is `<project> - 트랙` on a Korean Logic, so `"Tracks" in titles` could not pass
+# and reported "no arrange window" for a window that was plainly open. Measured spellings, tried in
+# turn; `AXLocalePolicy.arrangeWindowTitleSuffix` carries the same three.
+ARRANGE_TITLE_SUFFIX = ("Tracks", "트랙", "トラック")
+
+ev.check("575/precondition-an-arrange-window-is-open",
+         any(suffix in titles for suffix in ARRANGE_TITLE_SUFFIX),
          "Logic is up with a project, so the region enumeration has something to read",
          f"titles={titles!r}", None)
 
