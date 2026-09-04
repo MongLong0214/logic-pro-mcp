@@ -55,7 +55,6 @@ ISSUE = re.compile(r"#(\d+)")
 # issue, so the list can only shrink: a NEW row cannot join it without editing this file, which is
 # the point. Each entry names what would have to be re-measured to remove it.
 GRANDFATHERED = {
-    299: "ADR-011 native-editor slider census, measured 2026-08-30 before records existed",
     290: "ADR-007, closed 2026-08-30 — all seven criteria measured before records existed",
     300: "ADR-012, closed 2026-08-28 — seven acceptance criteria measured before records existed",
     301: "ADR-013 Channel EQ named-band writes, shipped and measured 2026-08-31",
