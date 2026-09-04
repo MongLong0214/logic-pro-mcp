@@ -1,0 +1,86 @@
+{
+  "id": "2026-09-04-transport-readings-and-where-the-playhead-is-not",
+  "date": "2026-09-04",
+  "subject": "What the control bar exposes, and which attribute carries each reading",
+  "question": "Can tempo, meter, key and the playhead position be read from the control bar, and from which attribute?",
+  "verdict": "partial",
+  "issues": [],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Walk the arrange window to depth 8 collecting role, AXDescription, AXValue and AXValueDescription for every element whose description names a transport control (재생/정지/녹음/위치/템포/박자/조표/사이클/메트로놈 or their English equivalents).",
+    "expected": "tempo reads as a number on an AXSlider; meter and key read as popup values; the playhead position group has no value while the playhead thumbnail's AXValueDescription carries the bar",
+    "cost": "~2 min, any project open"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements.swift"
+  ],
+  "method": "Read every attribute on each named control rather than only AXValue, because the Event List had already shown that the true reading sits on a different attribute per column. Doing the same here is what separated the position group from the thumbnail.",
+  "observations": [
+    {
+      "what": "controls found by name",
+      "count": 11
+    },
+    {
+      "control": "템포",
+      "role": "AXSlider",
+      "AXValue": 120.0,
+      "AXValueDescription": "120"
+    },
+    {
+      "control": "박자표",
+      "role": "AXPopUpButton",
+      "AXValue": "4/4"
+    },
+    {
+      "control": "조표",
+      "role": "AXPopUpButton",
+      "AXValue": "C 메이저"
+    },
+    {
+      "control": "재생헤드 위치",
+      "role": "AXGroup",
+      "AXValue": null,
+      "AXValueDescription": ""
+    },
+    {
+      "control": "재생헤드 썸네일",
+      "role": "AXValueIndicator",
+      "AXValue": "2.30897441833E+14",
+      "AXValueDescription": "5 마디",
+      "note": "the raw value is an opaque fixed-point number; the description is the reading"
+    },
+    {
+      "control": "재생헤드 캐치",
+      "role": "AXCheckBox",
+      "AXValue": true
+    },
+    {
+      "control": "녹음",
+      "role": "AXButton",
+      "AXValue": "끔"
+    },
+    {
+      "control": "녹음 활성화",
+      "role": "AXCheckBox",
+      "AXValue": 0,
+      "instances": 3,
+      "note": "these are the per-track arm buttons in the header rail, not a control-bar control"
+    }
+  ],
+  "conclusion": "Tempo, meter and key are readable directly and honestly: the tempo AXSlider carries 120.0 as its value with a matching description, and the meter and key popups carry 4/4 and C 메이저. The playhead is the exception and the reason to read every attribute rather than AXValue alone -- the element described 재생헤드 위치 is an AXGroup with no value at all, while the playhead thumbnail is an AXValueIndicator whose AXValue is an opaque fixed-point number and whose AXValueDescription reads 5 마디. So the position exists on the surface and is not where its name suggests, and a reader that takes AXValue from the named element gets nothing while one that takes AXValue from the indicator gets a number that is not a bar. This is the same split already recorded for the Event List velocity column: the attribute that carries the truth differs per control, and only reading both tells you which.",
+  "limits": [
+    "One project, ko-KR, transport stopped. Nothing here was measured while playing, so whether the thumbnail description updates live or only on settle is unknown.",
+    "Reading only. No write to tempo, meter, key or position was attempted, and the tempo slider being readable says nothing about it being settable — Controls-view sliders report success and do not move.",
+    "The 녹음 활성화 checkboxes are track-header arm buttons that matched the name filter; they are listed for completeness and are a different surface.",
+    "Bar 5 was wherever the playhead happened to sit; the reading was not cross-checked against a second source of the position."
+  ],
+  "supersedes": null
+}
