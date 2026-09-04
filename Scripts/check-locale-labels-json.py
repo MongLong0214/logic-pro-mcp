@@ -339,10 +339,40 @@ def coverage_problems(name, entry, locales, values):
         elif role not in declared:
             out.append(f"{name}: coverage[{loc}] cites a {role}, which is not one of this label's "
                        f"declared roles {declared}")
-        elif state == "measured" and not any(
-                sighting(rec, t, role, exact=(name not in _containment)) for t in strings if t):
-            out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which has "
-                       f"no {role} carrying any of this label's strings")
+        elif state == "measured" and (entry.get("coverage_absent") or {}).get(loc):
+            # MEASURED ABSENCE. The ADR always said "this element is unlabelled" was a `measured`
+            # whose record says so, but the guard required a sighting CARRYING one of the label's
+            # strings — a predicate a record proving absence can never satisfy. So the document
+            # promised a state that could not be expressed, and "we looked and Logic shows none of
+            # these" collapsed back into "nobody has looked".
+            #
+            # Both halves are mechanical: the element must have been SEEN (a row of the declared
+            # role is in the record) and it must have shown NONE of the strings (no row of that role
+            # carries one). Absence claimed about an element nobody found is still refused.
+            seen = [r for r in _rows(rec) if r.get("role") == role]
+            carrying = [t for t in strings if t and sighting(rec, t, role,
+                                                             exact=(name not in _containment))]
+            if not seen:
+                out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
+                           f"{cites.get(loc)!r}, which contains no {role} at all — absence is a "
+                           f"reading of an element that was found, not of one nobody located")
+            elif carrying:
+                out.append(f"{name}: coverage[{loc}] claims measured ABSENCE, but its record shows "
+                           f"a {role} carrying {carrying[0]!r} — that is a presence")
+        elif state == "measured":
+            # The ATTRIBUTE too, exactly as provenance requires. Without it a string found in ANY
+            # attribute backed the claim, and some labels say in their own rationale which attribute
+            # is authoritative — `pluginWindowViewSwitcher` records that AXDescription is the
+            # readback and AXTitle is not, then accepted a title match as measurement.
+            attr = (entry.get("coverage_attributes") or {}).get(loc)
+            if attr not in LABEL_ATTRS:
+                out.append(f"{name}: coverage[{loc}] is 'measured' but names no readable attribute "
+                           f"under coverage_attributes[{loc}] — one of {LABEL_ATTRS}. Which "
+                           f"attribute carried the string is part of the reading, not a detail")
+            elif not any(sighting(rec, t, role, attr, exact=(name not in _containment))
+                         for t in strings if t):
+                out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which "
+                           f"has no {role} whose {attr} carried any of this label's strings")
         elif state == "identifier":
             ident = (entry.get("coverage_identifiers") or {}).get(loc)
             if not ident:

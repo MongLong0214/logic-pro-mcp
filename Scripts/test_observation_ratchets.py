@@ -78,6 +78,13 @@ def _branch(root, labels, allowed, raised=None):
 def main():
     failures = []
 
+    # Most fixtures here are throwaway directories with no git at all, because the set arithmetic
+    # does not need one. The guard fails closed under CI when it cannot read a merge base — that is
+    # the point of it — so inheriting a CI signal turns every base-less fixture into a failure and
+    # the suite reports a bug in itself. The two cases that are ABOUT that behaviour pass `CI`
+    # explicitly in their own env; every other case gets a clean one.
+    os.environ.pop("CI", None)
+
     ran = [0]
 
     def check(name, cond, detail):

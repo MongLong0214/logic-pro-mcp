@@ -125,7 +125,9 @@ Otherwise three fields are required and the guard checks all three:
 |---|---|
 | `coverage_records[locale]` | the record id |
 | `coverage_roles[locale]` | the AX role the label addresses — `Edit` on a menu bar is not `Edit` on a toolbar button, and both `editMenuBar` and `markerListEditMenuButton` carry `Edit`, `편집`, `編集` |
+| `coverage_attributes[locale]` | which AX attribute carried the string — `title`, `description`, `help` or `value`. Provenance has always named it; without it here, a string found in ANY attribute backed the claim, and some labels record in their own rationale which attribute is the readback and which is not (`pluginWindowViewSwitcher`: AXDescription is authoritative, AXTitle is not) |
 | `coverage_identifiers[locale]` | for `identifier` only: the AXIdentifier, which the record must have been seen carrying |
+| `coverage_absent[locale]` | `true` for a MEASURED ABSENCE — see below |
 
 Without the role, any record showing either element backs both, which is the same shared-string
 hole D1 closes for variants.
@@ -135,10 +137,23 @@ hole D1 closes for variants.
 discharge by measuring anything. A permanent gap overstates the real one and trains readers to
 ignore the number.
 
-There is no `absent`. "Logic shows the canonical here" is a `measured` whose record contains the
-canonical; "this element is unlabelled" is a `measured` whose record says so in its observations.
-Neither is a state of its own, and neither is manufactured: the campaign in D4 proposes nothing for a
-label whose strings it did not see on an element of the right role.
+**Measured absence** is `measured` plus `coverage_absent[locale]: true`, and it is not a fourth
+state — it is the same claim ("somebody looked in this locale") about a different outcome. There is
+no `absent` state, because absence and presence are outcomes of one measurement, not two kinds of
+knowledge.
+
+An earlier draft said "this element is unlabelled is a `measured` whose record says so in its
+observations" and left it there. It was unreachable: `measured` required a sighting CARRYING one of
+the label's strings, which a record proving absence can never produce, so "we looked and Logic shows
+none of these" collapsed back into "nobody has looked" — the one distinction this ledger exists to
+make. Both halves are now mechanical:
+
+- the element must have been **seen** — the cited record contains a row of the declared role;
+- it must have shown **none** of the strings — no row of that role carries one.
+
+Absence claimed about an element nobody located is refused, and so is absence the record itself
+contradicts. Nothing here is manufactured: the campaign in D4 proposes nothing for a label whose
+strings it did not see on an element of the right role.
 
 Supported locales are `en-US`, `ko-KR`, `ja-JP`. `unmeasured` is counted per locale and each count
 may only fall. **#778 is the `ja-JP: unmeasured` count**; #768's eighteen empty lists become

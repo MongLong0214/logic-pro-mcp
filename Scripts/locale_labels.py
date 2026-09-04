@@ -210,7 +210,8 @@ def build(existing=None):
                     if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
                     and loc not in present_in}
 
-        for field in ("coverage_records", "coverage_roles", "coverage_identifiers"):
+        for field in ("coverage_records", "coverage_roles", "coverage_identifiers",
+                      "coverage_attributes", "coverage_absent"):
             kept = carried_map(field)
             if kept:
                 entry[field] = kept

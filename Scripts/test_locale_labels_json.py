@@ -52,7 +52,7 @@ def _row(role, **attrs):
 
 
 def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, idents=None,
-           canonical="input slot", declared=("AXButton",), retired=None):
+           canonical="input slot", declared=("AXButton",), retired=None, attrs=None, absent=None):
     e = {"canonical": canonical, "variants": variants, "rationale": "r"}
     if declared:
         e["roles"] = list(declared)
@@ -67,6 +67,10 @@ def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, ide
         e["coverage_roles"] = roles
     if idents:
         e["coverage_identifiers"] = idents
+    if attrs:
+        e["coverage_attributes"] = attrs
+    if absent:
+        e["coverage_absent"] = absent
     return e
 
 
@@ -213,18 +217,21 @@ def main():
     # 9. THE SHARED-STRING ATTACK. `editMenuBar` and `markerListEditMenuButton` both say 편집. A
     #    record showing the MENU BAR must not back the toolbar BUTTON, and the role is what says so.
     bar = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
-                 roles={"ko-KR": "AXMenuBarItem"}, canonical="편집", declared=("AXMenuBarItem",))
+                 roles={"ko-KR": "AXMenuBarItem"}, canonical="편집", declared=("AXMenuBarItem",),
+                 attrs={"ko-KR": "title"})
     case("menu-bar record backs the menu-bar label", cp(bar, "editMenuBar") == [], cp(bar, "editMenuBar"))
     btn = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"},
-                 roles={"ko-KR": "AXToolbarButton"}, canonical="편집", declared=("AXToolbarButton",))
+                 roles={"ko-KR": "AXToolbarButton"}, canonical="편집", declared=("AXToolbarButton",),
+                 attrs={"ko-KR": "title"})
     case("...and not a role the record never showed",
-         any("no AXToolbarButton carrying" in x for x in cp(btn, "markerListEditMenuButton")),
+         any("no AXToolbarButton whose title carried" in x for x in cp(btn, "markerListEditMenuButton")),
          cp(btn, "markerListEditMenuButton"))
 
     # 10. Coverage bookkeeping: a claim needs a record, the right locale, and a role.
     case("measured without record", any("claim of measurement" in x for x in cp(_entry([], None, ko_measured))), "")
     case("measured wrong locale", any("not ko-KR" in x for x in
-         cp(_entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ja"}, roles={"ko-KR": "AXButton"}))), "")
+         cp(_entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ja"}, roles={"ko-KR": "AXButton"},
+                   attrs={"ko-KR": "help"}))), "")
     case("measured without a role", any("names no role" in x for x in
          cp(_entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-ko"}))), "")
     case("unmeasured with provenance", any("it is measured" in x for x in
@@ -250,9 +257,10 @@ def main():
     #     claim is about what Logic SHOWS.
     guard.OBS = _ledger({"2026-09-05-id": ("ko-KR", [_row("AXButton", identifier="편집", help="unrelated")])})
     ident_only = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-id"},
-                        roles={"ko-KR": "AXButton"}, canonical="편집", declared=("AXButton",))
+                        roles={"ko-KR": "AXButton"}, canonical="편집", declared=("AXButton",),
+                        attrs={"ko-KR": "title"})
     case("an identifier is not a label sighting",
-         any("carrying any of this label" in x for x in cp(ident_only, "editMenuBar")),
+         any("carried any of this label" in x for x in cp(ident_only, "editMenuBar")),
          cp(ident_only, "editMenuBar"))
     guard.OBS = _ledger({
         "2026-09-05-ko":       ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스", description="입력 1"),
@@ -373,6 +381,45 @@ def main():
     case("...but the same row outside one is",
          guard.provenance_problems("automationModeContext", seen) == [],
          guard.provenance_problems("automationModeContext", seen))
+
+    # 18b. Coverage names the ATTRIBUTE it was read from, as provenance already does. Without it a
+    #      string found in ANY attribute backed the claim, and some labels record in their own
+    #      rationale which attribute is the readback and which is not.
+    guard.OBS = _ledger({"2026-09-05-at": ("ko-KR", [_row("AXButton", help="입력 슬롯", title="전혀 다름")])})
+    base_cov = dict(cites={"ko-KR": "2026-09-05-at"}, roles={"ko-KR": "AXButton"},
+                    declared=("AXButton",), canonical="입력 슬롯")
+    right = _entry([], None, ko_measured, attrs={"ko-KR": "help"}, **base_cov)
+    case("coverage naming the attribute it was read from is accepted", cp(right) == [], cp(right))
+    none_named = _entry([], None, ko_measured, **base_cov)
+    case("coverage with no attribute is refused",
+         any("no readable attribute" in x for x in cp(none_named)), cp(none_named))
+    wrong = _entry([], None, ko_measured, attrs={"ko-KR": "title"}, **base_cov)
+    case("coverage naming an attribute that did not carry it is refused",
+         any("whose title carried" in x for x in cp(wrong)), cp(wrong))
+
+    # 18c. MEASURED ABSENCE. "we looked and Logic shows none of these" was inexpressible: the ADR
+    #      called it `measured`, and `measured` required a sighting CARRYING one of the strings —
+    #      which a record proving absence can never produce. It collapsed into "nobody has looked".
+    guard.OBS = _ledger({
+        "2026-09-05-nil":  ("ko-KR", [_row("AXButton", help="전혀 다름", title="전혀 다름")]),
+        "2026-09-05-gone": ("ko-KR", [_row("AXStaticText", value="전혀 다름")]),
+        "2026-09-05-has":  ("ko-KR", [_row("AXButton", help="입력 슬롯")]),
+    })
+    absent = dict(roles={"ko-KR": "AXButton"}, declared=("AXButton",), canonical="입력 슬롯",
+                  absent={"ko-KR": True})
+    ok_absent = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-nil"}, **absent)
+    case("an element seen carrying none of the strings is measured absence",
+         cp(ok_absent) == [], cp(ok_absent))
+    never_found = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-gone"}, **absent)
+    case("absence about an element nobody located is refused",
+         any("contains no AXButton at all" in x for x in cp(never_found)), cp(never_found))
+    actually_there = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-has"}, **absent)
+    case("absence contradicted by the record is refused",
+         any("that is a presence" in x for x in cp(actually_there)), cp(actually_there))
+
+    guard.OBS = _ledger({
+        "2026-09-05-ko": ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스")]),
+    })
 
     # 19. `retired` excuses a label whose element Logic no longer shows, and it must say why —
     #     otherwise it is just `unmeasured` with the debt hidden.
