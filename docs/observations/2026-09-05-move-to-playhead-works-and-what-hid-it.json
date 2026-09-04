@@ -1,0 +1,94 @@
+{
+  "id": "2026-09-05-move-to-playhead-works-and-what-hid-it",
+  "date": "2026-09-05",
+  "subject": "region.move_to_playhead driven live, and the two pieces of session state that made it look broken",
+  "question": "Does the operation move the selected region to the playhead on this host?",
+  "verdict": "works",
+  "issues": [
+    774
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_575_move_to_playhead_reachable.py <worktree> <head-sha>, with LPM_EVIDENCE_ROOT set to an absolute path outside the repo. Before running, close the Mixer and confirm 편집 > 이동 > 재생헤드로 is present and enabled — the operation drives that menu path and it is absent while the Mixer holds the Edit menu.",
+    "expected": "10 of 10 checks pass, the region's start bar moves to the playhead bar, and the independent witness binary agrees. The visual assertion fails on a project whose zoom or scroll puts the moved region outside the harness's fixed band.",
+    "cost": "~2 min; the harness creates its own track and region"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift",
+    "Scripts/livekit/live_575_move_to_playhead_reachable.py"
+  ],
+  "method": "Ran the repository's own purpose-built harness rather than hand-driving the tool, because the harness establishes the preconditions the operation needs and reads the result with a second binary that is not the product. When it failed, asked what the operation actually drives — a menu path — and read that menu directly instead of inferring from the envelope.",
+  "observations": [
+    {
+      "what": "first run, with the Mixer left open from an earlier measurement",
+      "checks": 10,
+      "passed": 7,
+      "failed": [
+        "575/the-move-is-verified-not-merely-attempted — state=B reason=readback_mismatch",
+        "575/it-actually-moved-and-landed-on-the-playhead — start bar 1 -> 1, playhead=9",
+        "575/an-independent-reader-agrees-the-region-is-there-now — witness bar 1 -> 1"
+      ],
+      "preconditions_all_passed": true,
+      "note": "six preconditions green — one region selected, playhead elsewhere, operation reachable — which is what made the failure look like the product"
+    },
+    {
+      "what": "Logic's Edit menu while the Mixer is open",
+      "items": "전체 선택, 전체 선택 해제, 선택 부분 반전, 오디오 채널 스트립 선택, 악기 채널 스트립 선택, Aux 채널 스트립 선택, 출력 채널 스트립 선택, MIDI 채널 스트립 선택",
+      "move_submenu_present": false,
+      "reading": "that is the Mixer's Edit menu; the path the operation drives is not on it"
+    },
+    {
+      "what": "the same menu with the Mixer closed",
+      "path": "편집 > 이동 > 재생헤드로",
+      "present": true,
+      "enabled": true
+    },
+    {
+      "what": "second run, Mixer closed",
+      "checks": 10,
+      "passed": 10,
+      "start_bar_before": 1,
+      "start_bar_after": 9,
+      "playhead_bar": 9,
+      "independent_witness_agrees": true
+    },
+    {
+      "what": "a second piece of unrestored state, and what it cost",
+      "window_size_left_at": "1610x819",
+      "window_size_expected": "1920x1050",
+      "effect": "the harness's visual band computed to y=-141 and was clamped to y=0, sampling a strip that is not the canvas",
+      "captures_unsettled_before_restore": 2,
+      "captures_unsettled_after_restore": 0
+    },
+    {
+      "what": "what still fails with everything restored",
+      "checks_passed": 10,
+      "visual_failed": 1,
+      "band": [
+        940,
+        25,
+        500,
+        300
+      ],
+      "before_after_digest": "86f2e47634e3515e both",
+      "reading": "the region moved 1 -> 9 and the sampled band did not change, so the band is not aimed where the change happens in this project's zoom and scroll"
+    }
+  ],
+  "method_note": "The first run is kept in this record rather than deleted. A measurement that was wrong for a reason worth knowing is more useful than one that was never taken.",
+  "conclusion": "`region.move_to_playhead` moves the selected region to the playhead on this host: 10 of 10 checks pass, the start bar goes from 1 to 9 with the playhead at 9, and a witness binary that is not the product agrees. The earlier reading that it moved nothing was a false RED produced by session state I had created and not restored — the Mixer was open, and while it holds the Edit menu the path this operation drives (편집 > 이동 > 재생헤드로) is not present at all. A second unrestored change, a window left at 1610x819, made the harness's visual band clamp to the wrong strip. Six green preconditions made the failure look like the product's, which is the trap: a harness can only assert the preconditions it knows about, and 'which Edit menu is on screen' was not one of them. What remains failing is the harness's own: with all checks green the visual assertion still reports no change, because the band is a fixed 500x300 window at a constant offset rather than the moved region's measured frame, and `is_clean` requires `visual_failed` to be 0.",
+  "limits": [
+    "The question this record was originally opened for — whether a selection of TWO regions makes the operation report on one while moving both — is still unanswered. Every run here had exactly one region selected, which the harness asserts as a precondition, so nothing measured bears on it.",
+    "One host, one project, one locale. Whether the Mixer coupling has the same shape in other languages was not checked, though the mechanism is Logic's menu being contextual rather than anything locale-specific.",
+    "The visual band failure was reproduced but not diagnosed further: whether it is the zoom, the scroll position, or the constant offset that puts the change outside the band was not established.",
+    "No fix is included here for either the harness band or the singular readback that part 1 of the issue describes."
+  ],
+  "supersedes": null
+}
