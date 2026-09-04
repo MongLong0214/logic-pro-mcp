@@ -1,0 +1,38 @@
+{
+  "id": "2026-09-04-independent-expected-seam-absent-in-release",
+  "date": "2026-09-04",
+  "subject": "IndependentExpectedSeam availability in a release build",
+  "question": "Can a release build produce an independent expected proof, so a positive note match is possible?",
+  "verdict": "wall",
+  "issues": [303, 293],
+  "surface": "editor.piano_roll",
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "ko-KR", "os": "macOS 26.6",
+           "note": "this measurement is about the SERVER binary, not Logic; the host is recorded so drift is still computed"},
+  "reverify": {
+    "kind": "manual",
+    "command": "swift build -c release --product LogicProMCP, then `nm -U .build/release/LogicProMCP | grep -c IndependentExpectedSeam`. Also confirm Package.swift still gates QUALIFICATION_FAULT_SEAM on .debug.",
+    "expected": "zero seam symbols in the release binary, and the define still scoped to debug",
+    "cost": "~2 min, no Logic needed"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/MIDINoteIndependentVerification.swift:IndependentExpectedSeam",
+    "Package.swift:QUALIFICATION_FAULT_SEAM"
+  ],
+  "method": "Read the conditional-compilation boundary in the source, then confirmed the consequence in the shipped artifact rather than inferring it from the source alone: counted seam symbols in the release binary with nm.",
+  "observations": [
+    {"file": "Sources/LogicProMCP/MIDIReadback/MIDINoteIndependentVerification.swift",
+     "guard_opens_at_line": 59, "guard": "#if QUALIFICATION_FAULT_SEAM", "closes_at_line": 121,
+     "enclosed": "enum IndependentExpectedSeam and both of its makers"},
+    {"file": "Package.swift", "define": "QUALIFICATION_FAULT_SEAM", "condition": ".when(configuration: .debug)",
+     "targets_defining_it": 2},
+    {"artifact": ".build/release/LogicProMCP", "seam_symbols_found": 0, "tool": "nm -U"},
+    {"consumer": "verifyRegion", "behaviour": "guard let independent = expected.independentPayload else { return .incompleteCannotVerify }"}
+  ],
+  "conclusion": "A release build carries no maker for an independent expected proof — zero seam symbols in the shipped binary — so independentPayload is always nil there and verifyRegion can only answer incompleteCannotVerify. A positive note match is structurally impossible in what ships. The three verification modules exist; what is missing is a live ingestion boundary in front of them, which is R2's work.",
+  "limits": [
+    "This is about the server binary, not Logic. A Logic update does not change it, though the record is still host-bound so a re-run is dated.",
+    "nm counting zero proves the symbol is absent, not that no other path could construct a proof; the source boundary is the primary evidence and the count corroborates it.",
+    "Says nothing about whether a live ingestion boundary is feasible — only that none exists."
+  ],
+  "supersedes": null
+}
