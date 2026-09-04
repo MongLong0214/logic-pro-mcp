@@ -116,12 +116,37 @@ def main():
     check("ratchets file is not a record", live["schema_v1_records"] == 1,
           f"schema_v1_records={live['schema_v1_records']}, RATCHETS.json was counted")
 
-    # 9. An unreadable ledger is exit 2, never a pass.
+    # 9. THE MERGE-BASE CASE. The file's ceiling was raised in the same commit as the regression:
+    #    file says 2, live is 2, but the base still says 1. A guard reading only the file passes;
+    #    against the base it fails, and that is the whole reason the base is consulted.
+    root = _tree(labels2, records, dict(exact, undocumented_variants=2))
+    base = root / "base.json"
+    base.write_text(json.dumps({"ceilings": exact}), encoding="utf-8")
+    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(base))
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("same-commit raise is caught against the base", proc.returncode == 1 and "above the ceiling of 1" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:200]}")
+
+    # 10. ...and lowering the file below the base is an ordinary commit, not blocked by the base.
+    root = _tree(labels, records, exact)
+    base = root / "base.json"
+    base.write_text(json.dumps({"ceilings": dict(exact, undocumented_variants=9)}), encoding="utf-8")
+    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(base))
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("lowering below the base passes", proc.returncode == 0, f"exit {proc.returncode}: {proc.stdout[:200]}")
+
+    # 11. An unreadable base is said out loud and does not itself fail the run.
+    env = dict(os.environ, LPM_RATCHET_BASE_JSON=str(root / "missing.json"))
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("unreadable base is loud, not fatal", proc.returncode == 0 and "base ceilings unreadable" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:200]}")
+
+    # 12. An unreadable ledger is exit 2, never a pass.
     root = _tree(labels, records, exact)
     (root / "docs" / "observations" / "RATCHETS.json").write_text("{not json", encoding="utf-8")
     check("unreadable is exit 2", guard.main([str(root)]) == 2, "expected exit 2")
 
-    # 10. The real repository is at its ceilings right now.
+    # 13. The real repository is at its ceilings right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is at its ceilings", proc.returncode == 0, proc.stdout.strip()[:200])
 
@@ -129,7 +154,7 @@ def main():
         for f in failures:
             print(f"FAIL {f}")
         return 1
-    print("10 case(s) pass: the ratchet fails on a rise, on a lag, on a missing ceiling, and on what it cannot read")
+    print("13 case(s) pass: the ratchet fails on a rise, on a lag, on a missing ceiling, and on what it cannot read")
     return 0
 
 

@@ -27,6 +27,7 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,9 +81,44 @@ def _flatten(d, prefix=""):
             yield f"{prefix}{k}", v
 
 
-def compare(live, ratchets):
-    """(rises, lowerable, missing): each a list of (key, live, ceiling[, reason])."""
+def base_ceilings(repo):
+    """The ceilings at the merge base, so a raise in the same commit as a regression cannot hide it.
+
+    A file anyone can edit is an obvious "make CI green" knob: add ten undocumented variants,
+    raise the ceiling by ten, and a guard that reads only the file passes. Against the base it
+    cannot — the base ceiling is still the old number. `LPM_RATCHET_BASE_JSON` is a test seam
+    naming a file to use instead of git; `LPM_RATCHET_BASE_REF` picks the ref (default
+    origin/main). Returns (ceilings, description) or (None, why) when nothing base-like is readable.
+    """
+    seam = os.environ.get("LPM_RATCHET_BASE_JSON")
+    if seam:
+        try:
+            return dict(_flatten(json.load(open(seam, encoding="utf-8")).get("ceilings") or {})), seam
+        except (OSError, ValueError) as exc:
+            return None, f"{seam}: {exc}"
+    ref = os.environ.get("LPM_RATCHET_BASE_REF", "origin/main")
+    try:
+        out = subprocess.run(["git", "-C", repo, "show", f"{ref}:docs/observations/RATCHETS.json"],
+                             capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"git show {ref}: {exc}"
+    if out.returncode != 0:
+        return None, f"git show {ref}: {out.stderr.strip()[:120] or 'not available'}"
+    try:
+        return dict(_flatten(json.loads(out.stdout).get("ceilings") or {})), ref
+    except ValueError as exc:
+        return None, f"{ref}: {exc}"
+
+
+def compare(live, ratchets, base=None):
+    """(rises, lowerable, missing): each a list of (key, live, ceiling[, reason]).
+
+    The ceiling used for the RISE test is the lower of the file's and the base's, so raising the
+    file in the same commit as the regression does not help. The LAG test uses the file's own
+    value: lowering it is the ordinary commit and must not be blocked by a base that is higher.
+    """
     ceilings = dict(_flatten(ratchets.get("ceilings") or {}))
+    base = base or {}
     raised = ratchets.get("raised") or {}
     rises, lowerable, missing = [], [], []
     for key, value in _flatten(live):
@@ -90,7 +126,9 @@ def compare(live, ratchets):
             missing.append((key, value))
             continue
         ceiling = ceilings[key]
-        if value > ceiling:
+        rise_ceiling = min(ceiling, base[key]) if key in base else ceiling
+        if value > rise_ceiling:
+            ceiling = rise_ceiling
             entry = raised.get(key) or {}
             ok = bool(str(entry.get("reason") or "").strip()) and \
                 re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(entry.get("date") or "")) is not None
@@ -110,7 +148,11 @@ def main(argv=None):
         print(f"could not read the ledger, so the ratchets cannot be checked: {exc}")
         return 2
 
-    rises, lowerable, missing = compare(live, ratchets)
+    base, where = base_ceilings(repo)
+    if base is None:
+        print(f"note: base ceilings unreadable ({where}); comparing against the file alone, which a "
+              f"same-commit raise can defeat")
+    rises, lowerable, missing = compare(live, ratchets, base)
     failed = False
     for key, value in missing:
         print(f"{key}: live count {value} has no ceiling in RATCHETS.json — add one, or the gap is uncounted")

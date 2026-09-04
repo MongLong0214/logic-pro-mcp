@@ -9,8 +9,7 @@
     "ja-JP"
   ],
   "coverage_values": [
-    "present",
-    "absent",
+    "measured",
     "identifier",
     "unmeasured"
   ],
@@ -587,7 +586,7 @@
       },
       "coverage": {
         "en-US": "unmeasured",
-        "ko-KR": "present",
+        "ko-KR": "measured",
         "ja-JP": "unmeasured"
       }
     },
@@ -825,7 +824,7 @@
       },
       "coverage": {
         "en-US": "unmeasured",
-        "ko-KR": "present",
+        "ko-KR": "measured",
         "ja-JP": "unmeasured"
       }
     },

@@ -119,13 +119,45 @@ def provenance_problems(name, entry):
         if rec_locale != block.get("locale"):
             out.append(f"{name}: provenance for {variant!r} claims locale {block.get('locale')!r} "
                        f"but its record was measured in {rec_locale!r}")
+            continue
+        # The load-bearing check. Resolving the record and matching its locale is referential
+        # integrity — a dangling id, a typo. It is not evidence: a fabricated variant could cite any
+        # same-locale record and paste itself into `observed`. What makes this a READING is that the
+        # record itself saw the string: it has to occur verbatim in the record's raw observations or
+        # in a file the record lists as evidence. A record that never saw it cannot be cited for it.
+        if not _record_saw(rec, variant):
+            out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, whose "
+                       f"observations and evidence do not contain that string — a record that never "
+                       f"saw it cannot be cited for it")
+        if str(block.get("date")) != str(rec.get("date")):
+            out.append(f"{name}: provenance for {variant!r} is dated {block.get('date')!r} but its "
+                       f"record was measured {rec.get('date')!r}")
     return out
 
 
+def _record_saw(rec, text):
+    """Whether a record's raw readings, or a file it lists as evidence, contain `text` verbatim."""
+    if text and text in json.dumps(rec.get("observations") or [], ensure_ascii=False):
+        return True
+    for rel in rec.get("evidence") or []:
+        path = os.path.join(OBS, rel) if not os.path.isabs(rel) else rel
+        try:
+            if text in open(path, encoding="utf-8", errors="replace").read():
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def coverage_problems(name, entry, locales, values):
-    """`coverage` must name every supported locale, use only the four values, and be consistent
-    with the provenance: `present` iff a variant with provenance in that locale is listed, and
-    `absent` / `identifier` must cite a record in that locale under `coverage_records`."""
+    """`coverage` must name every supported locale, use only the three values, and be backed.
+
+    `measured` means a record in that locale observed the surface this label lives on and its
+    observations contain one of the label's strings — a variant with provenance, or the canonical.
+    `identifier` means a record in that locale observed the identifier the label is addressed by.
+    Both resolve `coverage_records[locale]`; a claim without a record that saw it is refused, so a
+    `measured` cannot be typed any more than a variant's provenance can.
+    """
     out = []
     cov = entry.get("coverage")
     if not isinstance(cov, dict):
@@ -134,23 +166,30 @@ def coverage_problems(name, entry, locales, values):
         out.append(f"{name}: coverage names {sorted(cov)}, expected exactly {sorted(locales)}")
     present_in = {str((b or {}).get("locale")) for b in (entry.get("provenance") or {}).values()}
     cites = entry.get("coverage_records") or {}
+    strings = [entry.get("canonical") or ""] + list(entry.get("variants") or [])
     for loc, state in cov.items():
         if state not in values:
             out.append(f"{name}: coverage[{loc}] is {state!r}, not one of {values}")
             continue
-        if (state == "present") != (loc in present_in):
-            out.append(f"{name}: coverage[{loc}] is {state!r} but a variant with provenance in "
-                       f"{loc} {'exists' if loc in present_in else 'does not exist'} — `present` is "
-                       f"derived from provenance and cannot be declared")
-        if state in ("absent", "identifier"):
-            rec = _record(cites.get(loc))
-            if rec is None:
-                out.append(f"{name}: coverage[{loc}] is {state!r} with no record under "
-                           f"coverage_records[{loc}] — a claim of absence needs the same reading "
-                           f"as a claim of presence")
-            elif (rec.get("host") or {}).get("locale") != loc:
-                out.append(f"{name}: coverage_records[{loc}] names a record measured in "
-                           f"{(rec.get('host') or {}).get('locale')!r}, not {loc}")
+        if state == "unmeasured":
+            if loc in present_in:
+                out.append(f"{name}: coverage[{loc}] is 'unmeasured' but a variant with provenance in "
+                           f"{loc} exists — it is measured, and the projection derives that")
+            continue
+        if loc in present_in and state == "measured":
+            continue          # derived from a variant's provenance, which was already checked
+        rec = _record(cites.get(loc))
+        if rec is None:
+            out.append(f"{name}: coverage[{loc}] is {state!r} with no record under "
+                       f"coverage_records[{loc}] — a claim of measurement needs the reading behind it")
+            continue
+        if (rec.get("host") or {}).get("locale") != loc:
+            out.append(f"{name}: coverage_records[{loc}] names a record measured in "
+                       f"{(rec.get('host') or {}).get('locale')!r}, not {loc}")
+            continue
+        if state == "measured" and not any(_record_saw(rec, t) for t in strings if t):
+            out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, whose "
+                       f"observations contain none of this label's strings")
     return out
 
 

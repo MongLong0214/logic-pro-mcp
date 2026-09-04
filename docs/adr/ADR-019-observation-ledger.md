@@ -1,6 +1,6 @@
 # ADR-019 — Observation Ledger: every claim names the record that produced it
 
-**Status:** Proposed
+**Status:** Proposed — revised after blind review (2026-09-05); P1 implements D1, D2, D3, D6, D8
 **Related:** #768 (empty variants), #778 (Japanese coverage), #767 (the instrument that started the observation records), `docs/observations/SCHEMA.md`, `docs/locale/ui-labels.json`
 **Date:** 2026-09-05
 
@@ -18,14 +18,21 @@ label sets without Japanese  113     no ja-JP measurement has ever been run
 records' host.locale         24× ko-KR   locale is recorded and is not an axis of anything
 ```
 
-These are four symptoms of one missing primitive. **A claim can exist without the record that
-produced it.** `measured` in `ui-labels.json` is an optional annex; the ratchet on it only stops the
-count from falling, so 2 is a stable equilibrium. An empty `variants` list is silent about why. A
-record's `locale` is stored and never queried. So the system can prove a record is well-formed and
-cannot prove a variant is real — and the variants are what the product matches against at runtime.
+These are four different failures, and an earlier draft of this document called them one. They
+are not:
 
-The unit of trust has to move from "the record is well-formed" to "the string the product will
-match was read, here, on this host, and this is where".
+| gap | kind of failure | what closes it |
+|---|---|---|
+| 255 variants with no reading | evidence integrity — a string the product matches with nothing behind it | D1: a variant must occur in the observations of the record it cites |
+| 18 empty `variants` lists | state model — one shape for "measured, nothing distinct", "addressed by identifier", "never looked" | D2: a per-locale coverage state |
+| 113 with no Japanese | **measurement not performed** — no schema closes this | D4: a campaign, run |
+| `host.locale` inert | reporting — the field exists and nothing asks it anything | D3: a locale axis in the status tool |
+
+What they share is narrower than a root cause: in each, the system can say a thing is *well-formed*
+and cannot say it is *true of Logic*. The unit of trust has to move from "the record is well-formed"
+to "the string the product will match was read, in this record, and here is the reading". This
+document makes the first, second and fourth gaps mechanical. It makes the third *countable*; only
+running the campaign closes it, and a phase that ships without new measurement has not closed it.
 
 ## Decision
 
@@ -44,32 +51,52 @@ match was read, here, on this host, and this is where".
 }
 ```
 
-Two of those are new and load-bearing: `record` must resolve to a file in `docs/observations/`,
-and its `host.locale` must match. That turns provenance from three strings anyone can type into a
-pointer into the ledger, auditable by the same guard that audits the ledger.
+Resolving `record` to a file and matching its `host.locale` is cheap referential integrity — it
+catches a dangling id and a locale typo, and it is not evidence. A fabricated variant could cite any
+same-locale record and paste itself into `observed`. What makes provenance a reading is one more
+check, and it is the load-bearing one:
+
+**the variant must occur verbatim in the cited record's raw `observations`** (or in a file that
+record lists under `evidence`), and the block's `date` must equal the record's.
+
+A record that never saw the string cannot be cited for it. This holds today for both existing
+provenance entries — the mixer-slot record's `help` readings contain `입력 슬롯` and `출력 슬롯` —
+and it is exactly the relationship the earlier shape never required. What it still cannot check is
+whether a record's observations were themselves typed rather than read; that is what the ledger's
+own schema, `reverify`, and review are for, and this document does not claim otherwise.
 
 A **new** variant without provenance is refused. Existing undocumented variants are a burn-down:
 listed by name, counted, and the count may only fall.
 
 ### D2 — Empty `variants` is not a state. `coverage` is.
 
-Each label set declares, per supported locale, one of four values:
+A `LabelSet` is not one translation slot per locale. It aggregates synonyms and contexts —
+`deleteTracksPrimaryButton` carries both `Delete Tracks and Content` and `Delete`, and an English
+Logic shows both, on different sheets. So "present" and "absent" are not exclusive for it, and an
+earlier draft's four-state model was wrong. Three states are:
 
 | value | meaning | is it a gap? |
 |---|---|---|
-| `present` | measured; the variant is in the list with provenance | no |
-| `absent` | measured; this locale has no distinct form (the canonical is what Logic shows, or the element is unlabelled) | no |
-| `identifier` | not matched by label at all — addressed by a locale-free `AXIdentifier`, named | no |
+| `measured` | a record in this locale observed the surface this label lives on, and its observations contain at least one of this label's strings — a variant with provenance, or the canonical | no |
+| `identifier` | not matched by label at all — addressed by a locale-free `AXIdentifier`, and a record in this locale observed that identifier on that element | no |
 | `unmeasured` | nobody has looked | **yes** |
 
-Supported locales are `en-US`, `ko-KR`, `ja-JP` — the three Logic ships that this repository has
-either measured or been asked about. `unmeasured` is the only gap, it is counted per locale, and each
-count may only fall. **#778 is, by construction, the `ja-JP: unmeasured` count.** #768 is the
-eighteen sets whose empty list this replaces with a declared reason.
+**Data model.** `coverage[locale]` is one of those strings. `coverage_records[locale]` is the id of
+the record that backs a `measured` or `identifier`; it is derived when a variant with provenance in
+that locale exists, and required otherwise. The guard resolves it and requires containment exactly
+as D1 does. So a claim of `measured` cannot be typed any more than a claim of `present` could.
+
+There is no `absent`. "Logic shows the canonical here" is a `measured` whose record contains the
+canonical; "this element is unlabelled" is a `measured` whose record says so in its observations.
+Neither is a state of its own, and neither is manufactured: the campaign in D4 proposes nothing for a
+label whose strings it did not see on an element of the right role.
+
+Supported locales are `en-US`, `ko-KR`, `ja-JP`. `unmeasured` is counted per locale and each count
+may only fall. **#778 is the `ja-JP: unmeasured` count**; #768's eighteen empty lists become
+eighteen declared states, most of them `unmeasured`, which is the true one.
 
 `coverage` lives in the JSON, not in Swift. Swift stays the compiled source of the *strings*; the
-JSON carries what is known *about* them. `Scripts/locale_labels.py --write` preserves `coverage` and
-`provenance` across regeneration exactly as it preserves `measured` today.
+JSON carries what is known *about* them, and `Scripts/locale_labels.py --write` preserves it.
 
 ### D3 — Locale becomes an axis of the ledger
 
@@ -82,17 +109,26 @@ the JSON auditable against the ledger rather than beside it.
 `Scripts/observations/locale-census.swift` walks a named surface and emits every
 `{role, attribute, string, path}` it can read. `Scripts/observations/locale-campaign.sh <locale>`:
 
-1. saves the open project, sets `defaults write com.apple.logic10 AppleLanguages -array <lang>`,
-   relaunches Logic on the same project, and **verifies** the running UI is in that locale by reading
-   the menu bar — a run that cannot prove its locale refuses, as `session_519_locale_flow.py` already
-   does;
-2. runs the census over every surface it can reach;
-3. writes one observation record per `(surface, locale)` with the census as `evidence`;
-4. proposes `provenance` for every label set whose canonical or variant matches a census string,
-   and `coverage: absent` for every set whose canonical appears verbatim.
+1. refuses unless the open project is the **disposable fixture** `Fixtures/locale/campaign.logicx`
+   — it never saves, closes or overwrites a user's project, and authorisation to switch Logic's
+   language is not authorisation to resolve a save prompt on someone's work. `session_519` refuses
+   to restart for that reason; the fixture is what removes the reason;
+2. sets `defaults write com.apple.logic10 AppleLanguages -array <lang>`, relaunches on the fixture,
+   and **verifies** the running UI is in that locale by reading the menu bar. A run that cannot
+   prove its locale refuses;
+3. runs the census over the **navigation-free** surfaces first: the menu bar and every menu (AX
+   reads them without opening them), the track headers, regions and transport of the window that
+   opened. Those need no label in the new locale to reach. Surfaces behind a menu or a button —
+   mixer, plug-in editors, the Event List — are reached only with labels the first census produced,
+   so a locale's first campaign cannot be circular: it measures what needs no navigation, and the
+   second campaign uses what the first measured;
+4. writes one observation record per `(surface, locale)` with the census as `evidence`;
+5. proposes `provenance` for a label set only where a census element of the **same role**
+   carries its canonical or a variant — `editMenuBar` and `markerListEditMenuButton` both say
+   `Edit`, and only one of them is a menu-bar item. It proposes nothing else.
 
 The proposals are reviewed and committed by a person. The campaign is how `ja-JP` and `en-US` get
-measured; the repository's owner has explicitly authorised switching Logic's language.
+measured.
 
 ### D5 — Records carry `schema` and `evidence`
 
@@ -129,10 +165,19 @@ disagreed. `kind: manual` is honest and is counted as debt.
   "schema_v1_records": 24, "manual_reverify": 19, "surfaces_without_records": 6 }
 ```
 
-A guard compares the live counts to the file and fails on any count that rose. Lowering a ceiling
-is a normal commit; raising one is a reviewed decision with a reason in the diff. Scattering these
-numbers as constants inside individual guards — which is where `TOTAL_VARIANT_CEILING = 257` lives
-today — is what makes a ratchet invisible to the person deciding whether to move it.
+A guard compares the live counts to the ceilings and fails on any count that rose, **and it
+takes each ceiling as the lower of the file's value and the merge-base's value** (`origin/main`, or
+the pull request's base in CI). A file anyone can edit is an obvious "make CI green" knob, and a
+commit that adds ten undocumented variants and raises the ceiling by ten would pass a guard that
+only read the file. Against the base it cannot: the base ceiling is still the old number. Raising
+therefore requires an entry under `raised` with a date and a reason, and the guard still fails —
+it names the reason and asks for the ceiling to move in a commit whose base then carries it. When
+the base is unreadable the guard says so and falls back to the file, loudly.
+
+Lowering a ceiling is an ordinary commit; a count that fell below its ceiling also fails, because a
+ceiling above reality lets the next regression hide under it. The constants this replaces sat beside
+the comments explaining them, which is a fair thing to lose; what is gained is one diff a reviewer
+looks at, and a check the reviewer does not have to remember to make.
 
 ## Phases
 
@@ -148,11 +193,14 @@ Each phase is one branch, blind-reviewed before merge.
 
 - A translated variant can no longer be added by editing Swift alone. That is the point: the guard
   refuses a string nobody read.
-- `coverage: absent` is a claim and needs the same provenance as `present` — a record in that locale
-  showing the surface. The campaign produces it; hand-writing it is the same fabrication the whole
-  system exists to prevent.
+- `coverage: measured` without a variant is a claim and needs a record in that locale whose
+  observations contain the canonical. The campaign produces it; hand-writing it is the same
+  fabrication the whole system exists to prevent, and the guard refuses it the same way.
 - Four ratchets and a burn-down list mean the state of knowledge is visible in a diff, and a change
   that reduces it fails CI rather than passing quietly.
+- **P1 does not close the 255.** It replaces "2 documented is a stable equilibrium" with "255
+  undocumented is a counted, named, non-growing debt". Those are different states and only the
+  second can be worked off; the work is P2, and it is measurement, not schema.
 
 ## Not decided here
 

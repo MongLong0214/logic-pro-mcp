@@ -18,8 +18,8 @@ cannot import Swift reads the JSON instead of guessing.
 observed, not when one is translated" stops being a comment and becomes data: each variant names
 the observation record it was read in, the locale that record is true of, the date, and the exact
 string that was read. `coverage` says, per supported locale, what is KNOWN about the label —
-`present` (measured, variant listed), `absent` (measured, no distinct form), `identifier` (not
-matched by label at all), or `unmeasured`, which is the only one that is a gap. ADR-019.
+`measured` (a record in that locale saw one of its strings), `identifier` (addressed by a
+locale-free AXIdentifier, and a record saw it), or `unmeasured`, the only one that is a gap. ADR-019.
 """
 import json
 import os
@@ -142,7 +142,7 @@ def localised_canonicals(doc=None):
 
 
 SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
-COVERAGE_VALUES = ("present", "absent", "identifier", "unmeasured")
+COVERAGE_VALUES = ("measured", "identifier", "unmeasured")
 
 
 def build(existing=None):
@@ -153,10 +153,11 @@ def build(existing=None):
     document's `measured` is read as `provenance`, so the migration is the next `--write`.
 
     `coverage` defaults to `unmeasured` for every supported locale a label has no declaration for.
-    That is the honest default: a label nobody has looked at in a locale is not `absent` there,
-    and writing `absent` without a record is the fabrication this whole file exists to prevent.
-    A `present` is derived, never carried: it is true exactly when a variant with provenance in
-    that locale is in the list, so it cannot drift from the evidence.
+    That is the honest default: a label nobody has looked at in a locale is unmeasured there, and
+    writing `measured` without a record is the fabrication this whole file exists to prevent.
+    `measured` is DERIVED whenever a variant with provenance in that locale is in the list, so it
+    cannot drift from the evidence; otherwise it, like `identifier`, is carried only together with
+    the record under `coverage_records` that showed it.
     """
     existing = existing if existing is not None else load_json()
     previous = (existing.get("labels") or {})
@@ -175,11 +176,11 @@ def build(existing=None):
         coverage = {}
         for locale in SUPPORTED_LOCALES:
             if locale in present_in:
-                coverage[locale] = "present"
-            elif carried.get(locale) in ("absent", "identifier") and cited.get(locale):
-                # A claim of absence is carried only with the record that showed it. An `absent`
-                # nobody cited would otherwise ride through every regeneration as if it were
-                # evidence — the guard would refuse it, but the projection should not emit it.
+                coverage[locale] = "measured"
+            elif carried.get(locale) in ("measured", "identifier") and cited.get(locale):
+                # A claim of measurement is carried only with the record that showed it. One nobody
+                # cited would otherwise ride through every regeneration as if it were evidence —
+                # the guard would refuse it, but the projection should not emit it.
                 coverage[locale] = carried[locale]
             else:
                 coverage[locale] = "unmeasured"
@@ -188,7 +189,8 @@ def build(existing=None):
         # that citation has to survive regeneration exactly as provenance does, or every --write
         # would turn a measured `absent` back into `unmeasured` by erasing its evidence.
         cites = {loc: rid for loc, rid in (prior.get("coverage_records") or {}).items()
-                 if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("absent", "identifier")}
+                 if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
+                 and loc not in present_in}
         if cites:
             entry["coverage_records"] = cites
         labels[name] = entry
