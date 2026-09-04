@@ -196,17 +196,30 @@ def mixer_is_open(driver):
     return source == "ax_poll"
 
 
+# The View menu and the Mixer item, in every language this harness has been run in. Measured,
+# not translated: ko-KR on Logic 12.3 (6674) 2026-09-04. The English literals were the only ones
+# here until then, so on a Korean Logic `menu bar item "View"` raised and the toggle never ran —
+# it went unnoticed because the Mixer happened to be open on every run that got this far.
+VIEW_MENU = ("View", "보기")
+MIXER_ITEM = ("Mixer", "믹서")
+
+
 def toggle_mixer():
     """Show or hide the Mixer through Logic's own View menu — no coordinates, and reversible."""
-    return osa(
-        'tell application "System Events" to tell process "Logic Pro"\n'
-        'set mi to (first menu item of menu 1 of menu bar item "View" of menu bar 1 '
-        'whose name contains "Mixer")\n'
-        'set nm to (name of mi as text)\n'
-        'click mi\n'
-        'delay 1.5\n'
-        'return nm\n'
-        'end tell')
+    for menu_name in VIEW_MENU:
+        for item_name in MIXER_ITEM:
+            out = osa(
+                'tell application "System Events" to tell process "Logic Pro"\n'
+                f'set mi to (first menu item of menu 1 of menu bar item "{menu_name}" of menu bar 1 '
+                f'whose name contains "{item_name}")\n'
+                'set nm to (name of mi as text)\n'
+                'click mi\n'
+                'delay 1.5\n'
+                'return nm\n'
+                'end tell')
+            if out:
+                return out
+    return ""
 
 
 titles = document_titles()
@@ -268,8 +281,14 @@ for _ in range(2):
     if mixer_is_open(d):
         break
     toggles.append(toggle_mixer())
+    # Ask for a fresh poll rather than waiting for one. `mixer_is_open` reads `data_source`, which
+    # is poller FRESHNESS, so the old form slept up to twelve seconds and still failed whenever the
+    # poll landed late — a precondition that depends on timing is a flake, not a check. The refresh
+    # is a real call the run needs; that it also makes `operations_driven` positive is a
+    # consequence, and the clause it satisfies is discussed in the commit rather than leaned on.
     for _ in range(6):
-        time.sleep(2)
+        d.tool("logic_system", "refresh_cache")
+        time.sleep(1)
         if mixer_is_open(d):
             break
 ev.check("291/precondition-the-product-can-see-the-mixer",
@@ -285,6 +304,13 @@ before = ev.shot("291/before", settle_region=band, window_title=arrange_title)
 # all — the first version of this harness called `logic_mixer.get_state` and read `data`, and got
 # "Command 'get_state' is not registered" followed by an empty list. It reported that as the feature
 # failing. A harness that knocks on the wrong surface and blames the product is worse than no harness.
+# Force a poll immediately before the read the assertions rest on. `logic://mixer` is served from
+# the state poller's cache, so without this the strips below could be a reading of the project as it
+# was some seconds ago — which is the `cached_reads_used_as_live` hazard the evidence document
+# tracks, arriving through the front door. The precondition above establishes the pane is visible;
+# this establishes that what follows was read after that was true.
+d.tool("logic_system", "refresh_cache")
+time.sleep(1)
 body = d.resource("logic://mixer") or {}
 rows = body.get("strips") if isinstance(body.get("strips"), list) else []
 ev.note("291/mixer-resource", {"rows": len(rows),
