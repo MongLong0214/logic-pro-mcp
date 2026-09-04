@@ -8,7 +8,8 @@ Logic is a moving target. A measurement is true of **one build of one applicatio
 updates the surface can change underneath code that was written against it — silently, because the
 code still compiles and the unit tests still pass. This repository has already been bitten by the
 inverse: a roadmap row saying `NOT STARTED` about work that had shipped, and `popupUnmeasured`
-sitting unmeasured for two weeks beside a note saying so.
+shipping on 2026-09-02 with a note saying the selection was unmeasured, which stayed the refusal's
+stated reason after 2026-09-04 measured it. Two days, and the note outlived the fact it reported.
 
 So a record is not a note. It is a **claim bound to a host build, with the method to re-run it and
 the code that depends on it**. When Logic moves, the question "what do we now not know?" has a

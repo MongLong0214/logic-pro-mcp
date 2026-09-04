@@ -184,10 +184,10 @@ private func validGainParams(
     let error = try #require(obj["error"] as? String)
     let observation = try #require(obj["what_was_observed"] as? String)
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
-    let namesMissingMeasurement = observation.contains("AXPopUpButton actuation is refused")
-        && observation.contains("selection has not been measured")
+    let namesTheMeasuredWall = observation.contains("AXPopUpButton actuation is refused")
+        && observation.contains("no choice can be named")
     let didNotAttemptWrite = !writeAttempted
     #expect(error == "unsupported_param_readback")
-    #expect(namesMissingMeasurement)
+    #expect(namesTheMeasuredWall)
     #expect(didNotAttemptWrite)
 }

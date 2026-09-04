@@ -123,13 +123,32 @@ def check(path):
 
     # `depends` may be empty; each entry must name a file that exists, because a stale record
     # reports these as unverified and a path that has moved makes that report wrong.
+    #
+    # A `path:Symbol` entry is checked to the symbol, not just the file. Renaming a symbol out
+    # from under a record is the likelier drift and the quieter one: the path still resolves, the
+    # build still passes, and the record goes on pointing at a name the file no longer contains.
+    # A dotted symbol must have every component present -- `LocatedControl.popup` checking only
+    # `popup` would match almost any file in this tree.
     if not isinstance(doc["depends"], list):
         bad.append(f"{stem}: depends must be a list")
     else:
         for dep in doc["depends"]:
-            rel = dep.split(":", 1)[0]
-            if not os.path.exists(os.path.join(REPO, rel)):
+            rel, _, symbol = dep.partition(":")
+            path = os.path.join(REPO, rel)
+            if not os.path.exists(path):
                 bad.append(f"{stem}: depends names {rel!r}, which does not exist")
+                continue
+            if not symbol:
+                continue
+            try:
+                body = open(path, encoding="utf-8", errors="replace").read()
+            except OSError:
+                bad.append(f"{stem}: depends names {rel!r}, which cannot be read")
+                continue
+            for part in (c for c in symbol.split(".") if c):
+                if part not in body:
+                    bad.append(f"{stem}: depends names {symbol!r} in {rel}, "
+                               f"but {part!r} does not appear there")
 
     if doc["supersedes"] is not None:
         target = os.path.join(DIR, f"{doc['supersedes']}.json")
