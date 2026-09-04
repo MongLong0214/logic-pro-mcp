@@ -122,6 +122,51 @@ extension AXLogicProElements {
         return current
     }
 
+    /// Locate a menu item under one menu-bar menu by its locale-free `AXIdentifier`.
+    ///
+    /// Measured on Logic 12.3 (ko-KR) 2026-09-04, walking the whole `편집` menu: 151 items, and
+    /// `AXIdentifier` is NOT a general escape from localized titles. The menu-BAR items publish no
+    /// identifier at all (12 of 12 `<none>`), and inside the Select submenu ten of seventeen items
+    /// share the single value `localMenuItemAction:` — an identifier that names the dispatcher, not
+    /// the item. Only the items Logic wires to a distinct selector carry a distinct value
+    /// (`selectAll:`, `deselectAll:`, `invertSelection:`), and for those the value is unique: a scan
+    /// of all 151 items found `deselectAll:` exactly once.
+    ///
+    /// So this addresses the leaf by identifier and still takes the containing menu by label,
+    /// because the menu bar leaves no other way to name it. Callers must satisfy themselves that
+    /// the identifier they pass is distinctive; a shared one like `localMenuItemAction:` would match
+    /// whichever item happened to come first.
+    static func menuItem(
+        identifier: String,
+        inMenuBar menuBar: AXLocalePolicy.LabelSet,
+        runtime: Runtime = .production
+    ) -> AXUIElement? {
+        guard let bar = getMenuBar(runtime: runtime) else { return nil }
+        guard let menu = AXHelpers.getChildren(bar, runtime: runtime.ax).first(where: {
+            menuBar.matches(AXHelpers.getTitle($0, runtime: runtime.ax))
+        }) else { return nil }
+
+        // Four levels below the menu-bar item, because the AXMenu containers take a level each:
+        // menu-bar item -> AXMenu -> item -> AXMenu -> item. `deselectAll:` sits at the last of
+        // those (편집 > 선택 > 전체 선택 해제). A first cut stopped at three and never reached it,
+        // and the operation's pre-state gate is what caught that rather than a wrong answer. The
+        // bound stays tight so a mis-typed identifier cannot walk the whole tree.
+        var frontier = AXHelpers.getChildren(menu, runtime: runtime.ax)
+        for _ in 0..<4 {
+            var next: [AXUIElement] = []
+            for element in frontier {
+                let identifierValue: String? = AXHelpers.getAttribute(
+                    element, kAXIdentifierAttribute as String, runtime: runtime.ax
+                )
+                if identifierValue == identifier { return element }
+                next.append(contentsOf: AXHelpers.getChildren(element, runtime: runtime.ax))
+            }
+            if next.isEmpty { return nil }
+            frontier = next
+        }
+        return nil
+    }
+
     /// Status-preserving counterpart to the locale-resolved `menuItem` lookup.
     /// It is intentionally additive: ordinary callers retain the old
     /// best-effort result, while a mutation verifier can distinguish a missing

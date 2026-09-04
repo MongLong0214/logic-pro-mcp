@@ -289,6 +289,28 @@ extension AccessibilityChannel {
     /// the arrange area. Returns nil when no AXLayoutItem reports
     /// `kAXSelectedAttribute = true`. Used by `region.move_to_playhead` for
     /// pre/post startBar diff.
+    /// EVERY region Logic reports as selected, in enumeration order.
+    ///
+    /// `selectedRegionInfo` answers with the first one and that is not enough to verify a
+    /// selection, because the write used to establish one is a toggle (see
+    /// `defaultSelectLastRegion`) and leaves whatever else was selected alone.
+    /// Asking "is the last region selected?" gets a yes while three others are also selected, and
+    /// the operations that consume the selection then act on all four. The verifiable question is
+    /// "is the selection exactly this one region?", and it needs the whole set.
+    static func selectedRegionInfos(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> [RegionInfo]? {
+        guard case .success(let result) = enumerateRegionItems(runtime: runtime) else {
+            return nil
+        }
+        return result.regions.filter { entry in
+            guard let value: AnyObject = AXHelpers.getAttribute(
+                entry.item, kAXSelectedAttribute, runtime: runtime.ax
+            ), let number = value as? NSNumber else { return false }
+            return number.boolValue
+        }.map(\.info)
+    }
+
     static func selectedRegionInfo(
         runtime: AXLogicProElements.Runtime = .production
     ) -> RegionInfo? {
@@ -316,15 +338,19 @@ extension AccessibilityChannel {
     /// that the action had missed.
     static func lastRegionItem(
         runtime: AXLogicProElements.Runtime = .production
-    ) -> (item: AXUIElement, info: RegionInfo)? {
+    ) -> (item: AXUIElement, info: RegionInfo, coversWholeArrangement: Bool)? {
         guard case .success(let result) = enumerateRegionItems(runtime: runtime),
               !result.regions.isEmpty else {
             return nil
         }
-        return result.regions.sorted { a, b in
+        // The enumeration knows whether it saw the whole arrangement, and a caller that says "the
+        // last region" is making a claim over exactly that scope. Carrying the flag out with the
+        // element is what lets the answer say which of the two things it means.
+        guard let last = result.regions.sorted(by: { a, b in
             if a.info.startBar != b.info.startBar { return a.info.startBar < b.info.startBar }
             return a.info.trackIndex < b.info.trackIndex
-        }.last
+        }).last else { return nil }
+        return (last.item, last.info, result.coversWholeArrangement)
     }
 
     static func lastRegionInfo(
@@ -535,19 +561,59 @@ extension AccessibilityChannel {
             ))
         }
     }
-
-    /// Select the most recently created (right-most / largest trackIndex)
-    /// region in the arrange area by locating it via AX element position.
-    /// Newly imported regions are usually already selected by Logic, but this
-    /// provides a fallback when selection state is lost between operations.
+    /// Put Logic's selection on exactly one region: the last one in the arrange area.
     ///
-    /// State A path (v3.1.3): after the AppleScript sets selection, re-read
-    /// the AX tree to find the currently selected region and the "last"
-    /// region (largest startBar). If they match → State A `verified:true`;
-    /// otherwise State B `readback_mismatch` / `readback_unavailable`.
+    /// "Last" is the greatest start bar, ties broken by the greater track index — the ordering
+    /// `lastRegionInfo` has always used. It is NOT "most recently created", which this comment
+    /// claimed for two years while the code sorted by timeline position; a region dragged to the
+    /// end of the song is the last one here however old it is.
+    ///
+    /// ## Why this is a composition and not a write
+    ///
+    /// No single actuator on this surface replaces a selection. Measured on Logic 12.3, ko-KR,
+    /// 2026-09-04, against a project with two regions:
+    ///
+    ///   * `AXSelected = true` is settable, returns `.success`, and is a TOGGLE. Writing `true`
+    ///     to the same region three times from an empty selection gives selected, DESELECTED,
+    ///     selected. A setter would leave it selected. This is why the repository's older note
+    ///     that the write "adds to the selection" is not quite the fact: adding is what a toggle
+    ///     looks like when the target happened to be off, and it is also why an earlier harness
+    ///     that wrote FALSE on every other region ended with eighteen selected and the target not.
+    ///   * `AXPress` never selects. Two selected → zero; zero → zero; `.success` both times.
+    ///   * the enclosing `AXLayoutArea` publishes `AXSelectedChildren` as NOT settable.
+    ///
+    /// So the selection is emptied first, using Logic's own `Deselect All`, and the toggle then
+    /// runs against a known-empty selection — which is the one pre-state where a toggle and a
+    /// setter agree. Measured in that order: 2 selected → Deselect All → 0 → write → exactly 1,
+    /// and it is the target. Driven live three times in a row against an already-correct
+    /// selection it stayed State A with a count of 1, which a toggle without the clear could not
+    /// do. The menu item is addressed by its locale-free
+    /// `AXIdentifier` (`deselectAll:`, unique among the Edit menu's 151 items), so this adds no new
+    /// localized label to maintain.
+    ///
+    /// ## What the verdict rests on
+    ///
+    /// The emptied selection is READ back, not assumed, so the transition 0 → 1 is observed rather
+    /// than inferred. That is what separates this from a no-op: without a known pre-state, calling
+    /// this on an already-selected target is indistinguishable from doing nothing, and reporting
+    /// State A for it would be exactly the `noop_unobservable` case the contract exists to name.
+    /// State A therefore requires the post-state to be a set of exactly one region whose identity
+    /// matches the target. Anything else is State B carrying the observed count.
+    ///
+    /// ## Limit
+    ///
+    /// `enumerateRegionItems` drops regions outside the visible arrange area, so "last" can mean
+    /// the last region Logic is currently SHOWING. The enumeration knows which case it is —
+    /// `coversWholeArrangement` is true only when every track header is in the viewport and no
+    /// region item was dropped — and the envelope reports it as `whole_arrangement` or
+    /// `visible_arrange_area` accordingly, rather than leaving the caller to assume the stronger
+    /// one. When the scope is the narrower one, a region scrolled out of view does not participate
+    /// in the ordering; closing that needs a way to enumerate the whole timeline, which this
+    /// surface does not offer.
     static func defaultSelectLastRegion(
         runtime: AXLogicProElements.Runtime = .production,
         selectRegion: (@Sendable (AXUIElement, AXLogicProElements.Runtime) -> Bool)? = nil,
+        deselectAll: (@Sendable (AXLogicProElements.Runtime) -> Bool)? = nil,
         settle: @Sendable () async -> Void = { try? await Task.sleep(nanoseconds: 350_000_000) }
     ) async -> ChannelResult {
         // #767 — this used to drive an AppleScript that walked `entire contents` and picked the
@@ -562,115 +628,128 @@ extension AccessibilityChannel {
         //     X landed on the region by a pixel of luck, and a project whose bottom track carries
         //     no region would have selected a header and called it the last region.
         //
-        // The rule was already here and already right — one function below, `lastRegionInfo` sorts
-        // by `startBar` then `trackIndex`, and this function used it to VERIFY the selection it
-        // had just made by a different rule. The check was correct and the action was not, so the
-        // check could only ever report that the action had missed. `lastRegionItem` is that same
-        // ordering carrying the element, and the selection is a Swift AX write on it.
-        let target = lastRegionItem(runtime: runtime)
+        // The rule was already here and already right — `lastRegionInfo` sorts by `startBar` then
+        // `trackIndex`, and this function used it to VERIFY a selection made by a different rule.
+        // The check was correct and the action was not, so the check could only ever report that
+        // the action had missed. Both now come from the same enumeration.
+        guard let target = lastRegionItem(runtime: runtime) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "region.select_last: no region found in the visible arrange area"
+            ))
+        }
+
+        let clearSelection = deselectAll ?? { runtime in
+            guard let item = AXLogicProElements.menuItem(
+                identifier: Self.deselectAllMenuIdentifier,
+                inMenuBar: AXLocalePolicy.editMenuBar,
+                runtime: runtime
+            ) else { return false }
+            // #606's gate: pressing a DISABLED menu item reports success and does nothing, so an
+            // unreadable `AXEnabled` is refused for the same reason a false one is.
+            let enabled: Bool? = AXHelpers.getAttribute(
+                item, kAXEnabledAttribute as String, runtime: runtime.ax
+            )
+            guard enabled == true else { return false }
+            return AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax)
+        }
         let writeSelected = selectRegion ?? { element, runtime in
             AXHelpers.setAttribute(element, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
         }
-        // AX return codes lie, so the write's answer is not the verdict on its own — the readback
-        // below is, and a selection that LANDED is reported however the setter answered. The
-        // answer is kept for the one case where the two agree: the write said no and nothing is
-        // selected afterwards. That pair is a real failure and the contract fails closed on it,
-        // rather than reporting an unreadable state B for something that plainly did not happen.
-        var writeReportedFailure = false
-        let result: ChannelResult
-        if let target {
-            writeReportedFailure = !writeSelected(target.item, runtime)
-            result = .success("SELECTED")
-        } else {
-            result = .success("NO_REGION")
+
+        // The actuator's answer is not the pre-state; the readback is. A `Deselect All` that
+        // reports failure over an already-empty selection has still left the selection empty, and
+        // one that reports success without emptying it has not. Its answer is carried in the
+        // envelope for diagnosis only — the first live run of this code failed here because the
+        // menu descent stopped one level short, and the gate refused rather than answering wrong.
+        let deselectReported = clearSelection(runtime)
+        await settle()
+        guard let cleared = selectedRegionInfos(runtime: runtime) else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "via": "deselect-all+ax-selected",
+                    "note": "could not read the selection after Deselect All"
+                ]
+            ))
+        }
+        guard cleared.isEmpty else {
+            // Without an empty pre-state the add-write cannot be distinguished from a no-op.
+            return .success(HonestContract.encodeStateB(
+                reason: .noopUnobservable,
+                extras: [
+                    "via": "deselect-all+ax-selected",
+                    "selected_before_count": cleared.count,
+                    "deselect_reported": deselectReported,
+                    "note": "Deselect All did not empty the selection, so a write that only "
+                        + "TOGGLES cannot be shown to have established this selection"
+                ]
+            ))
         }
 
-        switch result {
-        case .success(let output):
-            if output.contains("NO_REGION") {
-                return .error(HonestContract.encodeStateC(
-                    error: .elementNotFound,
-                    hint: "region.select_last: no region found in arrange area"
-                ))
-            }
-            if output.contains("SELECT_FAILED") {
-                // The target region was found but its AXSelected write failed.
-                // Fail closed — no coordinate fallback is attempted.
-                return .error(HonestContract.encodeStateC(
-                    error: .axWriteFailed,
-                    hint: "region.select_last: the target region's AXSelected attribute could not be "
-                        + "written; no fallback was attempted"
-                ))
-            }
-            // Settle window so Logic's AX tree reflects the new selection
-            // before we re-read AXSelected.
-            await settle()
+        let writeReportedFailure = !writeSelected(target.item, runtime)
+        await settle()
 
-            let method = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            let expected = lastRegionInfo(runtime: runtime)
-            let selected = selectedRegionInfo(runtime: runtime)
-
-            // Without a "last" region we can't even define the target.
-            guard let expected = expected else {
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: [
-                        "via": method.isEmpty ? "applescript" : method,
-                        "note": "could not enumerate regions for last-region target"
-                    ]
-                ))
-            }
-
-            // No selected region readback (AXSelected never came back true).
-            if selected == nil, writeReportedFailure {
-                return .error(HonestContract.encodeStateC(
-                    error: .axWriteFailed,
-                    hint: "region.select_last: the target region's AXSelected attribute could not be "
-                        + "written and nothing is selected; no fallback was attempted"
-                ))
-            }
-            guard let selected = selected else {
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: [
-                        "via": method.isEmpty ? "applescript" : method,
-                        "expected_name": expected.name,
-                        "expected_start_bar": expected.startBar,
-                        "note": "no AXSelected region post-action"
-                    ]
-                ))
-            }
-
-            let extrasBase: [String: Any] = [
-                "via": method.isEmpty ? "applescript" : method,
-                "expected_name": expected.name,
-                "expected_start_bar": expected.startBar,
-                "expected_track_index": expected.trackIndex,
-                "selected_name": selected.name,
-                "selected_start_bar": selected.startBar,
-                "selected_track_index": selected.trackIndex
-            ]
-
-            // Match by (name, startBar, trackIndex) triple — the same region
-            // identity the resource exposes. State A on full match.
-            if selected.name == expected.name
-                && selected.startBar == expected.startBar
-                && selected.trackIndex == expected.trackIndex {
-                return .success(HonestContract.encodeStateA(extras: extrasBase))
-            }
-
-            // Selected ≠ last region (AppleScript heuristic picked a
-            // different AXLayoutItem than our parsed-bar "last").
+        let expected = target.info
+        guard let selected = selectedRegionInfos(runtime: runtime) else {
             return .success(HonestContract.encodeStateB(
-                reason: .readbackMismatch,
-                extras: extrasBase
+                reason: .readbackUnavailable,
+                extras: [
+                    "via": "deselect-all+ax-selected",
+                    "expected_name": expected.name,
+                    "expected_start_bar": expected.startBar,
+                    "note": "could not read the selection after the write"
+                ]
             ))
-        case .error(let msg):
+        }
+
+        // The write said no and the selection is still empty. Those agree, and they agree on a real
+        // failure, so the contract fails closed rather than reporting an unreadable state.
+        if selected.isEmpty, writeReportedFailure {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "region.select_last failed: \(msg)"
+                hint: "region.select_last: the target region's AXSelected attribute could not be "
+                    + "written and nothing is selected; no fallback was attempted"
             ))
         }
+
+        var extras: [String: Any] = [
+            "via": "deselect-all+ax-selected",
+            "expected_name": expected.name,
+            "expected_start_bar": expected.startBar,
+            "expected_track_index": expected.trackIndex,
+            "selected_count": selected.count,
+            "scope": target.coversWholeArrangement ? "whole_arrangement" : Self.regionReadbackScope
+        ]
+        if !target.coversWholeArrangement {
+            // "The last region Logic is showing" and "the last region" are different claims, and
+            // only the enumeration can say which one this is.
+            extras["scope_reason"] = Self.regionReadbackLimitReason
+        }
+        if let only = selected.first {
+            extras["selected_name"] = only.name
+            extras["selected_start_bar"] = only.startBar
+            extras["selected_track_index"] = only.trackIndex
+        }
+
+        // State A is the whole selection being this one region. "The target is among the selected"
+        // is not the same claim and is not the one the consumers of a selection can use.
+        if selected.count == 1,
+           let only = selected.first,
+           only.name == expected.name,
+           only.startBar == expected.startBar,
+           only.trackIndex == expected.trackIndex {
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackMismatch,
+            extras: extras
+        ))
     }
+
+    /// Logic's `Edit > Select > Deselect All`. The value is the AppKit selector Logic wires the
+    /// item to, and it is the same in every language Logic ships.
+    private static let deselectAllMenuIdentifier = "deselectAll:"
 
 }

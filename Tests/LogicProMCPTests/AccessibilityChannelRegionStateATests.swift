@@ -448,9 +448,17 @@ private func makeRegionFixture(
     #expect(obj["selected_name"] as? String == "RegionA")
 }
 
-@Test func testSelectLastReturnsStateBWhenNoSelectionPostAction() async {
-    // Script returns SELECTED but never flipped AXSelected (read-back fails)
-    // → State B readback_unavailable.
+@Test func testSelectLastReturnsStateBWhenNothingIsSelectedAfterTheWrite() async {
+    // The write reports success and the selection is empty afterwards.
+    //
+    // This asserted `readback_unavailable` until #767, which was the old singular readback's
+    // conflation showing through: it answered `nil` both when the tree could not be enumerated and
+    // when it enumerated fine and nothing was selected. Those are different facts and only one of
+    // them is a readback failure. The set-valued readback separates them, so this is a MISMATCH —
+    // one region expected, zero observed — and the envelope carries the count that says so.
+    // `readback_unavailable` still means what it says: the tree stopped being enumerable
+    // mid-operation, which this fixture cannot stage because a runtime that fails enumeration fails
+    // it for the target lookup too and returns State C first.
     let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
 
     let fixture = makeRegionFixture(
@@ -476,8 +484,159 @@ private func makeRegionFixture(
     let obj = decodeJSON(result.message)
     #expect((obj["success"] as? Bool)!)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect(obj["reason"] as? String == "readback_unavailable")
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect(obj["selected_count"] as? Int == 0)
     #expect(obj["expected_name"] as? String == "RegionA")
+}
+
+@Test func testSelectLastNarrowsItsScopeWhenARegionIsOutsideTheViewport() async {
+    // The control for the `scope` field: it has to be able to say the narrower thing, or it is a
+    // constant wearing a flag's clothes. A region parked far to the right of the window is dropped
+    // by the enumeration, which makes "last" the region that remains — a true answer about a
+    // smaller question, and the envelope has to be the thing that says which question it answered.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let regionBHelp = "리전은 90 마디 에서 시작하여 92 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false),
+            (name: "RegionB", help: regionBHelp,
+             pos: axPoint(5_000, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+    // The fixture leaves the window frameless, which makes every item count as visible. Give it
+    // one so the viewport test has something to reject against.
+    let window = fixture.builder.element(1_001)
+    fixture.builder.setAttribute(window, kAXPositionAttribute as String, axPoint(0, 0))
+    fixture.builder.setAttribute(window, kAXSizeAttribute as String, axSize(600, 400))
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        settle: { }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["scope"] as? String == "visible_arrange_area")
+    #expect(obj["scope_reason"] as? String == "logic_ax_viewport_only")
+    // RegionB is off-viewport and therefore not a candidate; the last VISIBLE region is RegionA.
+    #expect(obj["selected_name"] as? String == "RegionA")
+    #expect(obj["selected_count"] as? Int == 1)
+}
+
+@Test func testSelectLastReportsWholeArrangementWhenNothingIsDropped() async {
+    // The other side of the same control, so a failure tells them apart.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false),
+            (name: "RegionB", help: regionBHelp,
+             pos: axPoint(400, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+    let window = fixture.builder.element(1_001)
+    fixture.builder.setAttribute(window, kAXPositionAttribute as String, axPoint(0, 0))
+    fixture.builder.setAttribute(window, kAXSizeAttribute as String, axSize(600, 400))
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        settle: { }
+    )
+
+    let obj = decodeJSON(result.message)
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["scope"] as? String == "whole_arrangement")
+    #expect(obj["scope_reason"] == nil)
+    #expect(obj["selected_name"] as? String == "RegionB")
+}
+
+@Test func testSelectLastRefusesWhenDeselectAllDidNotEmptyTheSelection() async {
+    // The pre-state gate. `AXSelected = true` is a TOGGLE (measured 2026-09-04: three writes of
+    // `true` to one region from an empty selection give on, OFF, on), so a write onto a selection
+    // that is not empty cannot be shown to have ESTABLISHED the resulting selection — it may have
+    // turned the target off, or the target may simply have been selected already.
+    // Deselect All reporting success is not evidence that it emptied anything; the readback is.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: true),
+            (name: "RegionB", help: regionBHelp,
+             pos: axPoint(400, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        deselectAll: { _ in true },   // reports success, clears nothing
+        settle: { }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect((obj["success"] as? Bool)!)
+    #expect(!((obj["verified"] as? Bool)!))
+    #expect(obj["reason"] as? String == "noop_unobservable")
+    #expect(obj["selected_before_count"] as? Int == 1)
+}
+
+@Test func testSelectLastRefusesWhenTheWriteLeavesMoreThanOneRegionSelected() async {
+    // The post-state gate, and the reason it is set-valued. The toggle can land the target and
+    // leave something else selected; asking only "is the target selected?" answers yes, and the
+    // operations that consume a selection then act on both regions. State A is the selection BEING
+    // the target, not containing it.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+    let regionBHelp = "리전은 5 마디 에서 시작하여 7 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: true),
+            (name: "RegionB", help: regionBHelp,
+             pos: axPoint(400, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+    let regionA = fixture.builder.element(3_000)
+    let builder = fixture.builder
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        selectRegion: { element, runtime in
+            // The target lands, and RegionA comes back with it.
+            let wrote = AXHelpers.setAttribute(
+                element, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax
+            )
+            builder.setAttribute(regionA, kAXSelectedAttribute as String, true)
+            return wrote
+        },
+        deselectAll: { _ in
+            builder.setAttribute(regionA, kAXSelectedAttribute as String, false)
+            return true
+        },
+        settle: { }
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect((obj["success"] as? Bool)!)
+    #expect(!((obj["verified"] as? Bool)!))
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect(obj["selected_count"] as? Int == 2)
 }
 
 @Test func testSelectLastReturnsStateCWhenNoRegions() async {
