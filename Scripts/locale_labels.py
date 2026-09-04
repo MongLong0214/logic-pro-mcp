@@ -32,7 +32,7 @@ DECL = re.compile(
     r'static let (\w+) = LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
     r'variants:\s*\[([^\]]*)\],\s*'
-    r'rationale:\s*"((?:[^"\\]|\\.)*)"',
+    r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
     re.S,
 )
 
@@ -45,7 +45,7 @@ INLINE = re.compile(
     r'(?<!= )LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
     r'variants:\s*\[([^\]]*)\],\s*'
-    r'rationale:\s*"((?:[^"\\]|\\.)*)"',
+    r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
     re.S,
 )
 # The denominator counts EVERY LabelSet, not every one this parser knows how to spell. A shape it
@@ -58,6 +58,21 @@ def _unescape(text):
     return text.replace('\\"', '"').replace("\\\\", "\\")
 
 
+def _rationale(raw):
+    """The rationale's text, whichever quoting Swift used.
+
+    A triple-quoted rationale — `deleteTracksPrimaryButton` has one — matched the ordinary-string
+    pattern as an EMPTY string between the first two quotes, so the projection recorded `""` for a
+    destructive button's entire justification and the comparison was happy because both sides
+    agreed on the wrong value. Found 2026-09-04 by an outside review.
+    """
+    if raw.startswith('"""') and raw.endswith('"""'):
+        body = raw[3:-3]
+        # Swift's multiline literals continue a line with a trailing backslash; join those.
+        return _unescape(re.sub(r"\\\n\s*", "", body)).strip()
+    return _unescape(raw[1:-1])
+
+
 def from_swift(path=SWIFT):
     """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}.
 
@@ -67,15 +82,17 @@ def from_swift(path=SWIFT):
     body = open(path, encoding="utf-8").read()
     declared = len(ANY_LABELSET.findall(body))
     out = {}
-    for name, canonical, variants, rationale in DECL.findall(body):
+    for match in DECL.finditer(body):
+        name, canonical, variants = match.group(1), match.group(2), match.group(3)
         out[name] = {
             "canonical": _unescape(canonical),
             "variants": [_unescape(v) for v in STRING.findall(variants)],
-            "rationale": _unescape(rationale),
+            "rationale": _rationale(match.group("rationale")),
         }
     named_canonicals = {e["canonical"] for e in out.values()}
-    for canonical, variants, rationale in INLINE.findall(body):
-        canonical = _unescape(canonical)
+    for match in INLINE.finditer(body):
+        canonical, variants = _unescape(match.group(1)), match.group(2)
+        rationale = match.group("rationale")
         key = f"inline:{canonical}"
         if canonical in named_canonicals and key not in out:
             # a named set the inline pattern also matched; the named entry already has it
@@ -83,7 +100,7 @@ def from_swift(path=SWIFT):
         out[key] = {
             "canonical": canonical,
             "variants": [_unescape(v) for v in STRING.findall(variants)],
-            "rationale": _unescape(rationale),
+            "rationale": _rationale(rationale),
         }
     if len(out) != declared:
         # A declaration written in a shape this parser does not read would silently vanish from the

@@ -82,6 +82,14 @@ with tempfile.TemporaryDirectory() as tmp:
     case("a guard named in a file that executes nothing is bare",
          bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
 
+# 3c. A tuple naming the guard AND an execution word satisfies two substring checks at once, which
+#     is the cheapest possible sham. A second review found it; the markers require call syntax now.
+with tempfile.TemporaryDirectory() as tmp:
+    covered, bare = coverage_in(
+        tmp, "print(1)\n", 'MARKERS = ("check-thing.py", "subprocess")\n')
+    case("a marker tuple naming the guard and an execution word is still bare",
+         bare == ["check-thing.py"], f"covered={covered!r} bare={bare!r}")
+
 # 4. And named only in a comment, for the shell tests, which have no docstrings.
 with tempfile.TemporaryDirectory() as tmp:
     covered, bare = coverage_in(

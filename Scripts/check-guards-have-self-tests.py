@@ -67,7 +67,11 @@ def tests():
            sorted(glob.glob(os.path.join(REPO, "Scripts", "livekit", "test_*.py")))
 
 
-EXECUTES = ("spec_from_file_location", "subprocess", "python3 ", "bash ", "sh ", "./")
+# An execution CONSTRUCT, not a word that could sit in a tuple beside the guard's name. An outside
+# review showed `MARKERS = ("check-thing.py", "subprocess")` satisfying both substring checks at
+# once, which is the cheapest possible sham. These require the call syntax.
+EXECUTES = ("spec_from_file_location(", "subprocess.run(", "subprocess.check_",
+            "exec_module(", "os.system(", "bash \"", "python3 \"", "bash $", "python3 $")
 
 
 def code_text(path):

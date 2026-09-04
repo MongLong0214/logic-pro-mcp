@@ -81,12 +81,17 @@ LIVEKIT = os.path.join(REPO, "Scripts", "livekit")
 # deduplicated before the comparison. A list that hides unbounded new copies of a defect is not a
 # ratchet. Counts may only fall; a site that gains one is reported.
 KNOWN = {
+    ("live_290_selectors_resolve_by_identity.py", "pan"): 1,
     ("live_290_shifted_strips_are_refused.py", "Mixer"): 1,
     ("live_290_shifted_strips_are_refused.py", "View"): 1,
+    ("live_291_input_slot_is_read.py", "send"): 1,
+    ("live_291_output_slot_is_read.py", "send"): 1,
     ("live_448_track_stack_readback.py", "Edit"): 1,
     ("live_448_track_stack_readback.py", "Tracks"): 1,
+    ("live_519_region_op_on_a_localized_logic.py", "Edit"): 3,
+    ("live_519_region_op_on_a_localized_logic.py", "Tracks"): 3,
     ("live_523_marker_delete.py", "Marker"): 2,
-    ("live_523_marker_delete.py", "Number of Items"): 2,
+    ("live_523_marker_delete.py", "Number of Items"): 3,
     ("live_538_modal_reconcile.py", "Tracks"): 2,
     ("live_549_cell_does_not_veto.py", "Cancel"): 2,
     ("live_549_cell_does_not_veto.py", "Delete"): 1,
@@ -102,13 +107,16 @@ KNOWN = {
     ("live_576_completeness_is_measured.py", "Tracks"): 3,
     ("live_576_viewport_limited_region_readback.py", "Tracks"): 1,
     ("live_590_project_new_from_cold_launch.py", "Cancel"): 1,
+    ("live_590_project_new_from_cold_launch.py", "Save"): 1,
+    ("live_590_project_new_from_cold_launch.py", "Tracks"): 4,
     ("live_592_stub_rows_retired.py", "Tracks"): 1,
-    ("live_606_save_as_writes_the_file.py", "Save"): 2,
-    ("live_608_first_call_is_not_refused.py", "Save"): 2,
+    ("live_606_save_as_writes_the_file.py", "Save"): 3,
+    ("live_608_first_call_is_not_refused.py", "Save"): 4,
     ("live_608_first_call_is_not_refused.py", "Save As…"): 1,
-    ("live_614_the_refusal_it_can_still_reach.py", "Save"): 2,
+    ("live_614_the_refusal_it_can_still_reach.py", "Save"): 3,
     ("live_628_mixer_fallback_is_visible.py", "Mixer"): 1,
     ("live_628_mixer_fallback_is_visible.py", "View"): 1,
+    ("test_evidence.py", "트랙 콘텐츠"): 1,
 }
 
 _ELEMENT = r"menu bar item|menu item|checkbox|button|window|radio button|static text|group"
@@ -129,11 +137,15 @@ APPLESCRIPT_PREDICATES = [
 # handed to the regex is `Tracks`, and the pattern demands `.startswith("Tracks")`. The rule
 # advertised these shapes and caught neither. They are a separate pass over the source for that
 # reason, and `test_livekit_ui_literals.py` now has the case that would have caught it.
+# The left-hand side is anything, not a bare identifier. An outside review found the narrow form
+# missing `t.strip() == "Save"` and `blocked.get("dialog_title") == "Save"`, both live in
+# `live_608`: a comparison against a localised UI string is the defect whatever the expression on
+# the other side looks like.
 PYTHON_PREDICATES = [
     re.compile(r'\.(?:startswith|endswith)\(\s*"([^"]+)"'),
-    re.compile(r'(?:help|description|title|name)\w*\s*(?:==|!=)\s*"([^"]+)"'),
-    re.compile(r'"([^"]+)"\s*(?:==|!=)\s*(?:help|description|title|name)\w*'),
-    re.compile(r'"([^"]+)"\s+in\s+(?:help|description|title|name)\w*'),
+    re.compile(r'(?:==|!=)\s*"([^"]+)"'),
+    re.compile(r'"([^"]+)"\s*(?:==|!=)'),
+    re.compile(r'"([^"]+)"\s+in\s+\w'),
 ]
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 

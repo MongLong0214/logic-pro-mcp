@@ -107,6 +107,16 @@ found = scan('def f(help):\n    return help == "Tracks"\n', CANONICALS)
 case("a Python == comparison is a site",
      [f[1] for f in found] == ["Tracks"], f"found={found!r}")
 
+# 4b-ii. The left-hand side is not always a bare identifier. A second review found the narrow form
+#        missing both of these, live in `live_608`.
+found = scan('x = [t for t in raw if t.strip() == "Tracks"]\n', CANONICALS)
+case("a comparison whose left side is a call is a site",
+     [f[1] for f in found] == ["Tracks"], f"found={found!r}")
+
+found = scan('ok = blocked.get("dialog_title") == "Tracks"\n', CANONICALS)
+case("a comparison against a dict lookup is a site",
+     [f[1] for f in found] == ["Tracks"], f"found={found!r}")
+
 # 4c. ...and the same shape quoted in a docstring is still prose.
 found = scan('"""Matched with help.startswith("Tracks") before #766."""\nX = 1\n', CANONICALS)
 case("a Python comparison quoted in a docstring is not a site", found == [], f"found={found!r}")

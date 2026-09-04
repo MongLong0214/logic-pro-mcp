@@ -27,6 +27,7 @@ only moves one way gets there without a flag day.
 """
 import importlib.util
 import os
+import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,22 +47,37 @@ def _module():
 
 
 DOCUMENTED_KEYS = ("locale", "date", "observed")
+_ISO_DATE = re.compile(r"^20\d\d-\d\d-\d\d$")
 
 
-def _is_documented(block):
+def _is_documented(block, variant=""):
     """A provenance block is a reading, not a placeholder.
 
-    `{}` counted as documentation while only its length was read, which let a variant be marked
-    measured without anything having been measured. A block has to say which language, when, and
-    what string was actually seen.
+    `{}` counted as documentation while only its length was read. Requiring three non-empty strings
+    was the next shape, and an outside review showed `{"locale":"x","date":"x","observed":"x"}`
+    satisfying it — a fabricated variant could be attached to junk and the totals would not move.
+
+    So: the date has to be a date, and **`observed` has to contain the variant it documents**. That
+    last one is the load-bearing part. A reading of a string you did not read cannot contain it,
+    and it is the difference between provenance and three characters.
+
+    What this still cannot check is whether the reading happened at all — someone determined to
+    fake it can paste the variant into `observed`. The record it names is where a reviewer looks.
     """
-    return isinstance(block, dict) and all(str(block.get(k) or "").strip() for k in DOCUMENTED_KEYS)
+    if not isinstance(block, dict):
+        return False
+    if not all(str(block.get(k) or "").strip() for k in DOCUMENTED_KEYS):
+        return False
+    if not _ISO_DATE.match(str(block.get("date", "")).strip()):
+        return False
+    return not variant or variant in str(block.get("observed", ""))
 
 
 def counts(doc):
     total = sum(len(e.get("variants") or []) for e in (doc.get("labels") or {}).values())
     documented = sum(
-        sum(1 for block in (e.get("measured") or {}).values() if _is_documented(block))
+        sum(1 for variant, block in (e.get("measured") or {}).items()
+            if _is_documented(block, variant))
         for e in (doc.get("labels") or {}).values()
     )
     return total, documented

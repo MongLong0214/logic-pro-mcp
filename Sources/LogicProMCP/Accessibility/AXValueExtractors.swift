@@ -737,12 +737,17 @@ enum AXValueExtractors {
     private static func inferTrackType(from header: AXUIElement, runtime: AXHelpers.Runtime) -> TrackType {
         // Logic 12.2 often puts the human track name on the AXLayoutItem and
         // the type hint on a descendant icon/control, so scan both levels.
+        // #766 — the track NAME is deliberately not here. It is user-editable text, and the GM
+        // Device branch below returns early and confidently: with the name in the aggregate,
+        // renaming any track "GM Device scratch" classified it as external MIDI and took the
+        // silent-bounce guard with it. A name a user typed is not a reading of what the track is.
+        // Found by an outside review after the ambiguity fix, which made the one remaining
+        // confident branch worth looking at.
         var signals = [
             AXHelpers.getDescription(header, runtime: runtime),
             AXHelpers.getTitle(header, runtime: runtime),
             AXHelpers.getIdentifier(header, runtime: runtime),
-            AXHelpers.getHelp(header, runtime: runtime),
-            extractTrackName(from: header, runtime: runtime).name
+            AXHelpers.getHelp(header, runtime: runtime)
         ]
         let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
         for element in descendants {
@@ -754,9 +759,20 @@ enum AXValueExtractors {
                 extractTextValue(element, runtime: runtime)
             ])
         }
+        // Removing the name from `signals` was not enough, and a live read is what said so: the
+        // header's own AXDescription embeds it — `1개의 ‘GM Device scratch’ 트랙` — so a track
+        // renamed after a type still classified as that type. The name is subtracted from the
+        // aggregate instead, wherever it appears.
+        let trackName = extractTrackName(from: header, runtime: runtime).name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
         let combined = signals
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
+            .map { signal -> String in
+                guard trackName.count > 1 else { return signal }
+                return signal.replacingOccurrences(of: trackName, with: " ")
+            }
             .joined(separator: " ")
 
         // #131 — Logic's multichannel SMF open creates "GM Device N" channel
