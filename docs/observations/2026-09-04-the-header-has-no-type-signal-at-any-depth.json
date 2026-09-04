@@ -1,0 +1,108 @@
+{
+  "id": "2026-09-04-the-header-has-no-type-signal-at-any-depth",
+  "date": "2026-09-04",
+  "subject": "Whether reading the track header deeper would find a track-type signal",
+  "question": "Does a type signal appear below the depth-4 radius the classifier searches?",
+  "verdict": "wall",
+  "issues": [
+    766
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "For each AXLayoutItem whose AXHelp begins with the track-header string, collect AXDescription/AXTitle/AXHelp/AXIdentifier/AXRoleDescription/AXValue over its whole subtree to depth 8, then diff the token sets between a known audio track and a known software instrument.",
+    "expected": "the sets differ only in the track name, and in track-stack tokens where one of them is a stack",
+    "cost": "~4 min with a project carrying both track kinds; read-only"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift"
+  ],
+  "method": "The earlier reading stopped at depth 4 because that is what the classifier searches, which left 'a signal exists deeper' open as a design option. Went deeper before choosing, so the choice rests on a measurement rather than on the absence of one.",
+  "observations": [
+    {
+      "what": "headers dumped",
+      "count": 3,
+      "depth": 8,
+      "tracks": [
+        "Absolute Zero (software instrument, a track stack)",
+        "Audio 1 (audio)",
+        "Studio Grand (software instrument)"
+      ]
+    },
+    {
+      "what": "tokens per header",
+      "Absolute Zero": 149,
+      "Audio 1": 138,
+      "Studio Grand": 138
+    },
+    {
+      "what": "tokens common to all three",
+      "count": 135
+    },
+    {
+      "what": "tokens unique to the audio track",
+      "count": 3,
+      "tokens": [
+        "Audio",
+        "1",
+        "25개의"
+      ],
+      "note": "the track name and its ordinal, nothing else"
+    },
+    {
+      "what": "tokens unique to one software instrument",
+      "count": 3,
+      "tokens": [
+        "Studio",
+        "Grand",
+        "26개의"
+      ],
+      "note": "the track name and its ordinal"
+    },
+    {
+      "what": "tokens unique to the other software instrument",
+      "count": 14,
+      "tokens": [
+        "Absolute",
+        "Zero",
+        "1개의",
+        "Stack",
+        "Stack의",
+        "Track",
+        "메인",
+        "서브",
+        "펼침",
+        "화살표",
+        "삼각형",
+        "가립니다",
+        "제어합니다",
+        "1"
+      ],
+      "note": "a track stack's disclosure arrow, not anything about being an instrument"
+    },
+    {
+      "what": "what the classifier does with this",
+      "searched_depth": 4,
+      "sets_matching_on_every_header": 2,
+      "which": [
+        "trackTypeAudio",
+        "trackTypeInstrument"
+      ]
+    }
+  ],
+  "conclusion": "Reading deeper does not help. At depth 8 the three headers share 135 tokens, and every token unique to one of them is either the track's own name or, for the one track that is a stack, the stack disclosure arrow. Nothing distinguishes an audio track from a software instrument at any depth the header offers, so widening the classifier's radius was not a design option and is now ruled out by measurement rather than by not having looked. What remains is to stop answering: the aggregate satisfies 2 label sets on every header, and where more than one matches the honest answer is unknown.",
+  "limits": [
+    "Three headers in one project, ko-KR. Two of the three are software instruments and only one is an audio track, so 'the audio track has no distinguishing token' rests on a single example.",
+    "One of the instrument tracks is a track stack, which is why its unique-token count is larger; a non-stack comparison would be cleaner and was not available in this project.",
+    "Depth 8 was chosen as comfortably past the classifier's 4. It is not a proof that no depth whatsoever carries a signal, only that the ones a reader would plausibly widen to do not.",
+    "This says nothing about where the type IS readable. The channel strip carries a partial signal, measured separately, and reading it needs the Mixer revealed."
+  ],
+  "supersedes": null
+}

@@ -766,14 +766,42 @@ enum AXValueExtractors {
         // strips get misclassified as audio tracks and the silent-bounce risk
         // is hidden before bounce. They are external-MIDI lanes, not audio.
         if AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) { return .externalMIDI }
-        if AXLocalePolicy.trackTypeAudio.containsAny(in: combined) { return .audio }
-        if AXLocalePolicy.trackTypeInstrument.containsAny(in: combined) { return .softwareInstrument }
-        if AXLocalePolicy.trackTypeDrummer.containsAny(in: combined) { return .drummer }
-        if AXLocalePolicy.trackTypeExternalMIDI.containsAny(in: combined) { return .externalMIDI }
-        if AXLocalePolicy.trackTypeAux.containsAny(in: combined) { return .aux }
-        if AXLocalePolicy.trackTypeBus.containsAny(in: combined) { return .bus }
-        if AXLocalePolicy.trackTypeMaster.containsAny(in: combined) { return .master }
-        return .unknown
+
+        // #766 — the remaining sets are counted, not tried in order.
+        //
+        // Measured 2026-09-04 on Logic 12.3 (6674): three tracks created back to back — a software
+        // instrument, an audio track and a drummer — all answered `.audio`, and dumping the
+        // aggregate for all seven headers in the project gave IDENTICAL type-token sets. The
+        // Input Monitoring button sits on every header and its help names an audio track and a
+        // software instrument track in the same sentence, so `trackTypeAudio` and
+        // `trackTypeInstrument` both match everywhere and whichever ran first won. Reversing the
+        // order would have answered `.softwareInstrument` for every track instead: no ordering
+        // repairs a signal that does not discriminate.
+        //
+        // Reading deeper does not help either. The same dump at depth 8 differs between an audio
+        // track and a software instrument only in the track NAME and in track-stack tokens.
+        //
+        // So when more than one set matches, this aggregate cannot tell them apart, and
+        // `.unknown` is the true answer — a caller that knows it does not know can go and look
+        // somewhere else, which a confident wrong answer forecloses. Where the type signal DOES
+        // live is the channel strip: an input slot marks an audio strip and a MIDI effect slot
+        // marks an instrument one, measured the same day and recorded, and reading it needs the
+        // Mixer revealed. That is a different read and is not attempted here.
+        //
+        // GM Device keeps its head start above: #131 measured that those strips carry an
+        // audio-shaped signal, and the silent-bounce risk it guards is worth an early return.
+        let candidates: [(AXLocalePolicy.LabelSet, TrackType)] = [
+            (AXLocalePolicy.trackTypeAudio, .audio),
+            (AXLocalePolicy.trackTypeInstrument, .softwareInstrument),
+            (AXLocalePolicy.trackTypeDrummer, .drummer),
+            (AXLocalePolicy.trackTypeExternalMIDI, .externalMIDI),
+            (AXLocalePolicy.trackTypeAux, .aux),
+            (AXLocalePolicy.trackTypeBus, .bus),
+            (AXLocalePolicy.trackTypeMaster, .master),
+        ]
+        let matched = candidates.filter { $0.0.containsAny(in: combined) }
+        guard matched.count == 1, let only = matched.first else { return .unknown }
+        return only.1
     }
 
     private static func extractQuotedTrackName(from description: String) -> String? {

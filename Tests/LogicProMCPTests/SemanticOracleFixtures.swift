@@ -953,7 +953,7 @@ enum SemanticOracleFixtures {
             response: """
                 {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 오디오 트랙",\
                 "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
-                "observed_track_type":"audio","track_type_verification_source":"observed_header",\
+                "observed_track_type":"unknown","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"Audio 1",\
                 "requested_track_type":"audio"}
@@ -961,11 +961,16 @@ enum SemanticOracleFixtures {
             readback: "{}"
         ),
         // type "software_instrument".
+        // #766 — these four carried "audio" / "software_instrument" / "drummer" / "external_midi",
+        // and live Logic produces none of them: the header aggregate names more than one type on
+        // every track, so the classifier answers `unknown`. A fixture asserting a value the product
+        // cannot emit is a passing test about nothing, and it is why the mismatch went unseen —
+        // the oracle was only ever run against these, never against a live response.
         .tracksCreateInstrument: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A",\
                 "menu_clicked":"새로운 소프트웨어 악기 트랙","track_count_before":2,"requested_delta":1,\
-                "dialog_confirmation_attempted":true,"observed_track_type":"software_instrument",\
+                "dialog_confirmation_attempted":true,"observed_track_type":"unknown",\
                 "track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"Inst 1",\
@@ -979,7 +984,7 @@ enum SemanticOracleFixtures {
                 {"success":true,"verified":true,"state":"A",\
                 "menu_clicked":"새로운 Session Player SI 트랙…","track_count_before":2,\
                 "requested_delta":1,"dialog_confirmation_attempted":true,\
-                "observed_track_type":"drummer","track_type_verification_source":"observed_header",\
+                "observed_track_type":"unknown","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"Drummer","requested_track_type":"drummer"}
                 """,
@@ -990,7 +995,7 @@ enum SemanticOracleFixtures {
             response: """
                 {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 외부 MIDI 트랙",\
                 "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
-                "observed_track_type":"external_midi","track_type_verification_source":"observed_header",\
+                "observed_track_type":"unknown","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"External MIDI","requested_track_type":"external_midi"}
                 """,
