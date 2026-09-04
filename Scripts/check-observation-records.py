@@ -177,7 +177,9 @@ def main():
     if not os.path.isdir(DIR):
         print("no docs/observations directory; nothing to check")
         return 0
-    paths = sorted(p for p in glob.glob(os.path.join(DIR, "*.json")))
+    # A record is a date-prefixed file (the schema requires it); RATCHETS.json beside them is not one.
+    paths = sorted(p for p in glob.glob(os.path.join(DIR, "*.json"))
+                   if re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(p)))
     problems = []
     for p in paths:
         problems += check(p)

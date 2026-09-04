@@ -22,6 +22,7 @@ import importlib.util
 import json
 import os
 import plistlib
+import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,9 +46,19 @@ def installed_host():
     return block if block.get("version") else None
 
 
+RECORD_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}-.*\.json$")
+
+
+def is_record(path):
+    """A record is a date-prefixed JSON file, which is what the schema guard already requires of
+    one. RATCHETS.json lives beside the records and is not one; a loader that globs `*.json`
+    counted it as a schema-1 record and reported 25 where the ratchet guard reported 24."""
+    return RECORD_NAME.match(os.path.basename(path)) is not None
+
+
 def load():
     out = []
-    for path in sorted(glob.glob(os.path.join(OBS, "*.json"))):
+    for path in sorted(p for p in glob.glob(os.path.join(OBS, "*.json")) if is_record(p)):
         try:
             out.append((path, json.load(open(path, encoding="utf-8"))))
         except ValueError:
@@ -106,7 +117,8 @@ def coverage(records):
             continue
         print(f"  {surface}")
         for d in sorted(docs, key=lambda x: x["id"]):
-            print(f"      [{d['verdict']:12s}] {d['question']}")
+            loc = (d.get("host") or {}).get("locale") or "?"
+            print(f"      [{d['verdict']:12s}] [{loc}] {d['question']}")
     if empty:
         print("\nnot measured — nobody has looked at these, which is not the same as them working\n")
         for surface, what in empty:
@@ -117,18 +129,85 @@ def coverage(records):
     return 0
 
 
+LABELS = os.path.join(REPO, "docs", "locale", "ui-labels.json")
+
+
+def unproven(records):
+    """Every gap the ledger can name, as things a person can go and do. ADR-019 D6.
+
+    The counts behind these lists are the ceilings in RATCHETS.json; this is the list form, so a
+    ceiling of 255 is 255 named strings rather than a number nobody can act on.
+    """
+    try:
+        labels = json.load(open(LABELS, encoding="utf-8"))
+    except (OSError, ValueError):
+        labels = {}
+    entries = labels.get("labels") or {}
+    locales = tuple(labels.get("supported_locales") or ())
+    docs = [d for _, d in records]
+    surfaces = [s for s, _ in taxonomy()]
+
+    print("variants with no provenance — strings the product matches that nobody has recorded reading\n")
+    n = 0
+    for name, e in sorted(entries.items()):
+        missing = [v for v in (e.get("variants") or []) if v not in (e.get("provenance") or {})]
+        if missing:
+            n += len(missing)
+            print(f"  {name:40s} {', '.join(repr(v) for v in missing)}")
+    print(f"\n  {n} variant(s)\n")
+
+    print("label sets unmeasured per locale — nobody has looked, which is not `absent`\n")
+    for loc in locales:
+        gaps = [name for name, e in sorted(entries.items())
+                if (e.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured"]
+        print(f"  {loc}: {len(gaps)} of {len(entries)}")
+    print()
+
+    print("surfaces with no record, per locale\n")
+    for loc in locales:
+        have = {d.get("surface") for d in docs if (d.get("host") or {}).get("locale") == loc}
+        bare = [s for s in surfaces if s not in have]
+        print(f"  {loc}: {len(bare)} of {len(surfaces)}" + (f" — {', '.join(bare)}" if bare and len(bare) <= 8 else ""))
+    print()
+
+    v1 = [d.get("id") for d in docs if d.get("schema", 1) != 2]
+    print(f"records at schema 1 (no `evidence`, no `schema`): {len(v1)}")
+    manual = [d.get("id") for d in docs if (d.get("reverify") or {}).get("kind") == "manual"]
+    print(f"records whose reverify is manual prose rather than a command: {len(manual)}")
+    broken = []
+    for d in docs:
+        for dep in d.get("depends") or []:
+            rel, _, symbol = dep.partition(":")
+            path = os.path.join(REPO, rel)
+            if not os.path.exists(path):
+                broken.append((d.get("id"), dep, "file missing"))
+            elif symbol:
+                body = open(path, encoding="utf-8", errors="replace").read()
+                gone = [c for c in symbol.split(".") if c and c not in body]
+                if gone:
+                    broken.append((d.get("id"), dep, f"symbol {gone[0]!r} gone"))
+    print(f"depends entries that no longer resolve: {len(broken)}")
+    for rid, dep, why in broken:
+        print(f"  {rid}: {dep} — {why}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--stale", action="store_true", help="exit 1 when any record has drifted")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--coverage", action="store_true",
                     help="what is measured per surface, and which surfaces nobody has looked at")
+    ap.add_argument("--unproven", action="store_true",
+                    help="everything the ledger does not know, as a list a person can act on")
     args = ap.parse_args()
 
     host = installed_host()
     records = load()
     rows = classify(records, host)
 
+    if args.unproven:
+        return unproven(records)
     if args.coverage:
         return coverage(records)
 

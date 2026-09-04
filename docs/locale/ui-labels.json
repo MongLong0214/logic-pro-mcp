@@ -1,15 +1,31 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
   "how_to_regenerate": "Scripts/locale_labels.py --write",
-  "note": "Swift is the compiled source of truth; this is its projection for everything that cannot import Swift. `measured` records where a variant was READ — the rule is that the list grows when a locale is observed, not when one is translated.",
+  "note": "Swift is the compiled source of truth; this is its projection for everything that cannot import Swift. `provenance` records where a variant was READ — the observation record, its locale, the date and the exact string — and `coverage` says per locale what is known about the label. `unmeasured` is the only value that is a gap. ADR-019.",
+  "supported_locales": [
+    "en-US",
+    "ko-KR",
+    "ja-JP"
+  ],
+  "coverage_values": [
+    "present",
+    "absent",
+    "identifier",
+    "unmeasured"
+  ],
   "labels": {
     "allTracksAsAudioFilesMenuItem": {
       "canonical": "All Tracks as Audio Files…",
       "variants": [
         "모든 트랙을 오디오 파일로…"
       ],
-      "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`."
+      "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "arrangeWindowTitleSuffix": {
       "canonical": "Tracks",
@@ -17,7 +33,12 @@
         "트랙",
         "トラック"
       ],
-      "rationale": "Witnesses that an arrange window exists after project.new; read-only classification."
+      "rationale": "Witnesses that an arrange window exists after project.new; read-only classification.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "audioPluginSlotLabel": {
       "canonical": "audio plugin",
@@ -26,77 +47,132 @@
         "오디오 플러그인",
         "오디오 이펙트"
       ],
-      "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists)."
+      "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeContext": {
       "canonical": "automation",
       "variants": [
         "오토메이션"
       ],
-      "rationale": "Gates the track-header automation-mode read to the automation control; read-only classifier."
+      "rationale": "Gates the track-header automation-mode read to the automation control; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeLatch": {
       "canonical": "latch",
       "variants": [
         "래치"
       ],
-      "rationale": "Classifies the track-header automation mode as Latch; read-only classifier."
+      "rationale": "Classifies the track-header automation mode as Latch; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeOff": {
       "canonical": "off",
       "variants": [
         "끔"
       ],
-      "rationale": "Classifies an explicit track-header automation Off token; read-only classifier."
+      "rationale": "Classifies an explicit track-header automation Off token; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeRead": {
       "canonical": "read",
       "variants": [
         "읽기"
       ],
-      "rationale": "Classifies the track-header automation mode as Read; read-only classifier."
+      "rationale": "Classifies the track-header automation mode as Read; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeTouch": {
       "canonical": "touch",
       "variants": [
         "터치"
       ],
-      "rationale": "Classifies the track-header automation mode as Touch; read-only classifier."
+      "rationale": "Classifies the track-header automation mode as Touch; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeTrim": {
       "canonical": "trim",
       "variants": [
         "트림"
       ],
-      "rationale": "Classifies the track-header automation mode as Trim; read-only classifier."
+      "rationale": "Classifies the track-header automation mode as Trim; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "automationModeWrite": {
       "canonical": "write",
       "variants": [
         "쓰기"
       ],
-      "rationale": "Classifies the track-header automation mode as Write; read-only classifier."
+      "rationale": "Classifies the track-header automation mode as Write; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "barSliderLabel": {
       "canonical": "bar",
       "variants": [
         "마디"
       ],
-      "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only."
+      "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "beatSliderLabel": {
       "canonical": "beat",
       "variants": [
         "비트"
       ],
-      "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only."
+      "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "bounceMenuItem": {
       "canonical": "Bounce",
       "variants": [
         "바운스"
       ],
-      "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path."
+      "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "cancelButton": {
       "canonical": "Cancel",
@@ -104,7 +180,12 @@
         "취소",
         "キャンセル"
       ],
-      "rationale": "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`)."
+      "rationale": "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "controlBarGroupLabel": {
       "canonical": "control bar",
@@ -112,7 +193,12 @@
         "컨트롤 막대",
         "コントロールバー"
       ],
-      "rationale": "Identifies the control-bar AXGroup by description; read-only locator."
+      "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "createButton": {
       "canonical": "Create",
@@ -120,7 +206,12 @@
         "생성",
         "作成"
       ],
-      "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
+      "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "createMarkerMenuItem": {
       "canonical": "Create Marker",
@@ -128,7 +219,12 @@
         "마커 생성",
         "マーカーを作成"
       ],
-      "rationale": "Navigate menu entry that creates a marker at the playhead."
+      "rationale": "Navigate menu entry that creates a marker at the playhead.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "deleteTracksPrimaryButton": {
       "canonical": "Delete Tracks and Content",
@@ -137,7 +233,12 @@
         "삭제",
         "削除"
       ],
-      "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button."
+      "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "editMenuBar": {
       "canonical": "Edit",
@@ -145,80 +246,140 @@
         "편집",
         "編集"
       ],
-      "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
+      "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnChannel": {
       "canonical": "Ch",
       "variants": [
         "채널"
       ],
-      "rationale": "Event List channel column; identity is the canonical English form."
+      "rationale": "Event List channel column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnL": {
       "canonical": "L",
       "variants": [],
-      "rationale": "Event List lock column; unlabelled in every locale measured."
+      "rationale": "Event List lock column; unlabelled in every locale measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnLength": {
       "canonical": "Length",
       "variants": [
         "길이"
       ],
-      "rationale": "Region-level length column; distinguishes the region list from the event list."
+      "rationale": "Region-level length column; distinguishes the region list from the event list.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnLengthInfo": {
       "canonical": "Length/Info",
       "variants": [
         "길이/정보"
       ],
-      "rationale": "Event List length column; identity is the canonical English form."
+      "rationale": "Event List length column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnM": {
       "canonical": "M",
       "variants": [],
-      "rationale": "Event List mute column; unlabelled in every locale measured."
+      "rationale": "Event List mute column; unlabelled in every locale measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnName": {
       "canonical": "Name",
       "variants": [
         "이름"
       ],
-      "rationale": "Region-level name column; distinguishes the region list from the event list."
+      "rationale": "Region-level name column; distinguishes the region list from the event list.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnNumber": {
       "canonical": "Num",
       "variants": [
         "번호"
       ],
-      "rationale": "Event List number column; identity is the canonical English form."
+      "rationale": "Event List number column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnPosition": {
       "canonical": "Position",
       "variants": [
         "위치"
       ],
-      "rationale": "Event List position column; identity is the canonical English form."
+      "rationale": "Event List position column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnStatus": {
       "canonical": "Status",
       "variants": [
         "상태"
       ],
-      "rationale": "Event List status column; identity is the canonical English form."
+      "rationale": "Event List status column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnTrack": {
       "canonical": "Trk",
       "variants": [
         "트랙"
       ],
-      "rationale": "Region-level track column; distinguishes the region list from the event list."
+      "rationale": "Region-level track column; distinguishes the region list from the event list.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListColumnValue": {
       "canonical": "Val",
       "variants": [
         "값"
       ],
-      "rationale": "Event List value column; identity is the canonical English form."
+      "rationale": "Event List value column; identity is the canonical English form.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventListTab": {
       "canonical": "event",
@@ -226,19 +387,34 @@
         "이벤트",
         "イベント"
       ],
-      "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it."
+      "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "eventPositionAsTimeMenuItem": {
       "canonical": "Event Position and Length as Time",
       "variants": [],
-      "rationale": "Decides whether Event List positions are bar/beat or timecode; read-only."
+      "rationale": "Decides whether Event List positions are bar/beat or timecode; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "exportMenuItem": {
       "canonical": "Export",
       "variants": [
         "내보내기"
       ],
-      "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label."
+      "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "fileMenuBar": {
       "canonical": "File",
@@ -246,7 +422,12 @@
         "파일",
         "ファイル"
       ],
-      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "goToMenuItem": {
       "canonical": "Go To",
@@ -254,7 +435,12 @@
         "이동",
         "移動"
       ],
-      "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position."
+      "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "goToPositionDialogTitle": {
       "canonical": "Go To Position",
@@ -262,7 +448,12 @@
         "위치로 이동",
         "位置の移動"
       ],
-      "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately."
+      "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "goToPositionMenuItem": {
       "canonical": "Position…",
@@ -270,7 +461,12 @@
         "위치…",
         "位置…"
       ],
-      "rationale": "Go To submenu leaf that opens the Go To Position dialog."
+      "rationale": "Go To submenu leaf that opens the Go To Position dialog.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "headerPanHint": {
       "canonical": "pan",
@@ -278,14 +474,24 @@
         "팬",
         "밸런스"
       ],
-      "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint."
+      "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "hideAllPluginWindowsMenuItem": {
       "canonical": "Hide All Plug-in Windows",
       "variants": [
         "모든 플러그인 윈도우 가리기"
       ],
-      "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus."
+      "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "horizontalZoomSlider": {
       "canonical": "Horizontal Zoom",
@@ -293,7 +499,12 @@
         "가로 확대/축소",
         "가로 확대"
       ],
-      "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match."
+      "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "importMenuItem": {
       "canonical": "Import",
@@ -301,35 +512,60 @@
         "가져오기",
         "読み込む"
       ],
-      "rationale": "File menu entry that opens the Import submenu used by midi.import_file."
+      "rationale": "File menu entry that opens the Import submenu used by midi.import_file.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "inline:Dual Mono": {
       "canonical": "Dual Mono",
       "variants": [
         "듀얼 모노"
       ],
-      "rationale": "Plugin format leaf after exact plugin selection."
+      "rationale": "Plugin format leaf after exact plugin selection.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "inline:Mono": {
       "canonical": "Mono",
       "variants": [
         "모노"
       ],
-      "rationale": "Plugin format leaf after exact plugin selection."
+      "rationale": "Plugin format leaf after exact plugin selection.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "inline:Mono->Stereo": {
       "canonical": "Mono->Stereo",
       "variants": [
         "모노->스테레오"
       ],
-      "rationale": "Plugin format leaf after exact plugin selection."
+      "rationale": "Plugin format leaf after exact plugin selection.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "inline:Stereo": {
       "canonical": "Stereo",
       "variants": [
         "스테레오"
       ],
-      "rationale": "Plugin format leaf after exact plugin selection."
+      "rationale": "Plugin format leaf after exact plugin selection.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "inputSlotHelpKeyword": {
       "canonical": "input slot",
@@ -337,7 +573,7 @@
         "입력 슬롯"
       ],
       "rationale": "Detects a channel strip's input slot by its AXHelp string; read-only classifier.",
-      "measured": {
+      "provenance": {
         "입력 슬롯": {
           "locale": "ko-KR",
           "date": "2026-09-04",
@@ -348,6 +584,11 @@
           "count_seen": 1,
           "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase"
         }
+      },
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "present",
+        "ja-JP": "unmeasured"
       }
     },
     "libraryPanelLabel": {
@@ -355,14 +596,24 @@
       "variants": [
         "라이브러리"
       ],
-      "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists)."
+      "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "markerContainerKeywords": {
       "canonical": "marker",
       "variants": [
         "마커"
       ],
-      "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan."
+      "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "markerListDeleteMenuItem": {
       "canonical": "Delete",
@@ -370,7 +621,12 @@
         "削除",
         "삭제"
       ],
-      "rationale": "Live-confirmed on Logic 12.3: Marker List Delete is `削除` in Japanese and `삭제` in Korean. It is used only with exactStrict because the Edit menu also has Delete-Undo-History entries; prefix or containment matching can reach a different destructive command."
+      "rationale": "Live-confirmed on Logic 12.3: Marker List Delete is `削除` in Japanese and `삭제` in Korean. It is used only with exactStrict because the Edit menu also has Delete-Undo-History entries; prefix or containment matching can reach a different destructive command.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "markerListEditMenuButton": {
       "canonical": "Edit",
@@ -378,7 +634,12 @@
         "編集",
         "편집"
       ],
-      "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
+      "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "markerListNumberOfItemsLabel": {
       "canonical": "Number of Items",
@@ -386,7 +647,12 @@
         "항목 수",
         "項目数"
       ],
-      "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule."
+      "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "midiFileMenuItem": {
       "canonical": "MIDI File…",
@@ -394,28 +660,48 @@
         "MIDI 파일…",
         "MIDIファイル…"
       ],
-      "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file."
+      "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "mixerInspectorContext": {
       "canonical": "inspector",
       "variants": [
         "인스펙터"
       ],
-      "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier."
+      "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "mixerNamedElement": {
       "canonical": "mixer",
       "variants": [
         "믹서"
       ],
-      "rationale": "Identifies the mixer container by exact normalized name; read-only classifier."
+      "rationale": "Identifies the mixer container by exact normalized name; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "moveMenuItem": {
       "canonical": "Move",
       "variants": [
         "이동"
       ],
-      "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region."
+      "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "navigateMenuBar": {
       "canonical": "Navigate",
@@ -423,7 +709,12 @@
         "탐색",
         "移動"
       ],
-      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "newProjectMenuItem": {
       "canonical": "New",
@@ -431,7 +722,12 @@
         "신규",
         "新規"
       ],
-      "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it."
+      "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "newTrackSheetDescription": {
       "canonical": "New Track",
@@ -439,7 +735,12 @@
         "새로운 트랙",
         "新規トラック"
       ],
-      "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
+      "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "nonInsertButtonText": {
       "canonical": "send",
@@ -473,14 +774,24 @@
         "패닝",
         "밸런스"
       ],
-      "rationale": "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only."
+      "rationale": "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "oneFilePerTrackPopupValue": {
       "canonical": "One File per Track",
       "variants": [
         "트랙당 하나의 파일"
       ],
-      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "openMarkerListMenuItem": {
       "canonical": "Open Marker List",
@@ -488,7 +799,12 @@
         "마커 목록 열기",
         "マーカーリストを開く"
       ],
-      "rationale": "Navigate menu entry that opens the Marker List window."
+      "rationale": "Navigate menu entry that opens the Marker List window.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "outputSlotHelpKeyword": {
       "canonical": "output slot",
@@ -496,7 +812,7 @@
         "출력 슬롯"
       ],
       "rationale": "Detects a channel strip's output slot by its AXHelp string; read-only classifier.",
-      "measured": {
+      "provenance": {
         "출력 슬롯": {
           "locale": "ko-KR",
           "date": "2026-09-04",
@@ -506,6 +822,11 @@
           "on_element": "AXButton, AXDescription \"Stereo Output\"",
           "count_seen": 4
         }
+      },
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "present",
+        "ja-JP": "unmeasured"
       }
     },
     "playheadPositionFieldLabel": {
@@ -513,7 +834,12 @@
       "variants": [
         "재생헤드 위치"
       ],
-      "rationale": "Identifies the playhead position text field description; read-only."
+      "rationale": "Identifies the playhead position text field description; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "playheadPositionGroupLabel": {
       "canonical": "playhead position",
@@ -521,28 +847,48 @@
         "재생헤드 위치",
         "再生ヘッド位置"
       ],
-      "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
+      "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginAutomationLabelExact": {
       "canonical": "읽기, 오토메이션이 활성화됨",
       "variants": [
         "read"
       ],
-      "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter."
+      "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginAutomationLabelSubstring": {
       "canonical": "automation",
       "variants": [
         "오토메이션"
       ],
-      "rationale": "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter."
+      "rationale": "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginBypassControl": {
       "canonical": "bypass",
       "variants": [
         "바이패스"
       ],
-      "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists)."
+      "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginOpenOrListControl": {
       "canonical": "open",
@@ -551,33 +897,58 @@
         "list",
         "목록"
       ],
-      "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
+      "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginWindowControlsViewMenuItem": {
       "canonical": "Controls",
       "variants": [
         "컨트롤"
       ],
-      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only."
+      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginWindowEditorViewMenuItem": {
       "canonical": "Editor",
       "variants": [
         "편집기"
       ],
-      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; paired evidence for Controls/컨트롤."
+      "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; paired evidence for Controls/컨트롤.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginWindowSmartControlsControl": {
       "canonical": "smart controls",
       "variants": [],
-      "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier."
+      "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "pluginWindowViewSwitcher": {
       "canonical": "View",
       "variants": [
         "보기"
       ],
-      "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback."
+      "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "projectOrSectionMenuItem": {
       "canonical": "Project or Section…",
@@ -586,7 +957,12 @@
         "Project or Section...",
         "프로젝트 또는 섹션..."
       ],
-      "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds."
+      "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "projectPickerWindow": {
       "canonical": "프로젝트 선택",
@@ -595,21 +971,36 @@
         "choose project",
         "new from template"
       ],
-      "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier."
+      "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "regionHelpKeyword": {
       "canonical": "region",
       "variants": [
         "리전"
       ],
-      "rationale": "Detects an arrange region by its AXHelp string; read-only classifier."
+      "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "regionKindAudio": {
       "canonical": "audio",
       "variants": [
         "오디오"
       ],
-      "rationale": "Classifies a region as audio content; read-only."
+      "rationale": "Classifies a region as audio content; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "regionKindDrummer": {
       "canonical": "drummer",
@@ -618,19 +1009,34 @@
         "드러머",
         "세션 플레이어"
       ],
-      "rationale": "Classifies a region as drummer/session-player content; read-only."
+      "rationale": "Classifies a region as drummer/session-player content; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "regionKindMidi": {
       "canonical": "midi",
       "variants": [],
-      "rationale": "Classifies a region as MIDI content; read-only."
+      "rationale": "Classifies a region as MIDI content; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "saveAsMenuItem": {
       "canonical": "Save As…",
       "variants": [
         "별도 저장…"
       ],
-      "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as."
+      "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "saveConfirmationButton": {
       "canonical": "Save",
@@ -639,28 +1045,48 @@
         "OK",
         "확인"
       ],
-      "rationale": "Save As dialog commit button; file existence verifies the result."
+      "rationale": "Save As dialog commit button; file existence verifies the result.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "savePanelFolderRadio": {
       "canonical": "Folder",
       "variants": [
         "폴더"
       ],
-      "rationale": "One of the two project-organisation radios that identify the Save As panel."
+      "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "savePanelPackageRadio": {
       "canonical": "Package",
       "variants": [
         "패키지"
       ],
-      "rationale": "One of the two project-organisation radios that identify the Save As panel."
+      "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "savePanelWindowTitle": {
       "canonical": "Save",
       "variants": [
         "저장"
       ],
-      "rationale": "Title of the Save As panel window; the structural classifier matches it exactly."
+      "rationale": "Title of the Save As panel window; the structural classifier matches it exactly.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sendOrIOControlLabel": {
       "canonical": "send",
@@ -671,14 +1097,24 @@
         "입력",
         "출력"
       ],
-      "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection; read-only."
+      "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "setLocatorsMenuItem": {
       "canonical": "Set Locators…",
       "variants": [
         "로케이터 설정…"
       ],
-      "rationale": "Navigate menu entry that opens the cycle-range locator dialog."
+      "rationale": "Navigate menu entry that opens the cycle-range locator dialog.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "settingPopupValue": {
       "canonical": "Preset",
@@ -687,28 +1123,48 @@
         "Default",
         "기본"
       ],
-      "rationale": "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator."
+      "rationale": "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "showMixerMenuItem": {
       "canonical": "Show Mixer",
       "variants": [
         "믹서 보기"
       ],
-      "rationale": "Used only as a best-effort mixer reveal before structural mixer readback."
+      "rationale": "Used only as a best-effort mixer reveal before structural mixer readback.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "showStepInputKeyboardMenuItem": {
       "canonical": "Show Step Input Keyboard",
       "variants": [
         "스텝 입력 키보드 보기"
       ],
-      "rationale": "Native Window-menu toggle used with independent window-state readback."
+      "rationale": "Native Window-menu toggle used with independent window-state readback.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "showTempoListMenuItem": {
       "canonical": "Show Tempo List",
       "variants": [
         "템포 목록 보기"
       ],
-      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table."
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sliderPanHint": {
       "canonical": "pan",
@@ -717,14 +1173,24 @@
         "패닝",
         "밸런스"
       ],
-      "rationale": "Classifies a slider as a pan control; read-only."
+      "rationale": "Classifies a slider as a pan control; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sliderSendHint": {
       "canonical": "send",
       "variants": [
         "센드"
       ],
-      "rationale": "Classifies a slider as a send control; read-only."
+      "rationale": "Classifies a slider as a send control; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sliderVolumeHint": {
       "canonical": "volume",
@@ -732,80 +1198,150 @@
         "fader",
         "볼륨"
       ],
-      "rationale": "Classifies a slider as a volume fader; read-only."
+      "rationale": "Classifies a slider as a volume fader; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sliderZoomHint": {
       "canonical": "zoom",
       "variants": [
         "확대"
       ],
-      "rationale": "Classifies a slider as a zoom control; read-only."
+      "rationale": "Classifies a slider as a zoom control; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByAudioChannelMenuItem": {
       "canonical": "오디오 채널",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByCreationDateMenuItem": {
       "canonical": "생성일",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByInstrumentNameMenuItem": {
       "canonical": "악기 이름",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByMIDIChannelMenuItem": {
       "canonical": "MIDI 채널",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByMenuItem": {
       "canonical": "트랙을 다음으로 정렬",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByOutputChannelMenuItem": {
       "canonical": "출력 채널",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByTrackNameMenuItem": {
       "canonical": "트랙 이름",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "sortTracksByUsedMenuItem": {
       "canonical": "사용 여부",
       "variants": [],
-      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+      "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "stemExportCommitButton": {
       "canonical": "Export",
       "variants": [
         "내보내기"
       ],
-      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "stemExportDismissButton": {
       "canonical": "Cancel",
       "variants": [
         "취소"
       ],
-      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal."
+      "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "stemExportProgressWindowTitle": {
       "canonical": "Logic Pro",
       "variants": [],
-      "rationale": "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+      "rationale": "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "stepInputKeyboardWindowTitle": {
       "canonical": "Step Input Keyboard",
       "variants": [
         "스텝 입력 키보드"
       ],
-      "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action."
+      "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "tempoFieldLabel": {
       "canonical": "tempo",
@@ -813,28 +1349,48 @@
         "bpm",
         "템포"
       ],
-      "rationale": "Identifies a tempo text field/slider description; read-only."
+      "rationale": "Identifies a tempo text field/slider description; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "tempoListNumberOfItemsLabel": {
       "canonical": "Number of Items",
       "variants": [
         "항목 수"
       ],
-      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText."
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "tempoMenuItem": {
       "canonical": "Tempo",
       "variants": [
         "템포"
       ],
-      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`."
+      "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "tempoSliderContainsLabel": {
       "canonical": "tempo",
       "variants": [
         "템포"
       ],
-      "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only."
+      "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "tempoSliderLabel": {
       "canonical": "tempo",
@@ -842,14 +1398,24 @@
         "bpm",
         "템포"
       ],
-      "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only."
+      "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "toPlayheadMenuItem": {
       "canonical": "To Playhead",
       "variants": [
         "재생헤드로"
       ],
-      "rationale": "Move submenu leaf that repositions the selected region to the playhead."
+      "rationale": "Move submenu leaf that repositions the selected region to the playhead.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackContentExplicit": {
       "canonical": "트랙 콘텐츠",
@@ -859,7 +1425,12 @@
         "tracks content",
         "tracks contents"
       ],
-      "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier."
+      "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackContentGeneric": {
       "canonical": "콘텐츠",
@@ -867,7 +1438,12 @@
         "content",
         "contents"
       ],
-      "rationale": "Generic content-group fallback by normalized description; read-only classifier."
+      "rationale": "Generic content-group fallback by normalized description; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackHeadersDescription": {
       "canonical": "track headers",
@@ -877,7 +1453,12 @@
         "tracks headers",
         "트랙 헤더"
       ],
-      "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred)."
+      "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred).",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackMenuBar": {
       "canonical": "Track",
@@ -885,14 +1466,24 @@
         "트랙",
         "トラック"
       ],
-      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackMuteButton": {
       "canonical": "Mute",
       "variants": [
         "음소거"
       ],
-      "rationale": "Identifies the track Mute button by description substring; read-only state extraction."
+      "rationale": "Identifies the track Mute button by description substring; read-only state extraction.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackRecordButton": {
       "canonical": "Record",
@@ -901,7 +1492,12 @@
         "녹음 활성화",
         "레코드 활성화"
       ],
-      "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction."
+      "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackRecordEnableCheckbox": {
       "canonical": "녹음 활성화",
@@ -909,48 +1505,88 @@
         "Record Enable",
         "Record"
       ],
-      "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
+      "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackSoloButton": {
       "canonical": "Solo",
       "variants": [
         "솔로"
       ],
-      "rationale": "Identifies the track Solo button by description substring; read-only state extraction."
+      "rationale": "Identifies the track Solo button by description substring; read-only state extraction.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeAudio": {
       "canonical": "audio",
       "variants": [
         "오디오"
       ],
-      "rationale": "Classifies an audio track by header aggregate; read-only classifier."
+      "rationale": "Classifies an audio track by header aggregate; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeAux": {
       "canonical": "aux",
       "variants": [],
-      "rationale": "Classifies an aux track; read-only classifier."
+      "rationale": "Classifies an aux track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeBus": {
       "canonical": "bus",
       "variants": [],
-      "rationale": "Classifies a bus track; read-only classifier."
+      "rationale": "Classifies a bus track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeDrummer": {
       "canonical": "drummer",
       "variants": [],
-      "rationale": "Classifies a drummer track; read-only classifier."
+      "rationale": "Classifies a drummer track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeExternalMIDI": {
       "canonical": "external",
       "variants": [
         "midi"
       ],
-      "rationale": "Classifies an external-MIDI track; read-only classifier."
+      "rationale": "Classifies an external-MIDI track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeGMDevice": {
       "canonical": "gm device",
       "variants": [],
-      "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only."
+      "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeInstrument": {
       "canonical": "instrument",
@@ -958,14 +1594,24 @@
         "software",
         "악기"
       ],
-      "rationale": "Classifies a software-instrument track; read-only classifier."
+      "rationale": "Classifies a software-instrument track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "trackTypeMaster": {
       "canonical": "master",
       "variants": [
         "stereo out"
       ],
-      "rationale": "Classifies the master / stereo-out track; read-only classifier."
+      "rationale": "Classifies the master / stereo-out track; read-only classifier.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportAutopunchControl": {
       "canonical": "Autopunch",
@@ -973,7 +1619,12 @@
         "Auto Punch",
         "Auto-Punch"
       ],
-      "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback."
+      "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportContainerControlKeywords": {
       "canonical": "play",
@@ -996,7 +1647,12 @@
         "メトロノーム",
         "クリック"
       ],
-      "rationale": "Counts distinct transport-control labels to classify the control bar; read-only."
+      "rationale": "Counts distinct transport-control labels to classify the control bar; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportContainerMetadata": {
       "canonical": "transport",
@@ -1005,7 +1661,12 @@
         "컨트롤 막대",
         "コントロールバー"
       ],
-      "rationale": "Classifies the transport/control-bar container by metadata substring; read-only."
+      "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportCycleControl": {
       "canonical": "cycle",
@@ -1014,7 +1675,12 @@
         "사이클",
         "サイクル"
       ],
-      "rationale": "Identifies the Cycle/Loop transport control; read-only."
+      "rationale": "Identifies the Cycle/Loop transport control; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportKeywordFalseFriends": {
       "canonical": "catch playhead",
@@ -1031,7 +1697,12 @@
         "루프 브라우저",
         "live loop 그리드 보기/가리기"
       ],
-      "rationale": "Negative guard: labels carrying a transport keyword that are not transport "
+      "rationale": "Negative guard: labels carrying a transport keyword that are not transport ",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportMetronomeControl": {
       "canonical": "metronome",
@@ -1043,7 +1714,12 @@
         "メトロノーム",
         "クリック"
       ],
-      "rationale": "Identifies the Metronome/Click transport control; read-only."
+      "rationale": "Identifies the Metronome/Click transport control; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportPlayControl": {
       "canonical": "play",
@@ -1051,14 +1727,24 @@
         "재생",
         "再生"
       ],
-      "rationale": "Identifies the Play transport control when reading TransportState; read-only."
+      "rationale": "Identifies the Play transport control when reading TransportState; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportRecordArmExclusion": {
       "canonical": "arm",
       "variants": [
         "활성화"
       ],
-      "rationale": "Negative guard: distinguishes per-track record-arm from transport Record; read-only."
+      "rationale": "Negative guard: distinguishes per-track record-arm from transport Record; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportRecordControl": {
       "canonical": "record",
@@ -1066,7 +1752,12 @@
         "녹음",
         "録音"
       ],
-      "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only."
+      "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportSliderHints": {
       "canonical": "tempo",
@@ -1078,7 +1769,12 @@
         "마디",
         "비트"
       ],
-      "rationale": "Classifies tempo/position sliders inside the transport container; read-only."
+      "rationale": "Classifies tempo/position sliders inside the transport container; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "transportTextFieldHint": {
       "canonical": "tempo",
@@ -1088,35 +1784,60 @@
         "템포",
         "재생헤드 위치"
       ],
-      "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only."
+      "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "undoMenuItemPrefix": {
       "canonical": "Undo",
       "variants": [
         "실행 취소"
       ],
-      "rationale": "Menu item includes the operation name after the localized Undo prefix."
+      "rationale": "Menu item includes the operation name after the localized Undo prefix.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "undoPluginInsertMenuItem": {
       "canonical": "Insert Plug-in in Channel Strip",
       "variants": [
         "채널 스트립에 플러그인 삽입"
       ],
-      "rationale": "Confirms the Undo entry describes OUR insert before a rollback presses it."
+      "rationale": "Confirms the Undo entry describes OUR insert before a rollback presses it.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "viewMenuBar": {
       "canonical": "View",
       "variants": [
         "보기"
       ],
-      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     },
     "windowMenuBar": {
       "canonical": "Window",
       "variants": [
         "윈도우"
       ],
-      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic."
+      "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "coverage": {
+        "en-US": "unmeasured",
+        "ko-KR": "unmeasured",
+        "ja-JP": "unmeasured"
+      }
     }
   }
 }

@@ -113,6 +113,47 @@ true of a different application.
 7. **`depends` names the code standing on the claim**, so a stale observation reports which paths are
    now running on an unverified assumption.
 
+## Schema 2 (ADR-019)
+
+A record may carry two more keys. Records without them are schema 1, still valid, and counted as
+a burn-down in `RATCHETS.json`.
+
+```jsonc
+  "schema": 2,
+  "evidence": [                      // files this record rests on, under docs/observations/evidence/
+    "evidence/2026-09-05-ja-JP-arrange-menus.census.json"
+  ]
+```
+
+`evidence` files must exist; the guard checks. A record whose readings live only in its own
+`observations` array is fine and states `"evidence": []` — the point is that a census dump or a
+screenshot the conclusion depends on cannot be cited and then lost.
+
+### Locale is an axis
+
+`host.locale` is still not a *drift* axis (rule 5), but it is a *coverage* axis: the same question
+measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
+which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
+schema 2) points INTO these records — a variant's `provenance.record` must exist here and its
+`host.locale` must equal the locale the variant claims — so a translated string that nobody read
+has nowhere to hide.
+
+### What the ledger does not know
+
+```
+Scripts/observations-status.py --unproven
+```
+
+lists, as things a person can go and do: variants with no provenance; label sets unmeasured per
+locale; surfaces with no record per locale; records at schema 1; records whose `reverify` is
+manual prose; `depends` entries that no longer resolve. The counts behind those lists are the
+ceilings in `docs/observations/RATCHETS.json`, and `Scripts/check-observation-ratchets.py` fails
+CI if any count rises — or lags, since a ceiling above reality lets the next regression hide.
+Raising a ceiling requires a dated reason under `raised`, so the decision is in the diff.
+
+`RATCHETS.json` sits beside the records and is not one: a record is a **date-prefixed** file, and
+every loader uses that rule rather than a name special-case.
+
 ## Tools
 
 ```
@@ -120,6 +161,8 @@ Scripts/observations-status.py            # what is current / stale / superseded
 Scripts/observations-status.py --stale    # exit 1 if anything is stale — for a post-update sweep
 Scripts/check-observation-records.py      # schema, run by CI
 Scripts/check-observations-cover-live-walls.py   # roadmap claims must have records, run by CI
+Scripts/check-observation-ratchets.py     # what the ledger does not know may only shrink, run by CI
+Scripts/observations-status.py --unproven # everything the ledger does not know, as a list
 ```
 
 ## When Logic updates

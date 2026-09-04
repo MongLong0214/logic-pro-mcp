@@ -1,117 +1,154 @@
 #!/usr/bin/env python3
-"""Cases for `check-locale-labels-json.py` — the projection must match the Swift, and a variant is
-a claim that Logic spells something that way.
+"""Prove `Scripts/check-locale-labels-json.py` can fail — on a claim, not only on a mismatch.
 
-The four controls that were run by hand when the rule was written. The fourth is the one that
-matters: a variant added to the policy with no reading behind it has to fail, because "the variants
-list grows when a locale is actually observed, not when one is translated" was a comment in
-`AXLocalePolicy` for months and a comment does not fail.
-
-The cases build documents in memory rather than touching `docs/locale/ui-labels.json`, so a failing
-case cannot leave the repository's own projection wrong.
+The guard's older job was "the JSON equals the Swift". Its job now is also "every claim the JSON
+makes about a string is backed by a record in the ledger". Each case below plants one way that
+backing can be missing or wrong and requires the guard to name it. The migration cases at the end
+require `locale_labels.py` to carry evidence across regeneration, because a `--write` that erased
+provenance would turn every measured label back into an unmeasured one in a single commit.
 """
-import copy
 import importlib.util
+import json
 import os
 import sys
+import tempfile
+from pathlib import Path
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = Path(__file__).resolve().parent
 
 
 def load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(REPO, "Scripts", filename))
+    spec = importlib.util.spec_from_file_location(name, HERE / filename)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-G = load("locale_labels_guard", "check-locale-labels-json.py")
-L = load("locale_labels", "locale_labels.py")
+guard = load("locale_labels_guard", "check-locale-labels-json.py")
+labels = load("locale_labels", "locale_labels.py")
 
-failed = 0
-
-
-def case(name, condition, detail):
-    global failed
-    failed += 0 if condition else 1
-    print(f"{'ok  ' if condition else 'FAIL'} {name} -> {detail}")
+LOCALES = ("en-US", "ko-KR", "ja-JP")
+VALUES = ("present", "absent", "identifier", "unmeasured")
 
 
-live = L.load_json()
+def _ledger(records):
+    """A temp observations dir holding the given {id: locale} records; returns its path."""
+    d = Path(tempfile.mkdtemp())
+    for rid, locale in records.items():
+        (d / f"{rid}.json").write_text(json.dumps({"id": rid, "host": {"locale": locale}}), encoding="utf-8")
+    return str(d)
 
-# 1. The projection agrees with the Swift as committed, or nothing below means anything.
-case("the committed projection agrees with AXLocalePolicy",
-     (live.get("labels") or {}) == L.build(existing=live)["labels"],
-     f"{len(live.get('labels') or {})} labels")
 
-# 2. Two numbers, not one. The first shape tracked `total - documented`, and an outside review
-#    showed it could be held level while both halves moved: add an undocumented variant AND
-#    document a different one, and the difference is unchanged.
-total, documented = G.counts(live)
-case("the recorded ceiling and floor equal the tree",
-     total == G.TOTAL_VARIANT_CEILING and documented == G.DOCUMENTED_VARIANT_FLOOR,
-     f"{documented} of {total}, recorded {G.DOCUMENTED_VARIANT_FLOOR} of {G.TOTAL_VARIANT_CEILING}")
+def _entry(variants, provenance=None, coverage=None, cites=None):
+    e = {"canonical": "input slot", "variants": variants, "rationale": "r"}
+    if provenance is not None:
+        e["provenance"] = provenance
+    e["coverage"] = coverage if coverage is not None else {loc: "unmeasured" for loc in LOCALES}
+    if cites:
+        e["coverage_records"] = cites
+    return e
 
-# 3. The defeat the review described, run as a case: it now raises the total past the ceiling.
-drifted = copy.deepcopy(live)
-a = next(n for n, e in drifted["labels"].items() if e.get("variants") and not e.get("measured"))
-b = next(n for n, e in drifted["labels"].items()
-         if e.get("variants") and not e.get("measured") and n != a)
-drifted["labels"][a]["variants"].append("キャンセル")
-drifted["labels"][b]["measured"] = {drifted["labels"][b]["variants"][0]:
-                                    {"locale": "ko-KR", "date": "2026-09-04", "observed": "x"}}
-t2, d2 = G.counts(drifted)
-case("adding an undocumented variant while documenting another still fails",
-     t2 > G.TOTAL_VARIANT_CEILING, f"total={t2} ceiling={G.TOTAL_VARIANT_CEILING}")
 
-# 4. An EMPTY provenance object counted as documentation while only its length was read, so a
-#    variant could be marked measured without anything having been measured.
-hollow = copy.deepcopy(live)
-c = next(n for n, e in hollow["labels"].items() if e.get("variants") and not e.get("measured"))
-hollow["labels"][c]["measured"] = {hollow["labels"][c]["variants"][0]: {}}
-case("an empty provenance block is not a reading",
-     G.counts(hollow)[1] == documented, f"documented={G.counts(hollow)[1]}")
+def _prov(record="2026-09-05-r", locale="ko-KR", observed="입력 슬롯. 채널 스트립", date="2026-09-05"):
+    return {"record": record, "locale": locale, "observed": observed, "date": date}
 
-real = copy.deepcopy(live)
-rv = real["labels"][c]["variants"][0]
-real["labels"][c]["measured"] = {rv: {"locale": "ko-KR", "date": "2026-09-04",
-                                      "observed": f"{rv} 를 이 화면에서 읽었다"}}
-case("a block whose observed string contains the variant is a reading",
-     G.counts(real)[1] == documented + 1, f"documented={G.counts(real)[1]}")
 
-# 4b. Three non-empty strings are not a reading. A second review attached
-#     `{"locale":"x","date":"x","observed":"x"}` to a fabricated variant and the totals did not
-#     move; `observed` must now contain the variant it documents, and the date must be a date.
-junk = copy.deepcopy(live)
-jl = next(n for n, e in junk["labels"].items() if e.get("variants") and not e.get("measured"))
-jv = junk["labels"][jl]["variants"][0]
-junk["labels"][jl]["measured"] = {jv: {"locale": "x", "date": "x", "observed": "x"}}
-case("junk strings are not a reading", G.counts(junk)[1] == documented, f"{G.counts(junk)[1]}")
+def main():
+    failures = []
 
-junk["labels"][jl]["measured"] = {jv: {"locale": "ko-KR", "date": "2026-09-04",
-                                       "observed": "nothing like it"}}
-case("an observed string that does not contain the variant is not a reading",
-     G.counts(junk)[1] == documented, f"{G.counts(junk)[1]}")
+    def case(name, condition, detail):
+        if not condition:
+            failures.append(f"{name}: {detail}")
 
-# 4c. A triple-quoted rationale was recorded as an empty string, so a destructive button's entire
-#     justification vanished from the projection while both sides agreed on the wrong value.
-case("no label carries an empty rationale",
-     all((e.get("rationale") or "").strip() for e in live["labels"].values()),
-     f"{sum(1 for e in live['labels'].values() if not (e.get('rationale') or '').strip())} empty")
+    guard.OBS = _ledger({"2026-09-05-r": "ko-KR", "2026-09-05-ja": "ja-JP"})
+    good_cov = {"en-US": "unmeasured", "ko-KR": "present", "ja-JP": "unmeasured"}
 
-# 5. The export refuses to write a short projection. A label the parser cannot read would vanish
-#    silently, and a missing label is the failure the projection exists to stop.
-case("the exporter counts declarations and parses all of them",
-     len(L.from_swift()) == len(live.get("labels") or {}),
-     f"{len(L.from_swift())} parsed")
+    # 1. A fully backed entry has no problems.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, good_cov)
+    case("clean entry", guard.provenance_problems("L", e) == [] and
+         guard.coverage_problems("L", e, LOCALES, VALUES) == [], "a backed entry was refused")
 
-# 6. `localised_canonicals` is what `check-livekit-ui-literals.py` aims with, and a canonical of two
-#    characters or fewer is excluded — `L` and `M` are Event List columns and would match anything.
-canonicals = L.localised_canonicals(live)
-case("short canonicals are excluded from the matching vocabulary",
-     all(len(c) > 2 for c in canonicals), f"{len(canonicals)} canonicals, shortest="
-     f"{min((len(c) for c in canonicals), default=0)}")
+    # 2. Provenance naming a record that is not in the ledger.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(record="2026-09-05-nope")}, good_cov)
+    p = guard.provenance_problems("L", e)
+    case("missing record", any("not in docs/observations" in x for x in p), p)
 
-print()
-print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
-sys.exit(1 if failed else 0)
+    # 3. Provenance whose record was measured in a different locale than it claims.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(record="2026-09-05-ja")}, good_cov)
+    p = guard.provenance_problems("L", e)
+    case("locale mismatch", any("measured in 'ja-JP'" in x for x in p), p)
+
+    # 4. `observed` that does not contain the variant is three strings, not a reading.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="something else")}, good_cov)
+    p = guard.provenance_problems("L", e)
+    case("observed lacks variant", any("containing the variant" in x for x in p), p)
+
+    # 5. Provenance for a string that is not a variant at all.
+    e = _entry(["입력 슬롯"], {"출력 슬롯": _prov(observed="출력 슬롯")}, good_cov)
+    p = guard.provenance_problems("L", e)
+    case("stray provenance", any("not one of its variants" in x for x in p), p)
+
+    # 6. `present` declared with no provenance in that locale — present is derived, never typed.
+    e = _entry(["입력 슬롯"], None, good_cov)
+    p = guard.coverage_problems("L", e, LOCALES, VALUES)
+    case("present without provenance", any("derived from provenance" in x for x in p), p)
+
+    # 7. `absent` with no record cited — a claim of absence needs a reading too.
+    e = _entry([], None, {"en-US": "absent", "ko-KR": "unmeasured", "ja-JP": "unmeasured"})
+    p = guard.coverage_problems("L", e, LOCALES, VALUES)
+    case("absent without record", any("claim of absence" in x for x in p), p)
+
+    # 8. `absent` citing a record from the wrong locale.
+    e = _entry([], None, {"en-US": "absent", "ko-KR": "unmeasured", "ja-JP": "unmeasured"},
+               cites={"en-US": "2026-09-05-r"})
+    p = guard.coverage_problems("L", e, LOCALES, VALUES)
+    case("absent wrong locale", any("not en-US" in x for x in p), p)
+
+    # 9. `absent` correctly cited passes.
+    e = _entry([], None, {"en-US": "unmeasured", "ko-KR": "absent", "ja-JP": "unmeasured"},
+               cites={"ko-KR": "2026-09-05-r"})
+    case("absent backed", guard.coverage_problems("L", e, LOCALES, VALUES) == [], "a backed absence was refused")
+
+    # 10. Coverage that skips a locale, or uses a value outside the four.
+    e = _entry([], None, {"en-US": "unmeasured", "ko-KR": "unmeasured"})
+    case("missing locale", any("expected exactly" in x for x in guard.coverage_problems("L", e, LOCALES, VALUES)), "")
+    e = _entry([], None, {"en-US": "unmeasured", "ko-KR": "maybe", "ja-JP": "unmeasured"})
+    case("bad value", any("not one of" in x for x in guard.coverage_problems("L", e, LOCALES, VALUES)), "")
+
+    # 11. Migration: a schema-1 `measured` block becomes `provenance` and derives `present`.
+    v1 = {"schema": 1, "labels": {"inputSlotHelpKeyword": {
+        "measured": {"입력 슬롯": _prov()}}}}
+    built = labels.build(existing=v1)
+    entry = built["labels"].get("inputSlotHelpKeyword") or {}
+    case("measured migrates", "입력 슬롯" in (entry.get("provenance") or {}), json.dumps(entry, ensure_ascii=False)[:200])
+    case("present derived", (entry.get("coverage") or {}).get("ko-KR") == "present", entry.get("coverage"))
+    case("schema 2", built.get("schema") == 2, built.get("schema"))
+
+    # 12. Migration: a cited absence survives regeneration; an uncited one does not become absent.
+    v2 = {"schema": 2, "labels": {"inputSlotHelpKeyword": {
+        "coverage": {"en-US": "absent", "ko-KR": "absent", "ja-JP": "unmeasured"},
+        "coverage_records": {"en-US": "2026-09-05-en"}}}}
+    built = labels.build(existing=v2)
+    entry = built["labels"].get("inputSlotHelpKeyword") or {}
+    cov = entry.get("coverage") or {}
+    case("cited absence survives", cov.get("en-US") == "absent" and
+         (entry.get("coverage_records") or {}).get("en-US") == "2026-09-05-en", entry)
+    # ko-KR was carried as `absent` with NO citation: that is not evidence and must not survive.
+    case("uncited absence is dropped", cov.get("ko-KR") == "unmeasured", cov)
+
+    # 13. The real document is clean.
+    import subprocess
+    proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")],
+                          capture_output=True, text=True)
+    case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
+
+    if failures:
+        for f in failures:
+            print(f"FAIL {f}")
+        return 1
+    print("13 case(s) pass: a claim without a record, in the wrong locale, or typed as `present` is refused")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "note": "Burn-down ceilings for what the observation ledger does not yet know. Each number is a count that may only FALL. A guard compares the live count to the ceiling and fails on any rise; lowering a ceiling is an ordinary commit; raising one requires an entry under `raised` with a date and a reason, so the decision is in the diff rather than in a constant nobody reads. ADR-019 D8. Live counts: Scripts/observations-status.py --unproven",
+  "seeded": "2026-09-05",
+  "ceilings": {
+    "undocumented_variants": 255,
+    "unmeasured_coverage": {
+      "en-US": 142,
+      "ko-KR": 140,
+      "ja-JP": 142
+    },
+    "schema_v1_records": 24,
+    "manual_reverify": 20,
+    "surfaces_without_records": 6
+  },
+  "raised": {}
+}

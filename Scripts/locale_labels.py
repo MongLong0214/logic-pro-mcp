@@ -14,9 +14,12 @@ cannot import Swift reads the JSON instead of guessing.
     Scripts/locale_labels.py --write     regenerate the JSON from AXLocalePolicy.swift
     Scripts/locale_labels.py --check     exit 1 if they disagree
 
-`measured` is where "the variants list grows when a locale is observed, not when one is translated"
-stops being a comment and becomes data: each variant may name the date, the observation record and
-the exact string that was read. `check-locale-labels-json.py` ratchets that coverage.
+`provenance` (schema 2; `measured` in schema 1) is where "the variants list grows when a locale is
+observed, not when one is translated" stops being a comment and becomes data: each variant names
+the observation record it was read in, the locale that record is true of, the date, and the exact
+string that was read. `coverage` says, per supported locale, what is KNOWN about the label —
+`present` (measured, variant listed), `absent` (measured, no distinct form), `identifier` (not
+matched by label at all), or `unmeasured`, which is the only one that is a gap. ADR-019.
 """
 import json
 import os
@@ -138,27 +141,69 @@ def localised_canonicals(doc=None):
     return out
 
 
+SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
+COVERAGE_VALUES = ("present", "absent", "identifier", "unmeasured")
+
+
 def build(existing=None):
-    """The JSON document: the Swift projection, with any `measured` blocks carried forward."""
+    """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
+
+    Swift owns the strings. The JSON owns what is known ABOUT them, and that must survive every
+    regeneration or the act of syncing the strings would erase the evidence for them. A schema-1
+    document's `measured` is read as `provenance`, so the migration is the next `--write`.
+
+    `coverage` defaults to `unmeasured` for every supported locale a label has no declaration for.
+    That is the honest default: a label nobody has looked at in a locale is not `absent` there,
+    and writing `absent` without a record is the fabrication this whole file exists to prevent.
+    A `present` is derived, never carried: it is true exactly when a variant with provenance in
+    that locale is in the list, so it cannot drift from the evidence.
+    """
     existing = existing if existing is not None else load_json()
     previous = (existing.get("labels") or {})
     labels = {}
     for name, entry in sorted(from_swift().items()):
-        measured = (previous.get(name) or {}).get("measured")
-        if measured:
-            # Provenance survives regeneration, but only for variants that still exist.
-            entry = dict(entry)
-            entry["measured"] = {k: v for k, v in measured.items() if k in entry["variants"]}
+        prior = previous.get(name) or {}
+        entry = dict(entry)
+        provenance = prior.get("provenance") or prior.get("measured") or {}
+        # Provenance survives regeneration, but only for variants that still exist.
+        provenance = {k: v for k, v in provenance.items() if k in entry["variants"]}
+        if provenance:
+            entry["provenance"] = provenance
+        carried = prior.get("coverage") or {}
+        cited = prior.get("coverage_records") or {}
+        present_in = {str((b or {}).get("locale")) for b in provenance.values()}
+        coverage = {}
+        for locale in SUPPORTED_LOCALES:
+            if locale in present_in:
+                coverage[locale] = "present"
+            elif carried.get(locale) in ("absent", "identifier") and cited.get(locale):
+                # A claim of absence is carried only with the record that showed it. An `absent`
+                # nobody cited would otherwise ride through every regeneration as if it were
+                # evidence — the guard would refuse it, but the projection should not emit it.
+                coverage[locale] = carried[locale]
+            else:
+                coverage[locale] = "unmeasured"
+        entry["coverage"] = coverage
+        # A claim of absence, or of identifier addressing, names the record that showed it — and
+        # that citation has to survive regeneration exactly as provenance does, or every --write
+        # would turn a measured `absent` back into `unmeasured` by erasing its evidence.
+        cites = {loc: rid for loc, rid in (prior.get("coverage_records") or {}).items()
+                 if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("absent", "identifier")}
+        if cites:
+            entry["coverage_records"] = cites
         labels[name] = entry
     return {
-        "schema": 1,
+        "schema": 2,
         "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
         "how_to_regenerate": "Scripts/locale_labels.py --write",
         "note": (
             "Swift is the compiled source of truth; this is its projection for everything that "
-            "cannot import Swift. `measured` records where a variant was READ — the rule is that "
-            "the list grows when a locale is observed, not when one is translated."
+            "cannot import Swift. `provenance` records where a variant was READ — the observation "
+            "record, its locale, the date and the exact string — and `coverage` says per locale "
+            "what is known about the label. `unmeasured` is the only value that is a gap. ADR-019."
         ),
+        "supported_locales": list(SUPPORTED_LOCALES),
+        "coverage_values": list(COVERAGE_VALUES),
         "labels": labels,
     }
 
