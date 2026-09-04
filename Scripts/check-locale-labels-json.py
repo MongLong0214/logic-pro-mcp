@@ -97,28 +97,13 @@ MATCH_MODES = ("exact", "contains")
 
 
 def swift_containment(repo=REPO):
-    """LabelSet names the product demonstrably reads by CONTAINMENT, read from the Swift.
+    """Delegates to Scripts/locale_labels.py, which is where the derivation lives.
 
-    Derived, not guessed. An earlier cut inferred the mode from the label's NAME — `*Keyword` and
-    `*Hint` meant containment — and it was wrong in both directions against the real call sites:
-    `cancelButton` and `audioPluginSlotLabel` are read with `containsAny` while `inputSlotHelpKeyword`
-    is not read at any call site at all, because it is PASSED to a helper that does the matching.
-
-    That last shape is why this returns only what it can see. A name absent from this set is not
-    known to be exact; it is not derivable here, and the caller says so rather than assuming.
+    Both this guard and the generator need to know which sets the product reads with `containsAny`,
+    and a rule with two implementations is a rule that drifts — measured 2026-09-05, when the
+    campaign proposer kept its own name-based version and was wrong for 23 of the 31 sets.
     """
-    names = set()
-    for root, _, files in os.walk(os.path.join(repo, "Sources")):
-        for f in files:
-            if not f.endswith(".swift"):
-                continue
-            try:
-                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
-            except OSError:
-                continue
-            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.containsAny", body))
-            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.matches\([^)]*mode:\s*\.contains", body))
-    return names
+    return _module().swift_containment(repo)
 
 
 _containment = swift_containment()
@@ -132,7 +117,9 @@ def provenance_problems(name, entry):
     RESOLVED: it must exist, and the locale the block claims must be the locale that record was
     measured in. A provenance that names a Korean record for a Japanese string is not a reading.
     """
-    out = []
+    label_mode, out = label_match(name, entry)
+    if label_mode is None and entry.get("provenance"):
+        return out          # without a declared mode there is no rule to check a sighting under
     for variant, block in (entry.get("provenance") or {}).items():
         if variant not in (entry.get("variants") or []):
             out.append(f"{name}: provenance for {variant!r}, which is not one of its variants")
@@ -158,7 +145,10 @@ def provenance_problems(name, entry):
         # in a file the record lists as evidence. A record that never saw it cannot be cited for it.
         role = block.get("role")
         attribute = block.get("attribute")
-        mode = block.get("match")
+        # The LABEL's mode, not the block's. A block may still carry one — `label_match` reports it
+        # when the two disagree — but the sighting is checked under the label's, so the two halves
+        # of this guard can never test the same claim under different rules.
+        mode = label_mode
         declared = entry.get("roles") or []
         if not declared:
             out.append(f"{name}: has provenance but declares no `roles` — without the set of AX "
@@ -171,13 +161,6 @@ def provenance_problems(name, entry):
         if not role or attribute not in SIGHTING_ATTRS:
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
-        elif mode not in MATCH_MODES:
-            out.append(f"{name}: provenance for {variant!r} must name `match` as one of {MATCH_MODES} "
-                       f"— whether Logic's string EQUALS this variant or merely contains it is the "
-                       f"difference between a sighting and a coincidence")
-        elif name in _containment and mode != "contains":
-            out.append(f"{name}: provenance for {variant!r} claims match {mode!r}, but the product "
-                       f"reads this set with `containsAny` — the evidence rule must be the product's")
         elif (seen := sighting_value(rec, variant, role, attribute,
                                      exact=(mode == "exact"))) is None:
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
@@ -284,6 +267,36 @@ def sighting_value(rec, text, role=None, attribute=None, exact=True):
     return None
 
 
+def label_match(name, entry):
+    """The match mode for a LABEL, as declared — and the problems with declaring it that way.
+
+    The mode is a property of the label, not of one variant's block: whether Logic's string EQUALS
+    this label or merely CONTAINS it is the same question for every locale. It lived only on
+    provenance blocks, so `coverage_problems` had nothing to read and derived its own answer from
+    the Swift — and for the 9 labels the Swift cannot speak about, the two halves of this guard
+    disagreed about the same label. `undoMenuItemPrefix` is the clearest: Logic shows
+    "Undo <action>", the proposer matched by containment and was right, and coverage demanded
+    equality and refused it.
+
+    Returns (mode, problems). `mode` is None when it cannot be trusted.
+    """
+    out = []
+    mode = entry.get("match")
+    if mode not in MATCH_MODES:
+        return None, [f"{name}: declares no `match` — one of {MATCH_MODES}. Whether Logic's string "
+                      f"EQUALS this label or CONTAINS it decides what counts as having seen it, and "
+                      f"it is a property of the label rather than of one variant"]
+    if name in _containment and mode != "contains":
+        out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
+                   f"`containsAny` — the evidence rule must be the product's")
+    for variant, block in (entry.get("provenance") or {}).items():
+        if block.get("match") not in (None, mode):
+            out.append(f"{name}: provenance for {variant!r} declares match "
+                       f"{block.get('match')!r} while the label declares {mode!r} — one label, one "
+                       f"rule, or the two halves of this guard test different things")
+    return mode, out
+
+
 def coverage_problems(name, entry, locales, values):
     """`coverage` must name every supported locale, use only the three values, and be backed.
 
@@ -293,10 +306,12 @@ def coverage_problems(name, entry, locales, values):
     Both resolve `coverage_records[locale]`; a claim without a record that saw it is refused, so a
     `measured` cannot be typed any more than a variant's provenance can.
     """
-    out = []
+    mode, out = label_match(name, entry)
     cov = entry.get("coverage")
     if not isinstance(cov, dict):
-        return [f"{name}: coverage is missing — every label declares what is known per locale"]
+        return out + [f"{name}: coverage is missing — every label declares what is known per locale"]
+    if mode is None and any(v in ("measured", "identifier") for v in cov.values()):
+        return out
     if set(cov) != set(locales):
         out.append(f"{name}: coverage names {sorted(cov)}, expected exactly {sorted(locales)}")
     present_in = {str((b or {}).get("locale")) for b in (entry.get("provenance") or {}).values()}
@@ -351,7 +366,7 @@ def coverage_problems(name, entry, locales, values):
             # carries one). Absence claimed about an element nobody found is still refused.
             seen = [r for r in _rows(rec) if r.get("role") == role]
             carrying = [t for t in strings if t and sighting(rec, t, role,
-                                                             exact=(name not in _containment))]
+                                                             exact=(mode == "exact"))]
             if not seen:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
                            f"{cites.get(loc)!r}, which contains no {role} at all — absence is a "
@@ -369,7 +384,7 @@ def coverage_problems(name, entry, locales, values):
                 out.append(f"{name}: coverage[{loc}] is 'measured' but names no readable attribute "
                            f"under coverage_attributes[{loc}] — one of {LABEL_ATTRS}. Which "
                            f"attribute carried the string is part of the reading, not a detail")
-            elif not any(sighting(rec, t, role, attr, exact=(name not in _containment))
+            elif not any(sighting(rec, t, role, attr, exact=(mode == "exact"))
                          for t in strings if t):
                 out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which "
                            f"has no {role} whose {attr} carried any of this label's strings")

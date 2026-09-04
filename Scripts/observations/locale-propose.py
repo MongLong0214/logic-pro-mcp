@@ -145,6 +145,10 @@ def apply(labels_path, census, proposals, records_by_surface):
         entry = doc["labels"].get(name)
         if not entry:
             continue
+        # The label declares the mode once. Coverage has no per-variant block to read one from, and
+        # when it derived its own the two halves of the guard disagreed for every label the Swift
+        # cannot speak about. This is the mode the hits above were actually found under.
+        entry["match"] = match_mode(name)
         for h in hits:
             rid = records_by_surface.get(h["surface"])
             if not rid:
@@ -176,6 +180,10 @@ def apply(labels_path, census, proposals, records_by_surface):
                     # label declares, so seed that here too.
                     entry.setdefault("coverage_records", {})[locale] = rid
                     entry.setdefault("coverage_roles", {})[locale] = h["role"]
+                    # ...and the attribute. Coverage names the same three things provenance does;
+                    # leaving this out produced a claim the guard refused on arrival, which is the
+                    # failure the integration cases exist to catch before a campaign does.
+                    entry.setdefault("coverage_attributes", {})[locale] = h["attribute"]
                     declared = entry.setdefault("roles", [])
                     if h["role"] not in declared:
                         declared.append(h["role"])

@@ -30,14 +30,25 @@ SURFACE_RULES = [
 # under the FIRST surface whose marker appears in its path; unmatched rows stay unclassified and are
 # counted in limits. Adding a locale means adding its spellings here — from a census, not a guess.
 ANCESTRY = [
-    ("arrange.transport",     ("{Transport}", "[컨트롤 막대", "[Control Bar", "[LCD")),
-    ("mixer.channel_strips",  ("[왼쪽 인스펙터 채널 스트립", "[오른쪽 인스펙터 채널 스트립", "[Left Inspector", "[Right Inspector", "[믹서", "[Mixer")),
-    ("library.patches",       ("[라이브러리", "[Library")),
+    ("arrange.transport",     ("{Transport}", "[컨트롤 막대", "[Control Bar", "[LCD", "[コントロールバー")),
+    ("mixer.channel_strips",  ("[왼쪽 인스펙터 채널 스트립", "[오른쪽 인스펙터 채널 스트립", "[Left Inspector", "[Right Inspector", "[믹서", "[Mixer", "[ミキサー")),
+    ("library.patches",       ("[라이브러리", "[Library", "[ライブラリ")),
     # Regions BEFORE headers: a region's path passes through a layout area described "N개의 ‘name’ 트랙",
     # which the headers marker would otherwise claim. First match wins, so the more specific goes first.
-    ("arrange.regions",       ("[트랙 콘텐츠", "[Track Content", "[Tracks contents")),
-    ("arrange.track_headers", ("[트랙 헤더", "[Track Header", "[트랙 헤더 목록", "’ 트랙]", "' Track]")),
+    ("arrange.regions",       ("[트랙 콘텐츠", "[Track Content", "[Tracks contents", "[トラックコンテンツ")),
+    ("arrange.track_headers", ("[트랙 헤더", "[Track Header", "[트랙 헤더 목록", "’ 트랙]", "' Track]",
+                               "[トラックヘッダ")),
 ]
+
+# The ja-JP spellings above were read out of a ja-JP census, not translated: `[コントロールバー`,
+# `[ミキサー`, `[ライブラリ`, `[トラックコンテンツ`, `[トラックヘッダ`, each with the same row counts
+# as its en-US counterpart. Without them every window row in Japanese fell through — 414 of 617 —
+# so a locale campaign produced ONE surface in Japanese and six in English, and the ledger recorded
+# that asymmetry as if it were something about Logic rather than about this list.
+#
+# `[インスペクタ` is deliberately absent. It is the exact counterpart of `[Inspector` (99 rows in
+# both censuses), and `[Inspector` is not here either — adding it on one side only would make the
+# Japanese taxonomy richer than the English one and the per-locale counts incomparable.
 
 
 def classify(row):

@@ -43,7 +43,7 @@ def census(rows, locale="ko-KR"):
 
 def labels(**sets):
     return {"schema": 2, "supported_locales": ["en-US", "ko-KR", "ja-JP"], "labels": {
-        k: {"canonical": v[0], "variants": v[1], "rationale": "r",
+        k: {"canonical": v[0], "variants": v[1], "rationale": "r", "match": "exact",
             "coverage": {"en-US": "unmeasured", "ko-KR": "unmeasured", "ja-JP": "unmeasured"}}
         for k, v in sets.items()}}
 
@@ -135,6 +135,31 @@ def main():
         finally:
             guard.OBS = saved
         case(f"{label_name}: the GUARD accepts what the proposer wrote", problems == [], problems)
+
+    # 5c. The same integration for the COVERAGE branch, which writes when the CANONICAL is what the
+    #     census saw. It is a separate code path in the proposer and it was missing
+    #     `coverage_attributes` — caught only by running a real campaign and having the guard refuse
+    #     the result. A path with no integration case is a path that gets found in production.
+    obs = Path(tempfile.mkdtemp())
+    rid = "2026-09-05-ko-KR-arrange-window-census"
+    json.dump({"id": rid, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXButton", "title": "Solo"}]},
+              open(obs / f"{rid}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo")]), open(cpath, "w"))
+    lp = write(tmp, labels(soloButton=("Solo", [])))
+    _, _, props, _ = propose.main(cpath, lp)
+    _, n_cov = propose.apply(lp, json.load(open(cpath)), props, {"arrange.window": rid})
+    entry = json.load(open(lp, encoding="utf-8"))["labels"]["soloButton"]
+    case("a canonical match writes a coverage citation", n_cov == 1, entry)
+    for field in ("coverage_records", "coverage_roles", "coverage_attributes"):
+        case(f"coverage names its {field.split('_')[1]}", (entry.get(field) or {}).get("ko-KR"), entry)
+    saved, guard.OBS = guard.OBS, str(obs)
+    try:
+        problems = guard.coverage_problems("soloButton", entry, ("en-US", "ko-KR", "ja-JP"),
+                                           ("measured", "identifier", "unmeasured", "retired"))
+    finally:
+        guard.OBS = saved
+    case("the GUARD accepts the coverage the proposer wrote", problems == [], problems)
 
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))

@@ -52,8 +52,9 @@ def _row(role, **attrs):
 
 
 def _entry(variants, provenance=None, coverage=None, cites=None, roles=None, idents=None,
-           canonical="input slot", declared=("AXButton",), retired=None, attrs=None, absent=None):
-    e = {"canonical": canonical, "variants": variants, "rationale": "r"}
+           canonical="input slot", declared=("AXButton",), retired=None, attrs=None, absent=None,
+           match="contains"):
+    e = {"canonical": canonical, "variants": variants, "rationale": "r", "match": match}
     if declared:
         e["roles"] = list(declared)
     if retired:
@@ -144,7 +145,7 @@ def main():
     guard.OBS = _ledger({"2026-09-05-l": ("ko-KR", [_row("AXStaticText", value="an L in it")])})
     ell = _entry(["L"], {"L": _prov(record="2026-09-05-l", observed="an L in it",
                                     role="AXStaticText", attribute="value", match="exact")}, U,
-                 declared=("AXStaticText",))
+                 declared=("AXStaticText",), match="exact")
     case("a letter inside a word is not an exact sighting",
          any("carried it" in x for x in guard.provenance_problems("eventListColumnL", ell)),
          guard.provenance_problems("eventListColumnL", ell))
@@ -162,8 +163,14 @@ def main():
     #    the name — `*Keyword` meant containment — and that was wrong in both directions against the
     #    real call sites. A block must declare it, and it must agree with how the product reads the
     #    set where the Swift can say.
-    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(match=None)}, ko_measured)
-    case("match mode is required", any("must name `match`" in x for x in pp(e)), pp(e))
+    # The LABEL declares it, because coverage has no block to read one from and derived its own
+    # when it was missing — so for the 9 sets the Swift cannot speak about, the two halves of this
+    # guard checked the same claim under different rules.
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov()}, ko_measured, match=None)
+    case("match mode is required on the label", any("declares no `match`" in x for x in pp(e)), pp(e))
+    e = _entry(["입력 슬롯"], {"입력 슬롯": _prov(match="exact")}, ko_measured, match="contains")
+    case("a block may not declare a mode the label contradicts",
+         any("one label, one rule" in x for x in pp(e)), pp(e))
 
     # `cancelButton` IS read with containsAny at a call site, so the Swift can contradict the claim.
     # `inputSlotHelpKeyword` is passed to a helper and cannot be derived, which is why the block
@@ -171,11 +178,12 @@ def main():
     guard.OBS = _ledger({"2026-09-05-c": ("ko-KR", [_row("AXButton", help="취소 하시겠습니까")])})
     cancel = _entry(["취소"], {"취소": _prov(record="2026-09-05-c", observed="취소 하시겠습니까",
                                             role="AXButton", attribute="help", match="exact")}, ko_measured,
-                    declared=("AXButton",))
+                    declared=("AXButton",), match="exact")
     case("claiming exact for a containsAny set is refused",
          any("reads this set with `containsAny`" in x
              for x in guard.provenance_problems("cancelButton", cancel)),
          guard.provenance_problems("cancelButton", cancel))
+    cancel["match"] = "contains"
     cancel["provenance"]["취소"]["match"] = "contains"
     case("...and declaring it correctly is accepted",
          guard.provenance_problems("cancelButton", cancel) == [],
@@ -186,7 +194,7 @@ def main():
     guard.OBS = _ledger({"2026-09-05-m": ("ko-KR", [_row("AXMenuItem", title="사이클 끔")])})
     off = _entry(["끔"], {"끔": _prov(record="2026-09-05-m", observed="사이클 끔",
                                      role="AXMenuItem", attribute="title", match="exact")}, ko_measured,
-                 declared=("AXMenuItem",))
+                 declared=("AXMenuItem",), match="exact")
     case("a longer menu title does not satisfy an exact match",
          any("carried it" in x for x in guard.provenance_problems("automationModeOff", off)),
          guard.provenance_problems("automationModeOff", off))

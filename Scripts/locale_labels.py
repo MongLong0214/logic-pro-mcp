@@ -145,6 +145,34 @@ SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
 COVERAGE_VALUES = ("measured", "identifier", "unmeasured", "retired")
 
 
+def swift_containment(repo=REPO):
+    """LabelSet names the product demonstrably reads by CONTAINMENT, read from the Swift.
+
+    Derived, not guessed. An earlier cut inferred the mode from the label's NAME — `*Keyword` and
+    `*Hint` meant containment — and it was wrong in both directions against the real call sites:
+    `cancelButton` and `audioPluginSlotLabel` are read with `containsAny` while `inputSlotHelpKeyword`
+    is not read at any call site at all, because it is PASSED to a helper that does the matching.
+
+    That last shape is why this returns only what it can see. A name absent from this set is not
+    known to be exact; it is not derivable here, and the caller says so rather than assuming.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.containsAny", body))
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.matches\([^)]*mode:\s*\.contains", body))
+    return names
+
+
+_CONTAINMENT = swift_containment()
+
+
 def build(existing=None):
     """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
 
@@ -181,6 +209,16 @@ def build(existing=None):
         for field in ("roles", "retired"):
             if prior.get(field):
                 entry[field] = prior[field]
+        # The match mode is a property of the LABEL: whether Logic's string EQUALS it or CONTAINS it
+        # is the same question in every locale. It used to live only on provenance blocks, so
+        # coverage had nothing to read and derived its own answer — and the two halves of the guard
+        # disagreed about the 9 labels the Swift cannot speak about.
+        #
+        # `exact` is the default because it is the STRICT one. Loosening a label to containment
+        # admits coincidental substrings, so it is a decision that shows up in a diff rather than
+        # something a regeneration can do quietly. Where the Swift says `containsAny`, it wins.
+        entry["match"] = ("contains" if name in _CONTAINMENT
+                          else prior.get("match") or "exact")
         retired = bool((entry.get("retired") or {}).get("reason"))
         coverage = {}
         for locale in SUPPORTED_LOCALES:

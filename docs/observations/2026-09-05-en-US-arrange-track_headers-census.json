@@ -1,0 +1,62 @@
+{
+  "id": "2026-09-05-en-US-arrange-track_headers-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.track_headers surface exposes to AX in en-US",
+  "question": "What labels does Logic show on arrange.track_headers in en-US, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh en-US",
+    "expected": "a census in en-US whose arrange.track_headers rows carry the same 5 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-en-US-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.track_headers",
+      "rows": 6,
+      "distinct_strings": 5,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "Has Focus",
+        "Track 1 “Absolute Zero”",
+        "Track 25 “Audio 1”",
+        "Track 26 “Studio Grand”",
+        "Track header. Mute or solo the track’s channel strip signal, enable the track for recording, and adjust volume or pan. Control-click and choose Track Header Components to select which controls to show or hide. "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in en-US, arrange.track_headers exposes 6 elements carrying 5 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "134 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

@@ -21,10 +21,23 @@
         "모든 트랙을 오디오 파일로…"
       ],
       "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "arrangeWindowTitleSuffix": {
@@ -34,6 +47,7 @@
         "トラック"
       ],
       "rationale": "Witnesses that an arrange window exists after project.new; read-only classification.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -48,6 +62,7 @@
         "오디오 이펙트"
       ],
       "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists).",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -60,6 +75,7 @@
         "오토메이션"
       ],
       "rationale": "Gates the track-header automation-mode read to the automation control; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -72,6 +88,7 @@
         "래치"
       ],
       "rationale": "Classifies the track-header automation mode as Latch; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -84,6 +101,7 @@
         "끔"
       ],
       "rationale": "Classifies an explicit track-header automation Off token; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -96,6 +114,7 @@
         "읽기"
       ],
       "rationale": "Classifies the track-header automation mode as Read; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -108,6 +127,7 @@
         "터치"
       ],
       "rationale": "Classifies the track-header automation mode as Touch; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -120,6 +140,7 @@
         "트림"
       ],
       "rationale": "Classifies the track-header automation mode as Trim; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -132,6 +153,7 @@
         "쓰기"
       ],
       "rationale": "Classifies the track-header automation mode as Write; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -144,10 +166,23 @@
         "마디"
       ],
       "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "beatSliderLabel": {
@@ -156,6 +191,7 @@
         "비트"
       ],
       "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -168,10 +204,23 @@
         "바운스"
       ],
       "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "cancelButton": {
@@ -181,6 +230,7 @@
         "キャンセル"
       ],
       "rationale": "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`).",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -194,10 +244,26 @@
         "コントロールバー"
       ],
       "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
+      "provenance": {
+        "コントロールバー": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "コントロールバー",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "createButton": {
@@ -207,6 +273,7 @@
         "作成"
       ],
       "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`).",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -220,10 +287,35 @@
         "マーカーを作成"
       ],
       "rationale": "Navigate menu entry that creates a marker at the playhead.",
+      "provenance": {
+        "マーカーを作成": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "マーカーを作成",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "deleteTracksPrimaryButton": {
@@ -234,6 +326,7 @@
         "削除"
       ],
       "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -247,10 +340,35 @@
         "編集"
       ],
       "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome.",
+      "provenance": {
+        "編集": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "編集",
+          "role": "AXMenuBarItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "eventListColumnChannel": {
@@ -259,6 +377,7 @@
         "채널"
       ],
       "rationale": "Event List channel column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -269,6 +388,7 @@
       "canonical": "L",
       "variants": [],
       "rationale": "Event List lock column; unlabelled in every locale measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -281,6 +401,7 @@
         "길이"
       ],
       "rationale": "Region-level length column; distinguishes the region list from the event list.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -293,6 +414,7 @@
         "길이/정보"
       ],
       "rationale": "Event List length column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -303,6 +425,7 @@
       "canonical": "M",
       "variants": [],
       "rationale": "Event List mute column; unlabelled in every locale measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -315,6 +438,7 @@
         "이름"
       ],
       "rationale": "Region-level name column; distinguishes the region list from the event list.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -327,6 +451,7 @@
         "번호"
       ],
       "rationale": "Event List number column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -339,6 +464,7 @@
         "위치"
       ],
       "rationale": "Event List position column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -351,6 +477,7 @@
         "상태"
       ],
       "rationale": "Event List status column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -363,6 +490,7 @@
         "트랙"
       ],
       "rationale": "Region-level track column; distinguishes the region list from the event list.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -375,6 +503,7 @@
         "값"
       ],
       "rationale": "Event List value column; identity is the canonical English form.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -388,6 +517,7 @@
         "イベント"
       ],
       "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -398,6 +528,7 @@
       "canonical": "Event Position and Length as Time",
       "variants": [],
       "rationale": "Decides whether Event List positions are bar/beat or timecode; read-only.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -410,10 +541,23 @@
         "내보내기"
       ],
       "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "fileMenuBar": {
@@ -423,10 +567,35 @@
         "ファイル"
       ],
       "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "provenance": {
+        "ファイル": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "ファイル",
+          "role": "AXMenuBarItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "goToMenuItem": {
@@ -436,10 +605,35 @@
         "移動"
       ],
       "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position.",
+      "provenance": {
+        "移動": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "移動",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "goToPositionDialogTitle": {
@@ -449,6 +643,7 @@
         "位置の移動"
       ],
       "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -462,10 +657,35 @@
         "位置…"
       ],
       "rationale": "Go To submenu leaf that opens the Go To Position dialog.",
+      "provenance": {
+        "位置…": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "位置…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "headerPanHint": {
@@ -479,6 +699,7 @@
         "reason": "Superseded by sliderPanHint. The track-header pan control this addressed is no longer read through this LabelSet, so no measurement in any locale can close it — left as `unmeasured` it was permanent debt that misreported the size of the gap.",
         "since": "2026-09-05"
       },
+      "match": "exact",
       "coverage": {
         "en-US": "retired",
         "ko-KR": "retired",
@@ -491,6 +712,7 @@
         "모든 플러그인 윈도우 가리기"
       ],
       "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -504,6 +726,7 @@
         "가로 확대"
       ],
       "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -517,10 +740,35 @@
         "読み込む"
       ],
       "rationale": "File menu entry that opens the Import submenu used by midi.import_file.",
+      "provenance": {
+        "読み込む": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "読み込む",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "inline:Dual Mono": {
@@ -529,6 +777,7 @@
         "듀얼 모노"
       ],
       "rationale": "Plugin format leaf after exact plugin selection.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -541,6 +790,7 @@
         "모노"
       ],
       "rationale": "Plugin format leaf after exact plugin selection.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -553,6 +803,7 @@
         "모노->스테레오"
       ],
       "rationale": "Plugin format leaf after exact plugin selection.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -565,6 +816,7 @@
         "스테레오"
       ],
       "rationale": "Plugin format leaf after exact plugin selection.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -594,6 +846,7 @@
       "roles": [
         "AXButton"
       ],
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "measured",
@@ -606,6 +859,7 @@
         "라이브러리"
       ],
       "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists).",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -618,6 +872,7 @@
         "마커"
       ],
       "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -631,10 +886,35 @@
         "삭제"
       ],
       "rationale": "Live-confirmed on Logic 12.3: Marker List Delete is `削除` in Japanese and `삭제` in Korean. It is used only with exactStrict because the Edit menu also has Delete-Undo-History entries; prefix or containment matching can reach a different destructive command.",
+      "provenance": {
+        "削除": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "削除",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "markerListEditMenuButton": {
@@ -644,6 +924,7 @@
         "편집"
       ],
       "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -657,6 +938,7 @@
         "項目数"
       ],
       "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -670,10 +952,35 @@
         "MIDIファイル…"
       ],
       "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file.",
+      "provenance": {
+        "MIDIファイル…": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "MIDIファイル…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "mixerInspectorContext": {
@@ -682,6 +989,7 @@
         "인스펙터"
       ],
       "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -694,6 +1002,7 @@
         "믹서"
       ],
       "rationale": "Identifies the mixer container by exact normalized name; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -706,6 +1015,7 @@
         "이동"
       ],
       "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -719,10 +1029,35 @@
         "移動"
       ],
       "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "provenance": {
+        "移動": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "移動",
+          "role": "AXMenuBarItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "newProjectMenuItem": {
@@ -732,10 +1067,35 @@
         "新規"
       ],
       "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it.",
+      "provenance": {
+        "新規": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "新規",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "newTrackSheetDescription": {
@@ -745,6 +1105,7 @@
         "新規トラック"
       ],
       "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled).",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -784,6 +1145,7 @@
         "밸런스"
       ],
       "rationale": "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -796,6 +1158,7 @@
         "트랙당 하나의 파일"
       ],
       "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -809,10 +1172,35 @@
         "マーカーリストを開く"
       ],
       "rationale": "Navigate menu entry that opens the Marker List window.",
+      "provenance": {
+        "マーカーリストを開く": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "マーカーリストを開く",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "outputSlotHelpKeyword": {
@@ -837,6 +1225,7 @@
       "roles": [
         "AXButton"
       ],
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "measured",
@@ -849,6 +1238,7 @@
         "재생헤드 위치"
       ],
       "rationale": "Identifies the playhead position text field description; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -862,6 +1252,7 @@
         "再生ヘッド位置"
       ],
       "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -874,6 +1265,7 @@
         "read"
       ],
       "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -886,6 +1278,7 @@
         "오토메이션"
       ],
       "rationale": "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -898,6 +1291,7 @@
         "바이패스"
       ],
       "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists).",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -912,6 +1306,7 @@
         "목록"
       ],
       "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists).",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -924,6 +1319,7 @@
         "컨트롤"
       ],
       "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; use to select Controls only.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -936,16 +1332,30 @@
         "편집기"
       ],
       "rationale": "Measured live on 2026-09-02 in Compressor's scoped View menu; paired evidence for Controls/컨트롤.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "pluginWindowSmartControlsControl": {
       "canonical": "smart controls",
       "variants": [],
       "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -958,10 +1368,23 @@
         "보기"
       ],
       "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback.",
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "projectOrSectionMenuItem": {
@@ -972,10 +1395,23 @@
         "프로젝트 또는 섹션..."
       ],
       "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "projectPickerWindow": {
@@ -986,6 +1422,7 @@
         "new from template"
       ],
       "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -998,6 +1435,7 @@
         "리전"
       ],
       "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1010,6 +1448,7 @@
         "오디오"
       ],
       "rationale": "Classifies a region as audio content; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1024,6 +1463,7 @@
         "세션 플레이어"
       ],
       "rationale": "Classifies a region as drummer/session-player content; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1034,6 +1474,7 @@
       "canonical": "midi",
       "variants": [],
       "rationale": "Classifies a region as MIDI content; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1046,10 +1487,23 @@
         "별도 저장…"
       ],
       "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "saveConfirmationButton": {
@@ -1060,6 +1514,7 @@
         "확인"
       ],
       "rationale": "Save As dialog commit button; file existence verifies the result.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1072,6 +1527,7 @@
         "폴더"
       ],
       "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1084,6 +1540,7 @@
         "패키지"
       ],
       "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1096,6 +1553,7 @@
         "저장"
       ],
       "rationale": "Title of the Save As panel window; the structural classifier matches it exactly.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1112,6 +1570,7 @@
         "출력"
       ],
       "rationale": "Excludes send/IO buttons from empty audio-plugin slot detection; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1124,6 +1583,7 @@
         "로케이터 설정…"
       ],
       "rationale": "Navigate menu entry that opens the cycle-range locator dialog.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1138,6 +1598,7 @@
         "기본"
       ],
       "rationale": "Identifies the plugin Setting AXPopUpButton by its value substring; read-only locator.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1150,6 +1611,7 @@
         "믹서 보기"
       ],
       "rationale": "Used only as a best-effort mixer reveal before structural mixer readback.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1162,6 +1624,7 @@
         "스텝 입력 키보드 보기"
       ],
       "rationale": "Native Window-menu toggle used with independent window-state readback.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1174,6 +1637,7 @@
         "템포 목록 보기"
       ],
       "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1188,6 +1652,7 @@
         "밸런스"
       ],
       "rationale": "Classifies a slider as a pan control; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1200,6 +1665,7 @@
         "센드"
       ],
       "rationale": "Classifies a slider as a send control; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1213,6 +1679,7 @@
         "볼륨"
       ],
       "rationale": "Classifies a slider as a volume fader; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1225,6 +1692,7 @@
         "확대"
       ],
       "rationale": "Classifies a slider as a zoom control; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1235,6 +1703,7 @@
       "canonical": "오디오 채널",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1245,6 +1714,7 @@
       "canonical": "생성일",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1255,6 +1725,7 @@
       "canonical": "악기 이름",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1265,6 +1736,7 @@
       "canonical": "MIDI 채널",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1275,6 +1747,7 @@
       "canonical": "트랙을 다음으로 정렬",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1285,6 +1758,7 @@
       "canonical": "출력 채널",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1295,6 +1769,7 @@
       "canonical": "트랙 이름",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1305,6 +1780,7 @@
       "canonical": "사용 여부",
       "variants": [],
       "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1317,6 +1793,7 @@
         "내보내기"
       ],
       "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1329,6 +1806,7 @@
         "취소"
       ],
       "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1339,6 +1817,7 @@
       "canonical": "Logic Pro",
       "variants": [],
       "rationale": "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1351,6 +1830,7 @@
         "스텝 입력 키보드"
       ],
       "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1364,6 +1844,7 @@
         "템포"
       ],
       "rationale": "Identifies a tempo text field/slider description; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1376,6 +1857,7 @@
         "항목 수"
       ],
       "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1388,6 +1870,7 @@
         "템포"
       ],
       "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1400,6 +1883,7 @@
         "템포"
       ],
       "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1413,6 +1897,7 @@
         "템포"
       ],
       "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1425,6 +1910,7 @@
         "재생헤드로"
       ],
       "rationale": "Move submenu leaf that repositions the selected region to the playhead.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1440,6 +1926,7 @@
         "tracks contents"
       ],
       "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1453,6 +1940,7 @@
         "contents"
       ],
       "rationale": "Generic content-group fallback by normalized description; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1468,6 +1956,7 @@
         "트랙 헤더"
       ],
       "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred).",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1481,10 +1970,35 @@
         "トラック"
       ],
       "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "provenance": {
+        "トラック": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "トラック",
+          "role": "AXMenuBarItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "trackMuteButton": {
@@ -1493,6 +2007,7 @@
         "음소거"
       ],
       "rationale": "Identifies the track Mute button by description substring; read-only state extraction.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1507,6 +2022,7 @@
         "레코드 활성화"
       ],
       "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1520,8 +2036,24 @@
         "Record"
       ],
       "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator.",
+      "provenance": {
+        "Record": {
+          "locale": "en-US",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-en-US-arrange-menus-census",
+          "observed": "Record",
+          "role": "AXMenuBarItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
       }
@@ -1532,6 +2064,7 @@
         "솔로"
       ],
       "rationale": "Identifies the track Solo button by description substring; read-only state extraction.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1544,6 +2077,7 @@
         "오디오"
       ],
       "rationale": "Classifies an audio track by header aggregate; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1554,6 +2088,7 @@
       "canonical": "aux",
       "variants": [],
       "rationale": "Classifies an aux track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1564,6 +2099,7 @@
       "canonical": "bus",
       "variants": [],
       "rationale": "Classifies a bus track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1574,6 +2110,7 @@
       "canonical": "drummer",
       "variants": [],
       "rationale": "Classifies a drummer track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1586,6 +2123,7 @@
         "midi"
       ],
       "rationale": "Classifies an external-MIDI track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1596,6 +2134,7 @@
       "canonical": "gm device",
       "variants": [],
       "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1609,6 +2148,7 @@
         "악기"
       ],
       "rationale": "Classifies a software-instrument track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1621,6 +2161,7 @@
         "stereo out"
       ],
       "rationale": "Classifies the master / stereo-out track; read-only classifier.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1634,6 +2175,7 @@
         "Auto-Punch"
       ],
       "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1662,10 +2204,66 @@
         "クリック"
       ],
       "rationale": "Counts distinct transport-control labels to classify the control bar; read-only.",
+      "provenance": {
+        "録音": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "録音…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        },
+        "メトロノーム": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "メトロノーム…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        },
+        "サイクル": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "ロケータを選択範囲で設定してサイクルを有効にする",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        },
+        "再生": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "再生ヘッド位置のマーカーを削除",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        },
+        "stop": {
+          "locale": "en-US",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-en-US-arrange-menus-census",
+          "observed": "Jump between Marquee- and Project Start if stopped",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "transportContainerMetadata": {
@@ -1676,10 +2274,26 @@
         "コントロールバー"
       ],
       "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
+      "provenance": {
+        "コントロールバー": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "コントロールバー",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "exact"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "transportCycleControl": {
@@ -1690,10 +2304,26 @@
         "サイクル"
       ],
       "rationale": "Identifies the Cycle/Loop transport control; read-only.",
+      "provenance": {
+        "サイクル": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "ロケータを選択範囲で設定してサイクルを有効にする",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "transportKeywordFalseFriends": {
@@ -1712,6 +2342,7 @@
         "live loop 그리드 보기/가리기"
       ],
       "rationale": "Negative guard: labels carrying a transport keyword that are not transport ",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1729,10 +2360,26 @@
         "クリック"
       ],
       "rationale": "Identifies the Metronome/Click transport control; read-only.",
+      "provenance": {
+        "メトロノーム": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "メトロノーム…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "transportPlayControl": {
@@ -1742,10 +2389,35 @@
         "再生"
       ],
       "rationale": "Identifies the Play transport control when reading TransportState; read-only.",
+      "provenance": {
+        "再生": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "再生ヘッド位置のマーカーを削除",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "transportRecordArmExclusion": {
@@ -1754,10 +2426,26 @@
         "활성화"
       ],
       "rationale": "Negative guard: distinguishes per-track record-arm from transport Record; read-only.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "ja-JP": "2026-09-05-ja-JP-arrange-menus-census",
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "ja-JP": "AXMenuItem",
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "ja-JP": "title",
+        "en-US": "title"
       }
     },
     "transportRecordControl": {
@@ -1767,10 +2455,26 @@
         "録音"
       ],
       "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
+      "provenance": {
+        "録音": {
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "observed": "録音…",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "match": "contains"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "transportSliderHints": {
@@ -1784,6 +2488,7 @@
         "비트"
       ],
       "rationale": "Classifies tempo/position sliders inside the transport container; read-only.",
+      "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1799,6 +2504,7 @@
         "재생헤드 위치"
       ],
       "rationale": "Classifies transport tempo/position text fields inside the control bar; read-only.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1811,10 +2517,23 @@
         "실행 취소"
       ],
       "rationale": "Menu item includes the operation name after the localized Undo prefix.",
+      "roles": [
+        "AXMenuItem"
+      ],
+      "match": "contains",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "undoPluginInsertMenuItem": {
@@ -1823,6 +2542,7 @@
         "채널 스트립에 플러그인 삽입"
       ],
       "rationale": "Confirms the Undo entry describes OUR insert before a rollback presses it.",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1835,10 +2555,23 @@
         "보기"
       ],
       "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     },
     "windowMenuBar": {
@@ -1847,10 +2580,23 @@
         "윈도우"
       ],
       "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+      "roles": [
+        "AXMenuBarItem"
+      ],
+      "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuBarItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
       }
     }
   }
