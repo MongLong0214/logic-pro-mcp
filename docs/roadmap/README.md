@@ -10,7 +10,9 @@ the controlling copy was last modified 2026-08-10, its ledger could not be found
 mirror opened by disclaiming itself, so **both copies were stale and neither could be corrected
 without the other**. That is the failure this file exists to end.
 
-`roadmap-2026-08-10.md` is retained beside this file, superseded, for the same reason.
+`roadmap-2026-08-10.md` was retained beside this file, superseded, until 2026-09-05. It is gone
+now — a second roadmap in the tree is the thing this file exists to end, and the reason it
+existed is written above rather than left in a file nobody reads. Git has it if it is wanted.
 
 ## The update rule
 
@@ -119,40 +121,158 @@ The instruction that produced this file asked for these to be established, not g
   reaching `frequency_peaks` after the first three were fixed. Promotion was the decision; the
   measurement was the work.
 
-## Order
+## Order — the phases
 
-The order below is derived from dependency, not from priority. Where an item is behind a wall, the
-next step is a measurement and the honest outcome may be a scope decision with that measurement
-attached — not a silent deferral.
+Numbering expresses dependency order, not a requirement to finish every preceding phase.
 
-1. **#284** — the release gate. Five of its six open contracts are `release.yml` requirements, so
-   most of it is repo-side work rather than live work. `R-SEM` is the large one, and measuring it
-   on 2026-08-24 moved its blocker: the 49 mutating operations with a verification plan are waiting
-   on a write-and-readback qualification mode that does not exist, which the #284 matrix does not
-   supply. #373 covers a smaller part of it than "depends on #373" suggested.
-2. ~~**#290**~~ — closed 2026-08-30. The diff runs at qualification time as a case and a refusal
-   rejects a promotion; five baselines cover en and ko and leave no adopted selector unmeasured.
-   The English control bar earned its keep on capture, exposing a prefix match that let the
-   transport's Record button read as a track's arm toggle — invisible in Korean, where `녹음` is
-   not a prefix of `녹음 활성화`.
-3. **#293 → #303** — readback before the transforms that must take their expected values from it.
-   #293's collector is measured reading a live note table; what remains there is the ADR body.
-4. **#302** — re-measured. `kAXColumns` resolves 8 columns and none of them carries a name, which
-   is a different fact from the one recorded; the header sort buttons supply the column map and
-   `readHeaders` already reads them. The next step is an R2 ticket.
-5. **#292 → #299**. #300's promotion is done — the flag is removed, not defaulted on.
-6. **#291, #301, #305, #306, #369, #448** — each starts with a measurement or a decision.
-   Measurements on 2026-08-30 covered #301, #306 and #369, and each moved its item rather than
-   confirming it: Channel EQ's controls are addressable, the Controls view carries a labelled row
-   per parameter, and the export menu path is reachable and enabled. **None of the three involved a
-   write**, so each establishes reachability and not verified control. #305 moved for a different
-   reason — its blocker named a plug-in window and Flex Pitch is a region editor, so it was never a
-   measurement about that surface, and one still has not been made. #291 and #448 turned out to
-   need decisions rather than measurements, and both were made and recorded on their issues. The
-   limit that held is the Compressor's native editor naming one slider on each measured instance
-   (of twenty-two on one and twenty on the other): an *identity* limit rather than a reachability
-   one, and a different repair.
-7. **#373 → #284's `R-SEM`**, then **#308** closes as an index.
+There is no phase for "close the index issue". #308 was that index, and these phases are what it
+was indexing — each with a precondition and a done-when it never carried. Keeping both would
+rebuild the two-copies problem the top of this file exists to end, so #308 closes with this change
+rather than after the ADR work it tracked.
+
+### Phase 1 — Repair the code-only foundations
+
+Deliver accurate harness interaction accounting, working manifest discovery, and removal of an unused MIDI destination.
+
+- **Issues it closes:** #755, #769, #776.
+- **PRECONDITION:** None.
+- **DONE WHEN:** Server startup no longer publishes the unconsumed inbound destination; a resource-only harness records product interaction while an idle harness still fails that requirement; source-relative manifest discovery resolves the repository-root manifest with other lookup routes unavailable. These checks require no running Logic.
+- **KIND:** `code`.
+
+### Phase 2 — Make live evidence usable across locales and viewports
+
+Deliver harnesses that find the intended UI and observe the region they actually moved.
+
+- **Issues it closes:** #773, #778, #780.
+- **PRECONDITION:** Phase 1, so resource-only runs can produce valid interaction evidence.
+- **DONE WHEN:** Every affected harness runs successfully with its English-only selectors removed; Japanese region enumeration works using measured `trackContentExplicit` and `trackContentGeneric` forms; the move harness captures the region’s measured before/after frames and detects movement across changed zoom or scroll conditions. Japanese label work remains incomplete until measured on Japanese Logic.
+- **KIND:** `mixed`.
+
+### Phase 3 — Resolve MIDI ownership and feedback failures
+
+Deliver confirmed feedback detection by the surviving owner and a server that remains responsive under the reported MCU conditions.
+
+- **Issues it closes:** #683, #736.
+- **PRECONDITION:** None for diagnosis; repeat endpoint measurements after Phase 1 changes publication.
+- **DONE WHEN:** The surviving owner reports actual MCU feedback with `mcu.connected: true`, while a second instance declines conflicting ownership. The reported hang is resolved and the affected host confirms continued protocol responses. Closure remains blocked on a sample from the wedged reporter process or an equivalent reproducer; Desktop success alone does not resolve the Creator Studio report.
+- **KIND:** `mixed`.
+
+### Phase 4 — Verify the complete region move
+
+Deliver move-to-playhead results that account for the whole affected selection.
+
+- **Issues it closes:** #774.
+- **PRECONDITION:** Phase 2, including the repaired visual witness.
+- **DONE WHEN:** A live multi-region measurement establishes what Logic’s command moves and how it treats relative positions. Verification then checks the complete affected selection and detects a partial or wrong-region result. Completion is blocked on that initial measurement; single-region success does not establish multi-region semantics.
+- **KIND:** `mixed`.
+
+### Phase 5 — Reach independent MIDI readback in release builds
+
+Deliver a production path from resolved region identity to the existing Event List collector.
+
+- **Issues it closes:** #293.
+- **PRECONDITION:** None; the triage already establishes that the collector can read live notes.
+- **DONE WHEN:** A release build constructs `RegistryResolvedIdentityProof` from resolved production identity, registers and reaches the provider through the product, and returns complete note observations for the intended region. Stale identity, wrong-region reads, and incomplete observations cannot pass; duplicate notes and timing normalization survive comparison.
+- **KIND:** `mixed`.
+
+### Phase 6 — Establish independent expected-note ingestion
+
+Deliver R2 positive verification backed by an independently established expected sequence.
+
+- **Issues it closes:** #302.
+- **PRECONDITION:** Phase 5 provides the qualified observed-note source.
+- **DONE WHEN:** A release build reaches the live-ingestion boundary and positively verifies matching notes while rejecting deliberate mismatches. Expected notes come from precommitted independent intent or a distinct observation source; copying observed notes or attaching a provenance label cannot manufacture independence. R1 fixtures and debug seams do not satisfy this phase.
+- **KIND:** `mixed`.
+
+### Phase 7 — Connect verified note transforms
+
+Deliver Piano Roll transforms whose verification uses the production independent-note source.
+
+- **Issues it closes:** #303.
+- **PRECONDITION:** Phase 6.
+- **DONE WHEN:** A transform reached through the release product takes its input notes from independent readback, produces the intended live note changes, and detects wrong-target or incorrect-note outcomes. Its own write plan cannot substitute for the independent source, and missing evidence cannot produce a positive verdict.
+- **KIND:** `mixed`.
+
+### Phase 8 — Set and qualify the stock-plugin parameter scope
+
+Deliver a shared capability registry whose advertised operations are demonstrably reachable.
+
+- **Issues it closes:** #292.
+- **PRECONDITION:** None.
+- **DONE WHEN:** The issue explicitly resolves its acceptance scope against the recorded Controls-view slider and popup failures. Every retained capability demonstrates target identity, effective actuation, and independent readback on a live instance. Any reduced scope is recorded as an evidence-backed decision; experimental entries alone do not count as expansion.
+- **KIND:** `mixed`.
+
+### Phase 9 — Complete the Compressor scope
+
+Deliver qualified Compressor controls and an explicit outcome for the remaining auto-setting promise.
+
+- **Issues it closes:** #299.
+- **PRECONDITION:** Phase 8 establishes the shared registry’s supported contract.
+- **DONE WHEN:** Additional retained parameters are qualified through that registry, and retained auto-setting behavior lands the intended settings with readback. Anonymous sliders cannot gain identity through positional pairing. Parameters or auto-setting that remain unsupported receive an explicit scope decision backed by the relevant measurement; the landed threshold control alone does not close this phase.
+- **KIND:** `mixed`.
+
+### Phase 10 — Qualify actual third-party host parameters
+
+Deliver a measured third-party capability boundary and production access to its supported controls.
+
+- **Issues it closes:** #306.
+- **PRECONDITION:** Phase 8 before integrating verified writes; initial third-party observations may start immediately.
+- **DONE WHEN:** Actual third-party instances inside Logic are measured for parameter identity, effective writes, and readback, and supported capabilities are reachable through the product. Completion remains blocked on those measurements: stock Compressor observations cannot qualify third-party plugins. Unreachable scope is closed only through an explicit measurement-backed decision.
+- **KIND:** `mixed`.
+
+### Phase 11 — Complete observable mixer and track organization
+
+Deliver honest routing coverage, observed track types, and resolved color and anchor-movement behavior.
+
+- **Issues it closes:** #291, #766, #448.
+- **PRECONDITION:** None for observation; Phase 2 before relying on affected localized harnesses for closure.
+- **DONE WHEN:** Send edges have observed destination identities, or their exclusion is explicitly settled without publishing an incomplete graph as complete. Channel-strip type readback identifies supported cases and preserves `unknown` for ambiguous strips. Color changes and anchor movement each have an observable verification contract and a successful live demonstration, or an evidence-backed scope decision. Existing slot reads and global sorting do not prove these remaining behaviors.
+- **KIND:** `mixed`.
+
+### Phase 12 — Measure and complete region-editor capabilities
+
+Deliver a resolved scope for remaining Smart Tempo and Flex Pitch control.
+
+- **Issues it closes:** #304, #305.
+- **PRECONDITION:** None; neither editor observation depends on plugin-parameter qualification.
+- **DONE WHEN:** Smart Tempo analysis controls are measured with an audio region selected, and retained analysis modes and sub-bar tempo behavior are verified. Flex Pitch is measured in the Audio Track Editor on a Flex-analyzed region; retained editing has production snapshot access, stable note identity, and independent effect verification. Flex Pitch completion remains blocked on that editor measurement. Unsupported scope requires an explicit decision based on that surface.
+- **KIND:** `mixed`.
+
+### Phase 13 — Qualify successful mutations and restoration
+
+Deliver qualification that can prove a mutation worked and that its effects were restored.
+
+- **Issues it closes:** #373.
+- **PRECONDITION:** Phase 1 for evidence accounting. Each operation’s live recipe requires its relevant capability phase; MIDI verification recipes require Phase 6.
+- **DONE WHEN:** The existing exact-binary transport performs real calls, checks independent post-state, restores or compensates, and verifies restoration. Negative controls expose stale readback and failed restoration. Disposable-project cases demonstrate final restoration. Coverage is reconciled against the current operation registry rather than inherited operation counts; refusal probes alone cannot qualify successful mutations.
+- **KIND:** `mixed`.
+
+### Phase 14 — Enforce same-artifact release qualification
+
+Deliver release enforcement backed by evidence for the artifact actually distributed.
+
+- **Issues it closes:** #284.
+- **PRECONDITION:** None for release-workflow work. Phase 13 and evidence for the candidate’s claimed capabilities are required before enabling enforcement.
+- **DONE WHEN:** Every remaining release contract is satisfied; the qualified artifact and distributed artifact have identical SHA-256 without rebuilding between qualification and publication. Current registered operations have required evidence or individually justified waivers under the existing policy. Missing, mismatched, or failing evidence prevents promotion. Completing Phase 13 alone does not satisfy the other release contracts.
+- **KIND:** `mixed`.
+
+## What can run at the same time
+
+- Phase 1, Phase 5, Phase 8, Phase 11 observations, Phase 12, and Phase 3 diagnosis can start together. Phase 14’s repository work can also begin immediately.
+- After Phase 1, Phase 2 and Phase 13’s qualification-mode work can run alongside the domain phases. Qualification recipes follow capabilities as they become available.
+- The hard completion chains are **Phase 2 → Phase 4**, **Phase 5 → Phase 6 → Phase 7**, **Phase 8 → Phases 9 and 10**, and **Phase 13 → Phase 14**.
+- Phases 9 and 10 may proceed together once Phase 8’s shared contract is settled. Phase 11’s three issue tracks and Phase 12’s two editor investigations can proceed independently.
+- Phase 1’s endpoint changes and Phase 3’s ownership measurements must not overlap on one host. Measurements must name which publication behavior they observed.
+- Concurrent live drives must not share a Logic instance: selections, active editors, Mixer visibility, and project mutations change each other’s preconditions. In particular, Phase 4 must not run alongside Phase 11’s Mixer work, and Phase 13’s restore recipes must not overlap another live mutation. Separate hosts permit parallel runs.
+- Sequencing assumption: AX-only work does not require Phase 3. Any recipe that relies on MCU feedback must wait for its feedback confirmation.
+
+## Where this plan is most likely to be wrong
+
+1. **Readable controls may lack usable identity or actuation.** This threatens plugin expansion, routing sends, color verification, and Flex Pitch. Cheapest measurement: inspect one actual target inside Logic, attempt one reversible change, and read its effect independently. Use the specific editor and plugin; a neighboring surface cannot establish a wall.
+
+2. **MIDI independence may remain unreachable in the shipped product.** Existing collectors and fixtures can hide a missing production connection. Cheapest measurement: drive one known region through a release build, obtain a positive match from the production boundary, then change an expected note and require a mismatch before building transforms.
+
+3. **Host conditions may invalidate otherwise convincing evidence.** The MCU hang remains reporter-specific, while locale and active-window state have already changed outcomes. Cheapest measurements: obtain the wedged-process sample and surviving-owner feedback observation; run one affected harness in the required locale and window state before expanding the campaign.
 
 ## What this file does not claim
 
