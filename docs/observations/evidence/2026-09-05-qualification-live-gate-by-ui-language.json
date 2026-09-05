@@ -1,0 +1,54 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "os": "macOS 26.3 (25D125)",
+  "note": "the same machine and the same release binary in both runs; only Logic's UI language differed, and Logic was relaunched between them"
+ },
+ "method": "`swift test --no-parallel --filter realReleaseBinaryExecutesEveryOperationWithIndependentReadback`, which drives the release binary over stdio against the running Logic and scores every operation against an independent readback. The lines below are that test's own output, verbatim.",
+ "runs": [
+  {
+   "logic_ui_language": "ja-JP",
+   "verdict": "the test FAILED: knownLiveGateFailuresMatchExactly",
+   "live_gate": "in_scope_passed=20, out_of_scope=90, not_exercisable_without_preconditions=0, environmental_preconditions=1, failed=2 of 113",
+   "failed_operations": [
+    {
+     "operation": "plugins.get_inventory",
+     "failure_reason": "semantic readback mismatch: response did not match its independent readback"
+    },
+    {
+     "operation": "tracks.list_library",
+     "failure_reason": "semantic readback mismatch: response did not match its independent readback"
+    }
+   ],
+   "read_only_short_of_passed": "3 of 23: plugins.get_inventory, tracks.list_library, tracks.scan_plugin_presets"
+  },
+  {
+   "logic_ui_language": "en-US",
+   "verdict": "the test PASSED",
+   "live_gate": "in_scope_passed=21, out_of_scope=90, not_exercisable_without_preconditions=0, environmental_preconditions=1, failed=1 of 113",
+   "failed_operations": [
+    {
+     "operation": "tracks.list_library",
+     "failure_reason": "semantic readback mismatch: response did not match its independent readback"
+    }
+   ],
+   "read_only_short_of_passed": "2 of 23 (implied): tracks.list_library, tracks.scan_plugin_presets"
+  }
+ ],
+ "english_probe_of_the_operation_that_differs": {
+  "call": "logic_plugins.get_inventory {\"track\": 0}",
+  "response_head": {
+   "complete": true,
+   "plugins_first_row": {
+    "insert": 0,
+    "name": "Compressor",
+    "occupied": true,
+    "plugin_id": "logic.stock.effect.compressor",
+    "read_status": "ok"
+   }
+  },
+  "note": "taken in en-US after the two runs above, to show the operation answers normally there. No ja-JP counterpart was taken: this file records THAT the gate differs by language, not why."
+ }
+}

@@ -682,7 +682,8 @@
       "2026-09-04-strip-slot-composition-carries-the-track-type",
       "2026-09-04-the-header-has-no-type-signal-at-any-depth",
       "2026-09-04-track-header-carries-no-type-signal",
-      "2026-09-04-transport-readings-and-where-the-playhead-is-not"
+      "2026-09-04-transport-readings-and-where-the-playhead-is-not",
+      "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese"
     ],
     "surfaces_without_records": [
       "en-US→editor.audio_track",
@@ -701,7 +702,6 @@
       "ja-JP→editor.event_list",
       "ja-JP→editor.piano_roll",
       "ja-JP→editor.step",
-      "ja-JP→mixer.inserts",
       "ja-JP→mixer.routing",
       "ja-JP→plugin.controls_view",
       "ja-JP→plugin.native_view",
@@ -718,5 +718,13 @@
       "ko-KR→system.preferences"
     ]
   },
-  "raised": {}
+  "raised": {
+    "manual_reverify": {
+      "date": "2026-09-05",
+      "reason": "Reverifying this one needs Logic's UI language changed and Logic relaunched between two runs of the same test, and no command in this repository does that. Writing it as a `script` would have named a command that cannot be run as written; the guard for that already refused one. The debt is real and is admitted here rather than disguised.",
+      "members": [
+        "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese"
+      ]
+    }
+  }
 }
