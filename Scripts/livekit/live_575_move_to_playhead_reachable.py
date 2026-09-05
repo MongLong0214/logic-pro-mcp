@@ -275,6 +275,24 @@ before_shot = ev.shot("575/before-move", settle_region=SETTLE_BAND, window_title
 
 # ---- the operation ------------------------------------------------------------------------------
 
+# What Logic's Edit menu WAS when the operation ran, recorded rather than asserted.
+#
+# Measured 2026-09-05: with the Mixer pane OPEN, Logic's Edit menu is the MIXER's — it carries
+# `Mixer Undo` and `Select Audio Channel Strips` and has NO `Move` submenu — so this call returns
+# `state B / readback_mismatch / "no position change"`, the undo title does not move, and the run
+# reads as though the operation is broken. Nothing in the document said why, and finding it cost a
+# full cycle.
+#
+# A note and not a check, deliberately. Two candidate preconditions were tried and rejected:
+# `located_band("Mixer")` answers None with the pane open AND closed, so it is not a signal; and a
+# Move-submenu assertion needs `moveMenuItem`'s labels, which carry no Japanese form — a
+# precondition that can go red for a missing label rather than for the condition it names is the
+# failure this repository refuses everywhere else.
+ev.note("575/edit-menu-when-the-move-ran",
+        {"items": osa('tell application "System Events" to tell process "Logic Pro" to '
+                      'return name of every menu item of menu 1 of '
+                      'menu bar item "Edit" of menu bar 1')[:400]})
+
 moved = d.tool("logic_edit", "move_to_playhead", {})
 time.sleep(2)
 after_state = witness()
