@@ -29,7 +29,7 @@ struct Issue60LocalePhase4Tests {
             ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl.labels, ["open", "열기", "list", "목록"]),
             ("pluginAutomationLabelExact", AXLocalePolicy.pluginAutomationLabelExact.labels, ["읽기, 오토메이션이 활성화됨", "read"]),
             ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션"]),
-            ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels, ["audio plugin", "audio effect", "오디오 플러그인", "오디오 이펙트"]),
+            ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels, ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"]),
             ("sendOrIOControlLabel", AXLocalePolicy.sendOrIOControlLabel.labels, ["send", "센드", "input", "output", "입력", "출력"]),
             ("nonInsertButtonText", AXLocalePolicy.nonInsertButtonText.labels, [
                 "send", "센드", "input", "입력", "output", "출력", "group", "그룹",

@@ -20,7 +20,7 @@ extension AccessibilityChannel {
               ) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "Window > Show Step Input Keyboard was not found."
+                hint: "Window > Step Input Keyboard was not found."
             ))
         }
 
@@ -32,7 +32,7 @@ extension AccessibilityChannel {
         guard enabled?.boolValue != false else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "Window > Show Step Input Keyboard is disabled."
+                hint: "Window > Step Input Keyboard is disabled."
             ))
         }
 
@@ -40,7 +40,7 @@ extension AccessibilityChannel {
         guard AXHelpers.performAction(menuItem, kAXPressAction, runtime: runtime.ax) else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "AXPress failed on Window > Show Step Input Keyboard."
+                hint: "AXPress failed on Window > Step Input Keyboard."
             ))
         }
 

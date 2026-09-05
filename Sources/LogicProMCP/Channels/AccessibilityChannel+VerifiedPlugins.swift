@@ -3876,7 +3876,7 @@ extension AccessibilityChannel {
         return false
     }
 
-    /// Hide every open plug-in window via "Window > Hide All Plug-in Windows" so a
+    /// Hide every open plug-in window via "Window > All Plug-in Windows" so a
     /// stray front plugin window (e.g. a track instrument window left open by a
     /// prior attempt) cannot capture the subsequent Mix-menu click (R14 live root
     /// cause). Best-effort: returns whether the menu item was clicked.

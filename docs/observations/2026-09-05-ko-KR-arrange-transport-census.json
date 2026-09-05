@@ -1,0 +1,119 @@
+{
+  "id": "2026-09-05-ko-KR-arrange-transport-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.transport surface exposes to AX in ko-KR",
+  "question": "What labels does Logic show on arrange.transport in ko-KR, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ko-KR",
+    "expected": "a census in ko-KR whose arrange.transport rows carry the same 62 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ko-KR-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 32,
+      "distinct_strings": 62,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "C 메이저",
+        "Smart Controls",
+        "Smart Controls   B, Smart Controls 버튼. 개별 채널 스트립 또는 플러그인을 편집할 필요 없이 현재 패치의 사운드를 빠르게 수정할 수 있습니다. ",
+        "녹음",
+        "녹음   R, 녹음 버튼. 선택한 트랙 또는 녹음 준비된 여러 트랙에 녹음합니다. ",
+        "대치",
+        "대치   /, 대치 버튼. 기존 녹음 또는 녹음 일부를 신규 녹음으로 대치합니다. ",
+        "도구 막대",
+        "도구 막대   ⌃⌥⌘T, 도구 막대 버튼. 키 기능에 대한 버튼을 포함하는 도구 막대를 표시합니다. ",
+        "라이브러리",
+        "라이브러리   Y, 라이브러리 버튼. 선택한 채널 스트립 또는 플러그인 유형에 대한 패치 및 프리셋을 로드하고 즉시 재생을 시작합니다. 패치를 로드하면 여러 개의 채널 스트립에 영향을 줄 수 있습니다. ",
+        "루프 브라우저",
+        "루프 브라우저   O, 루프 브라우저 버튼. 사전 녹음된 루프를 프로젝트에 추가합니다. ",
+        "마디",
+        "메모장",
+        "메모장   ⌃⇧P, 메모장 버튼. 프로젝트 및 트랙 텍스트 메모를 생성하고 보고 편집합니다. ",
+        "메트로놈 클릭",
+        "메트로놈 클릭   ⌃⇧R, 메트로놈 버튼. 재생 또는 녹음 중에 프로젝트 템포에서 클릭 소리를 듣습니다. 추가 옵션을 보려면 길게 클릭합니다. ",
+        "목록 편집기",
+        "목록 편집기   D, 목록 편집기 버튼. MIDI 이벤트, 마커, 템포 변경 및 조표 및 박자표 이벤트를 보고 편집합니다. ",
+        "믹서",
+        "믹서   X, 믹서 버튼. 프로젝트의 각 트랙에 대한 채널 스트립을 표시하는 믹서를 엽니다. 채널 스트립 컨트롤을 편집하고 플러그인을 추가 및 편집하며 라우팅 옵션을 사용자화할 수 있습니다. ",
+        "박자표",
+        "박자표, 박자표 디스플레이. 마디의 비트 숫자와 한 박자에 대한 노트 값을 나타냅니다. 수직으로 드래그하여 값을 편집하거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "브라우저",
+        "브라우저   F, 브라우저 버튼. 오디오 및 그 외 미디어 파일에 접근합니다. 또한 다른 프로젝트의 데이터 및 세팅을 가져올 수도 있습니다. ",
+        "비트",
+        "비트 및 프로젝트",
+        "빠른 도움말",
+        "빠른 도움말 버튼. 빠른 도움말 영역을 표시합니다. 인스펙터가 닫혀 있으면 빠른 도움말이 별도의 윈도우로 열립니다. ",
+        "사이클",
+        "사이클   C, 사이클 버튼. 눈금자에 나타나는 노란색 사이클 영역 내의 프로젝트 섹션을 반복적으로 재생하거나 위로 녹음하려면 사이클을 사용합니다. ",
+        "솔로",
+        "솔로, 솔로 버튼. 재생하는 동안 선택된 리전만 듣습니다. ",
+        "인스펙터",
+        "인스펙터   I, 인스펙터 버튼. 작업 중인 위치 및 선택한 항목에 따라 리전 및 트랙 설정을 보고 편집합니다. 채널 스트립 패닝 및 볼륨을 설정하거나 이펙트를 추가할 수도 있습니다. ",
+        "재생",
+        "재생   ⌅, 재생 버튼. 재생헤드 위치에서 재생을 시작하거나 사이클 모드에서 눈금자에 표시된 왼쪽 로케이터에서 시작합니다. ",
+        "재생헤드 위치",
+        "재생헤드 위치(마디), 재생헤드 위치 디스플레이. 마디 및 비트로 재생헤드 위치를 나타냅니다. 각 요소를 수직으로 드래그하여 편집하거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "조표",
+        "조표, 조표 디스플레이. 프로젝트의 조표를 나타냅니다. 팝업 메뉴에서 메이저 및 마이너 조표를 선택합니다. ",
+        "처음으로 이동",
+        "처음으로 이동   ↩, 시작으로 이동 버튼. 재생헤드를 프로젝트 시작 지점으로 이동합니다. ",
+        "카운트 인",
+        "카운트 인   ⇧K, 카운트 인 버튼. 녹음이 시작하기 전에 사전 정의된 카운트 인을 재생합니다. 버튼을 Control-클릭하면 카운트 인 길이를 선택할 수 있는 메뉴가 열립니다. ",
+        "컨트롤 막대",
+        "컨트롤 막대. 키 프로젝트 및 앱 기능을 위한 버튼 및 디스플레이가 포함되어 있습니다. 사용자화하려면 컨트롤 막대를 Control-클릭하고 ‘컨트롤 막대 및 디스플레이 사용자화’를 선택합니다. ",
+        "템포",
+        "템포, 템포 디스플레이. 재생 또는 녹음 속도를 나타냅니다. 수직으로 드래그하여 속도를 높이거나 낮추거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "튜너",
+        "튜너, 튜너 버튼. 시스템에 연결된 악기를 조정합니다. ",
+        "편집기",
+        "편집기   E, 편집기 버튼. 편집기에 접근합니다. 선택한 트랙 유형에 따라 오디오 트랙, 오디오 파일, Session Player, 피아노 롤, 악보 또는 스텝 편집기를 선택할 수 있습니다. ",
+        "표시 모드",
+        "표시 모드, 디스플레이 모드 팝업 메뉴. 눈금자 디스플레이를 마디 및 비트 또는 시간, 분, 초 또는 둘의 조합으로 전환합니다. 거대 디스플레이를 열 수도 있습니다. ",
+        "프로젝트 템포 메뉴, 프로젝트 템포 팝업 메뉴. 프로젝트 템포를 유지하고 오디오 녹음 및 가져온 오디오 파일의 템포를 조정할 것인지 또는 Logic Pro에서 프로젝트 템포 동작을 설정할 것인지를 선택합니다. ",
+        "프리 템포 녹음",
+        "프리 템포 녹음   ⌃⌥⌘R, 프리 템포 녹음. 녹음하는 동안 기존 콘텐츠를 음소거하고 스마트 템포 분석을 수행합니다. ",
+        "플래시백 캡처",
+        "플래시백 캡처   ⇧R, 플래시백 캡처. 재생하는 동안에 Logic Pro에서 녹음하지 않더라도 최근 MIDI 또는 오디오 퍼포먼스를 캡처합니다. "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ko-KR, arrange.transport exposes 32 elements carrying 62 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "102 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

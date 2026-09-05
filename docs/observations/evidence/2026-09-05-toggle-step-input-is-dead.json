@@ -1,0 +1,54 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "project lpm-locale-campaign.logicx; release binary built from fix/780-region-frame-band @ 8ce1a329"
+ },
+ "measured_at": "2026-09-05",
+ "method": "Drove `logic_edit toggle_step_input` twice over stdio and read Logic's window list before, between and after. Twice because the operation is a toggle: a working one opens the window on the first call and closes it on the second, so two calls that change nothing is the stronger reading.",
+ "windows_before": "lpm-locale-campaign - Tracks",
+ "call_1": {
+  "state": "C",
+  "success": false,
+  "error": "element_not_found",
+  "hint": "Window > Show Step Input Keyboard was not found."
+ },
+ "windows_after_call_1": "lpm-locale-campaign - Tracks",
+ "call_2": {
+  "state": "C",
+  "success": false,
+  "error": "element_not_found",
+  "hint": "Window > Show Step Input Keyboard was not found."
+ },
+ "windows_after_call_2": "lpm-locale-campaign - Tracks",
+ "window_menu_item_logic_actually_shows": "Step Input Keyboard",
+ "window_menu_item_has_a_submenu": false,
+ "policy_canonical": "Show Step Input Keyboard",
+ "after_the_fix": {
+  "measured_at": "2026-09-05T21:43:45+09:00",
+  "logic_ui_language": "ko-KR",
+  "note": "Driven in KOREAN, which is stronger than repeating the English probe: the label the fix added for this locale is `스텝 입력 키보드`, so a working call exercises the new variant rather than only the corrected canonical.",
+  "windows_before": "lpm-locale-campaign - 트랙",
+  "call_1": {
+   "state": "A",
+   "success": true,
+   "verified": true,
+   "previous_open": false,
+   "observed_open": true,
+   "via": "window-menu"
+  },
+  "windows_after_call_1": "lpm-locale-campaign - 스텝 입력 키보드, lpm-locale-campaign - 트랙",
+  "call_2": {
+   "state": "A",
+   "success": true,
+   "verified": true,
+   "previous_open": true,
+   "observed_open": false,
+   "via": "window-menu"
+  },
+  "windows_after_call_2": "lpm-locale-campaign - 트랙"
+ }
+}

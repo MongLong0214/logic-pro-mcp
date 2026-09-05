@@ -134,15 +134,26 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// This Logic build shows `All Plug-in Windows`, with no verb. `Hide All
+    /// Plug-in Windows` stood here and matches nothing; the item is a leaf with
+    /// no submenu, so the old spelling could not resolve at a deeper level
+    /// either. All three forms below are verbatim from the censuses of
+    /// 2026-09-05 — the Korean one carried `…가리기`, "…hide", and was wrong for
+    /// the same reason the English one was.
     static let hideAllPluginWindowsMenuItem = LabelSet(
-        canonical: "Hide All Plug-in Windows",
-        variants: ["모든 플러그인 윈도우 가리기"],
+        canonical: "All Plug-in Windows",
+        variants: ["모든 플러그인 윈도우", "すべてのプラグインウインドウ"],
         rationale: "Best-effort cleanup so stale plugin windows do not steal later menu focus."
     )
 
+    /// Same change, and this one was load-bearing: `edit.toggle_step_input`
+    /// resolves this item, and with `Show Step Input Keyboard` it answered
+    /// State C `element_not_found` and opened nothing — on an ENGLISH Logic,
+    /// twice, with the window list unchanged across both calls. Logic shows
+    /// `Step Input Keyboard`.
     static let showStepInputKeyboardMenuItem = LabelSet(
-        canonical: "Show Step Input Keyboard",
-        variants: ["스텝 입력 키보드 보기"],
+        canonical: "Step Input Keyboard",
+        variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
         rationale: "Native Window-menu toggle used with independent window-state readback."
     )
 
@@ -1133,9 +1144,17 @@ enum AXLocalePolicy {
     )
 
     /// Empty audio-plugin insert-slot button classification.
+    /// `audio plug-in`, with the hyphen Logic actually renders. `audio plugin`
+    /// stood here and is not a substring of what Logic shows, so this set —
+    /// read with `containsAny` — could not match an empty slot on any English
+    /// Logic. The Korean form was already right; the Japanese one is new and
+    /// measured. Whether anything depended on the label is a separate question:
+    /// the call site falls through to `isLanguageNeutralEmptyAudioPluginSlot`,
+    /// which is substantial enough that the label may never have been
+    /// load-bearing, and that was not measured.
     static let audioPluginSlotLabel = LabelSet(
-        canonical: "audio plugin",
-        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트"],
+        canonical: "audio plug-in",
+        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"],
         rationale: "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists)."
     )
     static let sendOrIOControlLabel = LabelSet(
