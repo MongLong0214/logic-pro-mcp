@@ -114,14 +114,18 @@ LATIN = re.compile(r"[A-Za-z]")
 def _chunk_is_a_dropped_word(policy, observed, chunk):
     """Whether what the policy has extra is a WORD, not a fragment of one.
 
-    The branch is chosen by SCRIPT, not by whether this particular string happens to contain a
-    space. A Latin-script string delimits its words with spaces — so if there is no space there is
-    no word to drop, and a chunk taken off the end is a fragment. Choosing the branch by
-    `" " in policy` sent single Latin words down the character-budget path, where `position` ->
-    `posit` and `Mixer` -> `Mixe` both passed. Found while a review was probing this very rule; the
-    hole was opened by removing a retained-length rule that had been hiding it for the wrong reason.
+    The branch is chosen by the script of the CHUNK — the part that was dropped — because that is
+    the thing being judged. Latin writes its words apart, so a Latin chunk with no space beside it
+    is a fragment of a word rather than a word; a chunk in a script that writes words closed up has
+    no space to look for and is budgeted instead.
+
+    Two earlier cuts each got this wrong in one direction. Choosing by `" " in policy` sent single
+    Latin words down the character budget, where `position` -> `posit` and `Mixer` -> `Mixe` passed.
+    Choosing by the script of the POLICY then refused mixed strings: `EQを表示` -> `EQ` has Latin in
+    it, so the Japanese chunk `を表示` was sent to look for a space boundary it could never have.
+    Raised by review 2026-09-06, one round apart, in opposite directions.
     """
-    if LATIN.search(policy):
+    if LATIN.search(chunk):
         if not (chunk.startswith(" ") or chunk.endswith(" ")):
             return False
         return 1 <= len(chunk.split()) <= AFFIX_MAX_WORDS

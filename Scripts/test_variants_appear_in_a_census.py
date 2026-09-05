@@ -156,6 +156,12 @@ case("affix ignores a fragment of a single Latin word",
      guard._affix_of("position", {"posit"}) is None, guard._affix_of("position", {"posit"}))
 case("affix ignores one letter shaved off a Latin label",
      guard._affix_of("Mixer", {"Mixe"}) is None, guard._affix_of("Mixer", {"Mixe"}))
+# ...and the branch is chosen by the CHUNK, not the policy. A mixed string has Latin in it while the
+# part Logic dropped is not Latin: `EQを表示` -> `EQ` drops `を表示`, which has no space to find and
+# never could. Keying on the policy's script refused it. Raised by review 2026-09-06, the round after
+# keying on the policy's script fixed the opposite error.
+case("affix keeps a non-Latin chunk dropped from a mixed-script label",
+     guard._affix_of("EQを表示", {"EQ"}) == "EQ", guard._affix_of("EQを表示", {"EQ"}))
 # ...while the same shape in a space-less script is a real dropped word: Korean writes `삭제하기`
 # closed up, and `하기` is the verb ending Logic drops.
 case("affix keeps a dropped ending in a closed-up Korean compound",
@@ -219,7 +225,15 @@ case("no census at all is a refusal, not a pass", rc == 1, (rc, buf.getvalue()))
 # a silently narrower loop.
 DRIFT_PAIRS = [(" Foo ", "Foo"), ("Foo", " Foo "), ("FooBar", "Foo"), ("foo", "FOO"),
                ("  Mixer  ", "Mixer"), ("Show Mixer", "Mixer"), ("정보", "정보 "), ("削除", "削除"),
-               ("トラックヘッダ", "トラック"), ("", "Foo")]
+               ("トラックヘッダ", "トラック"), ("", "Foo"),
+               # Decomposed on ONE side. Every pair above is already composed, so dropping
+               # `unicodedata.normalize` from the copy left all forty cases green — measured by
+               # mutation 2026-09-06, and named by review in the same round. A pair that differs
+               # only by normal form is the one shape that catches it.
+               (_u.normalize("NFD", "정보"), "정보"),
+               ("정보", _u.normalize("NFD", "정보")),
+               (_u.normalize("NFD", "ステップ"), "ステップ"),
+               (_u.normalize("NFD", "트랙 헤더"), "트랙 헤더")]
 for _mode in real_guard.MATCH_MODES:
     for _value, _text in DRIFT_PAIRS:
         _mine, _theirs = guard._carries(_value, _text, _mode), real_guard.carries(_value, _text, _mode)

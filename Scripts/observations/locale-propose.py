@@ -147,6 +147,7 @@ def apply(labels_path, census, proposals, records_by_surface):
     surface the match sat on. A variant gets a `provenance` block; a canonical-only match gets
     `coverage_records[locale]` so `measured` can be derived. Nothing is written for a label whose
     surface has no record — a citation to nothing is the shape the guard refuses."""
+    unbacked = {}
     doc = json.load(open(labels_path, encoding="utf-8"))
     host = census["host"]; locale = host["locale"]
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
@@ -204,6 +205,20 @@ def apply(labels_path, census, proposals, records_by_surface):
             # 2026-09-06.
             if not rid or not isinstance(_GUARD._record(rid), dict):
                 continue
+            # And the record must actually CONTAIN the sighting. Records are found by SURFACE, so a
+            # census whose `surface` field matches a record says nothing about whether THAT record
+            # saw THIS row — the census supplied on the command line and the record cited for it are
+            # two different files, matched on a label. The guard validates the record, so a
+            # mismatch writes a block the guard then refuses, leaving the ledger invalid AFTER it
+            # has been mutated. Raised by review 2026-09-06, which proved it by proposing from a
+            # synthetic census and watching the block land and then be rejected.
+            #
+            # Asked with the guard's own `sighting_value`, so the two cannot disagree about what
+            # counts as seen.
+            if _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
+                                     h["attribute"], h["match"]) is None:
+                unbacked.setdefault(name, set()).add((h["string"], rid))
+                continue
             if h["string"] in (entry.get("variants") or []):
                 # A provenance block must carry a REAL date matching its record's — the coverage
                 # branch below has no date field and asks nothing of it.
@@ -251,6 +266,12 @@ def apply(labels_path, census, proposals, records_by_surface):
         print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
               f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
               + (" …" if len(skipped) > 6 else ""))
+    if unbacked:
+        n = sum(len(v) for v in unbacked.values())
+        print(f"  not written for {n} sighting(s) whose cited record does not contain them — the "
+              f"census and the record for that surface disagree, so the citation would be false: "
+              + ", ".join(f"{k}→{sorted(v)[0][0]!r}" for k, v in sorted(unbacked.items())[:4])
+              + (" …" if len(unbacked) > 4 else ""))
     return n_prov, n_cov
 
 
