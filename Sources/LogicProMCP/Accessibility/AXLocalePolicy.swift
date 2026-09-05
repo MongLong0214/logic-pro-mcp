@@ -118,7 +118,7 @@ enum AXLocalePolicy {
 
     static let viewMenuBar = LabelSet(
         canonical: "View",
-        variants: ["보기"],
+        variants: ["보기", "表示"],
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
@@ -136,7 +136,7 @@ enum AXLocalePolicy {
 
     static let windowMenuBar = LabelSet(
         canonical: "Window",
-        variants: ["윈도우"],
+        variants: ["윈도우", "ウインドウ"],
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
