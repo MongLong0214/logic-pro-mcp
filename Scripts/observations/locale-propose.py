@@ -150,7 +150,18 @@ def apply(labels_path, census, proposals, records_by_surface):
     doc = json.load(open(labels_path, encoding="utf-8"))
     host = census["host"]; locale = host["locale"]
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
-    date = datetime.date.today().isoformat()
+    # The RECORD's date, not today's. A provenance block says a string was observed, and the
+    # observation happened when the census was taken — the guard enforces exactly that
+    # ("provenance for X is dated D but its record was measured E"). Stamping `today` worked only
+    # while a campaign was applied on the same day its census was written; the clock rolled past
+    # midnight during one, and every block the proposer would write from then on was one the guard
+    # refuses. Read per record, because a campaign can cite several.
+    # Read through the GUARD's resolver, not a path this file works out for itself — the same
+    # reason the containment sets and the string comparison come from there. Two ways of finding a
+    # record are two ways of disagreeing about which one was cited.
+    def record_date(record_id):
+        rec = _GUARD._record(record_id)
+        return (rec or {}).get("date") or ""
     n_prov = n_cov = 0
     skipped = []
     for name, hits in proposals.items():
@@ -182,7 +193,8 @@ def apply(labels_path, census, proposals, records_by_surface):
                 prov = entry.setdefault("provenance", {})
                 if h["string"] in prov:
                     continue
-                prov[h["string"]] = {"locale": locale, "date": date, "host": host_line, "record": rid,
+                prov[h["string"]] = {"locale": locale, "date": record_date(rid),
+                                     "host": host_line, "record": rid,
                                      "observed": h["observed"], "role": h["role"],
                                      "attribute": h["attribute"], "match": h["match"]}
                 # The label must DECLARE the roles it may be read on, and the citation must name one

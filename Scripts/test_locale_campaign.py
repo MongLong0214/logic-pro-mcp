@@ -120,7 +120,21 @@ def main():
         lp = write(tmp, labels(**{label_name: (canonical, [variant])}))
         _, _, props, _ = propose.main(cpath, lp)
         surface = "arrange.menus" if ax_path.startswith("AXMenuBar") else "arrange.window"
-        propose.apply(lp, json.load(open(cpath)), props, {surface: rid})
+        # `apply` now reads the cited record — for its DATE, which a provenance block must match —
+        # so it needs the same records directory the guard checks against. It used to stamp
+        # `today`, which passed only while a campaign ran on the day its census was written; the
+        # clock rolled past midnight during one and this test is what said so.
+        # BOTH module objects. This file loads its own copy of the guard for the assertion below,
+        # and the proposer loads a separate one for its own use — pointing only at this file's copy
+        # left `apply` reading the real repository's records, which is the same "two ways of
+        # finding a record" the proposer's own comment warns about, one level up.
+        saved_apply, guard.OBS = guard.OBS, str(obs)
+        saved_prop, propose._GUARD.OBS = propose._GUARD.OBS, str(obs)
+        try:
+            propose.apply(lp, json.load(open(cpath)), props, {surface: rid})
+        finally:
+            guard.OBS = saved_apply
+            propose._GUARD.OBS = saved_prop
         entry = json.load(open(lp, encoding="utf-8"))["labels"][label_name]
         block = (entry.get("provenance") or {}).get(variant) or {}
         case(f"{label_name}: the proposer declares the match the product uses",
