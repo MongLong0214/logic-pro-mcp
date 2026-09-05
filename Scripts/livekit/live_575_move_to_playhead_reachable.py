@@ -146,6 +146,23 @@ def frame_of(region):
     return tuple(parts)
 
 
+def region_identity(region):
+    """`(name, track)` for a witness reading, or None when either is missing.
+
+    NAME ALONE is not an identity — raised by review 2026-09-05: two regions can carry the same
+    name on different tracks, and `MIDI Region` is what `record_sequence` calls every one it
+    imports. The witness reports the LayoutArea it sits in, which is the track, so the pair is
+    available and the name on its own never was.
+    """
+    if not isinstance(region, dict):
+        return None
+    name = region.get("name")
+    track = region.get("track")
+    if not name or not track:
+        return None
+    return (name, track)
+
+
 def same_region(before, after):
     """Whether the two witness readings are about ONE region.
 
@@ -157,27 +174,32 @@ def same_region(before, after):
 
     The envelope's check does not transfer to the witness, so this asks the witness directly.
     """
-    if not isinstance(before, dict) or not isinstance(after, dict):
-        return False
-    return (before.get("name") or "") == (after.get("name") or "") and bool(before.get("name"))
+    a, b = region_identity(before), region_identity(after)
+    return a is not None and a == b
 
 
-def within_window(band, state):
-    """Whether a band lies inside the window the witness measured, so `visual()` will not clip it.
+def within_captured_window(band, state, captured):
+    """Whether the band lies inside the window `Evidence.visual` will actually clip against.
 
-    Also raised by that review, and it refutes a claim this harness's own pull request made: a
-    derived band contains the change in AX space, NOT in the captured image. `Evidence.visual`
-    clips the band to the window, so a real move whose union lies outside — a region dragged
-    off-screen, or a union wider than the window — hashes only the visible subset, which may omit
-    the movement entirely, or nothing at all.
+    Two things, and the first was missing. `visual()` clips against the CAPTURED window's size —
+    CoreGraphics, via `shot()` — while the band is derived from the AX window the witness measured.
+    Checking the band against the AX window alone assumes the two are the same window, which is the
+    assumption the third finding of that review was about. Raised again 2026-09-05: so the
+    correspondence is ASSERTED here, by title and by size, and the band is then checked against the
+    window that will do the clipping.
 
-    Clipping silently is the problem. Refusing loudly is the fix.
+    Measured on this host, they agree exactly — same origin, same size, same title. That is what
+    makes the assertion cheap; it is not what makes it unnecessary.
     """
-    window = state.get("window") if isinstance(state, dict) else None
-    if not isinstance(window, dict) or band is None:
+    axw = state.get("window") if isinstance(state, dict) else None
+    if band is None or not isinstance(axw, dict) or not isinstance(captured, dict):
+        return False
+    if (state.get("windowTitle") or "") != (captured.get("title") or ""):
+        return False
+    if axw.get("w") != captured.get("w") or axw.get("h") != captured.get("h"):
         return False
     x, y, w, h = band
-    return x >= 0 and y >= 0 and x + w <= window.get("w", 0) and y + h <= window.get("h", 0)
+    return x >= 0 and y >= 0 and x + w <= captured["w"] and y + h <= captured["h"]
 
 
 def union_frame(before, after):
@@ -190,6 +212,13 @@ def union_frame(before, after):
     a, b = frame_of(before), frame_of(after)
     if a is None or b is None:
         return None
+    # The two readings must be ONE region. Without this the band covers A and B when the selection
+    # drifts across the call, selection highlighting alone changes pixels inside it, and the
+    # assertion passes while A never moved. Raised by review 2026-09-05 — and the FIRST attempt at
+    # this fix defined the function and never called it, which is the shape of defect this whole
+    # harness exists to refuse.
+    if not same_region(before, after):
+        return None
     # The witness names its own space, and the value it uses is deliberately not the bare word for
     # a Logic window: a protocol token that collides with a UI label is a token the literal guard
     # cannot tell from a menu title, and neither can a reader.
@@ -200,7 +229,13 @@ def union_frame(before, after):
     y0 = min(a[1], b[1]) - FRAME_PAD
     x1 = max(a[0] + a[2], b[0] + b[2]) + FRAME_PAD
     y1 = max(a[1] + a[3], b[1] + b[3]) + FRAME_PAD
-    return (max(0, x0), max(0, y0), x1 - max(0, x0), y1 - max(0, y0))
+    # NOT clamped to zero. The first cut wrote `max(0, x0)`, which silently returns a different
+    # rectangle from the one the frames imply — and `within_window` below then approved the
+    # reshaped one. A band that would start off the left or top edge is a band this run cannot
+    # compare, so it is refused here and the precondition says so. Raised by review 2026-09-05.
+    if x0 < 0 or y0 < 0:
+        return None
+    return (x0, y0, x1 - x0, y1 - y0)
 
 
 def start_bar(help_text):
@@ -409,21 +444,25 @@ ev.check("575/precondition-the-region-frame-was-read-before-and-after",
 # The band must also be somewhere `visual()` can actually look. It clips to the window, so a union
 # outside it hashes a subset — or nothing — and an assertion about the region would then fail for a
 # reason that is not about the region.
-ev.check("575/precondition-the-band-is-inside-the-captured-window",
-         within_window(COMPARE_BAND, after_state),
-         "the derived band lies inside the window the witness measured, so the comparison below "
-         "sees the whole of it rather than a clipped subset",
-         f"band={COMPARE_BAND!r} window={(after_state or {}).get('window')!r} "
-         f"title={(after_state or {}).get('windowTitle')!r}",
-         "move the region so its union leaves the window: this check goes red instead of the "
-         "visual assertion failing for a reason that has nothing to do with the move")
+CAPTURED_WINDOW = E.logic_window(arrange_title)
+ev.check("575/precondition-the-band-is-inside-the-window-that-will-clip-it",
+         within_captured_window(COMPARE_BAND, after_state, CAPTURED_WINDOW),
+         "the AX window the band was measured in IS the window the capture was taken from — same "
+         "title, same size — and the band lies inside it, so the comparison below sees the whole "
+         "of it rather than a clipped subset",
+         f"band={COMPARE_BAND!r} ax={(after_state or {}).get('window')!r} "
+         f"ax_title={(after_state or {}).get('windowTitle')!r} captured={CAPTURED_WINDOW!r}",
+         "compare against the AX window alone: a second standard window makes the two disagree and "
+         "the band is approved against a window the capture did not come from")
 
 ev.visual("575/the-region-visibly-moved",
           before_shot["file"], after_shot["file"], COMPARE_BAND, subject=COMPARE_BAND_SUBJECT,
           expect_change=True,
-          why="the band is the union of the region's own measured frame before and after, so it "
-              "contains the change if there is one at any zoom or scroll — and it cannot pass on "
-              "empty canvas, which is how a fixed rectangle can be green about nothing")
+          why="the band is the union of one region's own measured frames before and after — the "
+              "same region, by name AND track — so it contains the change wherever the region is "
+              "on the canvas, and cannot pass on empty canvas the way a fixed rectangle can. It is "
+              "asserted to lie inside the window the capture came from, because a band outside it "
+              "would be clipped and the comparison would then be about something else")
 
 # ---- restore ------------------------------------------------------------------------------------
 #

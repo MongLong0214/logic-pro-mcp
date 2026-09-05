@@ -148,6 +148,23 @@ func windowContaining(_ element: AXUIElement) -> AXUIElement? {
     return nil
 }
 
+/// The LayoutArea a region item sits in, which is its TRACK.
+///
+/// A region's name is not an identity: two regions can carry the same name on different tracks,
+/// and `record_sequence` names every region it imports `MIDI Region`. Raised by review
+/// 2026-09-05 against a same-region check that compared names alone.
+func trackOf(_ item: AXUIElement) -> String? {
+    var current: AXUIElement? = attr(item, kAXParentAttribute as String) as! AXUIElement?
+    for _ in 0..<8 {
+        guard let node = current else { return nil }
+        if role(node) == (kAXLayoutAreaRole as String) {
+            return attr(node, kAXDescriptionAttribute as String) as? String
+        }
+        current = attr(node, kAXParentAttribute as String) as! AXUIElement?
+    }
+    return nil
+}
+
 func describe(_ item: AXUIElement, index: Int, origin: (x: Int, y: Int)?) -> String {
     let name = attr(item, kAXDescriptionAttribute as String) as? String
     let selected = (attr(item, kAXSelectedAttribute as String) as? NSNumber)?.boolValue
@@ -164,6 +181,7 @@ func describe(_ item: AXUIElement, index: Int, origin: (x: Int, y: Int)?) -> Str
     return """
     {"index":\(index),"name":\(jsonString(name)),"help":\(jsonString(help(item))),\
     "selected":\(selected.map { $0 ? "true" : "false" } ?? "null"),\
+    "track":\(jsonString(trackOf(item))),\
     "x":\(x),"y":\(y),"w":\(w),"h":\(h)}
     """
 }
