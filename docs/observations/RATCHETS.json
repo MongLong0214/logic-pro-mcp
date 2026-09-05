@@ -625,6 +625,7 @@
       "2026-09-04-the-header-has-no-type-signal-at-any-depth",
       "2026-09-04-track-header-carries-no-type-signal",
       "2026-09-04-transport-readings-and-where-the-playhead-is-not",
+      "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
       "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it",
       "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese"
     ],
@@ -640,7 +641,6 @@
       "en-US→project.export",
       "en-US→project.lifecycle",
       "en-US→system.midi",
-      "en-US→system.preferences",
       "ja-JP→editor.audio_track",
       "ja-JP→editor.event_list",
       "ja-JP→editor.piano_roll",
@@ -663,8 +663,9 @@
   "raised": {
     "manual_reverify": {
       "date": "2026-09-05",
-      "reason": "Reverifying this one needs Logic's Window menu read AND the toggle driven twice with the window list compared between the calls — two instruments, one of them a mutation, and no command in this repository does both. Writing it as a `script` would name a command that cannot be run as written; the guard for that already refused one.",
+      "reason": "Two records from this change reverify by hand and neither can be a script. One needs Logic's Window menu read AND a toggle driven twice with the window list compared between the calls. The other asks whether restoring a reader crashes Logic, which is a question with a cost — it was deliberately not retried, and a command that reproduces a crash on demand is not one this repository should carry.",
       "members": [
+        "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
         "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it"
       ]
     },
