@@ -535,6 +535,52 @@ def main():
     case("identifier survives regeneration",
          (built3.get("coverage_identifiers") or {}).get("en-US") == "markerEdit:", built3)
 
+    # The product folds case in every mode (`caseInsensitiveCompare`, and `.caseInsensitive` on
+    # `containsAny`), so the guard does too. Measured 2026-09-05: Logic shows the arrange canvas as
+    # `Tracks contents` and `trackContentExplicit` stores `tracks contents`, because the classifier
+    # lowercases before the lookup. Held case-sensitively this reading was unrecordable, and the
+    # only way to satisfy the guard was to write a variant Logic does not show.
+    #
+    # The third case is the one that keeps the fold from being a hole: if absence were still judged
+    # case-sensitively, changing the case of a string Logic really shows would turn a presence into
+    # a claim that nobody shows it.
+    guard.OBS = _ledger({"2026-09-05-case": ("en-US", [
+        _row("AXGroup", description="Tracks contents",
+             path="AXWindow[x]/AXScrollArea/AXGroup[Tracks contents]")])})
+    en_measured = dict(U, **{"en-US": "measured"})
+    folded = _entry(["tracks contents"], None, en_measured, canonical="트랙 콘텐츠", match="exact",
+                    declared=("AXGroup",), cites={"en-US": "2026-09-05-case"},
+                    roles={"en-US": "AXGroup"}, attrs={"en-US": "description"})
+    case("case-differing reading is a sighting", cp(folded) == [], cp(folded))
+
+    other = _entry(["track contents"], None, en_measured, canonical="트랙 콘텐츠", match="exact",
+                   declared=("AXGroup",), cites={"en-US": "2026-09-05-case"},
+                   roles={"en-US": "AXGroup"}, attrs={"en-US": "description"})
+    case("a different string is still not a sighting",
+         any("carried any of this label's strings" in x for x in cp(other)), cp(other))
+
+    absent = _entry(["tracks contents"], None, en_measured, canonical="트랙 콘텐츠", match="exact",
+                    declared=("AXGroup",), cites={"en-US": "2026-09-05-case"},
+                    roles={"en-US": "AXGroup"}, absent={"en-US": "AXScrollArea/AXGroup["})
+    case("case-differing presence defeats an absence claim",
+         any("that is a presence" in x for x in cp(absent)), cp(absent))
+
+    quoted = _entry(["tracks contents"], {"tracks contents": _prov(
+        record="2026-09-05-case", locale="en-US", observed="Tracks contents", role="AXGroup",
+        attribute="description", match="exact")}, en_measured, canonical="트랙 콘텐츠", match="exact",
+        declared=("AXGroup",))
+    case("a verbatim quote of a case-differing value is provenance",
+         guard.provenance_problems("trackContentExplicit", quoted) == [],
+         guard.provenance_problems("trackContentExplicit", quoted))
+
+    lowered = _entry(["tracks contents"], {"tracks contents": _prov(
+        record="2026-09-05-case", locale="en-US", observed="tracks contents", role="AXGroup",
+        attribute="description", match="exact")}, en_measured, canonical="트랙 콘텐츠", match="exact",
+        declared=("AXGroup",))
+    case("the quote itself is still held raw",
+         any("quotes observed" in x for x in guard.provenance_problems("trackContentExplicit", lowered)),
+         guard.provenance_problems("trackContentExplicit", lowered))
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

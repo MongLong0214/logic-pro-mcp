@@ -39,23 +39,24 @@ ROLE_HINTS = [
 CONTAINS_SHAPES = ("HelpKeyword", "Keyword", "Hint", "Suffix", "Prefix", "Context")
 
 
-def _swift_containment():
-    """The label sets the PRODUCT reads with `containsAny`, from the guard that derives them.
+def _guard():
+    """The guard module itself, loaded once.
 
-    Not a second copy. `CONTAINS_SHAPES` is a guess from the label's NAME, and measured against the
-    real call sites it was wrong for 23 of the 31 sets Swift actually reads with containment —
-    every one of which this tool would have proposed as `exact` and the guard would have refused.
-    The rule lives in check-locale-labels-json.py; both read that one.
+    This tool proposes what that guard will later judge, so every rule they share is read from
+    there rather than reimplemented here — measured 2026-09-05, twice: the containment sets (a
+    name-based guess, wrong for 23 of 31) and the string comparison (case-sensitive here, folded in
+    the product, so a proposal this tool could make was one the guard refused).
     """
     guard = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "check-locale-labels-json.py")
     spec = importlib.util.spec_from_file_location("locale_guard", guard)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return set(module.swift_containment())
+    return module
 
 
-_CONTAINMENT = _swift_containment()
+_GUARD = _guard()
+_CONTAINMENT = set(_GUARD.swift_containment())
 
 
 def match_mode(name):
@@ -83,10 +84,12 @@ def matches(name, wanted, text):
     written from the Swift. For the 23 sets where they disagree the tool found nothing at all
     (matching exactly) while claiming it would have matched by containment, so the campaign
     silently under-delivered instead of failing. One rule, asked once.
+
+    The comparison itself is the guard's, not a copy of it: `carries` folds case exactly as the
+    product does, and this file used to hold a case-sensitive twin that could propose nothing for a
+    label whose stored form differs from Logic's only in case.
     """
-    if match_mode(name) == "contains":
-        return wanted in text
-    return text.strip() == wanted.strip()
+    return _GUARD.carries(text, wanted, exact=match_mode(name) != "contains")
 
 
 def strings_of(row):

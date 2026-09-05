@@ -69,6 +69,13 @@ def _is_documented(block, variant=""):
 
     What this still cannot check is whether the reading happened at all — someone determined to
     fake it can paste the variant into `observed`. The record it names is where a reviewer looks.
+
+    The containment folds case for the reason `carries` does: `observed` quotes what Logic showed,
+    and the product matches a label to it case-insensitively. Held case-sensitively, a label whose
+    stored form differs only in case from Logic's — `trackContentExplicit` carries `tracks
+    contents`, Logic shows `Tracks contents` — could not be documented at all: the quote has to be
+    verbatim (checked below, RAW, against what the record carried), and a verbatim quote does not
+    contain the variant. Two rules in this file demanded opposite things about the same string.
     """
     if not isinstance(block, dict):
         return False
@@ -76,7 +83,7 @@ def _is_documented(block, variant=""):
         return False
     if not _is_real_date(block.get("date", "")):
         return False
-    return not variant or variant in str(block.get("observed", ""))
+    return not variant or variant.casefold() in str(block.get("observed", "")).casefold()
 
 
 OBS = os.path.join(REPO, "docs", "observations")
@@ -252,13 +259,32 @@ def sighting(rec, text, role=None, attribute=None, exact=True):
     return sighting_value(rec, text, role, attribute, exact) is not None
 
 
-def _carries(value, text, exact):
+def carries(value, text, exact):
     """Whether an attribute value counts as carrying `text`. The ONE comparison.
 
     It existed twice — `sighting` stripped before an exact test and the absence branch did not — so
     a value of `" Create "` was a presence to one and an absence to the other, about the same row.
+
+    CASE-INSENSITIVE, because the product is. Every mode of `AXLocalePolicy.LabelSet` folds case:
+    `.exact`/`.exactStrict` compare with `caseInsensitiveCompare`, and `containsAny` searches with
+    `.caseInsensitive`. This comparison was case-SENSITIVE, so the guard was STRICTER than the
+    thing it audits and refused honest readings — measured 2026-09-05: Logic shows the arrange
+    canvas as `Tracks contents`, `trackContentExplicit` carries `tracks contents` (the classifier
+    lowercases before looking it up), the product matches, and this returned False. A guard that
+    refuses what the product accepts does not report a gap in Logic; it reports a gap in itself,
+    and the only way to satisfy it was to write a variant Logic does not show.
+
+    The rule is the one `label_match` already states: the evidence rule must be the product's.
+
+    What this still does NOT fold is internal whitespace. `AccessibilityChannel+Regions` collapses
+    runs of whitespace before the lookup, so a Logic string with a double space would match there
+    and not here. No measured label needs it, and widening on a hypothetical is how a comparison
+    stops describing anything.
     """
-    return (value.strip() == text.strip()) if exact else (text in value)
+    if exact:
+        return value.strip().casefold() == text.strip().casefold()
+    return text.casefold() in value.casefold()
+
 
 
 def sighting_value(rec, text, role=None, attribute=None, exact=True):
@@ -277,7 +303,7 @@ def sighting_value(rec, text, role=None, attribute=None, exact=True):
             value = row.get(attr)
             if not isinstance(value, str):
                 continue
-            if _carries(value, text, exact):
+            if carries(value, text, exact):
                 return value
     return None
 
@@ -412,7 +438,7 @@ def coverage_problems(name, entry, locales, values):
             carrying = [v for t in strings if t
                         for r in seen
                         for v in (r.get(a) for a in LABEL_ATTRS)
-                        if isinstance(v, str) and _carries(v, t, exact=(mode == "exact"))]
+                        if isinstance(v, str) and carries(v, t, exact=(mode == "exact"))]
             if not seen:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
                            f"{cites.get(loc)!r}, which contains no {role} whose path carries "

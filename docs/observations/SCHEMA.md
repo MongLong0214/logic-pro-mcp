@@ -150,6 +150,14 @@ string under that mode. Three further rules make the citation hold:
   and a record that shows one. It does not check that the class is the one the product searches.
 - **A record's `expected` / `counterexample` subtrees are not readings.** They are element-shaped on
   purpose, which is what let a counterexample back the claim it was written to deny.
+- **The comparison folds case, because the product's does.** Every mode of `LabelSet` is
+  case-insensitive — `.exact` and `.exactStrict` use `caseInsensitiveCompare`, `containsAny`
+  searches with `.caseInsensitive` — and a guard stricter than the thing it audits refuses honest
+  readings. Measured: Logic shows `Tracks contents`, `trackContentExplicit` stores `tracks
+  contents` because the classifier lowercases before the lookup, the product matches, and a raw
+  comparison did not. The only way to satisfy it was to write a variant Logic does not show. What
+  does NOT fold is the `observed` quote above: matching is the product's rule, fidelity is this
+  file's.
 
 The mode is data because it cannot be guessed: inferring it from the label's NAME was wrong in both
 directions against the real call sites, and where the Swift *can* say —
