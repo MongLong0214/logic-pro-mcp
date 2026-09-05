@@ -135,6 +135,7 @@
    "sliderZoomHint→확대",
    "stemExportCommitButton→내보내기",
    "stemExportDismissButton→취소",
+   "stepInputKeyboardWindowTitle→ステップインプットキーボード",
    "stepInputKeyboardWindowTitle→스텝 입력 키보드",
    "tempoFieldLabel→bpm",
    "tempoFieldLabel→템포",
@@ -668,10 +669,11 @@
    ]
   },
   "undocumented_variants": {
-   "date": "2026-09-05",
-   "reason": "A claim retracted, not a gap that grew. Three entries in the base named a real record, the right role and the right attribute about the WRONG element: `markerListDeleteMenuItem` means the Marker List window's Delete and was backed by the application's Edit menu in three locales, and `pluginWindowEditorViewMenuItem` means a plugin window's scoped View menu and was backed by the application's View menu. `roles` cannot see the difference — it names a kind of element and Logic puts the same kind in many containers. Retracting them makes the gaps real again, and the ceiling has to say so rather than inherit a number that was wrong. The label's own rationale had warned that the Edit menu carries Delete-Undo-History entries and that matching there can reach a different destructive command.",
+   "date": "2026-09-06",
+   "reason": "Two variants, raised for opposite reasons. (1) 2026-09-05, `markerListDeleteMenuItem→削除` — A claim retracted, not a gap that grew. Three entries in the base named a real record, the right role and the right attribute about the WRONG element: `markerListDeleteMenuItem` means the Marker List window's Delete and was backed by the application's Edit menu; `roles` cannot see the difference, because it names a kind of element and Logic puts the same kind in many containers. Retracting the claim makes the gap real again, and the ceiling has to say so rather than inherit a number that was wrong. (2) 2026-09-06, `stepInputKeyboardWindowTitle→ステップインプットキーボード` — the opposite case: a variant that IS measured, but whose evidence no census can hold. It is a WINDOW title, and the window does not exist until `edit.toggle_step_input` opens it, so a navigation-free census walking the arrange surfaces can never see it. It was read from Logic's own window list during a live toggle on a Japanese Logic: `lpm-locale-campaign - ステップインプットキーボード`. Citing the ja-JP menu census instead would reproduce exactly the error in (1) — the same string on a menu item is a different element from the same string on a window.",
    "members": [
-    "markerListDeleteMenuItem→削除"
+    "markerListDeleteMenuItem→削除",
+    "stepInputKeyboardWindowTitle→ステップインプットキーボード"
    ]
   },
   "unmeasured_coverage.en-US": {

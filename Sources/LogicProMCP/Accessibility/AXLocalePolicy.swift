@@ -163,9 +163,19 @@ enum AXLocalePolicy {
         rationale: "Native Window-menu toggle used with independent window-state readback."
     )
 
+    /// Japanese measured live 2026-09-06, from Logic's own window list during a toggle:
+    /// `lpm-locale-campaign - ステップインプットキーボード`. No navigation-free census can carry
+    /// this string — the window does not exist until the operation opens it — which is why the
+    /// gap survived three censuses and two rounds of menu-label work.
+    ///
+    /// Its absence is the SECOND half of why `edit.toggle_step_input` was dead in Japanese. With
+    /// the menu labels fixed the AX channel found the item and pressed it, the window opened, and
+    /// then this readback could not see it: twenty polls, State C, and the chain fell through to
+    /// the key-command destination, which toggles the window but cannot read anything back. The
+    /// operation reported State B `readback_unavailable` about a window that was plainly open.
     static let stepInputKeyboardWindowTitle = LabelSet(
         canonical: "Step Input Keyboard",
-        variants: ["스텝 입력 키보드"],
+        variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
         rationale: "Verifies the Step Input Keyboard window opened or closed after the menu action."
     )
 
