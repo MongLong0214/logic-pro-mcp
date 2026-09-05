@@ -101,18 +101,57 @@ func jsonString(_ value: String?) -> String {
     return String(text.dropFirst().dropLast())
 }
 
-func describe(_ item: AXUIElement, index: Int) -> String {
+/// The element's frame, or nil when either half is unreadable.
+///
+/// Both halves. Position without size describes a point, and a band derived from a point is a
+/// band of zero area that every comparison reads as "nothing changed" — the failure #780 is about,
+/// arrived at by a different route.
+func frame(_ element: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
+    guard let positionValue = attr(element, kAXPositionAttribute as String),
+          let sizeValue = attr(element, kAXSizeAttribute as String) else { return nil }
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    // swiftlint:disable:next force_cast
+    guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &point),
+          // swiftlint:disable:next force_cast
+          AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return nil }
+    return (Int(point.x), Int(point.y), Int(size.width), Int(size.height))
+}
+
+/// The arrange window's frame, so every frame below can be reported in WINDOW coordinates.
+///
+/// AX reports screen coordinates and `Evidence.visual` takes window ones — it clips what it is
+/// given against the window's width and height. Handing it a screen rectangle on a second display
+/// or a window that is not at the origin aims the comparison somewhere else entirely, and the
+/// receipt cannot show it: a rectangle records where it looked, never what was there.
+/// `ax_control_bar_band.swift` already subtracts the window origin for exactly this reason; doing
+/// it here keeps one converter rather than two that can disagree.
+func arrangeWindowFrame(_ app: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
+    let windows = (attr(app, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []
+    for window in windows where (attr(window, kAXSubroleAttribute as String) as? String)
+        == (kAXStandardWindowSubrole as String) {
+        if let f = frame(window) { return f }
+    }
+    return nil
+}
+
+func describe(_ item: AXUIElement, index: Int, origin: (x: Int, y: Int)?) -> String {
     let name = attr(item, kAXDescriptionAttribute as String) as? String
     let selected = (attr(item, kAXSelectedAttribute as String) as? NSNumber)?.boolValue
-    var y = "null"
-    if let raw = attr(item, kAXPositionAttribute as String) {
-        var point = CGPoint.zero
-        // swiftlint:disable:next force_cast
-        if AXValueGetValue(raw as! AXValue, .cgPoint, &point) { y = "\(Int(point.y))" }
+    var x = "null", y = "null", w = "null", h = "null"
+    if let f = frame(item) {
+        // `y` keeps its screen-relative meaning ONLY when no window origin was resolved, which is
+        // also when no caller should be deriving a band. When the origin is known every component
+        // is window-relative, which is the space `visual()` and `shot()` work in.
+        x = "\(f.x - (origin?.x ?? 0))"
+        y = "\(f.y - (origin?.y ?? 0))"
+        w = "\(f.w)"
+        h = "\(f.h)"
     }
     return """
     {"index":\(index),"name":\(jsonString(name)),"help":\(jsonString(help(item))),\
-    "selected":\(selected.map { $0 ? "true" : "false" } ?? "null"),"y":\(y)}
+    "selected":\(selected.map { $0 ? "true" : "false" } ?? "null"),\
+    "x":\(x),"y":\(y),"w":\(w),"h":\(h)}
     """
 }
 
@@ -129,11 +168,22 @@ guard let content = trackContentGroup(appElement) else {
     exit(3)
 }
 
+let windowFrame = arrangeWindowFrame(appElement)
+let origin = windowFrame.map { (x: $0.x, y: $0.y) }
 let items = regionItems(content)
-let listing = items.enumerated().map { describe($0.element, index: $0.offset) }.joined(separator: ",")
+let listing = items.enumerated()
+    .map { describe($0.element, index: $0.offset, origin: origin) }
+    .joined(separator: ",")
 let selected = items.enumerated()
     .filter { (attr($0.element, kAXSelectedAttribute as String) as? NSNumber)?.boolValue == true }
     .map(\.offset)
+// `coordinateSpace` is stated rather than assumed. A caller that derives a band from these numbers
+// has to know which space they are in, and a run whose window origin could not be read must be
+// able to refuse instead of quietly building a band in the wrong one.
+let space = windowFrame == nil ? "screen-absolute" : "window-relative"
+let windowJSON = windowFrame.map { "{\"x\":\($0.x),\"y\":\($0.y),\"w\":\($0.w),\"h\":\($0.h)}" }
+    ?? "null"
 print("""
-{"regions":[\(listing)],"selected":[\(selected.map(String.init).joined(separator: ","))]}
+{"regions":[\(listing)],"selected":[\(selected.map(String.init).joined(separator: ","))],\
+"coordinateSpace":"\(space)","window":\(windowJSON)}
 """)

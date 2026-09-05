@@ -1,0 +1,78 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "project lpm-locale-campaign.logicx, window 1920x1050 at (0,30), Mixer pane CLOSED (with it open Logic's Edit menu is the Mixer's and has no Move submenu, so the operation under test cannot run at all)"
+ },
+ "measured_at": "2026-09-05T19:43:54+09:00",
+ "method": "One run of live_575_move_to_playhead_reachable at head 424c33c8, which moved a region from bar 1 to bar 9. Every rectangle below is from that run's own evidence document: the canvas from `located_band`, the region's frames from the harness's witness, the derived band from the visual assertion. The fixed band is the expression the harness carried, evaluated on the same canvas reading.",
+ "all_rectangles_window_relative": true,
+ "rectangles": {
+  "arrange_canvas": [
+   928,
+   162,
+   6162,
+   873
+  ],
+  "fixed_band_the_expression_would_have_computed": [
+   940,
+   162,
+   500,
+   300
+  ],
+  "region_before_the_move": [
+   937,
+   423,
+   48,
+   64
+  ],
+  "region_after_the_move": [
+   1321,
+   423,
+   48,
+   64
+  ],
+  "derived_band_this_run_used": [
+   929,
+   415,
+   448,
+   80
+  ]
+ },
+ "how_much_of_the_region_each_band_contains": {
+  "fixed_band_vs_region_before": {
+   "x_points": 45,
+   "of_x": 48,
+   "y_points": 39,
+   "of_y": 64
+  },
+  "fixed_band_vs_region_after": {
+   "x_points": 48,
+   "of_x": 48,
+   "y_points": 39,
+   "of_y": 64
+  },
+  "derived_band_vs_region_before": {
+   "x_points": 48,
+   "of_x": 48,
+   "y_points": 64,
+   "of_y": 64
+  },
+  "derived_band_vs_region_after": {
+   "x_points": 48,
+   "of_x": 48,
+   "y_points": 64,
+   "of_y": 64
+  }
+ },
+ "run_summary": {
+  "checks": 11,
+  "passed": 11,
+  "visual_failed": 0,
+  "captures_unsettled": 0,
+  "source": "printed by the harness at the end of the run; the evidence document itself carries the records these were counted from"
+ }
+}
