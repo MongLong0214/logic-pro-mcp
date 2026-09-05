@@ -135,7 +135,7 @@ screenshot the conclusion depends on cannot be cited and then lost.
 measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
 which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
 schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role`, the
-`attribute` it was read from and the `match` mode (`exact` or `contains`), and the guard requires
+`attribute` it was read from and the `match` mode (`exact`, `exact_strict` or `contains`), and the guard requires
 the record to contain a **sighting** — an element of that role whose that attribute carried the
 string under that mode. Three further rules make the citation hold:
 
@@ -150,6 +150,14 @@ string under that mode. Three further rules make the citation hold:
   and a record that shows one. It does not check that the class is the one the product searches.
 - **A record's `expected` / `counterexample` subtrees are not readings.** They are element-shaped on
   purpose, which is what let a counterexample back the claim it was written to deny.
+- **`exact_strict` is a third mode, not a stricter second.** `.exact` trims the observed text
+  before comparing and `.exactStrict` does not — it exists to preserve the raw `desc == label`
+  semantics the structural locators were written with. Held as one `exact`, the ledger certified a
+  padded reading the product refuses: an AXGroup description of `" 再生ヘッドの位置 "` satisfies a
+  trimming comparison and fails the one that element is actually read with. Which mode a label uses
+  is derived from the Swift, like containment. Three labels are read BOTH ways at different call
+  sites — so "the mode is a property of the label" is false for them; they are held to the looser
+  rule and the guard names them on every run rather than leaving that implied.
 - **The comparison folds case, because the product's does.** Every mode of `LabelSet` is
   case-insensitive — `.exact` and `.exactStrict` use `caseInsensitiveCompare`, `containsAny`
   searches with `.caseInsensitive` — and a guard stricter than the thing it audits refuses honest

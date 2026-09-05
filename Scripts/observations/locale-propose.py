@@ -57,16 +57,21 @@ def _guard():
 
 _GUARD = _guard()
 _CONTAINMENT = set(_GUARD.swift_containment())
+_EXACT_STRICT = set(_GUARD.swift_exact_strict())
 
 
 def match_mode(name):
-    """`contains` when the product reads this set with containment, else the name is the only hint.
+    """The mode the product reads this set with, from the Swift; the name is the only fallback.
 
     The Swift is authoritative and the name is a fallback for the sets it cannot speak about — a
-    label passed to a helper has no `containsAny` at its call site to find.
+    label passed to a helper has no `containsAny` at its call site to find. `exact_strict` is a
+    third answer, not a stricter `exact`: it does not trim the observed text, so a proposal made
+    under `exact` can be one the guard refuses.
     """
     if name in _CONTAINMENT:
         return "contains"
+    if name in _EXACT_STRICT:
+        return "exact_strict"
     return "contains" if any(f in name for f in CONTAINS_SHAPES) else "exact"
 
 
@@ -89,7 +94,7 @@ def matches(name, wanted, text):
     product does, and this file used to hold a case-sensitive twin that could propose nothing for a
     label whose stored form differs from Logic's only in case.
     """
-    return _GUARD.carries(text, wanted, exact=match_mode(name) != "contains")
+    return _GUARD.carries(text, wanted, match_mode(name))
 
 
 def strings_of(row):

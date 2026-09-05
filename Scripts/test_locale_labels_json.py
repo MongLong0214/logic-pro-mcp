@@ -309,13 +309,13 @@ def main():
     inside = {"id": "i", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
               "evidence": ["evidence/real.json"]}
     case("evidence under evidence/ IS read",
-         guard.sighting(inside, "입력 슬롯", "AXButton", "help", exact=False) is True,
+         guard.sighting(inside, "입력 슬롯", "AXButton", "help", "contains") is True,
          "the escape cases below would pass vacuously if this did not")
 
     outside = {"id": "x", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
                "evidence": ["../../elsewhere/planted.json"]}
     case("evidence cannot escape by relative path",
-         guard.sighting(outside, "입력 슬롯", "AXButton", "help", exact=False) is False, "")
+         guard.sighting(outside, "입력 슬롯", "AXButton", "help", "contains") is False, "")
 
     # ...and not by a symlink either. `normpath` is lexical: `evidence/link.json` passed a
     # `startswith` test while resolving to the planted file, which is why this resolves realpath.
@@ -325,7 +325,7 @@ def main():
         linked = {"id": "s", "date": D, "host": {"locale": "ko-KR"}, "observations": [],
                   "evidence": ["evidence/link.json"]}
         case("evidence cannot escape by symlink",
-             guard.sighting(linked, "입력 슬롯", "AXButton", "help", exact=False) is False, "")
+             guard.sighting(linked, "입력 슬롯", "AXButton", "help", "contains") is False, "")
     except OSError:
         pass          # a filesystem without symlinks cannot host the attack either
 
@@ -580,6 +580,37 @@ def main():
     case("the quote itself is still held raw",
          any("quotes observed" in x for x in guard.provenance_problems("trackContentExplicit", lowered)),
          guard.provenance_problems("trackContentExplicit", lowered))
+
+    # `.exactStrict` is not a stricter `.exact`; it is a different comparison. Both fold case and
+    # only `exact` trims the OBSERVED value, so a ledger holding one `exact` certifies a padded
+    # reading the product refuses. Found by review 2026-09-05 with this exact shape: an AXGroup
+    # whose description reads `" 再生ヘッドの位置 "`, cited for a label the product reads with
+    # `.exactStrict`.
+    guard.OBS = _ledger({"2026-09-05-pad": ("ja-JP", [
+        _row("AXGroup", description=" 再生ヘッドの位置 ",
+             path="AXWindow[x]/AXGroup[コントロールバー]/AXGroup[再生ヘッドの位置]")])})
+    ja_measured = dict(U, **{"ja-JP": "measured"})
+
+    def padded(match):
+        return _entry(["再生ヘッドの位置"], None, ja_measured, canonical="playhead position",
+                      match=match, declared=("AXGroup",), cites={"ja-JP": "2026-09-05-pad"},
+                      roles={"ja-JP": "AXGroup"}, attrs={"ja-JP": "description"})
+
+    case("a padded reading satisfies exact, which trims",
+         cp(padded("exact"), "someTrimmingLabel") == [], cp(padded("exact"), "someTrimmingLabel"))
+    case("a padded reading does NOT satisfy exact_strict, which does not",
+         any("carried any of this label's strings" in x
+             for x in cp(padded("exact_strict"), "someStrictLabel")),
+         cp(padded("exact_strict"), "someStrictLabel"))
+
+    # And the mode is not the author's to pick where the Swift can say. The label below is one the
+    # product really does read with `.exactStrict`, so declaring anything else is refused.
+    strict_name = sorted(guard._exact_strict)[0] if guard._exact_strict else None
+    if strict_name:
+        mislabelled = _entry(["x"], None, U, canonical="x", match="exact", declared=("AXGroup",))
+        case("a set the Swift reads strictly may not declare a looser mode",
+             any("`.exactStrict`" in x for x in guard.label_match(strict_name, mislabelled)[1]),
+             guard.label_match(strict_name, mislabelled)[1])
 
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
