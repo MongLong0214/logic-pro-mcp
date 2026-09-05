@@ -621,6 +621,12 @@ _OPS = [
     ("...and it names the URI it read, so the receipt says which",
      (E.Driver.operation_of("resources/read", {"uri": "logic://mixer"}) or (None,))[0]
      == "logic://mixer"),
+    ("a resource read the server REJECTED is not an operation",
+     E.Driver.operation_of("resources/read", {"uri": "logic://does-not-exist"},
+                           {"error": {"code": -32602, "message": "invalidParams"}}) is None),
+    ("...while a tool call that errored still is — it ran against Logic, a bad URI names nothing",
+     E.Driver.operation_of("tools/call", {"name": "logic", "arguments": {"command": "c"}},
+                           {"error": {"code": -32000}}) == ("logic", "c", None)),
     ("a handshake is not an operation",
      E.Driver.operation_of("initialize", {"protocolVersion": "1"}) is None),
     ("a notification with no params is not an operation",

@@ -3,7 +3,7 @@
   "date": "2026-09-05",
   "schema": 2,
   "subject": "What a live harness's own receipt records when the harness drives the product through `resources/read`",
-  "question": "Does `logic://mixer` read a channel strip's output destination, and does the run's receipt record the reads that produced the answer?",
+  "question": "When a harness reads the product only through `resources/read`, which of its operations does the evidence receipt record?",
   "verdict": "works",
   "issues": [
     769
@@ -78,7 +78,8 @@
   "limits": [
     "One harness, one project, one locale. It says nothing about harnesses that mix the two surfaces differently.",
     "It does NOT reproduce the `operations_driven: 0` documents #769 cites. Those were earlier revisions of the #291 harnesses; this revision makes a `refresh_cache` tool call, so the old rule would have counted 1 rather than 0 here. The zero is quoted from the issue, not re-measured.",
-    "The mixer output read is the harness's own subject and is unchanged by this work; it is recorded because it is what the run observed, not as a claim about routing coverage."
+    "This record does NOT say whether the mixer read returned a correct destination. That is the harness's own subject and its nine checks are where it is asserted; nothing here carries a destination value, so the verdict is about the RECEIPT and reaches no further. A review refused an earlier version of this record for a `question` that asked about both while the observations answered one.",
+    "The receipt records a resource read whether or not the resource touched Logic — some are served statically. Counting one rules out a run that touched nothing; it does not show the run drove its own subject."
   ],
   "supersedes": null
 }
