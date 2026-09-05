@@ -296,6 +296,50 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evr
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} ...and is allowed once one document is clean -> rc={rc}")
 
+# A harness the branch DELETED cannot be required to have run, even when it claimed a `Sources/`
+# path the branch changed. Declarations are read from the trusted ref so a branch cannot rewrite its
+# own obligations — which also kept a deleted claimant's obligation alive with nothing able to
+# satisfy it. What it claimed becomes UNPROVEN and is printed; the obligation is not dropped, it is
+# renamed to what it actually is.
+with tempfile.TemporaryDirectory() as tmp:
+    repo = os.path.join(tmp, "repo")
+    evroot = os.path.join(tmp, "ev")
+    os.makedirs(os.path.join(repo, "Scripts", "livekit"))
+    os.makedirs(os.path.join(repo, "Sources", "LogicProMCP", "MIDI"))
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+
+    def w3(rel, text):
+        with open(os.path.join(repo, rel), "w") as fh:
+            fh.write(text)
+
+    w3("Scripts/livekit/live_gone.py",
+       'COVERS = [\n    "Sources/LogicProMCP/MIDI/MIDIEngine.swift",\n]\n')
+    w3("Sources/LogicProMCP/MIDI/MIDIEngine.swift", "// base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    base3 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    os.remove(os.path.join(repo, "Scripts", "livekit", "live_gone.py"))
+    w3("Sources/LogicProMCP/MIDI/MIDIEngine.swift", "// the endpoint the harness sent to is gone\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "remove the subject and the harness for it")
+    head3 = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    os.makedirs(os.path.join(evroot, head3))
+
+    rc = C.main(["x", repo, head3, evroot, base3])
+    ok = rc == 0
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} a deleted claimant does not oblige a run it cannot do -> rc={rc}")
+
+    declarations = C.declarations_from_ref(repo, base3)
+    by_sources, _ = C.required_by_sources(["Sources/LogicProMCP/MIDI/MIDIEngine.swift"], declarations)
+    ok = "live_gone" in by_sources
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} ...and it WAS obliged before the deletion was noticed "
+          f"-> {sorted(by_sources)}")
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

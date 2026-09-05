@@ -252,6 +252,32 @@ def main(argv):
         print("   missing ref is a refusal, not a fallback. Run: git fetch origin main")
         return 2
     by_sources, unproven = required_by_sources(all_paths, declarations)
+
+    # A claimant the branch DELETED cannot be required to have run. The declarations are read from
+    # the trusted ref on purpose — a branch must not be able to rewrite its own obligations — but
+    # that also keeps a deleted harness's obligation alive, and nothing can satisfy it. This file
+    # already says why that is wrong, one path over: "one that no longer exists cannot be required
+    # to have run, and requiring it would make deleting a harness impossible." The reasoning was
+    # never wired into the source-coverage path.
+    #
+    # This is not an escape hatch. The obligation is not dropped — the paths that harness claimed
+    # move into `unproven` and are printed, so deleting a harness turns "claimed and proved" into
+    # "named as nobody's", which is exactly what it is. And deleting a harness is loud in review
+    # and independently ratcheted: `check-falsifiable-adoption.py` refuses a fall in the number
+    # that carry a counterexample.
+    deleted = {os.path.basename(p)[:-3] for p in
+               changed_paths(worktree, base, head, exclude_deletions=False)
+               if p.startswith("Scripts/livekit/live_") and p.endswith(".py")
+               and not os.path.exists(os.path.join(worktree, p))}
+    orphaned = sorted(stem for stem in by_sources if stem in deleted)
+    for stem in orphaned:
+        by_sources.discard(stem)
+        claimed = set(declarations.get(stem, []))
+        unproven.extend(sorted(p for p in all_paths
+                               if p.startswith("Sources/") and p in claimed))
+    if orphaned:
+        print(f"   {len(orphaned)} claimant(s) deleted by this branch; what they claimed is "
+              f"reported as unproven rather than required: {', '.join(orphaned)}")
     required |= by_sources
 
     if not required:
