@@ -612,6 +612,95 @@ def main():
              any("`.exactStrict`" in x for x in guard.label_match(strict_name, mislabelled)[1]),
              guard.label_match(strict_name, mislabelled)[1])
 
+    # The FOURTH mode. `.prefix` anchors, so containment — which the ledger used for the one label
+    # read this way — accepts a sighting in the middle of a value that the product refuses. Found
+    # while fixing the `.exactStrict` gap; same shape, opposite end of the same spectrum.
+    guard.OBS = _ledger({"2026-09-05-pre": ("ko-KR", [
+        _row("AXMenuItem", title="실행 취소 가져오기",
+             path="AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[실행 취소 가져오기]"),
+        _row("AXMenuItem", title="마지막 실행 취소",
+             path="AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[마지막 실행 취소]")])})
+    ko_pre = dict(U, **{"ko-KR": "measured"})
+
+    def anchored(match, variant):
+        return _entry([variant], None, ko_pre, canonical="Undo", match=match,
+                      declared=("AXMenuItem",), cites={"ko-KR": "2026-09-05-pre"},
+                      roles={"ko-KR": "AXMenuItem"}, attrs={"ko-KR": "title"})
+
+    case("prefix accepts a value that STARTS with the label",
+         cp(anchored("prefix", "실행 취소"), "anchoredHit") == [],
+         cp(anchored("prefix", "실행 취소"), "anchoredHit"))
+    # `취소` occurs inside both rows and starts neither — the one shape the two modes disagree
+    # about. An earlier draft used `마지막 실행`, which IS a prefix of the second row, so it asserted
+    # nothing and passed under both.
+    case("prefix REFUSES a value that merely contains it",
+         any("carried any of this label's strings" in x
+             for x in cp(anchored("prefix", "취소"), "midValue")),
+         cp(anchored("prefix", "취소"), "midValue"))
+    case("contains would have accepted that same mid-value sighting",
+         cp(anchored("contains", "취소"), "midValueLoose") == [],
+         cp(anchored("contains", "취소"), "midValueLoose"))
+
+    prefix_name = sorted(guard._prefix)[0] if guard._prefix else None
+    if prefix_name:
+        loose = _entry(["x"], None, U, canonical="x", match="contains", declared=("AXMenuItem",))
+        case("a set the Swift reads with .prefix may not declare containment",
+             any("`.prefix`" in x for x in guard.label_match(prefix_name, loose)[1]),
+             guard.label_match(prefix_name, loose)[1])
+
+    # WHERE, and why `roles` cannot answer it. Measured 2026-09-05: four labels had a sighting
+    # satisfying every rule this guard had — string, role, attribute, locale, real record — and all
+    # four were the WRONG ELEMENT. `markerListEditMenuButton` means the Marker List toolbar's Edit
+    # button; the sightings were AXMenuButtons labelled `編集` in the arrange window and in the
+    # mixer. Logic puts the same role in many containers, and the role distinguishes kinds.
+    #
+    # The record already carried the answer — every census row has a `path` — and provenance had no
+    # field that read it.
+    guard.OBS = _ledger({"2026-09-05-where": ("ja-JP", [
+        _row("AXMenuButton", description="編集",
+             path="AXWindow[x]/AXGroup[トラック]/AXGroup/AXMenuButton[編集]"),
+        _row("AXMenuButton", description="編集",
+             path="AXWindow[x]/AXGroup[ミキサー]/AXGroup/AXMenuButton[編集]")])})
+    ja_where = dict(U, **{"ja-JP": "measured"})
+
+    def sited(path_contains):
+        block_ = _prov(record="2026-09-05-where", locale="ja-JP", observed="編集",
+                       role="AXMenuButton", attribute="description", match="exact")
+        if path_contains is not None:
+            block_["path_contains"] = path_contains
+        return _entry(["編集"], {"編集": block_}, ja_where, canonical="Edit", match="exact",
+                      declared=("AXMenuButton",))
+
+    case("without a path, the arrange window's button backs the Marker List's label",
+         guard.provenance_problems("markerListEditMenuButton", sited(None)) == [],
+         guard.provenance_problems("markerListEditMenuButton", sited(None)))
+    case("with the Marker List named, the same record no longer backs it",
+         any("no AXMenuButton whose description carried it at a path containing" in x
+             for x in guard.provenance_problems("markerListEditMenuButton",
+                                                sited("AXWindow[Marker List]"))),
+         guard.provenance_problems("markerListEditMenuButton", sited("AXWindow[Marker List]")))
+    case("a path the sighting IS at still backs it",
+         guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")) == [],
+         guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")))
+
+    # CANONICAL EQUIVALENCE, which Swift has and Python does not. `String.range(of:options:)`
+    # without `.literal` and `caseInsensitiveCompare` both treat NFC and NFD forms of the same text
+    # as equal; `==`, `in` and `startswith` are code-point comparisons. A record carrying decomposed
+    # Hangul — which is what a good deal of macOS text is — was refused for a label the product
+    # matches. Raised by review, 2026-09-05.
+    import unicodedata as _ud
+    _nfd = _ud.normalize("NFD", "입력 슬롯")
+    case("a decomposed value matches a composed label, exactly",
+         guard.carries(_nfd, "입력 슬롯", "exact"), repr(_nfd))
+    case("...and by prefix",
+         guard.carries(_ud.normalize("NFD", "입력 슬롯 어쩌고"), "입력 슬롯", "prefix"), "")
+    case("...and by containment",
+         guard.carries(_ud.normalize("NFD", "어쩌고 입력 슬롯 저쩌고"), "입력 슬롯", "contains"), "")
+    case("a composed value matches a decomposed label too",
+         guard.carries("입력 슬롯", _nfd, "exact"), "")
+    case("normalising does not make unrelated text match",
+         not guard.carries(_ud.normalize("NFD", "출력 슬롯"), "입력 슬롯", "exact"), "")
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

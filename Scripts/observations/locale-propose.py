@@ -58,6 +58,7 @@ def _guard():
 _GUARD = _guard()
 _CONTAINMENT = set(_GUARD.swift_containment())
 _EXACT_STRICT = set(_GUARD.swift_exact_strict())
+_PREFIX = set(_GUARD.swift_prefix())
 
 
 def match_mode(name):
@@ -70,6 +71,8 @@ def match_mode(name):
     """
     if name in _CONTAINMENT:
         return "contains"
+    if name in _PREFIX:
+        return "prefix"
     if name in _EXACT_STRICT:
         return "exact_strict"
     return "contains" if any(f in name for f in CONTAINS_SHAPES) else "exact"

@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -83,7 +84,8 @@ def _is_documented(block, variant=""):
         return False
     if not _is_real_date(block.get("date", "")):
         return False
-    return not variant or variant.casefold() in str(block.get("observed", "")).casefold()
+    return not variant or (unicodedata.normalize("NFC", variant).casefold()
+                           in unicodedata.normalize("NFC", str(block.get("observed", ""))).casefold())
 
 
 OBS = os.path.join(REPO, "docs", "observations")
@@ -100,7 +102,12 @@ def _record(record_id):
         return None
 
 
-MATCH_MODES = ("exact", "exact_strict", "contains")
+MATCH_MODES = ("exact", "exact_strict", "prefix", "contains")
+
+
+def swift_prefix(repo=REPO):
+    """Delegates to Scripts/locale_labels.py, for the same reason the other two do."""
+    return _module().swift_prefix(repo)
 
 
 def swift_exact_strict(repo=REPO):
@@ -136,6 +143,10 @@ _exact_strict = swift_exact_strict()
 # unstated limit is the thing this ledger exists to end.
 _both_modes = sorted(_exact_strict & _containment)
 _exact_strict = _exact_strict - _containment
+# The fourth mode. `.prefix` anchors, so it is STRICTER than containment — a set read both ways
+# would have the same ambiguity the three above do, and none is, so the subtraction is a guard
+# against a future one rather than a live case.
+_prefix = swift_prefix() - _containment
 # Which labels the product still reads, for auditing `retired`. Same derivation site as the
 # containment sets, because a rule with two implementations is a rule that drifts.
 _live_label_uses = _module().swift_label_uses()
@@ -193,10 +204,13 @@ def provenance_problems(name, entry):
         if not role or attribute not in SIGHTING_ATTRS:
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
-        elif (seen := sighting_value(rec, variant, role, attribute, mode)) is None:
+        elif (seen := sighting_value(rec, variant, role, attribute, mode,
+                                     block.get("path_contains"))) is None:
+            where = (f" at a path containing {block.get('path_contains')!r}"
+                     if block.get("path_contains") else "")
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
-                       f"no {role} whose {attribute} carried it — a record that never saw it on that "
-                       f"element cannot be cited for it")
+                       f"no {role} whose {attribute} carried it{where} — a record that never saw it "
+                       f"on that element cannot be cited for it")
         elif str(block.get("observed", "")) != seen:
             # `observed` is a QUOTE of the string Logic carried, and the guard now holds it to
             # that, RAW. Stripping both sides was the gap between the rule this file claims and the
@@ -265,7 +279,7 @@ def _rows(rec):
             continue
 
 
-def sighting(rec, text, role=None, attribute=None, mode="exact"):
+def sighting(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
     """Whether the record contains an element of `role` whose `attribute` carried `text`.
 
     With no `attribute` named, only the LABEL-bearing ones are searched — never `identifier`, which
@@ -277,7 +291,7 @@ def sighting(rec, text, role=None, attribute=None, mode="exact"):
     row, an attribute on that row, and the value that attribute carried — the same three things a
     caller needs to find the element again.
     """
-    return sighting_value(rec, text, role, attribute, mode) is not None
+    return sighting_value(rec, text, role, attribute, mode, path_contains) is not None
 
 
 def carries(value, text, mode):
@@ -312,16 +326,31 @@ def carries(value, text, mode):
     and not here. No measured label needs it, and widening on a hypothetical is how a comparison
     stops describing anything.
     """
-    label = text.strip().casefold()
+    # NFC on both sides, because Swift compares with CANONICAL EQUIVALENCE and Python does not.
+    # `String.range(of:options:)` without `.literal` and `caseInsensitiveCompare` both treat NFC and
+    # NFD forms of the same text as equal — `evidence.py` records this for `containsAny` in its own
+    # words, "Omitting `.literal` keeps Hangul NFC/NFD canonical matching". Python's `==`, `in` and
+    # `startswith` are code-point comparisons, so a record carrying decomposed Hangul was refused
+    # for a label the product matches. Raised by review, 2026-09-05; the same defect was in the
+    # two-mode form before this, and in the folded-case form that shipped before that.
+    #
+    # This normalises for COMPARISON only. The `observed` quote is still held byte-for-byte against
+    # what the record carried, because that is a fidelity check and not a matching rule.
+    label = unicodedata.normalize("NFC", text.strip()).casefold()
+    subject = unicodedata.normalize("NFC", value).casefold()
     if mode == "exact":
-        return value.strip().casefold() == label
+        return subject.strip() == label
     if mode == "exact_strict":
-        return value.casefold() == label
-    return label in value.casefold()
+        return subject == label
+    if mode == "prefix":
+        # ANCHORED, and the candidate is trimmed — `.prefix` takes the same trimming path `.exact`
+        # does in `LabelSet.matches`; only `.exactStrict` returns before it.
+        return subject.strip().startswith(label)
+    return label in subject
 
 
 
-def sighting_value(rec, text, role=None, attribute=None, mode="exact"):
+def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
     """The value the matching attribute actually carried, or None.
 
     Returning the value rather than a bool is what lets a caller check that a provenance block's
@@ -332,6 +361,13 @@ def sighting_value(rec, text, role=None, attribute=None, mode="exact"):
         return None
     for row in _rows(rec):
         if role and row.get("role") != role:
+            continue
+        # WHERE, when the block says where. `roles` distinguishes KINDS of element and says nothing
+        # about WHICH — Logic puts an `AXMenuButton` labelled `Edit` in the arrange window, in the
+        # mixer AND in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying
+        # every rule this guard had — string, role, attribute, locale, real record — and all four
+        # were the wrong element, because the label meant a container the sighting was not in.
+        if path_contains and path_contains not in str(row.get("path") or ""):
             continue
         for attr in ([attribute] if attribute else LABEL_ATTRS):
             value = row.get(attr)
@@ -364,6 +400,10 @@ def label_match(name, entry):
     if name in _containment and mode != "contains":
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`containsAny` — the evidence rule must be the product's")
+    if name in _prefix and mode != "prefix":
+        out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
+                   f"`.prefix`, which ANCHORS — the evidence rule must be the product's, and "
+                   f"`contains` accepts a sighting mid-value that it refuses")
     if name in _exact_strict and mode != "exact_strict":
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`.exactStrict`, which does not trim the observed text — the evidence rule "

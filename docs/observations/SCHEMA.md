@@ -135,13 +135,24 @@ screenshot the conclusion depends on cannot be cited and then lost.
 measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
 which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
 schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role`, the
-`attribute` it was read from and the `match` mode (`exact`, `exact_strict` or `contains`), and the guard requires
+`attribute` it was read from and the `match` mode (`exact`, `exact_strict`, `prefix` or `contains`), and the guard requires
 the record to contain a **sighting** — an element of that role whose that attribute carried the
 string under that mode. Three further rules make the citation hold:
 
 - **`observed` is a quote.** It must equal, character for character, the value the cited record
   recorded on that element. Requiring only that it CONTAIN the variant left the rest of the field
   free, and a real but truncated reading was cited while `observed` claimed untruncated text.
+- **`path_contains` says WHERE, when the label means a particular one.** Optional, and checked when
+  present: the sighting's `path` must contain it. `roles` distinguishes KINDS of element and says
+  nothing about which — Logic puts an `AXMenuButton` labelled `Edit` in the arrange window, in the
+  mixer and in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying every
+  rule this file states — string, role, attribute, locale, real record — and all four were the
+  wrong element, because the label meant a container the sighting was not in. The record already
+  carried the answer; provenance had no field that read it.
+
+  Do not backfill it from sightings that already exist. That is fitting the constraint to the
+  evidence, which is how those four would have been written. Declare where the label addresses from
+  the label's own meaning, then look there; where nothing is found, the label is unmeasured.
 - **The role must be one the label declares** in its `roles` list. Otherwise a sighting of the same
   string on a different element backs the wrong label — `Edit` on a menu bar is not `Edit` on a
   toolbar button. `roles` is author-typed, and it is NOT the harmless kind of typed constraint: it
@@ -158,6 +169,10 @@ string under that mode. Three further rules make the citation hold:
   is derived from the Swift, like containment. Three labels are read BOTH ways at different call
   sites — so "the mode is a property of the label" is false for them; they are held to the looser
   rule and the guard names them on every run rather than leaving that implied.
+- **`prefix` is the fourth mode.** It ANCHORS, so containment is looser than it, and the one label
+  the product reads this way declared `contains` — the ledger accepted a sighting mid-value that
+  the product refuses. Derived from the `MenuPath(..., itemMode: .prefix)` form, which names its
+  LabelSet; a call site that passes a local variable cannot be derived and is not claimed.
 - **The comparison folds case, because the product's does.** Every mode of `LabelSet` is
   case-insensitive — `.exact` and `.exactStrict` use `caseInsensitiveCompare`, `containsAny`
   searches with `.caseInsensitive` — and a guard stricter than the thing it audits refuses honest
@@ -206,6 +221,24 @@ lists, **by name**, things a person can go and do: variants with no provenance; 
 unmeasured per locale; surfaces with no record per locale; records at schema 1; records whose
 `reverify` is manual prose; `depends` entries that no longer resolve. Names rather than counts,
 because a count is not a thing anyone can act on.
+
+There is one thing that list cannot say, and it is the one the ledger was blindest to: a variant
+that is present and WRONG. `undocumented_variants` counts strings nobody has backed; nothing
+counted a string somebody typed instead of read. `playheadPositionGroupLabel` carried
+`再生ヘッド位置` for as long as it had existed, Logic shows `再生ヘッドの位置`, and the set is
+matched whole — so one missing character made the element unfindable on every Japanese Logic, and
+the ledger read it as coverage.
+
+```
+Scripts/check-variants-appear-in-a-census.py
+```
+
+compares every variant against the census of its OWN locale, decided by script, and prints the
+ones that are absent with a close neighbour. It is **counted, not gated**: the censuses are
+navigation-free, so a label living on a dialog or a sheet is legitimately absent, and failing on
+absence would make it wrong far more often than right. The near misses are for a person to read —
+of the first five, three were real defects, one was a spelling the policy carries on purpose, and
+one was a census artefact.
 
 `docs/observations/RATCHETS.json` holds those same things as **sets of identities**, and
 `Scripts/check-observation-ratchets.py` fails CI when a set gains a member — even if the total
