@@ -77,15 +77,17 @@ SETTLE_BAND = (_CONTENTS[0] + 12, _CONTENTS[1], 500, 300) if _CONTENTS else None
 # below, because half of it does not exist until then.
 #
 # This rectangle used to be SETTLE_BAND, and #780 is what that cost: `+12` and a fixed 500x300
-# assume a zoom and scroll where the moved bars fall inside them. Measured 2026-09-05 on this
-# project, the region sits at window x=846 and the band starts at x=940 — 94 points to its left —
-# so ten green checks including two independent readers saying the region moved from bar 1 to 9
-# came with `visual_failed: 1` and byte-identical hashes. At 1610x819 the same expression computed
-# y=-141, was clamped to 0, and sampled a strip that is not the canvas at all.
+# assume a zoom and scroll where the moved bars fall inside them, and the expression reads neither.
+# Measured 2026-09-05 on one run, both bands against the same region in the same layout: the fixed
+# band contained 39 of the region's 64 vertical points at each position while the derived band
+# contained all 64 — so it was watching a fraction of its own subject even where it worked. The
+# issue records a run where it saw nothing at all, and that run is NOT reproduced here.
 #
-# A band derived from the region CONTAINS the change if there is one, at any zoom or scroll, and
-# — the stronger half — cannot pass by accident on empty canvas, which a fixed band sampling a
-# part of the arrangement where nothing happens can.
+# A band derived from the region contains the change in AX SPACE at any zoom or scroll, and cannot
+# pass by accident on empty canvas. It does NOT follow that it cannot fail: `visual()` clips to the
+# captured window, so a union outside the window hashes a subset or nothing. An earlier version of
+# this comment claimed the stronger thing; `within_window` below is what makes the weaker one
+# checkable instead of assumed. Raised by review, 2026-09-05.
 ev.check("575/precondition-the-arrange-canvas-was-located",
          SETTLE_BAND is not None and bool(_CONTENTS_SUBJECT),
          "a slice of the arrange canvas, located by AXDescription, to settle captures against",
@@ -142,6 +144,40 @@ def frame_of(region):
     if any(not isinstance(v, int) for v in parts) or parts[2] <= 0 or parts[3] <= 0:
         return None
     return tuple(parts)
+
+
+def same_region(before, after):
+    """Whether the two witness readings are about ONE region.
+
+    Raised by review 2026-09-05. `union_frame` took the sole selected region before and after and
+    never asked whether they were the same one — the harness's same-region check reads the
+    ENVELOPE's `region_name`/`post_region_name`, not the witness objects the band is built from. If
+    the selection drifts from A to B across the call, the band covers both, selection highlighting
+    alone changes pixels inside it, and `expect_change=True` passes while A never moved.
+
+    The envelope's check does not transfer to the witness, so this asks the witness directly.
+    """
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return False
+    return (before.get("name") or "") == (after.get("name") or "") and bool(before.get("name"))
+
+
+def within_window(band, state):
+    """Whether a band lies inside the window the witness measured, so `visual()` will not clip it.
+
+    Also raised by that review, and it refutes a claim this harness's own pull request made: a
+    derived band contains the change in AX space, NOT in the captured image. `Evidence.visual`
+    clips the band to the window, so a real move whose union lies outside — a region dragged
+    off-screen, or a union wider than the window — hashes only the visible subset, which may omit
+    the movement entirely, or nothing at all.
+
+    Clipping silently is the problem. Refusing loudly is the fix.
+    """
+    window = state.get("window") if isinstance(state, dict) else None
+    if not isinstance(window, dict) or band is None:
+        return False
+    x, y, w, h = band
+    return x >= 0 and y >= 0 and x + w <= window.get("w", 0) and y + h <= window.get("h", 0)
 
 
 def union_frame(before, after):
@@ -363,12 +399,24 @@ COMPARE_BAND_SUBJECT = (
 ) if COMPARE_BAND else None
 ev.check("575/precondition-the-region-frame-was-read-before-and-after",
          COMPARE_BAND is not None,
-         "the witness reported a readable frame for the target region on BOTH reads, in window "
+         "the witness reported a readable frame for the SAME region on both reads, in window "
          "coordinates, so a band containing the change can be derived from it",
          f"space={before_state.get('coordinateSpace')!r}/{after_state.get('coordinateSpace')!r} "
          f"before={frame_of(target)!r} after={frame_of(after_target)!r} band={COMPARE_BAND!r}",
          "have the witness emit position without size: `frame_of` returns None, this check goes "
          "red, and no band is built from half a rectangle")
+
+# The band must also be somewhere `visual()` can actually look. It clips to the window, so a union
+# outside it hashes a subset — or nothing — and an assertion about the region would then fail for a
+# reason that is not about the region.
+ev.check("575/precondition-the-band-is-inside-the-captured-window",
+         within_window(COMPARE_BAND, after_state),
+         "the derived band lies inside the window the witness measured, so the comparison below "
+         "sees the whole of it rather than a clipped subset",
+         f"band={COMPARE_BAND!r} window={(after_state or {}).get('window')!r} "
+         f"title={(after_state or {}).get('windowTitle')!r}",
+         "move the region so its union leaves the window: this check goes red instead of the "
+         "visual assertion failing for a reason that has nothing to do with the move")
 
 ev.visual("575/the-region-visibly-moved",
           before_shot["file"], after_shot["file"], COMPARE_BAND, subject=COMPARE_BAND_SUBJECT,
