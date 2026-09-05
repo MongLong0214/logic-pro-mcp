@@ -121,18 +121,38 @@ if CANVAS is None or LCD is None or not japanese_ui:
 regions = d.tool("logic_project", "get_regions") or {}
 ev.note("778/get_regions-envelope", regions)
 
-# The counterexample is the envelope the issue recorded on this exact call, quoted from #778. A
-# predicate that only asked `complete is True` would accept an envelope carrying BOTH — so it is
-# written to reject any error, and the counterexample proves it does.
+# WHAT THIS ASSERTS, and what it deliberately does not.
+#
+# #778's subject is a REFUSAL: `get_regions` answered `channels_exhausted`, "Track Content group not
+# found", because no AXGroup matched any spelling the policy knew. So the question is whether the
+# reader reaches that group and produces an enumeration — not how much of the arrangement happened
+# to be on screen while it did.
+#
+# The first cut asked `complete is True`, and that conflated the two. Measured 2026-09-06: the same
+# call answered `complete: False, reason: logic_ax_viewport_only` with `track_headers: 7,
+# track_headers_in_viewport: 6` — one track scrolled out of view — and the check went red about a
+# read that had worked. Three earlier runs passed only because every track happened to fit. A check
+# that fails when a track scrolls is not a check about localization.
+#
+# `logic_ax_viewport_only` is the reader saying honestly that it saw the viewport and knows there
+# may be more; `channels_exhausted` is it never finding the group at all. The predicate keeps
+# rejecting any error and now requires an enumeration to exist, which the counterexample — the
+# envelope #778 actually recorded — has no `regions` key for at all.
+ev.note("778/get_regions-viewport", {
+    "complete": regions.get("complete"), "reason": regions.get("reason"),
+    "returned_count": regions.get("returned_count"), "_debug": regions.get("_debug")})
 ev.falsifiable(
-    "778/region-enumeration-completes-on-a-japanese-ui",
-    lambda o: o.get("complete") is True and o.get("error") is None,
+    "778/region-enumeration-is-not-refused-on-a-japanese-ui",
+    lambda o: (o.get("error") is None
+               and isinstance(o.get("regions"), list)
+               and o.get("reason") != "channels_exhausted"),
     regions,
     {"error": "channels_exhausted",
      "hint": "Track Content group not found (scanned 35 AXGroups; landmarks: 'コントロールバー' | "
              "'再生ヘッドの位置' | 'インスペクタ' | 'ライブラリ' ...)"},
-    "get_regions returns a complete enumeration rather than the channels_exhausted refusal #778 "
-    "recorded, whose hint listed the Japanese landmarks it had scanned past",
+    "get_regions reaches the Track Content group and returns an enumeration rather than the "
+    "channels_exhausted refusal #778 recorded, whose hint listed the Japanese landmarks it had "
+    "scanned past",
     "remove トラックコンテンツ from trackContentExplicit: no AXGroup in the arrange window matches "
     "any spelling the policy knows, and the reader refuses with exactly the counterexample")
 
