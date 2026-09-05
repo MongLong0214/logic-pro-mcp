@@ -42,7 +42,7 @@ struct Issue60LocalePhase4Tests {
             ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels, ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더"]),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
-            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents"]),
+            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ"]),
             ("trackContentGeneric", AXLocalePolicy.trackContentGeneric.labels, ["콘텐츠", "content", "contents"]),
             ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels, ["drummer", "session player", "드러머", "세션 플레이어"]),
             ("regionKindMidi", AXLocalePolicy.regionKindMidi.labels, ["midi"]),
@@ -138,6 +138,35 @@ struct Issue60LocalePhase4Tests {
         #expect(AXLocalePolicy.trackContentGeneric.labels.contains("콘텐츠"))
         #expect(AXLocalePolicy.trackContentGeneric.labels.contains("content"))
         #expect(Set(AXLocalePolicy.trackContentExplicit.labels).isDisjoint(with: Set(AXLocalePolicy.trackContentGeneric.labels)))
+    }
+
+    /// The strings Logic actually shows, put through the normalization
+    /// `AccessibilityChannel+Regions.normalizeRegionGroupDescription` applies
+    /// before the lookup. Asserting membership of the stored form only would
+    /// pass while the product still failed: the stored English form is
+    /// lowercase and Logic shows `Tracks contents`, and it is the normalization
+    /// that closes that gap. Both strings are verbatim from
+    /// `docs/observations/2026-09-05-{en-US,ja-JP}-arrange-regions-census.json`.
+    @Test("the canvas description Logic shows classifies as explicit track content",
+          arguments: ["Tracks contents", "トラックコンテンツ"])
+    func shownCanvasDescriptionIsExplicit(shown: String) {
+        let normalized = shown
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split { $0.isWhitespace }
+            .joined(separator: " ")
+        #expect(AXLocalePolicy.trackContentExplicit.labels.contains(normalized))
+    }
+
+    /// The generic fallback carries no Japanese form on purpose. The ja-JP
+    /// census shows no AXGroup whose description is `コンテンツ`; the eight rows
+    /// carrying that substring are menu titles, help sentences, and the
+    /// explicit group itself. A form written here would be a translation of a
+    /// string Logic does not show, which is what the ledger refuses.
+    @Test("the generic content fallback has no Japanese form, because none was measured")
+    func genericFallbackHasNoJapaneseForm() {
+        #expect(!AXLocalePolicy.trackContentGeneric.labels.contains("コンテンツ"))
+        #expect(!AXLocalePolicy.trackContentGeneric.labels.contains("トラックコンテンツ"))
     }
 
     // MARK: - Functional (drive the accessible classifiers, EN + KO)

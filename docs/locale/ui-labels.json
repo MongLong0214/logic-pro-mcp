@@ -232,7 +232,7 @@
         "コントロールバー"
       ],
       "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -490,7 +490,7 @@
         "イベント"
       ],
       "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -616,7 +616,7 @@
         "位置の移動"
       ],
       "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -832,7 +832,7 @@
         "라이브러리"
       ],
       "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists).",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -911,7 +911,7 @@
         "項目数"
       ],
       "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1222,14 +1222,36 @@
       "canonical": "playhead position",
       "variants": [
         "재생헤드 위치",
-        "再生ヘッド位置"
+        "再生ヘッドの位置"
       ],
       "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
-      "match": "exact",
+      "provenance": {
+        "再生ヘッドの位置": {
+          "record": "2026-09-05-ja-JP-arrange-transport-census",
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "再生ヘッドの位置"
+        }
+      },
+      "roles": [
+        "AXGroup"
+      ],
+      "match": "exact_strict",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-transport-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXGroup"
+      },
+      "coverage_attributes": {
+        "en-US": "description"
       }
     },
     "pluginAutomationLabelExact": {
@@ -1238,7 +1260,7 @@
         "read"
       ],
       "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1858,7 +1880,7 @@
         "템포"
       ],
       "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only.",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
@@ -1884,14 +1906,36 @@
         "track content",
         "track contents",
         "tracks content",
-        "tracks contents"
+        "tracks contents",
+        "トラックコンテンツ"
       ],
       "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+      "provenance": {
+        "tracks contents": {
+          "record": "2026-09-05-en-US-arrange-regions-census",
+          "locale": "en-US",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "Tracks contents"
+        },
+        "トラックコンテンツ": {
+          "record": "2026-09-05-ja-JP-arrange-regions-census",
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "トラックコンテンツ"
+        }
+      },
+      "roles": [
+        "AXGroup"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "trackContentGeneric": {
@@ -1901,11 +1945,26 @@
         "contents"
       ],
       "rationale": "Generic content-group fallback by normalized description; read-only classifier.",
+      "roles": [
+        "AXGroup"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-regions-census",
+        "ja-JP": "2026-09-05-ja-JP-arrange-regions-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXGroup",
+        "ja-JP": "AXGroup"
+      },
+      "coverage_absent": {
+        "en-US": "AXScrollArea/AXGroup[",
+        "ja-JP": "AXScrollArea/AXGroup["
       }
     },
     "trackHeadersDescription": {
@@ -1917,7 +1976,7 @@
         "트랙 헤더"
       ],
       "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred).",
-      "match": "exact",
+      "match": "exact_strict",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",

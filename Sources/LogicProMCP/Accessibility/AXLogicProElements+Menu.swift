@@ -5,8 +5,24 @@ import Foundation
 extension AXLogicProElements {
     // MARK: - Menu Bar
 
-    private static let englishTopLevelMenuTitles: Set<String> = ["File", "Edit", "Track"]
-    private static let koreanTopLevelMenuTitles: Set<String> = ["파일", "편집", "트랙"]
+    /// The three top-level menus a locale is recognised by, per language.
+    ///
+    /// Japanese was absent until 2026-09-05, so a Logic running in Japanese reported its UI locale
+    /// as `unknown` — the same answer it gives when the menu bar cannot be read at all. #778 points
+    /// at this field as the signal a setup check could warn on, and for the locale that issue is
+    /// about it did not carry one. The titles are verbatim from the ja-JP arrange census: the menu
+    /// bar reads `Apple, Logic Pro, ファイル, 編集, トラック, 移動, 録音, ミックス, 表示,
+    /// ウインドウ, 1, ヘルプ`.
+    ///
+    /// Recognising a locale is not the same as SUPPORTING it: `QualificationLocale` still has two
+    /// cases, so a Japanese Logic cannot bind a qualification artifact. It could not before either
+    /// — `unknown` failed the same comparison — and saying `ja-JP` where `ja-JP` is true is what
+    /// lets a caller tell an unsupported language from an unreadable menu bar.
+    private static let topLevelMenuTitlesByLocale: [(locale: String, titles: Set<String>)] = [
+        ("en-US", ["File", "Edit", "Track"]),
+        ("ko-KR", ["파일", "편집", "트랙"]),
+        ("ja-JP", ["ファイル", "編集", "トラック"]),
+    ]
 
     /// The legacy menu helpers intentionally flatten AX failure to `nil` for
     /// best-effort callers. A mutation verifier needs the stronger distinction:
@@ -81,12 +97,16 @@ extension AXLogicProElements {
         }
     }
 
+    /// The locale whose three menu titles are ALL present, when exactly one language's are.
+    ///
+    /// Ambiguity stays `nil`, which is what the two-language form said with `englishMatch !=
+    /// koreanMatch`: a menu bar carrying two languages' worth of titles is not a reading of either,
+    /// and neither is one carrying none.
     static func logicUILocaleIdentifier(menuTitles: [String]) -> String? {
         let observed = Set(menuTitles)
-        let englishMatch = englishTopLevelMenuTitles.isSubset(of: observed)
-        let koreanMatch = koreanTopLevelMenuTitles.isSubset(of: observed)
-        guard englishMatch != koreanMatch else { return nil }
-        return englishMatch ? QualificationLocale.enUS.rawValue : QualificationLocale.koKR.rawValue
+        let matches = topLevelMenuTitlesByLocale.filter { $0.titles.isSubset(of: observed) }
+        guard matches.count == 1 else { return nil }
+        return matches[0].locale
     }
 
     /// Navigate menu: e.g. menuItem(path: ["File", "New..."]).

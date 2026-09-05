@@ -170,6 +170,44 @@ def swift_containment(repo=REPO):
     return names
 
 
+def swift_exact_strict(repo=REPO):
+    """LabelSet names the product demonstrably reads with `.exactStrict`, read from the Swift.
+
+    `.exactStrict` is not a stricter `.exact`; it is a DIFFERENT comparison. Both fold case, and
+    `.exact` trims the observed text while `.exactStrict` compares it verbatim — its own comment
+    says so, and it exists to preserve the `desc == label` semantics the structural locators were
+    written with.
+
+    A ledger that knows only `exact` therefore certifies claims the product refuses: a record whose
+    AXGroup description is `" 再生ヘッドの位置 "` satisfies a trimming comparison and fails
+    `.exactStrict`, which is what the element is actually read with. Found by review, 2026-09-05.
+
+    Same shape and same limit as `swift_containment`: what cannot be seen at a call site is not
+    claimed. A name absent from this set is not known to be non-strict.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            # `matches(` may carry the value argument before `mode:`, and the call is often split
+            # across lines — so the gap is matched permissively but bounded, and a `)` in it ends
+            # the call rather than the argument.
+            names |= set(re.findall(
+                r"AXLocalePolicy\s*\.\s*(\w+)\s*\.matches\((?:[^()]|\([^()]*\))*mode:\s*\.exactStrict",
+                body, re.S))
+            # `anyOf: AXLocalePolicy.<name>.labels, mode: .exactStrict` — the helper form, which
+            # takes the labels rather than the set and is otherwise invisible here.
+            names |= set(re.findall(
+                r"anyOf:\s*AXLocalePolicy\s*\.\s*(\w+)\s*\.labels\s*,\s*mode:\s*\.exactStrict",
+                body, re.S))
+    return names
+
+
 def swift_label_uses(repo=REPO):
     """Every LabelSet the product still reads, by name, from `AXLocalePolicy.<name>` in Sources/.
 
@@ -199,6 +237,7 @@ def swift_label_uses(repo=REPO):
 
 
 _CONTAINMENT = swift_containment()
+_EXACT_STRICT = swift_exact_strict()
 
 
 def build(existing=None):
@@ -245,8 +284,18 @@ def build(existing=None):
         # `exact` is the default because it is the STRICT one. Loosening a label to containment
         # admits coincidental substrings, so it is a decision that shows up in a diff rather than
         # something a regeneration can do quietly. Where the Swift says `containsAny`, it wins.
-        entry["match"] = ("contains" if name in _CONTAINMENT
-                          else prior.get("match") or "exact")
+        #
+        # `exact_strict` likewise comes from the Swift and not from a default. It is not a stricter
+        # `exact`: both fold case, and `exact` trims the observed text while `exactStrict` compares
+        # it verbatim. A ledger that knew only `exact` therefore certified claims the product
+        # refuses — a description read back as `" 再生ヘッドの位置 "` satisfies a trimming comparison
+        # and fails the one the element is actually read with. Found by review, 2026-09-05.
+        if name in _CONTAINMENT:
+            entry["match"] = "contains"
+        elif name in _EXACT_STRICT:
+            entry["match"] = "exact_strict"
+        else:
+            entry["match"] = prior.get("match") or "exact"
         retired = bool((entry.get("retired") or {}).get("reason"))
         coverage = {}
         for locale in SUPPORTED_LOCALES:

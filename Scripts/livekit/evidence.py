@@ -893,16 +893,31 @@ AX_REGION_LABELS = {
     # precondition about a window frame. Every other region in this table already had its row —
     # this was one missing line, not a missing mechanism.
     "Control Bar": ["컨트롤 막대", "コントロールバー"],
-    "Tracks contents": ["트랙 콘텐츠"],
+    # The Japanese column below is measured, not translated: every string is a verbatim
+    # AXDescription from the ja-JP arrange census of 2026-09-05 (Logic 12.3 build 6674), filed
+    # under docs/observations/evidence/. Until then `Control Bar` was the only row with one, so on
+    # a Japanese Logic `located_band` answered "no element with that exact AXDescription" for every
+    # other selector — 26 harnesses pass one of them and would have failed a precondition about a
+    # window frame. The same failure #778 reports for the product, one layer up.
+    #
+    # The three extra ASCII spellings on the next row are there for the reason the `Tracks header`
+    # row lists its own: the policy declares four and nothing here knows which one a given Logic
+    # renders, so a spelling the product would match must be one the locator can try.
+    "Tracks contents": ["트랙 콘텐츠", "トラックコンテンツ",
+                        "track content", "track contents", "tracks content"],
     # Four ASCII spellings because the policy declares four and nothing here knows which one a
     # given Logic renders — measured `Tracks header` in English 12.x, `트랙 헤더` in Korean. The
     # alias guard found the other three unreachable: the policy claimed to know them and the
     # locator would never have tried them.
-    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers"],
-    "Tracks": ["트랙"],
-    "Library": ["라이브러리"],
-    "Mixer": ["믹서"],
-    "Inspector": ["인스펙터"],
+    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers", "トラックヘッダ"],
+    "Tracks": ["트랙", "トラック"],
+    "Library": ["라이브러리", "ライブラリ"],
+    "Mixer": ["믹서", "ミキサー"],
+    "Inspector": ["인스펙터", "インスペクタ"],
+    # No row at all until now, and two harnesses ask for it by this name — so on any Logic that is
+    # not English they were locating nothing. The Korean form is the policy's; the Japanese one is
+    # measured, and it is `再生ヘッドの位置` rather than the `再生ヘッド位置` the policy carried.
+    "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置"],
 }
 
 

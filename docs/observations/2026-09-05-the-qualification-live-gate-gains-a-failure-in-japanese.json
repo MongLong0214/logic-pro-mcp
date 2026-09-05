@@ -1,0 +1,80 @@
+{
+  "id": "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Whether the release qualification live gate depends on Logic's UI language",
+  "question": "Does the set of operations that fail their independent readback change when Logic's UI language changes?",
+  "verdict": "partial",
+  "issues": [
+    778,
+    284
+  ],
+  "surface": "mixer.inserts",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "note": "measured in both ja-JP and en-US on the same machine and the same release binary; `host.locale` names the run that FAILED"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because no single command does it: (1) `defaults write com.apple.logic10 AppleLanguages -array ja` and relaunch Logic on a disposable project; (2) `swift build -c release`; (3) `swift test --no-parallel --filter realReleaseBinaryExecutesEveryOperationWithIndependentReadback`; (4) repeat (1)-(3) with `-array en`. The test lives in Tests/LogicProMCPTests/QualificationRunnerTests.swift and prints the live-gate lines this record quotes.",
+    "expected": "ja-JP: failed=2 and the test fails on knownLiveGateFailuresMatchExactly; en-US: failed=1 and it passes",
+    "cost": "~25 s per run plus a Logic relaunch between them, so about five minutes in total"
+  },
+  "depends": [
+    "Tests/LogicProMCPTests/QualificationRunnerTests.swift",
+    "Sources/LogicProMCP/Qualification/QualificationRunner.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-qualification-live-gate-by-ui-language.json"
+  ],
+  "method": "The same release binary driven twice by the same test, with nothing changed between the runs but Logic's UI language and the relaunch that requires.",
+  "observations": [
+    {
+      "what": "the live gate, by UI language",
+      "rows": [
+        {
+          "logic_ui_language": "ja-JP",
+          "failed": 2,
+          "in_scope_passed": 20,
+          "test": "failed"
+        },
+        {
+          "logic_ui_language": "en-US",
+          "failed": 1,
+          "in_scope_passed": 21,
+          "test": "passed"
+        }
+      ]
+    },
+    {
+      "what": "which operations failed",
+      "rows": [
+        {
+          "logic_ui_language": "ja-JP",
+          "operations": [
+            "plugins.get_inventory",
+            "tracks.list_library"
+          ]
+        },
+        {
+          "logic_ui_language": "en-US",
+          "operations": [
+            "tracks.list_library"
+          ]
+        }
+      ]
+    }
+  ],
+  "conclusion": "The qualification live gate is not language-independent. `plugins.get_inventory` fails its own independent readback on a Japanese Logic and passes on an English one, with the same binary minutes apart — so the known-failure set the test compares against describes an English Logic, and running the suite on a Japanese one reports a failure that is about the environment. It is a further read the Japanese-labels issue reaches, and unlike the ones fixed alongside this record it is NOT fixed: nothing here says which of the response or the readback moved.",
+  "limits": [
+    "It does not say WHY `plugins.get_inventory` disagrees with its readback in Japanese. No ja-JP probe of that operation was taken; only the gate's own verdict for it.",
+    "One host, one build, one project. `tracks.list_library` fails in both languages and is already pinned as a known failure against #284 — this record is about the operation that appears only in one.",
+    "The test is skipped entirely without a release build (`.enabled(if: isExecutableFile)`), which is why CI does not see this. It is a local-suite property, not a CI one.",
+    "`swift test` was run once per language, not repeatedly. A single run cannot separate a language dependence from a flake, though the two runs differ in exactly the direction the language change predicts."
+  ],
+  "supersedes": null
+}

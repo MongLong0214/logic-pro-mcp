@@ -42,6 +42,13 @@ PAIRS = [
 REGION_PAIRS = [
     ("Control Bar", "controlBarGroupLabel"),
     ("Tracks header", "trackHeadersDescription"),
+    # Both of these are names harnesses actually pass to `located_band` and both had a policy
+    # counterpart the guard was not reading, so the drift this file exists to catch went on
+    # uncaught: `Tracks contents` had no Japanese form while the policy learned one, and
+    # `Playhead Position` had no row in the table at all. A guard that covers two of the four
+    # selectors in use reports "no drift" about the two it looks at.
+    ("Tracks contents", "trackContentExplicit"),
+    ("Playhead Position", "playheadPositionGroupLabel"),
 ]
 
 # `MARKER_LIST_TAB_NAMES` and `OTHER_LIST_TAB_NAMES` have no policy counterpart and are not listed.
