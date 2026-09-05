@@ -147,17 +147,33 @@ import Testing
 }
 
 @Test func testAXLogicProElementsDeriveLogicUILocaleOnlyFromCompleteUnambiguousMenus() {
+    // Compared against the enum's own raw values, not against copies of them. The detector's
+    // table holds these as literals because Japanese has no `QualificationLocale` case to name,
+    // and this is what keeps the two spellings from drifting apart unnoticed.
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["Logic Pro", "File", "Edit", "Track", "Navigate"]
-    ) == "en-US")
+    ) == QualificationLocale.enUS.rawValue)
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["Logic Pro", "파일", "편집", "트랙", "탐색"]
-    ) == "ko-KR")
+    ) == QualificationLocale.koKR.rawValue)
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["File", "Edit"]
     ) == nil)
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["File", "Edit", "Track", "파일", "편집", "트랙"]
+    ) == nil)
+    // Japanese, measured 2026-09-05: the menu bar of a ja-JP Logic 12.3 reads
+    // `Apple, Logic Pro, ファイル, 編集, トラック, 移動, 録音, ミックス, 表示, ウインドウ, 1, ヘルプ`.
+    // Before this the same bar produced `unknown` — the answer an unreadable menu bar gives.
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["Logic Pro", "ファイル", "編集", "トラック", "移動", "ヘルプ"]
+    ) == "ja-JP")
+    // Ambiguity is still nil with three languages in play, not "the first one that matched".
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["File", "Edit", "Track", "ファイル", "編集", "トラック"]
+    ) == nil)
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["ファイル", "編集"]
     ) == nil)
 }
 

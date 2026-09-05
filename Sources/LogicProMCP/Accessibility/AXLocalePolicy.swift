@@ -730,9 +730,18 @@ enum AXLocalePolicy {
         rationale: "Identifies the playhead position text field description; read-only."
     )
 
+    /// The Japanese form is `再生ヘッドの位置`, WITH the `の`. `再生ヘッド位置`
+    /// stood here and was a translation, not a reading: on a ja-JP Logic 12.3
+    /// (build 6674) the group's AXDescription is `再生ヘッドの位置`, and this set
+    /// is read with `.exactStrict` — whole-string equality — so the old spelling
+    /// could never match. The group was therefore unfindable on a Japanese UI,
+    /// and with it the bar/beat component sliders every transport read and
+    /// `goto_position` resolve through. Measured 2026-09-05 in the arrange
+    /// census; the two sliders inside it are `bar` and `beat` in both locales,
+    /// which is why only this one line was wrong.
     static let playheadPositionGroupLabel = LabelSet(
         canonical: "playhead position",
-        variants: ["재생헤드 위치", "再生ヘッド位置"],
+        variants: ["재생헤드 위치", "再生ヘッドの位置"],
         rationale: "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
     )
 
@@ -1249,11 +1258,27 @@ enum AXLocalePolicy {
     )
 
     /// Region container "Track Content" group (normalized exact match).
+    ///
+    /// `トラックコンテンツ` is measured, not translated: on a ja-JP Logic 12.3
+    /// (build 6674) the arrange canvas is an AXGroup whose AXDescription is
+    /// exactly that string, at
+    /// `…/AXSplitGroup/AXScrollArea/AXGroup[トラックコンテンツ]`. Without it
+    /// `logic_project get_regions` failed with `channels_exhausted` on a
+    /// Japanese UI while the identical call succeeded in English — #778.
     static let trackContentExplicit = LabelSet(
         canonical: "트랙 콘텐츠",
-        variants: ["track content", "track contents", "tracks content", "tracks contents"],
+        variants: ["track content", "track contents", "tracks content", "tracks contents",
+                   "トラックコンテンツ"],
         rationale: "Identifies the arrange Track-Content group by normalized description; read-only classifier."
     )
+    /// Fallback for a canvas that is labelled `Contents` rather than
+    /// `Tracks contents`. It has NO Japanese form on purpose: the ja-JP census
+    /// of this surface shows no AXGroup whose description is `コンテンツ`, and
+    /// of the eight rows whose text contains that substring, three are menu
+    /// titles, four are help sentences on unrelated controls, and the eighth is
+    /// the explicit `トラックコンテンツ` group above. A variant written here
+    /// from the explicit form would be a translation of a string Logic does not
+    /// show on its own.
     static let trackContentGeneric = LabelSet(
         canonical: "콘텐츠",
         variants: ["content", "contents"],
