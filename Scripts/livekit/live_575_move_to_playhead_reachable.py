@@ -67,12 +67,29 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # the canvas moves whenever the Library or Inspector is opened, and a run had no way to say
 # whether it still watched the canvas or the pane that had slid under it.
 _CONTENTS, _CONTENTS_SUBJECT = ev.located_band("Tracks contents")
-CONTENT_BAND = (_CONTENTS[0] + 12, _CONTENTS[1], 500, 300) if _CONTENTS else None
-CONTENT_BAND_SUBJECT = f"{_CONTENTS_SUBJECT} — the first bars of the top lanes" if _CONTENTS else None
+# TWO rectangles, because they answer different questions and one of them was doing both badly.
+#
+# SETTLE band — a slice of the canvas, used only to decide when the pixels have stopped moving.
+# A whole-window settle never converges (level meters, the clock), so this has to be a slice, and
+# any slice of the canvas will do for that purpose.
+SETTLE_BAND = (_CONTENTS[0] + 12, _CONTENTS[1], 500, 300) if _CONTENTS else None
+# COMPARE band — the region's own frame, before and after, unioned. Computed after the move,
+# below, because half of it does not exist until then.
+#
+# This rectangle used to be SETTLE_BAND, and #780 is what that cost: `+12` and a fixed 500x300
+# assume a zoom and scroll where the moved bars fall inside them. Measured 2026-09-05 on this
+# project, the region sits at window x=846 and the band starts at x=940 — 94 points to its left —
+# so ten green checks including two independent readers saying the region moved from bar 1 to 9
+# came with `visual_failed: 1` and byte-identical hashes. At 1610x819 the same expression computed
+# y=-141, was clamped to 0, and sampled a strip that is not the canvas at all.
+#
+# A band derived from the region CONTAINS the change if there is one, at any zoom or scroll, and
+# — the stronger half — cannot pass by accident on empty canvas, which a fixed band sampling a
+# part of the arrangement where nothing happens can.
 ev.check("575/precondition-the-arrange-canvas-was-located",
-         CONTENT_BAND is not None and bool(CONTENT_BAND_SUBJECT),
-         "a slice of the arrange canvas, offset into a region located by AXDescription",
-         f"contents={_CONTENTS!r} band={CONTENT_BAND!r} subject={CONTENT_BAND_SUBJECT!r}", None)
+         SETTLE_BAND is not None and bool(_CONTENTS_SUBJECT),
+         "a slice of the arrange canvas, located by AXDescription, to settle captures against",
+         f"contents={_CONTENTS!r} settle={SETTLE_BAND!r} subject={_CONTENTS_SUBJECT!r}", None)
 TARGET_BAR = 9
 WITNESS_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_region_select.swift")
 WITNESS = os.path.join(ev.dir, "ax_region_select")
@@ -105,6 +122,49 @@ def undo_title():
     """What Logic says its Edit > Undo entry would undo, verbatim."""
     return osa('tell application "System Events" to tell process "Logic Pro" to '
                'return name of menu item 1 of menu 1 of menu bar item "Edit" of menu bar 1')
+
+
+FRAME_PAD = 8
+WINDOW_RELATIVE = "window-relative"
+
+
+def frame_of(region):
+    """`(x, y, w, h)` in WINDOW coordinates, or None when any component is missing.
+
+    All four, and only from a witness that says it worked in window coordinates. `Evidence.visual`
+    clips what it is given against the window's size, so a screen rectangle from a window that is
+    not at the origin — or on a second display — aims the comparison somewhere else and the receipt
+    cannot show it: a rectangle records where it looked, never what was there.
+    """
+    if not isinstance(region, dict):
+        return None
+    parts = [region.get(k) for k in ("x", "y", "w", "h")]
+    if any(not isinstance(v, int) for v in parts) or parts[2] <= 0 or parts[3] <= 0:
+        return None
+    return tuple(parts)
+
+
+def union_frame(before, after):
+    """The rectangle containing both frames, padded, or None if either is unreadable.
+
+    Padded because a region's edge is antialiased and a band flush to it can differ by rendering
+    rather than by position. Not padded so far that it stops being about the region: eight points
+    either side is under a fifth of the narrowest region this project holds.
+    """
+    a, b = frame_of(before), frame_of(after)
+    if a is None or b is None:
+        return None
+    # The witness names its own space, and the value it uses is deliberately not the bare word for
+    # a Logic window: a protocol token that collides with a UI label is a token the literal guard
+    # cannot tell from a menu title, and neither can a reader.
+    if (before_state.get("coordinateSpace") != WINDOW_RELATIVE
+            or after_state.get("coordinateSpace") != WINDOW_RELATIVE):
+        return None
+    x0 = min(a[0], b[0]) - FRAME_PAD
+    y0 = min(a[1], b[1]) - FRAME_PAD
+    x1 = max(a[0] + a[2], b[0] + b[2]) + FRAME_PAD
+    y1 = max(a[1] + a[3], b[1] + b[3]) + FRAME_PAD
+    return (max(0, x0), max(0, y0), x1 - max(0, x0), y1 - max(0, y0))
 
 
 def start_bar(help_text):
@@ -211,7 +271,7 @@ ev.note("575/seek", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]}
 # Captured AFTER the seek, deliberately. The playhead line moving from bar 1 to bar 9 changes this
 # band on its own, so a "before" taken ahead of the seek would let the visual assertion pass on the
 # playhead alone — it would be claiming the region moved while measuring that the cursor did.
-before_shot = ev.shot("575/before-move", settle_region=CONTENT_BAND, window_title=arrange_title)
+before_shot = ev.shot("575/before-move", settle_region=SETTLE_BAND, window_title=arrange_title)
 
 # ---- the operation ------------------------------------------------------------------------------
 
@@ -220,7 +280,7 @@ time.sleep(2)
 after_state = witness()
 after_target = selected_region(after_state)
 post_bar = start_bar((after_target or {}).get("help", ""))
-after_shot = ev.shot("575/after-move", settle_region=CONTENT_BAND, window_title=arrange_title)
+after_shot = ev.shot("575/after-move", settle_region=SETTLE_BAND, window_title=arrange_title)
 ev.note("575/move", moved if isinstance(moved, dict) else {"raw": str(moved)[:300]})
 
 body = moved if isinstance(moved, dict) else {}
@@ -275,12 +335,29 @@ ev.check("575/an-independent-reader-agrees-the-region-is-there-now",
          "have the handler report success without performing the menu click: the envelope still "
          "claims the move, and this check — which never reads the envelope — goes red")
 
+# The band the assertion is actually about: where the region WAS and where it IS, unioned and
+# padded. `frame_of` refuses anything it cannot read rather than substituting a default — a band
+# built from a missing frame is a rectangle nobody measured, which is the defect this replaces.
+COMPARE_BAND = union_frame(target, after_target)
+COMPARE_BAND_SUBJECT = (
+    f"the region Logic calls {(after_target or target or {}).get('name')!r}, its frame before and "
+    f"after the move, unioned and padded {FRAME_PAD}px"
+) if COMPARE_BAND else None
+ev.check("575/precondition-the-region-frame-was-read-before-and-after",
+         COMPARE_BAND is not None,
+         "the witness reported a readable frame for the target region on BOTH reads, in window "
+         "coordinates, so a band containing the change can be derived from it",
+         f"space={before_state.get('coordinateSpace')!r}/{after_state.get('coordinateSpace')!r} "
+         f"before={frame_of(target)!r} after={frame_of(after_target)!r} band={COMPARE_BAND!r}",
+         "have the witness emit position without size: `frame_of` returns None, this check goes "
+         "red, and no band is built from half a rectangle")
+
 ev.visual("575/the-region-visibly-moved",
-          before_shot["file"], after_shot["file"], CONTENT_BAND, subject=CONTENT_BAND_SUBJECT,
+          before_shot["file"], after_shot["file"], COMPARE_BAND, subject=COMPARE_BAND_SUBJECT,
           expect_change=True,
-          why="a region that moved from one bar to another is drawn somewhere else in the arrange "
-              "content, so the band must differ — an envelope that claimed a move the screen did "
-              "not show would be describing something other than what the user sees")
+          why="the band is the union of the region's own measured frame before and after, so it "
+              "contains the change if there is one at any zoom or scroll — and it cannot pass on "
+              "empty canvas, which is how a fixed rectangle can be green about nothing")
 
 # ---- restore ------------------------------------------------------------------------------------
 #
