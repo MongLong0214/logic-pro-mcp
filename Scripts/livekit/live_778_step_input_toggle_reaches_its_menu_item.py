@@ -57,16 +57,33 @@ if missing:
 
 
 def windows():
-    """Logic's window list, read through osascript rather than through the server.
+    """Logic's on-screen windows, from CoreGraphics — not from the server, and not from Logic.
 
-    The server is what is under test. A window count taken from its own envelope would let the
-    operation certify itself, which is the whole reason the envelope carries `observed_open` AND
-    this run reads the list separately.
+    The server is what is under test, so a window count from its own envelope would let the
+    operation certify itself. That is why this reads the list separately.
+
+    It reads it through CoreGraphics rather than System Events, and that is not a style choice.
+    Measured 2026-09-05: driving this toggle while asking System Events for
+    `name of every window` crashed Logic — `EXC_BAD_ACCESS`, "Thread stack size exceeded due to
+    excessive recursion", with `-[NSApplication windows]` and `-[NSApplication _copyWindows]` on
+    the faulting thread. Asking an application to enumerate its own windows while it is opening one
+    reaches into its AppKit state; the CoreGraphics window list is the window server's own record
+    and asks Logic nothing.
+
+    `E.logic_window()` is the same source and returns one window; this needs all of them, so it
+    reads the list the same way that function does.
     """
-    return subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to tell process "Logic Pro" to '
-                            'return name of every window'],
-        capture_output=True, text=True).stdout.strip()
+    try:
+        import Quartz
+    except ImportError:
+        return ""
+    found = []
+    for w in E._on_screen_windows(Quartz) or []:
+        if E._is_logic_owned_window(w):
+            name = w.get("kCGWindowName") or ""
+            if name:
+                found.append(name)
+    return ", ".join(found)
 
 
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
