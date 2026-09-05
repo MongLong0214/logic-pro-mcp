@@ -225,3 +225,20 @@ import Testing
     let pid = ProcessUtils.parseLogicProPID(fromProcessList: output)
     #expect(pid == 100)
 }
+
+
+@Test func issue776SourceRelativeFallbackReachesTheRepositoryRootNotSources() throws {
+    // The fallback existed to find `<repo>/manifest.json` when the working directory is outside
+    // the repository, which is the normal case for an MCP client. Three `deletingLastPathComponent`
+    // calls landed on `<repo>/Sources` and probed a path that has never existed, so it could not
+    // fire at all — and nothing failed, because nothing tested it.
+    let root = try #require(LogicProVariantPolicy.repoRootFromSource())
+    #expect(root.lastPathComponent != "Sources")
+    #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("Package.swift").path))
+    #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("manifest.json").path))
+}
+
+// Not tested here: `findRepoFile` itself under a working directory that misses. Driving that
+// means changing the PROCESS's current directory, which is global state this suite runs in
+// parallel with — a test that mutates it would make unrelated tests fail on timing. The unit
+// above covers the defect; the integration would need process isolation the suite does not have.

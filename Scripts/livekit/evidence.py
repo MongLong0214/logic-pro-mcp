@@ -704,6 +704,24 @@ class Driver:
     def _notify(self, method, params=None):
         self._write({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
+    @staticmethod
+    def operation_of(method, params):
+        """The operation a JSON-RPC call drives, as `(name, command, params)`, or None.
+
+        Pulled out of `_send` so the rule is checkable without a server. Both methods below reach
+        the product over the same connection, which is what `operations_driven` claims to count;
+        counting only `tools/call` made the clause narrower than its own docstring and left a
+        resource-only harness unable ever to be clean. #769.
+        """
+        if not isinstance(params, dict):
+            return None
+        if method == "tools/call":
+            args = params.get("arguments") or {}
+            return (params.get("name"), args.get("command"), args.get("params"))
+        if method == "resources/read":
+            return (params.get("uri"), "resources/read", None)
+        return None
+
     def _record_operation(self, name, command, params, body):
         """Put a driven operation in the document, however it was sent.
 
@@ -732,10 +750,11 @@ class Driver:
         # this directly — and the first run under this recording proved it: the operation the harness
         # was ABOUT went through `_send` and was absent from the document, while a warm-up call made
         # through `tool()` was the only thing `operations_driven` counted.
-        if method == "tools/call" and isinstance(params, dict):
-            args = params.get("arguments") or {}
-            self._record_operation(params.get("name"), args.get("command"),
-                                   args.get("params"), _body(raw))
+        driven = Driver.operation_of(method, params)
+        if driven is not None:
+            name, command, op_params = driven
+            self._record_operation(name, command, op_params,
+                                   _body(raw) if method == "tools/call" else raw)
         return raw
 
     def tool(self, name, command, params=None):
@@ -1446,7 +1465,9 @@ def is_clean(summary):
 
     What these clauses do NOT establish, stated so nobody reads them as more:
 
-      * `operations_driven` counts tool calls, not successful ones. A warm-up call, a read, or a
+      * `operations_driven` counts operations SENT, not successful ones — `tools/call` and
+        `resources/read` alike, since both reach the server over the same connection and either is
+        the product being touched. A warm-up call, a read, or a
         call that came back a transport error each increment it. It rules out a harness that never
         touched the product; it does not show the run drove its own subject.
       * `mutation_claimed` counts checks that NAME a mutation. Naming is not demonstrating — the

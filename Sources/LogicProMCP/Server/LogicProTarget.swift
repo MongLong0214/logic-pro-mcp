@@ -129,13 +129,35 @@ enum LogicProVariantPolicy {
             directory = parent
         }
 
-        let sourceRelative = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent(relativePath)
-        if FileManager.default.fileExists(atPath: sourceRelative.path) {
-            return sourceRelative
+        if let root = repoRootFromSource() {
+            let sourceRelative = root.appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: sourceRelative.path) {
+                return sourceRelative
+            }
+        }
+        return nil
+    }
+
+    /// The repository root, found by walking up from this file until a directory holds
+    /// `Package.swift`.
+    ///
+    /// This used to be three `deletingLastPathComponent()` calls, which landed on `<repo>/Sources`
+    /// and probed `<repo>/Sources/manifest.json` — a path that does not exist, so the fallback
+    /// could never fire (#776). Counting directory levels is what made that possible AND silent:
+    /// the count was right when it was written and wrong the moment the file's depth changed, with
+    /// nothing to notice. Walking to a MARKER states what is being looked for, so moving this file
+    /// cannot quietly break it again.
+    static func repoRootFromSource() -> URL? {
+        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<8 {
+            if FileManager.default.fileExists(atPath: directory.appendingPathComponent("Package.swift").path) {
+                return directory
+            }
+            let parent = directory.deletingLastPathComponent()
+            if parent.path == directory.path {
+                break
+            }
+            directory = parent
         }
         return nil
     }
