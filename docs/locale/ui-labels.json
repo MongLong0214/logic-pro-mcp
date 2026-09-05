@@ -2371,7 +2371,7 @@
       "roles": [
         "AXMenuItem"
       ],
-      "match": "contains",
+      "match": "prefix",
       "coverage": {
         "en-US": "measured",
         "ko-KR": "unmeasured",

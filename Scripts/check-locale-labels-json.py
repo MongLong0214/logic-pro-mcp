@@ -100,7 +100,12 @@ def _record(record_id):
         return None
 
 
-MATCH_MODES = ("exact", "exact_strict", "contains")
+MATCH_MODES = ("exact", "exact_strict", "prefix", "contains")
+
+
+def swift_prefix(repo=REPO):
+    """Delegates to Scripts/locale_labels.py, for the same reason the other two do."""
+    return _module().swift_prefix(repo)
 
 
 def swift_exact_strict(repo=REPO):
@@ -136,6 +141,10 @@ _exact_strict = swift_exact_strict()
 # unstated limit is the thing this ledger exists to end.
 _both_modes = sorted(_exact_strict & _containment)
 _exact_strict = _exact_strict - _containment
+# The fourth mode. `.prefix` anchors, so it is STRICTER than containment — a set read both ways
+# would have the same ambiguity the three above do, and none is, so the subtraction is a guard
+# against a future one rather than a live case.
+_prefix = swift_prefix() - _containment
 # Which labels the product still reads, for auditing `retired`. Same derivation site as the
 # containment sets, because a rule with two implementations is a rule that drifts.
 _live_label_uses = _module().swift_label_uses()
@@ -317,6 +326,10 @@ def carries(value, text, mode):
         return value.strip().casefold() == label
     if mode == "exact_strict":
         return value.casefold() == label
+    if mode == "prefix":
+        # ANCHORED, and the candidate is trimmed — `.prefix` takes the same trimming path `.exact`
+        # does in `LabelSet.matches`; only `.exactStrict` returns before it.
+        return value.strip().casefold().startswith(label)
     return label in value.casefold()
 
 
@@ -364,6 +377,10 @@ def label_match(name, entry):
     if name in _containment and mode != "contains":
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`containsAny` — the evidence rule must be the product's")
+    if name in _prefix and mode != "prefix":
+        out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
+                   f"`.prefix`, which ANCHORS — the evidence rule must be the product's, and "
+                   f"`contains` accepts a sighting mid-value that it refuses")
     if name in _exact_strict and mode != "exact_strict":
         out.append(f"{name}: declares match {mode!r}, but the product reads this set with "
                    f"`.exactStrict`, which does not trim the observed text — the evidence rule "

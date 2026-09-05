@@ -612,6 +612,42 @@ def main():
              any("`.exactStrict`" in x for x in guard.label_match(strict_name, mislabelled)[1]),
              guard.label_match(strict_name, mislabelled)[1])
 
+    # The FOURTH mode. `.prefix` anchors, so containment — which the ledger used for the one label
+    # read this way — accepts a sighting in the middle of a value that the product refuses. Found
+    # while fixing the `.exactStrict` gap; same shape, opposite end of the same spectrum.
+    guard.OBS = _ledger({"2026-09-05-pre": ("ko-KR", [
+        _row("AXMenuItem", title="실행 취소 가져오기",
+             path="AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[실행 취소 가져오기]"),
+        _row("AXMenuItem", title="마지막 실행 취소",
+             path="AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[마지막 실행 취소]")])})
+    ko_pre = dict(U, **{"ko-KR": "measured"})
+
+    def anchored(match, variant):
+        return _entry([variant], None, ko_pre, canonical="Undo", match=match,
+                      declared=("AXMenuItem",), cites={"ko-KR": "2026-09-05-pre"},
+                      roles={"ko-KR": "AXMenuItem"}, attrs={"ko-KR": "title"})
+
+    case("prefix accepts a value that STARTS with the label",
+         cp(anchored("prefix", "실행 취소"), "anchoredHit") == [],
+         cp(anchored("prefix", "실행 취소"), "anchoredHit"))
+    # `취소` occurs inside both rows and starts neither — the one shape the two modes disagree
+    # about. An earlier draft used `마지막 실행`, which IS a prefix of the second row, so it asserted
+    # nothing and passed under both.
+    case("prefix REFUSES a value that merely contains it",
+         any("carried any of this label's strings" in x
+             for x in cp(anchored("prefix", "취소"), "midValue")),
+         cp(anchored("prefix", "취소"), "midValue"))
+    case("contains would have accepted that same mid-value sighting",
+         cp(anchored("contains", "취소"), "midValueLoose") == [],
+         cp(anchored("contains", "취소"), "midValueLoose"))
+
+    prefix_name = sorted(guard._prefix)[0] if guard._prefix else None
+    if prefix_name:
+        loose = _entry(["x"], None, U, canonical="x", match="contains", declared=("AXMenuItem",))
+        case("a set the Swift reads with .prefix may not declare containment",
+             any("`.prefix`" in x for x in guard.label_match(prefix_name, loose)[1]),
+             guard.label_match(prefix_name, loose)[1])
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Prove `Scripts/check-variants-appear-in-a-census.py` finds the thing it exists for, and does
+not find the things it must not.
+
+The guard's whole value is the near-miss list — a string somebody typed instead of read, close to
+one Logic really shows. `playheadPositionGroupLabel` carried `再生ヘッド位置` for as long as it had
+existed, Logic shows `再生ヘッドの位置`, and no check in this repository could say so. These cases
+plant that shape and three ways of being wrong about it.
+"""
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location("nearmiss", HERE / "check-variants-appear-in-a-census.py")
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+
+failures, ran = [], [0]
+
+
+def case(name, condition, detail=""):
+    ran[0] += 1
+    if not condition:
+        failures.append(f"{name}: {detail}")
+
+
+# --- locale_of: the script decides the column, and refuses when it cannot -------------------
+case("hangul is ko", guard.locale_of("트랙 콘텐츠") == "ko-KR")
+case("kana is ja", guard.locale_of("トラックコンテンツ") == "ja-JP")
+case("kanji is ja", guard.locale_of("再生ヘッドの位置") == "ja-JP")
+case("ascii is en", guard.locale_of("Tracks contents") == "en-US")
+# A mixed string pins to the script that is present; a string with no script signal pins to none.
+case("a string with no letters pins to nothing", guard.locale_of("…") is None,
+     repr(guard.locale_of("…")))
+case("an empty string pins to nothing", guard.locale_of("") is None)
+
+
+# --- the near-miss itself -------------------------------------------------------------------
+def ledger(rows, labels):
+    """A temp repo whose evidence directory holds one census and whose projection holds `labels`."""
+    root = Path(tempfile.mkdtemp())
+    (root / "docs" / "observations" / "evidence").mkdir(parents=True)
+    (root / "docs" / "locale").mkdir(parents=True)
+    (root / "docs" / "observations" / "evidence" / "x.census.json").write_text(
+        json.dumps({"host": {"locale": "ja-JP"}, "census": rows}, ensure_ascii=False),
+        encoding="utf-8")
+    (root / "docs" / "locale" / "ui-labels.json").write_text(
+        json.dumps({"labels": labels}, ensure_ascii=False), encoding="utf-8")
+    guard.OBS = str(root / "docs" / "observations")
+    guard.LABELS = str(root / "docs" / "locale" / "ui-labels.json")
+    return root
+
+
+SHOWN = [{"role": "AXGroup", "description": "再生ヘッドの位置"}]
+UNMEASURED = {"en-US": "unmeasured", "ko-KR": "unmeasured", "ja-JP": "unmeasured"}
+
+
+def run(labels, rows=SHOWN):
+    ledger(rows, labels)
+    import io as _io
+    import contextlib
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = guard.main()
+    return rc, buf.getvalue()
+
+
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッド位置"], "coverage": dict(UNMEASURED)}})
+case("the one-character miss is reported", "再生ヘッド位置" in out and "NEAR" in out, out)
+case("and the string Logic shows is named beside it", "再生ヘッドの位置" in out, out)
+case("reporting is not failing", rc == 0, rc)
+
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッドの位置"], "coverage": dict(UNMEASURED)}})
+case("a variant Logic DOES show is not a near miss", "NEAR" not in out, out)
+
+rc, out = run({"somethingElse": {
+    "canonical": "x", "variants": ["まったく無関係な文字列"], "coverage": dict(UNMEASURED)}})
+case("a string with no near neighbour is absent but not NEAR", "NEAR" not in out, out)
+case("...and is still counted as absent", "1 variant(s) absent" in out, out)
+
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッド位置"],
+    "coverage": dict(UNMEASURED, **{"ja-JP": "measured"})}})
+case("a label the ledger already measured in that locale is skipped", "NEAR" not in out, out)
+
+# An empty vocabulary must not read as clean: the guard refuses rather than reporting no drift.
+ledger([], {})
+import io as _io
+import contextlib
+buf = _io.StringIO()
+with contextlib.redirect_stdout(buf):
+    rc = guard.main()
+case("no census at all is a refusal, not a pass", rc == 1, (rc, buf.getvalue()))
+
+if failures:
+    for f in failures:
+        print(f"FAIL {f}")
+    sys.exit(1)
+print(f"{ran[0]} case(s) pass: a near miss is a string close to one Logic shows, and absence "
+      f"without a neighbour is only absence")

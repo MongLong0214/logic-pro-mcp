@@ -208,6 +208,40 @@ def swift_exact_strict(repo=REPO):
     return names
 
 
+def swift_prefix(repo=REPO):
+    """LabelSet names the product demonstrably reads with `.prefix`, read from the Swift.
+
+    The fourth mode, and the last one this file can see. `.prefix` is ANCHORED: Logic's string must
+    START with the label. Containment is looser, so a label read with `.prefix` but declared
+    `contains` lets the ledger certify a sighting in the middle of a value that the product would
+    refuse — the same shape as the `.exactStrict` gap, found while fixing it.
+
+    Only the `MenuPath(..., itemMode: .prefix)` form is derivable: it names the LabelSet.
+    `AXLogicProElements+Tracks.swift` passes a local `labels` variable to a predicate with
+    `mode: .prefix`, and no name is visible at that call site — the same limit `swift_containment`
+    documents, and the reason both functions return only what they can see.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            # `MenuPath(bar: <x>, item: <name>, itemMode: .prefix)` — the item is the label whose
+            # mode this is. `bar` is matched with the default mode and is not implicated.
+            names |= set(re.findall(
+                r"MenuPath\((?:[^()]|\([^()]*\))*?item:\s*(\w+)"
+                r"(?:[^()]|\([^()]*\))*?itemMode:\s*\.prefix",
+                body, re.S))
+            names |= set(re.findall(
+                r"AXLocalePolicy\s*\.\s*(\w+)\s*\.matches\((?:[^()]|\([^()]*\))*mode:\s*\.prefix",
+                body, re.S))
+    return names
+
+
 def swift_label_uses(repo=REPO):
     """Every LabelSet the product still reads, by name, from `AXLocalePolicy.<name>` in Sources/.
 
@@ -238,6 +272,7 @@ def swift_label_uses(repo=REPO):
 
 _CONTAINMENT = swift_containment()
 _EXACT_STRICT = swift_exact_strict()
+_PREFIX = swift_prefix()
 
 
 def build(existing=None):
@@ -290,7 +325,12 @@ def build(existing=None):
         # it verbatim. A ledger that knew only `exact` therefore certified claims the product
         # refuses — a description read back as `" 再生ヘッドの位置 "` satisfies a trimming comparison
         # and fails the one the element is actually read with. Found by review, 2026-09-05.
-        if name in _CONTAINMENT:
+        # `prefix` is ANCHORED, so containment is looser than it: a label read with `.prefix` and
+        # declared `contains` lets the ledger certify a sighting mid-value the product refuses.
+        # Same shape as the `exact_strict` gap, and found while fixing that one.
+        if name in _PREFIX and name not in _CONTAINMENT:
+            entry["match"] = "prefix"
+        elif name in _CONTAINMENT:
             entry["match"] = "contains"
         elif name in _EXACT_STRICT:
             entry["match"] = "exact_strict"
