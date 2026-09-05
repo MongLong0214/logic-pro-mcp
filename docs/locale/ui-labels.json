@@ -1600,7 +1600,8 @@
     "regionHelpKeyword": {
       "canonical": "region",
       "variants": [
-        "리전"
+        "리전",
+        "リージョン"
       ],
       "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
       "match": "contains",

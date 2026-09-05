@@ -215,8 +215,15 @@ def apply(labels_path, census, proposals, records_by_surface):
             #
             # Asked with the guard's own `sighting_value`, so the two cannot disagree about what
             # counts as seen.
-            if _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
-                                     h["attribute"], h["match"]) is None:
+            # The value the GUARD will return, not the one this tool happened to match. `observed`
+            # is held to being a QUOTE of what the cited record carried, and the guard re-derives it
+            # by scanning that record and taking the FIRST row that matches. Under `contains` a
+            # record ordered `취소` then `취소 하시겠습니까` gives the guard the short one while this
+            # tool, iterating the census, may have found the long one — and the block is then
+            # refused for an `observed` mismatch. Named by review 2026-09-06.
+            seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
+                                         h["attribute"], h["match"])
+            if seen is None:
                 unbacked.setdefault(name, set()).add((h["string"], rid))
                 continue
             if h["string"] in (entry.get("variants") or []):
@@ -229,7 +236,7 @@ def apply(labels_path, census, proposals, records_by_surface):
                     continue
                 prov[h["string"]] = {"locale": locale, "date": record_date(rid),
                                      "host": host_line, "record": rid,
-                                     "observed": h["observed"], "role": h["role"],
+                                     "observed": seen, "role": h["role"],
                                      "attribute": h["attribute"], "match": h["match"]}
                 # The label must DECLARE the roles it may be read on, and the citation must name one
                 # of them. Seeded from the role actually observed — the first measurement is what

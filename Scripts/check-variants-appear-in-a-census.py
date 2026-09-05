@@ -137,6 +137,12 @@ def _chunk_is_a_dropped_word(policy, observed, chunk):
     # An empty observed value fails here too, which is the only thing stopping it in direct callers.
     if len(observed.strip()) < AFFIX_MIN_RETAINED:
         return False
+    # A dropped WORD contains a letter. Without this, `트랙 1` -> `트랙` reported the ordinal ` 1` as
+    # a dropped word: digits and punctuation carry no ASCII letter, so they took the budget branch
+    # and fitted it. Those are a different ELEMENT — track 1 rather than the track rail — not the
+    # same label with a word removed. Named by review 2026-09-06.
+    if not any(c.isalpha() for c in chunk):
+        return False
     return 1 <= len(chunk.strip()) <= AFFIX_MAX_CHARS
 
 
@@ -149,13 +155,17 @@ def _carries(value, text, mode):
     """
     label = unicodedata.normalize("NFC", text.strip()).casefold()
     subject = unicodedata.normalize("NFC", value).casefold()
-    if mode == "contains":
-        return label in subject
-    if mode == "prefix":
-        return subject.strip().startswith(label)
+    # Branch order and FALLBACK mirror the original exactly. They did not: an unrecognised mode fell
+    # through to `exact` here and to `contains` there, the loosest possible answer, so the two
+    # disagreed on any mode name outside the four. Named by review 2026-09-06; the agreement test
+    # could not see it because it looped over the declared modes only.
+    if mode == "exact":
+        return subject.strip() == label
     if mode == "exact_strict":
         return subject == label
-    return subject.strip() == label
+    if mode == "prefix":
+        return subject.strip().startswith(label)
+    return label in subject
 
 
 def _affix_of(text, bag, mode="exact"):

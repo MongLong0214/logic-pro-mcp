@@ -141,11 +141,32 @@ ev.note("778/get_regions-envelope", regions)
 ev.note("778/get_regions-viewport", {
     "complete": regions.get("complete"), "reason": regions.get("reason"),
     "returned_count": regions.get("returned_count"), "_debug": regions.get("_debug")})
+# ...but "not refused" is not enough on its own, and the first cut of this relaxation was not.
+# `coversWholeArrangement` (AccessibilityChannel+Regions.swift:96) requires `trackHeaderCount > 0`,
+# so a read that FOUND the group and then resolved no track headers at all reports
+# `complete: false` with no error — and a predicate asking only "no error" would pass it while the
+# reader had read nothing. That is the shape this whole harness exists to refuse, introduced while
+# fixing a different coupling. So the rail must have been read: `track_headers > 0` says the
+# enumeration had something to enumerate.
+# `nonRegion` is the localization question stated as a number, and leaving it out is how this check
+# stayed green through four Japanese runs while the defect it exists for was live.
+# `AccessibilityChannel+Regions.swift:244` classifies a layout item as a region iff its AXHelp
+# carries a `regionHelpKeyword` variant. That set was `region` and `리전`, so on a Japanese Logic
+# every region counted as NOT a region: measured `layoutItems: 1, nonRegion: 1, returned_count: 0`
+# on four separate heads, where the same project in English gave `nonRegion: 0` and one region. The
+# envelope carried no error and `complete` was true, so an empty arrangement and an unreadable one
+# were indistinguishable from the outside — which is the whole shape of #778.
+#
+# The limit, said rather than hidden: this asserts that EVERY layout item was recognised, so a
+# project holding a layout item that legitimately is not a region would fail it. On the campaign
+# project it is zero in English, which is what makes the comparison meaningful here.
 ev.falsifiable(
     "778/region-enumeration-is-not-refused-on-a-japanese-ui",
     lambda o: (o.get("error") is None
                and isinstance(o.get("regions"), list)
-               and o.get("reason") != "channels_exhausted"),
+               and o.get("reason") != "channels_exhausted"
+               and (o.get("_debug") or {}).get("track_headers", 0) > 0
+               and (o.get("_debug") or {}).get("nonRegion", 1) == 0),
     regions,
     {"error": "channels_exhausted",
      "hint": "Track Content group not found (scanned 35 AXGroups; landmarks: 'コントロールバー' | "

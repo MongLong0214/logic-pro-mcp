@@ -162,6 +162,12 @@ case("affix ignores one letter shaved off a Latin label",
 # keying on the policy's script fixed the opposite error.
 case("affix keeps a non-Latin chunk dropped from a mixed-script label",
      guard._affix_of("EQを表示", {"EQ"}) == "EQ", guard._affix_of("EQを表示", {"EQ"}))
+# ...and what is dropped must be a WORD, so a chunk of digits or punctuation is not one. `트랙 1`
+# against `트랙` drops ` 1`, which carries no letter and fitted the budget — but track 1 is a
+# different ELEMENT from the track rail, not the same label with a word removed. Named by review
+# 2026-09-06.
+case("affix ignores an ordinal dropped from a label",
+     guard._affix_of("트랙 1", {"트랙"}) is None, guard._affix_of("트랙 1", {"트랙"}))
 # ...while the same shape in a space-less script is a real dropped word: Korean writes `삭제하기`
 # closed up, and `하기` is the verb ending Logic drops.
 case("affix keeps a dropped ending in a closed-up Korean compound",
@@ -234,6 +240,13 @@ DRIFT_PAIRS = [(" Foo ", "Foo"), ("Foo", " Foo "), ("FooBar", "Foo"), ("foo", "F
                ("정보", _u.normalize("NFD", "정보")),
                (_u.normalize("NFD", "ステップ"), "ステップ"),
                (_u.normalize("NFD", "트랙 헤더"), "트랙 헤더")]
+# A mode OUTSIDE the declared four. The loop below walks `MATCH_MODES`, so it can never reach the
+# fallback branch — and the two implementations disagreed there: an unrecognised mode fell through
+# to `exact` in the copy and to `contains` in the original, the loosest answer. Named by review
+# 2026-09-06, which is also how it was found: the loop's own coverage hid it.
+case("the copy agrees with the original on a mode neither declares",
+     guard._carries("FooBar", "Foo", "bogus") == real_guard.carries("FooBar", "Foo", "bogus"),
+     (guard._carries("FooBar", "Foo", "bogus"), real_guard.carries("FooBar", "Foo", "bogus")))
 for _mode in real_guard.MATCH_MODES:
     for _value, _text in DRIFT_PAIRS:
         _mine, _theirs = guard._carries(_value, _text, _mode), real_guard.carries(_value, _text, _mode)

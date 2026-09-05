@@ -1385,9 +1385,19 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
     )
 
+    /// Japanese measured 2026-09-06 from the ja-JP arrange-regions census: Logic's help string for
+    /// a region reads `リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. …`.
+    ///
+    /// Its absence made `get_regions` return an EMPTY enumeration on a Japanese Logic while regions
+    /// were plainly there. `AccessibilityChannel+Regions.swift:244` classifies a layout item as a
+    /// region iff its help carries one of these, so every Japanese region counted as `nonRegion`:
+    /// four separate runs reported `layoutItems: 1, nonRegion: 1, returned_count: 0` where the same
+    /// project on an English Logic reported `nonRegion: 0` and one region. The envelope carried no
+    /// error and `complete` was true, so it did not look like a failure — it looked like an
+    /// arrangement with nothing in it.
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
-        variants: ["리전"],
+        variants: ["리전", "リージョン"],
         rationale: "Detects an arrange region by its AXHelp string; read-only classifier."
     )
 

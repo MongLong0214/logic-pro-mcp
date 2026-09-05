@@ -258,6 +258,47 @@ def main():
     case("...and leaves no coverage citation behind",
          not entry_wrong.get("coverage_records"), entry_wrong)
 
+    # 5e. `observed` must be the value the GUARD will re-derive, not the one this tool happened to
+    #     match. The guard scans the cited record and takes the FIRST row that matches, so under
+    #     `contains` a record ordered `입력 슬롯` then `입력 슬롯 (스테레오)` hands it the short one
+    #     while the census may have supplied the long one — and the block is then refused for an
+    #     `observed` mismatch, after the ledger has been written. Named by review 2026-09-06.
+    #
+    #     It must be the VARIANT that matches, not the canonical: only the provenance branch writes
+    #     `observed`, and a first cut of this case matched the canonical, took the coverage branch,
+    #     and asserted nothing about the field it was written for.
+    obs_order = Path(tempfile.mkdtemp())
+    rid_order = "2026-09-05-ko-KR-arrange-window-ordered"
+    json.dump({"id": rid_order, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXButton", "title": "입력 슬롯"},
+                                {"role": "AXButton", "title": "입력 슬롯 (스테레오)"}]},
+              open(obs_order / f"{rid_order}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    # The census supplies the LONGER string, so a tool quoting its own row would write that one.
+    json.dump(census([row("AXButton", "AXWindow/AXButton[in]", title="입력 슬롯 (스테레오)")]),
+              open(cpath, "w"))
+    lp = write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
+    _, _, props_order, _ = propose.main(cpath, lp)
+    assert any(h["string"] == "입력 슬롯" for h in props_order.get("inputSlotHelpKeyword", [])), (
+        "the fixture must propose the VARIANT, or the provenance branch never runs")
+    saved_order, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_order)
+    try:
+        n_prov_order, _ = propose.apply(lp, json.load(open(cpath)), props_order,
+                                        {"arrange.window": rid_order})
+    finally:
+        propose._GUARD.OBS = saved_order
+    e_order = json.load(open(lp, encoding="utf-8"))["labels"]["inputSlotHelpKeyword"]
+    block = (e_order.get("provenance") or {}).get("입력 슬롯") or {}
+    case("a provenance block was written at all", n_prov_order == 1 and bool(block),
+         (n_prov_order, e_order))
+    case("`observed` is the value the guard re-derives, not the census row",
+         block.get("observed") == "입력 슬롯", block.get("observed"))
+    saved_g, guard.OBS = guard.OBS, str(obs_order)
+    try:
+        problems_order = guard.provenance_problems("inputSlotHelpKeyword", e_order)
+    finally:
+        guard.OBS = saved_g
+    case("...and the guard accepts what was written", problems_order == [], problems_order)
+
     # 6b. ...and nothing when the surface names a record that does not EXIST. Checking the id was
     #     truthy let a dangling citation through with an empty date, and the guard then refused the
     #     ledger after it had been mutated — the wrong end of the transaction. Raised by review
