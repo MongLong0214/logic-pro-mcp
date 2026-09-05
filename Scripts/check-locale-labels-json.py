@@ -202,10 +202,13 @@ def provenance_problems(name, entry):
         if not role or attribute not in SIGHTING_ATTRS:
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
-        elif (seen := sighting_value(rec, variant, role, attribute, mode)) is None:
+        elif (seen := sighting_value(rec, variant, role, attribute, mode,
+                                     block.get("path_contains"))) is None:
+            where = (f" at a path containing {block.get('path_contains')!r}"
+                     if block.get("path_contains") else "")
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
-                       f"no {role} whose {attribute} carried it — a record that never saw it on that "
-                       f"element cannot be cited for it")
+                       f"no {role} whose {attribute} carried it{where} — a record that never saw it "
+                       f"on that element cannot be cited for it")
         elif str(block.get("observed", "")) != seen:
             # `observed` is a QUOTE of the string Logic carried, and the guard now holds it to
             # that, RAW. Stripping both sides was the gap between the rule this file claims and the
@@ -274,7 +277,7 @@ def _rows(rec):
             continue
 
 
-def sighting(rec, text, role=None, attribute=None, mode="exact"):
+def sighting(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
     """Whether the record contains an element of `role` whose `attribute` carried `text`.
 
     With no `attribute` named, only the LABEL-bearing ones are searched — never `identifier`, which
@@ -286,7 +289,7 @@ def sighting(rec, text, role=None, attribute=None, mode="exact"):
     row, an attribute on that row, and the value that attribute carried — the same three things a
     caller needs to find the element again.
     """
-    return sighting_value(rec, text, role, attribute, mode) is not None
+    return sighting_value(rec, text, role, attribute, mode, path_contains) is not None
 
 
 def carries(value, text, mode):
@@ -334,7 +337,7 @@ def carries(value, text, mode):
 
 
 
-def sighting_value(rec, text, role=None, attribute=None, mode="exact"):
+def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
     """The value the matching attribute actually carried, or None.
 
     Returning the value rather than a bool is what lets a caller check that a provenance block's
@@ -345,6 +348,13 @@ def sighting_value(rec, text, role=None, attribute=None, mode="exact"):
         return None
     for row in _rows(rec):
         if role and row.get("role") != role:
+            continue
+        # WHERE, when the block says where. `roles` distinguishes KINDS of element and says nothing
+        # about WHICH — Logic puts an `AXMenuButton` labelled `Edit` in the arrange window, in the
+        # mixer AND in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying
+        # every rule this guard had — string, role, attribute, locale, real record — and all four
+        # were the wrong element, because the label meant a container the sighting was not in.
+        if path_contains and path_contains not in str(row.get("path") or ""):
             continue
         for attr in ([attribute] if attribute else LABEL_ATTRS):
             value = row.get(attr)

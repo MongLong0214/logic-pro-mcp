@@ -648,6 +648,41 @@ def main():
              any("`.prefix`" in x for x in guard.label_match(prefix_name, loose)[1]),
              guard.label_match(prefix_name, loose)[1])
 
+    # WHERE, and why `roles` cannot answer it. Measured 2026-09-05: four labels had a sighting
+    # satisfying every rule this guard had — string, role, attribute, locale, real record — and all
+    # four were the WRONG ELEMENT. `markerListEditMenuButton` means the Marker List toolbar's Edit
+    # button; the sightings were AXMenuButtons labelled `編集` in the arrange window and in the
+    # mixer. Logic puts the same role in many containers, and the role distinguishes kinds.
+    #
+    # The record already carried the answer — every census row has a `path` — and provenance had no
+    # field that read it.
+    guard.OBS = _ledger({"2026-09-05-where": ("ja-JP", [
+        _row("AXMenuButton", description="編集",
+             path="AXWindow[x]/AXGroup[トラック]/AXGroup/AXMenuButton[編集]"),
+        _row("AXMenuButton", description="編集",
+             path="AXWindow[x]/AXGroup[ミキサー]/AXGroup/AXMenuButton[編集]")])})
+    ja_where = dict(U, **{"ja-JP": "measured"})
+
+    def sited(path_contains):
+        block_ = _prov(record="2026-09-05-where", locale="ja-JP", observed="編集",
+                       role="AXMenuButton", attribute="description", match="exact")
+        if path_contains is not None:
+            block_["path_contains"] = path_contains
+        return _entry(["編集"], {"編集": block_}, ja_where, canonical="Edit", match="exact",
+                      declared=("AXMenuButton",))
+
+    case("without a path, the arrange window's button backs the Marker List's label",
+         guard.provenance_problems("markerListEditMenuButton", sited(None)) == [],
+         guard.provenance_problems("markerListEditMenuButton", sited(None)))
+    case("with the Marker List named, the same record no longer backs it",
+         any("no AXMenuButton whose description carried it at a path containing" in x
+             for x in guard.provenance_problems("markerListEditMenuButton",
+                                                sited("AXWindow[Marker List]"))),
+         guard.provenance_problems("markerListEditMenuButton", sited("AXWindow[Marker List]")))
+    case("a path the sighting IS at still backs it",
+         guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")) == [],
+         guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")))
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

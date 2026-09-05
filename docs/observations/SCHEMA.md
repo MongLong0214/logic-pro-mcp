@@ -142,6 +142,17 @@ string under that mode. Three further rules make the citation hold:
 - **`observed` is a quote.** It must equal, character for character, the value the cited record
   recorded on that element. Requiring only that it CONTAIN the variant left the rest of the field
   free, and a real but truncated reading was cited while `observed` claimed untruncated text.
+- **`path_contains` says WHERE, when the label means a particular one.** Optional, and checked when
+  present: the sighting's `path` must contain it. `roles` distinguishes KINDS of element and says
+  nothing about which — Logic puts an `AXMenuButton` labelled `Edit` in the arrange window, in the
+  mixer and in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying every
+  rule this file states — string, role, attribute, locale, real record — and all four were the
+  wrong element, because the label meant a container the sighting was not in. The record already
+  carried the answer; provenance had no field that read it.
+
+  Do not backfill it from sightings that already exist. That is fitting the constraint to the
+  evidence, which is how those four would have been written. Declare where the label addresses from
+  the label's own meaning, then look there; where nothing is found, the label is unmeasured.
 - **The role must be one the label declares** in its `roles` list. Otherwise a sighting of the same
   string on a different element backs the wrong label — `Edit` on a menu bar is not `Edit` on a
   toolbar button. `roles` is author-typed, and it is NOT the harmless kind of typed constraint: it
