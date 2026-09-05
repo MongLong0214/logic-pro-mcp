@@ -252,6 +252,15 @@ def sighting(rec, text, role=None, attribute=None, exact=True):
     return sighting_value(rec, text, role, attribute, exact) is not None
 
 
+def _carries(value, text, exact):
+    """Whether an attribute value counts as carrying `text`. The ONE comparison.
+
+    It existed twice — `sighting` stripped before an exact test and the absence branch did not — so
+    a value of `" Create "` was a presence to one and an absence to the other, about the same row.
+    """
+    return (value.strip() == text.strip()) if exact else (text in value)
+
+
 def sighting_value(rec, text, role=None, attribute=None, exact=True):
     """The value the matching attribute actually carried, or None.
 
@@ -268,7 +277,7 @@ def sighting_value(rec, text, role=None, attribute=None, exact=True):
             value = row.get(attr)
             if not isinstance(value, str):
                 continue
-            if (value.strip() == text.strip()) if exact else (text in value):
+            if _carries(value, text, exact):
                 return value
     return None
 
@@ -385,12 +394,25 @@ def coverage_problems(name, entry, locales, values):
                            f"about — a fragment of its AX path. `true` let any row of this role "
                            f"stand for one nobody looked at")
                 continue
+            if "/" not in where and "[" not in where:
+                # A bare substring is not a locator. `"AX"` selects every row of the role and the
+                # claim collapses back to the one this rule replaced. Requiring the shape of a path
+                # — a separator or a named segment, both of which the census writes — refuses that
+                # without capping how many rows a genuine path may select, which is what would make
+                # an honest claim about identical siblings inexpressible.
+                out.append(f"{name}: coverage_absent[{loc}] is {where!r}, which is a substring "
+                           f"rather than a path — it must contain `/` or `[`, or it identifies "
+                           f"nothing and any row of this role satisfies it")
+                continue
             seen = [r for r in _rows(rec)
                     if r.get("role") == role and where in str(r.get("path") or "")]
+            # Compared the way `sighting` compares, or the two disagree about the same pair:
+            # positive sightings strip before an exact test, so `" Create "` counted as a presence
+            # there and as an absence here. One rule.
             carrying = [v for t in strings if t
                         for r in seen
                         for v in (r.get(a) for a in LABEL_ATTRS)
-                        if isinstance(v, str) and ((v == t) if mode == "exact" else (t in v))]
+                        if isinstance(v, str) and _carries(v, t, exact=(mode == "exact"))]
             if not seen:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
                            f"{cites.get(loc)!r}, which contains no {role} whose path carries "

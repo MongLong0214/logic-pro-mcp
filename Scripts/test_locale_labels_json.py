@@ -438,6 +438,26 @@ def main():
     actually_there = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-has"}, **absent)
     case("absence contradicted by the record is refused",
          any("that is a presence" in x for x in cp(actually_there)), cp(actually_there))
+    substring = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-nil"},
+                       **dict(absent, absent={"ko-KR": "AX"}))
+    case("a bare substring is not a locator",
+         any("substring rather than a path" in x for x in cp(substring)), cp(substring))
+    # ...and the comparison is the one a SIGHTING uses. These were two: `sighting` strips before an
+    # exact test and the absence branch did not, so a padded value was a presence to one and an
+    # absence to the other, about the same row.
+    guard.OBS = _ledger({"2026-09-05-pad": ("ko-KR", [_row("AXButton", title="  입력 슬롯  ", path=P)])})
+    # `match="exact"` on purpose: the two comparisons only ever disagreed on an exact test, because
+    # containment gives the same answer whether or not the value was stripped.
+    padded_row = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-pad"},
+                        **dict(absent, absent={"ko-KR": P}, match="exact"))
+    case("a padded value is a presence to both halves, not an absence to one",
+         any("that is a presence" in x for x in cp(padded_row)), cp(padded_row))
+    guard.OBS = _ledger({
+        "2026-09-05-nil":  ("ko-KR", [_row("AXButton", help="전혀 다름", title="전혀 다름", path=P)]),
+        "2026-09-05-gone": ("ko-KR", [_row("AXStaticText", value="전혀 다름", path=P)]),
+        "2026-09-05-has":  ("ko-KR", [_row("AXButton", help="입력 슬롯", path=P)]),
+        "2026-09-05-else": ("ko-KR", [_row("AXButton", help="전혀 다름", path="AXWindow/AXButton[other]")]),
+    })
     untargeted = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-nil"},
                         **dict(absent, absent={"ko-KR": True}))
     case("absence that names no element is refused",
@@ -459,6 +479,20 @@ def main():
     # every other check, and since the projection then marks all three locales `retired` and the
     # ratchets count only literal `unmeasured`, a live label could be dropped from every ceiling by
     # asserting it was gone. `cancelButton` is read at two call sites.
+    # The audit reads Swift, so it must read it the way Swift is written: a use split across lines
+    # was missed, and a label named only in a comment blocked an honest retirement.
+    labels_mod = guard._module()
+    import tempfile as _tf, os as _os
+    src = Path(_tf.mkdtemp())
+    (src / "Sources").mkdir()
+    (src / "Sources" / "A.swift").write_text(
+        "let a = AXLocalePolicy\n    .splitAcrossLines\n// AXLocalePolicy.onlyInAComment\n"
+        "/* AXLocalePolicy.onlyInABlockComment */\n", encoding="utf-8")
+    uses = labels_mod.swift_label_uses(str(src))
+    case("a use split across lines counts", "splitAcrossLines" in uses, sorted(uses))
+    case("a name in a line comment does not", "onlyInAComment" not in uses, sorted(uses))
+    case("a name in a block comment does not", "onlyInABlockComment" not in uses, sorted(uses))
+
     live = sorted(guard._live_label_uses)[0] if guard._live_label_uses else None
     if live:
         r_live = _entry([], None, {loc: "retired" for loc in LOCALES},

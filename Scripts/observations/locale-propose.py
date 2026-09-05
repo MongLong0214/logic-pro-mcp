@@ -73,7 +73,7 @@ def roles_for(name):
     for frag, roles in ROLE_HINTS:
         if frag in name:
             return roles
-    return None   # unknown shape: propose on any role, but say so
+    return None   # unknown shape — see `apply`, which refuses to write for these
 
 
 def matches(name, wanted, text):
@@ -141,9 +141,23 @@ def apply(labels_path, census, proposals, records_by_surface):
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
     date = datetime.date.today().isoformat()
     n_prov = n_cov = 0
+    skipped = []
     for name, hits in proposals.items():
         entry = doc["labels"].get(name)
         if not entry:
+            continue
+        # An unknown name shape means EVERY role was accepted for this label, so the match says
+        # nothing about which element carries the string — and `apply` used to promote whatever the
+        # census happened to hit into the label's `roles`. Measured on the first real campaign, that
+        # produced 11 citations and the list is its own indictment: `barSliderLabel` backed by an
+        # AXMenuItem, `trackRecordEnableCheckbox` by an AXMenuBarItem, the transport controls by menu
+        # items. Logic's menus carry the same words, which is the shared-string collision this whole
+        # design exists to refuse — walked into by the tool that fills the design in.
+        #
+        # So: propose, never write. A role this tool cannot constrain is a declaration a person
+        # makes, and `main()` already reports these for review.
+        if roles_for(name) is None and not entry.get("roles"):
+            skipped.append(name)
             continue
         # The label declares the mode once. Coverage has no per-variant block to read one from, and
         # when it derived its own the two halves of the guard disagreed for every label the Swift
@@ -191,6 +205,10 @@ def apply(labels_path, census, proposals, records_by_surface):
                     n_cov += 1
     json.dump(doc, open(labels_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     open(labels_path, "a", encoding="utf-8").write("\n")
+    if skipped:
+        print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
+              f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
+              + (" …" if len(skipped) > 6 else ""))
     return n_prov, n_cov
 
 

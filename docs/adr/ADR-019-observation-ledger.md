@@ -138,7 +138,7 @@ Otherwise three fields are required and the guard checks all three:
 | `coverage_roles[locale]` | the AX role the label addresses — `Edit` on a menu bar is not `Edit` on a toolbar button, and both `editMenuBar` and `markerListEditMenuButton` carry `Edit`, `편집`, `編集` |
 | `coverage_attributes[locale]` | which AX attribute carried the string — `title`, `description`, `help` or `value`. Provenance has always named it; without it here, a string found in ANY attribute backed the claim, and some labels record in their own rationale which attribute is the readback and which is not (`pluginWindowViewSwitcher`: AXDescription is authoritative, AXTitle is not) |
 | `coverage_identifiers[locale]` | for `identifier` only: the AXIdentifier, which the record must have been seen carrying |
-| `coverage_absent[locale]` | `true` for a MEASURED ABSENCE — see below |
+| `coverage_absent[locale]` | for a MEASURED ABSENCE: a fragment of the element's AX path, containing `/` or `[` — see below |
 
 Without the role, any record showing either element backs both, which is the same shared-string
 hole D1 closes for variants.
@@ -148,7 +148,8 @@ hole D1 closes for variants.
 discharge by measuring anything. A permanent gap overstates the real one and trains readers to
 ignore the number.
 
-**Measured absence** is `measured` plus `coverage_absent[locale]: true`, and it is not a fourth
+**Measured absence** is `measured` plus `coverage_absent[locale]` naming the element — a fragment
+of its AX path, containing a `/` or a `[`. It is not a fourth
 state — it is the same claim ("somebody looked in this locale") about a different outcome. There is
 no `absent` state, because absence and presence are outcomes of one measurement, not two kinds of
 knowledge.
@@ -159,8 +160,14 @@ the label's strings, which a record proving absence can never produce, so "we lo
 none of these" collapsed back into "nobody has looked" — the one distinction this ledger exists to
 make. Both halves are now mechanical:
 
-- the element must have been **seen** — the cited record contains a row of the declared role;
-- it must have shown **none** of the strings — no row of that role carries one.
+- the element must have been **seen** — the cited record contains a row of the declared role at
+  that path;
+- it must have shown **none** of the strings — no row selected there carries one.
+
+`true` was the first spelling and it is refused now: it let any row of the declared role anywhere in
+the record stand for an element nobody had looked at. So is a bare substring like `"AX"`, which
+selects everything and identifies nothing. What this still cannot check is that the path is the
+element the product reads — the same limit `roles` has, and stated for the same reason.
 
 Absence claimed about an element nobody located is refused, and so is absence the record itself
 contradicts. Nothing here is manufactured: the campaign in D4 proposes nothing for a label whose

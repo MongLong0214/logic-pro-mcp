@@ -188,7 +188,13 @@ def swift_label_uses(repo=REPO):
                 body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            used |= set(re.findall(r"AXLocalePolicy\.(\w+)", body))
+            # Comments stripped first, and whitespace allowed around the dot. The regex was
+            # `AXLocalePolicy\.(\w+)` against the raw text, which missed a use written as
+            # `AXLocalePolicy\n    .cancelButton` — Swift's own formatting — and counted a label
+            # named only in a historical comment as live, blocking an honest retirement.
+            body = re.sub(r"/\*.*?\*/", " ", body, flags=re.S)
+            body = re.sub(r"//[^\n]*", " ", body)
+            used |= set(re.findall(r"AXLocalePolicy\s*\.\s*(\w+)", body))
     return used
 
 

@@ -161,6 +161,33 @@ def main():
         guard.OBS = saved
     case("the GUARD accepts the coverage the proposer wrote", problems == [], problems)
 
+    # 5d. A label whose NAME SHAPE gives no role hint had every role accepted, and `apply` then
+    #     promoted whatever the census hit into the label's `roles`. On the first real campaign that
+    #     wrote 11 citations and the list is its own indictment: barSliderLabel backed by an
+    #     AXMenuItem, trackRecordEnableCheckbox by an AXMenuBarItem, the transport controls by menu
+    #     items — Logic's menus carry the same words. That is the shared-string collision the guard
+    #     exists to refuse, arriving through the tool that fills the guard's data in.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[View]",
+                          title="View")]), open(cpath, "w"))
+    lp = write(tmp, labels(pluginWindowViewSwitcher=("View", [])))
+    _, _, props, _ = propose.main(cpath, lp)
+    n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), props,
+                                  {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
+    entry = json.load(open(lp, encoding="utf-8"))["labels"]["pluginWindowViewSwitcher"]
+    case("an unconstrained role is proposed but never written", (n_prov, n_cov) == (0, 0),
+         (n_prov, n_cov))
+    case("...and the label acquires no role from it", entry.get("roles") is None, entry)
+    case("...nor a coverage citation", entry.get("coverage_records") is None, entry)
+
+    # ...but once a person DECLARES the roles, the same census does write.
+    doc = json.load(open(lp, encoding="utf-8"))
+    doc["labels"]["pluginWindowViewSwitcher"]["roles"] = ["AXMenuItem"]
+    open(lp, "w", encoding="utf-8").write(json.dumps(doc, ensure_ascii=False))
+    _, _, props, _ = propose.main(cpath, lp)
+    _, n_cov = propose.apply(lp, json.load(open(cpath)), props,
+                             {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
+    case("a declared role unblocks the write", n_cov == 1, n_cov)
+
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
     n_prov, _ = propose.apply(lp, json.load(open(cpath)), props, {})

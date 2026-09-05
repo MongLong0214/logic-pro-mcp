@@ -166,23 +166,11 @@
         "마디"
       ],
       "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only.",
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
-      },
-      "coverage_records": {
-        "en-US": "2026-09-05-en-US-arrange-menus-census"
-      },
-      "coverage_roles": {
-        "en-US": "AXMenuItem"
-      },
-      "coverage_attributes": {
-        "en-US": "title"
       }
     },
     "beatSliderLabel": {
@@ -244,26 +232,11 @@
         "コントロールバー"
       ],
       "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
-      "provenance": {
-        "コントロールバー": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "コントロールバー",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "exact"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "createButton": {
@@ -1368,23 +1341,11 @@
         "보기"
       ],
       "rationale": "Measured live on 2026-09-02 in Compressor: the Controls/editor AXMenuButton identifies itself by AXDescription (View/보기); AXTitle is not a view readback.",
-      "roles": [
-        "AXMenuBarItem"
-      ],
       "match": "exact",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
-      },
-      "coverage_records": {
-        "en-US": "2026-09-05-en-US-arrange-menus-census"
-      },
-      "coverage_roles": {
-        "en-US": "AXMenuBarItem"
-      },
-      "coverage_attributes": {
-        "en-US": "title"
       }
     },
     "projectOrSectionMenuItem": {
@@ -2036,24 +1997,9 @@
         "Record"
       ],
       "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator.",
-      "provenance": {
-        "Record": {
-          "locale": "en-US",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-en-US-arrange-menus-census",
-          "observed": "Record",
-          "role": "AXMenuBarItem",
-          "attribute": "title",
-          "match": "exact"
-        }
-      },
-      "roles": [
-        "AXMenuBarItem"
-      ],
       "match": "exact",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
         "ja-JP": "unmeasured"
       }
@@ -2204,66 +2150,11 @@
         "クリック"
       ],
       "rationale": "Counts distinct transport-control labels to classify the control bar; read-only.",
-      "provenance": {
-        "録音": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "録音…",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        },
-        "メトロノーム": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "メトロノーム…",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        },
-        "サイクル": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "ロケータを選択範囲で設定してサイクルを有効にする",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        },
-        "再生": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "再生ヘッド位置のマーカーを削除",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        },
-        "stop": {
-          "locale": "en-US",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-en-US-arrange-menus-census",
-          "observed": "Jump between Marquee- and Project Start if stopped",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "transportContainerMetadata": {
@@ -2274,26 +2165,11 @@
         "コントロールバー"
       ],
       "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
-      "provenance": {
-        "コントロールバー": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "コントロールバー",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "exact"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "exact",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "transportCycleControl": {
@@ -2304,26 +2180,11 @@
         "サイクル"
       ],
       "rationale": "Identifies the Cycle/Loop transport control; read-only.",
-      "provenance": {
-        "サイクル": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "ロケータを選択範囲で設定してサイクルを有効にする",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "transportKeywordFalseFriends": {
@@ -2360,26 +2221,11 @@
         "クリック"
       ],
       "rationale": "Identifies the Metronome/Click transport control; read-only.",
-      "provenance": {
-        "メトロノーム": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "メトロノーム…",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "transportPlayControl": {
@@ -2389,35 +2235,11 @@
         "再生"
       ],
       "rationale": "Identifies the Play transport control when reading TransportState; read-only.",
-      "provenance": {
-        "再生": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "再生ヘッド位置のマーカーを削除",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
-      },
-      "coverage_records": {
-        "en-US": "2026-09-05-en-US-arrange-menus-census"
-      },
-      "coverage_roles": {
-        "en-US": "AXMenuItem"
-      },
-      "coverage_attributes": {
-        "en-US": "title"
+        "ja-JP": "unmeasured"
       }
     },
     "transportRecordArmExclusion": {
@@ -2426,26 +2248,11 @@
         "활성화"
       ],
       "rationale": "Negative guard: distinguishes per-track record-arm from transport Record; read-only.",
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
-        "en-US": "measured",
+        "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
-      },
-      "coverage_records": {
-        "ja-JP": "2026-09-05-ja-JP-arrange-menus-census",
-        "en-US": "2026-09-05-en-US-arrange-menus-census"
-      },
-      "coverage_roles": {
-        "ja-JP": "AXMenuItem",
-        "en-US": "AXMenuItem"
-      },
-      "coverage_attributes": {
-        "ja-JP": "title",
-        "en-US": "title"
+        "ja-JP": "unmeasured"
       }
     },
     "transportRecordControl": {
@@ -2455,26 +2262,11 @@
         "録音"
       ],
       "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
-      "provenance": {
-        "録音": {
-          "locale": "ja-JP",
-          "date": "2026-09-05",
-          "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-          "record": "2026-09-05-ja-JP-arrange-menus-census",
-          "observed": "録音…",
-          "role": "AXMenuItem",
-          "attribute": "title",
-          "match": "contains"
-        }
-      },
-      "roles": [
-        "AXMenuItem"
-      ],
       "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",
-        "ja-JP": "measured"
+        "ja-JP": "unmeasured"
       }
     },
     "transportSliderHints": {
