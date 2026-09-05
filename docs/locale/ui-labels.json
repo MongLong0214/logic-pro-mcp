@@ -2175,7 +2175,7 @@
         "스텝 입력 키보드"
       ],
       "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action.",
-      "match": "exact",
+      "match": "contains",
       "coverage": {
         "en-US": "unmeasured",
         "ko-KR": "unmeasured",

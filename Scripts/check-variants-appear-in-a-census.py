@@ -59,13 +59,28 @@ def locale_of(text):
     return None
 
 
-AFFIX_MIN = 4
-# The shorter side must be at least half the longer. The shape this signal is for is a string that
-# lost a leading or trailing WORD — `Show Mixer` -> `Mixer` is 0.5 — and without a ratio the same
-# test also reports a six-character label inside a thirty-six-character menu title, which is
-# containment noise rather than a dropped verb. Measured: the ratio takes the list from 34 to a
-# size a person will actually read.
-AFFIX_RATIO = 0.5
+# The removed chunk must be a whole word or two, not any substring. A ratio was the first attempt
+# and it was wrong in both directions — raised by review 2026-09-05: it reported
+# `createButton` -> `Create` against the unrelated menu command `Create Group`, which a reader
+# could act on, and it suppressed the real short-tail shape `Show EQ` -> `EQ`.
+#
+# The shape this signal is for has a direction: the POLICY string is the longer one, because Logic
+# dropped a word the policy still carries. `Create` against `Create Group` is the other way round
+# and is not it.
+AFFIX_MAX_WORDS = 2
+AFFIX_MAX_CHARS = 6
+
+
+def _dropped_chunk(policy, observed):
+    """What `policy` has that `observed` does not, when one is an affix of the other. Else None."""
+    p, o = policy.casefold(), observed.casefold()
+    if o == p or len(o) >= len(p):
+        return None          # the policy must be the LONGER side — that is the dropped-word shape
+    if p.startswith(o):
+        return p[len(o):]
+    if p.endswith(o):
+        return p[:len(p) - len(o)]
+    return None
 
 
 def _carries(value, text, mode):
@@ -87,24 +102,22 @@ def _carries(value, text, mode):
 
 
 def _affix_of(text, bag):
-    """An observed string that is `text` minus a leading or trailing chunk, or plus one.
+    """An observed string that is `text` minus a leading or trailing word or two, else None.
 
-    Whole-string containment either way, with the shorter side at least `AFFIX_MIN` characters so
-    a two-letter canonical does not match half the vocabulary. Deliberately NOT word-delimited:
-    Japanese does not put spaces between words, and the same verb-dropping shape appears there.
+    Whole words where the language has them, and a short character budget where it does not —
+    Japanese writes `ステップインプットキーボード` with no spaces, and the same verb-dropping shape
+    appears there.
     """
-    lowered = text.casefold()
     best = None
     for other in bag:
-        o = other.casefold()
-        if o == lowered:
-            return None
-        if min(len(o), len(lowered)) < AFFIX_MIN:
+        chunk = _dropped_chunk(text, other)
+        if chunk is None:
             continue
-        if (o in lowered or lowered in o) and \
-                min(len(o), len(lowered)) >= AFFIX_RATIO * max(len(o), len(lowered)):
-            if best is None or abs(len(other) - len(text)) < abs(len(best) - len(text)):
-                best = other
+        words = [w for w in chunk.split() if w]
+        if not (len(words) <= AFFIX_MAX_WORDS if words else len(chunk.strip()) <= AFFIX_MAX_CHARS):
+            continue
+        if best is None or len(other) > len(best):
+            best = other
     return best
 
 

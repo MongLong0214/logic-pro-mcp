@@ -119,12 +119,21 @@ for shown, observed in [
          guard._affix_of(shown, {observed, "Untitled"}) == observed,
          guard._affix_of(shown, {observed, "Untitled"}))
 
-# ...and does not fire on containment noise, which is what the ratio is for.
+# The short tail, which a length ratio suppressed. Raised by review 2026-09-05.
+case("affix finds a two-character tail", guard._affix_of("Show EQ", {"EQ"}) == "EQ",
+     guard._affix_of("Show EQ", {"EQ"}))
+
+# ...and the DIRECTION, which is what makes it a dropped-word signal rather than substring noise.
+# The policy string must be the longer one, because Logic dropped a word the policy still carries.
+case("affix does not report an unrelated LONGER menu command",
+     guard._affix_of("Create", {"Create Group"}) is None,
+     guard._affix_of("Create", {"Create Group"}))
 case("affix ignores a short label inside a long unrelated title",
      guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}) is None,
      guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}))
-case("affix ignores a string too short to mean anything",
-     guard._affix_of("Ch", {"Chx"}) is None, guard._affix_of("Ch", {"Chx"}))
+case("affix ignores a chunk that is several words",
+     guard._affix_of("Stop and Go to Last Locate Position", {"Position"}) is None,
+     guard._affix_of("Stop and Go to Last Locate Position", {"Position"}))
 
 # A containment label is not absent because no string EQUALS it — Logic showing it inside a longer
 # value is a match for that label. Testing absence by equality regardless of mode reported fifty
