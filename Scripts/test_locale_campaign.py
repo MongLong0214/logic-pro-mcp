@@ -230,6 +230,27 @@ def main():
     case("...and leaves no dangling citation", not entry.get("provenance")
          and not entry.get("coverage_records"), entry)
 
+    # 6c. A record that RESOLVES but carries no date is valid evidence for COVERAGE, which has no
+    #     date field, and must not be skipped. The first cut asked resolution and date validity as
+    #     one question and dropped it. Raised by review 2026-09-06 — the fix for 6b introduced this.
+    obs_nodate = Path(tempfile.mkdtemp())
+    rid_nodate = "2026-09-05-ko-KR-arrange-window-nodate"
+    json.dump({"id": rid_nodate, "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXButton", "title": "Solo"}]},
+              open(obs_nodate / f"{rid_nodate}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo")]), open(cpath, "w"))
+    lp = write(tmp, labels(soloButton=("Solo", [])))
+    _, _, nodate_props, _ = propose.main(cpath, lp)
+    assert nodate_props, "the fixture must propose something, or the cases below assert nothing"
+    saved_nd, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_nodate)
+    try:
+        n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), nodate_props,
+                                      {"arrange.window": rid_nodate})
+    finally:
+        propose._GUARD.OBS = saved_nd
+    case("a dateless record still backs COVERAGE", n_cov == 1, (n_prov, n_cov))
+    case("...and writes no provenance from it", n_prov == 0, (n_prov, n_cov))
+
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
     n_prov, _ = propose.apply(lp, json.load(open(cpath)), props, {})

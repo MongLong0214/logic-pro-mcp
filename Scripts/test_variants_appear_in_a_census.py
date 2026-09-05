@@ -142,6 +142,15 @@ import unicodedata as _u
 case("affix sees through NFD/NFC",
      guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}) == "스텝 입력 키보드",
      guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}))
+# A two-character label in a space-less language is a label, not a fragment. An earlier cut
+# demanded three characters of the RETAINED side and silently dropped this shape. Raised by review
+# 2026-09-06.
+case("affix keeps a short retained label where the language has no spaces",
+     guard._affix_of("情報を表示", {"情報"}) == "情報", guard._affix_of("情報を表示", {"情報"}))
+# ...and it trims, like every other comparison here. A padded policy string was comparable to
+# `carries` and not to this one.
+case("affix sees through padding",
+     guard._affix_of("Show Mixer ", {"Mixer"}) == "Mixer", guard._affix_of("Show Mixer ", {"Mixer"}))
 case("affix ignores a chunk that is several words",
      guard._affix_of("Stop and Go to Last Locate Position", {"Position"}) is None,
      guard._affix_of("Stop and Go to Last Locate Position", {"Position"}))

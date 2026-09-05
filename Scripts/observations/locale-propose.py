@@ -190,12 +190,20 @@ def apply(labels_path, census, proposals, records_by_surface):
             # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
             # record that does not exist write a block with an empty date and a dangling citation —
             # the guard then rejects the ledger AFTER it has been mutated, which is the wrong end of
-            # the transaction. Raised by review 2026-09-06, and introduced by taking the date from
-            # the record: before that the date was always well-formed and the id was the only thing
-            # that could be wrong.
-            if not rid or not record_date(rid):
+            # the transaction.
+            #
+            # But resolution and DATE VALIDITY are two questions, and the first cut asked them as
+            # one. Coverage needs a resolved record and carries no date at all, so a record without
+            # one is perfectly good evidence for it and was being skipped; while a malformed but
+            # non-empty date passed and wrote provenance the guard then refused. Both raised by
+            # review, one round apart, and the second was introduced by the fix for the first.
+            if not rid or _GUARD._record(rid) is None:
                 continue
             if h["string"] in (entry.get("variants") or []):
+                # A provenance block must carry a REAL date matching its record's — the coverage
+                # branch below has no date field and asks nothing of it.
+                if not _GUARD._is_real_date(record_date(rid)):
+                    continue
                 prov = entry.setdefault("provenance", {})
                 if h["string"] in prov:
                     continue

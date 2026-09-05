@@ -68,13 +68,14 @@ def locale_of(text):
 # dropped a word the policy still carries. `Create` against `Create Group` is the other way round
 # and is not it.
 AFFIX_MAX_WORDS = 2
-# A space-less policy string cannot be split into words, so the chunk is measured in characters and
-# the RETAINED side must still be substantial. Without that second half, `position` minus `on`
-# leaves `positi` — one "word" to `str.split`, six characters, and accepted. Raised by review
-# 2026-09-06: `str.split` makes every non-empty fragment a word, so the word limit was never a
-# word limit at all.
+# A space-less policy string cannot be split into words, so the chunk is measured in characters.
+# `position` minus `on` leaves `positi`, six characters, which the budget already refuses — an
+# earlier cut also demanded the RETAINED side be three characters or more, and that rejected a real
+# Japanese shape: 「情報を表示」 -> 「情報」 drops three characters and keeps a valid two-character
+# label. Raised by review 2026-09-06; character count is not a proxy for whether a label in a
+# space-less language is a fragment, so it is asked only of the chunk, where it is a budget rather
+# than a judgement about words.
 AFFIX_MAX_CHARS = 4
-AFFIX_MIN_RETAINED = 3
 
 
 def _dropped_chunk(policy, observed):
@@ -84,8 +85,12 @@ def _dropped_chunk(policy, observed):
     equivalence, so a policy string in one normal form and a census string in the other are the
     same text. Without it this signal silently missed the cases it exists for.
     """
-    p = unicodedata.normalize("NFC", policy).casefold()
-    o = unicodedata.normalize("NFC", observed).casefold()
+    # Trimmed as well as folded and normalised. `carries` trims the label in every mode and the
+    # observed value in all but `exact_strict`, so a padded policy string was comparable there and
+    # not here — the two disagreed about the same pair. Raised by review 2026-09-06: case and NFC
+    # had been brought into line, trimming had not.
+    p = unicodedata.normalize("NFC", policy.strip()).casefold()
+    o = unicodedata.normalize("NFC", observed.strip()).casefold()
     if o == p or len(o) >= len(p):
         return None          # the policy must be the LONGER side — that is the dropped-word shape
     if p.startswith(o):
@@ -105,7 +110,7 @@ def _chunk_is_a_dropped_word(policy, observed, chunk):
         return 1 <= len(chunk.split()) <= AFFIX_MAX_WORDS
     # No spaces to split on — Japanese writes `ステップインプットキーボード` as one run. Budget the
     # chunk, and require what remains to be long enough to be a label rather than a fragment.
-    return len(chunk.strip()) <= AFFIX_MAX_CHARS and len(observed.strip()) >= AFFIX_MIN_RETAINED
+    return len(chunk.strip()) <= AFFIX_MAX_CHARS
 
 
 def _carries(value, text, mode):
