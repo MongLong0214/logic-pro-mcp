@@ -1,0 +1,85 @@
+{
+  "id": "2026-09-05-a-resource-only-read-was-absent-from-its-own-receipt",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "What a live harness's own receipt records when the harness drives the product through `resources/read`",
+  "question": "When a harness reads the product only through `resources/read`, which of its operations does the evidence receipt record?",
+  "verdict": "works",
+  "issues": [
+    769
+  ],
+  "surface": "mixer.routing",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "project lpm-locale-campaign.logicx; Logic switched to English for this run"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_291_output_slot_is_read.py <worktree> <head> (with LPM_EVIDENCE_ROOT exported)",
+    "expected": "9 of 9 checks pass and the receipt records 7 operations, 6 of them `resources/read` on `logic://mixer`"
+  },
+  "depends": [
+    "Scripts/livekit/live_291_output_slot_is_read.py",
+    "Scripts/livekit/evidence.py"
+  ],
+  "method": "Ran the #291 output harness against a live Logic at head a88f49e0 with the release binary, then read the operation records out of the evidence document it wrote.",
+  "observations": [
+    {
+      "what": "checks the harness ran",
+      "checks": 9,
+      "passed": 9,
+      "operations_driven": 7
+    },
+    {
+      "what": "the operations the receipt recorded, in order",
+      "rows": [
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        },
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        },
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        },
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        },
+        {
+          "method": "tools/call",
+          "tool": "logic_system",
+          "command": "refresh_cache"
+        },
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        },
+        {
+          "method": "resources/read",
+          "uri": "logic://mixer"
+        }
+      ]
+    },
+    {
+      "what": "how many of those the PREVIOUS rule would have counted — it recorded `tools/call` only",
+      "tools_call_operations": 1,
+      "resources_read_operations": 6
+    }
+  ],
+  "conclusion": "Six of the seven operations are `resources/read`, and the previous rule recorded none of them. This run would have scored `operations_driven: 1` under that rule — the single `refresh_cache` tool call — so it would have passed `is_clean`'s positive-count clause while its receipt named none of the six reads that produced the answer. That is the sharper statement than the issue's: the clause was satisfiable here by a warm-up call, and the work was absent from the document.",
+  "limits": [
+    "One harness, one project, one locale. It says nothing about harnesses that mix the two surfaces differently.",
+    "It does NOT reproduce the `operations_driven: 0` documents #769 cites. Those were earlier revisions of the #291 harnesses; this revision makes a `refresh_cache` tool call, so the old rule would have counted 1 rather than 0 here. The zero is quoted from the issue, not re-measured.",
+    "This record does NOT say whether the mixer read returned a correct destination. That is the harness's own subject and its nine checks are where it is asserted; nothing here carries a destination value, so the verdict is about the RECEIPT and reaches no further. A review refused an earlier version of this record for a `question` that asked about both while the observations answered one.",
+    "The receipt records a resource read whether or not the resource touched Logic — some are served statically. Counting one rules out a run that touched nothing; it does not show the run drove its own subject."
+  ],
+  "supersedes": null
+}

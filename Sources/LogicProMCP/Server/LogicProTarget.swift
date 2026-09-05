@@ -129,13 +129,41 @@ enum LogicProVariantPolicy {
             directory = parent
         }
 
-        let sourceRelative = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent(relativePath)
-        if FileManager.default.fileExists(atPath: sourceRelative.path) {
+        if let sourceRelative = ancestorOfThisFile(containing: relativePath) {
             return sourceRelative
+        }
+        return nil
+    }
+
+    /// The nearest ancestor of THIS SOURCE FILE that actually contains `relativePath`.
+    ///
+    /// This was three `deletingLastPathComponent()` calls, which landed on `<repo>/Sources` and
+    /// probed `<repo>/Sources/manifest.json` — a path that has never existed, so the fallback could
+    /// not fire at all (#776). Counting directory levels made that both possible and silent: the
+    /// count was right when it was written and wrong the moment this file's depth changed, with
+    /// nothing to notice.
+    ///
+    /// The first repair walked up to a directory holding `Package.swift`. A review refused it, and
+    /// was right: that is a PACKAGE root, not a repository root. Given
+    /// `/repo/packages/logic/Package.swift` with `/repo/manifest.json` above it, the walk stops at
+    /// the inner package and the file it was sent for is one level further up. The marker answers a
+    /// different question than the caller asked.
+    ///
+    /// So there is no marker. The caller names a file; this walks up until a directory HAS it. That
+    /// cannot be wrong about which ancestor is meant, because the thing being looked for is the
+    /// test.
+    static func ancestorOfThisFile(containing relativePath: String) -> URL? {
+        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = directory.appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            let parent = directory.deletingLastPathComponent()
+            if parent.path == directory.path {
+                break
+            }
+            directory = parent
         }
         return nil
     }

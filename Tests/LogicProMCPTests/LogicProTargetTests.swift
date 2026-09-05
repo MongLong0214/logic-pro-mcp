@@ -225,3 +225,27 @@ import Testing
     let pid = ProcessUtils.parseLogicProPID(fromProcessList: output)
     #expect(pid == 100)
 }
+
+
+@Test func issue776SourceRelativeFallbackReachesTheFileItWasSentFor() throws {
+    // The fallback existed to find `<repo>/manifest.json` when the working directory is outside
+    // the repository, which is the normal case for an MCP client. Three `deletingLastPathComponent`
+    // calls landed on `<repo>/Sources` and probed a path that has never existed, so it could not
+    // fire at all — and nothing failed, because nothing tested it.
+    let found = try #require(LogicProVariantPolicy.ancestorOfThisFile(containing: "manifest.json"))
+    #expect(found.lastPathComponent == "manifest.json")
+    #expect(FileManager.default.fileExists(atPath: found.path))
+    // Not `<repo>/Sources/manifest.json`, which is the path the old count produced.
+    #expect(found.deletingLastPathComponent().lastPathComponent != "Sources")
+
+    // A review refused an earlier repair that walked to a `Package.swift` marker: that is a PACKAGE
+    // root, and a nested package would stop the walk one level below the file being sought. This
+    // asks for the file itself, so a name nothing holds resolves nowhere rather than to the wrong
+    // ancestor — the failure a marker cannot express.
+    #expect(LogicProVariantPolicy.ancestorOfThisFile(containing: "no-such-file-1a2b3c.json") == nil)
+}
+
+// Not tested here: `findRepoFile` itself under a working directory that misses. Driving that
+// means changing the PROCESS's current directory, which is global state this suite runs in
+// parallel with — a test that mutates it would make unrelated tests fail on timing. The unit
+// above covers the defect; the integration would need process isolation the suite does not have.

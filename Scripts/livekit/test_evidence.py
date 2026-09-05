@@ -606,6 +606,34 @@ try:
     shapes.append(("Evidence refuses an unknown surface", False))
 except ValueError:
     shapes.append(("Evidence refuses an unknown surface", True))
+# #769 — `operations_driven` says it counts a run that touched the product, and only `tools/call`
+# was recorded. A harness driving the product entirely through its resource surface scored zero and
+# could never be clean, however much it read; every #291 evidence document ever written scored
+# ops=0, three of them with every check green. The rule is a pure function so it can be asked.
+_OPS = [
+    ("a tool call is an operation",
+     E.Driver.operation_of("tools/call",
+                           {"name": "logic", "arguments": {"command": "c", "params": {"a": 1}}})
+     == ("logic", "c", {"a": 1})),
+    ("a resource read is an operation too",
+     E.Driver.operation_of("resources/read", {"uri": "logic://tracks"})
+     == ("logic://tracks", "resources/read", None)),
+    ("...and it names the URI it read, so the receipt says which",
+     (E.Driver.operation_of("resources/read", {"uri": "logic://mixer"}) or (None,))[0]
+     == "logic://mixer"),
+    ("a resource read the server REJECTED is not an operation",
+     E.Driver.operation_of("resources/read", {"uri": "logic://does-not-exist"},
+                           {"error": {"code": -32602, "message": "invalidParams"}}) is None),
+    ("...while a tool call that errored still is — it ran against Logic, a bad URI names nothing",
+     E.Driver.operation_of("tools/call", {"name": "logic", "arguments": {"command": "c"}},
+                           {"error": {"code": -32000}}) == ("logic", "c", None)),
+    ("a handshake is not an operation",
+     E.Driver.operation_of("initialize", {"protocolVersion": "1"}) is None),
+    ("a notification with no params is not an operation",
+     E.Driver.operation_of("tools/call", None) is None),
+]
+shapes.extend(_OPS)
+
 for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
