@@ -173,6 +173,19 @@ def main():
     check("a raise with no members is refused",
           proc.returncode == 1 and "names no `members`" in proc.stdout, proc.stdout[:300])
 
+    # 5d. A raise authorises EXACTLY its members. Listing a member that is not being added lets one
+    #     decision pre-authorise a later, unrelated gap: the entry stays in the file, the second
+    #     member appears on a later merge, and `added - members` is still empty. The documented
+    #     rule said "exactly what is being allowed in" while the code said "at least".
+    root = _tree(labels, records, exact, git_init=True)
+    env = _branch(root, labels2, grown,
+                  raised={"undocumented_variants": {"date": "2026-09-05", "reason": "a real sentence",
+                                                    "members": ["L\u2192c", "L\u2192notyet"]}})
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True, env=env)
+    check("a raise may not name members that are not being added",
+          proc.returncode == 1 and "not being added here" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
+
     # 6. A raise needs a REAL date and a reason with substance. `\u200b` survives strip(), and
     #    `2026-99-99` matches a date-shaped regex while being no date at all.
     for label, entry, want in (

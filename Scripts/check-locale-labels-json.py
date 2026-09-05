@@ -107,6 +107,9 @@ def swift_containment(repo=REPO):
 
 
 _containment = swift_containment()
+# Which labels the product still reads, for auditing `retired`. Same derivation site as the
+# containment sets, because a rule with two implementations is a rule that drifts.
+_live_label_uses = _module().swift_label_uses()
 
 
 def provenance_problems(name, entry):
@@ -166,8 +169,11 @@ def provenance_problems(name, entry):
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
                        f"no {role} whose {attribute} carried it — a record that never saw it on that "
                        f"element cannot be cited for it")
-        elif str(block.get("observed", "")).strip() != seen.strip():
-            # `observed` is a QUOTE of the string Logic carried, and the guard now holds it to that.
+        elif str(block.get("observed", "")) != seen:
+            # `observed` is a QUOTE of the string Logic carried, and the guard now holds it to
+            # that, RAW. Stripping both sides was the gap between the rule this file claims and the
+            # rule it applied: a padded quote passed while the record held no such value, and the
+            # documentation said "character for character" throughout.
             # Checking only that it CONTAINED the variant let the rest of the field be written
             # freely: a real truncated reading was cited while `observed` claimed the untruncated
             # text nobody had read. Whatever the record holds is what may be quoted.
@@ -326,6 +332,10 @@ def coverage_problems(name, entry, locales, values):
             if not reason:
                 out.append(f"{name}: coverage[{loc}] is 'retired' but the label names no "
                            f"`retired.reason` — a label excused from measurement says why")
+            elif name in _live_label_uses:
+                out.append(f"{name}: coverage[{loc}] is 'retired', but `AXLocalePolicy.{name}` is "
+                           f"still read in Sources/. A label the product uses is not retired, and "
+                           f"retiring it drops a real gap out of every ceiling without a raise")
             continue
         if state == "unmeasured":
             if loc in present_in:
@@ -354,7 +364,7 @@ def coverage_problems(name, entry, locales, values):
         elif role not in declared:
             out.append(f"{name}: coverage[{loc}] cites a {role}, which is not one of this label's "
                        f"declared roles {declared}")
-        elif state == "measured" and (entry.get("coverage_absent") or {}).get(loc):
+        elif state == "measured" and (entry.get("coverage_absent") or {}).get(loc) is not None:
             # MEASURED ABSENCE. The ADR always said "this element is unlabelled" was a `measured`
             # whose record says so, but the guard required a sighting CARRYING one of the label's
             # strings — a predicate a record proving absence can never satisfy. So the document
@@ -364,13 +374,28 @@ def coverage_problems(name, entry, locales, values):
             # Both halves are mechanical: the element must have been SEEN (a row of the declared
             # role is in the record) and it must have shown NONE of the strings (no row of that role
             # carries one). Absence claimed about an element nobody found is still refused.
-            seen = [r for r in _rows(rec) if r.get("role") == role]
-            carrying = [t for t in strings if t and sighting(rec, t, role,
-                                                             exact=(mode == "exact"))]
+            # The element, not just its ROLE. `true` accepted any row of the declared role
+            # anywhere in the cited record, so a mixer reading stood in for a Cancel button nobody
+            # had looked at — the record was real, the role matched, and the claim was unrelated to
+            # both. `coverage_absent[locale]` is now a fragment of the AX path, which makes the
+            # claim something a reader can go and check.
+            where = (entry.get("coverage_absent") or {}).get(loc)
+            if not isinstance(where, str) or not where.strip():
+                out.append(f"{name}: coverage_absent[{loc}] must name the ELEMENT the absence is "
+                           f"about — a fragment of its AX path. `true` let any row of this role "
+                           f"stand for one nobody looked at")
+                continue
+            seen = [r for r in _rows(rec)
+                    if r.get("role") == role and where in str(r.get("path") or "")]
+            carrying = [v for t in strings if t
+                        for r in seen
+                        for v in (r.get(a) for a in LABEL_ATTRS)
+                        if isinstance(v, str) and ((v == t) if mode == "exact" else (t in v))]
             if not seen:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
-                           f"{cites.get(loc)!r}, which contains no {role} at all — absence is a "
-                           f"reading of an element that was found, not of one nobody located")
+                           f"{cites.get(loc)!r}, which contains no {role} whose path carries "
+                           f"{where!r} — absence is a reading of an element that was found, not of "
+                           f"one nobody located")
             elif carrying:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE, but its record shows "
                            f"a {role} carrying {carrying[0]!r} — that is a presence")

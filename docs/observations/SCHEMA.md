@@ -144,8 +144,10 @@ string under that mode. Three further rules make the citation hold:
   free, and a real but truncated reading was cited while `observed` claimed untruncated text.
 - **The role must be one the label declares** in its `roles` list. Otherwise a sighting of the same
   string on a different element backs the wrong label — `Edit` on a menu bar is not `Edit` on a
-  toolbar button. `roles` is author-typed: a constraint can only refuse evidence, never manufacture
-  it, so a wrong one costs a false RED rather than a false claim.
+  toolbar button. `roles` is author-typed, and it is NOT the harmless kind of typed constraint: it
+  selects which rows are searched, so a wrong role admits a sighting of the wrong element rather
+  than merely refusing a right one. What this rule checks is that a citation names an element class
+  and a record that shows one. It does not check that the class is the one the product searches.
 - **A record's `expected` / `counterexample` subtrees are not readings.** They are element-shaped on
   purpose, which is what let a counterexample back the claim it was written to deny.
 
@@ -157,7 +159,15 @@ serialized record, which accepted the variant `input` on the strength of a key n
 
 `coverage` adds `retired` to `measured` / `identifier` / `unmeasured`, for a label whose element is
 no longer read through it — permanent debt no measurement could ever discharge. It requires a
-reason.
+reason, and the reason is audited: a label whose name still appears as `AXLocalePolicy.<name>` in
+`Sources/` cannot be retired. Taken on trust it was an escape hatch, because the projection marks
+every locale `retired` and the ratchets count only literal `unmeasured` — so asserting a live label
+was gone dropped a real gap out of every ceiling with no raise.
+
+**Measured absence** — `measured` with `coverage_absent[locale]` — names the element it is about, as
+a fragment of its AX path. The record must contain a row of the declared role at that path, and no
+row there may carry any of the label's strings. `true` was accepted at first and it let any row of
+the role anywhere in the record stand for an element nobody had looked at.
 
 What this does NOT check is whether a record's own rows were read or typed. A record carries
 readings, and a person writing down what they saw is how most of this ledger was built; the guard

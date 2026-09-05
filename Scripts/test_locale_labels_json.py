@@ -46,7 +46,8 @@ def _ledger(records):
 
 
 def _row(role, **attrs):
-    r = {"role": role, "title": None, "description": None, "help": None, "value": None, "identifier": None}
+    r = {"role": role, "title": None, "description": None, "help": None, "value": None,
+         "identifier": None, "path": None}
     r.update(attrs)
     return r
 
@@ -344,6 +345,13 @@ def main():
          any("actually carried" in x for x in pp(padded)), pp(padded))
     short = _entry(["입력 슬롯"], {"입력 슬롯": _prov(observed="입력 슬롯")}, ko_measured)
     case("...nor understate it", any("actually carried" in x for x in pp(short)), pp(short))
+    # Compared RAW. Stripping both sides is not "character for character", and a padded quote
+    # passed while the record held no such value — the documentation claimed the strict rule the
+    # whole time this one was applied.
+    padded = _entry(["입력 슬롯"],
+                    {"입력 슬롯": _prov(observed="  입력 슬롯. 채널 스트립 입력 소스  ")}, ko_measured)
+    case("...nor pad it with whitespace the record does not have",
+         any("actually carried" in x for x in pp(padded)), pp(padded))
 
     # 17. The role must be one the LABEL declares. Without this, `editMenuBar` was backed by an
     #     AXMenuButton sighting belonging to a different label that shows the same string — the
@@ -408,22 +416,35 @@ def main():
     # 18c. MEASURED ABSENCE. "we looked and Logic shows none of these" was inexpressible: the ADR
     #      called it `measured`, and `measured` required a sighting CARRYING one of the strings —
     #      which a record proving absence can never produce. It collapsed into "nobody has looked".
+    #     The claim also has to say WHICH element. `true` accepted any row of the declared role
+    #     anywhere in the cited record, so an unrelated reading of some other button stood in for
+    #     one nobody had looked at — the record was real, the role matched, and neither had
+    #     anything to do with the label.
+    P = "AXWindow/AXButton[target]"
     guard.OBS = _ledger({
-        "2026-09-05-nil":  ("ko-KR", [_row("AXButton", help="전혀 다름", title="전혀 다름")]),
-        "2026-09-05-gone": ("ko-KR", [_row("AXStaticText", value="전혀 다름")]),
-        "2026-09-05-has":  ("ko-KR", [_row("AXButton", help="입력 슬롯")]),
+        "2026-09-05-nil":  ("ko-KR", [_row("AXButton", help="전혀 다름", title="전혀 다름", path=P)]),
+        "2026-09-05-gone": ("ko-KR", [_row("AXStaticText", value="전혀 다름", path=P)]),
+        "2026-09-05-has":  ("ko-KR", [_row("AXButton", help="입력 슬롯", path=P)]),
+        "2026-09-05-else": ("ko-KR", [_row("AXButton", help="전혀 다름", path="AXWindow/AXButton[other]")]),
     })
     absent = dict(roles={"ko-KR": "AXButton"}, declared=("AXButton",), canonical="입력 슬롯",
-                  absent={"ko-KR": True})
+                  absent={"ko-KR": P})
     ok_absent = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-nil"}, **absent)
     case("an element seen carrying none of the strings is measured absence",
          cp(ok_absent) == [], cp(ok_absent))
     never_found = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-gone"}, **absent)
     case("absence about an element nobody located is refused",
-         any("contains no AXButton at all" in x for x in cp(never_found)), cp(never_found))
+         any("whose path carries" in x for x in cp(never_found)), cp(never_found))
     actually_there = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-has"}, **absent)
     case("absence contradicted by the record is refused",
          any("that is a presence" in x for x in cp(actually_there)), cp(actually_there))
+    untargeted = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-nil"},
+                        **dict(absent, absent={"ko-KR": True}))
+    case("absence that names no element is refused",
+         any("must name the ELEMENT" in x for x in cp(untargeted)), cp(untargeted))
+    wrong_element = _entry([], None, ko_measured, cites={"ko-KR": "2026-09-05-else"}, **absent)
+    case("absence backed by a DIFFERENT element of the same role is refused",
+         any("whose path carries" in x for x in cp(wrong_element)), cp(wrong_element))
 
     guard.OBS = _ledger({
         "2026-09-05-ko": ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스")]),
@@ -434,6 +455,16 @@ def main():
     r_ok = _entry(["팬"], None, {loc: "retired" for loc in LOCALES},
                   retired={"reason": "superseded by sliderPanHint", "since": D})
     case("retired with a reason is accepted", cp(r_ok, "headerPanHint") == [], cp(r_ok, "headerPanHint"))
+    # ...and a label the product STILL READS cannot be retired. Any nonempty reason used to skip
+    # every other check, and since the projection then marks all three locales `retired` and the
+    # ratchets count only literal `unmeasured`, a live label could be dropped from every ceiling by
+    # asserting it was gone. `cancelButton` is read at two call sites.
+    live = sorted(guard._live_label_uses)[0] if guard._live_label_uses else None
+    if live:
+        r_live = _entry([], None, {loc: "retired" for loc in LOCALES},
+                        retired={"reason": "claimed gone while the product still reads it"})
+        case("a label the product still reads cannot be retired",
+             any("still read in Sources/" in x for x in cp(r_live, live)), cp(r_live, live))
     r_bad = _entry(["팬"], None, {loc: "retired" for loc in LOCALES})
     case("retired without a reason is refused",
          any("names no `retired.reason`" in x for x in cp(r_bad, "headerPanHint")),

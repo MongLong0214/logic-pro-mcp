@@ -62,9 +62,20 @@ text nobody had read. If the record truncated, the quote is truncated.
 
 `roles` is declared per label, not per block, and every citation must name one of them. Without it
 the shared-string hole D2 closes for coverage stays open for provenance: `editMenuBar` could be
-backed by a sighting of `編集` on an `AXMenuButton` that belongs to `markerListEditMenuButton`. It is
-author-typed on purpose — the AX role is not derivable from the Swift, and a typed CONSTRAINT can
-only ever refuse evidence, never manufacture it, so a wrong one costs a false RED somebody fixes.
+backed by a sighting of `編集` on an `AXMenuButton` that belongs to `markerListEditMenuButton`.
+
+It is author-typed because the AX role is not derivable from the Swift. An earlier draft justified
+that by calling it a constraint that "can only refuse evidence, never manufacture it". **That was
+wrong, and it is worth writing down why.** The role does not only narrow what is acceptable — it
+SELECTS which rows are searched, so a role that names the wrong element admits a sighting of that
+element. A review demonstrated it: `libraryPanelLabel` declared `AXButton` and was backed by a
+neighbouring focus-triangle button, while production searches an `AXBrowser` with `.exactStrict`.
+
+So the honest statement of what this checks: a citation names an element class and a record that
+shows one, and a reader can go and look. It does not check that the class is the one the product
+searches. Where the Swift can say — the `containsAny` call sites — the guard uses it and refuses
+disagreement; everywhere else this is a declaration, and the ledger is worth exactly what the
+declarations are.
 
 Resolving `record` to a file and matching its `host.locale` is cheap referential integrity — it
 catches a dangling id and a locale typo, and it is not evidence. A fabricated variant could cite any

@@ -159,10 +159,20 @@ def _raise_authorizes(entry, added):
     members = entry.get("members")
     if not isinstance(members, list):
         return False, "it names no `members`, so it authorises anything that ever appears"
+    # EXACTLY these members, not a superset. `added - members` alone let one raise list members
+    # that had not appeared yet, and a later merge adding them passed with no new decision — the
+    # documented rule said "exactly what is being allowed in" while the code said "at least".
+    # Once a raise lands, its members are in the base and stop being growth, so an entry that still
+    # names more than the current additions is authorising something else.
     uncovered = sorted(set(added) - set(members))
     if uncovered:
         return False, (f"{len(uncovered)} of these are outside the members it authorised, "
                        f"first {uncovered[0]!r}")
+    unused = sorted(set(members) - set(added))
+    if unused:
+        return False, (f"it names {len(unused)} member(s) that are not being added here, first "
+                       f"{unused[0]!r} — a raise authorises exactly what it lists, or it "
+                       f"pre-authorises a gap nobody has decided about yet")
     return True, ""
 
 

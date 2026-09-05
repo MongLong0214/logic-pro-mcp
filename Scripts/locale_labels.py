@@ -170,6 +170,28 @@ def swift_containment(repo=REPO):
     return names
 
 
+def swift_label_uses(repo=REPO):
+    """Every LabelSet the product still reads, by name, from `AXLocalePolicy.<name>` in Sources/.
+
+    Retirement is a fact about the CODE. Taken on trust it was an unaudited escape hatch: any
+    nonempty reason marked all three locales `retired`, the ratchets count only literal
+    `unmeasured`, and a label the product still reads could therefore be dropped from every ceiling
+    by asserting it was gone. `cancelButton` is the reviewer's example and it is read at two call
+    sites.
+    """
+    used = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            used |= set(re.findall(r"AXLocalePolicy\.(\w+)", body))
+    return used
+
+
 _CONTAINMENT = swift_containment()
 
 
