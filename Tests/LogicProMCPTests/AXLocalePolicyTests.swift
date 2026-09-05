@@ -85,9 +85,13 @@ struct AXLocalePolicyTests {
         let builder = FakeAXRuntimeBuilder()
         let menuBar = builder.element(1)
         let view = addPolicyMenuItem(builder, 2, title: "View")
-        let showMixer = addPolicyMenuItem(builder, 3, title: "Show Mixer")
+        // Measured 2026-09-05: Logic titles these View/Window entries without a Show/Hide
+        // verb — `Mixer`, `모든 플러그인 윈도우`. The fixture said `Show Mixer` and
+        // `모든 플러그인 윈도우 가리기`, so it tested the contract rather than the product,
+        // which is the second and third fixture found doing that today.
+        let showMixer = addPolicyMenuItem(builder, 3, title: "Mixer")
         let koreanWindow = addPolicyMenuItem(builder, 4, title: "윈도우")
-        let hidePlugins = addPolicyMenuItem(builder, 5, title: "모든 플러그인 윈도우 가리기")
+        let hidePlugins = addPolicyMenuItem(builder, 5, title: "모든 플러그인 윈도우")
         builder.setChildren(menuBar, [view, koreanWindow])
         builder.setChildren(view, [showMixer])
         builder.setChildren(koreanWindow, [hidePlugins])

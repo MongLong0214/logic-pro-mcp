@@ -122,9 +122,15 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// The third item this Logic build spells without a Show/Hide verb: the
+    /// View menu's entry is `Mixer`, not `Show Mixer`, in all three censuses of
+    /// 2026-09-05. Found by a unit-test fixture failing on its NEIGHBOUR — the
+    /// near-miss check did not report it, because `Show Mixer` against `Mixer`
+    /// scores 0.72 and the cutoff is 0.86, which is the limit that check prints
+    /// beside its own output.
     static let showMixerMenuItem = LabelSet(
-        canonical: "Show Mixer",
-        variants: ["믹서 보기"],
+        canonical: "Mixer",
+        variants: ["믹서", "ミキサー"],
         rationale: "Used only as a best-effort mixer reveal before structural mixer readback."
     )
 

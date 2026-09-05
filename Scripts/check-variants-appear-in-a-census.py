@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OBS = os.path.join(REPO, "docs", "observations")
@@ -56,6 +57,55 @@ def locale_of(text):
     if ASCII_ONLY.match(text or ""):
         return "en-US"
     return None
+
+
+AFFIX_MIN = 4
+# The shorter side must be at least half the longer. The shape this signal is for is a string that
+# lost a leading or trailing WORD — `Show Mixer` -> `Mixer` is 0.5 — and without a ratio the same
+# test also reports a six-character label inside a thirty-six-character menu title, which is
+# containment noise rather than a dropped verb. Measured: the ratio takes the list from 34 to a
+# size a person will actually read.
+AFFIX_RATIO = 0.5
+
+
+def _carries(value, text, mode):
+    """Whether an observed string counts as showing `text`, under the label's own mode.
+
+    The same three shapes `check-locale-labels-json.py` uses, normalised the same way. Kept small
+    rather than imported: this guard runs over every census and every label, and loading the other
+    module for its comparison would make a reporting tool depend on a gating one.
+    """
+    label = unicodedata.normalize("NFC", text.strip()).casefold()
+    subject = unicodedata.normalize("NFC", value).casefold()
+    if mode == "contains":
+        return label in subject
+    if mode == "prefix":
+        return subject.strip().startswith(label)
+    if mode == "exact_strict":
+        return subject == label
+    return subject.strip() == label
+
+
+def _affix_of(text, bag):
+    """An observed string that is `text` minus a leading or trailing chunk, or plus one.
+
+    Whole-string containment either way, with the shorter side at least `AFFIX_MIN` characters so
+    a two-letter canonical does not match half the vocabulary. Deliberately NOT word-delimited:
+    Japanese does not put spaces between words, and the same verb-dropping shape appears there.
+    """
+    lowered = text.casefold()
+    best = None
+    for other in bag:
+        o = other.casefold()
+        if o == lowered:
+            return None
+        if min(len(o), len(lowered)) < AFFIX_MIN:
+            continue
+        if (o in lowered or lowered in o) and \
+                min(len(o), len(lowered)) >= AFFIX_RATIO * max(len(o), len(lowered)):
+            if best is None or abs(len(other) - len(text)) < abs(len(best) - len(text)):
+                best = other
+    return best
 
 
 def census_strings():
@@ -106,6 +156,7 @@ def main():
             loc = locale_of(text)
             if loc is None or loc not in seen:
                 continue
+            mode = entry.get("match") or "exact"
             if (entry.get("coverage") or {}).get(loc) in ("measured", "identifier", "retired"):
                 # The ledger already knows this one was read in this locale. Two candidates were
                 # dismissed by hand before this rule existed — `eventListColumnPosition` addresses
@@ -113,13 +164,31 @@ def main():
                 # which the navigation-free census walks — and both would keep reappearing.
                 continue
             bag = seen[loc]
-            if any(text.casefold() == s.casefold() for s in bag):
+            # ABSENT under the label's OWN mode. Testing equality regardless of it called a
+            # containment label absent when Logic plainly shows it inside a longer string —
+            # `nonInsertButtonText` carries `send` and the census has `send button`, which is a
+            # MATCH for that label and was being reported as a gap. Measured 2026-09-05: the
+            # affix signal below surfaced fifty such rows before this was fixed, and they were
+            # all the guard misreading its own subject.
+            if any(_carries(s, text, mode) for s in bag):
                 continue
             key = f"{name}→{text}"
             absent.append(key)
             hit = difflib.get_close_matches(text, list(bag), n=1, cutoff=NEAR)
             if hit and hit[0].casefold() != text.casefold():
-                near.append((key, hit[0]))
+                near.append((key, hit[0], "near"))
+                continue
+            # AFFIX, a second signal the similarity score cannot see. `Show Mixer` against `Mixer`
+            # scores 0.72 and never reached the list — measured 2026-09-05, and it was a real
+            # defect found instead by a unit-test fixture failing on its neighbour. The shape is
+            # specific and cheap to name: one string is the other plus a leading or trailing word.
+            # Every Show/Hide verb Logic 12.3 dropped has it, and none of them scored high enough.
+            # AFFIX applies only where the product compares by EQUALITY. For a containment label
+            # an affix is a match, not a miss — which is why it is asked here and not above.
+            if mode != "contains":
+                affix = _affix_of(text, bag)
+                if affix:
+                    near.append((key, affix, "affix"))
 
     print(f"{len(absent)} variant(s) absent from a census in their own locale; "
           f"{len(near)} of them have a near miss")
@@ -130,8 +199,8 @@ def main():
         # review, 2026-09-05.
         for key in absent:
             print(f"   absent  {key}")
-    for key, hit in near:
-        print(f"   NEAR  {key}   ~   {hit!r}")
+    for key, hit, kind in near:
+        print(f"   {kind.upper():5s} {key}   ~   {hit!r}")
     if near:
         print("   A near miss is a string somebody may have typed instead of read. Check each "
               "against the census before dismissing it; the census is navigation-free, so a "

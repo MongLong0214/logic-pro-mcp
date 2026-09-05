@@ -1786,16 +1786,52 @@
       }
     },
     "showMixerMenuItem": {
-      "canonical": "Show Mixer",
+      "canonical": "Mixer",
       "variants": [
-        "믹서 보기"
+        "믹서",
+        "ミキサー"
       ],
       "rationale": "Used only as a best-effort mixer reveal before structural mixer readback.",
+      "provenance": {
+        "믹서": {
+          "record": "2026-09-05-ko-KR-arrange-menus-census",
+          "locale": "ko-KR",
+          "date": "2026-09-05",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "path_contains": "AXMenuBarItem[보기]/",
+          "observed": "믹서"
+        },
+        "ミキサー": {
+          "record": "2026-09-05-ja-JP-arrange-menus-census",
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "role": "AXMenuItem",
+          "attribute": "title",
+          "path_contains": "AXMenuBarItem[表示]/",
+          "observed": "ミキサー"
+        }
+      },
+      "roles": [
+        "AXMenuItem"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
-        "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "en-US": "measured",
+        "ko-KR": "measured",
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-menus-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXMenuItem"
+      },
+      "coverage_attributes": {
+        "en-US": "title"
+      },
+      "coverage_paths": {
+        "en-US": "AXMenuBarItem[View]/"
       }
     },
     "showStepInputKeyboardMenuItem": {

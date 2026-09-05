@@ -104,6 +104,36 @@ rc, out = run({"playheadPositionGroupLabel": {
     rows=[{"role": "AXGroup", "description": "再生ヘッドの位置"}])
 case("a row with a role and an attribute is a reading", "0 variant(s) absent" in out, out)
 
+# The AFFIX signal, and the five real defects it is shaped for. Every one of them is a string that
+# lost a leading or trailing word when Logic 12.3 dropped the Show/Hide verb, and NONE of them
+# scored high enough for the similarity cutoff — `Show Mixer` against `Mixer` is 0.72. That one was
+# found by a unit-test fixture failing on its neighbour, which is not a method.
+for shown, observed in [
+    ("Show Mixer", "Mixer"),
+    ("Show Step Input Keyboard", "Step Input Keyboard"),
+    ("Hide All Plug-in Windows", "All Plug-in Windows"),
+    ("모든 플러그인 윈도우 가리기", "모든 플러그인 윈도우"),
+    ("스텝 입력 키보드 보기", "스텝 입력 키보드"),
+]:
+    case(f"affix finds {observed!r} for {shown!r}",
+         guard._affix_of(shown, {observed, "Untitled"}) == observed,
+         guard._affix_of(shown, {observed, "Untitled"}))
+
+# ...and does not fire on containment noise, which is what the ratio is for.
+case("affix ignores a short label inside a long unrelated title",
+     guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}) is None,
+     guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}))
+case("affix ignores a string too short to mean anything",
+     guard._affix_of("Ch", {"Chx"}) is None, guard._affix_of("Ch", {"Chx"}))
+
+# A containment label is not absent because no string EQUALS it — Logic showing it inside a longer
+# value is a match for that label. Testing absence by equality regardless of mode reported fifty
+# such rows as gaps.
+case("a contains-label seen inside a longer value is not absent",
+     guard._carries("send button", "send", "contains"), "")
+case("...and an exact-label is not satisfied by the same thing",
+     not guard._carries("send button", "send", "exact"), "")
+
 # An empty vocabulary must not read as clean: the guard refuses rather than reporting no drift.
 ledger([], {})
 import io as _io
