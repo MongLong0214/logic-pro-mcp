@@ -92,12 +92,20 @@ def osa(script):
 
 titles = osa('tell application "System Events" to tell process "Logic Pro" to '
              'return name of every window')
-ev.check("592/precondition-an-arrange-window-is-open", "Tracks" in titles,
+# `titles` is the AppleScript window list joined into one string, so this is a substring
+# test. It carried ONE of the three spellings Logic uses, and `evidence.py` has held all
+# three since #767 — a harness that knows one of them fails a precondition about a window
+# that is open, and says "no arrange window" about a Logic that has one.
+ev.check("592/precondition-an-arrange-window-is-open",
+         any(spelling in titles for spelling in E.ARRANGE_WINDOW_TITLES),
          "Logic is up with a project, so the surviving region operation has something to answer "
          "about and an empty inventory would mean something",
-         f"titles={titles!r}", None)
+         f"titles={titles!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
 
-win = E.logic_window("Tracks") or E.logic_window(None)
+# `logic_window(None)` already walks every spelling in `ARRANGE_WINDOW_TITLES`, so naming the
+# English one first added nothing and read as though it did: a reviewer sees a fallback and
+# infers the bare call is narrower, when it is strictly wider.
+win = E.logic_window()
 HEADER_BAND, HEADER_SUBJECT = located_band("Tracks header")
 ev.check("592/precondition-the-window-frame-is-known",
          HEADER_BAND is not None and bool(HEADER_SUBJECT),

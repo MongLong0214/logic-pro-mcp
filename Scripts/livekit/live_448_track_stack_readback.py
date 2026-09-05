@@ -288,9 +288,14 @@ ev.check("448/precondition-the-independent-arrow-reader-builds",
 
 titles, _ = (osa('tell application "System Events" to tell process "Logic Pro" to '
                  'return name of every window'))
-ev.check("448/precondition-an-arrange-window-is-open", "Tracks" in titles,
+# `titles` is the AppleScript window list joined into one string, so this is a substring
+# test. It carried ONE of the three spellings Logic uses, and `evidence.py` has held all
+# three since #767 — a harness that knows one of them fails a precondition about a window
+# that is open, and says "no arrange window" about a Logic that has one.
+ev.check("448/precondition-an-arrange-window-is-open",
+         any(spelling in titles for spelling in E.ARRANGE_WINDOW_TITLES),
          "Logic has an arrange window whose track headers can be read",
-         f"titles={titles!r}", None)
+         f"titles={titles!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
 
 start = arrow_state() if os.path.exists(ARROW_TOOL) else {}
 ev.check("448/precondition-the-project-has-exactly-one-track-stack",
