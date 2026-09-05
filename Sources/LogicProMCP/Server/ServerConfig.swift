@@ -13,7 +13,6 @@ struct ServerConfig: Sendable {
     // ports — the unified naming pattern lets users approve all 4 ports the same way
     // in Logic Pro's MIDI Studio / Project Settings.
     static let virtualMIDISourceName = "LogicProMCP-MIDI-Internal"
-    static let virtualMIDISinkName = "LogicProMCP-MIDI-In"
     /// MMC device ID (0x7F = all devices)
     static let mmcDeviceID: UInt8 = 0x7F
 
