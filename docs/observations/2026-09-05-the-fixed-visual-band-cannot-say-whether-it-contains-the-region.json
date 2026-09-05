@@ -1,0 +1,129 @@
+{
+  "id": "2026-09-05-the-fixed-visual-band-cannot-say-whether-it-contains-the-region",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Whether `live_575_move_to_playhead_reachable`'s visual band contains the region it is an assertion about",
+  "question": "Does the band `(canvas_x + 12, canvas_y, 500, 300)` contain the region whose movement it claims to see?",
+  "verdict": "partial",
+  "issues": [
+    780
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "project lpm-locale-campaign.logicx, window 1920x1050 at (0,30), Mixer pane CLOSED. With the Mixer pane open Logic's Edit menu is the MIXER's — it carries `Mixer Undo` and `Select Audio Channel Strips` and has no `Move` submenu — so `move_to_playhead` cannot run at all, which is a precondition this harness does not check and a first run here failed on."
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_575_move_to_playhead_reachable.py <worktree> <head> (with LPM_EVIDENCE_ROOT exported)",
+    "expected": "the run is clean, including its visual assertion; the receipt names the band as the region's own frame before and after",
+    "cost": "~1 min"
+  },
+  "depends": [
+    "Scripts/livekit/live_575_move_to_playhead_reachable.py",
+    "Scripts/livekit/ax_region_select.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-the-fixed-band-does-not-contain-the-region.json"
+  ],
+  "method": "One run of the harness at head 424c33c8, which moved a region from bar 1 to bar 9. Every rectangle is from that run's own evidence document: the canvas from `located_band`, the region's frames from the harness's independent witness, the derived band from the visual assertion. The fixed band is the expression the harness carried, evaluated on the same canvas reading — so both bands are compared against the same region in the same layout at the same moment.",
+  "observations": [
+    {
+      "what": "the rectangles, window-relative",
+      "rows": [
+        {
+          "which": "arrange canvas, by AXDescription",
+          "x": 928,
+          "y": 162,
+          "w": 6162,
+          "h": 873
+        },
+        {
+          "which": "the band the expression would have computed",
+          "x": 940,
+          "y": 162,
+          "w": 500,
+          "h": 300
+        },
+        {
+          "which": "the region before the move",
+          "x": 937,
+          "y": 423,
+          "w": 48,
+          "h": 64
+        },
+        {
+          "which": "the region after the move",
+          "x": 1321,
+          "y": 423,
+          "w": 48,
+          "h": 64
+        },
+        {
+          "which": "the derived band this run used",
+          "x": 929,
+          "y": 415,
+          "w": 448,
+          "h": 80
+        }
+      ]
+    },
+    {
+      "what": "how much of the region each band contains",
+      "rows": [
+        {
+          "band": "fixed",
+          "position": "before",
+          "x_points": 45,
+          "of_x": 48,
+          "y_points": 39,
+          "of_y": 64
+        },
+        {
+          "band": "fixed",
+          "position": "after",
+          "x_points": 48,
+          "of_x": 48,
+          "y_points": 39,
+          "of_y": 64
+        },
+        {
+          "band": "derived",
+          "position": "before",
+          "x_points": 48,
+          "of_x": 48,
+          "y_points": 64,
+          "of_y": 64
+        },
+        {
+          "band": "derived",
+          "position": "after",
+          "x_points": 48,
+          "of_x": 48,
+          "y_points": 64,
+          "of_y": 64
+        }
+      ]
+    },
+    {
+      "what": "the run",
+      "checks": 11,
+      "passed": 11,
+      "visual_failed": 0,
+      "captures_unsettled": 0
+    }
+  ],
+  "conclusion": "Both bands see this move, and that is the finding. The fixed band clips the region vertically — it contains only part of its height at both positions, because its top edge is the canvas's and the region sits well below it — while the derived band contains the whole region at both. So the fixed band was watching a fraction of its own subject even on a run where it worked, and nothing in the expression that produced it reads the region at all: it takes the canvas position and adds constants. Whether it contains the thing it is an assertion about is therefore not decidable from anything it looks at, which is how a band can be green about nothing. The derived band contains the region by construction, at any zoom or scroll.",
+  "limits": [
+    "It does NOT reproduce the failing run the issue reports. That was ko-KR on a different project; here BOTH bands see the move. The failure is quoted from #780, not re-measured.",
+    "It does not establish which of zoom, scroll or the constant offset put the change outside the band in that run. Three candidates, none eliminated.",
+    "One window size and one zoom. The issue also reports the band computing y=-141 at 1610x819 and being clamped to 0; that arithmetic is not reproduced here, where the canvas sits at y=162.",
+    "The vertical clipping measured here is a property of where this region's track sits, not a constant. A region on the top lane would be fully inside the fixed band's height.",
+    "A first run of this harness failed with the Mixer pane open, because Logic's Edit menu is then the Mixer's and has no Move submenu. That is an unchecked precondition of the harness, not a finding about the band, and it is left unfixed here."
+  ],
+  "supersedes": null
+}
