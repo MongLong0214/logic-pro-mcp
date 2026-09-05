@@ -157,6 +157,11 @@ ev.note("778/get_regions-viewport", {
 # envelope carried no error and `complete` was true, so an empty arrangement and an unreadable one
 # were indistinguishable from the outside — which is the whole shape of #778.
 #
+# `layoutItems > 0` because `nonRegion == 0` is VACUOUS when the traversal found nothing to
+# classify: a run that selected the wrong content group would satisfy it while having read no
+# regions at all. That is the same shape as the clause above it, one level down, and it was named
+# by review 2026-09-06 against the very commit that added the clause.
+#
 # The limit, said rather than hidden: this asserts that EVERY layout item was recognised, so a
 # project holding a layout item that legitimately is not a region would fail it. On the campaign
 # project it is zero in English, which is what makes the comparison meaningful here.
@@ -166,6 +171,7 @@ ev.falsifiable(
                and isinstance(o.get("regions"), list)
                and o.get("reason") != "channels_exhausted"
                and (o.get("_debug") or {}).get("track_headers", 0) > 0
+               and (o.get("_debug") or {}).get("layoutItems", 0) > 0
                and (o.get("_debug") or {}).get("nonRegion", 1) == 0),
     regions,
     {"error": "channels_exhausted",
@@ -176,6 +182,32 @@ ev.falsifiable(
     "scanned past",
     "remove トラックコンテンツ from trackContentExplicit: no AXGroup in the arrange window matches "
     "any spelling the policy knows, and the reader refuses with exactly the counterexample")
+
+# ...and a region whose BARS cannot be read is only half enumerated. Recognising the element and
+# parsing its position are two separate localized reads, and fixing the first exposed the second:
+# measured 2026-09-06, the moment `regionHelpKeyword` learned `リージョン` this call started
+# returning `{"name": "MIDI Region", "startBar": -1, "endBar": -1}` because `parseRegionBars`
+# carried Korean and English patterns only. Fail-closed downstream — `move_to_playhead` refuses a
+# readback with `startBar <= 0` — but a caller reading the enumeration gets numbers that are not
+# positions, and the check above cannot see it because the region IS classified.
+#
+# `-1` is the refusal the parser is documented to return, so the counterexample is the envelope
+# this run produced before the Japanese pattern existed.
+ev.falsifiable(
+    "778/an-enumerated-japanese-region-carries-real-bar-numbers",
+    lambda o: (isinstance(o.get("regions"), list) and bool(o.get("regions"))
+               and all(isinstance(r.get("startBar"), int) and r["startBar"] > 0
+                       and isinstance(r.get("endBar"), int) and r["endBar"] > 0
+                       for r in o["regions"])),
+    regions,
+    {"regions": [{"name": "MIDI Region", "startBar": -1, "endBar": -1,
+                  "kind": "midi", "trackIndex": 6,
+                  "rawHelp": "リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. "}],
+     "complete": False},
+    "every region the enumeration returns carries bars parsed from Logic's Japanese help, not the "
+    "(-1, -1) the parser returns when no locale pattern matches",
+    "remove the Japanese row from `parseRegionBars`: the region is still recognised and still "
+    "returned, and every bar number in the envelope becomes -1")
 
 # --- 2. The playhead-position group, found while measuring the first --------------------------
 parked = d.tool("logic_transport", "goto_position", {"position": PARK}) or {}
