@@ -26,6 +26,7 @@ import glob
 import os
 import subprocess
 import sys
+import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -39,6 +40,25 @@ def discovered():
     return [p for p in out if os.path.basename(p) != os.path.basename(__file__)]
 
 
+def _isolated_env():
+    """A child environment whose bytecode cache is empty and per-run.
+
+    Every guard here loads the module it checks with `spec_from_file_location`, which goes through
+    the ordinary bytecode cache. On this platform that cache is redirected out of the tree
+    (`sys.pycache_prefix` = ~/Library/Caches/com.apple.python), so `rm -rf __pycache__` inside the
+    repository clears nothing and a stale entry outlives any edit made here.
+
+    Measured 2026-09-05: a guard whose source on disk resolved evidence paths with `realpath` was
+    executing an older compiled body that used `normpath`, so its self-test reported a symlink
+    escape as unblocked while the shipped source blocked it. Copying the identical bytes to a new
+    filename passed. A cache that can serve a different body than the file being reviewed defeats
+    every claim these guards make, so each run gets its own empty prefix.
+    """
+    env = dict(os.environ)
+    env["PYTHONPYCACHEPREFIX"] = tempfile.mkdtemp(prefix="lpm-pyc-")
+    return env
+
+
 def main():
     files = discovered()
     if not files:
@@ -49,7 +69,7 @@ def main():
     for path in files:
         rel = os.path.relpath(path, REPO)
         proc = subprocess.run([sys.executable, path], cwd=REPO,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=_isolated_env())
         status = "ok  " if proc.returncode == 0 else "FAIL"
         print(f"{status} {rel}")
         if proc.returncode != 0:

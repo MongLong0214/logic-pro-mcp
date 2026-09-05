@@ -71,7 +71,10 @@ GRANDFATHERED = {
 
 def recorded_issues():
     out = set()
+    # A record is a date-prefixed file (the schema requires it); RATCHETS.json beside them is not one.
     for p in glob.glob(os.path.join(OBS, "*.json")):
+        if not re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(p)):
+            continue
         try:
             doc = json.load(open(p, encoding="utf-8"))
         except ValueError:

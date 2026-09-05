@@ -1,0 +1,119 @@
+{
+  "id": "2026-09-05-ja-JP-arrange-transport-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.transport surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on arrange.transport in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose arrange.transport rows carry the same 62 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 32,
+      "distinct_strings": 62,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "Cメジャー",
+        "Flashback Capture",
+        "Flashback Capture   ⇧R, 「Flashback Capture」ボタン. 一番新しいMIDI演奏またはオーディオ演奏を取り込みます。Logic Proが録音状態でなかったときの演奏も対象になります。 ",
+        "Smart Control",
+        "Smart Control   B, 「Smart Control」ボタン. チャンネルストリップやプラグインを個別に編集することなく、現在のパッチのサウンドを素早く変更できます。 ",
+        "bar",
+        "beat",
+        "“プロジェクトテンポ”メニュー, 「プロジェクトテンポ」ポップアップメニュー. プロジェクトのテンポを維持するか、録音または読み込んだオーディオファイルのテンポに合わせるか、あるいはプロジェクトのテンポに関する動作を自動的に決定するかどうかを選択します。 ",
+        "「クイックヘルプ」ボタン. クイックヘルプ領域を表示します。インスペクタが非表示の場合、クイックヘルプは個別のウインドウで開きます。 ",
+        "インスペクタ",
+        "インスペクタ   I, 「インスペクタ」ボタン. 作業中の領域や選択中の項目に基づいて、リージョンおよびトラック設定を表示/編集します。チャンネルストリップのパン/ボリュームを設定したり、エフェクトを追加したりすることもできます。 ",
+        "エディタ",
+        "エディタ   E, 「エディタ」ボタン. 選択したトラックのタイプに応じたエディタ（オーディオトラックエディタ、オーディオファイルエディタ、Session Playerエディタ、ピアノロールエディタ、スコアエディタ、ステップエディタ）を開きます。 ",
+        "カウントイン",
+        "カウントイン   ⇧K, 「カウントイン」ボタン. あらかじめ定義されたカウントインを再生してから録音が始まります。Controlキーを押しながらボタンをクリックすると、カウントインの長さを選択できるメニューが開きます。 ",
+        "キー",
+        "キー, キーディスプレイ. プロジェクトのキーを示します。ポップアップメニューからメジャーまたはマイナーのキーを選択できます。 ",
+        "クイックヘルプ",
+        "コントロールバー",
+        "コントロールバー. 主要なプロジェクトとApp機能を操作するボタンとディスプレイがあります。カスタマイズするには、Controlキーを押したままコントロールバーをクリックして、メニューから「コントロールバーとディスプレイをカスタマイズ」を選択します。 ",
+        "サイクル",
+        "サイクル   C, 「サイクル」ボタン. ルーラに表示された黄色いサイクル範囲内のプロジェクトセクションが繰り返し再生または録音されます。 ",
+        "ソロ",
+        "ソロ, ソロボタン. 選択したリージョンだけを再生します。 ",
+        "チューナー",
+        "チューナー, 「チューナー」ボタン. システムに接続された音源をチューニングできます。 ",
+        "ツールバー",
+        "ツールバー   ⌃⌥⌘T, 「ツールバー」ボタン. 主要な機能のボタンを含むツールバーを表示します。 ",
+        "テンポ",
+        "テンポ, テンポディスプレイ. 再生または録音の速度を示します。縦方向にドラッグしてテンポを調節できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "ノートパッド",
+        "ノートパッド   ⌃⇧P, 「ノートパッド」ボタン. プロジェクトやトラックのテキストノートを作成、表示、編集できます。 ",
+        "ビートとプロジェクト",
+        "フリーテンポ録音",
+        "フリーテンポ録音   ⌃⌥⌘R, フリーテンポ録音. 録音中に既存のすべてのコンテンツをミュートしてスマートテンポ解析を行います。 ",
+        "ブラウザ",
+        "ブラウザ   F, 「ブラウザ」ボタン. オーディオやその他のメディアファイルにアクセスできます。ほかのプロジェクトからデータと設定を読み込むこともできます。 ",
+        "ミキサー",
+        "ミキサー   X, 「ミキサー」ボタン. ミキサーを開きます。各トラックのチャンネルストリップが表示されます。チャンネルストリップコントロールの編集、プラグインの追加と編集、ルーティングオプションのカスタマイズができます。 ",
+        "メトロノームクリック",
+        "メトロノームクリック   ⌃⇧R, 「メトロノーム」ボタン. 再生または録音中にプロジェクトテンポを刻むクリック音を流します。その他のオプションを表示するには、クリックしたままにします。 ",
+        "ライブラリ",
+        "ライブラリ   Y, 「ライブラリ」ボタン. 選択したチャンネルストリップ/プラグインタイプにパッチ/プリセットを読み込み、すぐに演奏を開始できます。パッチを読み込むと複数のチャンネルストリップに影響する場合があります。 ",
+        "リストエディタ",
+        "リストエディタ   D, 「リストエディタ」ボタン. MIDIイベント、マーカー、テンポチェンジ、キー/拍子イベントを表示および編集できます。 ",
+        "ループブラウザ",
+        "ループブラウザ   O, 「ループブラウザ」ボタン. あらかじめ録音されたループをプロジェクトに追加します。 ",
+        "先頭に移動",
+        "先頭に移動   ↩, 「先頭に移動」ボタン. 再生ヘッドをプロジェクトの先頭に移動します。 ",
+        "再生",
+        "再生   ⌅, 再生ボタン. 再生ヘッドの位置から、またはサイクルモードのときはルーラの左ロケータの位置から再生を開始します。 ",
+        "再生ヘッドの位置",
+        "再生ヘッドの位置（小節）, 再生ヘッド位置ディスプレイ. 再生ヘッドの位置を小節と拍の単位で示します。各要素を縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "拍子",
+        "拍子, 拍子ディスプレイ. 1小節あたりの拍数と1拍の音価を示します。縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "置き換える",
+        "置き換える   /, 「置き換える」ボタン. 既存の録音全体またはその一部を新しい録音に置き換えます。 ",
+        "表示モード",
+        "表示モード, 「表示モード」ポップアップメニュー. ルーラの表示を小節と拍単位にするか、時間、分、秒単位にするか、その両方を組み合わせるかを切り替えます。ディスプレイを拡大表示することもできます。 ",
+        "録音",
+        "録音   R, 録音ボタン. 選択したトラック、または録音可能になっている複数のトラックに録音します。 "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ja-JP, arrange.transport exposes 32 elements carrying 62 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "103 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

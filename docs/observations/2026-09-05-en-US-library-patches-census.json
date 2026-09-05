@@ -1,0 +1,88 @@
+{
+  "id": "2026-09-05-en-US-library-patches-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the library.patches surface exposes to AX in en-US",
+  "question": "What labels does Logic show on library.patches in en-US, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "library.patches",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh en-US",
+    "expected": "a census in en-US whose library.patches rows carry the same 12 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-en-US-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on library.patches",
+      "rows": 27,
+      "distinct_strings": 12,
+      "distinct_identifiers": 18
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "Action pop-up menu. Access patch merging and user default commands. ",
+        "Delete",
+        "Delete button. Delete the selected patch or plug-in preset. This action can’t be undone. ",
+        "Get More Sounds",
+        "Library",
+        "Library. Load and save patches, plug-in presets, or Sampler instruments, based on the selected channel strip slot. Loading a patch can affect multiple channel strips. ",
+        "Revert",
+        "Revert button. Revert to the saved settings for the patch or plug-in preset. As this erases any changes you made, save with a different name before reverting. ",
+        "Save button. Save the patch or plug-in preset with its current settings as a new patch or plug-in preset. ",
+        "Save…",
+        "Search field. Search for patches and presets by name. Click the magnifying glass to view recent searches or to clear the search history. ",
+        "tools"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_NS:10",
+        "_NS:16",
+        "_NS:329",
+        "_NS:337",
+        "_NS:400",
+        "_NS:406",
+        "_NS:410",
+        "_NS:564",
+        "_NS:568",
+        "_NS:646",
+        "_NS:652",
+        "_NS:674",
+        "_NS:685",
+        "_NS:692",
+        "_NS:874",
+        "_NS:88",
+        "_NS:94",
+        "getMoreSounds"
+      ]
+    }
+  ],
+  "conclusion": "On this host in en-US, library.patches exposes 27 elements carrying 12 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "134 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

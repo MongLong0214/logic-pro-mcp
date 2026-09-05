@@ -14,9 +14,12 @@ cannot import Swift reads the JSON instead of guessing.
     Scripts/locale_labels.py --write     regenerate the JSON from AXLocalePolicy.swift
     Scripts/locale_labels.py --check     exit 1 if they disagree
 
-`measured` is where "the variants list grows when a locale is observed, not when one is translated"
-stops being a comment and becomes data: each variant may name the date, the observation record and
-the exact string that was read. `check-locale-labels-json.py` ratchets that coverage.
+`provenance` (schema 2; `measured` in schema 1) is where "the variants list grows when a locale is
+observed, not when one is translated" stops being a comment and becomes data: each variant names
+the observation record it was read in, the locale that record is true of, the date, and the exact
+string that was read. `coverage` says, per supported locale, what is KNOWN about the label —
+`measured` (a record in that locale saw one of its strings), `identifier` (addressed by a
+locale-free AXIdentifier, and a record saw it), or `unmeasured`, the only one that is a gap. ADR-019.
 """
 import json
 import os
@@ -138,27 +141,159 @@ def localised_canonicals(doc=None):
     return out
 
 
+SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
+COVERAGE_VALUES = ("measured", "identifier", "unmeasured", "retired")
+
+
+def swift_containment(repo=REPO):
+    """LabelSet names the product demonstrably reads by CONTAINMENT, read from the Swift.
+
+    Derived, not guessed. An earlier cut inferred the mode from the label's NAME — `*Keyword` and
+    `*Hint` meant containment — and it was wrong in both directions against the real call sites:
+    `cancelButton` and `audioPluginSlotLabel` are read with `containsAny` while `inputSlotHelpKeyword`
+    is not read at any call site at all, because it is PASSED to a helper that does the matching.
+
+    That last shape is why this returns only what it can see. A name absent from this set is not
+    known to be exact; it is not derivable here, and the caller says so rather than assuming.
+    """
+    names = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.containsAny", body))
+            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.matches\([^)]*mode:\s*\.contains", body))
+    return names
+
+
+def swift_label_uses(repo=REPO):
+    """Every LabelSet the product still reads, by name, from `AXLocalePolicy.<name>` in Sources/.
+
+    Retirement is a fact about the CODE. Taken on trust it was an unaudited escape hatch: any
+    nonempty reason marked all three locales `retired`, the ratchets count only literal
+    `unmeasured`, and a label the product still reads could therefore be dropped from every ceiling
+    by asserting it was gone. `cancelButton` is the reviewer's example and it is read at two call
+    sites.
+    """
+    used = set()
+    for root, _, files in os.walk(os.path.join(repo, "Sources")):
+        for f in files:
+            if not f.endswith(".swift"):
+                continue
+            try:
+                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            # Comments stripped first, and whitespace allowed around the dot. The regex was
+            # `AXLocalePolicy\.(\w+)` against the raw text, which missed a use written as
+            # `AXLocalePolicy\n    .cancelButton` — Swift's own formatting — and counted a label
+            # named only in a historical comment as live, blocking an honest retirement.
+            body = re.sub(r"/\*.*?\*/", " ", body, flags=re.S)
+            body = re.sub(r"//[^\n]*", " ", body)
+            used |= set(re.findall(r"AXLocalePolicy\s*\.\s*(\w+)", body))
+    return used
+
+
+_CONTAINMENT = swift_containment()
+
+
 def build(existing=None):
-    """The JSON document: the Swift projection, with any `measured` blocks carried forward."""
+    """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
+
+    Swift owns the strings. The JSON owns what is known ABOUT them, and that must survive every
+    regeneration or the act of syncing the strings would erase the evidence for them. A schema-1
+    document's `measured` is read as `provenance`, so the migration is the next `--write`.
+
+    `coverage` defaults to `unmeasured` for every supported locale a label has no declaration for.
+    That is the honest default: a label nobody has looked at in a locale is unmeasured there, and
+    writing `measured` without a record is the fabrication this whole file exists to prevent.
+    `measured` is DERIVED whenever a variant with provenance in that locale is in the list, so it
+    cannot drift from the evidence; otherwise it, like `identifier`, is carried only together with
+    the record under `coverage_records` that showed it.
+    """
     existing = existing if existing is not None else load_json()
     previous = (existing.get("labels") or {})
     labels = {}
     for name, entry in sorted(from_swift().items()):
-        measured = (previous.get(name) or {}).get("measured")
-        if measured:
-            # Provenance survives regeneration, but only for variants that still exist.
-            entry = dict(entry)
-            entry["measured"] = {k: v for k, v in measured.items() if k in entry["variants"]}
+        prior = previous.get(name) or {}
+        entry = dict(entry)
+        provenance = prior.get("provenance") or prior.get("measured") or {}
+        # Provenance survives regeneration, but only for variants that still exist.
+        provenance = {k: v for k, v in provenance.items() if k in entry["variants"]}
+        if provenance:
+            entry["provenance"] = provenance
+        prior_coverage = prior.get("coverage") or {}
+        cited = prior.get("coverage_records") or {}
+        present_in = {str((b or {}).get("locale")) for b in provenance.values()}
+        # Author-typed constraints, carried verbatim. `roles` can only ever REFUSE evidence — a
+        # wrong one costs a false RED that someone fixes, never a false GREEN — so it is safe for a
+        # human to write where the AX role is not derivable from Swift. `retired` excuses a label
+        # whose element Logic no longer ships, which otherwise sits in the ledger as permanent debt
+        # nobody can ever close by measuring.
+        for field in ("roles", "retired"):
+            if prior.get(field):
+                entry[field] = prior[field]
+        # The match mode is a property of the LABEL: whether Logic's string EQUALS it or CONTAINS it
+        # is the same question in every locale. It used to live only on provenance blocks, so
+        # coverage had nothing to read and derived its own answer — and the two halves of the guard
+        # disagreed about the 9 labels the Swift cannot speak about.
+        #
+        # `exact` is the default because it is the STRICT one. Loosening a label to containment
+        # admits coincidental substrings, so it is a decision that shows up in a diff rather than
+        # something a regeneration can do quietly. Where the Swift says `containsAny`, it wins.
+        entry["match"] = ("contains" if name in _CONTAINMENT
+                          else prior.get("match") or "exact")
+        retired = bool((entry.get("retired") or {}).get("reason"))
+        coverage = {}
+        for locale in SUPPORTED_LOCALES:
+            if retired:
+                coverage[locale] = "retired"
+            elif locale in present_in:
+                coverage[locale] = "measured"
+            elif prior_coverage.get(locale) in ("measured", "identifier") and cited.get(locale):
+                # A claim of measurement is carried only with the record that showed it. One nobody
+                # cited would otherwise ride through every regeneration as if it were evidence —
+                # the guard would refuse it, but the projection should not emit it.
+                coverage[locale] = prior_coverage[locale]
+            else:
+                coverage[locale] = "unmeasured"
+        entry["coverage"] = coverage
+        # A claim of absence, or of identifier addressing, names the record that showed it — and
+        # that citation has to survive regeneration exactly as provenance does, or every --write
+        # would turn a measured `absent` back into `unmeasured` by erasing its evidence.
+        # All THREE citation maps travel together. Carrying only the record id was a data-loss bug:
+        # the next `--write` stripped the role and the identifier, and the guard then rejected a
+        # claim that had been valid — regeneration turning evidence into a failure.
+        # Named `carried_map` because `carried` was also the name of the prior-coverage dict a few
+        # lines above. It worked only because the dict is rebound at the top of every iteration;
+        # moving either line would have silently turned a dict lookup into a function object.
+        def carried_map(field):
+            return {loc: v for loc, v in (prior.get(field) or {}).items()
+                    if loc in SUPPORTED_LOCALES and coverage.get(loc) in ("measured", "identifier")
+                    and loc not in present_in}
+
+        for field in ("coverage_records", "coverage_roles", "coverage_identifiers",
+                      "coverage_attributes", "coverage_absent"):
+            kept = carried_map(field)
+            if kept:
+                entry[field] = kept
         labels[name] = entry
     return {
-        "schema": 1,
+        "schema": 2,
         "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
         "how_to_regenerate": "Scripts/locale_labels.py --write",
         "note": (
             "Swift is the compiled source of truth; this is its projection for everything that "
-            "cannot import Swift. `measured` records where a variant was READ — the rule is that "
-            "the list grows when a locale is observed, not when one is translated."
+            "cannot import Swift. `provenance` records where a variant was READ — the observation "
+            "record, its locale, the date and the exact string — and `coverage` says per locale "
+            "what is known about the label. `unmeasured` is the only value that is a gap. ADR-019."
         ),
+        "supported_locales": list(SUPPORTED_LOCALES),
+        "coverage_values": list(COVERAGE_VALUES),
         "labels": labels,
     }
 

@@ -1,0 +1,82 @@
+{
+  "id": "2026-09-05-ja-JP-arrange-track_headers-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.track_headers surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on arrange.track_headers in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose arrange.track_headers rows carry the same 25 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.track_headers",
+      "rows": 38,
+      "distinct_strings": 25,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "0のパン",
+        "Absolute Zero",
+        "Audio 1",
+        "Studio Grand",
+        "Track Stackの開閉用矢印. サブトラックの表示/非表示を切り替えます。Track Stackのすべてのサブトラックを制御するには、メイントラックのコントロールを使用します。 ",
+        "「M」ボタン. プロジェクト再生からトラックの信号を取り除いて、そのトラックの信号を無音にします。ミキサーのチャンネルストリップの「ミュート」ボタンと対応しています。一方を変更すると他方も変更されます。 ",
+        "「入力モニタリング」ボタン. 録音可能な状態でないオーディオトラックやソフトウェア音源トラックの入力信号を再生します。録音前のレベル調整やパートの練習に便利です。 ",
+        "「録音可能」ボタン. トラックを録音可能な状態にするか、録音可能な状態になっているトラックを無効にします。ボタンが変わり、トラックが非アクティブ、録音可能状態、または録音中であることを示します。 ",
+        "ソロ",
+        "ソロボタン. トラックの信号を切り離して、その音だけが聞こえるようにします。このパートを切り離すにはAuxまたは出力のものを使います。 ",
+        "トラック1の“Absolute Zero”",
+        "トラック25の“Audio 1”",
+        "トラック26の“Studio Grand”",
+        "トラックヘッダ",
+        "トラックヘッダ. トラックのチャンネルストリップ信号をミュート/ソロにする、トラックを録音可能な状態にする、ボリューム/パンを調整するといった操作ができます。Controlキーを押しながら「トラックヘッダコンポーネント」をクリックして選択し、どのコントロールを表示または非表示にするかを選択します。 ",
+        "パン/バランスノブ. 縦方向にドラッグして、ステレオ音場でのトラック信号の位置を設定します。 ",
+        "フォーカスされている",
+        "ボリューム",
+        "ボリュームフェーダー. トラックの再生ボリュームを設定します。ミックスのこのパートのボリュームを調整するにはAuxまたは出力チャンネルストリップを、プロジェクト全体のボリュームを設定するには出力チャンネルストリップを使います。 ",
+        "ミュート",
+        "個々のトラックをズーム. トラック下部の分割線をドラッグして、垂直トラックのズームレベルを調整します。Commandキーを押しながらドラッグすると、同じトラックタイプのすべてのトラックを調整できます。Shiftキー＋クリックですべてのトラックがデフォルトのズームレベルにリセットされます。 ",
+        "個々のトラックをズームします",
+        "入力モニタリング",
+        "名前フィールド. ダブルクリックしてトラック名を変更します。 ",
+        "録音を可能にする"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ja-JP, arrange.track_headers exposes 38 elements carrying 25 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "103 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

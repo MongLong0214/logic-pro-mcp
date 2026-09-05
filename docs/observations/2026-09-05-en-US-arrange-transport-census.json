@@ -1,0 +1,119 @@
+{
+  "id": "2026-09-05-en-US-arrange-transport-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.transport surface exposes to AX in en-US",
+  "question": "What labels does Logic show on arrange.transport in en-US, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh en-US",
+    "expected": "a census in en-US whose arrange.transport rows carry the same 62 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-en-US-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 32,
+      "distinct_strings": 62,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "Beats & Project",
+        "Browsers",
+        "Browsers   F, Browsers button. Access audio and other media files. You can also import data and settings from other projects. ",
+        "C Major",
+        "Control Bar",
+        "Control bar. Contains buttons and displays for key project and app functions. To customize, Control-click the control bar and choose Customize Control Bar and Display. ",
+        "Count In",
+        "Count In   ⇧K, Count-in button. Play a predefined count-in before recording starts. Control-click the button to open a menu where you can choose the count-in length. ",
+        "Cycle",
+        "Cycle   C, Cycle button. Use Cycle to repeatedly play, or record over, the project section within the yellow cycle area that appears in the ruler. ",
+        "Display Mode",
+        "Display Mode, Display Mode pop-up menu. Switch the ruler display between bars and beats, or hours, minutes, and seconds, or a combination of both. You can also open giant displays. ",
+        "Editors",
+        "Editors   E, Editors button. Access editors—Audio Track, Audio File, Session Players, Piano Roll, Score, or Step Editor—based on the selected track type. ",
+        "Flashback Capture",
+        "Flashback Capture   ⇧R, Flashback Capture. Capture a recent MIDI or audio performance, even if Logic Pro wasn’t recording while you were playing. ",
+        "Free Tempo Recording",
+        "Free Tempo Recording   ⌃⌥⌘R, Free Tempo Recording. Mutes all existing content during recording and performs a Smart Tempo analysis. ",
+        "Go to Beginning",
+        "Go to Beginning   ↩, Go to Beginning button. Move the playhead to the start of the project. ",
+        "Inspector",
+        "Inspector   I, Inspector button. View and edit region and track settings, based on where you’re working and the item selected. You can also set channel strip pan and volume, or add effects. ",
+        "Key Signature",
+        "Key Signature, Key Signature display. Indicates the key signature of the project. Choose a major or minor key signature from the pop-up menu. ",
+        "Library",
+        "Library   Y, Library button. Load patches and presets for the selected channel strip or plug-in type; start playing immediately. Loading a patch can affect multiple channel strips. ",
+        "List Editors",
+        "List Editors   D, List Editors button. View and edit MIDI events, markers, tempo changes, and signature events. ",
+        "Loop Browser",
+        "Loop Browser   O, Loop Browser button. Add prerecorded loops to your project. ",
+        "Metronome Click",
+        "Metronome Click   ⌃⇧R, Metronome button. Hear a click at the project tempo during playback or recording. Click and hold for further options. ",
+        "Mixer",
+        "Mixer   X, Mixer button. Open the Mixer, which shows channel strips for each track in the project. You can edit channel strip controls, add and edit plug-ins, and customize routing options. ",
+        "Note Pads",
+        "Note Pads   ⌃⇧P, Note Pads button. Create, view, and edit project and track text notes. ",
+        "Play",
+        "Play   ⌅, Play button. Start playback from the playhead position, or from the left locator shown in the ruler when in Cycle mode. ",
+        "Playhead Position",
+        "Playhead Position (Bars), Playhead Position display. Indicates the playhead position in bars and beats. Drag each element vertically to edit it, or double-click and enter a new value. ",
+        "Project Tempo menu, Project Tempo pop-up menu. Choose whether the project tempo is maintained, adapts to the tempo of audio recordings and imported audio files, or if Logic Pro determines the project tempo behavior. ",
+        "Quick Help",
+        "Quick Help button. Show the Quick Help area. If the inspector is closed, Quick Help opens as a separate window. ",
+        "Record",
+        "Record   R, Record button. Record to the selected track, or to multiple record-ready tracks. ",
+        "Replace",
+        "Replace   /, Replace button. Replace an existing recording, or a portion of it, with a new recording. ",
+        "Smart Controls",
+        "Smart Controls   B, Smart Controls button. Quickly modify the sound of the current patch without having to edit individual channel strips or plug-ins. ",
+        "Solo",
+        "Solo, Solo button. Only hear selected regions during playback. ",
+        "Tempo",
+        "Tempo, Tempo display. Indicates the playback or recording speed. Drag vertically to speed up or slow down the tempo, or double-click and enter a new value. ",
+        "Time Signature",
+        "Time Signature, Time Signature display. Indicates the number of beats in a bar and the note value for one beat. Drag vertically to edit the value, or double-click and enter a new value. ",
+        "Toolbar",
+        "Toolbar   ⌃⌥⌘T, Toolbar button. Show the toolbar, which contains buttons for key functions. ",
+        "Tuner",
+        "Tuner, Tuner button. Tune instruments connected to your system. ",
+        "bar",
+        "beat"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in en-US, arrange.transport exposes 32 elements carrying 62 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "134 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

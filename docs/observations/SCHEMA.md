@@ -113,6 +113,94 @@ true of a different application.
 7. **`depends` names the code standing on the claim**, so a stale observation reports which paths are
    now running on an unverified assumption.
 
+## Schema 2 (ADR-019)
+
+A record may carry two more keys. Records without them are schema 1, still valid, and counted as
+a burn-down in `RATCHETS.json`.
+
+```jsonc
+  "schema": 2,
+  "evidence": [                      // files this record rests on, under docs/observations/evidence/
+    "evidence/2026-09-05-ja-JP-arrange-menus.census.json"
+  ]
+```
+
+`evidence` files must exist; the guard checks. A record whose readings live only in its own
+`observations` array is fine and states `"evidence": []` — the point is that a census dump or a
+screenshot the conclusion depends on cannot be cited and then lost.
+
+### Locale is an axis
+
+`host.locale` is still not a *drift* axis (rule 5), but it is a *coverage* axis: the same question
+measured in `ko-KR` and in `ja-JP` is two records, and `observations-status.py --coverage` reports
+which locales each surface has been looked at in. The label projection (`docs/locale/ui-labels.json`,
+schema 2) points INTO these records: a variant's `provenance` names the record, the AX `role`, the
+`attribute` it was read from and the `match` mode (`exact` or `contains`), and the guard requires
+the record to contain a **sighting** — an element of that role whose that attribute carried the
+string under that mode. Three further rules make the citation hold:
+
+- **`observed` is a quote.** It must equal, character for character, the value the cited record
+  recorded on that element. Requiring only that it CONTAIN the variant left the rest of the field
+  free, and a real but truncated reading was cited while `observed` claimed untruncated text.
+- **The role must be one the label declares** in its `roles` list. Otherwise a sighting of the same
+  string on a different element backs the wrong label — `Edit` on a menu bar is not `Edit` on a
+  toolbar button. `roles` is author-typed, and it is NOT the harmless kind of typed constraint: it
+  selects which rows are searched, so a wrong role admits a sighting of the wrong element rather
+  than merely refusing a right one. What this rule checks is that a citation names an element class
+  and a record that shows one. It does not check that the class is the one the product searches.
+- **A record's `expected` / `counterexample` subtrees are not readings.** They are element-shaped on
+  purpose, which is what let a counterexample back the claim it was written to deny.
+
+The mode is data because it cannot be guessed: inferring it from the label's NAME was wrong in both
+directions against the real call sites, and where the Swift *can* say —
+`AXLocalePolicy.<name>.containsAny` — the guard requires the declaration to agree with it. And a
+sighting is a row, an attribute and the value that attribute carried — not a substring of the
+serialized record, which accepted the variant `input` on the strength of a key named `with_input`.
+
+`coverage` adds `retired` to `measured` / `identifier` / `unmeasured`, for a label whose element is
+no longer read through it — permanent debt no measurement could ever discharge. It requires a
+reason, and the reason is audited: a label whose name still appears as `AXLocalePolicy.<name>` in
+`Sources/` cannot be retired. Taken on trust it was an escape hatch, because the projection marks
+every locale `retired` and the ratchets count only literal `unmeasured` — so asserting a live label
+was gone dropped a real gap out of every ceiling with no raise.
+
+**Measured absence** — `measured` with `coverage_absent[locale]` — names the element it is about, as
+a fragment of its AX path. The record must contain a row of the declared role at that path, and no
+row there may carry any of the label's strings. `true` was accepted at first and it let any row of
+the role anywhere in the record stand for an element nobody had looked at.
+
+What this does NOT check is whether a record's own rows were read or typed. A record carries
+readings, and a person writing down what they saw is how most of this ledger was built; the guard
+verifies that the record SAW the string, not how the record came to say so. That is the ledger's
+trust boundary, and `observations-status.py --unproven` now counts both kinds so it is visible
+rather than only written down here.
+
+So a record's `observations` are worth writing **row-shaped** — `{"role": …, "help": …}` — because
+that is the shape a claim can rest on. Evidence files must live under `docs/observations/evidence/`
+and are read as JSON rows; a screenshot is worth keeping and cannot back a claim, which is the
+honest position rather than a checkbox.
+
+### What the ledger does not know
+
+```
+Scripts/observations-status.py --unproven
+```
+
+lists, **by name**, things a person can go and do: variants with no provenance; label sets
+unmeasured per locale; surfaces with no record per locale; records at schema 1; records whose
+`reverify` is manual prose; `depends` entries that no longer resolve. Names rather than counts,
+because a count is not a thing anyone can act on.
+
+`docs/observations/RATCHETS.json` holds those same things as **sets of identities**, and
+`Scripts/check-observation-ratchets.py` fails CI when a set gains a member — even if the total
+falls, which is how a swap hides inside a count. It compares against the real `git merge-base`,
+and the base is authoritative for growth: unioning it with the branch's own file is what a
+same-commit raise exploits. A member that closed also fails, asking to be removed. Raising takes a
+dated reason under `raised`, which lands and prints.
+
+`RATCHETS.json` sits beside the records and is not one: a record is a **date-prefixed** file, and
+every loader uses that rule rather than a name special-case.
+
 ## Tools
 
 ```
@@ -120,6 +208,8 @@ Scripts/observations-status.py            # what is current / stale / superseded
 Scripts/observations-status.py --stale    # exit 1 if anything is stale — for a post-update sweep
 Scripts/check-observation-records.py      # schema, run by CI
 Scripts/check-observations-cover-live-walls.py   # roadmap claims must have records, run by CI
+Scripts/check-observation-ratchets.py     # what the ledger does not know may only shrink, run by CI
+Scripts/observations-status.py --unproven # everything the ledger does not know, as a list
 ```
 
 ## When Logic updates

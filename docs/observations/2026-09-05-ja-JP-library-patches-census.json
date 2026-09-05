@@ -1,0 +1,88 @@
+{
+  "id": "2026-09-05-ja-JP-library-patches-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the library.patches surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on library.patches in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "library.patches",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose library.patches rows carry the same 12 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on library.patches",
+      "rows": 27,
+      "distinct_strings": 12,
+      "distinct_identifiers": 18
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "「保存」ボタン. パッチまたはプラグインプリセットを現在の設定で新しいパッチまたはプラグインプリセットとして保存します。 ",
+        "「元に戻す」ボタン. パッチまたはプラグインプリセットの設定を保存時の状態に戻します。保存後に行った変更は破棄されるので、実行前に必要に応じて別名で保存してください。 ",
+        "「削除」ボタン. 選択したパッチまたはプラグインプリセットを削除します。この操作は取り消せません。 ",
+        "その他のサウンドを入手",
+        "アクションポップアップメニュー. パッチの結合とユーザデフォルトに関するコマンドにアクセスします。 ",
+        "ツール",
+        "ライブラリ",
+        "ライブラリ. 選択したチャンネルストリップのスロットに応じて、パッチ、プラグインプリセット、サンプラー音源を読み込む/保存します。パッチを読み込むと複数のチャンネルストリップに影響する場合があります。 ",
+        "保存…",
+        "元に戻す",
+        "削除",
+        "検索フィールド. パッチとプリセットを名前で検索します。虫眼鏡をクリックすると、最近検索した語句を選択したり、検索履歴を消去したりできます。 "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_NS:10",
+        "_NS:16",
+        "_NS:342",
+        "_NS:350",
+        "_NS:413",
+        "_NS:419",
+        "_NS:423",
+        "_NS:577",
+        "_NS:581",
+        "_NS:659",
+        "_NS:665",
+        "_NS:687",
+        "_NS:698",
+        "_NS:705",
+        "_NS:88",
+        "_NS:887",
+        "_NS:94",
+        "getMoreSounds"
+      ]
+    }
+  ],
+  "conclusion": "On this host in ja-JP, library.patches exposes 27 elements carrying 12 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "103 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

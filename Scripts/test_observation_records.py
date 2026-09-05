@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location(
@@ -134,6 +135,54 @@ case("a command naming a file that does not exist is rejected",
 #    nobody defined.
 bad = problems(record(surface="arrange.invented"))
 case("an undeclared surface is rejected", any("surface" in b for b in bad), f"{bad!r}")
+
+# --- schema 2: `schema` and `evidence` (ADR-019 D5) -------------------------------------------
+# Both are optional, because a schema-1 record is still valid and is counted as a burn-down. A
+# record that DECLARES them has to mean them: a citation to a file that is missing, or that sits
+# outside the evidence directory, is a claim nobody can check. The escape case matters most —
+# `../locale/ui-labels.json` would let a record cite the very file whose claims it backs.
+case("a record without schema or evidence is still valid",
+     problems(record()) == [], f"{problems(record())!r}")
+
+bad = problems(record(schema=3))
+case("an unknown schema is rejected", any("schema" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence=["evidence/does-not-exist.json"]))
+case("evidence that does not exist is rejected", any("does not exist" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence=["../locale/ui-labels.json"]))
+case("evidence outside the evidence directory is rejected",
+     any("outside" in b for b in bad), f"{bad!r}")
+
+bad = problems(record(evidence="evidence/one.json"))
+case("evidence that is not a list is rejected", any("must be a list" in b for b in bad), f"{bad!r}")
+
+case("an empty evidence list is fine — it claims nothing",
+     problems(record(schema=2, evidence=[])) == [], f"{problems(record(schema=2, evidence=[]))!r}")
+
+# ...and not by a symlink. A lexical containment check passes `evidence/link.json` while it resolves
+# anywhere on disk. Driven against a temporary DIR so the real tree is never written to, and with a
+# positive control first — an escape case that cannot see legitimate evidence would pass under a
+# broken implementation for a reason that has nothing to do with escaping.
+_saved_dir = G.DIR
+_sandbox = Path(tempfile.mkdtemp()).resolve()
+(_sandbox / "evidence").mkdir()
+(_sandbox / "outside").mkdir()
+(_sandbox / "evidence" / "real.json").write_text("[]", encoding="utf-8")
+(_sandbox / "outside" / "planted.json").write_text("[]", encoding="utf-8")
+G.DIR = str(_sandbox)
+try:
+    ok = problems(record(schema=2, evidence=["evidence/real.json"]))
+    case("evidence under evidence/ is accepted", ok == [],
+         f"the escape case below would pass vacuously otherwise: {ok!r}")
+    try:
+        (_sandbox / "evidence" / "link.json").symlink_to(_sandbox / "outside" / "planted.json")
+        bad = problems(record(schema=2, evidence=["evidence/link.json"]))
+        case("evidence cannot escape by symlink", any("outside" in b for b in bad), f"{bad!r}")
+    except OSError:
+        pass          # a filesystem without symlinks cannot host the attack either
+finally:
+    G.DIR = _saved_dir
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")

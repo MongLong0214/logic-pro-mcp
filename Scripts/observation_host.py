@@ -20,6 +20,8 @@ of restating the format string. Two copies of `macOS {version} ({build})` that d
 would mark every record stale at once, which is the loudest possible way to be wrong.
 """
 import glob
+import os
+import re
 import json
 import plistlib
 import subprocess
@@ -89,7 +91,10 @@ def check(paths):
 def main():
     args = sys.argv[1:]
     if args and args[0] == "--check":
-        targets = args[1:] or sorted(glob.glob("docs/observations/*.json"))
+        # A record is a date-prefixed file, which is what the schema guard requires; RATCHETS.json
+        # beside them has no host block and is not one.
+        targets = args[1:] or sorted(p for p in glob.glob("docs/observations/*.json")
+                                     if re.match(r"^\d{4}-\d{2}-\d{2}-", os.path.basename(p)))
         return check(targets)
     print(json.dumps(host(), indent=2, ensure_ascii=False))
     return 0
