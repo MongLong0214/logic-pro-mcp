@@ -366,7 +366,7 @@ def build(existing=None):
                     and loc not in present_in}
 
         for field in ("coverage_records", "coverage_roles", "coverage_identifiers",
-                      "coverage_attributes", "coverage_absent"):
+                      "coverage_attributes", "coverage_absent", "coverage_paths"):
             kept = carried_map(field)
             if kept:
                 entry[field] = kept

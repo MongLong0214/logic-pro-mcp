@@ -535,10 +535,19 @@ def coverage_problems(name, entry, locales, values):
                 out.append(f"{name}: coverage[{loc}] is 'measured' but names no readable attribute "
                            f"under coverage_attributes[{loc}] — one of {LABEL_ATTRS}. Which "
                            f"attribute carried the string is part of the reading, not a detail")
-            elif not any(sighting(rec, t, role, attr, mode)
+            elif not any(sighting(rec, t, role, attr, mode,
+                                  (entry.get("coverage_paths") or {}).get(loc))
                          for t in strings if t):
+                # `coverage_paths[locale]` is the coverage half of provenance's `path_contains`, and
+                # it exists for the same measured reason. THREE claims on this branch's base cited a
+                # real record with the right role and the right attribute about the wrong element,
+                # and two of them were coverage rather than provenance — so fixing only the
+                # provenance half would have left the other one able to make the same mistake, in
+                # the same file, the next time somebody looked.
+                where = (entry.get("coverage_paths") or {}).get(loc)
                 out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which "
-                           f"has no {role} whose {attr} carried any of this label's strings")
+                           f"has no {role} whose {attr} carried any of this label's strings"
+                           + (f" at a path containing {where!r}" if where else ""))
         elif state == "identifier":
             ident = (entry.get("coverage_identifiers") or {}).get(loc)
             if not ident:
