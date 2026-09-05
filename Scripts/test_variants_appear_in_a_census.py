@@ -18,6 +18,16 @@ spec = importlib.util.spec_from_file_location("nearmiss", HERE / "check-variants
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
+# The guard keeps its OWN copy of `carries`, deliberately: it runs over every census and every label,
+# and importing the gating guard for one comparison would make a reporting tool depend on a gating
+# one. A second copy goes stale the day someone changes the first — and it did, one mode at a time.
+# Trimming was brought into line for three modes and left wrong for `exact_strict`, so the two
+# disagreed about ` Foo ` and the near-miss report offered a pair the product would never match.
+# That was found by review 2026-09-06, not by anything here. A copy with a check cannot drift.
+_real_spec = importlib.util.spec_from_file_location("labelguard", HERE / "check-locale-labels-json.py")
+real_guard = importlib.util.module_from_spec(_real_spec)
+_real_spec.loader.exec_module(real_guard)
+
 failures, ran = [], [0]
 
 
@@ -203,6 +213,19 @@ buf = _io.StringIO()
 with contextlib.redirect_stdout(buf):
     rc = guard.main()
 case("no census at all is a refusal, not a pass", rc == 1, (rc, buf.getvalue()))
+
+# --- the copy of `carries` must agree with the original, in every mode ---------------------------
+# The modes come from the ORIGINAL, so a mode added there and not here is a missing case rather than
+# a silently narrower loop.
+DRIFT_PAIRS = [(" Foo ", "Foo"), ("Foo", " Foo "), ("FooBar", "Foo"), ("foo", "FOO"),
+               ("  Mixer  ", "Mixer"), ("Show Mixer", "Mixer"), ("정보", "정보 "), ("削除", "削除"),
+               ("トラックヘッダ", "トラック"), ("", "Foo")]
+for _mode in real_guard.MATCH_MODES:
+    for _value, _text in DRIFT_PAIRS:
+        _mine, _theirs = guard._carries(_value, _text, _mode), real_guard.carries(_value, _text, _mode)
+        case(f"the copy of `carries` agrees with the original: {_mode} {_value!r} vs {_text!r}",
+             _mine == _theirs, (_mode, _value, _text, "copy", _mine, "original", _theirs))
+
 
 if failures:
     for f in failures:
