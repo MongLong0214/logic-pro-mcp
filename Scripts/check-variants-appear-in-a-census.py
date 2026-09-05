@@ -76,9 +76,11 @@ AFFIX_MAX_WORDS = 2
 # space-less language is a fragment, so it is asked only of the chunk, where it is a budget rather
 # than a judgement about words.
 AFFIX_MAX_CHARS = 4
+# What must SURVIVE on the observed side. Two, because `情報` and `삭제` are labels and `除` is not.
+AFFIX_MIN_RETAINED = 2
 
 
-def _dropped_chunk(policy, observed):
+def _dropped_chunk(policy, observed, mode="exact"):
     """What `policy` has that `observed` does not, when one is an affix of the other. Else None.
 
     NFC on both sides, like `_carries` and for the same reason: the product compares with canonical
@@ -90,7 +92,13 @@ def _dropped_chunk(policy, observed):
     # not here — the two disagreed about the same pair. Raised by review 2026-09-06: case and NFC
     # had been brought into line, trimming had not.
     p = unicodedata.normalize("NFC", policy.strip()).casefold()
-    o = unicodedata.normalize("NFC", observed.strip()).casefold()
+    # `exact_strict` is the one mode that does NOT trim the observed value: to the product ` Foo `
+    # and `Foo` are different strings there. Trimming here anyway made this signal offer ` Foo ` as
+    # `FooBar` minus a word, a pair the product would never call a match. Raised by review
+    # 2026-09-06, one round after trimming was ADDED to fix the opposite disagreement in the other
+    # modes — the rule is to trim exactly where `carries` trims, not everywhere or nowhere.
+    o = unicodedata.normalize("NFC", observed if mode == "exact_strict" else observed.strip())
+    o = o.casefold()
     if o == p or len(o) >= len(p):
         return None          # the policy must be the LONGER side — that is the dropped-word shape
     if p.startswith(o):
@@ -100,17 +108,32 @@ def _dropped_chunk(policy, observed):
     return None
 
 
+LATIN = re.compile(r"[A-Za-z]")
+
+
 def _chunk_is_a_dropped_word(policy, observed, chunk):
-    """Whether what the policy has extra is a WORD, not a fragment of one."""
-    if " " in policy.strip():
-        # The boundary has to fall on a space, or the chunk is half a word: `position` minus `on`
-        # leaves `positi`, which is not a word Logic dropped.
+    """Whether what the policy has extra is a WORD, not a fragment of one.
+
+    The branch is chosen by SCRIPT, not by whether this particular string happens to contain a
+    space. A Latin-script string delimits its words with spaces — so if there is no space there is
+    no word to drop, and a chunk taken off the end is a fragment. Choosing the branch by
+    `" " in policy` sent single Latin words down the character-budget path, where `position` ->
+    `posit` and `Mixer` -> `Mixe` both passed. Found while a review was probing this very rule; the
+    hole was opened by removing a retained-length rule that had been hiding it for the wrong reason.
+    """
+    if LATIN.search(policy):
         if not (chunk.startswith(" ") or chunk.endswith(" ")):
             return False
         return 1 <= len(chunk.split()) <= AFFIX_MAX_WORDS
-    # No spaces to split on — Japanese writes `ステップインプットキーボード` as one run. Budget the
-    # chunk, and require what remains to be long enough to be a label rather than a fragment.
-    return len(chunk.strip()) <= AFFIX_MAX_CHARS
+    # Scripts that do not put spaces between words — Japanese writes `ステップインプットキーボード`
+    # as one run, and Korean compounds like `삭제하기` are written closed. There is no boundary to
+    # test, so budget the chunk AND require what is left to be long enough to be a label. Both
+    # halves are needed and each was wrong once: a floor of three dropped `情報を表示` -> `情報`, and
+    # removing the floor entirely let `削除` -> `除` through, a single kanji that is not the word.
+    # An empty observed value fails here too, which is the only thing stopping it in direct callers.
+    if len(observed.strip()) < AFFIX_MIN_RETAINED:
+        return False
+    return 1 <= len(chunk.strip()) <= AFFIX_MAX_CHARS
 
 
 def _carries(value, text, mode):
@@ -131,11 +154,11 @@ def _carries(value, text, mode):
     return subject.strip() == label
 
 
-def _affix_of(text, bag):
+def _affix_of(text, bag, mode="exact"):
     """An observed string that is `text` minus a leading or trailing word, else None."""
     best = None
     for other in bag:
-        chunk = _dropped_chunk(text, other)
+        chunk = _dropped_chunk(text, other, mode)
         if chunk is None or not _chunk_is_a_dropped_word(text, other, chunk):
             continue
         if best is None or len(other) > len(best):
@@ -221,7 +244,7 @@ def main():
             # AFFIX applies only where the product compares by EQUALITY. For a containment label
             # an affix is a match, not a miss — which is why it is asked here and not above.
             if mode != "contains":
-                affix = _affix_of(text, bag)
+                affix = _affix_of(text, bag, mode)
                 if affix:
                     near.append((key, affix, "affix"))
 

@@ -136,6 +136,38 @@ case("affix ignores a short label inside a long unrelated title",
 # review 2026-09-06.
 case("affix ignores a partial word", guard._affix_of("position", {"on"}) is None,
      guard._affix_of("position", {"on"}))
+# The branch is picked by SCRIPT, not by whether this string happens to contain a space. Latin
+# writes its words apart, so a Latin string with no space has no word to drop and every chunk taken
+# off it is a fragment; the character budget is for scripts that write words closed up. Choosing on
+# `" " in policy` let a single Latin word take the budget path, where `position` minus `posit` is
+# three characters and passed. Raised by review 2026-09-06, after removing a retained-length rule
+# that had been hiding this for an unrelated reason.
+case("affix ignores a fragment of a single Latin word",
+     guard._affix_of("position", {"posit"}) is None, guard._affix_of("position", {"posit"}))
+case("affix ignores one letter shaved off a Latin label",
+     guard._affix_of("Mixer", {"Mixe"}) is None, guard._affix_of("Mixer", {"Mixe"}))
+# ...while the same shape in a space-less script is a real dropped word: Korean writes `삭제하기`
+# closed up, and `하기` is the verb ending Logic drops.
+case("affix keeps a dropped ending in a closed-up Korean compound",
+     guard._affix_of("삭제하기", {"삭제"}) == "삭제", guard._affix_of("삭제하기", {"삭제"}))
+# The budget needs a floor on the other side too. `削除` minus `除` drops one kanji and fits any
+# chunk budget, but `除` is not the word — nothing was dropped, the label was cut in half. A floor of
+# THREE was tried first and killed `情報`, so the floor is two: the length of the shortest label
+# either census actually carries. Raised by review 2026-09-06, one round after the floor was deleted
+# rather than lowered.
+case("affix ignores a single kanji cut off a two-kanji word",
+     guard._affix_of("削除", {"除"}) is None, guard._affix_of("削除", {"除"}))
+case("affix ignores an empty observed value",
+     guard._affix_of("削除", {""}) is None, guard._affix_of("削除", {""}))
+# ...and the boundary test trims exactly where `carries` trims. `exact_strict` is the mode that does
+# not trim the observed value, so ` Foo ` is not `FooBar` minus a word there — though it is in every
+# other mode. Raised by review 2026-09-06, the round after trimming was added for the other modes.
+case("affix does not trim the observed value under exact_strict",
+     guard._dropped_chunk("FooBar", " Foo ", "exact_strict") is None,
+     guard._dropped_chunk("FooBar", " Foo ", "exact_strict"))
+case("...but does under every mode that trims",
+     guard._dropped_chunk("FooBar", " Foo ", "exact") == "bar",
+     guard._dropped_chunk("FooBar", " Foo ", "exact"))
 # ...and it normalises, like every other comparison in this ledger, because the product compares
 # with canonical equivalence.
 import unicodedata as _u

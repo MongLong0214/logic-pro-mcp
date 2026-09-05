@@ -238,10 +238,16 @@ def main():
     json.dump({"id": rid_nodate, "host": dict(HOST, locale="ko-KR"),
                "observations": [{"role": "AXButton", "title": "Solo"}]},
               open(obs_nodate / f"{rid_nodate}.json", "w", encoding="utf-8"), ensure_ascii=False)
-    json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo")]), open(cpath, "w"))
-    lp = write(tmp, labels(soloButton=("Solo", [])))
+    # The fixture carries the canonical AND a variant, so the two branches are separable: coverage
+    # comes from the canonical row and provenance would come from the variant row. An earlier cut
+    # used a variant-free label, and then `n_prov == 0` held whatever the date rule did — the case
+    # could not fail. Raised by review 2026-09-06.
+    json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo"),
+                      row("AXButton", "AXWindow/AXButton[Solo2]", title="솔로")]), open(cpath, "w"))
+    lp = write(tmp, labels(soloButton=("Solo", ["솔로"])))
     _, _, nodate_props, _ = propose.main(cpath, lp)
-    assert nodate_props, "the fixture must propose something, or the cases below assert nothing"
+    assert any(h["string"] == "솔로" for h in nodate_props.get("soloButton", [])), (
+        "the fixture must propose the VARIANT, or the provenance case below asserts nothing")
     saved_nd, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_nodate)
     try:
         n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), nodate_props,
@@ -250,6 +256,23 @@ def main():
         propose._GUARD.OBS = saved_nd
     case("a dateless record still backs COVERAGE", n_cov == 1, (n_prov, n_cov))
     case("...and writes no provenance from it", n_prov == 0, (n_prov, n_cov))
+
+    # 6d. Resolution means a RECORD, not merely parseable JSON. A list is not None and passed, and
+    #     both branches then crashed dereferencing it. Raised by review 2026-09-06.
+    obs_bad = Path(tempfile.mkdtemp())
+    rid_bad = "2026-09-05-ko-KR-arrange-window-notadict"
+    json.dump(["not", "a", "record"], open(obs_bad / f"{rid_bad}.json", "w", encoding="utf-8"))
+    lp = write(tmp, labels(soloButton=("Solo", ["솔로"])))
+    _, _, bad_props, _ = propose.main(cpath, lp)
+    assert bad_props, "the fixture must propose something, or the case below asserts nothing"
+    saved_bad, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_bad)
+    try:
+        counts = propose.apply(lp, json.load(open(cpath)), bad_props, {"arrange.window": rid_bad})
+    except AttributeError as exc:
+        counts = f"crashed: {exc}"
+    finally:
+        propose._GUARD.OBS = saved_bad
+    case("a record that is not an object writes nothing", counts == (0, 0), counts)
 
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))

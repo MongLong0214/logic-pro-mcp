@@ -197,7 +197,12 @@ def apply(labels_path, census, proposals, records_by_surface):
             # one is perfectly good evidence for it and was being skipped; while a malformed but
             # non-empty date passed and wrote provenance the guard then refused. Both raised by
             # review, one round apart, and the second was introduced by the fix for the first.
-            if not rid or _GUARD._record(rid) is None:
+            # A RECORD, not merely valid JSON. `_record` returns whatever the file parsed to, and a
+            # list or a string is not None — so a malformed record file resolved, and then the two
+            # branches below crashed on `.get`: provenance immediately in `record_date`, coverage
+            # later inside the guard, after the ledger had already been written. Raised by review
+            # 2026-09-06.
+            if not rid or not isinstance(_GUARD._record(rid), dict):
                 continue
             if h["string"] in (entry.get("variants") or []):
                 # A provenance block must carry a REAL date matching its record's — the coverage
