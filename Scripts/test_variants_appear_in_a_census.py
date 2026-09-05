@@ -88,6 +88,22 @@ rc, out = run({"playheadPositionGroupLabel": {
     "coverage": dict(UNMEASURED, **{"ja-JP": "measured"})}})
 case("a label the ledger already measured in that locale is skipped", "NEAR" not in out, out)
 
+# A file that is not a census must not count as one. Without row shape, any JSON with a
+# `host.locale` and a list called `census` was evidence — so a file holding one bare description
+# made a genuinely absent variant look present and silenced a real near miss.
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッド位置"], "coverage": dict(UNMEASURED)}},
+    rows=[{"description": "再生ヘッド位置"}])
+# A census of nothing but unshaped rows yields an EMPTY vocabulary, so the guard refuses outright
+# rather than reporting a clean run — which is stronger than counting the variant as absent.
+case("a row with no role is not a reading", rc == 1 and "refusing" in out, (rc, out))
+
+# ...and a row that IS shaped still counts, so the rule narrows rather than breaks the guard.
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッドの位置"], "coverage": dict(UNMEASURED)}},
+    rows=[{"role": "AXGroup", "description": "再生ヘッドの位置"}])
+case("a row with a role and an attribute is a reading", "0 variant(s) absent" in out, out)
+
 # An empty vocabulary must not read as clean: the guard refuses rather than reporting no drift.
 ledger([], {})
 import io as _io

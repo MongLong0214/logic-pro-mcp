@@ -72,6 +72,13 @@ def census_strings():
             continue
         bag = out.setdefault(loc, set())
         for row in rows:
+            # ROW-SHAPED, the way `check-locale-labels-json.py` defines a sighting: a `role` and at
+            # least one label-bearing attribute. Without it any JSON object with a `host.locale` and
+            # a list called `census` counted as evidence, so a file holding
+            # `{"census": [{"description": "再生ヘッド位置"}]}` would make a genuinely absent variant
+            # look present and silence a real near miss. Raised by review, 2026-09-05.
+            if not isinstance(row, dict) or not row.get("role"):
+                continue
             for attr in ("title", "description", "help", "value"):
                 v = row.get(attr)
                 if isinstance(v, str) and v.strip():
@@ -116,12 +123,25 @@ def main():
 
     print(f"{len(absent)} variant(s) absent from a census in their own locale; "
           f"{len(near)} of them have a near miss")
+    if "--list" in sys.argv:
+        # The near-miss list is the useful half and the absent list is the honest one. A short
+        # canonical cannot reach the near list at all — `difflib` scores `Ch` against `Chx` at 0.8,
+        # under the cutoff — so a reader who wants everything has to be able to ask. Raised by
+        # review, 2026-09-05.
+        for key in absent:
+            print(f"   absent  {key}")
     for key, hit in near:
         print(f"   NEAR  {key}   ~   {hit!r}")
     if near:
         print("   A near miss is a string somebody may have typed instead of read. Check each "
               "against the census before dismissing it; the census is navigation-free, so a "
               "surface it does not walk is a legitimate absence.")
+        print(f"   Two limits, said rather than hidden. The neighbour is found over ALL of that "
+              f"locale's strings with no role or path filter, so an unrelated label can be "
+              f"reported — `moveMenuItem` -> 'Move' is offered 'Movie', which is a File-menu item "
+              f"and nothing to do with it. And a canonical of two or three characters cannot reach "
+              f"this list at all: difflib scores 'Ch' against 'Chx' at 0.8, under the {NEAR} "
+              f"cutoff. `--list` prints every absence, including those.")
     # COUNTED, NOT GATED — for now, and the condition for changing that is written down rather
     # than left to whoever reads this next.
     #

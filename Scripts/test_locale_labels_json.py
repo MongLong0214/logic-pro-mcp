@@ -683,6 +683,24 @@ def main():
          guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")) == [],
          guard.provenance_problems("someArrangeLabel", sited("AXGroup[トラック]")))
 
+    # CANONICAL EQUIVALENCE, which Swift has and Python does not. `String.range(of:options:)`
+    # without `.literal` and `caseInsensitiveCompare` both treat NFC and NFD forms of the same text
+    # as equal; `==`, `in` and `startswith` are code-point comparisons. A record carrying decomposed
+    # Hangul — which is what a good deal of macOS text is — was refused for a label the product
+    # matches. Raised by review, 2026-09-05.
+    import unicodedata as _ud
+    _nfd = _ud.normalize("NFD", "입력 슬롯")
+    case("a decomposed value matches a composed label, exactly",
+         guard.carries(_nfd, "입력 슬롯", "exact"), repr(_nfd))
+    case("...and by prefix",
+         guard.carries(_ud.normalize("NFD", "입력 슬롯 어쩌고"), "입력 슬롯", "prefix"), "")
+    case("...and by containment",
+         guard.carries(_ud.normalize("NFD", "어쩌고 입력 슬롯 저쩌고"), "입력 슬롯", "contains"), "")
+    case("a composed value matches a decomposed label too",
+         guard.carries("입력 슬롯", _nfd, "exact"), "")
+    case("normalising does not make unrelated text match",
+         not guard.carries(_ud.normalize("NFD", "출력 슬롯"), "입력 슬롯", "exact"), "")
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

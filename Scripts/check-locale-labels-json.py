@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -83,7 +84,8 @@ def _is_documented(block, variant=""):
         return False
     if not _is_real_date(block.get("date", "")):
         return False
-    return not variant or variant.casefold() in str(block.get("observed", "")).casefold()
+    return not variant or (unicodedata.normalize("NFC", variant).casefold()
+                           in unicodedata.normalize("NFC", str(block.get("observed", ""))).casefold())
 
 
 OBS = os.path.join(REPO, "docs", "observations")
@@ -324,16 +326,27 @@ def carries(value, text, mode):
     and not here. No measured label needs it, and widening on a hypothetical is how a comparison
     stops describing anything.
     """
-    label = text.strip().casefold()
+    # NFC on both sides, because Swift compares with CANONICAL EQUIVALENCE and Python does not.
+    # `String.range(of:options:)` without `.literal` and `caseInsensitiveCompare` both treat NFC and
+    # NFD forms of the same text as equal — `evidence.py` records this for `containsAny` in its own
+    # words, "Omitting `.literal` keeps Hangul NFC/NFD canonical matching". Python's `==`, `in` and
+    # `startswith` are code-point comparisons, so a record carrying decomposed Hangul was refused
+    # for a label the product matches. Raised by review, 2026-09-05; the same defect was in the
+    # two-mode form before this, and in the folded-case form that shipped before that.
+    #
+    # This normalises for COMPARISON only. The `observed` quote is still held byte-for-byte against
+    # what the record carried, because that is a fidelity check and not a matching rule.
+    label = unicodedata.normalize("NFC", text.strip()).casefold()
+    subject = unicodedata.normalize("NFC", value).casefold()
     if mode == "exact":
-        return value.strip().casefold() == label
+        return subject.strip() == label
     if mode == "exact_strict":
-        return value.casefold() == label
+        return subject == label
     if mode == "prefix":
         # ANCHORED, and the candidate is trimmed — `.prefix` takes the same trimming path `.exact`
         # does in `LabelSet.matches`; only `.exactStrict` returns before it.
-        return value.strip().casefold().startswith(label)
-    return label in value.casefold()
+        return subject.strip().startswith(label)
+    return label in subject
 
 
 
