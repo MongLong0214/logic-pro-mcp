@@ -27,6 +27,9 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
     struct Runtime: Sendable {
         let createClient: @Sendable (_ name: String, _ onNotification: @escaping @Sendable (Int32) -> Void) -> (OSStatus, MIDIClientRef)
         let createSource: @Sendable (_ client: MIDIClientRef, _ name: String) -> (OSStatus, MIDIEndpointRef)
+        /// Not called. `startResources` publishes no destination (#755); this and
+        /// `MIDIEngine.receivePackets` are the ready half, kept so re-enabling is the six lines the
+        /// removal site names rather than a rewrite of the traversal #735 fixed.
         let createDestination: @Sendable (
             _ client: MIDIClientRef,
             _ name: String,
@@ -138,29 +141,17 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
 
     private var client: MIDIClientRef = 0
     private var virtualSource: MIDIEndpointRef = 0
-    private var virtualDestination: MIDIEndpointRef = 0
     private var isRunning = false
     private var startupFailure: String?
     private let runtime: Runtime
 
-    /// Stream of inbound MIDI packets from Logic Pro via the virtual destination.
-    let inboundMessages: AsyncStream<MIDIFeedback.Event>
-    private let inboundContinuation: AsyncStream<MIDIFeedback.Event>.Continuation
-
     init(runtime: Runtime = .production) {
         self.runtime = runtime
-        let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream()
-        self.inboundMessages = stream
-        self.inboundContinuation = continuation
-    }
-
-    deinit {
-        inboundContinuation.finish()
     }
 
     // MARK: - Lifecycle
 
-    /// Create the CoreMIDI client, virtual source, and virtual destination.
+    /// Create the CoreMIDI client and the virtual source. No destination — see `startResources`.
     func start() throws {
         guard !isRunning else { return }
         startupFailure = nil
@@ -216,57 +207,29 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
             throw error
         }
 
-        do {
-            try rejectForeignEndpoint(named: ServerConfig.virtualMIDISinkName)
-        } catch {
-            _ = disposeOwnedEndpoint(createdSource)
-            runtime.disposeClient(createdClient)
-            throw error
-        }
-
-        let continuation = self.inboundContinuation
-        let (destinationStatus, createdDestination) = runtime.createDestination(
-            createdClient,
-            ServerConfig.virtualMIDISinkName
-        ) { bytes in
-            for event in MIDIFeedback.parseBytes(bytes) {
-                continuation.yield(event)
-            }
-        }
-        guard destinationStatus == noErr else {
-            _ = disposeOwnedEndpoint(createdSource)
-            runtime.disposeClient(createdClient)
-            throw MIDIEngineError.destinationCreationFailed(destinationStatus)
-        }
-        runtime.endpointRuntime.claimProcessOwnership(of: createdDestination)
-        do {
-            try assignStableUniqueID(
-                to: createdDestination,
-                name: ServerConfig.virtualMIDISinkName,
-                kind: .destination
-            )
-        } catch {
-            _ = disposeOwnedEndpoint(createdDestination)
-            _ = disposeOwnedEndpoint(createdSource)
-            runtime.disposeClient(createdClient)
-            throw error
-        }
-
+        // No virtual DESTINATION is published. `LogicProMCP-MIDI-In` used to exist here, accept
+        // everything sent to it, parse it, and drop it — `inboundMessages` never had a production
+        // consumer. A client sending to it got no error and no effect and could not tell "delivered
+        // and ignored" from "delivered and acted on", which is the worst of the three available
+        // states (#755). It is unpublished until something reads it: an absence a client discovers
+        // immediately beats a silence it cannot diagnose.
+        //
+        // What re-enabling costs, so the next person does not have to work it out: create the
+        // destination here with `runtime.createDestination`, claim ownership, assign the stable
+        // unique id, and give the parsed bytes somewhere to go. `MIDIEngine.receivePackets` — the
+        // traversal #735 fixed — is still here and still tested against a real CoreMIDI packet
+        // list at the copy boundary that crashed.
         client = createdClient
         virtualSource = createdSource
-        virtualDestination = createdDestination
         isRunning = true
-        Log.info("MIDIEngine started — source: \(ServerConfig.virtualMIDISourceName), sink: \(ServerConfig.virtualMIDISinkName)", subsystem: "midi")
+        Log.info("MIDIEngine started — source: \(ServerConfig.virtualMIDISourceName), no inbound destination (#755)", subsystem: "midi")
     }
 
     /// Tear down all CoreMIDI resources.
     func stop() {
-        guard isRunning || virtualSource != 0 || virtualDestination != 0 || client != 0 else { return }
+        guard isRunning || virtualSource != 0 || client != 0 else { return }
         if virtualSource != 0, disposeOwnedEndpoint(virtualSource) {
             virtualSource = 0
-        }
-        if virtualDestination != 0, disposeOwnedEndpoint(virtualDestination) {
-            virtualDestination = 0
         }
         if client != 0 {
             runtime.disposeClient(client)
@@ -274,14 +237,6 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         }
         isRunning = false
         startupFailure = nil
-        // v3.4.5 (H1 / P1-6): do NOT finish the inbound stream here. The
-        // stream + continuation are created once in init() and cannot be
-        // re-created (`inboundMessages` is a `let` the consumer holds). If
-        // stop() finished the continuation, a later start() would re-capture
-        // an already-finished continuation and silently drop all inbound MIDI
-        // — making the engine restart-unsafe. The continuation is terminal
-        // only at deinit; stop() is a restartable pause that just tears down
-        // the CoreMIDI endpoints.
         Log.info("MIDIEngine stopped", subsystem: "midi")
     }
 
@@ -465,7 +420,6 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
 enum MIDIEngineError: Error, Sendable, CustomStringConvertible {
     case clientCreationFailed(OSStatus)
     case sourceCreationFailed(OSStatus)
-    case destinationCreationFailed(OSStatus)
     case notRunning
     case sendFailed(OSStatus)
     case invalidSysEx
@@ -482,8 +436,6 @@ enum MIDIEngineError: Error, Sendable, CustomStringConvertible {
             return "MIDI client creation failed (\(status))"
         case .sourceCreationFailed(let status):
             return "MIDI source creation failed (\(status))"
-        case .destinationCreationFailed(let status):
-            return "MIDI destination creation failed (\(status))"
         case .notRunning:
             return "MIDI engine is not running"
         case .sendFailed(let status):

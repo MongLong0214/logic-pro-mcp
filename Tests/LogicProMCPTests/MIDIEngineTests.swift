@@ -298,22 +298,14 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     let started = harness.snapshot()
     #expect(started.createClientCalls == 1)
     #expect(started.createSourceCalls == 1)
-    #expect(started.createDestinationCalls == 1)
+    #expect(started.createDestinationCalls == 0)   // #755 — no destination is published
     #expect(started.lastClientName == ServerConfig.virtualMIDISourceName)
     #expect(started.lastSourceName == ServerConfig.virtualMIDISourceName)
-    #expect(started.lastDestinationName == ServerConfig.virtualMIDISinkName)
     #expect(
         started.assignedUniqueIDs[harness.createdSource]
             == VirtualMIDIEndpointIdentity.uniqueID(
                 forPortNamed: ServerConfig.virtualMIDISourceName,
                 kind: .source
-            )
-    )
-    #expect(
-        started.assignedUniqueIDs[harness.createdDestination]
-            == VirtualMIDIEndpointIdentity.uniqueID(
-                forPortNamed: ServerConfig.virtualMIDISinkName,
-                kind: .destination
             )
     )
 
@@ -322,7 +314,7 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     #expect(!(await engine.isActive))
 
     let stopped = harness.snapshot()
-    #expect(stopped.disposedEndpoints == [harness.createdSource, harness.createdDestination])
+    #expect(stopped.disposedEndpoints == [harness.createdSource])
     #expect(stopped.disposedClients == [harness.createdClient])
 }
 
@@ -380,32 +372,6 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     #expect(!(await engine.isActive))
 }
 
-@Test func testMIDIEngineStartPropagatesDestinationCreationFailureAndDisposesIntermediates() async {
-    let harness = MIDIEngineRuntimeHarness()
-    harness.destinationStatus = -30
-    let engine = MIDIEngine(runtime: harness.makeRuntime())
-
-    do {
-        try await engine.start()
-        Issue.record("Expected destination creation failure")
-    } catch let error as MIDIEngineError {
-        if case .destinationCreationFailed(let status) = error {
-            #expect(status == -30)
-        } else {
-            Issue.record("Expected destinationCreationFailed, got \(error)")
-        }
-    } catch {
-        Issue.record("Unexpected error: \(error)")
-    }
-
-    let snapshot = harness.snapshot()
-    #expect(snapshot.createClientCalls == 1)
-    #expect(snapshot.createSourceCalls == 1)
-    #expect(snapshot.createDestinationCalls == 1)
-    #expect(snapshot.disposedEndpoints == [harness.createdSource])
-    #expect(snapshot.disposedClients == [harness.createdClient])
-    #expect(!(await engine.isActive))
-}
 
 @Test func issue736HeldOwnershipLockRefusesMIDIEngineBeforeEndpointCreation() async {
     let harness = MIDIEngineRuntimeHarness()
@@ -429,7 +395,11 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     #expect(snapshot.disposedClients == [harness.createdClient])
 }
 
-@Test func issue736MIDIEngineOwnershipLockCoversBothCensusesAndCreations() async throws {
+// #736 — the lock must be held across the census AND the creation it decides, or two processes
+// each read "nobody owns this" and both publish. One endpoint remains (#755 unpublished the
+// destination), so the sequence is one census and one creation; what this pins is that neither
+// falls outside the lock, which is the property, not the count.
+@Test func issue736MIDIEngineOwnershipLockCoversTheCensusAndTheCreation() async throws {
     let harness = MIDIEngineRuntimeHarness()
     let engine = MIDIEngine(runtime: harness.makeRuntime())
 
@@ -440,8 +410,6 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
         "lock acquired",
         "census",
         "source creation",
-        "census",
-        "destination creation",
         "lock released",
     ])
 
@@ -649,45 +617,23 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     #expect(await engine.isActive)
 }
 
-@Test func testMIDIEngineInboundMessagesYieldParsedEventsFromRuntimeBytes() async throws {
-    let harness = MIDIEngineRuntimeHarness()
-    let engine = MIDIEngine(runtime: harness.makeRuntime())
-    let stream = await engine.inboundMessages
-    var iterator = stream.makeAsyncIterator()
-
-    try await engine.start()
-    harness.deliverInbound([0x90, 0x3C, 0x64, 0x3E, 0x60])
-
-    let first = await iterator.next()
-    let second = await iterator.next()
-
-    if case .noteOn(let channel, let note, let velocity)? = first {
-        #expect(channel == 0)
-        #expect(note == 0x3C)
-        #expect(velocity == 0x64)
-    } else {
-        Issue.record("Expected first inbound noteOn event")
-    }
-
-    if case .noteOn(let channel, let note, let velocity)? = second {
-        #expect(channel == 0)
-        #expect(note == 0x3E)
-        #expect(velocity == 0x60)
-    } else {
-        Issue.record("Expected second inbound noteOn event from running status")
-    }
-
-    await engine.stop()
-    // v3.4.5 (H1 / P1-6): stop() no longer finishes the inbound stream — the
-    // continuation is kept alive so the same MIDIEngine instance is
-    // restart-safe (see testMIDIEngineRestartDeliversInbound). Only deinit
-    // terminates the stream. Asserting via lifecycle state instead of a
-    // would-block iterator read.
-    #expect(!(await engine.isActive))
-}
 
 // 64 deliberately varied packets exceed the one-packet window a Swift value copy
 // of MIDIPacketList retains. Comparing the complete array also pins packet order.
+
+// Three tests were removed with the inbound destination (#755): the one asserting that a
+// destination-creation failure propagates and disposes intermediates, the one driving
+// `inboundMessages` from runtime bytes, and T-H1's restart proof that a second start() restored
+// the inbound path. None of the three has a subject any more — nothing is created, nothing
+// yields, and there is no inbound path to restore.
+//
+// What did NOT go with them is the traversal #735 fixed:
+// `testMIDIEngineReceivesEveryPacketAcrossMIDIPacketListCopyBoundary` drives 64 packets across
+// the value-copy boundary that crashed, against a real CoreMIDI packet list, and
+// `testMIDIEngineRejectsOversizedMIDIPacketDataTuple` covers the 257-byte reject. Those are the
+// crash conditions; the live harness that sent to the endpoint proved the PLUMBING, and the
+// plumbing is what this change removes.
+
 @Test func testMIDIEngineReceivesEveryPacketAcrossMIDIPacketListCopyBoundary() {
     let expectedPackets = boundaryCrossingPackets()
     let recorder = MIDIBytesRecorder()
@@ -716,56 +662,26 @@ private func boundaryCrossingPackets() -> [[UInt8]] {
     #expect(receivedPackets.isEmpty)
 }
 
-// T-H1 (P1-6) — start → stop → start must restore the inbound feedback path.
-// Before the fix, stop() called inboundContinuation.finish(), permanently
-// terminating the single stream created in init(); the second start()
-// re-captured the already-finished continuation, so inbound MIDI was silently
-// dropped after any restart.
-@Test func testMIDIEngineRestartDeliversInbound() async throws {
-    let harness = MIDIEngineRuntimeHarness()
-    let engine = MIDIEngine(runtime: harness.makeRuntime())
-    let stream = await engine.inboundMessages
-    var iterator = stream.makeAsyncIterator()
-
-    try await engine.start()
-    harness.deliverInbound([0x90, 0x3C, 0x64])
-    let first = await iterator.next()
-    guard case .noteOn(_, 0x3C, _)? = first else {
-        Issue.record("Expected inbound noteOn 0x3C before restart, got \(String(describing: first))")
-        return
-    }
-
-    await engine.stop()
-    try await engine.start()
-
-    harness.deliverInbound([0x90, 0x3E, 0x60])
-    let afterRestart = await iterator.next()
-    guard case .noteOn(_, 0x3E, _)? = afterRestart else {
-        Issue.record("restart-unsafe: inbound noteOn 0x3E not delivered after stop→start, got \(String(describing: afterRestart))")
-        return
-    }
-}
 
 @Test(coreMIDIUnavailableInSandbox)
 func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
     let endpointRuntime = VirtualMIDIEndpointRuntime.production
+    // Only the source is censused: #755 unpublished the destination, so there is no second
+    // production name for a prior process to own.
     let sourceCensus = endpointRuntime.census(named: ServerConfig.virtualMIDISourceName)
-    let destinationCensus = endpointRuntime.census(named: ServerConfig.virtualMIDISinkName)
     guard sourceCensus.isObserved,
-          destinationCensus.isObserved,
-          let sourceCount = sourceCensus.endpointCount,
-          let destinationCount = destinationCensus.endpointCount else {
+          let sourceCount = sourceCensus.endpointCount else {
         print("SKIPPED testMIDIEngineProductionRuntimeStartStopSmoke: CoreMIDI endpoint census is unknown.")
         return
     }
-    guard sourceCount == 0, destinationCount == 0 else {
+    guard sourceCount == 0 else {
         // This smoke test cannot safely exercise fixed production names when a
         // prior process owns them: creation must now refuse that conflict rather
         // than publishing a second endpoint. A clean preflight still requires a
         // successful product start below.
         print(
             "SKIPPED testMIDIEngineProductionRuntimeStartStopSmoke: pre-existing virtual endpoint(s) "
-                + "(sources \(sourceCount), destinations \(destinationCount))."
+                + "(sources \(sourceCount))."
         )
         return
     }
