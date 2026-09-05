@@ -1222,14 +1222,36 @@
       "canonical": "playhead position",
       "variants": [
         "재생헤드 위치",
-        "再生ヘッド位置"
+        "再生ヘッドの位置"
       ],
       "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
+      "provenance": {
+        "再生ヘッドの位置": {
+          "record": "2026-09-05-ja-JP-arrange-transport-census",
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "再生ヘッドの位置"
+        }
+      },
+      "roles": [
+        "AXGroup"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-transport-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXGroup"
+      },
+      "coverage_attributes": {
+        "en-US": "description"
       }
     },
     "pluginAutomationLabelExact": {
@@ -1884,14 +1906,36 @@
         "track content",
         "track contents",
         "tracks content",
-        "tracks contents"
+        "tracks contents",
+        "トラックコンテンツ"
       ],
       "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+      "provenance": {
+        "tracks contents": {
+          "record": "2026-09-05-en-US-arrange-regions-census",
+          "locale": "en-US",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "Tracks contents"
+        },
+        "トラックコンテンツ": {
+          "record": "2026-09-05-ja-JP-arrange-regions-census",
+          "locale": "ja-JP",
+          "date": "2026-09-05",
+          "role": "AXGroup",
+          "attribute": "description",
+          "observed": "トラックコンテンツ"
+        }
+      },
+      "roles": [
+        "AXGroup"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
       }
     },
     "trackContentGeneric": {
@@ -1901,11 +1945,26 @@
         "contents"
       ],
       "rationale": "Generic content-group fallback by normalized description; read-only classifier.",
+      "roles": [
+        "AXGroup"
+      ],
       "match": "exact",
       "coverage": {
-        "en-US": "unmeasured",
+        "en-US": "measured",
         "ko-KR": "unmeasured",
-        "ja-JP": "unmeasured"
+        "ja-JP": "measured"
+      },
+      "coverage_records": {
+        "en-US": "2026-09-05-en-US-arrange-regions-census",
+        "ja-JP": "2026-09-05-ja-JP-arrange-regions-census"
+      },
+      "coverage_roles": {
+        "en-US": "AXGroup",
+        "ja-JP": "AXGroup"
+      },
+      "coverage_absent": {
+        "en-US": "AXScrollArea/AXGroup[",
+        "ja-JP": "AXScrollArea/AXGroup["
       }
     },
     "trackHeadersDescription": {

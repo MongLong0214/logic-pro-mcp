@@ -37,7 +37,9 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
-FLOOR = 8
+# 8 -> 9 on 2026-09-05: live_778_japanese_ax_reads_resolve, whose three assertions are each about a
+# state a Japanese Logic used to be in, so each is written against the envelope that state produced.
+FLOOR = 9
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

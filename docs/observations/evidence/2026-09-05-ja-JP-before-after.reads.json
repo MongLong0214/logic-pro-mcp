@@ -1,0 +1,78 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ja-JP",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "measured_at": "2026-09-05T18:59:45+09:00",
+ "method": "The same running Logic, minutes apart, driven by two release builds: the merge base and this branch. Nothing about Logic changed between them — the menu bar below was read once and is the same application both binaries connected to.",
+ "logic_menu_bar": "Apple, Logic Pro, ファイル, 編集, トラック, 移動, 録音, ミックス, 表示, ウインドウ, 1, ヘルプ",
+ "note": "`checkout` is the commit each worktree stood at when the run was taken. For the branch row that is the commit BEFORE the one carrying this file, because a commit cannot name itself; the binary hash is what identifies the artifact.",
+ "runs": [
+  {
+   "binary": "merge base",
+   "binary_sha256": "52a0edb8f25fcc0cdbcd5d29f223755ef8e52fe8df2372517014572da2300071",
+   "checkout": "826b224553f88524e3c153f3d7792e59ea59f245",
+   "checkout_is_the_commit_under_review": false,
+   "logic_system_health": {
+    "logic_pro_running": true,
+    "logic_pro_version": "12.3",
+    "logic_pro_ui_locale": "unknown"
+   },
+   "get_regions": {
+    "error": "channels_exhausted",
+    "hint": "Track Content group not found (scanned 51 AXGroups; landmarks: 'コントロールバー'(8=U+30B3,U+30F3,U+30C8,U+30ED,U+30FC,U+30EB,U+30D0,U+30FC) | 'コントロールバー'(8=U+30B3,U+30F3,U+30C8,U+30ED,U+30FC,U+30EB,U+30D0,U+30FC) | '再生ヘッドの位置'(8=U+518D,U+751F,U+30D8,U+30C3,U+30C9,U+306E,U+4F4D,U+7F6E) | 'インスペクタ'(6=U+30A4,U+30F3,U+30B9,U+30DA,U+30AF,U+30BF) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'ライブラリ'(5=U+30E9,U+30A4,U+30D6,U+30E9,U+30EA) | 'ライブラリ'(5=U+30E9,U+30A4,U+30D6,U+30E9,U+30EA) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック凡例'(6=U+30C8,U+30E9,U+30C3,U+30AF,U+51E1,U+4F8B) | 'トラックヘッダ'(7=U+30C8,U+30E9,U+30C3,U+30AF,U+30D8,U+30C3,U+30C0) | 'トラックコンテンツ'(9=U+30C8,U+30E9,U+30C3,U+30AF,U+30B3,U+30F3,U+30C6,U+30F3,U+30C4) | 'ミキサー'(4=U+30DF,U+30AD,U+30B5,U+30FC) | 'ミキサー'(4=U+30DF,U+30AD,U+30B5,U+30FC) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'Compressor'(10=U+0043,U+006F,U+006D,U+0070,U+0072,U+0065,U+0073,U+0073,U+006F,U+0072) | 'Compressor'(10=U+0043,U+006F,U+006D,U+0070,U+0072,U+0065,U+0073,U+0073,U+006F,U+0072) | 'Drum Machine Designer'(21=U+0044,U+0072,U+0075,U+006D,U+0020,U+004D,U+0061,U+0063,U+0068,U+0069,U+006E,U+0065,U+0020,U+0044,U+0065,U+0073,U+0069,U+0067,U+006E,U+0065,U+0072)). Recovery hint: ensure the Tracks arrange area is visible and not replaced by a modal, editor, or plugin window.",
+    "last_error": "Track Content group not found (scanned 51 AXGroups; landmarks: 'コントロールバー'(8=U+30B3,U+30F3,U+30C8,U+30ED,U+30FC,U+30EB,U+30D0,U+30FC) | 'コントロールバー'(8=U+30B3,U+30F3,U+30C8,U+30ED,U+30FC,U+30EB,U+30D0,U+30FC) | '再生ヘッドの位置'(8=U+518D,U+751F,U+30D8,U+30C3,U+30C9,U+306E,U+4F4D,U+7F6E) | 'インスペクタ'(6=U+30A4,U+30F3,U+30B9,U+30DA,U+30AF,U+30BF) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'ライブラリ'(5=U+30E9,U+30A4,U+30D6,U+30E9,U+30EA) | 'ライブラリ'(5=U+30E9,U+30A4,U+30D6,U+30E9,U+30EA) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック'(4=U+30C8,U+30E9,U+30C3,U+30AF) | 'トラック凡例'(6=U+30C8,U+30E9,U+30C3,U+30AF,U+51E1,U+4F8B) | 'トラックヘッダ'(7=U+30C8,U+30E9,U+30C3,U+30AF,U+30D8,U+30C3,U+30C0) | 'トラックコンテンツ'(9=U+30C8,U+30E9,U+30C3,U+30AF,U+30B3,U+30F3,U+30C6,U+30F3,U+30C4) | 'ミキサー'(4=U+30DF,U+30AD,U+30B5,U+30FC) | 'ミキサー'(4=U+30DF,U+30AD,U+30B5,U+30FC) | 'Read, オートメーションが有効になりました'(23=U+0052,U+0065,U+0061,U+0064,U+002C,U+0020,U+30AA,U+30FC,U+30C8,U+30E1,U+30FC,U+30B7,U+30E7,U+30F3,U+304C,U+6709,U+52B9,U+306B,U+306A,U+308A,U+307E,U+3057,U+305F) | 'Compressor'(10=U+0043,U+006F,U+006D,U+0070,U+0072,U+0065,U+0073,U+0073,U+006F,U+0072) | 'Compressor'(10=U+0043,U+006F,U+006D,U+0070,U+0072,U+0065,U+0073,U+0073,U+006F,U+0072) | 'Drum Machine Designer'(21=U+0044,U+0072,U+0075,U+006D,U+0020,U+004D,U+0061,U+0063,U+0068,U+0069,U+006E,U+0065,U+0020,U+0044,U+0065,U+0073,U+0069,U+0067,U+006E,U+0065,U+0072)). Recovery hint: ensure the Tracks arrange area is visible and not replaced by a modal, editor, or plugin window.",
+    "operation": "region.get_regions",
+    "state": "C",
+    "success": false
+   },
+   "goto_position_1_to_9": {
+    "observed": null,
+    "observed_before": null,
+    "observed_position_components": [],
+    "state": "B",
+    "verified": false,
+    "error": null,
+    "hint": null
+   }
+  },
+  {
+   "binary": "this branch",
+   "binary_sha256": "5f7a34ffc56f9536ef8f4495a7a0e4a5d27c274a5bb2f456cee08d65004b89cc",
+   "checkout": "826b224553f88524e3c153f3d7792e59ea59f245",
+   "checkout_is_the_commit_under_review": true,
+   "logic_system_health": {
+    "logic_pro_running": true,
+    "logic_pro_version": "12.3",
+    "logic_pro_ui_locale": "ja-JP"
+   },
+   "get_regions": {
+    "_debug": {
+     "layoutItems": 1,
+     "nonRegion": 1,
+     "track_headers": 3,
+     "track_headers_in_viewport": 3
+    },
+    "complete": true,
+    "regions": [],
+    "returned_count": 0,
+    "scope": "whole_arrangement"
+   },
+   "goto_position_1_to_9": {
+    "observed": "9.1",
+    "observed_before": "1.1",
+    "observed_position_components": [
+     "bar",
+     "beat"
+    ],
+    "state": "B",
+    "verified": false,
+    "error": null,
+    "hint": null
+   }
+  }
+ ]
+}

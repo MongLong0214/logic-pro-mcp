@@ -1,0 +1,107 @@
+{
+  "id": "2026-09-05-three-japanese-reads-failed-on-strings-nobody-had-read",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "What a Japanese Logic Pro shows for the arrange canvas, the playhead-position group and the menu bar, and what the server did with each",
+  "question": "On a Logic whose UI language is Japanese, which AX reads fail, and is the cause a missing string or a wrong one?",
+  "verdict": "partial",
+  "issues": [
+    778
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "note": "project lpm-locale-campaign.logicx; Logic switched to Japanese with `defaults write com.apple.logic10 AppleLanguages -array ja` and relaunched"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_778_japanese_ax_reads_resolve.py <worktree> <head> (with LPM_EVIDENCE_ROOT exported, Logic running in Japanese)",
+    "expected": "every check passes; the run refuses at its first check on any other locale",
+    "cost": "~1 min once Logic is in Japanese"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ja-JP-navigation-free.census.json",
+    "evidence/2026-09-05-ja-JP-before-after.reads.json"
+  ],
+  "method": "Two release builds — the merge base and the branch — driven against the SAME running Logic minutes apart, with no change to the application between them. Each was asked for `logic_system health`, `logic_project get_regions`, and a `logic_transport goto_position` from bar 1 to bar 9. The strings each read is looking for were taken from the ja-JP arrange census of the same day.",
+  "observations": [
+    {
+      "what": "the three failures, and the cause of each",
+      "rows": [
+        {
+          "read": "logic_project get_regions",
+          "label_set": "trackContentExplicit",
+          "cause": "no Japanese form at all",
+          "logic_shows": "トラックコンテンツ",
+          "policy_carried": "(none)",
+          "role": "AXGroup",
+          "description": "トラックコンテンツ",
+          "path": "AXWindow[lpm-locale-campaign - トラック]/AXGroup[トラック]/AXGroup[トラック]/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup[トラックコンテンツ]"
+        },
+        {
+          "read": "logic_transport goto_position readback",
+          "label_set": "playheadPositionGroupLabel",
+          "cause": "a Japanese form that Logic does not show — one character short",
+          "logic_shows": "再生ヘッドの位置",
+          "policy_carried": "再生ヘッド位置",
+          "role": "AXGroup",
+          "description": "再生ヘッドの位置"
+        },
+        {
+          "read": "logic_system health logic_pro_ui_locale",
+          "label_set": "(none — a menu-title set in AXLogicProElements+Menu)",
+          "cause": "the detector knows English and Korean only",
+          "logic_shows": "ファイル / 編集 / トラック",
+          "policy_carried": "File/Edit/Track and 파일/편집/트랙"
+        }
+      ]
+    },
+    {
+      "what": "what each binary answered, same Logic, minutes apart",
+      "rows": [
+        {
+          "binary": "merge base 826b2245",
+          "logic_pro_ui_locale": "unknown",
+          "get_regions": "channels_exhausted — Track Content group not found (scanned 51 AXGroups)",
+          "goto_position_observed": null,
+          "goto_position_components": []
+        },
+        {
+          "binary": "this branch",
+          "logic_pro_ui_locale": "ja-JP",
+          "get_regions": "complete: true, scope whole_arrangement, 0 regions",
+          "goto_position_observed": "9.1",
+          "goto_position_components": [
+            "bar",
+            "beat"
+          ]
+        }
+      ]
+    },
+    {
+      "what": "the generic content fallback, which stays empty",
+      "rows_carrying_コンテンツ_in_the_census": 8,
+      "of_those_an_AXGroup_whose_description_is_exactly_コンテンツ": 0,
+      "breakdown": "3 menu-item titles, 4 help sentences on unrelated controls, and the explicit トラックコンテンツ group itself"
+    }
+  ],
+  "conclusion": "Three independent reads failed on a Japanese UI and none of them failed for the same reason as the others. One string was absent, one was present and wrong — `再生ヘッド位置` for `再生ヘッドの位置`, matched with `.exactStrict`, so a single missing character made the group unfindable and every bar/beat readback empty — and one was a menu-title set that had never learned the language. The wrong string is the more instructive of the three: an absent variant is a gap anyone can see in a diff, while a plausible translation reads as coverage and fails silently. The A/B is the evidence: the same Logic, the same minute, answered `unknown` / `channels_exhausted` / `observed: null` to one binary and `ja-JP` / `complete: true` / `observed: 9.1` to the other.",
+  "limits": [
+    "One host, one build (Logic 12.3 build 6674), one project. Another Logic build may spell any of these differently.",
+    "It says nothing about the other 69 label sets #778 counts as lacking a Japanese form. Those are still unmeasured, and this record does not license writing them.",
+    "`goto_position` still reports State B here, and correctly: the request carries four components and Logic exposes two, so the readback cannot certify the whole request. The change is that a readback exists at all.",
+    "The locale detector now RECOGNISES ja-JP; `QualificationLocale` still has two cases, so a Japanese Logic remains unqualifiable. Recognising is not supporting.",
+    "The census behind the strings is navigation-free: menus were walked without opening them and the main window to depth 8. A label on a surface that walk does not reach is absent from it for that reason, not because Logic does not show it.",
+    "The live kit's own independent witness is still blind here: `Scripts/livekit/ax_region_select.swift` matches the track-content group and the region help keyword in English and Korean only, so on this Logic it finds neither `トラックコンテンツ` nor `MIDIリージョン`. That is the same class of gap in the tool that exists to be a second reader, and it is not fixed by this record's change."
+  ],
+  "supersedes": null
+}
