@@ -146,7 +146,8 @@ ev.falsifiable(
     after_open,
     before_windows,
     "Logic's own window list gains the Step Input Keyboard window, in whichever language it is "
-    "running — read through osascript, not through the server whose operation is under test",
+    "running — read from CoreGraphics, which is neither the server whose operation is under test "
+    "nor Logic itself, because asking Logic to enumerate its windows during this toggle crashed it",
     "make the channel report success without pressing the menu item: the envelope still claims the "
     "toggle and this check, which never reads the envelope, goes red")
 

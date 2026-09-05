@@ -131,6 +131,17 @@ case("affix does not report an unrelated LONGER menu command",
 case("affix ignores a short label inside a long unrelated title",
      guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}) is None,
      guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}))
+# A WORD, not a fragment of one. `str.split` makes every non-empty fragment a single "word", so
+# `position` minus `on` left `positi` and passed a limit that was never a word limit. Raised by
+# review 2026-09-06.
+case("affix ignores a partial word", guard._affix_of("position", {"on"}) is None,
+     guard._affix_of("position", {"on"}))
+# ...and it normalises, like every other comparison in this ledger, because the product compares
+# with canonical equivalence.
+import unicodedata as _u
+case("affix sees through NFD/NFC",
+     guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}) == "스텝 입력 키보드",
+     guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}))
 case("affix ignores a chunk that is several words",
      guard._affix_of("Stop and Go to Last Locate Position", {"Position"}) is None,
      guard._affix_of("Stop and Go to Last Locate Position", {"Position"}))

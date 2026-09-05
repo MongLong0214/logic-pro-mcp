@@ -68,12 +68,24 @@ def locale_of(text):
 # dropped a word the policy still carries. `Create` against `Create Group` is the other way round
 # and is not it.
 AFFIX_MAX_WORDS = 2
-AFFIX_MAX_CHARS = 6
+# A space-less policy string cannot be split into words, so the chunk is measured in characters and
+# the RETAINED side must still be substantial. Without that second half, `position` minus `on`
+# leaves `positi` — one "word" to `str.split`, six characters, and accepted. Raised by review
+# 2026-09-06: `str.split` makes every non-empty fragment a word, so the word limit was never a
+# word limit at all.
+AFFIX_MAX_CHARS = 4
+AFFIX_MIN_RETAINED = 3
 
 
 def _dropped_chunk(policy, observed):
-    """What `policy` has that `observed` does not, when one is an affix of the other. Else None."""
-    p, o = policy.casefold(), observed.casefold()
+    """What `policy` has that `observed` does not, when one is an affix of the other. Else None.
+
+    NFC on both sides, like `_carries` and for the same reason: the product compares with canonical
+    equivalence, so a policy string in one normal form and a census string in the other are the
+    same text. Without it this signal silently missed the cases it exists for.
+    """
+    p = unicodedata.normalize("NFC", policy).casefold()
+    o = unicodedata.normalize("NFC", observed).casefold()
     if o == p or len(o) >= len(p):
         return None          # the policy must be the LONGER side — that is the dropped-word shape
     if p.startswith(o):
@@ -81,6 +93,19 @@ def _dropped_chunk(policy, observed):
     if p.endswith(o):
         return p[:len(p) - len(o)]
     return None
+
+
+def _chunk_is_a_dropped_word(policy, observed, chunk):
+    """Whether what the policy has extra is a WORD, not a fragment of one."""
+    if " " in policy.strip():
+        # The boundary has to fall on a space, or the chunk is half a word: `position` minus `on`
+        # leaves `positi`, which is not a word Logic dropped.
+        if not (chunk.startswith(" ") or chunk.endswith(" ")):
+            return False
+        return 1 <= len(chunk.split()) <= AFFIX_MAX_WORDS
+    # No spaces to split on — Japanese writes `ステップインプットキーボード` as one run. Budget the
+    # chunk, and require what remains to be long enough to be a label rather than a fragment.
+    return len(chunk.strip()) <= AFFIX_MAX_CHARS and len(observed.strip()) >= AFFIX_MIN_RETAINED
 
 
 def _carries(value, text, mode):
@@ -102,19 +127,11 @@ def _carries(value, text, mode):
 
 
 def _affix_of(text, bag):
-    """An observed string that is `text` minus a leading or trailing word or two, else None.
-
-    Whole words where the language has them, and a short character budget where it does not —
-    Japanese writes `ステップインプットキーボード` with no spaces, and the same verb-dropping shape
-    appears there.
-    """
+    """An observed string that is `text` minus a leading or trailing word, else None."""
     best = None
     for other in bag:
         chunk = _dropped_chunk(text, other)
-        if chunk is None:
-            continue
-        words = [w for w in chunk.split() if w]
-        if not (len(words) <= AFFIX_MAX_WORDS if words else len(chunk.strip()) <= AFFIX_MAX_CHARS):
+        if chunk is None or not _chunk_is_a_dropped_word(text, other, chunk):
             continue
         if best is None or len(other) > len(best):
             best = other

@@ -162,7 +162,14 @@ def main():
     json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo")]), open(cpath, "w"))
     lp = write(tmp, labels(soloButton=("Solo", [])))
     _, _, props, _ = propose.main(cpath, lp)
-    _, n_cov = propose.apply(lp, json.load(open(cpath)), props, {"arrange.window": rid})
+    # `apply` resolves the cited record now — for its date, and to refuse a citation that names one
+    # which does not exist — so it needs this block's records directory, exactly as the provenance
+    # integration above does.
+    saved_cov, propose._GUARD.OBS = propose._GUARD.OBS, str(obs)
+    try:
+        _, n_cov = propose.apply(lp, json.load(open(cpath)), props, {"arrange.window": rid})
+    finally:
+        propose._GUARD.OBS = saved_cov
     entry = json.load(open(lp, encoding="utf-8"))["labels"]["soloButton"]
     case("a canonical match writes a coverage citation", n_cov == 1, entry)
     for field in ("coverage_records", "coverage_roles", "coverage_attributes"):
@@ -201,6 +208,27 @@ def main():
     _, n_cov = propose.apply(lp, json.load(open(cpath)), props,
                              {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
     case("a declared role unblocks the write", n_cov == 1, n_cov)
+
+    # 6b. ...and nothing when the surface names a record that does not EXIST. Checking the id was
+    #     truthy let a dangling citation through with an empty date, and the guard then refused the
+    #     ledger after it had been mutated — the wrong end of the transaction. Raised by review
+    #     2026-09-06, and introduced by taking the date from the record: before that the date was
+    #     always well-formed and a missing record could only be caught downstream.
+    # The census and the proposals are rebuilt HERE rather than reused: the `props` in scope came
+    # from a different census, so an assertion using them would pass because nothing was proposed
+    # at all — a case that cannot fail, in a test written to catch a check that cannot fail. Caught
+    # by mutation-testing this very case: removing the rule under test changed nothing.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[내보내기]",
+                          title="내보내기")]), open(cpath, "w"))
+    lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
+    _, _, dangling_props, _ = propose.main(cpath, lp)
+    assert dangling_props, "the fixture must propose something, or the case below asserts nothing"
+    n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), dangling_props,
+                                  {"arrange.menus": "2026-09-05-a-record-nobody-wrote"})
+    entry = json.load(open(lp, encoding="utf-8"))["labels"]["exportMenuItem"]
+    case("a record that does not exist writes nothing", (n_prov, n_cov) == (0, 0), (n_prov, n_cov))
+    case("...and leaves no dangling citation", not entry.get("provenance")
+         and not entry.get("coverage_records"), entry)
 
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))

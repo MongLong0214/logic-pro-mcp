@@ -187,7 +187,13 @@ def apply(labels_path, census, proposals, records_by_surface):
         entry["match"] = match_mode(name)
         for h in hits:
             rid = records_by_surface.get(h["surface"])
-            if not rid:
+            # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
+            # record that does not exist write a block with an empty date and a dangling citation —
+            # the guard then rejects the ledger AFTER it has been mutated, which is the wrong end of
+            # the transaction. Raised by review 2026-09-06, and introduced by taking the date from
+            # the record: before that the date was always well-formed and the id was the only thing
+            # that could be wrong.
+            if not rid or not record_date(rid):
                 continue
             if h["string"] in (entry.get("variants") or []):
                 prov = entry.setdefault("provenance", {})
