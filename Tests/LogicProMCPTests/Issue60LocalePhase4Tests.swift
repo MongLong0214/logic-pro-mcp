@@ -47,7 +47,12 @@ struct Issue60LocalePhase4Tests {
             ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels, ["drummer", "session player", "드러머", "세션 플레이어"]),
             ("regionKindMidi", AXLocalePolicy.regionKindMidi.labels, ["midi"]),
             ("regionKindAudio", AXLocalePolicy.regionKindAudio.labels, ["audio", "오디오"]),
-            ("regionHelpKeyword", AXLocalePolicy.regionHelpKeyword.labels, ["region", "리전"]),
+            // `リージョン` added 2026-09-06, measured from the ja-JP arrange-regions census. Not
+            // drift: without it `AccessibilityChannel+Regions.swift:244` classified every Japanese
+            // region as NOT a region, so `get_regions` returned an empty enumeration with no error
+            // while a region was on screen — `nonRegion: 1, returned_count: 0` on four live heads
+            // against `nonRegion: 0` for the same project in English.
+            ("regionHelpKeyword", AXLocalePolicy.regionHelpKeyword.labels, ["region", "리전", "リージョン"]),
         ]
         for (name, labels, expected) in cases {
             #expect(Set(labels) == expected, "\(name) token drift: \(Set(labels).symmetricDifference(expected))")
@@ -97,6 +102,11 @@ struct Issue60LocalePhase4Tests {
 
         #expect(AXLocalePolicy.regionHelpKeyword.containsAny(in: "Audio Region starts at bar 5"))
         #expect(AXLocalePolicy.regionHelpKeyword.containsAny(in: "리전은 5마디에서 시작"))
+        // Verbatim from the ja-JP arrange-regions census of 2026-09-05 — the string Logic actually
+        // puts on a region's AXHelp, not a translation of the English one.
+        #expect(AXLocalePolicy.regionHelpKeyword.containsAny(
+            in: "リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. "
+                + "MIDIノートおよびコントローライベントが含まれています。"))
         #expect(!AXLocalePolicy.regionHelpKeyword.containsAny(in: "marker at bar 5"))
 
         #expect(AXLocalePolicy.pluginBypassControl.containsAny(in: "bypass"))
