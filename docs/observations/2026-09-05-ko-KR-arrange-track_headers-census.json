@@ -1,0 +1,82 @@
+{
+  "id": "2026-09-05-ko-KR-arrange-track_headers-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the arrange.track_headers surface exposes to AX in ko-KR",
+  "question": "What labels does Logic show on arrange.track_headers in ko-KR, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ko-KR",
+    "expected": "a census in ko-KR whose arrange.track_headers rows carry the same 25 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ko-KR-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.track_headers",
+      "rows": 38,
+      "distinct_strings": 25,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "1개의 ‘Absolute Zero’ 트랙",
+        "25개의 ‘Audio 1’ 트랙",
+        "26개의 ‘Studio Grand’ 트랙",
+        "Absolute Zero",
+        "Audio 1",
+        "Studio Grand",
+        "Track Stack 펼침 화살표. 서브 트랙을 보거나 가립니다. 메인 트랙의 컨트롤을 사용하여 Track Stack의 모든 서브 트랙을 제어합니다. ",
+        "개별 트랙 확대/축소",
+        "개별 트랙 확대/축소. 트랙 하단의 분리선을 드래그하여 수직 트랙 확대/축소 레벨을 조절합니다. 동일한 트랙 유형의 모든 트랙을 조절하려면 Command-드래그합니다. 모든 트랙을 기본 확대/축소 레벨로 재설정하려면 Shift-클릭합니다. ",
+        "녹음 활성화",
+        "녹음 활성화 버튼. 녹음을 위해 트랙을 준비하거나 녹음 준비된 트랙을 비활성화합니다. 버튼이 변경되어 트랙이 비활성 상태인지, 녹음 활성화 상태인지, 현재 녹음 중인지 나타냅니다. ",
+        "볼륨",
+        "볼륨 페이더. 트랙의 재생 볼륨을 설정합니다. Aux 채널 스트립 또는 출력 채널 스트립에서 사용하여 믹스의 해당 파트 볼륨을 조절하거나, 출력 채널 스트립에서 사용하여 전체 프로젝트 볼륨을 설정합니다. ",
+        "솔로",
+        "솔로 버튼. 다른 트랙 없이 트랙 신호를 단독으로 들을 수 있도록 분리합니다. Aux 채널 스트립 또는 출력 채널 스트립에 사용하여 믹스의 해당 부분을 분리합니다. ",
+        "음소거",
+        "음소거 버튼. 트랙 신호를 음소거하여 프로젝트 재생에서 트랙 신호를 제거합니다. 믹서에 있는 채널 스트립의 음소거 버튼에 해당하므로 하나를 변경하면 다른 것도 변경됩니다. ",
+        "이름 필드. 트랙 이름을 변경하려면 두 번 클릭합니다. ",
+        "입력 모니터링",
+        "입력 모니터링 버튼. 녹음 활성화가 되지 않은 오디오 또는 소프트웨어 악기 트랙에서 수신 신호를 들을 수 있습니다. 녹음 전에 레벨을 설정하거나 파트를 연습할 때 유용합니다. ",
+        "트랙 헤더",
+        "트랙 헤더. 트랙의 채널 스트립 신호를 솔로 또는 음소거하고 녹음을 위해 트랙을 활성화하며 볼륨 또는 패닝을 조절합니다. Control-클릭하고 트랙 헤더 구성요소를 선택하여 보거나 가릴 컨트롤을 선택합니다. ",
+        "패닝 0",
+        "패닝 노브 및 밸런스 노브. 트랙 신호를 스테레오 필드에 위치하려면 수직으로 드래그합니다. ",
+        "포커스 있음"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ko-KR, arrange.track_headers exposes 38 elements carrying 25 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "102 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

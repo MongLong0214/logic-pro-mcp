@@ -137,7 +137,11 @@ private func issue255Channel(
     builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
     builder.setChildren(menu, [showStepInput])
     builder.setAttribute(showStepInput, kAXRoleAttribute as String, kAXMenuItemRole as String)
-    builder.setAttribute(showStepInput, kAXTitleAttribute as String, "Show Step Input Keyboard")
+    // Measured 2026-09-05: Logic 12.3 titles this item `Step Input Keyboard`, with no
+// verb. The fixture said `Show Step Input Keyboard`, which is why this test passed
+// while the operation was dead against the real application — a fixture that encodes
+// the wrong contract tests the contract, not the product.
+    builder.setAttribute(showStepInput, kAXTitleAttribute as String, "Step Input Keyboard")
     builder.setAttribute(showStepInput, kAXEnabledAttribute as String, NSNumber(value: true))
 
     let logicRuntime = builder.makeLogicRuntime(

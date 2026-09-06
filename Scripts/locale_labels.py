@@ -165,8 +165,16 @@ def swift_containment(repo=REPO):
                 body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.containsAny", body))
-            names |= set(re.findall(r"AXLocalePolicy\.(\w+)\.matches\([^)]*mode:\s*\.contains", body))
+            names |= set(re.findall(r"AXLocalePolicy\s*\.\s*(\w+)\s*\.containsAny", body))
+            # `[^)]*` stopped at the first `)`, so a call whose VALUE argument contains parentheses
+            # — `.matches(AXHelpers.getTitle(window, runtime: runtime), mode: .contains)`, which is
+            # how every window-title read is written — never reached `mode:` and the set was
+            # silently short. Raised by review 2026-09-05 against `stepInputKeyboardWindowTitle`,
+            # which the ledger therefore held to `exact` while the product read it by containment,
+            # so a true sighting of `Untitled - Step Input Keyboard` would have been refused.
+            names |= set(re.findall(
+                r"AXLocalePolicy\s*\.\s*(\w+)\s*\.matches\((?:[^()]|\([^()]*\))*mode:\s*\.contains",
+                body, re.S))
     return names
 
 
@@ -366,7 +374,7 @@ def build(existing=None):
                     and loc not in present_in}
 
         for field in ("coverage_records", "coverage_roles", "coverage_identifiers",
-                      "coverage_attributes", "coverage_absent"):
+                      "coverage_attributes", "coverage_absent", "coverage_paths"):
             kept = carried_map(field)
             if kept:
                 entry[field] = kept

@@ -1,0 +1,123 @@
+{
+  "id": "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Two Window-menu items whose titles the policy still spells with a Show/Hide verb, and the operation that depends on one",
+  "question": "Do `Show Step Input Keyboard` and `Hide All Plug-in Windows` exist in Logic 12.3, and does the operation that resolves one still work?",
+  "verdict": "works",
+  "issues": [
+    778
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "the menu reading is from all three censuses of this date (en-US, ja-JP, ko-KR); the operation probe was driven on the en-US one, which is the point — this is not a locale failure"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Read Logic's Window menu (`osascript -e 'tell application \"System Events\" to tell process \"Logic Pro\" to return name of every menu item of menu 1 of menu bar item \"Window\" of menu bar 1'`), then drive `logic_edit toggle_step_input` twice and compare the window list before, between and after",
+    "expected": "the menu shows `Step Input Keyboard` and `All Plug-in Windows` with no verb; the operation answers State C `element_not_found` both times and no window opens",
+    "cost": "under a minute"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Editing.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-toggle-step-input-is-dead.json",
+    "evidence/2026-09-05-en-US-navigation-free.census.json",
+    "evidence/2026-09-05-ja-JP-navigation-free.census.json",
+    "evidence/2026-09-05-ko-KR-navigation-free.census.json"
+  ],
+  "method": "The Window menu was read from the census of each locale — all three walk the menu bar without opening it, and all three carry the whole Window menu. The operation was then driven twice against a live English Logic, because it is a TOGGLE: a working one opens the window on the first call and closes it on the second, so two calls that change nothing is a stronger reading than one failure.",
+  "observations": [
+    {
+      "what": "what the policy looks for, and what Logic shows",
+      "rows": [
+        {
+          "label": "showStepInputKeyboardMenuItem",
+          "policy_canonical": "Show Step Input Keyboard",
+          "role": "AXMenuItem",
+          "en_US": "Step Input Keyboard",
+          "ja_JP": "ステップインプットキーボード",
+          "ko_KR": "스텝 입력 키보드"
+        },
+        {
+          "label": "hideAllPluginWindowsMenuItem",
+          "policy_canonical": "Hide All Plug-in Windows",
+          "role": "AXMenuItem",
+          "en_US": "All Plug-in Windows",
+          "ja_JP": "すべてのプラグインウインドウ",
+          "ko_KR": "모든 플러그인 윈도우"
+        }
+      ]
+    },
+    {
+      "what": "neither item has a submenu, so the policy's strings cannot match at a deeper level",
+      "rows": [
+        {
+          "item": "All Plug-in Windows",
+          "asking_for_its_menu": "-1719 invalid index"
+        },
+        {
+          "item": "Step Input Keyboard",
+          "count_of_menus": 0
+        }
+      ]
+    },
+    {
+      "what": "driving `logic_edit toggle_step_input` twice on an English Logic",
+      "rows": [
+        {
+          "call": 1,
+          "state": "C",
+          "error": "element_not_found",
+          "hint": "Window > Show Step Input Keyboard was not found.",
+          "windows_after": "lpm-locale-campaign - Tracks"
+        },
+        {
+          "call": 2,
+          "state": "C",
+          "error": "element_not_found",
+          "hint": "Window > Show Step Input Keyboard was not found.",
+          "windows_after": "lpm-locale-campaign - Tracks"
+        }
+      ]
+    },
+    {
+      "what": "the same operation after the labels were corrected, driven in Korean",
+      "rows": [
+        {
+          "call": 1,
+          "state": "A",
+          "verified": true,
+          "previous_open": false,
+          "observed_open": true,
+          "windows_after": "lpm-locale-campaign - 스텝 입력 키보드, lpm-locale-campaign - 트랙"
+        },
+        {
+          "call": 2,
+          "state": "A",
+          "verified": true,
+          "previous_open": true,
+          "observed_open": false,
+          "windows_after": "lpm-locale-campaign - 트랙"
+        }
+      ]
+    }
+  ],
+  "conclusion": "This Logic build dropped the Show/Hide verb from both Window-menu items, in every language measured, and the policy still spells both with it. One of them backs a registered product operation: `edit.toggle_step_input` answers State C `element_not_found` and opens nothing, on an ENGLISH Logic — so this is not a locale failure and the key-command destination does not rescue it. The other is a best-effort cleanup, where a miss is quiet by design and shows up later as a stale plugin window taking menu focus. The Korean forms carried the same verb and were unmeasurable until this day, because the ledger had no Korean census; it has one now, and they are wrong in the same way. Corrected from the measured titles, the same operation answers State A verified on both calls: the Step Input Keyboard window appears in Logic's window list after the first and is gone after the second. That run was driven in KOREAN, which exercises the variant the Korean census supplied rather than only the corrected English canonical.",
+  "limits": [
+    "One build, named in `host`. It does not say when the titles changed, only that this one does not have the verb.",
+    "The failing call is measured; WHY the key-command destination does not answer instead is not. Whether that is routing order, a missing binding, or the AX channel being the only registered destination for this operation was not established.",
+    "`hideAllPluginWindowsMenuItem`'s effect is NOT measured. Its call site is a best-effort cleanup candidate, so a miss degrades silently and nothing here shows it degrading.",
+    "`audioPluginSlotLabel` is the same class — the policy says `audio plugin`, Logic says `audio plug-in` — and is deliberately not in this record: its call site falls through to a structural check substantial enough that the label may never have been load-bearing, and that was not measured either.",
+    "The after-run was taken in Korean and the before-run in English. They are not the same locale, and neither is a controlled A/B of one language: what they jointly establish is that the titles were wrong in all three censuses and that the corrected labels drive the operation. A per-locale before/after was not taken."
+  ],
+  "supersedes": null
+}

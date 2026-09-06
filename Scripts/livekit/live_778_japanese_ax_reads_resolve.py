@@ -121,20 +121,93 @@ if CANVAS is None or LCD is None or not japanese_ui:
 regions = d.tool("logic_project", "get_regions") or {}
 ev.note("778/get_regions-envelope", regions)
 
-# The counterexample is the envelope the issue recorded on this exact call, quoted from #778. A
-# predicate that only asked `complete is True` would accept an envelope carrying BOTH — so it is
-# written to reject any error, and the counterexample proves it does.
+# WHAT THIS ASSERTS, and what it deliberately does not.
+#
+# #778's subject is a REFUSAL: `get_regions` answered `channels_exhausted`, "Track Content group not
+# found", because no AXGroup matched any spelling the policy knew. So the question is whether the
+# reader reaches that group and produces an enumeration — not how much of the arrangement happened
+# to be on screen while it did.
+#
+# The first cut asked `complete is True`, and that conflated the two. Measured 2026-09-06: the same
+# call answered `complete: False, reason: logic_ax_viewport_only` with `track_headers: 7,
+# track_headers_in_viewport: 6` — one track scrolled out of view — and the check went red about a
+# read that had worked. Three earlier runs passed only because every track happened to fit. A check
+# that fails when a track scrolls is not a check about localization.
+#
+# `logic_ax_viewport_only` is the reader saying honestly that it saw the viewport and knows there
+# may be more; `channels_exhausted` is it never finding the group at all. The predicate keeps
+# rejecting any error and now requires an enumeration to exist, which the counterexample — the
+# envelope #778 actually recorded — has no `regions` key for at all.
+ev.note("778/get_regions-viewport", {
+    "complete": regions.get("complete"), "reason": regions.get("reason"),
+    "returned_count": regions.get("returned_count"), "_debug": regions.get("_debug")})
+# ...but "not refused" is not enough on its own, and the first cut of this relaxation was not.
+# `coversWholeArrangement` (AccessibilityChannel+Regions.swift:96) requires `trackHeaderCount > 0`,
+# so a read that FOUND the group and then resolved no track headers at all reports
+# `complete: false` with no error — and a predicate asking only "no error" would pass it while the
+# reader had read nothing. That is the shape this whole harness exists to refuse, introduced while
+# fixing a different coupling. So the rail must have been read: `track_headers > 0` says the
+# enumeration had something to enumerate.
+# `nonRegion` is the localization question stated as a number, and leaving it out is how this check
+# stayed green through four Japanese runs while the defect it exists for was live.
+# `AccessibilityChannel+Regions.swift:244` classifies a layout item as a region iff its AXHelp
+# carries a `regionHelpKeyword` variant. That set was `region` and `리전`, so on a Japanese Logic
+# every region counted as NOT a region: measured `layoutItems: 1, nonRegion: 1, returned_count: 0`
+# on four separate heads, where the same project in English gave `nonRegion: 0` and one region. The
+# envelope carried no error and `complete` was true, so an empty arrangement and an unreadable one
+# were indistinguishable from the outside — which is the whole shape of #778.
+#
+# `layoutItems > 0` because `nonRegion == 0` is VACUOUS when the traversal found nothing to
+# classify: a run that selected the wrong content group would satisfy it while having read no
+# regions at all. That is the same shape as the clause above it, one level down, and it was named
+# by review 2026-09-06 against the very commit that added the clause.
+#
+# The limit, said rather than hidden: this asserts that EVERY layout item was recognised, so a
+# project holding a layout item that legitimately is not a region would fail it. On the campaign
+# project it is zero in English, which is what makes the comparison meaningful here.
 ev.falsifiable(
-    "778/region-enumeration-completes-on-a-japanese-ui",
-    lambda o: o.get("complete") is True and o.get("error") is None,
+    "778/region-enumeration-is-not-refused-on-a-japanese-ui",
+    lambda o: (o.get("error") is None
+               and isinstance(o.get("regions"), list)
+               and o.get("reason") != "channels_exhausted"
+               and (o.get("_debug") or {}).get("track_headers", 0) > 0
+               and (o.get("_debug") or {}).get("layoutItems", 0) > 0
+               and (o.get("_debug") or {}).get("nonRegion", 1) == 0),
     regions,
     {"error": "channels_exhausted",
      "hint": "Track Content group not found (scanned 35 AXGroups; landmarks: 'コントロールバー' | "
              "'再生ヘッドの位置' | 'インスペクタ' | 'ライブラリ' ...)"},
-    "get_regions returns a complete enumeration rather than the channels_exhausted refusal #778 "
-    "recorded, whose hint listed the Japanese landmarks it had scanned past",
+    "get_regions reaches the Track Content group and returns an enumeration rather than the "
+    "channels_exhausted refusal #778 recorded, whose hint listed the Japanese landmarks it had "
+    "scanned past",
     "remove トラックコンテンツ from trackContentExplicit: no AXGroup in the arrange window matches "
     "any spelling the policy knows, and the reader refuses with exactly the counterexample")
+
+# ...and a region whose BARS cannot be read is only half enumerated. Recognising the element and
+# parsing its position are two separate localized reads, and fixing the first exposed the second:
+# measured 2026-09-06, the moment `regionHelpKeyword` learned `リージョン` this call started
+# returning `{"name": "MIDI Region", "startBar": -1, "endBar": -1}` because `parseRegionBars`
+# carried Korean and English patterns only. Fail-closed downstream — `move_to_playhead` refuses a
+# readback with `startBar <= 0` — but a caller reading the enumeration gets numbers that are not
+# positions, and the check above cannot see it because the region IS classified.
+#
+# `-1` is the refusal the parser is documented to return, so the counterexample is the envelope
+# this run produced before the Japanese pattern existed.
+ev.falsifiable(
+    "778/an-enumerated-japanese-region-carries-real-bar-numbers",
+    lambda o: (isinstance(o.get("regions"), list) and bool(o.get("regions"))
+               and all(isinstance(r.get("startBar"), int) and r["startBar"] > 0
+                       and isinstance(r.get("endBar"), int) and r["endBar"] > 0
+                       for r in o["regions"])),
+    regions,
+    {"regions": [{"name": "MIDI Region", "startBar": -1, "endBar": -1,
+                  "kind": "midi", "trackIndex": 6,
+                  "rawHelp": "リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. "}],
+     "complete": False},
+    "every region the enumeration returns carries bars parsed from Logic's Japanese help, not the "
+    "(-1, -1) the parser returns when no locale pattern matches",
+    "remove the Japanese row from `parseRegionBars`: the region is still recognised and still "
+    "returned, and every bar number in the envelope becomes -1")
 
 # --- 2. The playhead-position group, found while measuring the first --------------------------
 parked = d.tool("logic_transport", "goto_position", {"position": PARK}) or {}
