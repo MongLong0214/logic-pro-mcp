@@ -118,15 +118,14 @@ func frame(_ element: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
     return (Int(point.x), Int(point.y), Int(size.width), Int(size.height))
 }
 
-/// The arrange window's frame, so every frame below can be reported in WINDOW coordinates.
+/// The window that CONTAINS a given element, by walking its AXParent chain. Its frame is the origin
+/// every region frame below is reported against, so they come out in WINDOW coordinates.
 ///
-/// AX reports screen coordinates and `Evidence.visual` takes window ones — it clips what it is
-/// given against the window's width and height. Handing it a screen rectangle on a second display
-/// or a window that is not at the origin aims the comparison somewhere else entirely, and the
-/// receipt cannot show it: a rectangle records where it looked, never what was there.
-/// `ax_control_bar_band.swift` already subtracts the window origin for exactly this reason; doing
-/// it here keeps one converter rather than two that can disagree.
-/// The window that CONTAINS a given element, by walking its AXParent chain.
+/// Window coordinates because AX reports screen ones and `Evidence.visual` takes window ones — it
+/// clips what it is given against the window's width and height. Handing it a screen rectangle on
+/// a second display or a window that is not at the origin aims the comparison somewhere else
+/// entirely, and the receipt cannot show it: a rectangle records where it looked, never what was
+/// there.
 ///
 /// Not "the first standard window". Raised by review 2026-09-05: `Evidence.shot` picks a
 /// CoreGraphics window by the arrange TITLE, and this tool picked the first standard window in AX
@@ -136,6 +135,14 @@ func frame(_ element: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
 ///
 /// Walking up from the track-content group ties the origin to the window the regions are actually
 /// in, which is the window the harness captured or the run has bigger problems than an offset.
+///
+/// This is a SECOND converter, not a shared one. `ax_control_bar_band.swift` subtracts the origin
+/// of the first standard window its description matched in, falling back to the first standard
+/// window outright (`let win = hitWindow ?? standardWindows[0]`), while this subtracts the origin
+/// of the window that contains the group. The two agree when one standard window is open and can
+/// disagree when two are, which is why the harness checks the `window` and `windowTitle` this
+/// tool emits against the capture instead of assuming the converters agree. An earlier comment
+/// here claimed the opposite; it was written for a function that no longer exists.
 func windowContaining(_ element: AXUIElement) -> AXUIElement? {
     var current: AXUIElement? = element
     for _ in 0..<24 {
