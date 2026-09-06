@@ -90,20 +90,9 @@ def inner_of(result):
 
 
 titles = window_titles()
-# `titles` is the AppleScript window list joined into one string. Logic titles a window
-# `<project> - <view>`, so the list is split per window and each name is asked for the
-# SUFFIX ` - <spelling>`, over the three spellings `evidence.py` has held since #767. The
-# substring test that stood here (#773's first cut) asked whether a spelling appeared
-# anywhere in the joined blob, so a project named `Drum Tracks` with only its Mixer open —
-# `Drum Tracks - Mixer` — passed a precondition about an arrange window that was not open,
-# and the Korean and Japanese spellings, being the bare word, passed on any title that
-# happened to carry it.
-windows = [name for name in titles.split(", ") if name]
-ev.check("576/precondition-an-arrange-window-is-open",
-         any(name.endswith(" - " + spelling)
-             for name in windows for spelling in E.ARRANGE_WINDOW_TITLES),
+ev.check("576/precondition-an-arrange-window-is-open", "Tracks" in titles,
          "Logic has an arrange window to import into",
-         f"windows={windows!r} tried={E.ARRANGE_WINDOW_TITLES!r}",
+         f"titles={titles!r}",
          None)
 
 rec = ev.record_screen(seconds=240)

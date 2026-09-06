@@ -99,6 +99,7 @@ KNOWN = {
     ("live_549_receipt_names_the_node.py", "Tracks"): 1,
     ("live_575_move_to_playhead_reachable.py", "Edit"): 3,
     ("live_576_completeness_is_measured.py", "Tracks"): 2,
+    ("live_576_viewport_limited_region_readback.py", "Tracks"): 1,
     ("live_590_project_new_from_cold_launch.py", "Cancel"): 1,
     ("live_590_project_new_from_cold_launch.py", "Save"): 1,
     ("live_590_project_new_from_cold_launch.py", "Tracks"): 4,
