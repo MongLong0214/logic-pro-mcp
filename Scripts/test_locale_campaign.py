@@ -551,6 +551,22 @@ def main():
                                     {"arrange.window": "2026-09-05-ko-KR-arrange-window-census"})
     finally:
         propose._GUARD.OBS = saved_cp
+    # A canonical that is ALSO listed as a variant takes the provenance branch, so the coverage
+    # constraint must not be applied to it. `LabelSet` stores both without objecting.
+    doc_both = labels(trackSoloButton=("솔로", ["솔로"]))
+    doc_both["labels"]["trackSoloButton"]["roles"] = ["AXButton"]
+    doc_both["labels"]["trackSoloButton"]["coverage_paths"] = {"ko-KR": "AXWindow[Target]"}
+    lp_both = write(tmp, doc_both)
+    _, _, props_both, _ = propose.main(cpath, lp_both)
+    saved_b, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_cp)
+    try:
+        n_prov_both, _ = propose.apply(lp_both, json.load(open(cpath)), props_both,
+                                       {"arrange.window": "2026-09-05-ko-KR-arrange-window-census"})
+    finally:
+        propose._GUARD.OBS = saved_b
+    case("a canonical listed as a variant is not held to the coverage path",
+         n_prov_both == 1, n_prov_both)
+
     case("a dormant coverage_paths is honoured when coverage is written",
          n_cov_cp == 0 and json.load(open(lp_cp, encoding="utf-8"))["labels"]["trackSoloButton"]
          ["coverage"]["ko-KR"] == "unmeasured", n_cov_cp)

@@ -539,10 +539,15 @@ def _is_a_locator(where):
     path rather than a part of one, and each selects rows it does not name.
     """
     text = str(where)
-    if re.search(r"\[[^\[\]]+\]", text):
+    # A segment has CONTENT: `[ ]` is a pair of brackets around nothing. The census also writes
+    # `{_NS:108}` for elements Logic gives no name, and those are locators too — refusing them made
+    # a real component of a real path unusable (round seven, ko-KR census).
+    if re.search(r"\[[^\[\]]*\w[^\[\]]*\]", text) or re.search(r"\{[^{}]*\w[^{}]*\}", text):
         return True
+    # EVERY component, not two of them. Counting the good ones let `AXWindow/   /AXButton` through
+    # on the strength of its first and last, and a blank component is not a path component.
     parts = text.split("/")
-    return len([p for p in parts if p.strip() and re.search(r"\w", p)]) >= 2 and "" not in parts
+    return len(parts) >= 2 and all(p.strip() and re.search(r"\w", p) for p in parts)
 
 
 def _row_definitely_outside(row, fragments, surfaces):

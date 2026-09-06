@@ -334,7 +334,12 @@ def apply(labels_path, census, proposals, records_by_surface):
             # `measured` the guard then refused. Round six, 2026-09-07: a dormant
             # `coverage_paths.ko-KR` of `AXWindow[Target]` against a record that saw the string
             # under `AXWindow[Other]`, applied clean and rejected afterwards.
-            if h["string"] == entry.get("canonical"):
+            # The SAME predicate the branch below uses, not an approximation of it. A canonical may
+            # also be listed as a variant — `LabelSet` stores both without objecting — and such a
+            # hit takes the provenance branch while canonical equality said coverage, so the
+            # coverage constraint was applied to a provenance write. Round seven, 2026-09-07.
+            if (h["string"] not in (entry.get("variants") or [])
+                    and h["string"] == entry.get("canonical")):
                 fragments += _GUARD._path_fragments(
                     (entry.get("coverage_paths") or {}).get(locale))
             seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],

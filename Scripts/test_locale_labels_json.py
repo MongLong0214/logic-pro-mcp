@@ -1084,7 +1084,9 @@ def main():
     # the same unrelated row; the real censuses carry `AXMenuItem[左]` and `AXMenuBarItem[1]`,
     # whose named segments are one character long. The test is structural now — a whole bracketed
     # segment, or two whole `/`-separated components.
-    for bare in ("[", "/", "[]", "//", "/AX", "AX/", "AX"):
+    # Round seven: `[ ]` is brackets around nothing and `AXWindow/   /AXButton` has a blank
+    # component — counting the GOOD components let the second through on its first and last.
+    for bare in ("[", "/", "[]", "//", "/AX", "AX/", "AX", "[ ]", "AXWindow/   /AXButton"):
         case(f"an absence locator of {bare!r} is refused as identifying nothing",
              any("named segment" in x for x in cp(bare_locator(bare))), cp(bare_locator(bare)))
     case("a locator naming a real segment is still accepted",
@@ -1097,6 +1099,10 @@ def main():
          guard._is_a_locator("AXMenuItem[左]") and guard._is_a_locator("AXMenuBarItem[1]"), "")
     case("two whole components are a locator, brackets or not",
          guard._is_a_locator("AXOutline/AXRow"), "")
+    # The census writes `{_NS:108}` for elements Logic gives no name. Refusing that shape made a
+    # real component of a real ko-KR path unusable as a locator.
+    case("an unnamed census component is a locator too",
+         guard._is_a_locator("AXScrollArea{_NS:108}"), "")
 
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",
