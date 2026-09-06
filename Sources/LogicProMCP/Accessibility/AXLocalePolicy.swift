@@ -128,9 +128,29 @@ enum AXLocalePolicy {
     /// near-miss check did not report it, because `Show Mixer` against `Mixer`
     /// scores 0.72 and the cutoff is 0.86, which is the limit that check prints
     /// beside its own output.
+    /// The View menu's mixer entry CARRIES ITS VERB and changes with the pane's state. Measured
+    /// 2026-09-06 by opening the menu before reading it:
+    ///
+    ///     mixer closed -> `Show Mixer`      mixer open -> `Hide Mixer`
+    ///
+    /// It never reads bare `Mixer`. A run of #778 changed the canonical to `Mixer` on the strength
+    /// of the en-US census, which records `AXMenuItem[Mixer]` under the View menu — and that value
+    /// is STALE: the census walks the menu bar without opening the menus, so a state-dependent item
+    /// is recorded with whatever name was cached when the menu was last built. Reading the same
+    /// item without opening it reproduces `Mixer` today while the opened menu says `Show Mixer`.
+    ///
+    /// The consequence was not cosmetic: the reveal looks the item up by exact match, so with the
+    /// mixer closed it found nothing — `mixer_reveal_menu_item_found: false` — and
+    /// `plugins.get_inventory` returned State B `mixer_not_visible` on a Logic whose View menu had
+    /// the entry all along.
+    ///
+    /// Both English forms are listed because the reveal must FIND the item in either state; which
+    /// one is present is what tells it whether a click is needed. The Korean form is the one this
+    /// label shipped with before that change. Japanese is deliberately absent rather than guessed:
+    /// the only ja string available is the same stale census reading.
     static let showMixerMenuItem = LabelSet(
-        canonical: "Mixer",
-        variants: ["믹서", "ミキサー"],
+        canonical: "Show Mixer",
+        variants: ["Hide Mixer", "믹서 보기"],
         rationale: "Used only as a best-effort mixer reveal before structural mixer readback."
     )
 

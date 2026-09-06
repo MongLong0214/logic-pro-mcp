@@ -126,6 +126,8 @@
    "settingPopupValue→Default",
    "settingPopupValue→기본",
    "settingPopupValue→프리셋",
+   "showMixerMenuItem→Hide Mixer",
+   "showMixerMenuItem→믹서 보기",
    "showTempoListMenuItem→템포 목록 보기",
    "sliderPanHint→panning",
    "sliderPanHint→밸런스",
@@ -295,6 +297,7 @@
     "sendOrIOControlLabel",
     "setLocatorsMenuItem",
     "settingPopupValue",
+    "showMixerMenuItem",
     "showTempoListMenuItem",
     "sliderPanHint",
     "sliderSendHint",
@@ -411,6 +414,7 @@
     "sendOrIOControlLabel",
     "setLocatorsMenuItem",
     "settingPopupValue",
+    "showMixerMenuItem",
     "showTempoListMenuItem",
     "sliderPanHint",
     "sliderSendHint",
@@ -527,6 +531,7 @@
     "sendOrIOControlLabel",
     "setLocatorsMenuItem",
     "settingPopupValue",
+    "showMixerMenuItem",
     "showTempoListMenuItem",
     "sliderPanHint",
     "sliderSendHint",
@@ -671,26 +676,31 @@
   },
   "undocumented_variants": {
    "date": "2026-09-06",
-   "reason": "Two variants, raised for opposite reasons. (1) 2026-09-05, `markerListDeleteMenuItem→削除` — A claim retracted, not a gap that grew. Three entries in the base named a real record, the right role and the right attribute about the WRONG element: `markerListDeleteMenuItem` means the Marker List window's Delete and was backed by the application's Edit menu; `roles` cannot see the difference, because it names a kind of element and Logic puts the same kind in many containers. Retracting the claim makes the gap real again, and the ceiling has to say so rather than inherit a number that was wrong. (2) 2026-09-06, `stepInputKeyboardWindowTitle→ステップインプットキーボード` — the opposite case: a variant that IS measured, but whose evidence no census can hold. It is a WINDOW title, and the window does not exist until `edit.toggle_step_input` opens it, so a navigation-free census walking the arrange surfaces can never see it. It was read from Logic's own window list during a live toggle on a Japanese Logic: `lpm-locale-campaign - ステップインプットキーボード`. Citing the ja-JP menu census instead would reproduce exactly the error in (1) — the same string on a menu item is a different element from the same string on a window. (3) 2026-09-06, `regionHelpKeyword→リージョン` — measured, and in a dated record, but that record stores its readings as a flat list of strings rather than as rows carrying a role and an attribute, so `_rows` finds nothing to cite: `2026-09-05-ja-JP-arrange-regions-census` holds `リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. …` verbatim under `observations[].strings`. The navigation-free census DOES carry the substring on eight rows, and every one of them is the wrong element — AXCheckBoxes for Solo and Inspector whose help merely MENTIONS regions. Citing those would reproduce the retraction in (1) exactly, which is why the proposer declined them and why this is raised instead of backed. The fix is to re-take the arrange.regions census in row shape; the string is not in doubt, its element is unrecorded.",
+   "reason": "A label whose evidence the census cannot carry. (4) 2026-09-06, `showMixerMenuItem→Hide Mixer` and `→믹서 보기` — the census CANNOT back this label, and that is the finding rather than an inconvenience. The View menu's mixer entry carries its verb and changes with the pane: measured by OPENING the menu before reading, `Show Mixer` when closed and `Hide Mixer` when open. It never reads bare `Mixer`. The en-US census records `AXMenuItem[Mixer]` under the View menu because it walks the menu bar WITHOUT opening the menus, so a state-dependent item is captured with whatever name was cached when the menu was last built. An earlier run of #778 took that stale value as the canonical, and the reveal then found nothing with the mixer closed — `plugins.get_inventory` answered State B `mixer_not_visible` on a Logic whose View menu had the entry all along. The English pair is measured live; the Korean form is the one this label shipped with before that change; Japanese is left absent rather than taken from the same stale reading.",
    "members": [
-    "markerListDeleteMenuItem→削除",
-    "regionHelpKeyword→リージョン",
-    "stepInputKeyboardWindowTitle→ステップインプットキーボード"
+    "showMixerMenuItem→Hide Mixer",
+    "showMixerMenuItem→믹서 보기"
    ]
   },
   "unmeasured_coverage.en-US": {
-   "date": "2026-09-05",
-   "reason": "A claim retracted, not a gap that grew. Three entries in the base named a real record, the right role and the right attribute about the WRONG element: `markerListDeleteMenuItem` means the Marker List window's Delete and was backed by the application's Edit menu in three locales, and `pluginWindowEditorViewMenuItem` means a plugin window's scoped View menu and was backed by the application's View menu. `roles` cannot see the difference — it names a kind of element and Logic puts the same kind in many containers. Retracting them makes the gaps real again, and the ceiling has to say so rather than inherit a number that was wrong. The label's own rationale had warned that the Edit menu carries Delete-Undo-History entries and that matching there can reach a different destructive command.",
+   "date": "2026-09-06",
+   "reason": "A claim retracted, not a gap that grew. `showMixerMenuItem` was marked measured in en-US citing the arrange-menus census, and that census cannot back it: the View menu's mixer entry carries its verb and changes with the pane — `Show Mixer` closed, `Hide Mixer` open, measured 2026-09-06 by OPENING the menu before reading. The census walks the menu bar WITHOUT opening the menus, so it recorded the cached `Mixer`. The guard refused the citation as soon as the label carried the real strings, which is the check working. The English pair is measured live and has no record shaped to hold it; Japanese is left absent rather than taken from the same stale reading.",
    "members": [
-    "markerListDeleteMenuItem",
-    "pluginWindowEditorViewMenuItem"
+    "showMixerMenuItem"
    ]
   },
   "unmeasured_coverage.ja-JP": {
-   "date": "2026-09-05",
-   "reason": "A claim retracted, not a gap that grew. Three entries in the base named a real record, the right role and the right attribute about the WRONG element: `markerListDeleteMenuItem` means the Marker List window's Delete and was backed by the application's Edit menu in three locales, and `pluginWindowEditorViewMenuItem` means a plugin window's scoped View menu and was backed by the application's View menu. `roles` cannot see the difference — it names a kind of element and Logic puts the same kind in many containers. Retracting them makes the gaps real again, and the ceiling has to say so rather than inherit a number that was wrong. The label's own rationale had warned that the Edit menu carries Delete-Undo-History entries and that matching there can reach a different destructive command.",
+   "date": "2026-09-06",
+   "reason": "A claim retracted, not a gap that grew. `showMixerMenuItem` carried the View menu's mixer entry as bare `Mixer`, taken from the en-US arrange-menus census. That value is stale: the census walks the menu bar WITHOUT opening the menus, so a state-dependent item is recorded with whatever name was cached when the menu was last built. Measured 2026-09-06 by OPENING the menu before reading, the entry is `Show Mixer` when the mixer is closed and `Hide Mixer` when it is open, and never bare `Mixer`. The label now carries the two measured English forms and the Korean one it shipped with; ko-KR and ja-JP have no record that can back them, because the only census strings for this item are the same stale reading. Leaving them declared measured would have kept a claim the evidence never supported.",
    "members": [
-    "markerListDeleteMenuItem"
+    "showMixerMenuItem"
+   ]
+  },
+  "unmeasured_coverage.ko-KR": {
+   "date": "2026-09-06",
+   "reason": "A claim retracted, not a gap that grew. `showMixerMenuItem` carried the View menu's mixer entry as bare `Mixer`, taken from the en-US arrange-menus census. That value is stale: the census walks the menu bar WITHOUT opening the menus, so a state-dependent item is recorded with whatever name was cached when the menu was last built. Measured 2026-09-06 by OPENING the menu before reading, the entry is `Show Mixer` when the mixer is closed and `Hide Mixer` when it is open, and never bare `Mixer`. The label now carries the two measured English forms and the Korean one it shipped with; ko-KR and ja-JP have no record that can back them, because the only census strings for this item are the same stale reading. Leaving them declared measured would have kept a claim the evidence never supported.",
+   "members": [
+    "showMixerMenuItem"
    ]
   }
  }

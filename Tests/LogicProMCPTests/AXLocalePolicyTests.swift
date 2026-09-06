@@ -85,11 +85,17 @@ struct AXLocalePolicyTests {
         let builder = FakeAXRuntimeBuilder()
         let menuBar = builder.element(1)
         let view = addPolicyMenuItem(builder, 2, title: "View")
-        // Measured 2026-09-05: Logic titles these View/Window entries without a Show/Hide
-        // verb — `Mixer`, `모든 플러그인 윈도우`. The fixture said `Show Mixer` and
-        // `모든 플러그인 윈도우 가리기`, so it tested the contract rather than the product,
-        // which is the second and third fixture found doing that today.
-        let showMixer = addPolicyMenuItem(builder, 3, title: "Mixer")
+        // The WINDOW menu's entries lost their verbs — `모든 플러그인 윈도우` — and that is proven by
+        // the operation: `edit.toggle_step_input` reaches State A through `Step Input Keyboard`.
+        //
+        // The VIEW menu's mixer entry did NOT. It carries its verb and changes with the pane:
+        // measured 2026-09-06 by OPENING the menu before reading, `Show Mixer` when the mixer is
+        // closed and `Hide Mixer` when it is open; it never reads bare `Mixer`. This fixture said
+        // `Mixer` for a day, taken from the en-US census, which walks the menu bar WITHOUT opening
+        // the menus and therefore records whatever name was cached when the menu was last built.
+        // Reading the item the same way today still returns `Mixer` while the opened menu says
+        // `Show Mixer` — so the fixture agreed with a stale reading rather than with Logic.
+        let showMixer = addPolicyMenuItem(builder, 3, title: "Show Mixer")
         let koreanWindow = addPolicyMenuItem(builder, 4, title: "윈도우")
         let hidePlugins = addPolicyMenuItem(builder, 5, title: "모든 플러그인 윈도우")
         builder.setChildren(menuBar, [view, koreanWindow])
