@@ -526,6 +526,30 @@ def _row_in_scope(row, fragments, surfaces):
     return True
 
 
+def _row_definitely_outside(row, fragments, surfaces):
+    """True only when the row is KNOWN to be somewhere the scope excludes.
+
+    `_row_in_scope` answers "may this row back a claim", and its default for a row it cannot place
+    is NO. That is right for a presence and wrong for an absence, where every row dropped is a
+    presence that stops contradicting the claim. This is the third answer: not "in scope", not
+    "unknown", but *demonstrably elsewhere*.
+
+    Two rounds of review live in the difference. Round two showed a false ABSENCE passing because
+    untagged rows carrying the string fell outside a `surfaces` scope. Round three showed the
+    over-correction: a record with two same-path, same-role rows, one tagged with the scope's
+    surface and one tagged with another, made an honest absence unprovable — the contradicting row
+    was explicitly somewhere the claim was not about, and no narrower `coverage_absent` could
+    separate them, because only `surface` differed.
+    """
+    path = row.get("path")
+    if fragments and isinstance(path, str) and any(f not in path for f in fragments):
+        return True
+    surface = row.get("surface")
+    if surfaces and isinstance(surface, str) and surface not in surfaces:
+        return True
+    return False
+
+
 def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_contains=None,
                    surfaces=None):
     """The value the matching attribute actually carried, or None.
@@ -711,12 +735,14 @@ def coverage_problems(name, entry, locales, values):
             # that: an untagged inline row carrying `Delete` fell outside a `surfaces` scope, a
             # tagged row carrying `Paste` satisfied `seen`, and a FALSE absence passed.
             #
-            # So `carrying` looks at every row of the role at that path, scope or no scope. The cost
-            # is a refusal when a row from elsewhere happens to carry the string, and that is the
-            # right direction to be wrong in: a claim of absence that something contradicts should
-            # fail.
+            # So `carrying` keeps every row it cannot PLACE — an untagged row might be the
+            # element — and drops only the ones demonstrably somewhere else. Refusing those too was
+            # the over-correction round three found: it made an honest absence unprovable whenever a
+            # record held a same-path, same-role row from another surface.
             at_the_element = [r for r in _rows(rec)
-                              if r.get("role") == role and where in str(r.get("path") or "")]
+                              if r.get("role") == role and where in str(r.get("path") or "")
+                              and not _row_definitely_outside(
+                                  r, _path_fragments(scope.get("path_contains")), allowed_surfaces)]
             seen = [r for r in at_the_element
                     if _row_in_scope(r, _path_fragments(scope.get("path_contains")),
                                      allowed_surfaces)]

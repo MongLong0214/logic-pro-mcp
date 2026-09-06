@@ -1010,6 +1010,28 @@ def main():
          any("that is a presence" in x for x in cp(false_absence(None))),
          cp(false_absence(None)))
 
+    #      The over-correction, found by round three: a row EXPLICITLY tagged with another surface
+    #      is not evidence against an absence claim about this one. Both rows share a path and a
+    #      role, so no narrower `coverage_absent` can separate them — only `surface` does, and
+    #      refusing on it made an honest claim inexpressible. Untagged rows still count (above);
+    #      demonstrably-elsewhere rows do not.
+    (ab / "2026-09-07-tagged.json").write_text(json.dumps({
+        "id": "2026-09-07-tagged", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]"),
+            _row("AXMenuItem", title="Delete", surface="arrange.menus",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Delete]")]}]}), encoding="utf-8")
+
+    def honest_absence():
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-tagged"}
+        return e
+
+    case("a row tagged with another surface does not contradict this scope's absence",
+         cp(honest_absence()) == [], cp(honest_absence()))
+
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",
          any("`reason`" in x for x in sp({"surfaces": ["plugin.window"],
@@ -1020,16 +1042,29 @@ def main():
          sp({"surfaces": ["plugin.window"], "reason": "because"}))
 
     #      A rename cannot be carried, so it has to be LOUD. `build` records what it is dropping.
-    labels.build(existing={"schema": 2, "labels": {
-        "aLabelTheSwiftNoLongerHas": {"evidence_scope": {"path_contains": "AXWindow[",
-                                                         "reason": "r"},
-                                      "roles": ["AXMenuItem"]}}})
-    case("a label whose author-typed metadata is about to be lost is named",
-         labels.dropped.get("aLabelTheSwiftNoLongerHas") == ["evidence_scope", "roles"],
-         labels.dropped)
-    labels.build(existing={"schema": 2, "labels": {}})
-    case("...and the report does not survive into the next build",
-         labels.dropped == {}, labels.dropped)
+    scope4 = {"path_contains": "AXWindow[", "reason": "r"}
+    gone = {"schema": 2, "labels": {"aLabelTheSwiftNoLongerHas": {
+        "evidence_scope": scope4, "roles": ["AXMenuItem"], "match": "contains"}}}
+    lost_a = {}
+    labels.build(existing=gone, dropped=lost_a)
+    case("a label whose author-typed metadata is about to be lost is named, WITH the values",
+         lost_a.get("aLabelTheSwiftNoLongerHas") == {"evidence_scope": scope4,
+                                                     "roles": ["AXMenuItem"],
+                                                     "match": "contains"}, lost_a)
+    # `match` is not carried forward — it is derived from the Swift where the Swift can speak — but
+    # its FALLBACK is keyed by name too, so a rename reinstates the `exact` default over an author's
+    # `contains`. Round three found that live on `arrangeWindowTitleSuffix`, whose product
+    # comparison is `hasSuffix`. Accounting for it is the least this can do.
+    case("...including `match`, which is lost even though it is not carried",
+         "match" in (lost_a.get("aLabelTheSwiftNoLongerHas") or {}), lost_a)
+    # The report belongs to the call that produced it. As module state, a second build overwrote the
+    # first one's, and a caller holding the first document printed the second's losses beside it.
+    lost_b = {}
+    labels.build(existing={"schema": 2, "labels": {}}, dropped=lost_b)
+    case("a second build does not disturb the first build's report",
+         lost_b == {} and lost_a != {}, (lost_a, lost_b))
+    case("a caller that asks for no report gets none, and nothing is left behind",
+         isinstance(labels.build(existing=gone), dict), "")
 
     # 17. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
