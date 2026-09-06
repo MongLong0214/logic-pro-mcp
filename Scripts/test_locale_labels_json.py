@@ -1080,11 +1080,23 @@ def main():
         e["coverage_absent"] = {"en-US": where}
         return e
 
-    for bare in ("[", "/", "[]", "//"):
+    # Round six: counting word characters was wrong in BOTH directions. `/AX` passed and selected
+    # the same unrelated row; the real censuses carry `AXMenuItem[左]` and `AXMenuBarItem[1]`,
+    # whose named segments are one character long. The test is structural now — a whole bracketed
+    # segment, or two whole `/`-separated components.
+    for bare in ("[", "/", "[]", "//", "/AX", "AX/", "AX"):
         case(f"an absence locator of {bare!r} is refused as identifying nothing",
              any("named segment" in x for x in cp(bare_locator(bare))), cp(bare_locator(bare)))
     case("a locator naming a real segment is still accepted",
          cp(bare_locator("AXWindow[Other]")) == [], cp(bare_locator("AXWindow[Other]")))
+    # A one-character localized segment is a real locator. `\w{2}` refused these.
+    for good in ("[Other]", "AXWindow[Other]/AXMenuItem[Paste]"):
+        case(f"a locator of {good!r} is accepted", cp(bare_locator(good)) == [],
+             cp(bare_locator(good)))
+    case("a one-character segment from the real censuses is a locator",
+         guard._is_a_locator("AXMenuItem[左]") and guard._is_a_locator("AXMenuBarItem[1]"), "")
+    case("two whole components are a locator, brackets or not",
+         guard._is_a_locator("AXOutline/AXRow"), "")
 
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",

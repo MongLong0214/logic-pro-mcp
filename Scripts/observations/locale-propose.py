@@ -327,9 +327,18 @@ def apply(labels_path, census, proposals, records_by_surface):
             # Round four, 2026-09-07: a window-row proposal paired with a record carrying the
             # string only on a menu-bar row.
             scope = _GUARD.evidence_scope(entry)
+            fragments = _GUARD._path_fragments(scope.get("path_contains"))
+            # `coverage_paths[locale]` too, when this hit will take the COVERAGE branch. It is a
+            # constraint the document may already carry — legal to hold while a locale is
+            # `unmeasured`, because the guard skips that state — and validating without it wrote a
+            # `measured` the guard then refused. Round six, 2026-09-07: a dormant
+            # `coverage_paths.ko-KR` of `AXWindow[Target]` against a record that saw the string
+            # under `AXWindow[Other]`, applied clean and rejected afterwards.
+            if h["string"] == entry.get("canonical"):
+                fragments += _GUARD._path_fragments(
+                    (entry.get("coverage_paths") or {}).get(locale))
             seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
-                                         h["attribute"], h["match"],
-                                         _GUARD._path_fragments(scope.get("path_contains")),
+                                         h["attribute"], h["match"], fragments,
                                          scope.get("surfaces"))
             if seen is None:
                 unbacked.setdefault(name, set()).add((h["string"], rid))

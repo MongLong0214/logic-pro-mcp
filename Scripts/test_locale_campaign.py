@@ -524,6 +524,37 @@ def main():
          n_l == 0 and not (json.load(open(lp_l, encoding="utf-8"))["labels"]["exportMenuItem"]
                            .get("provenance")), n_l)
 
+    # 10f. `--apply` must honour a `coverage_paths[locale]` the document already carries. It is
+    #      legal to hold one while the locale is `unmeasured` — the guard skips that state — so a
+    #      run that validated without it wrote a `measured` the guard then refused.
+    json.dump(census([row("AXButton", "AXWindow[Other]/AXButton[Solo]", title="솔로")]),
+              open(cpath, "w"))
+    obs_cp = Path(tempfile.mkdtemp())
+    # The census row sits in a WINDOW, so its surface is `arrange.window` — mapping only
+    # `arrange.menus` made `apply` skip this label before the line under test, and the case passed
+    # while the mutation it exists to catch changed nothing.
+    json.dump({"id": "2026-09-05-ko-KR-arrange-window-census", "date": "2026-09-05",
+               "host": dict(HOST, locale="ko-KR"), "surface": "arrange.window",
+               "observations": [{"role": "AXButton", "title": "솔로",
+                                 "path": "AXWindow[Other]/AXButton[Solo]"}]},
+              open(obs_cp / "2026-09-05-ko-KR-arrange-window-census.json", "w", encoding="utf-8"),
+              ensure_ascii=False)
+    doc_cp = labels(trackSoloButton=("솔로", []))
+    doc_cp["labels"]["trackSoloButton"]["roles"] = ["AXButton"]
+    doc_cp["labels"]["trackSoloButton"]["coverage_paths"] = {"ko-KR": "AXWindow[Target]"}
+    lp_cp = write(tmp, doc_cp)
+    _, _, props_cp, _ = propose.main(cpath, lp_cp)
+    saved_cp, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_cp)
+    try:
+        assert props_cp.get("trackSoloButton"), "the fixture must propose, or apply never runs"
+        _, n_cov_cp = propose.apply(lp_cp, json.load(open(cpath)), props_cp,
+                                    {"arrange.window": "2026-09-05-ko-KR-arrange-window-census"})
+    finally:
+        propose._GUARD.OBS = saved_cp
+    case("a dormant coverage_paths is honoured when coverage is written",
+         n_cov_cp == 0 and json.load(open(lp_cp, encoding="utf-8"))["labels"]["trackSoloButton"]
+         ["coverage"]["ko-KR"] == "unmeasured", n_cov_cp)
+
     case("a well-formed scope still admits the row it allows",
          "markerListDeleteMenuItem" in with_scope(
              {"reason": "r", "surfaces": ["arrange.menus"]}), "")

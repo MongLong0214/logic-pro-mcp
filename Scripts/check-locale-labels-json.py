@@ -531,6 +531,20 @@ def _row_in_scope(row, fragments, surfaces):
     return True
 
 
+def _is_a_locator(where):
+    """Whether this string names a place in an AX path, structurally.
+
+    `[Other]` and `[左]` and `[1]` are complete bracketed segments. `AXOutline/AXRow` is two
+    complete components. `[`, `/`, `//`, `[]` and `/AX` are none of those: each is a piece of a
+    path rather than a part of one, and each selects rows it does not name.
+    """
+    text = str(where)
+    if re.search(r"\[[^\[\]]+\]", text):
+        return True
+    parts = text.split("/")
+    return len([p for p in parts if p.strip() and re.search(r"\w", p)]) >= 2 and "" not in parts
+
+
 def _row_definitely_outside(row, fragments, surfaces):
     """True only when the row is KNOWN to be somewhere the scope excludes.
 
@@ -721,13 +735,19 @@ def coverage_problems(name, entry, locales, values):
                            f"about — a fragment of its AX path. `true` let any row of this role "
                            f"stand for one nobody looked at")
                 continue
-            # A DELIMITER is not a locator either. The rule below asked for a `/` or a `[`, and
-            # `"["` satisfies it while matching every bracketed path in the record — so `seen`
-            # accepted an unrelated `Paste` item and the guard certified an absence nobody had
-            # located. Round five, 2026-09-07. A locator has to name something: a separator AND a
-            # run of at least two word characters, which every path the census writes has and no
-            # punctuation-only string does.
-            if not re.search(r"\w{2}", str(where)) or ("/" not in where and "[" not in where):
+            # A DELIMITER is not a locator either, and neither is a fragment of one. Asking for a
+            # `/` or a `[` let `"["` through, which matches every bracketed path in the record —
+            # `seen` accepted an unrelated `Paste` item and the guard certified an absence nobody
+            # had located (round five). Counting word characters instead was wrong in BOTH
+            # directions: `/AX` passed and selected the same unrelated row, while the real censuses
+            # contain `AXMenuItem[左]` and `AXMenuBarItem[1]`, whose named segments are one
+            # character long (round six).
+            #
+            # So the test is STRUCTURAL, on complete path components rather than on characters: a
+            # locator names at least one whole bracketed segment, or at least two whole
+            # `/`-separated components. Both are things a path HAS; neither is something a fragment
+            # of punctuation can imitate, and neither cares how long a localized name is.
+            if not _is_a_locator(where):
                 # A bare substring is not a locator. `"AX"` selects every row of the role and the
                 # claim collapses back to the one this rule replaced. Requiring the shape of a path
                 # — a separator or a named segment, both of which the census writes — refuses that
