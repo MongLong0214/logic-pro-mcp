@@ -26,6 +26,13 @@ What makes this safe is what it refuses:
     role and the right attribute about the wrong element — the defect retracted on 2026-09-05 and
     resurrected on 2026-09-06 (#793).
 
+The BASE census should be the one whose language the labels are named in. A label is matched by its
+`canonical`, which is English, so a Korean base finds only the labels Logic leaves untranslated in
+Korean — measured 2026-09-06: 29 candidates from en-US against ja-JP, 11 from ko-KR against the
+same target. Matching the base against a label's declared VARIANTS as well would lift that, and is
+deliberately not done here: it would make the tool's answer depend on evidence the ledger already
+holds, and the point of this one is to find strings nothing in the ledger knows.
+
 Nothing is written to the tree, and nothing here edits Swift. It prints candidates; a person adds
 the variant to `AXLocalePolicy.swift` and the campaign then backs it with provenance the ordinary
 way.
@@ -94,16 +101,24 @@ def reading(row):
 def candidates(base_census, target_census, labels):
     """For each label, the target-locale string sitting where its canonical sits. And the refusals.
 
-    Returns (proposals, ambiguous, stats). A proposal is only made when every aligned occurrence of
-    the canonical agrees about the target string; when they disagree the label goes to `ambiguous`
-    with all of them, because there is no evidence here for choosing.
+    Returns (proposals, ambiguous, containing, stats). A proposal is only made when every aligned
+    occurrence of the canonical agrees about the target string; when they disagree the label goes
+    to `ambiguous` with all of them, because there is no evidence here for choosing.
+
+    And the base row has to BE the canonical, not merely contain it. An aligned pair gives back the
+    whole target string, so for a label matched by containment the answer is the translation of the
+    CONTAINING string — `regionHelpKeyword` is `region`, the row it matched reads `cycle region`,
+    and the aligned Japanese is `サイクルリージョン`, which is the translation of `cycle region`.
+    Taken as a variant that is a different label. Found 2026-09-06 by reading this tool's own
+    output against what each label says it addresses: 2 of the first 18 candidates were this, and
+    `arrangeWindowTitleSuffix` would have taken a project name into the ledger with it.
     """
     pairs, unplaced_base, unplaced_target = aligned(base_census["census"], target_census["census"])
     usable = [(b, t) for b, t in pairs if SYSTEM_OWNED not in str(b.get("path") or "")]
     stats = {"pairs": len(pairs), "system_owned": len(pairs) - len(usable),
              "unplaced_base": unplaced_base, "unplaced_target": unplaced_target}
 
-    proposals, ambiguous = {}, {}
+    proposals, ambiguous, containing = {}, {}, {}
     for name, entry in sorted(labels.items()):
         canonical = entry.get("canonical")
         if not canonical:
@@ -125,7 +140,15 @@ def candidates(base_census, target_census, labels):
             t_attr, t_text = reading(t)
             if not b_text or not t_text or b_attr != t_attr:
                 continue
-            if not _PROPOSE.matches(name, canonical, b_text):
+            # The ENTRY, so the mode comes from what the ledger declares rather than from a guess
+            # about the label's name — and so a label with no agreed mode matches nothing here
+            # either, which is what the proposer and the guard both do.
+            if not _PROPOSE.matches(name, canonical, b_text, entry):
+                continue
+            # EQUALS, not merely matches. Asked with the guard's own comparison under `exact`, which
+            # folds case and trims exactly as the product does, so this cannot drift from it.
+            if not _GUARD.carries(b_text, canonical, "exact"):
+                containing.setdefault(name, []).append({"base": b_text, "target": t_text})
                 continue
             if t_text == b_text:
                 # Not a translation. Logic ships plenty of strings identical across locales, and a
@@ -150,7 +173,7 @@ def candidates(base_census, target_census, labels):
         c = dict(found[target_text][0])
         c["scoped"] = bool(_GUARD.evidence_scope(entry))
         proposals[name] = c
-    return proposals, ambiguous, stats
+    return proposals, ambiguous, containing, stats
 
 
 def _census(path):
@@ -177,7 +200,7 @@ def main(argv=None):
         raise SystemExit(f"both censuses are {base_locale} — an alignment needs two languages")
     labels = json.load(open(args.labels, encoding="utf-8"))["labels"]
 
-    proposals, ambiguous, stats = candidates(base, target, labels)
+    proposals, ambiguous, containing, stats = candidates(base, target, labels)
     missing = {n for n, e in labels.items()
                if (e.get("coverage") or {}).get(target_locale) == "unmeasured"}
 
@@ -188,6 +211,8 @@ def main(argv=None):
     print(f"{len(proposals)} label(s) have an unambiguous {target_locale} string read from the "
           f"aligned walk, {len(set(proposals) & missing)} of them currently unmeasured there")
     print(f"{len(ambiguous)} label(s) matched aligned rows whose targets DISAGREE — not proposed")
+    print(f"{len(containing)} label(s) matched only INSIDE a longer string, so the aligned target "
+          f"is the translation of that longer string and not of the label — not proposed")
     # Said every run rather than left for a reader to work out. These are the candidates admitted
     # by a ROLE and nothing narrower, so each is a place the #793 shape can happen: a real reading
     # of the right kind of element, about the wrong one.
@@ -204,7 +229,8 @@ def main(argv=None):
     if args.out:
         json.dump({"base_locale": base_locale, "target_locale": target_locale,
                    "base_record": base.get("id"), "target_record": target.get("id"),
-                   "stats": stats, "proposals": proposals, "ambiguous": ambiguous},
+                   "stats": stats, "proposals": proposals, "ambiguous": ambiguous,
+                   "containing": containing},
                   open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         print(f"wrote {args.out}")
     return 0

@@ -431,7 +431,7 @@ def main():
          "markerListDeleteMenuItem" in scoped_labels(
              {"surfaces": ["arrange.menus"], "reason": "r"}, menubar), "")
 
-    # 10. A MALFORMED scope makes the proposer refuse, not shrug. It used to read the fields
+    # 10b. A MALFORMED scope makes the proposer refuse, not shrug. It used to read the fields
     #     straight out of the object, so `evidence_scope: "AXWindow["` and `path_contains: 5` were
     #     silently ignored — a scope written wrongly permitted everything — and `surfaces: 5`
     #     crashed the tool. Named by review 2026-09-07. Refusing is the safe direction for a tool
@@ -599,7 +599,7 @@ def main():
     # `Export` would be paired with `挿入` and the reading would be confidently wrong.
     target3 = [mi(B + "AXMenuItem[A]", "バウンス"), mi(B + "AXGroup/AXMenuItem[X]", "挿入"),
                mi(B + "AXMenuItem[B]", "書き出す")]
-    props, amb, stats = pair(base3, target3, dict(exportMenuItem=("Export", [])))
+    props, amb, _cont, stats = pair(base3, target3, dict(exportMenuItem=("Export", [])))
     case("an inserted target row does not shift the pairing after it",
          (props.get("exportMenuItem") or {}).get("target") == "書き出す", (props, stats))
     case("the unplaceable row is counted, not approximated",
@@ -608,7 +608,7 @@ def main():
     # The Apple menu carries the SYSTEM locale. On a host whose system language never changed both
     # censuses show the same string there, so a pair taken from it reads as "not translated".
     apple = "AXMenuBar/AXMenuBarItem[Apple]/AXMenu/"
-    props, _, stats = pair([mi(apple + "AXMenuItem[S]", "Bounce")],
+    props, _, _cont, stats = pair([mi(apple + "AXMenuItem[S]", "Bounce")],
                            [mi(apple + "AXMenuItem[S]", "バウンス")],
                            dict(bounceMenuItem=("Bounce", [])))
     case("Apple-menu rows are excluded from the alignment",
@@ -616,47 +616,61 @@ def main():
 
     # Two aligned rows carrying the canonical whose targets DISAGREE. Choosing one would write a
     # real record, the right role and the right attribute about the wrong element — #793's shape.
-    props, amb, _ = pair([mi(B + "AXMenuItem[A]", "Delete"), mi(B + "AXMenuItem[B]", "Delete")],
-                         [mi(B + "AXMenuItem[A]", "削除"), mi(B + "AXMenuItem[B]", "消去")],
+    props, amb, _cont, _ = pair([mi(B + "AXMenuItem[A]", "Delete"), mi(B + "AXMenuItem[B]", "Delete")],
+                              [mi(B + "AXMenuItem[A]", "削除"), mi(B + "AXMenuItem[B]", "消去")],
                          dict(exportMenuItem=("Delete", [])))
     case("disagreeing targets are reported, never resolved",
          "exportMenuItem" not in props and set(amb.get("exportMenuItem") or {}) == {"削除", "消去"},
          (props, amb))
 
     # ...but two aligned rows AGREEING is not ambiguity, it is corroboration.
-    props, amb, _ = pair([mi(B + "AXMenuItem[A]", "Delete"), mi(B + "AXMenuItem[B]", "Delete")],
-                         [mi(B + "AXMenuItem[A]", "削除"), mi(B + "AXMenuItem[B]", "削除")],
+    props, amb, _cont, _ = pair([mi(B + "AXMenuItem[A]", "Delete"), mi(B + "AXMenuItem[B]", "Delete")],
+                              [mi(B + "AXMenuItem[A]", "削除"), mi(B + "AXMenuItem[B]", "削除")],
                          dict(exportMenuItem=("Delete", [])))
     case("agreeing targets are one candidate, not a conflict",
          (props.get("exportMenuItem") or {}).get("target") == "削除", (props, amb))
 
-    props, _, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "Bounce")],
+    props, _, _c, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "Bounce")],
                        dict(bounceMenuItem=("Bounce", [])))
     case("an untranslated string is not a candidate", "bounceMenuItem" not in props, props)
 
-    props, _, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
+    # The base row must BE the canonical, not merely contain it. An aligned pair returns the whole
+    # target string, so a containment match hands back the translation of the CONTAINING string —
+    # `region` matched inside `cycle region` gives `サイクルリージョン`, which is a different label.
+    # Two of the first 18 candidates this tool produced were this shape.
+    props, _, cont, _ = pair([row("AXLayoutItem", "AXWindow[x]/AXLayoutItem[cycle region]",
+                                  description="cycle region")],
+                             [row("AXLayoutItem", "AXWindow[x]/AXLayoutItem[サイクルリージョン]",
+                                  description="サイクルリージョン")],
+                             dict(regionHelpKeyword=("region", [])))
+    case("a containment-only match is refused, not proposed",
+         "regionHelpKeyword" not in props, props)
+    case("...and is reported with what it actually saw",
+         (cont.get("regionHelpKeyword") or [{}])[0].get("target") == "サイクルリージョン", cont)
+
+    props, _, _c, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
                        dict(bounceMenuItem=("Bounce", ["バウンス"])))
     case("a variant already declared is not re-proposed", "bounceMenuItem" not in props, props)
 
-    props, _, _ = pair([row("AXMenuBarItem", "AXMenuBar/AXMenuBarItem[Bounce]", title="Bounce")],
+    props, _, _c, _ = pair([row("AXMenuBarItem", "AXMenuBar/AXMenuBarItem[Bounce]", title="Bounce")],
                        [row("AXMenuBarItem", "AXMenuBar/AXMenuBarItem[バウンス]", title="バウンス")],
                        dict(bounceMenuItem=("Bounce", [])))
     case("the base row's role must fit the label's shape", "bounceMenuItem" not in props, props)
 
     # The label's `evidence_scope` gates the BASE row too: a label that may only be read in a
     # window may not learn its translation from the menu bar either.
-    props, _, _ = pair([mi(B + "AXMenuItem[A]", "Delete")], [mi(B + "AXMenuItem[A]", "削除")],
+    props, _, _c, _ = pair([mi(B + "AXMenuItem[A]", "Delete")], [mi(B + "AXMenuItem[A]", "削除")],
                        dict(markerListDeleteMenuItem=("Delete", [])),
                        evidence_scope={"path_contains": "AXWindow[", "reason": "r"})
     case("a scoped label does not learn its translation from outside its scope",
          "markerListDeleteMenuItem" not in props, props)
 
     # And every candidate says whether anything narrower than a role admitted it.
-    props, _, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
+    props, _, _c, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
                        dict(bounceMenuItem=("Bounce", [])))
     case("an unscoped candidate is marked as resting on its role alone",
          props["bounceMenuItem"]["scoped"] is False, props)
-    props, _, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
+    props, _, _c, _ = pair([mi(B + "AXMenuItem[A]", "Bounce")], [mi(B + "AXMenuItem[A]", "バウンス")],
                        dict(bounceMenuItem=("Bounce", [])),
                        evidence_scope={"surfaces": ["arrange.menus"], "reason": "r"})
     case("a scoped candidate says so", props["bounceMenuItem"]["scoped"] is True, props)
