@@ -721,15 +721,21 @@ def coverage_problems(name, entry, locales, values):
                            f"about — a fragment of its AX path. `true` let any row of this role "
                            f"stand for one nobody looked at")
                 continue
-            if "/" not in where and "[" not in where:
+            # A DELIMITER is not a locator either. The rule below asked for a `/` or a `[`, and
+            # `"["` satisfies it while matching every bracketed path in the record — so `seen`
+            # accepted an unrelated `Paste` item and the guard certified an absence nobody had
+            # located. Round five, 2026-09-07. A locator has to name something: a separator AND a
+            # run of at least two word characters, which every path the census writes has and no
+            # punctuation-only string does.
+            if not re.search(r"\w{2}", str(where)) or ("/" not in where and "[" not in where):
                 # A bare substring is not a locator. `"AX"` selects every row of the role and the
                 # claim collapses back to the one this rule replaced. Requiring the shape of a path
                 # — a separator or a named segment, both of which the census writes — refuses that
                 # without capping how many rows a genuine path may select, which is what would make
                 # an honest claim about identical siblings inexpressible.
                 out.append(f"{name}: coverage_absent[{loc}] is {where!r}, which is a substring "
-                           f"rather than a path — it must contain `/` or `[`, or it identifies "
-                           f"nothing and any row of this role satisfies it")
+                           f"rather than a path — it must contain `/` or `[` AND a named segment, "
+                           f"or it identifies nothing and any row of this role satisfies it")
                 continue
             # The label's scope, on BOTH sides of this branch. It selects rows itself rather than
             # calling `sighting`, so adding the scope only where `sighting` is called left measured

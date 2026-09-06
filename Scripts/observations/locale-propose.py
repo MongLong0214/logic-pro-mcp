@@ -83,7 +83,16 @@ def label_mode(name, entry):
     if swift is not None:
         return swift
     declared = (entry or {}).get("match")
-    return declared if declared in _GUARD.MATCH_MODES else match_mode(name)
+    if declared in _GUARD.MATCH_MODES:
+        return declared
+    # NO MODE. The guard refuses a label that declares none — "whether Logic's string EQUALS this
+    # label or CONTAINS it decides what counts as having seen it" — so a proposal made under a guess
+    # is a proposal under a rule nothing has agreed to. Worse, `apply` used to WRITE that guess, so
+    # a run turned a guard-red ledger green by installing the very rule that legitimised its own
+    # match: round five drove `automationModeContext` with no declaration, matched
+    # `automation extended` by the name guess, wrote `contains`, recorded coverage, and the guard
+    # then agreed. `main()` reports these; nothing is proposed for them.
+    return None
 
 
 def swift_mode(name):
@@ -149,6 +158,7 @@ def roles_for(name):
 
 
 def matches(name, wanted, text, entry=None):
+    # A label with no agreed mode matches nothing — see `label_mode`.
     """Whether this string counts as seen — under the SAME mode the block will declare.
 
     These were two rules: the hit was decided from the label's name and the `match` field was
@@ -160,7 +170,8 @@ def matches(name, wanted, text, entry=None):
     product does, and this file used to hold a case-sensitive twin that could propose nothing for a
     label whose stored form differs from Logic's only in case.
     """
-    return _GUARD.carries(text, wanted, label_mode(name, entry))
+    mode = label_mode(name, entry)
+    return mode is not None and _GUARD.carries(text, wanted, mode)
 
 
 def strings_of(row):
@@ -213,6 +224,7 @@ def apply(labels_path, census, proposals, records_by_surface):
     `coverage_records[locale]` so `measured` can be derived. Nothing is written for a label whose
     surface has no record — a citation to nothing is the shape the guard refuses."""
     unbacked = {}
+    mislocated = {}
     doc = json.load(open(labels_path, encoding="utf-8"))
     host = census["host"]; locale = host["locale"]
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
@@ -261,8 +273,10 @@ def apply(labels_path, census, proposals, records_by_surface):
         swift = swift_mode(name)
         if swift is not None:
             entry["match"] = swift
-        else:
-            entry.setdefault("match", match_mode(name))
+        elif entry.get("match") not in _GUARD.MATCH_MODES:
+            # No Swift, no declaration: there is nothing to write that is not a guess, and the hits
+            # above are empty for exactly that reason.
+            continue
         for h in hits:
             rid = records_by_surface.get(h["surface"])
             # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
@@ -281,6 +295,14 @@ def apply(labels_path, census, proposals, records_by_surface):
             # later inside the guard, after the ledger had already been written. Raised by review
             # 2026-09-06.
             if not rid or not isinstance(_GUARD._record(rid), dict):
+                continue
+            # The record's LOCALE, which the guard checks and this did not. Records are chosen by
+            # FILENAME (`*-<locale>-*-census.json`) and nothing makes a record's name agree with its
+            # `host.locale`, so a mis-named record produced a block claiming the census locale and
+            # citing a reading taken in another — written, reported as success, and then refused by
+            # the guard. Round five, 2026-09-07; same shape as the sighting check beside it.
+            if ((_GUARD._record(rid).get("host") or {}).get("locale")) != locale:
+                mislocated.setdefault(name, set()).add(rid)
                 continue
             # And the record must actually CONTAIN the sighting. Records are found by SURFACE, so a
             # census whose `surface` field matches a record says nothing about whether THAT record
@@ -359,6 +381,12 @@ def apply(labels_path, census, proposals, records_by_surface):
         print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
               f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
               + (" …" if len(skipped) > 6 else ""))
+    if mislocated:
+        print(f"  not written for {len(mislocated)} label(s) whose surface record was measured in "
+              f"another locale than the census — records are chosen by FILENAME and nothing makes "
+              f"that name agree with the record's `host.locale`: "
+              + ", ".join(f"{k}→{sorted(v)[0]}" for k, v in sorted(mislocated.items())[:4])
+              + (" …" if len(mislocated) > 4 else ""))
     if unbacked:
         n = sum(len(v) for v in unbacked.values())
         print(f"  not written for {n} sighting(s) whose cited record does not contain them — the "

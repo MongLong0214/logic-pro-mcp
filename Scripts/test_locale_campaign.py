@@ -483,6 +483,47 @@ def main():
          == "exact",
          json.load(open(lp_m2, encoding="utf-8"))["labels"]["automationModeContext"].get("match"))
 
+    # 10d. A label the Swift cannot speak about and the ledger does not declare has NO agreed mode.
+    #      The guard refuses it outright, so a proposal made under a guess is one made under a rule
+    #      nothing agreed to — and `apply` used to WRITE that guess, turning a guard-red ledger green
+    #      by installing the rule that legitimised its own match. Round five, 2026-09-07.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[x]",
+                          title="자동화 확장")]), open(cpath, "w"))
+    undeclared = labels(automationModeContext=("automation", ["자동화"]))
+    undeclared["labels"]["automationModeContext"].pop("match")
+    undeclared["labels"]["automationModeContext"]["roles"] = ["AXMenuItem"]
+    lp_u = write(tmp, undeclared)
+    _, _, props_u, _ = propose.main(cpath, lp_u)
+    case("a label with no agreed match mode is not proposed at all",
+         "automationModeContext" not in props_u, props_u)
+    propose.apply(lp_u, json.load(open(cpath)), props_u, {})
+    case("...and --apply does not install a guessed mode for it",
+         "match" not in json.load(open(lp_u, encoding="utf-8"))["labels"]["automationModeContext"],
+         json.load(open(lp_u, encoding="utf-8"))["labels"]["automationModeContext"])
+
+    # 10e. A record is chosen by FILENAME, and nothing makes that name agree with its `host.locale`.
+    #      Writing the census locale into a block citing a record measured elsewhere is a block the
+    #      guard then refuses — written, and reported as success.
+    obs_loc = Path(tempfile.mkdtemp())
+    json.dump({"id": "2026-09-05-ko-KR-mislabelled-census", "date": "2026-09-05",
+               "host": dict(HOST, locale="en-US"), "surface": "arrange.menus",
+               "observations": [{"role": "AXMenuItem", "title": "내보내기"}]},
+              open(obs_loc / "2026-09-05-ko-KR-mislabelled-census.json", "w", encoding="utf-8"),
+              ensure_ascii=False)
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[내보내기]",
+                          title="내보내기")]), open(cpath, "w"))
+    lp_l = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
+    _, _, props_l, _ = propose.main(cpath, lp_l)
+    saved_loc, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_loc)
+    try:
+        n_l, _ = propose.apply(lp_l, json.load(open(cpath)), props_l,
+                               {"arrange.menus": "2026-09-05-ko-KR-mislabelled-census"})
+    finally:
+        propose._GUARD.OBS = saved_loc
+    case("a record measured in another locale is not cited, however it is named",
+         n_l == 0 and not (json.load(open(lp_l, encoding="utf-8"))["labels"]["exportMenuItem"]
+                           .get("provenance")), n_l)
+
     case("a well-formed scope still admits the row it allows",
          "markerListDeleteMenuItem" in with_scope(
              {"reason": "r", "surfaces": ["arrange.menus"]}), "")

@@ -1062,6 +1062,30 @@ def main():
     case("a non-string path cannot satisfy a path constraint",
          any("at a path containing" in x for x in pp(listy)), pp(listy))
 
+    #      Round five: a DELIMITER is not a locator. `"["` satisfied "must contain / or [" and then
+    #      matched every bracketed path in the record, so `seen` accepted an unrelated element and
+    #      the guard certified an absence nobody had located.
+    (ab / "2026-09-07-unrelated.json").write_text(json.dumps({
+        "id": "2026-09-07-unrelated", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[Other]/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+
+    guard.OBS = str(ab)        # the `listy` case above repointed it; these records live in `ab`
+
+    def bare_locator(where):
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-unrelated"}
+        e["coverage_absent"] = {"en-US": where}
+        return e
+
+    for bare in ("[", "/", "[]", "//"):
+        case(f"an absence locator of {bare!r} is refused as identifying nothing",
+             any("named segment" in x for x in cp(bare_locator(bare))), cp(bare_locator(bare)))
+    case("a locator naming a real segment is still accepted",
+         cp(bare_locator("AXWindow[Other]")) == [], cp(bare_locator("AXWindow[Other]")))
+
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",
          any("`reason`" in x for x in sp({"surfaces": ["plugin.window"],
