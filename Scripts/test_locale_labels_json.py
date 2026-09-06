@@ -1103,6 +1103,11 @@ def main():
     # real component of a real ko-KR path unusable as a locator.
     case("an unnamed census component is a locator too",
          guard._is_a_locator("AXScrollArea{_NS:108}"), "")
+    # Python counts `_` as a word character, so a rule promising a NAME accepted punctuation-only
+    # probes. Round eight, 2026-09-07.
+    for underscore in ("[_]", "{_}", "_/_"):
+        case(f"an underscore-only probe {underscore!r} is not a name",
+             not guard._is_a_locator(underscore), "")
 
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",

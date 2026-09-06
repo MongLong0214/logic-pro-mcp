@@ -542,12 +542,17 @@ def _is_a_locator(where):
     # A segment has CONTENT: `[ ]` is a pair of brackets around nothing. The census also writes
     # `{_NS:108}` for elements Logic gives no name, and those are locators too — refusing them made
     # a real component of a real path unusable (round seven, ko-KR census).
-    if re.search(r"\[[^\[\]]*\w[^\[\]]*\]", text) or re.search(r"\{[^{}]*\w[^{}]*\}", text):
+    # `[^\W_]` rather than `\w`: Python counts the underscore as a word character, so `[_]`, `{_}`
+    # and `_/_` passed a rule that promises a NAME. Named by review, round eight. It still accepts
+    # every localized name — CJK, letters, digits — and `{_NS:108}` keeps its `NS` and its digits.
+    named = r"[^\W_]"
+    if (re.search(r"\[[^\[\]]*" + named + r"[^\[\]]*\]", text)
+            or re.search(r"\{[^{}]*" + named + r"[^{}]*\}", text)):
         return True
     # EVERY component, not two of them. Counting the good ones let `AXWindow/   /AXButton` through
     # on the strength of its first and last, and a blank component is not a path component.
     parts = text.split("/")
-    return len(parts) >= 2 and all(p.strip() and re.search(r"\w", p) for p in parts)
+    return len(parts) >= 2 and all(p.strip() and re.search(named, p) for p in parts)
 
 
 def _row_definitely_outside(row, fragments, surfaces):
