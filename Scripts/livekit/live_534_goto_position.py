@@ -44,12 +44,6 @@ rec = ev.record_screen(seconds=45)
 d = E.Driver()
 
 
-def playhead():
-    """The transport readout, read live rather than from cache."""
-    body = d.tool("logic_transport", "goto_position", {"position": PARK}) if False else None
-    return d.resource("logic://transport")
-
-
 win = E.logic_window()
 if not win:
     ev.check("534/precondition-logic-window", False,
