@@ -183,16 +183,6 @@ def current_language_setting():
     return [c for c in codes if c not in ("", )] or ["en"]
 
 
-def start_bar(help_text):
-    """The bar Logic's help string says a region starts at — the two languages differ in order."""
-    text = help_text or ""
-    korean = re.search(r"(\d+)\s*마디[^0-9]*시작", text)
-    if korean:
-        return int(korean.group(1))
-    english = re.search(r"starts at\D*(\d+)", text)
-    return int(english.group(1)) if english else None
-
-
 original_languages = current_language_setting()
 ev.note("519/original-language", {"AppleLanguages": original_languages})
 
