@@ -519,7 +519,12 @@ def _row_in_scope(row, fragments, surfaces):
     where a reviewer looks. What the check buys is that the census, which writes almost every row
     here, tags them mechanically.
     """
-    if any(f not in str(row.get("path") or "") for f in fragments):
+    # `isinstance`, not `str(...)`. A row whose `path` is the LIST `["AXWindow["]` stringifies to
+    # `['AXWindow[']`, which contains the fragment — so a row with no usable path satisfied a path
+    # constraint. Round four, 2026-09-07. A row that cannot state where it is cannot satisfy a rule
+    # about where it is.
+    path = row.get("path")
+    if fragments and (not isinstance(path, str) or any(f not in path for f in fragments)):
         return False
     if surfaces and row.get("surface") not in surfaces:
         return False
@@ -542,6 +547,9 @@ def _row_definitely_outside(row, fragments, surfaces):
     separate them, because only `surface` differed.
     """
     path = row.get("path")
+    # A row whose path is unusable is UNKNOWN, never "definitely outside" — the asymmetry is the
+    # whole point of this predicate, and reading a list's repr as a path would break it in the
+    # dangerous direction.
     if fragments and isinstance(path, str) and any(f not in path for f in fragments):
         return True
     surface = row.get("surface")
@@ -739,13 +747,27 @@ def coverage_problems(name, entry, locales, values):
             # element — and drops only the ones demonstrably somewhere else. Refusing those too was
             # the over-correction round three found: it made an honest absence unprovable whenever a
             # record held a same-path, same-role row from another surface.
-            at_the_element = [r for r in _rows(rec)
-                              if r.get("role") == role and where in str(r.get("path") or "")
-                              and not _row_definitely_outside(
-                                  r, _path_fragments(scope.get("path_contains")), allowed_surfaces)]
+            # A row with no usable PATH is not located anywhere, so `where in path` drops it —
+            # before the tri-state can say whether it is elsewhere. Round four built the false
+            # absence that follows: an untagged, pathless row carrying the string vanished from the
+            # comparison entirely while a tagged row supplied `seen`. Unlocatable is `unknown`, and
+            # unknown counts as a possible presence here for the same reason untagged does.
+            def _at_element(r):
+                if r.get("role") != role:
+                    return False
+                path = r.get("path")
+                if isinstance(path, str) and where not in path:
+                    return False
+                return not _row_definitely_outside(
+                    r, _path_fragments(scope.get("path_contains")), allowed_surfaces)
+
+            at_the_element = [r for r in _rows(rec) if _at_element(r)]
+            # `seen` keeps the strict reading: the element has to have been FOUND, and a row that
+            # cannot say where it is has not found anything.
             seen = [r for r in at_the_element
-                    if _row_in_scope(r, _path_fragments(scope.get("path_contains")),
-                                     allowed_surfaces)]
+                    if isinstance(r.get("path"), str) and where in r["path"]
+                    and _row_in_scope(r, _path_fragments(scope.get("path_contains")),
+                                      allowed_surfaces)]
             # Compared the way `sighting` compares, or the two disagree about the same pair:
             # positive sightings strip before an exact test, so `" Create "` counted as a presence
             # there and as an absence here. One rule.

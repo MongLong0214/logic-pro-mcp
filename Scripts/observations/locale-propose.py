@@ -64,6 +64,39 @@ _EXACT_STRICT = set(_GUARD.swift_exact_strict())
 _PREFIX = set(_GUARD.swift_prefix())
 
 
+def label_mode(name, entry):
+    """The mode to read this label with: the Swift where it can speak, else what the LEDGER says.
+
+    `match_mode` falls back to a guess from the label's NAME, and `apply` used to write that guess
+    over whatever the document declared. Four labels disagree today — `automationModeContext`,
+    `headerPanHint`, `markerContainerKeywords` and `transportSliderHints` all declare `exact` while
+    the name fallback says `contains` — so a campaign run silently loosened them and then matched
+    under the looser rule it had just installed. Round four of review reproduced it end to end:
+    `automationModeContext` accepted `automation extended`, rewrote `exact` to `contains`, recorded
+    measured coverage, and passed the guard, because the guard checks the mode the document now
+    declared.
+
+    An author's declaration outranks a guess. The Swift outranks both, because it is what the
+    product actually does.
+    """
+    swift = swift_mode(name)
+    if swift is not None:
+        return swift
+    declared = (entry or {}).get("match")
+    return declared if declared in _GUARD.MATCH_MODES else match_mode(name)
+
+
+def swift_mode(name):
+    """The mode the product reads this set with, or None where the Swift cannot say."""
+    if name in _CONTAINMENT:
+        return "contains"
+    if name in _PREFIX:
+        return "prefix"
+    if name in _EXACT_STRICT:
+        return "exact_strict"
+    return None
+
+
 def match_mode(name):
     """The mode the product reads this set with, from the Swift; the name is the only fallback.
 
@@ -115,7 +148,7 @@ def roles_for(name):
     return None   # unknown shape — see `apply`, which refuses to write for these
 
 
-def matches(name, wanted, text):
+def matches(name, wanted, text, entry=None):
     """Whether this string counts as seen — under the SAME mode the block will declare.
 
     These were two rules: the hit was decided from the label's name and the `match` field was
@@ -127,7 +160,7 @@ def matches(name, wanted, text):
     product does, and this file used to hold a case-sensitive twin that could propose nothing for a
     label whose stored form differs from Logic's only in case.
     """
-    return _GUARD.carries(text, wanted, match_mode(name))
+    return _GUARD.carries(text, wanted, label_mode(name, entry))
 
 
 def strings_of(row):
@@ -155,12 +188,12 @@ def main(census_path, labels_path):
             if allowed is not None and row["role"] not in allowed:
                 # the string may appear here, but this element cannot be what the label addresses
                 for _, text in strings_of(row):
-                    if any(w and matches(name, w, text) for w in wanted):
+                    if any(w and matches(name, w, text, entry) for w in wanted):
                         unmatched_role.setdefault(name, set()).add(row["role"])
                 continue
             for attr, text in strings_of(row):
                 for w in wanted:
-                    if w and matches(name, w, text):
+                    if w and matches(name, w, text, entry):
                         # NOT truncated. `observed` is compared character for character against
                         # the value the record carried, so a clipped proposal is a claim the record
                         # cannot back — and clipping is exactly what produced the two overclaiming
@@ -168,7 +201,7 @@ def main(census_path, labels_path):
                         hits.append({"string": w, "attribute": attr, "observed": text,
                                      "role": row["role"], "path": row["path"][:100],
                                      "surface": row["surface"],
-                                     "match": match_mode(name)})
+                                     "match": label_mode(name, entry)})
         if hits:
             proposals[name] = hits
     return locale, host, proposals, unmatched_role
@@ -217,7 +250,19 @@ def apply(labels_path, census, proposals, records_by_surface):
         # The label declares the mode once. Coverage has no per-variant block to read one from, and
         # when it derived its own the two halves of the guard disagreed for every label the Swift
         # cannot speak about. This is the mode the hits above were actually found under.
-        entry["match"] = match_mode(name)
+        #
+        # NEVER over an author's declaration. This wrote `match_mode(name)` — a guess from the
+        # label's NAME — over whatever the document said, and four labels disagree today. Round
+        # four reproduced the consequence: `automationModeContext` declares `exact`, the guess says
+        # `contains`, and a run matched `automation extended`, rewrote the mode to `contains`,
+        # recorded measured coverage, and then passed the guard, because by then the document
+        # declared the looser rule it had just been given. The Swift still wins where it can speak,
+        # because that is what the product does.
+        swift = swift_mode(name)
+        if swift is not None:
+            entry["match"] = swift
+        else:
+            entry.setdefault("match", match_mode(name))
         for h in hits:
             rid = records_by_surface.get(h["surface"])
             # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
@@ -253,8 +298,17 @@ def apply(labels_path, census, proposals, records_by_surface):
             # record ordered `취소` then `취소 하시겠습니까` gives the guard the short one while this
             # tool, iterating the census, may have found the long one — and the block is then
             # refused for an `observed` mismatch. Named by review 2026-09-06.
+            # WITH the label's scope. Without it this validated the citation under a looser rule
+            # than the guard applies, so `--apply` wrote a block and reported success for a claim
+            # the guard then refused — leaving the ledger invalid AFTER it had been mutated, which
+            # is the failure the surrounding comment already describes, reached a different way.
+            # Round four, 2026-09-07: a window-row proposal paired with a record carrying the
+            # string only on a menu-bar row.
+            scope = _GUARD.evidence_scope(entry)
             seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
-                                         h["attribute"], h["match"])
+                                         h["attribute"], h["match"],
+                                         _GUARD._path_fragments(scope.get("path_contains")),
+                                         scope.get("surfaces"))
             if seen is None:
                 unbacked.setdefault(name, set()).add((h["string"], rid))
                 continue

@@ -1032,6 +1032,36 @@ def main():
     case("a row tagged with another surface does not contradict this scope's absence",
          cp(honest_absence()) == [], cp(honest_absence()))
 
+    #      Round four: the `coverage_absent` locator filters on `path`, so a row that cannot say
+    #      where it is disappeared BEFORE the tri-state could classify it — and an untagged,
+    #      pathless row carrying the string is exactly the presence round two established must
+    #      count. Unlocatable is `unknown`, and unknown counts against an absence.
+    (ab / "2026-09-07-pathless.json").write_text(json.dumps({
+        "id": "2026-09-07-pathless", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            {"role": "AXMenuItem", "title": "Delete"},
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+
+    def pathless_absence():
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-pathless"}
+        return e
+
+    case("a pathless row carrying the string still contradicts an absence claim",
+         any("that is a presence" in x for x in cp(pathless_absence())), cp(pathless_absence()))
+
+    #      ...and a path that is not a string is not a path. `str(["AXWindow["])` contains the
+    #      fragment, so a list satisfied a `path_contains` constraint.
+    guard.OBS = _ledger({
+        "2026-09-07-listpath": ("en-US", [{"role": "AXMenuItem", "title": "Delete",
+                                           "path": ["AXWindow["]}], "arrange.window"),
+    })
+    listy = scoped("2026-09-07-listpath", WINDOW, coverage=False)
+    case("a non-string path cannot satisfy a path constraint",
+         any("at a path containing" in x for x in pp(listy)), pp(listy))
+
     #      A `reason` that is not a string stringifies to something non-empty and passed.
     case("a reason that is not a string is refused",
          any("`reason`" in x for x in sp({"surfaces": ["plugin.window"],

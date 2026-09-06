@@ -41,9 +41,16 @@ def census(rows, locale="ko-KR"):
     return {"host": dict(HOST, locale=locale), "menu_bar": [], "census": rows}
 
 
-def labels(**sets):
+def labels(_match="exact", **sets):
+    """A synthetic ledger. `_match` is what every label in it DECLARES.
+
+    It is a parameter because the declaration is now authoritative: the proposer used to guess the
+    mode from the label's NAME and write that guess over whatever the document said, and a fixture
+    could therefore declare `exact` and still be matched by containment. Making these agree is what
+    that fix costs, and a fixture whose declaration does not mean anything is a fixture testing a
+    rule the product does not have."""
     return {"schema": 2, "supported_locales": ["en-US", "ko-KR", "ja-JP"], "labels": {
-        k: {"canonical": v[0], "variants": v[1], "rationale": "r", "match": "exact",
+        k: {"canonical": v[0], "variants": v[1], "rationale": "r", "match": _match,
             "coverage": {"en-US": "unmeasured", "ko-KR": "unmeasured", "ja-JP": "unmeasured"}}
         for k, v in sets.items()}}
 
@@ -74,7 +81,7 @@ def main():
 
     # 3. A help KEYWORD is matched by containment — that is how the product reads it.
     json.dump(census([row("AXButton", "AXWindow/AXGroup/AXButton", help="입력 슬롯. 채널 스트립 입력 소스를 선택합니다")]), open(cpath, "w"))
-    _, _, props, _ = propose.main(cpath, write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"]))))
+    _, _, props, _ = propose.main(cpath, write(tmp, labels("contains", inputSlotHelpKeyword=("input slot", ["입력 슬롯"]))))
     case("help keyword matched by containment", "inputSlotHelpKeyword" in props, props)
 
     # 4. ROLE GATING: "Edit" on a menu-bar item backs editMenuBar and NOT markerListEditMenuButton.
@@ -276,7 +283,7 @@ def main():
     # The census supplies the LONGER string, so a tool quoting its own row would write that one.
     json.dump(census([row("AXButton", "AXWindow/AXButton[in]", title="입력 슬롯 (스테레오)")]),
               open(cpath, "w"))
-    lp = write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
+    lp = write(tmp, labels("contains", inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
     _, _, props_order, _ = propose.main(cpath, lp)
     assert any(h["string"] == "입력 슬롯" for h in props_order.get("inputSlotHelpKeyword", [])), (
         "the fixture must propose the VARIANT, or the provenance branch never runs")
@@ -448,6 +455,33 @@ def main():
             props, crashed = {}, repr(exc)
         case(f"a malformed scope {bad!r} refuses rather than permitting or crashing",
              crashed is None and "markerListDeleteMenuItem" not in props, crashed or props)
+
+    # 10c. `--apply` must not write a guess over the ledger's declared `match`. Four labels disagree
+    #      today, and a run that loosens `exact` to `contains` then matches under the rule it just
+    #      installed — and the guard, reading the document, agrees with it.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[x]",
+                          title="자동화 확장")]), open(cpath, "w"))
+    doc_exact = labels(automationModeContext=("automation", ["자동화"]))
+    lp_m = write(tmp, doc_exact)
+    _, _, props_m, _ = propose.main(cpath, lp_m)
+    case("a label declaring `exact` is not matched by containment",
+         "automationModeContext" not in props_m, props_m)
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[자동화]",
+                          title="자동화")]), open(cpath, "w"))
+    doc_m2 = labels(automationModeContext=("automation", ["자동화"]))
+    # `roles` DECLARED, or `apply` skips this label before it reaches the line under test —
+    # `automationModeContext` has no role hint in its name. Without it this case passed while the
+    # mutation it exists to catch changed nothing, which is the failure mode round two named.
+    doc_m2["labels"]["automationModeContext"]["roles"] = ["AXMenuItem"]
+    lp_m2 = write(tmp, doc_m2)
+    _, _, props_m2, _ = propose.main(cpath, lp_m2)
+    assert props_m2.get("automationModeContext"), "the fixture must propose, or apply never runs"
+    propose.apply(lp_m2, json.load(open(cpath)), props_m2,
+                  {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
+    case("...and --apply leaves that declaration alone",
+         json.load(open(lp_m2, encoding="utf-8"))["labels"]["automationModeContext"]["match"]
+         == "exact",
+         json.load(open(lp_m2, encoding="utf-8"))["labels"]["automationModeContext"].get("match"))
 
     case("a well-formed scope still admits the row it allows",
          "markerListDeleteMenuItem" in with_scope(
