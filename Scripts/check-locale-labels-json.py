@@ -158,7 +158,34 @@ def _path_fragments(path_contains):
         return ()
     if isinstance(path_contains, str):
         return (path_contains,) if path_contains else ()
-    return tuple(f for f in path_contains if isinstance(f, str) and f)
+    try:
+        return tuple(f for f in path_contains if isinstance(f, str) and f)
+    except TypeError:
+        # Unusable, and already REPORTED by `_bad_path_field` at every site that reads this. The
+        # extraction only has to avoid crashing after the problem has been named; it must never be
+        # the thing that decides a malformed constraint is acceptable.
+        return ()
+
+
+def _bad_path_field(where, value):
+    """A `path_contains` that is present but unusable, named rather than dropped.
+
+    Generalising the single fragment into a tuple made a malformed one FALL OUT — `5` or `["a", 2]`
+    used to raise on the `in` comparison, and afterwards it filtered to nothing and imposed no
+    constraint at all. A guard whose constraint quietly evaporates on bad input is worse than one
+    that crashes: the crash is loud and this is a false green. Found reviewing the change that
+    introduced it, before it shipped.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [] if value.strip() else [f"{where} is empty — a path constraint that matches every "
+                                         f"row constrains nothing"]
+    if isinstance(value, (list, tuple)) and value and all(
+            isinstance(f, str) and f.strip() for f in value):
+        return []
+    return [f"{where} must be a non-empty AX-path fragment, or a list of them — {value!r} imposes "
+            f"no constraint at all once it is read"]
 
 
 def scope_problems(name, entry, surfaces):
@@ -188,10 +215,9 @@ def scope_problems(name, entry, surfaces):
             if bad:
                 out.append(f"{name}: `evidence_scope.surfaces` names {bad}, absent from "
                            f"docs/observations/SURFACES.md — add the row before scoping to it")
-    fragment = scope.get("path_contains")
-    if "path_contains" in scope and (not isinstance(fragment, str) or not fragment.strip()):
-        out.append(f"{name}: `evidence_scope.path_contains` must be a non-empty fragment of the AX "
-                   f"path the element sits at")
+    if "path_contains" in scope:
+        out += _bad_path_field(f"{name}: `evidence_scope.path_contains` is a fragment that",
+                               scope.get("path_contains"))
     if not out and not any(scope.get(k) for k in CONSTRAINING_SCOPE_KEYS):
         # A scope that permits everything is worse than none: it reads, in a diff and to the next
         # reader, as the retraction having been recorded.
@@ -297,6 +323,8 @@ def provenance_problems(name, entry):
                        f"not allow ({allowed_surfaces})")
             continue
         # The block's fragment and the label's are both requirements — see `_path_fragments`.
+        out += _bad_path_field(f"{name}: provenance for {variant!r} declares a `path_contains` that",
+                               block.get("path_contains"))
         fragments = (_path_fragments(block.get("path_contains"))
                      + _path_fragments(scope.get("path_contains")))
         role = block.get("role")
@@ -584,6 +612,8 @@ def coverage_problems(name, entry, locales, values):
         # were still the wrong element, two were coverage. A constraint enforced on one half only
         # leaves the other able to make the same mistake in the same file.
         scope = evidence_scope(entry)
+        out += _bad_path_field(f"{name}: coverage_paths[{loc}] is a `path_contains` that",
+                               (entry.get("coverage_paths") or {}).get(loc))
         allowed_surfaces = scope.get("surfaces")
         if allowed_surfaces and rec.get("surface") not in allowed_surfaces:
             out.append(f"{name}: coverage_records[{loc}] names a record measured on surface "

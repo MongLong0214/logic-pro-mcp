@@ -839,8 +839,27 @@ def main():
          any("non-empty list" in x for x in sp({"reason": "r", "surfaces": []})),
          sp({"reason": "r", "surfaces": []}))
     case("a blank path_contains is refused",
-         any("non-empty fragment" in x for x in sp({"reason": "r", "path_contains": "  "})),
+         any("constrains nothing" in x for x in sp({"reason": "r", "path_contains": "  "})),
          sp({"reason": "r", "path_contains": "  "}))
+    # A malformed fragment must be NAMED, not dropped. Generalising the single fragment into a
+    # tuple made `5` and `["a", 2]` filter to nothing and impose no constraint, where before they
+    # raised on the `in` comparison — a loud failure turned into a false green. The same predicate
+    # answers for all three sites, so they cannot disagree about what a usable fragment is.
+    for bad in (5, ["a", 2], [], {"a": 1}):
+        case(f"a path_contains of {bad!r} is refused rather than ignored",
+             any("imposes no constraint" in x for x in sp({"reason": "r", "path_contains": bad})),
+             sp({"reason": "r", "path_contains": bad}))
+    case("a list of fragments is accepted",
+         sp({"reason": "r", "path_contains": ["AXWindow[", "AXMenuItem"]}) == [],
+         sp({"reason": "r", "path_contains": ["AXWindow[", "AXMenuItem"]}))
+    malformed = scoped("2026-09-06-window", WINDOW, coverage=False)
+    malformed["provenance"]["Delete"]["path_contains"] = 5
+    case("a malformed path_contains on a BLOCK is named too",
+         any("imposes no constraint" in x for x in pp(malformed)), pp(malformed))
+    mal_cov = scoped("2026-09-06-window", WINDOW)
+    mal_cov["coverage_paths"] = {"en-US": 5}
+    case("a malformed coverage_paths entry is named too",
+         any("imposes no constraint" in x for x in cp(mal_cov)), cp(mal_cov))
     case("a scope that is not an object is refused",
          any("must be an object" in x for x in sp(["AXWindow["])), sp(["AXWindow["]))
     case("a well-formed scope is accepted",
