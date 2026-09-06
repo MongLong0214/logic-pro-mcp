@@ -455,6 +455,22 @@ def report_dropped(dropped, stream=sys.stderr):
               f"the new name — a lost `evidence_scope` is a retraction the next campaign silently "
               f"undoes:\n  " + json.dumps(lost, ensure_ascii=False), file=stream)
 
+# The file on disk is indented with ONE space. Three separate `json.dump` calls used to decide that
+# independently — here twice and once in `locale-propose.py --apply` — and all three said `indent=2`
+# while the tree said one, so the command this file documents for regenerating the document
+# rewrote all 2858 of its lines without changing a value (#798). The guard compares PARSED objects,
+# so nothing in CI could see it, and a campaign adding two provenance blocks produced a diff those
+# blocks were not findable in.
+#
+# One renderer, and `test_locale_labels_json.py` compares its output to the file's BYTES. Comparing
+# parsed objects is what let this drift, so a test that compares parsed objects would not catch it.
+INDENT = 1
+
+
+def render(doc):
+    """The document's exact text, including its trailing newline."""
+    return json.dumps(doc, ensure_ascii=False, indent=INDENT) + "\n"
+
 
 def main():
     args = sys.argv[1:]
@@ -464,8 +480,7 @@ def main():
     if "--write" in args:
         os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
         with open(JSON_PATH, "w", encoding="utf-8") as fh:
-            json.dump(doc, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
+            fh.write(render(doc))
         print(f"wrote {len(doc['labels'])} labels to docs/locale/ui-labels.json")
         return 0
     if "--check" in args:
@@ -475,8 +490,7 @@ def main():
             return 1
         print(f"{len(doc['labels'])} labels agree")
         return 0
-    json.dump(doc, sys.stdout, indent=2, ensure_ascii=False)
-    print()
+    sys.stdout.write(render(doc))
     return 0
 
 

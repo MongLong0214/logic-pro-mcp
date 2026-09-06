@@ -867,7 +867,6 @@ def main():
          sp({"reason": "r", "surfaces": ["plugin.window"], "path_contains": "AXWindow["}))
     case("a label with no scope is asked nothing",
          guard.scope_problems("x", {}, {"plugin.window"}) == [], "")
-
     # 16g. THE SIX FINDINGS of the 2026-09-07 review, each reproduced through the guard's real
     #      entry points rather than by calling a helper. Five of the six were only reachable there,
     #      and the sixth — the list of fragments — was a case that passed by asking `scope_problems`
@@ -1143,7 +1142,20 @@ def main():
     case("a caller that asks for no report gets none, and nothing is left behind",
          isinstance(labels.build(existing=gone), dict), "")
 
-    # 17. The real document is clean.
+    # 17. The document on disk is BYTE-identical to what the generator writes.
+    #     Not "parses to the same object" — that is what `main()` already checks, and it is what let
+    #     three `json.dump` calls disagree with the tree about indentation until the documented
+    #     regeneration command rewrote all 2858 lines of the file without changing a value (#798).
+    #     A formatting drift is only visible in the bytes, so this case reads the bytes.
+    on_disk_text = (HERE.parent / "docs" / "locale" / "ui-labels.json").read_text(encoding="utf-8")
+    rendered = labels.render(json.loads(on_disk_text))
+    case("the file on disk is exactly what the writer produces",
+         rendered == on_disk_text,
+         f"writer emits {len(rendered)} bytes, the file holds {len(on_disk_text)}; "
+         f"first difference at "
+         + str(next((i for i, (a, b) in enumerate(zip(rendered, on_disk_text)) if a != b), "EOF")))
+
+    # 18. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
 
