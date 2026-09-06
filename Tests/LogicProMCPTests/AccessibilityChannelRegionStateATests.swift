@@ -992,3 +992,82 @@ private func attachMenuBar(
     #expect(sel?.name == "B")
     #expect(sel?.startBar == 7)
 }
+
+// MARK: - #774: the verifier reads the SELECTION, not the first thing in it
+
+/// `executeScript` is `@Sendable`, so a captured `var` cannot record whether it ran. Same shape as
+/// `AccessibilityRuntimeRecorder` in AccessibilityChannelTests.
+private final class MoveMenuDriveRecorder: @unchecked Sendable {
+    var ran = false
+}
+
+/// Logic's `Move to Playhead` acts on everything selected. `selectedRegionInfo` returns the FIRST
+/// region carrying `AXSelected`, so with two selected the identity check compared one of them
+/// against itself, the envelope named that one, and nothing said a second had been moved.
+///
+/// Verifying a multi-region move is a larger question than this readback answers — a partial
+/// landing has no honest State A — so a selection that is not exactly one is refused BEFORE the
+/// menu is driven. These cases pin the refusal and the single-region path it must not disturb.
+@Test("a two-region selection is refused rather than verified from the first region")
+func moveToPlayheadRefusesAMultiRegionSelection() async {
+    let help1 = "Region starts at 1 bar  and ends at 2 bars , MIDI region."
+    let help2 = "Region starts at 3 bars  and ends at 4 bars , MIDI region."
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: help1, pos: axPoint(240, 108), size: axSize(320, 24), selected: true),
+            (name: "RegionB", help: help2, pos: axPoint(600, 108), size: axSize(320, 24), selected: true),
+        ],
+        playheadPosition: "9.1.1.1"
+    )
+
+    let menu = MoveMenuDriveRecorder()
+    let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
+        runtime: fixture.runtime,
+        executeScript: { _ in menu.ran = true; return .success("OK") },
+        settle: { }
+    )
+
+    let obj = decodeJSON(result.message)
+    #expect(obj["state"] as? String == "B")
+    #expect(obj["verified"] as? Bool != true)
+    #expect(obj["selected_count"] as? Int == 2)
+    #expect((obj["selected_names"] as? [String])?.sorted() == ["RegionA", "RegionB"])
+    // Refused BEFORE the menu is driven: the operation must not move what it cannot certify.
+    #expect(menu.ran == false, "the menu was driven for a selection this readback cannot verify")
+}
+
+/// The single-region path must be untouched by that refusal — otherwise the fix would trade one
+/// blind spot for a regression, and the State A case is the one every caller depends on.
+@Test("a one-region selection still reaches State A")
+func moveToPlayheadStillVerifiesASingleRegion() async {
+    let preHelp = "Region starts at 1 bar  and ends at 2 bars , MIDI region."
+    let postHelp = "Region starts at 9 bars  and ends at 10 bars , MIDI region."
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [(name: "RegionA", help: preHelp, pos: axPoint(240, 108), size: axSize(320, 24), selected: true)],
+        playheadPosition: "9.1.1.1"
+    )
+
+    let menu = MoveMenuDriveRecorder()
+    let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
+        runtime: fixture.runtime,
+        executeScript: { _ in
+            menu.ran = true
+            fixture.builder.setAttribute(
+                fixture.builder.element(3_000), kAXHelpAttribute as String, postHelp
+            )
+            return .success("OK")
+        },
+        settle: { }
+    )
+
+    let obj = decodeJSON(result.message)
+    #expect(obj["state"] as? String == "A")
+    #expect(obj["verified"] as? Bool == true)
+    #expect(obj["selected_count"] == nil, "the refusal's fields must not leak into the verified path")
+    // This is what makes the `menu.ran == false` assertion in the refusal case mean something: the
+    // same recorder, same fixture shape, DOES observe the drive when the operation proceeds.
+    // Without it that negative could pass because nothing ever drives the menu in these tests.
+    #expect(menu.ran == true, "the recorder cannot see the drive, so its negative proves nothing")
+}

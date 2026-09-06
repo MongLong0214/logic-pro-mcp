@@ -465,7 +465,31 @@ extension AccessibilityChannel {
     ) async -> ChannelResult {
         // Pre-state: snapshot the currently selected region (may be nil if
         // nothing is selected or the AX surface is unreadable).
-        let pre = selectedRegionInfo(runtime: runtime)
+        // THE SELECTION, not the first thing in it. Logic's `Move to Playhead` acts on everything
+        // selected, while `selectedRegionInfo` returns the first region carrying `AXSelected` — so
+        // with two selected this verifier compared one of them against itself, the envelope named
+        // that one, and nothing said a second had been moved. #774, and the same root cause #767
+        // fixed for `region.select_last`.
+        //
+        // Verifying a multi-region move is a bigger question than this readback answers: it would
+        // have to corroborate every region's landing, and a partial landing has no honest State A.
+        // So the set is READ here and a selection that is not exactly one is refused below, before
+        // the menu is driven. Refusing is not the same as pretending, and it is what lets a caller
+        // tell "this operation cannot verify what you asked" from "it worked".
+        let preSelection = selectedRegionInfos(runtime: runtime)
+        let pre = preSelection?.count == 1 ? preSelection?.first : nil
+        if let selection = preSelection, selection.count > 1 {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "operation": "region.move_to_playhead",
+                    "selected_count": selection.count,
+                    "selected_names": selection.map(\.name),
+                    "note": "Logic moves the whole selection; this readback corroborates one region "
+                        + "and cannot certify the rest. Select a single region to get State A.",
+                ]
+            ))
+        }
 
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
         // #519: bar/item/leaf names come from AXLocalePolicy's LabelSets (Edit/Move/To
@@ -516,7 +540,10 @@ extension AccessibilityChannel {
             // Settle window so Logic's AX tree updates before we re-read.
             await settle()
 
-            let post = selectedRegionInfo(runtime: runtime)
+            // Read as a SET on the way out too: the menu can leave a different number selected
+            // than it started with, and a post-read that silently took the first would hide that.
+            let postSelection = selectedRegionInfos(runtime: runtime)
+            let post = postSelection?.count == 1 ? postSelection?.first : nil
             let playheadBar = currentPlayheadBar(runtime: runtime)
 
             // Without a pre-state we can't diff. State B readback_unavailable.
