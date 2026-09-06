@@ -176,14 +176,17 @@ def _bad_path_field(where, value):
     that crashes: the crash is loud and this is a false green. Found reviewing the change that
     introduced it, before it shipped.
     """
-    if value is None:
-        return []
     if isinstance(value, str):
         return [] if value.strip() else [f"{where} is empty — a path constraint that matches every "
                                          f"row constrains nothing"]
     if isinstance(value, (list, tuple)) and value and all(
             isinstance(f, str) and f.strip() for f in value):
         return []
+    # `None` lands here deliberately. Every caller asks only when the key is PRESENT, and a key
+    # written as `null` is a declaration that reads as a constraint and is one — until it is read,
+    # when it becomes nothing. Absent is absent; present-and-null is malformed. Named by review
+    # 2026-09-07, which added `"path_contains": null` to a real provenance block and watched the
+    # whole guard stay green.
     return [f"{where} must be a non-empty AX-path fragment, or a list of them — {value!r} imposes "
             f"no constraint at all once it is read"]
 
@@ -323,8 +326,9 @@ def provenance_problems(name, entry):
                        f"not allow ({allowed_surfaces})")
             continue
         # The block's fragment and the label's are both requirements — see `_path_fragments`.
-        out += _bad_path_field(f"{name}: provenance for {variant!r} declares a `path_contains` that",
-                               block.get("path_contains"))
+        if "path_contains" in block:
+            out += _bad_path_field(f"{name}: provenance for {variant!r} declares a "
+                                   f"`path_contains` that", block.get("path_contains"))
         fragments = (_path_fragments(block.get("path_contains"))
                      + _path_fragments(scope.get("path_contains")))
         role = block.get("role")
@@ -346,7 +350,7 @@ def provenance_problems(name, entry):
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
         elif (seen := sighting_value(rec, variant, role, attribute, mode,
-                                     fragments)) is None:
+                                     fragments, allowed_surfaces)) is None:
             where = (" at a path containing " + ", ".join(repr(f) for f in fragments)
                      if fragments else "")
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
@@ -420,7 +424,8 @@ def _rows(rec):
             continue
 
 
-def sighting(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
+def sighting(rec, text, role=None, attribute=None, mode="exact", path_contains=None,
+             surfaces=None):
     """Whether the record contains an element of `role` whose `attribute` carried `text`.
 
     With no `attribute` named, only the LABEL-bearing ones are searched — never `identifier`, which
@@ -432,7 +437,7 @@ def sighting(rec, text, role=None, attribute=None, mode="exact", path_contains=N
     row, an attribute on that row, and the value that attribute carried — the same three things a
     caller needs to find the element again.
     """
-    return sighting_value(rec, text, role, attribute, mode, path_contains) is not None
+    return sighting_value(rec, text, role, attribute, mode, path_contains, surfaces) is not None
 
 
 def carries(value, text, mode):
@@ -491,7 +496,28 @@ def carries(value, text, mode):
 
 
 
-def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_contains=None):
+def _row_in_scope(row, fragments, surfaces):
+    """Whether this ROW is somewhere the label's scope allows — asked of the row, not the record.
+
+    A record's `surface` is a claim about the record. `_rows` also walks every file the record
+    lists as `evidence`, and a census evidence file holds rows from more than one surface, so a
+    record headed `arrange.track_headers` can hand back a menu-bar row. Checking only the header
+    let a surface scope be laundered through a shared evidence file — found by review 2026-09-07,
+    which cited a real en-US track-header record and got the application menu's `Delete` out of it.
+
+    Census rows carry their own `surface`. A row that does not is not admissible under a scope that
+    names surfaces: `surfaces` is opt-in, so this only tightens labels that asked to be tightened,
+    and the alternative is a scope that means nothing wherever the rows are hand-written.
+    """
+    if any(f not in str(row.get("path") or "") for f in fragments):
+        return False
+    if surfaces and row.get("surface") not in surfaces:
+        return False
+    return True
+
+
+def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_contains=None,
+                   surfaces=None):
     """The value the matching attribute actually carried, or None.
 
     Returning the value rather than a bool is what lets a caller check that a provenance block's
@@ -508,7 +534,7 @@ def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_cont
         # mixer AND in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying
         # every rule this guard had — string, role, attribute, locale, real record — and all four
         # were the wrong element, because the label meant a container the sighting was not in.
-        if any(f not in str(row.get("path") or "") for f in _path_fragments(path_contains)):
+        if not _row_in_scope(row, _path_fragments(path_contains), surfaces):
             continue
         for attr in ([attribute] if attribute else LABEL_ATTRS):
             value = row.get(attr)
@@ -612,8 +638,9 @@ def coverage_problems(name, entry, locales, values):
         # were still the wrong element, two were coverage. A constraint enforced on one half only
         # leaves the other able to make the same mistake in the same file.
         scope = evidence_scope(entry)
-        out += _bad_path_field(f"{name}: coverage_paths[{loc}] is a `path_contains` that",
-                               (entry.get("coverage_paths") or {}).get(loc))
+        if loc in (entry.get("coverage_paths") or {}):
+            out += _bad_path_field(f"{name}: coverage_paths[{loc}] is a `path_contains` that",
+                                   (entry.get("coverage_paths") or {}).get(loc))
         allowed_surfaces = scope.get("surfaces")
         if allowed_surfaces and rec.get("surface") not in allowed_surfaces:
             out.append(f"{name}: coverage_records[{loc}] names a record measured on surface "
@@ -662,8 +689,15 @@ def coverage_problems(name, entry, locales, values):
                            f"rather than a path — it must contain `/` or `[`, or it identifies "
                            f"nothing and any row of this role satisfies it")
                 continue
+            # The label's scope, on BOTH sides of this branch. It selects rows itself rather than
+            # calling `sighting`, so adding the scope only where `sighting` is called left measured
+            # ABSENCE and `identifier` coverage exempt from it — the same "fixed one half" shape
+            # this file already carries a comment about, found by review 2026-09-07 with a real
+            # `path_contains: "AXWindow["` declaration and a citation of the application menu.
             seen = [r for r in _rows(rec)
-                    if r.get("role") == role and where in str(r.get("path") or "")]
+                    if r.get("role") == role and where in str(r.get("path") or "")
+                    and _row_in_scope(r, _path_fragments(scope.get("path_contains")),
+                                      allowed_surfaces)]
             # Compared the way `sighting` compares, or the two disagree about the same pair:
             # positive sightings strip before an exact test, so `" Create "` counted as a presence
             # there and as an absence here. One rule.
@@ -672,10 +706,14 @@ def coverage_problems(name, entry, locales, values):
                         for v in (r.get(a) for a in LABEL_ATTRS)
                         if isinstance(v, str) and carries(v, t, mode)]
             if not seen:
+                scoped_note = ""
+                if scope.get("path_contains") or allowed_surfaces:
+                    scoped_note = (f" within this label's `evidence_scope` "
+                                   f"({scope.get('path_contains') or allowed_surfaces!r})")
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE citing "
                            f"{cites.get(loc)!r}, which contains no {role} whose path carries "
-                           f"{where!r} — absence is a reading of an element that was found, not of "
-                           f"one nobody located")
+                           f"{where!r}{scoped_note} — absence is a reading of an element that was "
+                           f"found, not of one nobody located")
             elif carrying:
                 out.append(f"{name}: coverage[{loc}] claims measured ABSENCE, but its record shows "
                            f"a {role} carrying {carrying[0]!r} — that is a presence")
@@ -691,7 +729,8 @@ def coverage_problems(name, entry, locales, values):
                            f"attribute carried the string is part of the reading, not a detail")
             elif not any(sighting(rec, t, role, attr, mode,
                                   _path_fragments((entry.get("coverage_paths") or {}).get(loc))
-                                  + _path_fragments(scope.get("path_contains")))
+                                  + _path_fragments(scope.get("path_contains")),
+                                  allowed_surfaces)
                          for t in strings if t):
                 # `coverage_paths[locale]` is the coverage half of provenance's `path_contains`, and
                 # it exists for the same measured reason. THREE claims on this branch's base cited a
@@ -710,9 +749,12 @@ def coverage_problems(name, entry, locales, values):
             if not ident:
                 out.append(f"{name}: coverage[{loc}] is 'identifier' but names no AXIdentifier under "
                            f"coverage_identifiers[{loc}] — the claim is that an identifier was seen")
-            elif not sighting(rec, ident, role, "identifier"):
+            elif not sighting(rec, ident, role, "identifier", "exact",
+                              _path_fragments(scope.get("path_contains")), allowed_surfaces):
                 out.append(f"{name}: coverage[{loc}] is 'identifier' citing {cites.get(loc)!r}, "
-                           f"which has no {role} whose identifier is {ident!r}")
+                           f"which has no {role} whose identifier is {ident!r}"
+                           + (" within this label's `evidence_scope`"
+                              if scope.get("path_contains") or allowed_surfaces else ""))
     return out
 
 

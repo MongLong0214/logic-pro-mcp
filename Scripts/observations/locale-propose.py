@@ -56,6 +56,9 @@ def _guard():
 
 
 _GUARD = _guard()
+# The surface taxonomy, so a scope naming an unknown surface is refused here the same way the guard
+# refuses it — one list, read from SURFACES.md, never a second copy.
+_SURFACES = _GUARD._records_module().known_surfaces()
 _CONTAINMENT = set(_GUARD.swift_containment())
 _EXACT_STRICT = set(_GUARD.swift_exact_strict())
 _PREFIX = set(_GUARD.swift_prefix())
@@ -90,12 +93,19 @@ def in_scope(entry, row):
     Read from the guard, so the tool that proposes and the tool that judges cannot disagree about
     what a scope means.
     """
-    scope = _GUARD.evidence_scope(entry)
-    surfaces = scope.get("surfaces")
-    if surfaces and row.get("surface") not in surfaces:
+    scope = entry.get("evidence_scope")
+    if scope is None:
+        return True
+    # FAIL CLOSED on a malformed scope. This used to read the fields straight out of the object, so
+    # `evidence_scope: "AXWindow["` and `path_contains: 5` were silently ignored — a scope written
+    # wrongly permitted everything — and `surfaces: 5` crashed the tool outright. Found by review
+    # 2026-09-07. The guard reports the malformation; this side simply proposes nothing for a label
+    # whose scope it cannot read, which is the safe direction for a tool that writes citations.
+    if _GUARD.scope_problems("", entry, _SURFACES):
         return False
-    return all(f in str(row.get("path") or "")
-               for f in _GUARD._path_fragments(scope.get("path_contains")))
+    scope = _GUARD.evidence_scope(entry)
+    return _GUARD._row_in_scope(row, _GUARD._path_fragments(scope.get("path_contains")),
+                                scope.get("surfaces"))
 
 
 def roles_for(name):

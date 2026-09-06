@@ -868,6 +868,114 @@ def main():
     case("a label with no scope is asked nothing",
          guard.scope_problems("x", {}, {"plugin.window"}) == [], "")
 
+    # 16g. THE SIX FINDINGS of the 2026-09-07 review, each reproduced through the guard's real
+    #      entry points rather than by calling a helper. Five of the six were only reachable there,
+    #      and the sixth — the list of fragments — was a case that passed by asking `scope_problems`
+    #      whether a list is well formed while nothing checked that the list is ENFORCED.
+    #
+    #      A record whose header names one surface, carrying an evidence file with rows from
+    #      another. `_rows` walks both, so checking the header alone let a surface scope be
+    #      laundered: a real en-US track-header record handed back the application menu's Delete.
+    #      Both records below are HEADED `arrange.track_headers`, so the record-level check admits
+    #      them and cannot be what refuses either. The difference is only in the rows their shared
+    #      evidence file carries — which is the whole attack.
+    ev = Path(tempfile.mkdtemp())
+    (ev / "evidence").mkdir()
+    (ev / "evidence" / "honest.json").write_text(json.dumps([
+        _row("AXMenuItem", title="Delete", surface="arrange.track_headers",
+             path="AXWindow[x]/AXOutline/AXRow/AXMenuItem[Delete]"),
+    ]), encoding="utf-8")
+    (ev / "evidence" / "laundered.json").write_text(json.dumps([
+        _row("AXMenuItem", title="Delete", surface="arrange.menus",
+             path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete]"),
+    ]), encoding="utf-8")
+    for stem, eviname in (("honest", "honest.json"), ("laundered", "laundered.json")):
+        (ev / f"2026-09-07-{stem}.json").write_text(json.dumps({
+            "id": f"2026-09-07-{stem}", "date": D, "host": {"locale": "en-US"},
+            "surface": "arrange.track_headers", "observations": [],
+            "evidence": [f"evidence/{eviname}"]}), encoding="utf-8")
+    guard.OBS = str(ev)
+
+    def laundered(record, scope):
+        e = _entry([], None, dict(U, **{"en-US": "measured"}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": record}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["evidence_scope"] = scope
+        return e
+
+    HEADERS = {"surfaces": ["arrange.track_headers"], "reason": "the track rail"}
+    case("a scoped record whose row is really from that surface backs the claim",
+         cp(laundered("2026-09-07-honest", HEADERS)) == [],
+         cp(laundered("2026-09-07-honest", HEADERS)))
+    # Same header, same scope, same role, same string. The ONLY difference is that the row inside
+    # the evidence file belongs to another surface — so if this passes, the scope means nothing
+    # wherever an evidence file is shared.
+    case("a row laundered in through a shared evidence file does not back it",
+         any("has no AXMenuItem" in x for x in cp(laundered("2026-09-07-laundered", HEADERS))),
+         cp(laundered("2026-09-07-laundered", HEADERS)))
+    # And the record-level check is still there, refusing before the rows are read at all.
+    MIXER = {"surfaces": ["mixer.inserts"], "reason": "an insert slot"}
+    case("a record whose own surface is outside the scope is refused by name",
+         any("evidence_scope.surfaces" in x
+             for x in cp(laundered("2026-09-07-honest", MIXER))),
+         cp(laundered("2026-09-07-honest", MIXER)))
+
+    #      Measured ABSENCE and `identifier` coverage select rows themselves instead of calling
+    #      `sighting`, so a scope added only at the `sighting` call sites left both exempt.
+    (ev / "2026-09-07-menus.json").write_text(json.dumps({
+        "id": "2026-09-07-menus", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.menus",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", identifier="delete:",
+                 path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Paste]")]}]},
+        ), encoding="utf-8")
+    WINDOW_ONLY = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+
+    def out_of_scope(state, extra):
+        e = _entry([], None, dict(U, **{"en-US": state}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": "2026-09-07-menus"}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["evidence_scope"] = WINDOW_ONLY
+        e.update(extra)
+        return e
+
+    absent = out_of_scope("measured", {"coverage_absent": {"en-US": "AXMenu/AXMenuItem[Paste]"}})
+    case("measured ABSENCE is held to the label's scope",
+         any("evidence_scope" in x for x in cp(absent)), cp(absent))
+    ident = out_of_scope("identifier", {"coverage_identifiers": {"en-US": "delete:"}})
+    case("`identifier` coverage is held to the label's scope",
+         any("evidence_scope" in x for x in cp(ident)), cp(ident))
+
+    #      An explicit `null` is not an absent key: it reads as a declared constraint and is one
+    #      until it is read, when it becomes nothing.
+    case("a path_contains written as null is refused, not treated as absent",
+         any("imposes no constraint" in x for x in sp({"reason": "r", "surfaces": ["plugin.window"],
+                                                       "path_contains": None})),
+         sp({"reason": "r", "surfaces": ["plugin.window"], "path_contains": None}))
+    guard.OBS = _ledger({
+        "2026-09-06-window": ("en-US", [_row("AXMenuItem", title="Delete",
+                                             path="AXWindow[Marker List]/AXMenuItem[Delete]")],
+                              "arrange.window"),
+    })
+    nulled = scoped("2026-09-06-window", WINDOW, coverage=False)
+    nulled["provenance"]["Delete"]["path_contains"] = None
+    case("a block's path_contains written as null is refused too",
+         any("imposes no constraint" in x for x in pp(nulled)), pp(nulled))
+
+    #      And the list of fragments has to be ENFORCED, not merely accepted as well formed.
+    listed = scoped("2026-09-06-window", {"path_contains": ["AXWindow[", "AXOutline"],
+                                          "reason": "both"}, coverage=False)
+    case("every fragment in a list is required, not just the first",
+         any("at a path containing" in x for x in pp(listed)), pp(listed))
+    both_ok = scoped("2026-09-06-window", {"path_contains": ["AXWindow[", "AXMenuItem"],
+                                           "reason": "both"}, coverage=False)
+    case("a list whose fragments are all present is admitted",
+         pp(both_ok) == [], pp(both_ok))
+
     # 17. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

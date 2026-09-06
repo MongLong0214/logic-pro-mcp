@@ -423,6 +423,33 @@ def main():
          "markerListDeleteMenuItem" in scoped_labels(
              {"surfaces": ["arrange.menus"], "reason": "r"}, menubar), "")
 
+    # 10. A MALFORMED scope makes the proposer refuse, not shrug. It used to read the fields
+    #     straight out of the object, so `evidence_scope: "AXWindow["` and `path_contains: 5` were
+    #     silently ignored — a scope written wrongly permitted everything — and `surfaces: 5`
+    #     crashed the tool. Named by review 2026-09-07. Refusing is the safe direction for a tool
+    #     whose output is a citation; the guard is what reports WHY it is malformed.
+    menubar = [row("AXMenuItem", "AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[삭제]", title="삭제")]
+
+    def with_scope(scope):
+        json.dump(census(menubar), open(cpath, "w"))
+        doc = labels(markerListDeleteMenuItem=("Delete", ["삭제"]))
+        doc["labels"]["markerListDeleteMenuItem"]["evidence_scope"] = scope
+        return propose.main(cpath, write(tmp, doc))[2]
+
+    for bad in ("AXWindow[", {"reason": "r", "path_contains": 5}, {"reason": "r", "surfaces": 5},
+                {"reason": "r"}, {"path_contains": "AXMenuBar/"}):
+        try:
+            props = with_scope(bad)
+            crashed = None
+        except Exception as exc:                                   # noqa: BLE001
+            props, crashed = {}, repr(exc)
+        case(f"a malformed scope {bad!r} refuses rather than permitting or crashing",
+             crashed is None and "markerListDeleteMenuItem" not in props, crashed or props)
+
+    case("a well-formed scope still admits the row it allows",
+         "markerListDeleteMenuItem" in with_scope(
+             {"reason": "r", "surfaces": ["arrange.menus"]}), "")
+
     if failures:
         for f in failures: print(f"FAIL {f}")
         return 1

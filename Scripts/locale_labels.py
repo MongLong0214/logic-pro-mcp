@@ -320,6 +320,13 @@ def build(existing=None):
         # REFUSE evidence, so a wrong one costs a false RED. It also has to survive regeneration
         # more than the others do — it is how a RETRACTION is recorded, and a retraction that a
         # `--write` erases is one the next campaign run silently undoes.
+        #
+        # THE LIMIT, and it is a real one: metadata is recovered by exact label NAME, so renaming
+        # the Swift symbol drops the scope along with `roles` and `retired`, and the next campaign
+        # run may then back the renamed label with the reading the scope existed to refuse. Named
+        # by review 2026-09-07. Carrying it across a rename would need the generator to be told
+        # which old name became which new one, and nothing in the projection knows that; the honest
+        # form is to say so here rather than to imply the field is rename-proof.
         for field in ("roles", "retired", "evidence_scope"):
             if prior.get(field):
                 entry[field] = prior[field]
