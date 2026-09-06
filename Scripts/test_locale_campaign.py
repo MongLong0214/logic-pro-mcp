@@ -41,9 +41,16 @@ def census(rows, locale="ko-KR"):
     return {"host": dict(HOST, locale=locale), "menu_bar": [], "census": rows}
 
 
-def labels(**sets):
+def labels(_match="exact", **sets):
+    """A synthetic ledger. `_match` is what every label in it DECLARES.
+
+    It is a parameter because the declaration is now authoritative: the proposer used to guess the
+    mode from the label's NAME and write that guess over whatever the document said, and a fixture
+    could therefore declare `exact` and still be matched by containment. Making these agree is what
+    that fix costs, and a fixture whose declaration does not mean anything is a fixture testing a
+    rule the product does not have."""
     return {"schema": 2, "supported_locales": ["en-US", "ko-KR", "ja-JP"], "labels": {
-        k: {"canonical": v[0], "variants": v[1], "rationale": "r", "match": "exact",
+        k: {"canonical": v[0], "variants": v[1], "rationale": "r", "match": _match,
             "coverage": {"en-US": "unmeasured", "ko-KR": "unmeasured", "ja-JP": "unmeasured"}}
         for k, v in sets.items()}}
 
@@ -74,7 +81,7 @@ def main():
 
     # 3. A help KEYWORD is matched by containment — that is how the product reads it.
     json.dump(census([row("AXButton", "AXWindow/AXGroup/AXButton", help="입력 슬롯. 채널 스트립 입력 소스를 선택합니다")]), open(cpath, "w"))
-    _, _, props, _ = propose.main(cpath, write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"]))))
+    _, _, props, _ = propose.main(cpath, write(tmp, labels("contains", inputSlotHelpKeyword=("input slot", ["입력 슬롯"]))))
     case("help keyword matched by containment", "inputSlotHelpKeyword" in props, props)
 
     # 4. ROLE GATING: "Edit" on a menu-bar item backs editMenuBar and NOT markerListEditMenuButton.
@@ -276,7 +283,7 @@ def main():
     # The census supplies the LONGER string, so a tool quoting its own row would write that one.
     json.dump(census([row("AXButton", "AXWindow/AXButton[in]", title="입력 슬롯 (스테레오)")]),
               open(cpath, "w"))
-    lp = write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
+    lp = write(tmp, labels("contains", inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
     _, _, props_order, _ = propose.main(cpath, lp)
     assert any(h["string"] == "입력 슬롯" for h in props_order.get("inputSlotHelpKeyword", [])), (
         "the fixture must propose the VARIANT, or the provenance branch never runs")
@@ -390,6 +397,183 @@ def main():
     case("control bar routes to transport", records.classify(r) == "arrange.transport", records.classify(r))
     r = row("AXButton", "AXWindow[x]/AXGroup/AXList/AXGroup/AXButton", description="chrome")
     case("unlabelled chrome stays unclassified", records.classify(r) is None, records.classify(r))
+
+    # 10. `evidence_scope`: the proposer reads the label's declaration of WHERE its evidence may
+    #     come from, so a claim retracted as the wrong element is not re-proposed the next run.
+    #     Measured 2026-09-06 (#793): `markerListDeleteMenuItem` means the Delete in the Marker
+    #     List window; the menus census carries the Edit menu's Delete on the same role with the
+    #     same string, and re-running the proposer for two unrelated labels put the retracted block
+    #     back verbatim and flipped the locale to `measured`, reported as an improvement.
+    menubar = [row("AXMenuItem", "AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[삭제]", title="삭제")]
+    window = [row("AXMenuItem", "AXWindow[마커 리스트]/AXMenuItem[삭제]", title="삭제")]
+
+    def scoped_labels(scope, rows):
+        json.dump(census(rows), open(cpath, "w"))
+        doc = labels(markerListDeleteMenuItem=("Delete", ["삭제"]))
+        if scope is not None:
+            doc["labels"]["markerListDeleteMenuItem"]["evidence_scope"] = scope
+        return propose.main(cpath, write(tmp, doc))[2]
+
+    WINDOW = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+    # The control first: without the declaration the menu-bar row IS proposed. A case that cannot
+    # fail proves nothing, and this is the exact reading the fix has to keep refusing.
+    case("unscoped, the menu bar's Delete is proposed for the Marker List label",
+         "markerListDeleteMenuItem" in scoped_labels(None, menubar), "")
+    case("scoped by path, the menu bar's Delete is refused",
+         "markerListDeleteMenuItem" not in scoped_labels(WINDOW, menubar), "")
+    case("the same scope still admits the reading taken in the window",
+         "markerListDeleteMenuItem" in scoped_labels(WINDOW, window), "")
+    case("scoped by surface, a row from another surface is refused",
+         "markerListDeleteMenuItem" not in scoped_labels(
+             {"surfaces": ["plugin.window"], "reason": "r"}, menubar), "")
+    case("scoped by surface, a row from that surface is admitted",
+         "markerListDeleteMenuItem" in scoped_labels(
+             {"surfaces": ["arrange.menus"], "reason": "r"}, menubar), "")
+
+    # 10. A MALFORMED scope makes the proposer refuse, not shrug. It used to read the fields
+    #     straight out of the object, so `evidence_scope: "AXWindow["` and `path_contains: 5` were
+    #     silently ignored — a scope written wrongly permitted everything — and `surfaces: 5`
+    #     crashed the tool. Named by review 2026-09-07. Refusing is the safe direction for a tool
+    #     whose output is a citation; the guard is what reports WHY it is malformed.
+    menubar = [row("AXMenuItem", "AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[삭제]", title="삭제")]
+
+    def with_scope(scope):
+        json.dump(census(menubar), open(cpath, "w"))
+        doc = labels(markerListDeleteMenuItem=("Delete", ["삭제"]))
+        doc["labels"]["markerListDeleteMenuItem"]["evidence_scope"] = scope
+        return propose.main(cpath, write(tmp, doc))[2]
+
+    # `{"why": ...}` is in this list because a reason was checked by the truthiness of `str(...)`,
+    # which a dict satisfies — so it reached the proposer through the same fail-closed call.
+    for bad in ("AXWindow[", {"reason": "r", "path_contains": 5}, {"reason": "r", "surfaces": 5},
+                {"reason": "r"}, {"path_contains": "AXMenuBar/"},
+                {"surfaces": ["arrange.menus"], "reason": {"why": "the track rail"}}):
+        try:
+            props = with_scope(bad)
+            crashed = None
+        except Exception as exc:                                   # noqa: BLE001
+            props, crashed = {}, repr(exc)
+        case(f"a malformed scope {bad!r} refuses rather than permitting or crashing",
+             crashed is None and "markerListDeleteMenuItem" not in props, crashed or props)
+
+    # 10c. `--apply` must not write a guess over the ledger's declared `match`. Four labels disagree
+    #      today, and a run that loosens `exact` to `contains` then matches under the rule it just
+    #      installed — and the guard, reading the document, agrees with it.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[x]",
+                          title="자동화 확장")]), open(cpath, "w"))
+    doc_exact = labels(automationModeContext=("automation", ["자동화"]))
+    lp_m = write(tmp, doc_exact)
+    _, _, props_m, _ = propose.main(cpath, lp_m)
+    case("a label declaring `exact` is not matched by containment",
+         "automationModeContext" not in props_m, props_m)
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[자동화]",
+                          title="자동화")]), open(cpath, "w"))
+    doc_m2 = labels(automationModeContext=("automation", ["자동화"]))
+    # `roles` DECLARED, or `apply` skips this label before it reaches the line under test —
+    # `automationModeContext` has no role hint in its name. Without it this case passed while the
+    # mutation it exists to catch changed nothing, which is the failure mode round two named.
+    doc_m2["labels"]["automationModeContext"]["roles"] = ["AXMenuItem"]
+    lp_m2 = write(tmp, doc_m2)
+    _, _, props_m2, _ = propose.main(cpath, lp_m2)
+    assert props_m2.get("automationModeContext"), "the fixture must propose, or apply never runs"
+    propose.apply(lp_m2, json.load(open(cpath)), props_m2,
+                  {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
+    case("...and --apply leaves that declaration alone",
+         json.load(open(lp_m2, encoding="utf-8"))["labels"]["automationModeContext"]["match"]
+         == "exact",
+         json.load(open(lp_m2, encoding="utf-8"))["labels"]["automationModeContext"].get("match"))
+
+    # 10d. A label the Swift cannot speak about and the ledger does not declare has NO agreed mode.
+    #      The guard refuses it outright, so a proposal made under a guess is one made under a rule
+    #      nothing agreed to — and `apply` used to WRITE that guess, turning a guard-red ledger green
+    #      by installing the rule that legitimised its own match. Round five, 2026-09-07.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[x]",
+                          title="자동화 확장")]), open(cpath, "w"))
+    undeclared = labels(automationModeContext=("automation", ["자동화"]))
+    undeclared["labels"]["automationModeContext"].pop("match")
+    undeclared["labels"]["automationModeContext"]["roles"] = ["AXMenuItem"]
+    lp_u = write(tmp, undeclared)
+    _, _, props_u, _ = propose.main(cpath, lp_u)
+    case("a label with no agreed match mode is not proposed at all",
+         "automationModeContext" not in props_u, props_u)
+    propose.apply(lp_u, json.load(open(cpath)), props_u, {})
+    case("...and --apply does not install a guessed mode for it",
+         "match" not in json.load(open(lp_u, encoding="utf-8"))["labels"]["automationModeContext"],
+         json.load(open(lp_u, encoding="utf-8"))["labels"]["automationModeContext"])
+
+    # 10e. A record is chosen by FILENAME, and nothing makes that name agree with its `host.locale`.
+    #      Writing the census locale into a block citing a record measured elsewhere is a block the
+    #      guard then refuses — written, and reported as success.
+    obs_loc = Path(tempfile.mkdtemp())
+    json.dump({"id": "2026-09-05-ko-KR-mislabelled-census", "date": "2026-09-05",
+               "host": dict(HOST, locale="en-US"), "surface": "arrange.menus",
+               "observations": [{"role": "AXMenuItem", "title": "내보내기"}]},
+              open(obs_loc / "2026-09-05-ko-KR-mislabelled-census.json", "w", encoding="utf-8"),
+              ensure_ascii=False)
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[내보내기]",
+                          title="내보내기")]), open(cpath, "w"))
+    lp_l = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
+    _, _, props_l, _ = propose.main(cpath, lp_l)
+    saved_loc, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_loc)
+    try:
+        n_l, _ = propose.apply(lp_l, json.load(open(cpath)), props_l,
+                               {"arrange.menus": "2026-09-05-ko-KR-mislabelled-census"})
+    finally:
+        propose._GUARD.OBS = saved_loc
+    case("a record measured in another locale is not cited, however it is named",
+         n_l == 0 and not (json.load(open(lp_l, encoding="utf-8"))["labels"]["exportMenuItem"]
+                           .get("provenance")), n_l)
+
+    # 10f. `--apply` must honour a `coverage_paths[locale]` the document already carries. It is
+    #      legal to hold one while the locale is `unmeasured` — the guard skips that state — so a
+    #      run that validated without it wrote a `measured` the guard then refused.
+    json.dump(census([row("AXButton", "AXWindow[Other]/AXButton[Solo]", title="솔로")]),
+              open(cpath, "w"))
+    obs_cp = Path(tempfile.mkdtemp())
+    # The census row sits in a WINDOW, so its surface is `arrange.window` — mapping only
+    # `arrange.menus` made `apply` skip this label before the line under test, and the case passed
+    # while the mutation it exists to catch changed nothing.
+    json.dump({"id": "2026-09-05-ko-KR-arrange-window-census", "date": "2026-09-05",
+               "host": dict(HOST, locale="ko-KR"), "surface": "arrange.window",
+               "observations": [{"role": "AXButton", "title": "솔로",
+                                 "path": "AXWindow[Other]/AXButton[Solo]"}]},
+              open(obs_cp / "2026-09-05-ko-KR-arrange-window-census.json", "w", encoding="utf-8"),
+              ensure_ascii=False)
+    doc_cp = labels(trackSoloButton=("솔로", []))
+    doc_cp["labels"]["trackSoloButton"]["roles"] = ["AXButton"]
+    doc_cp["labels"]["trackSoloButton"]["coverage_paths"] = {"ko-KR": "AXWindow[Target]"}
+    lp_cp = write(tmp, doc_cp)
+    _, _, props_cp, _ = propose.main(cpath, lp_cp)
+    saved_cp, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_cp)
+    try:
+        assert props_cp.get("trackSoloButton"), "the fixture must propose, or apply never runs"
+        _, n_cov_cp = propose.apply(lp_cp, json.load(open(cpath)), props_cp,
+                                    {"arrange.window": "2026-09-05-ko-KR-arrange-window-census"})
+    finally:
+        propose._GUARD.OBS = saved_cp
+    # A canonical that is ALSO listed as a variant takes the provenance branch, so the coverage
+    # constraint must not be applied to it. `LabelSet` stores both without objecting.
+    doc_both = labels(trackSoloButton=("솔로", ["솔로"]))
+    doc_both["labels"]["trackSoloButton"]["roles"] = ["AXButton"]
+    doc_both["labels"]["trackSoloButton"]["coverage_paths"] = {"ko-KR": "AXWindow[Target]"}
+    lp_both = write(tmp, doc_both)
+    _, _, props_both, _ = propose.main(cpath, lp_both)
+    saved_b, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_cp)
+    try:
+        n_prov_both, _ = propose.apply(lp_both, json.load(open(cpath)), props_both,
+                                       {"arrange.window": "2026-09-05-ko-KR-arrange-window-census"})
+    finally:
+        propose._GUARD.OBS = saved_b
+    case("a canonical listed as a variant is not held to the coverage path",
+         n_prov_both == 1, n_prov_both)
+
+    case("a dormant coverage_paths is honoured when coverage is written",
+         n_cov_cp == 0 and json.load(open(lp_cp, encoding="utf-8"))["labels"]["trackSoloButton"]
+         ["coverage"]["ko-KR"] == "unmeasured", n_cov_cp)
+
+    case("a well-formed scope still admits the row it allows",
+         "markerListDeleteMenuItem" in with_scope(
+             {"reason": "r", "surfaces": ["arrange.menus"]}), "")
 
     if failures:
         for f in failures: print(f"FAIL {f}")

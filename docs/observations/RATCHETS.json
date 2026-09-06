@@ -632,7 +632,8 @@
    "2026-09-04-transport-readings-and-where-the-playhead-is-not",
    "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
    "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it",
-   "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese"
+   "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese",
+   "2026-09-07-a-locked-screen-is-three-different-answers"
   ],
   "surfaces_without_records": [
    "en-US→editor.audio_track",
@@ -656,22 +657,23 @@
    "ja-JP→plugin.window",
    "ja-JP→project.export",
    "ja-JP→project.lifecycle",
+   "ja-JP→system.accessibility",
    "ja-JP→system.midi",
    "ja-JP→system.preferences",
    "ko-KR→editor.step",
    "ko-KR→project.export",
    "ko-KR→project.lifecycle",
+   "ko-KR→system.accessibility",
    "ko-KR→system.midi",
    "ko-KR→system.preferences"
   ]
  },
  "raised": {
   "manual_reverify": {
-   "date": "2026-09-05",
-   "reason": "Two records from this change reverify by hand and neither can be a script. One needs Logic's Window menu read AND a toggle driven twice with the window list compared between the calls. The other asks whether restoring a reader crashes Logic, which is a question with a cost — it was deliberately not retried, and a command that reproduces a crash on demand is not one this repository should carry.",
+   "date": "2026-09-07",
+   "reason": "The record measures what the accessibility API reports while the login session is LOCKED. A script can lock a screen; it cannot unlock one, and it cannot be running unattended on the other side of a lock it created without holding a credential this repository must never hold. So the reverify is a person locking the screen and taking six readings, and calling it a script would be a command nobody can run.",
    "members": [
-    "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
-    "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it"
+    "2026-09-07-a-locked-screen-is-three-different-answers"
    ]
   },
   "undocumented_variants": {
@@ -701,6 +703,14 @@
    "reason": "A claim retracted, not a gap that grew. `showMixerMenuItem` carried the View menu's mixer entry as bare `Mixer`, taken from the en-US arrange-menus census. That value is stale: the census walks the menu bar WITHOUT opening the menus, so a state-dependent item is recorded with whatever name was cached when the menu was last built. Measured 2026-09-06 by OPENING the menu before reading, the entry is `Show Mixer` when the mixer is closed and `Hide Mixer` when it is open, and never bare `Mixer`. The label now carries the two measured English forms and the Korean one it shipped with; ko-KR and ja-JP have no record that can back them, because the only census strings for this item are the same stale reading. Leaving them declared measured would have kept a claim the evidence never supported.",
    "members": [
     "showMixerMenuItem"
+   ]
+  },
+  "surfaces_without_records": {
+   "date": "2026-09-07",
+   "reason": "`system.accessibility` is a new row in SURFACES.md — the AX bridge itself, which nothing had ever measured as a surface even though every live harness reads through it. Naming it creates two gaps rather than hiding them: the locked-session readings were taken on an en-US host only. It is TEMPTING to argue a lock is locale-independent and close these by reasoning; that is exactly the move this ledger exists to refuse, so they stay open until somebody takes the readings on a Japanese and a Korean Logic.",
+   "members": [
+    "ja-JP→system.accessibility",
+    "ko-KR→system.accessibility"
    ]
   }
  }

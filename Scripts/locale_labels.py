@@ -283,7 +283,18 @@ _EXACT_STRICT = swift_exact_strict()
 _PREFIX = swift_prefix()
 
 
-def build(existing=None):
+# Fields a person wrote by hand, which the Swift projection cannot regenerate.
+CARRIED = ("roles", "retired", "evidence_scope")
+# `match` is not carried by the loop below — it is derived from the Swift where the Swift can speak,
+# and falls back to the prior value where it cannot. But that fallback is keyed by NAME too, so a
+# rename loses an author's `contains` and silently reinstates the `exact` default. Round three of
+# review found it live: `arrangeWindowTitleSuffix` declares `contains` while the product compares
+# with `hasSuffix`, and under a reinstated `exact` a window titled `Untitled - Tracks` stops
+# matching. So the loss ACCOUNTING covers it even though the carry-forward cannot.
+AUTHOR_TYPED = CARRIED + ("match",)
+
+
+def build(existing=None, dropped=None):
     """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
 
     Swift owns the strings. The JSON owns what is known ABOUT them, and that must survive every
@@ -316,7 +327,21 @@ def build(existing=None):
         # human to write where the AX role is not derivable from Swift. `retired` excuses a label
         # whose element Logic no longer ships, which otherwise sits in the ledger as permanent debt
         # nobody can ever close by measuring.
-        for field in ("roles", "retired"):
+        # `evidence_scope` is the same kind of thing and carried the same way: it can only ever
+        # REFUSE evidence, so a wrong one costs a false RED. It also has to survive regeneration
+        # more than the others do — it is how a RETRACTION is recorded, and a retraction that a
+        # `--write` erases is one the next campaign run silently undoes.
+        #
+        # THE LIMIT, and it is a real one: metadata is recovered by exact label NAME, so renaming
+        # the Swift symbol drops the scope along with `roles` and `retired`, and the next campaign
+        # run may then back the renamed label with the reading the scope existed to refuse. Named
+        # by review 2026-09-07. Carrying it across a rename would need the generator to be told
+        # which old name became which new one, and nothing in the projection knows that; the honest
+        # form is to say so here rather than to imply the field is rename-proof. What CAN be done
+        # is make the loss loud: `--write` reports every label whose author-typed metadata it is
+        # about to drop, so a rename says what it costs at the moment somebody runs it, instead of
+        # being discovered by a campaign that quietly re-proposes the reading a scope had refused.
+        for field in CARRIED:
             if prior.get(field):
                 entry[field] = prior[field]
         # The match mode is a property of the LABEL: whether Logic's string EQUALS it or CONTAINS it
@@ -379,6 +404,26 @@ def build(existing=None):
             if kept:
                 entry[field] = kept
         labels[name] = entry
+    # Every label that WAS in the document, carried author-typed metadata, and is no longer in the
+    # Swift. Renaming a symbol lands here, and so does deleting one; either way the scope, the
+    # declared roles, the retirement reason or the match mode is about to be lost and nothing else
+    # would say so.
+    #
+    # An OUT-PARAMETER, not module state. `dropped` was a module global cleared at the top of this
+    # function, so a second `build()` overwrote the first one's report and a caller holding the
+    # first document could print the second's losses beside it. Round three reproduced exactly
+    # that. The report now belongs to the call that produced it.
+    #
+    # And the VALUES, not just the field names. What a rename needs is the text to paste onto the
+    # new name; `DROPPED old: evidence_scope, roles` names a loss the reader can no longer undo,
+    # because the file has already been rewritten by the time they read it.
+    if dropped is not None:
+        for name, prior in previous.items():
+            if name in labels:
+                continue
+            lost = {f: prior[f] for f in AUTHOR_TYPED if prior.get(f)}
+            if lost:
+                dropped[name] = lost
     return {
         "schema": 2,
         "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
@@ -395,9 +440,27 @@ def build(existing=None):
     }
 
 
+def report_dropped(dropped, stream=sys.stderr):
+    """Say what author-typed metadata this build is about to lose, with the values.
+
+    On STDERR, and before anything is written. The report lived only in the `--write` branch and
+    printed only field NAMES: a pipeline that generates to stdout and moves the file over the ledger
+    lost the metadata in silence, and even `--write` overwrote the document before naming a loss the
+    reader could then no longer undo. Both found by review, round three. stderr also keeps this out
+    of the JSON when the document is being piped.
+    """
+    for name, lost in sorted(dropped.items()):
+        print(f"DROPPED {name}: this label is no longer in AXLocalePolicy.swift, so the following "
+              f"was written by a person and is about to be lost. If it was RENAMED, paste this onto "
+              f"the new name — a lost `evidence_scope` is a retraction the next campaign silently "
+              f"undoes:\n  " + json.dumps(lost, ensure_ascii=False), file=stream)
+
+
 def main():
     args = sys.argv[1:]
-    doc = build()
+    dropped = {}
+    doc = build(dropped=dropped)
+    report_dropped(dropped)
     if "--write" in args:
         os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
         with open(JSON_PATH, "w", encoding="utf-8") as fh:

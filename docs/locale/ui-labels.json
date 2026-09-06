@@ -1027,6 +1027,10 @@
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "evidence_scope": {
+    "path_contains": "AXWindow[",
+    "reason": "This is the Delete in Logic's Marker List WINDOW. The application menu bar carries Edit > Delete with the same AXMenuItem role and the same string in all three locales, so `roles` cannot tell them apart. A provenance block citing the arrange-menus census was retracted on 2026-09-05 for exactly that, and the proposer re-added it verbatim on 2026-09-06 while attaching evidence for two unrelated labels (#793). Limit: this fragment says only that the element is inside a window, which is as much as a locale-independent path can say — window titles are localized. It refuses the menu bar, which is where the false match came from; it would not refuse a same-named item in another window."
    }
   },
   "markerListEditMenuButton": {
@@ -1517,6 +1521,10 @@
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "evidence_scope": {
+    "path_contains": "AXWindow[",
+    "reason": "This is the Editor entry in a plug-in window's OWN View menu, measured in Compressor on 2026-09-02. The application's View menu carries `Editor` / `편집기` on the same role, and the ko-KR and en-US menus censuses both match it there. Same limit as markerListDeleteMenuItem: the fragment refuses the menu bar, not every other window — Logic titles a plug-in window by its track, so there is no stable locale-independent fragment that names the plug-in window itself."
    }
   },
   "pluginWindowSmartControlsControl": {

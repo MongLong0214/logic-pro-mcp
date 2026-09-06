@@ -28,6 +28,7 @@ harder question, **"what have we never measured?"**
 | `library.patches` | the Library browser |
 | `project.lifecycle` | new / open / save / close, and their panels |
 | `project.export` | bounce and export panels |
+| `system.accessibility` | the AX bridge itself: whether Logic's tree is readable at all, and what the session state does to it |
 | `system.midi` | CoreMIDI endpoints, MCU, control surfaces |
 | `system.preferences` | Settings and Key Commands |
 

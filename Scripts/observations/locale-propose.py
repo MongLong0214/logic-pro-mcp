@@ -56,9 +56,54 @@ def _guard():
 
 
 _GUARD = _guard()
+# The surface taxonomy, so a scope naming an unknown surface is refused here the same way the guard
+# refuses it — one list, read from SURFACES.md, never a second copy.
+_SURFACES = _GUARD._records_module().known_surfaces()
 _CONTAINMENT = set(_GUARD.swift_containment())
 _EXACT_STRICT = set(_GUARD.swift_exact_strict())
 _PREFIX = set(_GUARD.swift_prefix())
+
+
+def label_mode(name, entry):
+    """The mode to read this label with: the Swift where it can speak, else what the LEDGER says.
+
+    `match_mode` falls back to a guess from the label's NAME, and `apply` used to write that guess
+    over whatever the document declared. Four labels disagree today — `automationModeContext`,
+    `headerPanHint`, `markerContainerKeywords` and `transportSliderHints` all declare `exact` while
+    the name fallback says `contains` — so a campaign run silently loosened them and then matched
+    under the looser rule it had just installed. Round four of review reproduced it end to end:
+    `automationModeContext` accepted `automation extended`, rewrote `exact` to `contains`, recorded
+    measured coverage, and passed the guard, because the guard checks the mode the document now
+    declared.
+
+    An author's declaration outranks a guess. The Swift outranks both, because it is what the
+    product actually does.
+    """
+    swift = swift_mode(name)
+    if swift is not None:
+        return swift
+    declared = (entry or {}).get("match")
+    if declared in _GUARD.MATCH_MODES:
+        return declared
+    # NO MODE. The guard refuses a label that declares none — "whether Logic's string EQUALS this
+    # label or CONTAINS it decides what counts as having seen it" — so a proposal made under a guess
+    # is a proposal under a rule nothing has agreed to. Worse, `apply` used to WRITE that guess, so
+    # a run turned a guard-red ledger green by installing the very rule that legitimised its own
+    # match: round five drove `automationModeContext` with no declaration, matched
+    # `automation extended` by the name guess, wrote `contains`, recorded coverage, and the guard
+    # then agreed. `main()` reports these; nothing is proposed for them.
+    return None
+
+
+def swift_mode(name):
+    """The mode the product reads this set with, or None where the Swift cannot say."""
+    if name in _CONTAINMENT:
+        return "contains"
+    if name in _PREFIX:
+        return "prefix"
+    if name in _EXACT_STRICT:
+        return "exact_strict"
+    return None
 
 
 def match_mode(name):
@@ -78,6 +123,33 @@ def match_mode(name):
     return "contains" if any(f in name for f in CONTAINS_SHAPES) else "exact"
 
 
+def in_scope(entry, row):
+    """Whether this census row is somewhere this label's evidence may come from.
+
+    Asked BEFORE the string is compared, because the whole failure this closes is a row that
+    matches on every other axis. `markerListDeleteMenuItem` means the Delete in Logic's Marker List
+    window; the ja-JP menus census carries `削除` as the Edit menu's Delete, with the same role and
+    the same string, and a claim retracted for exactly that reason came back verbatim the next time
+    this tool ran — with the ratchet reporting it as an improvement.
+
+    Read from the guard, so the tool that proposes and the tool that judges cannot disagree about
+    what a scope means.
+    """
+    scope = entry.get("evidence_scope")
+    if scope is None:
+        return True
+    # FAIL CLOSED on a malformed scope. This used to read the fields straight out of the object, so
+    # `evidence_scope: "AXWindow["` and `path_contains: 5` were silently ignored — a scope written
+    # wrongly permitted everything — and `surfaces: 5` crashed the tool outright. Found by review
+    # 2026-09-07. The guard reports the malformation; this side simply proposes nothing for a label
+    # whose scope it cannot read, which is the safe direction for a tool that writes citations.
+    if _GUARD.scope_problems("", entry, _SURFACES):
+        return False
+    scope = _GUARD.evidence_scope(entry)
+    return _GUARD._row_in_scope(row, _GUARD._path_fragments(scope.get("path_contains")),
+                                scope.get("surfaces"))
+
+
 def roles_for(name):
     for frag, roles in ROLE_HINTS:
         if frag in name:
@@ -85,7 +157,8 @@ def roles_for(name):
     return None   # unknown shape — see `apply`, which refuses to write for these
 
 
-def matches(name, wanted, text):
+def matches(name, wanted, text, entry=None):
+    # A label with no agreed mode matches nothing — see `label_mode`.
     """Whether this string counts as seen — under the SAME mode the block will declare.
 
     These were two rules: the hit was decided from the label's name and the `match` field was
@@ -97,7 +170,8 @@ def matches(name, wanted, text):
     product does, and this file used to hold a case-sensitive twin that could propose nothing for a
     label whose stored form differs from Logic's only in case.
     """
-    return _GUARD.carries(text, wanted, match_mode(name))
+    mode = label_mode(name, entry)
+    return mode is not None and _GUARD.carries(text, wanted, mode)
 
 
 def strings_of(row):
@@ -120,15 +194,17 @@ def main(census_path, labels_path):
         allowed = roles_for(name)
         hits = []
         for row in rows:
+            if not in_scope(entry, row):
+                continue
             if allowed is not None and row["role"] not in allowed:
                 # the string may appear here, but this element cannot be what the label addresses
                 for _, text in strings_of(row):
-                    if any(w and matches(name, w, text) for w in wanted):
+                    if any(w and matches(name, w, text, entry) for w in wanted):
                         unmatched_role.setdefault(name, set()).add(row["role"])
                 continue
             for attr, text in strings_of(row):
                 for w in wanted:
-                    if w and matches(name, w, text):
+                    if w and matches(name, w, text, entry):
                         # NOT truncated. `observed` is compared character for character against
                         # the value the record carried, so a clipped proposal is a claim the record
                         # cannot back — and clipping is exactly what produced the two overclaiming
@@ -136,7 +212,7 @@ def main(census_path, labels_path):
                         hits.append({"string": w, "attribute": attr, "observed": text,
                                      "role": row["role"], "path": row["path"][:100],
                                      "surface": row["surface"],
-                                     "match": match_mode(name)})
+                                     "match": label_mode(name, entry)})
         if hits:
             proposals[name] = hits
     return locale, host, proposals, unmatched_role
@@ -148,6 +224,7 @@ def apply(labels_path, census, proposals, records_by_surface):
     `coverage_records[locale]` so `measured` can be derived. Nothing is written for a label whose
     surface has no record — a citation to nothing is the shape the guard refuses."""
     unbacked = {}
+    mislocated = {}
     doc = json.load(open(labels_path, encoding="utf-8"))
     host = census["host"]; locale = host["locale"]
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
@@ -185,7 +262,21 @@ def apply(labels_path, census, proposals, records_by_surface):
         # The label declares the mode once. Coverage has no per-variant block to read one from, and
         # when it derived its own the two halves of the guard disagreed for every label the Swift
         # cannot speak about. This is the mode the hits above were actually found under.
-        entry["match"] = match_mode(name)
+        #
+        # NEVER over an author's declaration. This wrote `match_mode(name)` — a guess from the
+        # label's NAME — over whatever the document said, and four labels disagree today. Round
+        # four reproduced the consequence: `automationModeContext` declares `exact`, the guess says
+        # `contains`, and a run matched `automation extended`, rewrote the mode to `contains`,
+        # recorded measured coverage, and then passed the guard, because by then the document
+        # declared the looser rule it had just been given. The Swift still wins where it can speak,
+        # because that is what the product does.
+        swift = swift_mode(name)
+        if swift is not None:
+            entry["match"] = swift
+        elif entry.get("match") not in _GUARD.MATCH_MODES:
+            # No Swift, no declaration: there is nothing to write that is not a guess, and the hits
+            # above are empty for exactly that reason.
+            continue
         for h in hits:
             rid = records_by_surface.get(h["surface"])
             # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
@@ -205,6 +296,14 @@ def apply(labels_path, census, proposals, records_by_surface):
             # 2026-09-06.
             if not rid or not isinstance(_GUARD._record(rid), dict):
                 continue
+            # The record's LOCALE, which the guard checks and this did not. Records are chosen by
+            # FILENAME (`*-<locale>-*-census.json`) and nothing makes a record's name agree with its
+            # `host.locale`, so a mis-named record produced a block claiming the census locale and
+            # citing a reading taken in another — written, reported as success, and then refused by
+            # the guard. Round five, 2026-09-07; same shape as the sighting check beside it.
+            if ((_GUARD._record(rid).get("host") or {}).get("locale")) != locale:
+                mislocated.setdefault(name, set()).add(rid)
+                continue
             # And the record must actually CONTAIN the sighting. Records are found by SURFACE, so a
             # census whose `surface` field matches a record says nothing about whether THAT record
             # saw THIS row — the census supplied on the command line and the record cited for it are
@@ -221,8 +320,31 @@ def apply(labels_path, census, proposals, records_by_surface):
             # record ordered `취소` then `취소 하시겠습니까` gives the guard the short one while this
             # tool, iterating the census, may have found the long one — and the block is then
             # refused for an `observed` mismatch. Named by review 2026-09-06.
+            # WITH the label's scope. Without it this validated the citation under a looser rule
+            # than the guard applies, so `--apply` wrote a block and reported success for a claim
+            # the guard then refused — leaving the ledger invalid AFTER it had been mutated, which
+            # is the failure the surrounding comment already describes, reached a different way.
+            # Round four, 2026-09-07: a window-row proposal paired with a record carrying the
+            # string only on a menu-bar row.
+            scope = _GUARD.evidence_scope(entry)
+            fragments = _GUARD._path_fragments(scope.get("path_contains"))
+            # `coverage_paths[locale]` too, when this hit will take the COVERAGE branch. It is a
+            # constraint the document may already carry — legal to hold while a locale is
+            # `unmeasured`, because the guard skips that state — and validating without it wrote a
+            # `measured` the guard then refused. Round six, 2026-09-07: a dormant
+            # `coverage_paths.ko-KR` of `AXWindow[Target]` against a record that saw the string
+            # under `AXWindow[Other]`, applied clean and rejected afterwards.
+            # The SAME predicate the branch below uses, not an approximation of it. A canonical may
+            # also be listed as a variant — `LabelSet` stores both without objecting — and such a
+            # hit takes the provenance branch while canonical equality said coverage, so the
+            # coverage constraint was applied to a provenance write. Round seven, 2026-09-07.
+            if (h["string"] not in (entry.get("variants") or [])
+                    and h["string"] == entry.get("canonical")):
+                fragments += _GUARD._path_fragments(
+                    (entry.get("coverage_paths") or {}).get(locale))
             seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
-                                         h["attribute"], h["match"])
+                                         h["attribute"], h["match"], fragments,
+                                         scope.get("surfaces"))
             if seen is None:
                 unbacked.setdefault(name, set()).add((h["string"], rid))
                 continue
@@ -273,6 +395,12 @@ def apply(labels_path, census, proposals, records_by_surface):
         print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
               f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
               + (" …" if len(skipped) > 6 else ""))
+    if mislocated:
+        print(f"  not written for {len(mislocated)} label(s) whose surface record was measured in "
+              f"another locale than the census — records are chosen by FILENAME and nothing makes "
+              f"that name agree with the record's `host.locale`: "
+              + ", ".join(f"{k}→{sorted(v)[0]}" for k, v in sorted(mislocated.items())[:4])
+              + (" …" if len(mislocated) > 4 else ""))
     if unbacked:
         n = sum(len(v) for v in unbacked.values())
         print(f"  not written for {n} sighting(s) whose cited record does not contain them — the "

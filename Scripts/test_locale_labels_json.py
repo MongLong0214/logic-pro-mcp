@@ -36,12 +36,19 @@ D = "2026-09-05"
 
 def _ledger(records):
     """A temp observations dir. `records` is {id: (locale, [row dicts])} — rows are element-shaped
-    readings, because a sighting is an element and an attribute, not a string in a blob."""
+    readings, because a sighting is an element and an attribute, not a string in a blob.
+
+    A third element names the record's `surface`, which is the coarsest thing an `evidence_scope`
+    constrains: a census is taken of one surface at a time, so which one it was is evidence about
+    which element it can possibly have seen."""
     d = Path(tempfile.mkdtemp())
-    for rid, (locale, rows) in records.items():
-        (d / f"{rid}.json").write_text(json.dumps({
-            "id": rid, "date": D, "host": {"locale": locale},
-            "observations": [{"what": "census", "rows": rows}]}, ensure_ascii=False), encoding="utf-8")
+    for rid, spec in records.items():
+        locale, rows = spec[0], spec[1]
+        doc = {"id": rid, "date": D, "host": {"locale": locale},
+               "observations": [{"what": "census", "rows": rows}]}
+        if len(spec) > 2:
+            doc["surface"] = spec[2]
+        (d / f"{rid}.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
     return str(d)
 
 
@@ -535,6 +542,14 @@ def main():
     case("identifier survives regeneration",
          (built3.get("coverage_identifiers") or {}).get("en-US") == "markerEdit:", built3)
 
+    # `evidence_scope` has to survive a `--write` more than the other carried fields do: it is how
+    # a RETRACTION is written down, and a retraction a regeneration erases is one the next campaign
+    # run silently undoes — which is the failure it was added for (#793).
+    scope = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+    v4 = {"schema": 2, "labels": {"inputSlotHelpKeyword": {"evidence_scope": scope}}}
+    built4 = labels.build(existing=v4)["labels"].get("inputSlotHelpKeyword") or {}
+    case("evidence_scope survives regeneration", built4.get("evidence_scope") == scope, built4)
+
     # The product folds case in every mode (`caseInsensitiveCompare`, and `.caseInsensitive` on
     # `containsAny`), so the guard does too. Measured 2026-09-05: Logic shows the arrange canvas as
     # `Tracks contents` and `trackContentExplicit` stores `tracks contents`, because the classifier
@@ -724,7 +739,411 @@ def main():
              for x in cp(covered("AXWindow[Marker List]"), "markerListDeleteMenuItem")),
          cp(covered("AXWindow[Marker List]"), "markerListDeleteMenuItem"))
 
-    # 16. The real document is clean.
+    # 16. `evidence_scope`: a label declares WHERE its evidence may come from, and both halves of
+    #     this guard read it. The two cases are the ones measured on 2026-09-06 (#793): a claim
+    #     retracted because the census that backed it walked the application menu bar, where the
+    #     same role carries the same string, and which the proposer then re-added verbatim because
+    #     the retraction lived nowhere a tool could read.
+    guard.OBS = _ledger({
+        "2026-09-06-menus":  ("en-US", [_row("AXMenuItem", title="Delete",
+                                             path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete]")],
+                              "arrange.menus"),
+        "2026-09-06-window": ("en-US", [_row("AXMenuItem", title="Delete",
+                                             path="AXWindow[Marker List]/AXMenuItem[Delete]")],
+                              "arrange.window"),
+    })
+    en_m = dict(U, **{"en-US": "measured"})
+
+    def scoped(record, scope=None, path=None, coverage=True):
+        e = _entry(["Delete"] if not coverage else [], None,
+                   en_m if coverage else U, canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        if coverage:
+            e["coverage_records"] = {"en-US": record}
+            e["coverage_roles"] = {"en-US": "AXMenuItem"}
+            e["coverage_attributes"] = {"en-US": "title"}
+        else:
+            e["variants"] = ["Delete"]
+            e["canonical"] = "unrelated canonical"
+            e["provenance"] = {"Delete": _prov(record=record, locale="en-US", observed="Delete",
+                                               role="AXMenuItem", attribute="title", match="exact")}
+            if path:
+                e["provenance"]["Delete"]["path_contains"] = path
+        if scope is not None:
+            e["evidence_scope"] = scope
+        return e
+
+    WINDOW = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+    PLUGIN = {"surfaces": ["plugin.window"], "reason": "the plug-in window's own View menu"}
+
+    # 16a. The defect, reproduced: with no scope the menu-bar reading backs the label, on both halves.
+    case("unscoped, a menu-bar reading backs a Marker List label (provenance)",
+         pp(scoped("2026-09-06-menus", coverage=False)) == [],
+         pp(scoped("2026-09-06-menus", coverage=False)))
+    case("unscoped, a menu-bar reading backs a Marker List label (coverage)",
+         cp(scoped("2026-09-06-menus")) == [], cp(scoped("2026-09-06-menus")))
+
+    # 16b. Scoped by path, the same record no longer backs it — and the message says where.
+    case("a label-level path refuses the menu-bar provenance",
+         any("at a path containing" in x and "AXWindow[" in x
+             for x in pp(scoped("2026-09-06-menus", WINDOW, coverage=False))),
+         pp(scoped("2026-09-06-menus", WINDOW, coverage=False)))
+    case("a label-level path refuses the menu-bar coverage",
+         any("at a path containing" in x and "AXWindow[" in x
+             for x in cp(scoped("2026-09-06-menus", WINDOW))),
+         cp(scoped("2026-09-06-menus", WINDOW)))
+
+    # 16c. …and the scope is a constraint, not a ban: the right window still backs it.
+    case("the same scope admits the reading taken in the window",
+         pp(scoped("2026-09-06-window", WINDOW, coverage=False)) == []
+         and cp(scoped("2026-09-06-window", WINDOW)) == [],
+         pp(scoped("2026-09-06-window", WINDOW, coverage=False))
+         + cp(scoped("2026-09-06-window", WINDOW)))
+
+    # 16d. Surfaces are checked before anything about the element, and named when they refuse.
+    case("a surface outside the scope is refused, by name (provenance)",
+         any("evidence_scope.surfaces" in x and "arrange.menus" in x
+             for x in pp(scoped("2026-09-06-menus", PLUGIN, coverage=False))),
+         pp(scoped("2026-09-06-menus", PLUGIN, coverage=False)))
+    case("a surface outside the scope is refused, by name (coverage)",
+         any("evidence_scope.surfaces" in x and "arrange.menus" in x
+             for x in cp(scoped("2026-09-06-menus", PLUGIN))),
+         cp(scoped("2026-09-06-menus", PLUGIN)))
+
+    # 16e. A block carrying its OWN fragment does not escape its label's — both are requirements.
+    #      Without the AND this is exactly how the hole reappears one level down.
+    #      Each direction is checked on a record that SATISFIES the other fragment, so a case
+    #      cannot pass because the fragment it is not about did the refusing.
+    label_fails = scoped("2026-09-06-menus", WINDOW, path="AXMenuBar/", coverage=False)
+    case("the block's fragment is satisfied and the LABEL's is not — still refused",
+         any("at a path containing" in x for x in pp(label_fails)), pp(label_fails))
+    block_fails = scoped("2026-09-06-window", WINDOW, path="AXMenuBar/", coverage=False)
+    case("the label's fragment is satisfied and the BLOCK's is not — still refused",
+         any("at a path containing" in x for x in pp(block_fails)), pp(block_fails))
+
+    # 16f. The declaration itself has to be one that can refuse something.
+    def sp(scope):
+        return guard.scope_problems("x", {"evidence_scope": scope}, {"plugin.window"})
+
+    case("a scope with no reason is refused",
+         any("`reason`" in x for x in sp({"path_contains": "AXWindow["})), sp({"path_contains": "AXWindow["}))
+    case("a scope that constrains nothing is refused",
+         any("constrains nothing" in x for x in sp({"reason": "because"})), sp({"reason": "because"}))
+    case("an unknown key is refused",
+         any("unknown key" in x for x in sp({"reason": "r", "surfaces": ["plugin.window"], "nope": 1})),
+         sp({"reason": "r", "surfaces": ["plugin.window"], "nope": 1}))
+    case("a surface absent from SURFACES.md is refused",
+         any("SURFACES.md" in x for x in sp({"reason": "r", "surfaces": ["arrange.nowhere"]})),
+         sp({"reason": "r", "surfaces": ["arrange.nowhere"]}))
+    case("an empty surfaces list is refused",
+         any("non-empty list" in x for x in sp({"reason": "r", "surfaces": []})),
+         sp({"reason": "r", "surfaces": []}))
+    case("a blank path_contains is refused",
+         any("constrains nothing" in x for x in sp({"reason": "r", "path_contains": "  "})),
+         sp({"reason": "r", "path_contains": "  "}))
+    # A malformed fragment must be NAMED, not dropped. Generalising the single fragment into a
+    # tuple made `5` and `["a", 2]` filter to nothing and impose no constraint, where before they
+    # raised on the `in` comparison — a loud failure turned into a false green. The same predicate
+    # answers for all three sites, so they cannot disagree about what a usable fragment is.
+    for bad in (5, ["a", 2], [], {"a": 1}):
+        case(f"a path_contains of {bad!r} is refused rather than ignored",
+             any("imposes no constraint" in x for x in sp({"reason": "r", "path_contains": bad})),
+             sp({"reason": "r", "path_contains": bad}))
+    case("a list of fragments is accepted",
+         sp({"reason": "r", "path_contains": ["AXWindow[", "AXMenuItem"]}) == [],
+         sp({"reason": "r", "path_contains": ["AXWindow[", "AXMenuItem"]}))
+    malformed = scoped("2026-09-06-window", WINDOW, coverage=False)
+    malformed["provenance"]["Delete"]["path_contains"] = 5
+    case("a malformed path_contains on a BLOCK is named too",
+         any("imposes no constraint" in x for x in pp(malformed)), pp(malformed))
+    mal_cov = scoped("2026-09-06-window", WINDOW)
+    mal_cov["coverage_paths"] = {"en-US": 5}
+    case("a malformed coverage_paths entry is named too",
+         any("imposes no constraint" in x for x in cp(mal_cov)), cp(mal_cov))
+    case("a scope that is not an object is refused",
+         any("must be an object" in x for x in sp(["AXWindow["])), sp(["AXWindow["]))
+    case("a well-formed scope is accepted",
+         sp({"reason": "r", "surfaces": ["plugin.window"], "path_contains": "AXWindow["}) == [],
+         sp({"reason": "r", "surfaces": ["plugin.window"], "path_contains": "AXWindow["}))
+    case("a label with no scope is asked nothing",
+         guard.scope_problems("x", {}, {"plugin.window"}) == [], "")
+
+    # 16g. THE SIX FINDINGS of the 2026-09-07 review, each reproduced through the guard's real
+    #      entry points rather than by calling a helper. Five of the six were only reachable there,
+    #      and the sixth — the list of fragments — was a case that passed by asking `scope_problems`
+    #      whether a list is well formed while nothing checked that the list is ENFORCED.
+    #
+    #      A record whose header names one surface, carrying an evidence file with rows from
+    #      another. `_rows` walks both, so checking the header alone let a surface scope be
+    #      laundered: a real en-US track-header record handed back the application menu's Delete.
+    #      Both records below are HEADED `arrange.track_headers`, so the record-level check admits
+    #      them and cannot be what refuses either. The difference is only in the rows their shared
+    #      evidence file carries — which is the whole attack.
+    ev = Path(tempfile.mkdtemp())
+    (ev / "evidence").mkdir()
+    (ev / "evidence" / "honest.json").write_text(json.dumps([
+        _row("AXMenuItem", title="Delete", surface="arrange.track_headers",
+             path="AXWindow[x]/AXOutline/AXRow/AXMenuItem[Delete]"),
+    ]), encoding="utf-8")
+    (ev / "evidence" / "laundered.json").write_text(json.dumps([
+        _row("AXMenuItem", title="Delete", surface="arrange.menus",
+             path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete]"),
+    ]), encoding="utf-8")
+    for stem, eviname in (("honest", "honest.json"), ("laundered", "laundered.json")):
+        (ev / f"2026-09-07-{stem}.json").write_text(json.dumps({
+            "id": f"2026-09-07-{stem}", "date": D, "host": {"locale": "en-US"},
+            "surface": "arrange.track_headers", "observations": [],
+            "evidence": [f"evidence/{eviname}"]}), encoding="utf-8")
+    guard.OBS = str(ev)
+
+    def laundered(record, scope):
+        e = _entry([], None, dict(U, **{"en-US": "measured"}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": record}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["evidence_scope"] = scope
+        return e
+
+    HEADERS = {"surfaces": ["arrange.track_headers"], "reason": "the track rail"}
+    case("a scoped record whose row is really from that surface backs the claim",
+         cp(laundered("2026-09-07-honest", HEADERS)) == [],
+         cp(laundered("2026-09-07-honest", HEADERS)))
+    # Same header, same scope, same role, same string. The ONLY difference is that the row inside
+    # the evidence file belongs to another surface — so if this passes, the scope means nothing
+    # wherever an evidence file is shared.
+    case("a row laundered in through a shared evidence file does not back it",
+         any("has no AXMenuItem" in x for x in cp(laundered("2026-09-07-laundered", HEADERS))),
+         cp(laundered("2026-09-07-laundered", HEADERS)))
+    # And the record-level check is still there, refusing before the rows are read at all.
+    MIXER = {"surfaces": ["mixer.inserts"], "reason": "an insert slot"}
+    case("a record whose own surface is outside the scope is refused by name",
+         any("evidence_scope.surfaces" in x
+             for x in cp(laundered("2026-09-07-honest", MIXER))),
+         cp(laundered("2026-09-07-honest", MIXER)))
+
+    #      Measured ABSENCE and `identifier` coverage select rows themselves instead of calling
+    #      `sighting`, so a scope added only at the `sighting` call sites left both exempt.
+    (ev / "2026-09-07-menus.json").write_text(json.dumps({
+        "id": "2026-09-07-menus", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.menus",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", identifier="delete:",
+                 path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Paste]")]}]},
+        ), encoding="utf-8")
+    WINDOW_ONLY = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+
+    def out_of_scope(state, extra):
+        e = _entry([], None, dict(U, **{"en-US": state}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": "2026-09-07-menus"}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["evidence_scope"] = WINDOW_ONLY
+        e.update(extra)
+        return e
+
+    absent = out_of_scope("measured", {"coverage_absent": {"en-US": "AXMenu/AXMenuItem[Paste]"}})
+    case("measured ABSENCE is held to the label's scope",
+         any("evidence_scope" in x for x in cp(absent)), cp(absent))
+    ident = out_of_scope("identifier", {"coverage_identifiers": {"en-US": "delete:"}})
+    case("`identifier` coverage is held to the label's scope",
+         any("evidence_scope" in x for x in cp(ident)), cp(ident))
+
+    #      An explicit `null` is not an absent key: it reads as a declared constraint and is one
+    #      until it is read, when it becomes nothing.
+    case("a path_contains written as null is refused, not treated as absent",
+         any("imposes no constraint" in x for x in sp({"reason": "r", "surfaces": ["plugin.window"],
+                                                       "path_contains": None})),
+         sp({"reason": "r", "surfaces": ["plugin.window"], "path_contains": None}))
+    guard.OBS = _ledger({
+        "2026-09-06-window": ("en-US", [_row("AXMenuItem", title="Delete",
+                                             path="AXWindow[Marker List]/AXMenuItem[Delete]")],
+                              "arrange.window"),
+    })
+    nulled = scoped("2026-09-06-window", WINDOW, coverage=False)
+    nulled["provenance"]["Delete"]["path_contains"] = None
+    case("a block's path_contains written as null is refused too",
+         any("imposes no constraint" in x for x in pp(nulled)), pp(nulled))
+
+    #      And the list of fragments has to be ENFORCED, not merely accepted as well formed.
+    listed = scoped("2026-09-06-window", {"path_contains": ["AXWindow[", "AXOutline"],
+                                          "reason": "both"}, coverage=False)
+    case("every fragment in a list is required, not just the first",
+         any("at a path containing" in x for x in pp(listed)), pp(listed))
+    both_ok = scoped("2026-09-06-window", {"path_contains": ["AXWindow[", "AXMenuItem"],
+                                           "reason": "both"}, coverage=False)
+    case("a list whose fragments are all present is admitted",
+         pp(both_ok) == [], pp(both_ok))
+
+    # 16h. THE SECOND REVIEW, of the fixes above. Narrowing which rows a branch looks at is
+    #      conservative for a claim of PRESENCE and the exact opposite for a claim of ABSENCE:
+    #      every row the scope drops is a presence that stops contradicting it. The fixture is the
+    #      one that review built — an UNTAGGED inline row carrying the string, a tagged row carrying
+    #      something else, and a scope that admits only the tagged one.
+    ab = Path(tempfile.mkdtemp())
+    (ab / "2026-09-07-mixed.json").write_text(json.dumps({
+        "id": "2026-09-07-mixed", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Delete", path="AXWindow[x]/AXOutline/AXMenuItem[Delete]"),
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+    guard.OBS = str(ab)
+
+    def false_absence(scope):
+        e = _entry([], None, dict(U, **{"en-US": "measured"}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": "2026-09-07-mixed"}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["coverage_absent"] = {"en-US": "AXWindow[x]/AXOutline"}
+        if scope:
+            e["evidence_scope"] = scope
+        return e
+
+    HEADERS = {"surfaces": ["arrange.track_headers"], "reason": "the track rail"}
+    case("a scope cannot hide the presence that contradicts an absence claim",
+         any("that is a presence" in x for x in cp(false_absence(HEADERS))),
+         cp(false_absence(HEADERS)))
+    case("...and the same claim is refused without a scope too, for the same reason",
+         any("that is a presence" in x for x in cp(false_absence(None))),
+         cp(false_absence(None)))
+
+    #      The over-correction, found by round three: a row EXPLICITLY tagged with another surface
+    #      is not evidence against an absence claim about this one. Both rows share a path and a
+    #      role, so no narrower `coverage_absent` can separate them — only `surface` does, and
+    #      refusing on it made an honest claim inexpressible. Untagged rows still count (above);
+    #      demonstrably-elsewhere rows do not.
+    (ab / "2026-09-07-tagged.json").write_text(json.dumps({
+        "id": "2026-09-07-tagged", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]"),
+            _row("AXMenuItem", title="Delete", surface="arrange.menus",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Delete]")]}]}), encoding="utf-8")
+
+    def honest_absence():
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-tagged"}
+        return e
+
+    case("a row tagged with another surface does not contradict this scope's absence",
+         cp(honest_absence()) == [], cp(honest_absence()))
+
+    #      Round four: the `coverage_absent` locator filters on `path`, so a row that cannot say
+    #      where it is disappeared BEFORE the tri-state could classify it — and an untagged,
+    #      pathless row carrying the string is exactly the presence round two established must
+    #      count. Unlocatable is `unknown`, and unknown counts against an absence.
+    (ab / "2026-09-07-pathless.json").write_text(json.dumps({
+        "id": "2026-09-07-pathless", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            {"role": "AXMenuItem", "title": "Delete"},
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+
+    def pathless_absence():
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-pathless"}
+        return e
+
+    case("a pathless row carrying the string still contradicts an absence claim",
+         any("that is a presence" in x for x in cp(pathless_absence())), cp(pathless_absence()))
+
+    #      ...and a path that is not a string is not a path. `str(["AXWindow["])` contains the
+    #      fragment, so a list satisfied a `path_contains` constraint.
+    guard.OBS = _ledger({
+        "2026-09-07-listpath": ("en-US", [{"role": "AXMenuItem", "title": "Delete",
+                                           "path": ["AXWindow["]}], "arrange.window"),
+    })
+    listy = scoped("2026-09-07-listpath", WINDOW, coverage=False)
+    case("a non-string path cannot satisfy a path constraint",
+         any("at a path containing" in x for x in pp(listy)), pp(listy))
+
+    #      Round five: a DELIMITER is not a locator. `"["` satisfied "must contain / or [" and then
+    #      matched every bracketed path in the record, so `seen` accepted an unrelated element and
+    #      the guard certified an absence nobody had located.
+    (ab / "2026-09-07-unrelated.json").write_text(json.dumps({
+        "id": "2026-09-07-unrelated", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[Other]/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+
+    guard.OBS = str(ab)        # the `listy` case above repointed it; these records live in `ab`
+
+    def bare_locator(where):
+        e = false_absence(HEADERS)
+        e["coverage_records"] = {"en-US": "2026-09-07-unrelated"}
+        e["coverage_absent"] = {"en-US": where}
+        return e
+
+    # Round six: counting word characters was wrong in BOTH directions. `/AX` passed and selected
+    # the same unrelated row; the real censuses carry `AXMenuItem[左]` and `AXMenuBarItem[1]`,
+    # whose named segments are one character long. The test is structural now — a whole bracketed
+    # segment, or two whole `/`-separated components.
+    # Round seven: `[ ]` is brackets around nothing and `AXWindow/   /AXButton` has a blank
+    # component — counting the GOOD components let the second through on its first and last.
+    for bare in ("[", "/", "[]", "//", "/AX", "AX/", "AX", "[ ]", "AXWindow/   /AXButton"):
+        case(f"an absence locator of {bare!r} is refused as identifying nothing",
+             any("named segment" in x for x in cp(bare_locator(bare))), cp(bare_locator(bare)))
+    case("a locator naming a real segment is still accepted",
+         cp(bare_locator("AXWindow[Other]")) == [], cp(bare_locator("AXWindow[Other]")))
+    # A one-character localized segment is a real locator. `\w{2}` refused these.
+    for good in ("[Other]", "AXWindow[Other]/AXMenuItem[Paste]"):
+        case(f"a locator of {good!r} is accepted", cp(bare_locator(good)) == [],
+             cp(bare_locator(good)))
+    case("a one-character segment from the real censuses is a locator",
+         guard._is_a_locator("AXMenuItem[左]") and guard._is_a_locator("AXMenuBarItem[1]"), "")
+    case("two whole components are a locator, brackets or not",
+         guard._is_a_locator("AXOutline/AXRow"), "")
+    # The census writes `{_NS:108}` for elements Logic gives no name. Refusing that shape made a
+    # real component of a real ko-KR path unusable as a locator.
+    case("an unnamed census component is a locator too",
+         guard._is_a_locator("AXScrollArea{_NS:108}"), "")
+    # Python counts `_` as a word character, so a rule promising a NAME accepted punctuation-only
+    # probes. Round eight, 2026-09-07.
+    for underscore in ("[_]", "{_}", "_/_"):
+        case(f"an underscore-only probe {underscore!r} is not a name",
+             not guard._is_a_locator(underscore), "")
+
+    #      A `reason` that is not a string stringifies to something non-empty and passed.
+    case("a reason that is not a string is refused",
+         any("`reason`" in x for x in sp({"surfaces": ["plugin.window"],
+                                          "reason": {"why": "track rail"}})),
+         sp({"surfaces": ["plugin.window"], "reason": {"why": "track rail"}}))
+    case("a reason that is a real string is accepted",
+         sp({"surfaces": ["plugin.window"], "reason": "because"}) == [],
+         sp({"surfaces": ["plugin.window"], "reason": "because"}))
+
+    #      A rename cannot be carried, so it has to be LOUD. `build` records what it is dropping.
+    scope4 = {"path_contains": "AXWindow[", "reason": "r"}
+    gone = {"schema": 2, "labels": {"aLabelTheSwiftNoLongerHas": {
+        "evidence_scope": scope4, "roles": ["AXMenuItem"], "match": "contains"}}}
+    lost_a = {}
+    labels.build(existing=gone, dropped=lost_a)
+    case("a label whose author-typed metadata is about to be lost is named, WITH the values",
+         lost_a.get("aLabelTheSwiftNoLongerHas") == {"evidence_scope": scope4,
+                                                     "roles": ["AXMenuItem"],
+                                                     "match": "contains"}, lost_a)
+    # `match` is not carried forward — it is derived from the Swift where the Swift can speak — but
+    # its FALLBACK is keyed by name too, so a rename reinstates the `exact` default over an author's
+    # `contains`. Round three found that live on `arrangeWindowTitleSuffix`, whose product
+    # comparison is `hasSuffix`. Accounting for it is the least this can do.
+    case("...including `match`, which is lost even though it is not carried",
+         "match" in (lost_a.get("aLabelTheSwiftNoLongerHas") or {}), lost_a)
+    # The report belongs to the call that produced it. As module state, a second build overwrote the
+    # first one's, and a caller holding the first document printed the second's losses beside it.
+    lost_b = {}
+    labels.build(existing={"schema": 2, "labels": {}}, dropped=lost_b)
+    case("a second build does not disturb the first build's report",
+         lost_b == {} and lost_a != {}, (lost_a, lost_b))
+    case("a caller that asks for no report gets none, and nothing is left behind",
+         isinstance(labels.build(existing=gone), dict), "")
+
+    # 17. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])
 
