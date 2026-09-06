@@ -118,19 +118,56 @@ func frame(_ element: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
     return (Int(point.x), Int(point.y), Int(size.width), Int(size.height))
 }
 
-/// The arrange window's frame, so every frame below can be reported in WINDOW coordinates.
+/// The window that CONTAINS a given element, by walking its AXParent chain. Its frame is the origin
+/// every region frame below is reported against, so they come out in WINDOW coordinates.
 ///
-/// AX reports screen coordinates and `Evidence.visual` takes window ones — it clips what it is
-/// given against the window's width and height. Handing it a screen rectangle on a second display
-/// or a window that is not at the origin aims the comparison somewhere else entirely, and the
-/// receipt cannot show it: a rectangle records where it looked, never what was there.
-/// `ax_control_bar_band.swift` already subtracts the window origin for exactly this reason; doing
-/// it here keeps one converter rather than two that can disagree.
-func arrangeWindowFrame(_ app: AXUIElement) -> (x: Int, y: Int, w: Int, h: Int)? {
-    let windows = (attr(app, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []
-    for window in windows where (attr(window, kAXSubroleAttribute as String) as? String)
-        == (kAXStandardWindowSubrole as String) {
-        if let f = frame(window) { return f }
+/// Window coordinates because AX reports screen ones and `Evidence.visual` takes window ones — it
+/// clips what it is given against the window's width and height. Handing it a screen rectangle on
+/// a second display or a window that is not at the origin aims the comparison somewhere else
+/// entirely, and the receipt cannot show it: a rectangle records where it looked, never what was
+/// there.
+///
+/// Not "the first standard window". Raised by review 2026-09-05: `Evidence.shot` picks a
+/// CoreGraphics window by the arrange TITLE, and this tool picked the first standard window in AX
+/// order. With two standard windows on screen those need not be the same window, so the emitted
+/// coordinates could be relative to one while declaring `window-relative` — and a declared
+/// coordinate space that can be wrong is worse than none, because a reader trusts it.
+///
+/// Walking up from the track-content group ties the origin to the window the regions are actually
+/// in, which is the window the harness captured or the run has bigger problems than an offset.
+///
+/// This is a SECOND converter, not a shared one. `ax_control_bar_band.swift` subtracts the origin
+/// of the first standard window its description matched in, falling back to the first standard
+/// window outright (`let win = hitWindow ?? standardWindows[0]`), while this subtracts the origin
+/// of the window that contains the group. The two agree when one standard window is open and can
+/// disagree when two are, which is why the harness checks the `window` and `windowTitle` this
+/// tool emits against the capture instead of assuming the converters agree. An earlier comment
+/// here claimed the opposite; it was written for a function that no longer exists.
+func windowContaining(_ element: AXUIElement) -> AXUIElement? {
+    var current: AXUIElement? = element
+    for _ in 0..<24 {
+        guard let node = current else { return nil }
+        if (attr(node, kAXRoleAttribute as String) as? String) == (kAXWindowRole as String) {
+            return node
+        }
+        current = attr(node, kAXParentAttribute as String) as! AXUIElement?
+    }
+    return nil
+}
+
+/// The LayoutArea a region item sits in, which is its TRACK.
+///
+/// A region's name is not an identity: two regions can carry the same name on different tracks,
+/// and `record_sequence` names every region it imports `MIDI Region`. Raised by review
+/// 2026-09-05 against a same-region check that compared names alone.
+func trackOf(_ item: AXUIElement) -> String? {
+    var current: AXUIElement? = attr(item, kAXParentAttribute as String) as! AXUIElement?
+    for _ in 0..<8 {
+        guard let node = current else { return nil }
+        if role(node) == (kAXLayoutAreaRole as String) {
+            return attr(node, kAXDescriptionAttribute as String) as? String
+        }
+        current = attr(node, kAXParentAttribute as String) as! AXUIElement?
     }
     return nil
 }
@@ -151,6 +188,7 @@ func describe(_ item: AXUIElement, index: Int, origin: (x: Int, y: Int)?) -> Str
     return """
     {"index":\(index),"name":\(jsonString(name)),"help":\(jsonString(help(item))),\
     "selected":\(selected.map { $0 ? "true" : "false" } ?? "null"),\
+    "track":\(jsonString(trackOf(item))),\
     "x":\(x),"y":\(y),"w":\(w),"h":\(h)}
     """
 }
@@ -168,7 +206,9 @@ guard let content = trackContentGroup(appElement) else {
     exit(3)
 }
 
-let windowFrame = arrangeWindowFrame(appElement)
+let contentWindow = windowContaining(content)
+let windowFrame = contentWindow.flatMap(frame)
+let windowTitle = contentWindow.flatMap { attr($0, kAXTitleAttribute as String) as? String }
 let origin = windowFrame.map { (x: $0.x, y: $0.y) }
 let items = regionItems(content)
 let listing = items.enumerated()
@@ -183,7 +223,10 @@ let selected = items.enumerated()
 let space = windowFrame == nil ? "screen-absolute" : "window-relative"
 let windowJSON = windowFrame.map { "{\"x\":\($0.x),\"y\":\($0.y),\"w\":\($0.w),\"h\":\($0.h)}" }
     ?? "null"
+// The window's TITLE travels with the coordinates so a caller can check the origin it subtracted
+// belongs to the window it captured. Emitting the space without the identity was the gap: the
+// payload said `window-relative` and could not say WHICH window.
 print("""
 {"regions":[\(listing)],"selected":[\(selected.map(String.init).joined(separator: ","))],\
-"coordinateSpace":"\(space)","window":\(windowJSON)}
+"coordinateSpace":"\(space)","window":\(windowJSON),"windowTitle":\(jsonString(windowTitle))}
 """)

@@ -77,15 +77,17 @@ SETTLE_BAND = (_CONTENTS[0] + 12, _CONTENTS[1], 500, 300) if _CONTENTS else None
 # below, because half of it does not exist until then.
 #
 # This rectangle used to be SETTLE_BAND, and #780 is what that cost: `+12` and a fixed 500x300
-# assume a zoom and scroll where the moved bars fall inside them. Measured 2026-09-05 on this
-# project, the region sits at window x=846 and the band starts at x=940 — 94 points to its left —
-# so ten green checks including two independent readers saying the region moved from bar 1 to 9
-# came with `visual_failed: 1` and byte-identical hashes. At 1610x819 the same expression computed
-# y=-141, was clamped to 0, and sampled a strip that is not the canvas at all.
+# assume a zoom and scroll where the moved bars fall inside them, and the expression reads neither.
+# Measured 2026-09-05 on one run, both bands against the same region in the same layout: the fixed
+# band contained 39 of the region's 64 vertical points at each position while the derived band
+# contained all 64 — so it was watching a fraction of its own subject even where it worked. The
+# issue records a run where it saw nothing at all, and that run is NOT reproduced here.
 #
-# A band derived from the region CONTAINS the change if there is one, at any zoom or scroll, and
-# — the stronger half — cannot pass by accident on empty canvas, which a fixed band sampling a
-# part of the arrangement where nothing happens can.
+# A band derived from the region contains the change in AX SPACE at any zoom or scroll, and cannot
+# pass by accident on empty canvas. It does NOT follow that it cannot fail: `visual()` clips to the
+# captured window, so a union outside the window hashes a subset or nothing. An earlier version of
+# this comment claimed the stronger thing; `within_captured_window` below is what makes the weaker
+# one checkable instead of assumed. Raised by review, 2026-09-05.
 ev.check("575/precondition-the-arrange-canvas-was-located",
          SETTLE_BAND is not None and bool(_CONTENTS_SUBJECT),
          "a slice of the arrange canvas, located by AXDescription, to settle captures against",
@@ -144,27 +146,146 @@ def frame_of(region):
     return tuple(parts)
 
 
-def union_frame(before, after):
-    """The rectangle containing both frames, padded, or None if either is unreadable.
+def region_identity(region):
+    """`(name, track)` for a witness reading, or None when either is missing.
+
+    NAME ALONE is not an identity — raised by review 2026-09-05: two regions can carry the same
+    name on different tracks, and `MIDI Region` is what `record_sequence` calls every one it
+    imports. The witness reports the LayoutArea it sits in, which is the track, so the pair is
+    available and the name on its own never was.
+    """
+    if not isinstance(region, dict):
+        return None
+    name = region.get("name")
+    track = region.get("track")
+    if not name or not track:
+        return None
+    return (name, track)
+
+
+def same_region(before, after):
+    """Whether the two witness readings are about ONE region.
+
+    Raised by review 2026-09-05. `union_frame` took the sole selected region before and after and
+    never asked whether they were the same one — the harness's same-region check reads the
+    ENVELOPE's `region_name`/`post_region_name`, not the witness objects the band is built from. If
+    the selection drifts from A to B across the call, the band covers both, selection highlighting
+    alone changes pixels inside it, and `expect_change=True` passes while A never moved.
+
+    The envelope's check does not transfer to the witness, so this asks the witness directly.
+    """
+    a, b = region_identity(before), region_identity(after)
+    return a is not None and a == b
+
+
+def within_captured_window(band, state, before_captured, after_captured):
+    """Whether the band lies inside the window `Evidence.visual` actually clipped against.
+
+    Three things, and each of the first two was missing in turn.
+
+    The window is the one `after_shot` RECORDED, not a fresh CoreGraphics read taken afterwards.
+    `visual()` scales BOTH captures by the size of the last capture taken — `shot()` stores it —
+    so the window that clips the band is the one that capture saw. A fresh read says what the window
+    is NOW: resize it between the two captures and back, and the fresh read still matches while the
+    before crop landed on different pixels, the hashes differ, and `changed=True` reports a move
+    that never happened. Raised by review 2026-09-05. The two captures must also be ONE window —
+    same CoreGraphics id, same width, same height — for the same reason: a resize between them puts
+    the two crops on different pixels whatever the band says.
+
+    Then the AX window the witness measured must be the window that was captured, by title and by
+    size, or the band is in the coordinate space of a window the comparison never looked at.
+
+    What passes is a bound on the RECTANGLE: it lies within the captured window's point bounds, so
+    `_clip_to_window` removes none of it. That is NOT a claim that the region is on the visible
+    canvas. AX region frames are canvas geometry — `Tracks contents` can be far wider than the
+    window, and the product's own enumerator counts `regionItemsOutsideViewport` separately — and a
+    frame inside the window's bounds may still sit under the track-header rail or a pane. Whether the
+    pixels at the band are the region is not something this check can say, and its subject string
+    no longer says it.
+
+    Measured on this host, AX and CoreGraphics agree exactly — same origin, same size, same title.
+    That is what makes the assertion cheap; it is not what makes it unnecessary.
+    """
+    axw = state.get("window") if isinstance(state, dict) else None
+    if band is None or not isinstance(axw, dict):
+        return False
+    if not isinstance(before_captured, dict) or not isinstance(after_captured, dict):
+        return False
+    # Present on BOTH captures before they are compared. `None == None` is True, so two missing ids
+    # would otherwise read as one window.
+    for key in ("id", "w", "h"):
+        b, a = before_captured.get(key), after_captured.get(key)
+        if b is None or a is None or b != a:
+            return False
+    # Both titles must be PRESENT before they are compared, for the same reason: `("" != "")` is
+    # False, so a witness that could not name its window and a capture that could not name its own
+    # used to pass the identity check together. Raised by review 2026-09-05.
+    ax_title = state.get("windowTitle")
+    captured_title = after_captured.get("title")
+    if not ax_title or not captured_title or ax_title != captured_title:
+        return False
+    if axw.get("w") != after_captured.get("w") or axw.get("h") != after_captured.get("h"):
+        return False
+    x, y, w, h = band
+    return x >= 0 and y >= 0 and x + w <= after_captured["w"] and y + h <= after_captured["h"]
+
+
+def union_frame(before, after, before_state, after_state):
+    """`(band, None)` — the rectangle containing both frames, padded — or `(None, reason)`.
 
     Padded because a region's edge is antialiased and a band flush to it can differ by rendering
     rather than by position. Not padded so far that it stops being about the region: eight points
     either side is under a fifth of the narrowest region this project holds.
+
+    Every refusal is NAMED, because the receipt has to say which one fired. Raised by review
+    2026-09-05: `same_region` was called and its answer reached the receipt only as a bare None,
+    which is also what an unreadable frame, a wrong coordinate space and a negative origin produce.
+    A red from "different region" that reads the same as a red from "off the left edge" is a red
+    nobody can act on.
     """
     a, b = frame_of(before), frame_of(after)
-    if a is None or b is None:
-        return None
+    if a is None:
+        return None, "before frame unreadable"
+    if b is None:
+        return None, "after frame unreadable"
+    # The two readings must be ONE region. Without this the band covers A and B when the selection
+    # drifts across the call, selection highlighting alone changes pixels inside it, and the
+    # assertion passes while A never moved. Raised by review 2026-09-05 — and the FIRST attempt at
+    # this fix defined the function and never called it, which is the shape of defect this whole
+    # harness exists to refuse.
+    if not same_region(before, after):
+        return None, "different region before and after"
     # The witness names its own space, and the value it uses is deliberately not the bare word for
     # a Logic window: a protocol token that collides with a UI label is a token the literal guard
     # cannot tell from a menu title, and neither can a reader.
     if (before_state.get("coordinateSpace") != WINDOW_RELATIVE
             or after_state.get("coordinateSpace") != WINDOW_RELATIVE):
-        return None
+        return None, "not window-relative"
+    # The band is built from BOTH reads, so both must be relative to the same window. The harness
+    # asserts the after read against the capture below; without this the before read was never
+    # tied to anything, and a window that resized, moved or was swapped for another between the two
+    # reads made the before frame a rectangle no capture shows. Raised by review 2026-09-05.
+    #
+    # What this catches is a change to the WINDOW between the reads. A pane sliding the canvas
+    # inside an unchanged window is not visible here: the witness reports the window's frame, not
+    # the canvas's, so that case still has to be excluded by the run leaving the layout alone.
+    bw, aw = before_state.get("window"), after_state.get("window")
+    if not isinstance(bw, dict) or not isinstance(aw, dict) or bw != aw:
+        return None, "witness window frame differs between reads"
+    bt, at = before_state.get("windowTitle"), after_state.get("windowTitle")
+    if not bt or not at or bt != at:
+        return None, "witness window title missing or differs between reads"
     x0 = min(a[0], b[0]) - FRAME_PAD
     y0 = min(a[1], b[1]) - FRAME_PAD
     x1 = max(a[0] + a[2], b[0] + b[2]) + FRAME_PAD
     y1 = max(a[1] + a[3], b[1] + b[3]) + FRAME_PAD
-    return (max(0, x0), max(0, y0), x1 - max(0, x0), y1 - max(0, y0))
+    # NOT clamped to zero. The first cut wrote `max(0, x0)`, which silently returns a different
+    # rectangle from the one the frames imply — and `within_captured_window` below then approved
+    # the reshaped one. A band that would start off the left or top edge is a band this run cannot
+    # compare, so it is refused here and the precondition says so. Raised by review 2026-09-05.
+    if x0 < 0 or y0 < 0:
+        return None, "negative origin"
+    return (x0, y0, x1 - x0, y1 - y0), None
 
 
 def start_bar(help_text):
@@ -356,26 +477,56 @@ ev.check("575/an-independent-reader-agrees-the-region-is-there-now",
 # The band the assertion is actually about: where the region WAS and where it IS, unioned and
 # padded. `frame_of` refuses anything it cannot read rather than substituting a default — a band
 # built from a missing frame is a rectangle nobody measured, which is the defect this replaces.
-COMPARE_BAND = union_frame(target, after_target)
+COMPARE_BAND, COMPARE_BAND_REFUSAL = union_frame(target, after_target, before_state, after_state)
 COMPARE_BAND_SUBJECT = (
     f"the region Logic calls {(after_target or target or {}).get('name')!r}, its frame before and "
     f"after the move, unioned and padded {FRAME_PAD}px"
 ) if COMPARE_BAND else None
+# The observed string carries the `(name, track)` pair of BOTH reads and the refusal that fired.
+# Raised by review 2026-09-05: the identity comparison happened and left no trace, so a red for
+# "different region" read exactly like a red for "off the left edge".
 ev.check("575/precondition-the-region-frame-was-read-before-and-after",
          COMPARE_BAND is not None,
-         "the witness reported a readable frame for the target region on BOTH reads, in window "
-         "coordinates, so a band containing the change can be derived from it",
+         "the witness reported a readable frame for the SAME region — same name, same track — on "
+         "both reads, in window coordinates relative to ONE window, so a band containing the "
+         "change can be derived from it",
          f"space={before_state.get('coordinateSpace')!r}/{after_state.get('coordinateSpace')!r} "
-         f"before={frame_of(target)!r} after={frame_of(after_target)!r} band={COMPARE_BAND!r}",
+         f"identity={region_identity(target)!r}->{region_identity(after_target)!r} "
+         f"window={before_state.get('window')!r}/{after_state.get('window')!r} "
+         f"before={frame_of(target)!r} after={frame_of(after_target)!r} band={COMPARE_BAND!r} "
+         f"refused={COMPARE_BAND_REFUSAL!r}",
          "have the witness emit position without size: `frame_of` returns None, this check goes "
-         "red, and no band is built from half a rectangle")
+         "red, and the receipt names `before frame unreadable` rather than a bare None")
+
+# The band must also be somewhere `visual()` can actually look. It clips to the window, so a union
+# outside it hashes a subset — or nothing — and an assertion about the region would then fail for a
+# reason that is not about the region. The window is the one the captures RECORDED — `shot()`
+# returns it — not a fresh read taken now; see `within_captured_window`.
+BEFORE_WINDOW = before_shot.get("window")
+AFTER_WINDOW = after_shot.get("window")
+ev.check("575/precondition-the-band-is-inside-the-window-that-will-clip-it",
+         within_captured_window(COMPARE_BAND, after_state, BEFORE_WINDOW, AFTER_WINDOW),
+         "the two captures are one window — same id, width and height — the AX window the band "
+         "was measured in IS that window — same title, same size — and the band lies inside its "
+         "point bounds, so `visual()` clips none of it. That is a bound on the RECTANGLE, not on "
+         "the region: a frame inside the window's bounds can still sit under the track-header rail "
+         "or a pane, and whether the pixels there are the region is not asserted here",
+         f"band={COMPARE_BAND!r} ax={(after_state or {}).get('window')!r} "
+         f"ax_title={(after_state or {}).get('windowTitle')!r} "
+         f"captured before={BEFORE_WINDOW!r} after={AFTER_WINDOW!r}",
+         "have the witness report the first standard window's frame and title instead of the "
+         "containing window's: with a second project window in front, title and size stop "
+         "matching the capture and this goes red")
 
 ev.visual("575/the-region-visibly-moved",
           before_shot["file"], after_shot["file"], COMPARE_BAND, subject=COMPARE_BAND_SUBJECT,
           expect_change=True,
-          why="the band is the union of the region's own measured frame before and after, so it "
-              "contains the change if there is one at any zoom or scroll — and it cannot pass on "
-              "empty canvas, which is how a fixed rectangle can be green about nothing")
+          why="the band is the union of one region's own measured frames before and after — the "
+              "same region, by name AND track, relative to the same window — so it contains the "
+              "change wherever the region is on the canvas, and cannot pass on empty canvas the "
+              "way a fixed rectangle can. It is asserted to lie inside the window both captures "
+              "came from, because a band outside it would be clipped and the comparison would "
+              "then be about something else")
 
 # ---- restore ------------------------------------------------------------------------------------
 #
