@@ -102,6 +102,106 @@ def _record(record_id):
         return None
 
 
+def _records_module():
+    """`Scripts/check-observation-records.py`, for its surface taxonomy.
+
+    The list of legal surfaces is parsed out of `docs/observations/SURFACES.md` there, and a second
+    parser here would be a second answer to the same question — the drift this file already learned
+    about with the containment sets, which were a name-based guess and wrong for 23 of 31 sets.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "observation_records", os.path.join(REPO, "Scripts", "check-observation-records.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# `reason` is REQUIRED, and it is read — by the check below, which refuses a scope without one.
+# A scope narrows what may ever back a label, and the case it was built for is a retraction: the
+# next person to look has to be able to tell "this was measured to be the wrong element" from "this
+# was narrowed by somebody guessing". Prose that only a comment carries is prose the tooling can
+# strip; this one is in the ledger with the constraint it explains.
+SCOPE_KEYS = ("surfaces", "path_contains", "reason")
+CONSTRAINING_SCOPE_KEYS = ("surfaces", "path_contains")
+
+
+def evidence_scope(entry):
+    """Where this label's evidence may come from, as the label itself declares it.
+
+    `roles` names a KIND of element and `path_contains` on a provenance block names a place, but
+    only after a block exists to carry it — so the constraint that would have refused a bad match
+    could only be written once the bad match had been made, and a label whose claim had been
+    RETRACTED had nowhere at all to record why. Measured 2026-09-06: `markerListDeleteMenuItem`
+    means the Delete in Logic's Marker List window; its claim was withdrawn because the census that
+    backed it walks the application menu bar, where `Delete` is the Edit menu's. Running the
+    proposer again for two unrelated labels re-added the withdrawn block verbatim and flipped the
+    locale back to `measured`, and nothing failed.
+
+    A scope is a fact about the label, so it survives a retraction and both halves of this guard
+    read it. Empty or malformed is no scope at all; `scope_problems` refuses those separately
+    rather than letting them read as a constraint that is silently doing nothing.
+    """
+    scope = entry.get("evidence_scope")
+    return scope if isinstance(scope, dict) else {}
+
+
+def _path_fragments(path_contains):
+    """The path fragments a sighting must satisfy, normalised from one source or several.
+
+    A sighting can be constrained twice: by the LABEL (`evidence_scope.path_contains` — where this
+    label's element lives at all) and by the BLOCK (`path_contains` — which reading backs this one
+    variant). Both are requirements, so they are ANDed. Passing only one would have let a block
+    carrying its own fragment slip out of its label's scope, which is the hole this exists to close
+    reappearing one level down.
+    """
+    if path_contains is None:
+        return ()
+    if isinstance(path_contains, str):
+        return (path_contains,) if path_contains else ()
+    return tuple(f for f in path_contains if isinstance(f, str) and f)
+
+
+def scope_problems(name, entry, surfaces):
+    """`evidence_scope`, if declared, has to be a constraint that can actually refuse something."""
+    if "evidence_scope" not in entry:
+        return []
+    scope = entry.get("evidence_scope")
+    if not isinstance(scope, dict):
+        return [f"{name}: `evidence_scope` must be an object naming where this label's evidence "
+                f"may come from, not {type(scope).__name__}"]
+    unknown = sorted(set(scope) - set(SCOPE_KEYS))
+    if unknown:
+        return [f"{name}: `evidence_scope` carries unknown key(s) {unknown} — one of {SCOPE_KEYS}. "
+                f"A key nothing reads is a constraint that looks declared and refuses nothing"]
+    out = []
+    if not str(scope.get("reason") or "").strip():
+        out.append(f"{name}: `evidence_scope` must carry a `reason` — a scope is how a retracted "
+                   f"claim is recorded, and one with no reason cannot be told from a guess")
+    allowed = scope.get("surfaces")
+    if "surfaces" in scope:
+        if not isinstance(allowed, list) or not allowed or not all(
+                isinstance(x, str) and x for x in allowed):
+            out.append(f"{name}: `evidence_scope.surfaces` must be a non-empty list of surface "
+                       f"names from docs/observations/SURFACES.md")
+        elif surfaces:
+            bad = sorted(x for x in allowed if x not in surfaces)
+            if bad:
+                out.append(f"{name}: `evidence_scope.surfaces` names {bad}, absent from "
+                           f"docs/observations/SURFACES.md — add the row before scoping to it")
+    fragment = scope.get("path_contains")
+    if "path_contains" in scope and (not isinstance(fragment, str) or not fragment.strip()):
+        out.append(f"{name}: `evidence_scope.path_contains` must be a non-empty fragment of the AX "
+                   f"path the element sits at")
+    if not out and not any(scope.get(k) for k in CONSTRAINING_SCOPE_KEYS):
+        # A scope that permits everything is worse than none: it reads, in a diff and to the next
+        # reader, as the retraction having been recorded.
+        out.append(f"{name}: `evidence_scope` names no {CONSTRAINING_SCOPE_KEYS} — it constrains "
+                   f"nothing, while reading as though where this label may be read from had been "
+                   f"decided")
+    return out
+
+
+
 MATCH_MODES = ("exact", "exact_strict", "prefix", "contains")
 
 
@@ -186,6 +286,19 @@ def provenance_problems(name, entry):
         # same-locale record and paste itself into `observed`. What makes this a READING is that the
         # record itself saw the string: it has to occur verbatim in the record's raw observations or
         # in a file the record lists as evidence. A record that never saw it cannot be cited for it.
+        scope = evidence_scope(entry)
+        # WHICH SURFACE the reading came from, before anything about the element. A census is taken
+        # of one surface at a time, so "this label is read in the Marker List window" is refuted by
+        # a citation of the application-menu-bar census whatever the row inside it looks like.
+        allowed_surfaces = scope.get("surfaces")
+        if allowed_surfaces and rec.get("surface") not in allowed_surfaces:
+            out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, measured "
+                       f"on surface {rec.get('surface')!r}, which `evidence_scope.surfaces` does "
+                       f"not allow ({allowed_surfaces})")
+            continue
+        # The block's fragment and the label's are both requirements — see `_path_fragments`.
+        fragments = (_path_fragments(block.get("path_contains"))
+                     + _path_fragments(scope.get("path_contains")))
         role = block.get("role")
         attribute = block.get("attribute")
         # The LABEL's mode, not the block's. A block may still carry one — `label_match` reports it
@@ -205,9 +318,9 @@ def provenance_problems(name, entry):
             out.append(f"{name}: provenance for {variant!r} must name the `role` and the `attribute` "
                        f"it was read from — a string with no element is not a sighting")
         elif (seen := sighting_value(rec, variant, role, attribute, mode,
-                                     block.get("path_contains"))) is None:
-            where = (f" at a path containing {block.get('path_contains')!r}"
-                     if block.get("path_contains") else "")
+                                     fragments)) is None:
+            where = (" at a path containing " + ", ".join(repr(f) for f in fragments)
+                     if fragments else "")
             out.append(f"{name}: provenance for {variant!r} cites {block.get('record')!r}, which has "
                        f"no {role} whose {attribute} carried it{where} — a record that never saw it "
                        f"on that element cannot be cited for it")
@@ -367,7 +480,7 @@ def sighting_value(rec, text, role=None, attribute=None, mode="exact", path_cont
         # mixer AND in the Marker List. Measured 2026-09-05: four labels had a sighting satisfying
         # every rule this guard had — string, role, attribute, locale, real record — and all four
         # were the wrong element, because the label meant a container the sighting was not in.
-        if path_contains and path_contains not in str(row.get("path") or ""):
+        if any(f not in str(row.get("path") or "") for f in _path_fragments(path_contains)):
             continue
         for attr in ([attribute] if attribute else LABEL_ATTRS):
             value = row.get(attr)
@@ -466,6 +579,17 @@ def coverage_problems(name, entry, locales, values):
             out.append(f"{name}: coverage_records[{loc}] names a record measured in "
                        f"{(rec.get('host') or {}).get('locale')!r}, not {loc}")
             continue
+        # The coverage half of the scope check in `provenance_problems`, and here for the reason
+        # `coverage_paths` exists: of the four claims on 2026-09-05 that satisfied every rule and
+        # were still the wrong element, two were coverage. A constraint enforced on one half only
+        # leaves the other able to make the same mistake in the same file.
+        scope = evidence_scope(entry)
+        allowed_surfaces = scope.get("surfaces")
+        if allowed_surfaces and rec.get("surface") not in allowed_surfaces:
+            out.append(f"{name}: coverage_records[{loc}] names a record measured on surface "
+                       f"{rec.get('surface')!r}, which `evidence_scope.surfaces` does not allow "
+                       f"({allowed_surfaces})")
+            continue
         role = (entry.get("coverage_roles") or {}).get(loc)
         declared = entry.get("roles") or []
         if not role:
@@ -536,7 +660,8 @@ def coverage_problems(name, entry, locales, values):
                            f"under coverage_attributes[{loc}] — one of {LABEL_ATTRS}. Which "
                            f"attribute carried the string is part of the reading, not a detail")
             elif not any(sighting(rec, t, role, attr, mode,
-                                  (entry.get("coverage_paths") or {}).get(loc))
+                                  _path_fragments((entry.get("coverage_paths") or {}).get(loc))
+                                  + _path_fragments(scope.get("path_contains")))
                          for t in strings if t):
                 # `coverage_paths[locale]` is the coverage half of provenance's `path_contains`, and
                 # it exists for the same measured reason. THREE claims on this branch's base cited a
@@ -544,10 +669,12 @@ def coverage_problems(name, entry, locales, values):
                 # and two of them were coverage rather than provenance — so fixing only the
                 # provenance half would have left the other one able to make the same mistake, in
                 # the same file, the next time somebody looked.
-                where = (entry.get("coverage_paths") or {}).get(loc)
+                where = (_path_fragments((entry.get("coverage_paths") or {}).get(loc))
+                         + _path_fragments(scope.get("path_contains")))
                 out.append(f"{name}: coverage[{loc}] is 'measured' citing {cites.get(loc)!r}, which "
                            f"has no {role} whose {attr} carried any of this label's strings"
-                           + (f" at a path containing {where!r}" if where else ""))
+                           + (" at a path containing " + ", ".join(repr(f) for f in where)
+                              if where else ""))
         elif state == "identifier":
             ident = (entry.get("coverage_identifiers") or {}).get(loc)
             if not ident:
@@ -589,7 +716,9 @@ def main():
         problems.append(f"schema is {on_disk.get('schema')!r}; this guard reads schema 2 — regenerate")
     if not locales or not values:
         problems.append("supported_locales / coverage_values missing — regenerate")
+    surfaces = _records_module().known_surfaces()
     for name, entry in sorted(on_disk["labels"].items()):
+        problems += scope_problems(name, entry, surfaces)
         problems += provenance_problems(name, entry)
         if locales and values:
             problems += coverage_problems(name, entry, locales, values)

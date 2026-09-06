@@ -316,7 +316,11 @@ def build(existing=None):
         # human to write where the AX role is not derivable from Swift. `retired` excuses a label
         # whose element Logic no longer ships, which otherwise sits in the ledger as permanent debt
         # nobody can ever close by measuring.
-        for field in ("roles", "retired"):
+        # `evidence_scope` is the same kind of thing and carried the same way: it can only ever
+        # REFUSE evidence, so a wrong one costs a false RED. It also has to survive regeneration
+        # more than the others do — it is how a RETRACTION is recorded, and a retraction that a
+        # `--write` erases is one the next campaign run silently undoes.
+        for field in ("roles", "retired", "evidence_scope"):
             if prior.get(field):
                 entry[field] = prior[field]
         # The match mode is a property of the LABEL: whether Logic's string EQUALS it or CONTAINS it

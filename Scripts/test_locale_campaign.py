@@ -391,6 +391,38 @@ def main():
     r = row("AXButton", "AXWindow[x]/AXGroup/AXList/AXGroup/AXButton", description="chrome")
     case("unlabelled chrome stays unclassified", records.classify(r) is None, records.classify(r))
 
+    # 10. `evidence_scope`: the proposer reads the label's declaration of WHERE its evidence may
+    #     come from, so a claim retracted as the wrong element is not re-proposed the next run.
+    #     Measured 2026-09-06 (#793): `markerListDeleteMenuItem` means the Delete in the Marker
+    #     List window; the menus census carries the Edit menu's Delete on the same role with the
+    #     same string, and re-running the proposer for two unrelated labels put the retracted block
+    #     back verbatim and flipped the locale to `measured`, reported as an improvement.
+    menubar = [row("AXMenuItem", "AXMenuBar/AXMenuBarItem[편집]/AXMenu/AXMenuItem[삭제]", title="삭제")]
+    window = [row("AXMenuItem", "AXWindow[마커 리스트]/AXMenuItem[삭제]", title="삭제")]
+
+    def scoped_labels(scope, rows):
+        json.dump(census(rows), open(cpath, "w"))
+        doc = labels(markerListDeleteMenuItem=("Delete", ["삭제"]))
+        if scope is not None:
+            doc["labels"]["markerListDeleteMenuItem"]["evidence_scope"] = scope
+        return propose.main(cpath, write(tmp, doc))[2]
+
+    WINDOW = {"path_contains": "AXWindow[", "reason": "the Marker List is a window"}
+    # The control first: without the declaration the menu-bar row IS proposed. A case that cannot
+    # fail proves nothing, and this is the exact reading the fix has to keep refusing.
+    case("unscoped, the menu bar's Delete is proposed for the Marker List label",
+         "markerListDeleteMenuItem" in scoped_labels(None, menubar), "")
+    case("scoped by path, the menu bar's Delete is refused",
+         "markerListDeleteMenuItem" not in scoped_labels(WINDOW, menubar), "")
+    case("the same scope still admits the reading taken in the window",
+         "markerListDeleteMenuItem" in scoped_labels(WINDOW, window), "")
+    case("scoped by surface, a row from another surface is refused",
+         "markerListDeleteMenuItem" not in scoped_labels(
+             {"surfaces": ["plugin.window"], "reason": "r"}, menubar), "")
+    case("scoped by surface, a row from that surface is admitted",
+         "markerListDeleteMenuItem" in scoped_labels(
+             {"surfaces": ["arrange.menus"], "reason": "r"}, menubar), "")
+
     if failures:
         for f in failures: print(f"FAIL {f}")
         return 1

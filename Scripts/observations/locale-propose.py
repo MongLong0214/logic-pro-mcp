@@ -78,6 +78,26 @@ def match_mode(name):
     return "contains" if any(f in name for f in CONTAINS_SHAPES) else "exact"
 
 
+def in_scope(entry, row):
+    """Whether this census row is somewhere this label's evidence may come from.
+
+    Asked BEFORE the string is compared, because the whole failure this closes is a row that
+    matches on every other axis. `markerListDeleteMenuItem` means the Delete in Logic's Marker List
+    window; the ja-JP menus census carries `削除` as the Edit menu's Delete, with the same role and
+    the same string, and a claim retracted for exactly that reason came back verbatim the next time
+    this tool ran — with the ratchet reporting it as an improvement.
+
+    Read from the guard, so the tool that proposes and the tool that judges cannot disagree about
+    what a scope means.
+    """
+    scope = _GUARD.evidence_scope(entry)
+    surfaces = scope.get("surfaces")
+    if surfaces and row.get("surface") not in surfaces:
+        return False
+    return all(f in str(row.get("path") or "")
+               for f in _GUARD._path_fragments(scope.get("path_contains")))
+
+
 def roles_for(name):
     for frag, roles in ROLE_HINTS:
         if frag in name:
@@ -120,6 +140,8 @@ def main(census_path, labels_path):
         allowed = roles_for(name)
         hits = []
         for row in rows:
+            if not in_scope(entry, row):
+                continue
             if allowed is not None and row["role"] not in allowed:
                 # the string may appear here, but this element cannot be what the label addresses
                 for _, text in strings_of(row):
