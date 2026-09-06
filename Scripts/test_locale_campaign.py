@@ -436,8 +436,11 @@ def main():
         doc["labels"]["markerListDeleteMenuItem"]["evidence_scope"] = scope
         return propose.main(cpath, write(tmp, doc))[2]
 
+    # `{"why": ...}` is in this list because a reason was checked by the truthiness of `str(...)`,
+    # which a dict satisfies — so it reached the proposer through the same fail-closed call.
     for bad in ("AXWindow[", {"reason": "r", "path_contains": 5}, {"reason": "r", "surfaces": 5},
-                {"reason": "r"}, {"path_contains": "AXMenuBar/"}):
+                {"reason": "r"}, {"path_contains": "AXMenuBar/"},
+                {"surfaces": ["arrange.menus"], "reason": {"why": "the track rail"}}):
         try:
             props = with_scope(bad)
             crashed = None

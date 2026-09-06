@@ -204,7 +204,10 @@ def scope_problems(name, entry, surfaces):
         return [f"{name}: `evidence_scope` carries unknown key(s) {unknown} — one of {SCOPE_KEYS}. "
                 f"A key nothing reads is a constraint that looks declared and refuses nothing"]
     out = []
-    if not str(scope.get("reason") or "").strip():
+    # `isinstance`, not the truthiness of `str(...)`. `{"why": "track rail"}` stringifies to a
+    # non-empty string, so a dict passed as a reason and the scope was accepted — which also let it
+    # through the proposer, whose fail-closed check asks this function. Second review, 2026-09-07.
+    if not isinstance(scope.get("reason"), str) or not scope["reason"].strip():
         out.append(f"{name}: `evidence_scope` must carry a `reason` — a scope is how a retracted "
                    f"claim is recorded, and one with no reason cannot be told from a guess")
     allowed = scope.get("surfaces")
@@ -508,6 +511,13 @@ def _row_in_scope(row, fragments, surfaces):
     Census rows carry their own `surface`. A row that does not is not admissible under a scope that
     names surfaces: `surfaces` is opt-in, so this only tightens labels that asked to be tightened,
     and the alternative is a scope that means nothing wherever the rows are hand-written.
+
+    WHAT THIS CANNOT CHECK, and the second review said so plainly: a row's `surface` is
+    self-reported. A hand-written evidence file may tag a menu-bar row `arrange.track_headers` and
+    this admits it. That is the same class as `observed` being pasted rather than read — the limit
+    this file already states for provenance — and the answer is the same: the record it names is
+    where a reviewer looks. What the check buys is that the census, which writes almost every row
+    here, tags them mechanically.
     """
     if any(f not in str(row.get("path") or "") for f in fragments):
         return False
@@ -694,15 +704,27 @@ def coverage_problems(name, entry, locales, values):
             # ABSENCE and `identifier` coverage exempt from it — the same "fixed one half" shape
             # this file already carries a comment about, found by review 2026-09-07 with a real
             # `path_contains: "AXWindow["` declaration and a citation of the application menu.
-            seen = [r for r in _rows(rec)
-                    if r.get("role") == role and where in str(r.get("path") or "")
-                    and _row_in_scope(r, _path_fragments(scope.get("path_contains")),
-                                      allowed_surfaces)]
+            # `seen` and `carrying` ask OPPOSITE questions, so they cannot be narrowed the same
+            # way. Narrowing `seen` is conservative: fewer rows means the element is harder to claim
+            # as found. Narrowing `carrying` is the reverse — every row it drops is a presence that
+            # stops contradicting the absence — and the second review of this fix built exactly
+            # that: an untagged inline row carrying `Delete` fell outside a `surfaces` scope, a
+            # tagged row carrying `Paste` satisfied `seen`, and a FALSE absence passed.
+            #
+            # So `carrying` looks at every row of the role at that path, scope or no scope. The cost
+            # is a refusal when a row from elsewhere happens to carry the string, and that is the
+            # right direction to be wrong in: a claim of absence that something contradicts should
+            # fail.
+            at_the_element = [r for r in _rows(rec)
+                              if r.get("role") == role and where in str(r.get("path") or "")]
+            seen = [r for r in at_the_element
+                    if _row_in_scope(r, _path_fragments(scope.get("path_contains")),
+                                     allowed_surfaces)]
             # Compared the way `sighting` compares, or the two disagree about the same pair:
             # positive sightings strip before an exact test, so `" Create "` counted as a presence
             # there and as an absence here. One rule.
             carrying = [v for t in strings if t
-                        for r in seen
+                        for r in at_the_element
                         for v in (r.get(a) for a in LABEL_ATTRS)
                         if isinstance(v, str) and carries(v, t, mode)]
             if not seen:

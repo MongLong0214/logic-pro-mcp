@@ -976,6 +976,61 @@ def main():
     case("a list whose fragments are all present is admitted",
          pp(both_ok) == [], pp(both_ok))
 
+    # 16h. THE SECOND REVIEW, of the fixes above. Narrowing which rows a branch looks at is
+    #      conservative for a claim of PRESENCE and the exact opposite for a claim of ABSENCE:
+    #      every row the scope drops is a presence that stops contradicting it. The fixture is the
+    #      one that review built — an UNTAGGED inline row carrying the string, a tagged row carrying
+    #      something else, and a scope that admits only the tagged one.
+    ab = Path(tempfile.mkdtemp())
+    (ab / "2026-09-07-mixed.json").write_text(json.dumps({
+        "id": "2026-09-07-mixed", "date": D, "host": {"locale": "en-US"},
+        "surface": "arrange.track_headers",
+        "observations": [{"rows": [
+            _row("AXMenuItem", title="Delete", path="AXWindow[x]/AXOutline/AXMenuItem[Delete]"),
+            _row("AXMenuItem", title="Paste", surface="arrange.track_headers",
+                 path="AXWindow[x]/AXOutline/AXMenuItem[Paste]")]}]}), encoding="utf-8")
+    guard.OBS = str(ab)
+
+    def false_absence(scope):
+        e = _entry([], None, dict(U, **{"en-US": "measured"}), canonical="Delete", match="exact",
+                   declared=("AXMenuItem",))
+        e["coverage_records"] = {"en-US": "2026-09-07-mixed"}
+        e["coverage_roles"] = {"en-US": "AXMenuItem"}
+        e["coverage_attributes"] = {"en-US": "title"}
+        e["coverage_absent"] = {"en-US": "AXWindow[x]/AXOutline"}
+        if scope:
+            e["evidence_scope"] = scope
+        return e
+
+    HEADERS = {"surfaces": ["arrange.track_headers"], "reason": "the track rail"}
+    case("a scope cannot hide the presence that contradicts an absence claim",
+         any("that is a presence" in x for x in cp(false_absence(HEADERS))),
+         cp(false_absence(HEADERS)))
+    case("...and the same claim is refused without a scope too, for the same reason",
+         any("that is a presence" in x for x in cp(false_absence(None))),
+         cp(false_absence(None)))
+
+    #      A `reason` that is not a string stringifies to something non-empty and passed.
+    case("a reason that is not a string is refused",
+         any("`reason`" in x for x in sp({"surfaces": ["plugin.window"],
+                                          "reason": {"why": "track rail"}})),
+         sp({"surfaces": ["plugin.window"], "reason": {"why": "track rail"}}))
+    case("a reason that is a real string is accepted",
+         sp({"surfaces": ["plugin.window"], "reason": "because"}) == [],
+         sp({"surfaces": ["plugin.window"], "reason": "because"}))
+
+    #      A rename cannot be carried, so it has to be LOUD. `build` records what it is dropping.
+    labels.build(existing={"schema": 2, "labels": {
+        "aLabelTheSwiftNoLongerHas": {"evidence_scope": {"path_contains": "AXWindow[",
+                                                         "reason": "r"},
+                                      "roles": ["AXMenuItem"]}}})
+    case("a label whose author-typed metadata is about to be lost is named",
+         labels.dropped.get("aLabelTheSwiftNoLongerHas") == ["evidence_scope", "roles"],
+         labels.dropped)
+    labels.build(existing={"schema": 2, "labels": {}})
+    case("...and the report does not survive into the next build",
+         labels.dropped == {}, labels.dropped)
+
     # 17. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

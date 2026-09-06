@@ -283,6 +283,12 @@ _EXACT_STRICT = swift_exact_strict()
 _PREFIX = swift_prefix()
 
 
+# Fields a person wrote by hand, which the Swift projection cannot regenerate. `dropped` is filled
+# by `build` with the ones about to be lost because their label is no longer in the Swift.
+AUTHOR_TYPED = ("roles", "retired", "evidence_scope")
+dropped = {}
+
+
 def build(existing=None):
     """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
 
@@ -300,6 +306,7 @@ def build(existing=None):
     existing = existing if existing is not None else load_json()
     previous = (existing.get("labels") or {})
     labels = {}
+    dropped.clear()
     for name, entry in sorted(from_swift().items()):
         prior = previous.get(name) or {}
         entry = dict(entry)
@@ -326,8 +333,11 @@ def build(existing=None):
         # run may then back the renamed label with the reading the scope existed to refuse. Named
         # by review 2026-09-07. Carrying it across a rename would need the generator to be told
         # which old name became which new one, and nothing in the projection knows that; the honest
-        # form is to say so here rather than to imply the field is rename-proof.
-        for field in ("roles", "retired", "evidence_scope"):
+        # form is to say so here rather than to imply the field is rename-proof. What CAN be done
+        # is make the loss loud: `--write` reports every label whose author-typed metadata it is
+        # about to drop, so a rename says what it costs at the moment somebody runs it, instead of
+        # being discovered by a campaign that quietly re-proposes the reading a scope had refused.
+        for field in AUTHOR_TYPED:
             if prior.get(field):
                 entry[field] = prior[field]
         # The match mode is a property of the LABEL: whether Logic's string EQUALS it or CONTAINS it
@@ -390,6 +400,15 @@ def build(existing=None):
             if kept:
                 entry[field] = kept
         labels[name] = entry
+    # Every label that WAS in the document, carried author-typed metadata, and is no longer in the
+    # Swift. Renaming a symbol lands here, and so does deleting one; either way the scope, the
+    # declared roles or the retirement reason is about to be lost and nothing else would say so.
+    for name, prior in previous.items():
+        if name in labels:
+            continue
+        lost = {f: prior[f] for f in AUTHOR_TYPED if prior.get(f)}
+        if lost:
+            dropped[name] = sorted(lost)
     return {
         "schema": 2,
         "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
@@ -415,6 +434,10 @@ def main():
             json.dump(doc, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
         print(f"wrote {len(doc['labels'])} labels to docs/locale/ui-labels.json")
+        for name, fields in sorted(dropped.items()):
+            print(f"  DROPPED {name}: {', '.join(fields)} — this label is no longer in the Swift. "
+                  f"If it was RENAMED, copy these onto the new name by hand; a lost "
+                  f"`evidence_scope` is a retraction the next campaign run silently undoes")
         return 0
     if "--check" in args:
         on_disk = load_json()
