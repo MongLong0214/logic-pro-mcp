@@ -288,14 +288,20 @@ ev.check("448/precondition-the-independent-arrow-reader-builds",
 
 titles, _ = (osa('tell application "System Events" to tell process "Logic Pro" to '
                  'return name of every window'))
-# `titles` is the AppleScript window list joined into one string, so this is a substring
-# test. It carried ONE of the three spellings Logic uses, and `evidence.py` has held all
-# three since #767 — a harness that knows one of them fails a precondition about a window
-# that is open, and says "no arrange window" about a Logic that has one.
+# `titles` is the AppleScript window list joined into one string. Logic titles a window
+# `<project> - <view>`, so the list is split per window and each name is asked for the
+# SUFFIX ` - <spelling>`, over the three spellings `evidence.py` has held since #767. The
+# substring test that stood here (#773's first cut) asked whether a spelling appeared
+# anywhere in the joined blob, so a project named `Drum Tracks` with only its Mixer open —
+# `Drum Tracks - Mixer` — passed a precondition about an arrange window that was not open,
+# and the Korean and Japanese spellings, being the bare word, passed on any title that
+# happened to carry it.
+windows = [name for name in titles.split(", ") if name]
 ev.check("448/precondition-an-arrange-window-is-open",
-         any(spelling in titles for spelling in E.ARRANGE_WINDOW_TITLES),
+         any(name.endswith(" - " + spelling)
+             for name in windows for spelling in E.ARRANGE_WINDOW_TITLES),
          "Logic has an arrange window whose track headers can be read",
-         f"titles={titles!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
+         f"windows={windows!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
 
 start = arrow_state() if os.path.exists(ARROW_TOOL) else {}
 ev.check("448/precondition-the-project-has-exactly-one-track-stack",

@@ -63,24 +63,13 @@ ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"])
 # full-width strip across the top; the rail this run asserts about sits at x=603 and is 325 wide, so
 # the band was mostly not looking at it. Asking AX for `Tracks header` gives both — a frame that is
 # current on whichever display the window is on, and the region the claim is actually about.
-BAND_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ax_control_bar_band.swift")
-BAND_TOOL = os.path.join(ev.dir, "ax_control_bar_band")
-subprocess.run(["swiftc", "-O", BAND_SOURCE, "-o", BAND_TOOL], check=True, capture_output=True)
-
-
-def located_band(*selector):
-    """(band, subject) for a named region, or (None, None) — never a fallback rectangle."""
-    r = subprocess.run([BAND_TOOL, *selector], capture_output=True, text=True)
-    try:
-        payload = json.loads(r.stdout or "{}")
-    except ValueError:
-        return None, None
-    b = payload.get("band")
-    if not (isinstance(b, list) and len(b) == 4):
-        return None, None
-    return tuple(b), payload.get("description")
-
-
+#
+# #773: asked through `ev.located_band`, not a private copy of it. The copy passed the
+# literal `Tracks header` straight to the band tool, which compares AXDescription exactly —
+# on a Korean Logic the rail is `트랙 헤더`, so the lookup found nothing and the frame
+# precondition below went red whatever the window was titled. `evidence.py` walks the
+# measured `AX_REGION_LABELS` translations of the name; `(None, None)` is still what a
+# failed lookup returns, never a fallback rectangle.
 HEADER_BAND = None
 HEADER_SUBJECT = None
 
@@ -92,21 +81,27 @@ def osa(script):
 
 titles = osa('tell application "System Events" to tell process "Logic Pro" to '
              'return name of every window')
-# `titles` is the AppleScript window list joined into one string, so this is a substring
-# test. It carried ONE of the three spellings Logic uses, and `evidence.py` has held all
-# three since #767 — a harness that knows one of them fails a precondition about a window
-# that is open, and says "no arrange window" about a Logic that has one.
+# `titles` is the AppleScript window list joined into one string. Logic titles a window
+# `<project> - <view>`, so the list is split per window and each name is asked for the
+# SUFFIX ` - <spelling>`, over the three spellings `evidence.py` has held since #767. The
+# substring test that stood here (#773's first cut) asked whether a spelling appeared
+# anywhere in the joined blob, so a project named `Drum Tracks` with only its Mixer open —
+# `Drum Tracks - Mixer` — passed a precondition about an arrange window that was not open,
+# and the Korean and Japanese spellings, being the bare word, passed on any title that
+# happened to carry it.
+windows = [name for name in titles.split(", ") if name]
 ev.check("592/precondition-an-arrange-window-is-open",
-         any(spelling in titles for spelling in E.ARRANGE_WINDOW_TITLES),
+         any(name.endswith(" - " + spelling)
+             for name in windows for spelling in E.ARRANGE_WINDOW_TITLES),
          "Logic is up with a project, so the surviving region operation has something to answer "
          "about and an empty inventory would mean something",
-         f"titles={titles!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
+         f"windows={windows!r} tried={E.ARRANGE_WINDOW_TITLES!r}", None)
 
 # `logic_window(None)` already walks every spelling in `ARRANGE_WINDOW_TITLES`, so naming the
 # English one first added nothing and read as though it did: a reviewer sees a fallback and
 # infers the bare call is narrower, when it is strictly wider.
 win = E.logic_window()
-HEADER_BAND, HEADER_SUBJECT = located_band("Tracks header")
+HEADER_BAND, HEADER_SUBJECT = ev.located_band("Tracks header")
 ev.check("592/precondition-the-window-frame-is-known",
          HEADER_BAND is not None and bool(HEADER_SUBJECT),
          "the arrange window's own frame read, so the capture band below is inside it — a band "
