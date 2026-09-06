@@ -1009,7 +1009,7 @@ private final class MoveMenuDriveRecorder: @unchecked Sendable {
 /// landing has no honest State A — so a selection that is not exactly one is refused BEFORE the
 /// menu is driven. These cases pin the refusal and the single-region path it must not disturb.
 @Test("a two-region selection is refused rather than verified from the first region")
-func moveToPlayheadRefusesAMultiRegionSelection() async {
+func moveToPlayheadRefusesAMultiRegionSelection() async throws {
     let help1 = "Region starts at 1 bar  and ends at 2 bars , MIDI region."
     let help2 = "Region starts at 3 bars  and ends at 4 bars , MIDI region."
     let fixture = makeRegionFixture(
@@ -1030,17 +1030,18 @@ func moveToPlayheadRefusesAMultiRegionSelection() async {
 
     let obj = decodeJSON(result.message)
     #expect(obj["state"] as? String == "B")
-    #expect(obj["verified"] as? Bool != true)
+    let refusedVerified = try #require(obj["verified"] as? Bool)
+    #expect(!refusedVerified)
     #expect(obj["selected_count"] as? Int == 2)
     #expect((obj["selected_names"] as? [String])?.sorted() == ["RegionA", "RegionB"])
     // Refused BEFORE the menu is driven: the operation must not move what it cannot certify.
-    #expect(menu.ran == false, "the menu was driven for a selection this readback cannot verify")
+    #expect(!menu.ran, "the menu was driven for a selection this readback cannot verify")
 }
 
 /// The single-region path must be untouched by that refusal — otherwise the fix would trade one
 /// blind spot for a regression, and the State A case is the one every caller depends on.
 @Test("a one-region selection still reaches State A")
-func moveToPlayheadStillVerifiesASingleRegion() async {
+func moveToPlayheadStillVerifiesASingleRegion() async throws {
     let preHelp = "Region starts at 1 bar  and ends at 2 bars , MIDI region."
     let postHelp = "Region starts at 9 bars  and ends at 10 bars , MIDI region."
     let fixture = makeRegionFixture(
@@ -1064,10 +1065,11 @@ func moveToPlayheadStillVerifiesASingleRegion() async {
 
     let obj = decodeJSON(result.message)
     #expect(obj["state"] as? String == "A")
-    #expect(obj["verified"] as? Bool == true)
+    let verified = try #require(obj["verified"] as? Bool)
+    #expect(verified)
     #expect(obj["selected_count"] == nil, "the refusal's fields must not leak into the verified path")
     // This is what makes the `menu.ran == false` assertion in the refusal case mean something: the
     // same recorder, same fixture shape, DOES observe the drive when the operation proceeds.
     // Without it that negative could pass because nothing ever drives the menu in these tests.
-    #expect(menu.ran == true, "the recorder cannot see the drive, so its negative proves nothing")
+    #expect(menu.ran, "the recorder cannot see the drive, so its negative proves nothing")
 }
