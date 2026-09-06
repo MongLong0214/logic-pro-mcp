@@ -27,6 +27,9 @@ GOOD = {
     "visual_assertions": 1, "visual_failed": 0, "visual_assertions_without_a_subject": 0,
     "declared_surface": None,
     "recordings": 1,
+    # #797. Absent is not False here either: every fixture below inherits this, and a run that
+    # never recorded the session state is one that cannot say it read an application it could see.
+    "screen_locked": False,
 }
 
 CASES = [
@@ -528,6 +531,16 @@ def _png(path, colour):
 
 tmp = tempfile.mkdtemp()
 ev = E.Evidence(head="0" * 40, root=tmp, name="contract-drive")
+def _touch_newer(root, binary):
+    """The same binary, stamped after every source — the control for the case above."""
+    latest = max(os.path.getmtime(os.path.join(root, f"Sources/{n}"))
+                 for n in ("Old.swift", "New.swift"))
+    os.utime(binary, (latest + 60, latest + 60))
+    return binary
+
+
+REPO_FOR_TEST = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 shapes = []
 shapes.append(("Evidence.dir is a str", isinstance(ev.dir, str)))
 ev.check("t", True, "expected", "observed", "a mutation")
@@ -632,6 +645,70 @@ _OPS = [
     ("a notification with no params is not an operation",
      E.Driver.operation_of("tools/call", None) is None),
 ]
+# #797: a locked screen makes the three AX paths disagree and none of them says "locked", so the
+# session state is a dimension of its own. Built by flipping ONE field on a summary that otherwise
+# passes, because a synthetic summary that fails for six other reasons proves nothing about this one.
+_PASSING = dict(GOOD)
+_LOCK = [
+    ("a run taken with the screen UNLOCKED can be clean", E.is_clean(dict(_PASSING))),
+    ("the same run taken behind a LOCKED screen cannot",
+     not E.is_clean(dict(_PASSING, screen_locked=True))),
+    ("...nor one where the session could not be asked — unknown is not unlocked",
+     not E.is_clean(dict(_PASSING, screen_locked=None))),
+    ("...nor one that never recorded the field at all",
+     not E.is_clean({k: v for k, v in _PASSING.items() if k != "screen_locked"})),
+    ("the detector answers a real boolean or None, never a string",
+     E.screen_is_locked() in (True, False, None)),
+    # The MAPPING, not just the type. Asserting only "one of three values" is satisfied by a
+    # function that always says False, which is the mutation worth failing on.
+    ("a locked session reads as locked",
+     E.screen_is_locked({"CGSSessionScreenIsLocked": True}) is True),
+    ("an unlocked session reads as unlocked",
+     E.screen_is_locked({"CGSSessionScreenIsLocked": False}) is False),
+    ("a session with no lock key is not locked",
+     E.screen_is_locked({"kCGSSessionOnConsoleKey": 1}) is False),
+    ("a session that could not be read is unknown, not unlocked",
+     E.screen_is_locked({}) is None),
+]
+shapes.extend(_LOCK)
+
+# #794: the artifact is compared to its sources rather than assumed to match the head.
+def _stale_fixture():
+    """A real git repository where one tracked Sources/ file is newer than the binary.
+
+    A real one, because the function asks `git ls-files` — a fake directory would exercise the
+    early return instead of the comparison, which is the branch that matters.
+    """
+    import subprocess as _sp
+    root = _tempfile_for_modal.mkdtemp()
+    os.makedirs(os.path.join(root, "Sources"))
+    for name in ("Sources/Old.swift", "Sources/New.swift"):
+        open(os.path.join(root, name), "w").write("// x\n")
+    for cmd in (["init", "-q"], ["add", "Sources"]):
+        _sp.run(["git", "-C", root] + cmd, capture_output=True)
+    binary = os.path.join(root, "built")
+    open(binary, "w").write("x")
+    now = os.path.getmtime(binary)
+    os.utime(os.path.join(root, "Sources/Old.swift"), (now - 60, now - 60))
+    os.utime(os.path.join(root, "Sources/New.swift"), (now + 60, now + 60))
+    return root, binary
+
+
+_STALE_ROOT, _STALE_BIN = _stale_fixture()
+_STALE = [
+    ("a source newer than the binary is reported, by path",
+     E._sources_newer_than_binary(_STALE_ROOT, _STALE_BIN) == ["Sources/New.swift"]),
+    ("...and a source older than it is not",
+     "Sources/Old.swift" not in E._sources_newer_than_binary(_STALE_ROOT, _STALE_BIN)),
+    ("a binary newer than everything reports nothing",
+     E._sources_newer_than_binary(
+         _STALE_ROOT, _touch_newer(_STALE_ROOT, _STALE_BIN)) == []),
+    ("a binary that does not exist reports no stale sources rather than crashing",
+     E._sources_newer_than_binary(REPO_FOR_TEST, "/nonexistent/binary") == []),
+    ("a path that is not a repository reports nothing rather than raising",
+     E._sources_newer_than_binary("/nonexistent/repo", __file__) == []),
+]
+shapes.extend(_STALE)
 shapes.extend(_OPS)
 
 for why, ok in shapes:
