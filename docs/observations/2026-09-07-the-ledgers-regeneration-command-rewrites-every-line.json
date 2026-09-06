@@ -1,0 +1,73 @@
+{
+ "id": "2026-09-07-the-ledgers-regeneration-command-rewrites-every-line",
+ "date": "2026-09-07",
+ "schema": 2,
+ "subject": "docs/locale/ui-labels.json and the command it names for regenerating itself",
+ "question": "Does `Scripts/locale_labels.py --write` reproduce the file that is in the tree?",
+ "verdict": "partial",
+ "issues": [
+  798
+ ],
+ "surface": "arrange.menus",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "about the locale ledger FILE and the tools that write it, not about Logic; no Logic was driven"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "python3 Scripts/locale_labels.py --write && git diff --numstat docs/locale/ui-labels.json",
+  "expected": "no output from the diff — the writer reproduces the file byte for byte. Before the fix it printed `2858 2858`."
+ },
+ "depends": [
+  "Scripts/locale_labels.py",
+  "Scripts/observations/locale-propose.py",
+  "Scripts/check-locale-labels-json.py",
+  "docs/locale/ui-labels.json"
+ ],
+ "evidence": null,
+ "method": "Run the regeneration command the document names for itself at b3e4d27b, then ask git how many lines moved; separately compare the file's bytes with a round trip through json.dumps at each indent width.",
+ "observations": [
+  {
+   "what": "git diff --numstat after `locale_labels.py --write`",
+   "added": 2858,
+   "removed": 2858,
+   "note": "json.load of both sides compares equal, so no value changed"
+  },
+  {
+   "what": "byte size by indent width",
+   "committed_file": 74163,
+   "writer_output": 85339,
+   "committed_indent": 1,
+   "writer_indent": 2
+  },
+  {
+   "what": "round trip of the committed file through json.dumps(indent=1)",
+   "identical": true
+  },
+  {
+   "what": "call sites deciding the format independently",
+   "count": 3,
+   "sites": [
+    "Scripts/locale_labels.py:408",
+    "Scripts/locale_labels.py:419",
+    "Scripts/observations/locale-propose.py:270"
+   ]
+  },
+  {
+   "what": "what the guard compares",
+   "check-locale-labels-json.py": "parsed objects",
+   "consequence": "formatting drift is invisible to CI"
+  }
+ ],
+ "conclusion": "The documented regeneration command rewrites all 2858 lines of the ledger without changing a value, because 3 call sites each chose indent 2 while the file in the tree is indented with 1 space and round-trips at that width byte for byte. The guard compares parsed objects, so nothing in CI could see it.",
+ "limits": [
+  "This says nothing about which indent width is correct. Only that the tools and the tree disagreed, and that agreement is what a reviewer needs.",
+  "The 3 call sites were found by grepping for `indent=`. A writer that formats the file some other way would not have been counted.",
+  "Measured at one commit, b3e4d27b. How long the two have disagreed is not established."
+ ],
+ "supersedes": null
+}

@@ -1,0 +1,78 @@
+{
+ "id": "2026-09-07-a-locked-screen-is-three-different-answers",
+ "date": "2026-09-07",
+ "schema": 2,
+ "subject": "reading Logic through the accessibility API while the screen is locked",
+ "question": "What do the three AX paths this repository uses report when the screen is locked, and can a harness tell that from a product failure?",
+ "verdict": "wall",
+ "issues": [
+  797
+ ],
+ "surface": "system.accessibility",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "Logic was running as pid 3574 with the login session locked; nothing was driven"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Lock the screen with Logic running, then from another session read: CGSessionCopyCurrentDictionary()['CGSSessionScreenIsLocked']; the AXWindows of Logic's pid via AXUIElement; `count of windows` via System Events; CGWindowListCopyWindowInfo for owner Logic Pro; and Scripts/livekit/evidence.py's logic_window() and _production_ax_modal_signals().",
+  "expected": "locked True; AXUIElement 1 window titled 'Logic Pro'; System Events 0; CGWindowList 1 window with an empty name; logic_window() None; _production_ax_modal_signals() raising _ModalReadError about depth 32"
+ },
+ "depends": [
+  "Scripts/livekit/evidence.py"
+ ],
+ "evidence": null,
+ "method": "With the screen locked and Logic already running, read the same application through each path the repository uses, in one process, without driving anything.",
+ "observations": [
+  {
+   "what": "session state",
+   "CGSSessionScreenIsLocked": true,
+   "kCGSSessionOnConsoleKey": true
+  },
+  {
+   "what": "direct AXUIElement, AXWindows of Logic's pid",
+   "pid": 3574,
+   "windows": 1,
+   "titles": [
+    "Logic Pro"
+   ]
+  },
+  {
+   "what": "System Events, `count of windows` of process \"Logic Pro\"",
+   "windows": 0
+  },
+  {
+   "what": "CGWindowList, on-screen, owner Logic Pro",
+   "windows": 1,
+   "rows": [
+    {
+     "name": "",
+     "width": 260,
+     "height": 282,
+     "x": 830,
+     "y": 222
+    }
+   ]
+  },
+  {
+   "what": "Scripts/livekit/evidence.py logic_window()",
+   "returned": null
+  },
+  {
+   "what": "Scripts/livekit/evidence.py _production_ax_modal_signals()",
+   "raised": "_ModalReadError('AX sheet descendant search reached depth 32')"
+  }
+ ],
+ "conclusion": "A locked screen does not make the accessibility API fail; it makes the three paths this repository uses disagree. The direct AXUIElement API reports 1 window, System Events reports 0, and CGWindowList reports 1 with no name. None of them mentions the lock, so the harness reports a recursion guard or an empty window list and the reader diagnoses Logic. The session state itself is a single boolean and is the only one of these readings that says what is actually true.",
+ "limits": [
+  "One host, one moment, one lock. Whether the AXUIElement window count under a lock is stable, or whether the single window titled 'Logic Pro' is the lock's doing rather than whatever Logic had open, is not measured.",
+  "Nothing here says what happens on a logged-out or fast-user-switched session, which may differ from a locked one.",
+  "No negative control was taken: the same six readings with the screen UNLOCKED were not recorded in this session, so 'they agree when unlocked' is an expectation rather than a measurement.",
+  "This does not establish that a lock is what wedged a ship gate for 34 minutes on 2026-09-06. That run was killed rather than diagnosed."
+ ],
+ "supersedes": null
+}
