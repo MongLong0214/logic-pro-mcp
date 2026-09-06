@@ -389,8 +389,10 @@ def apply(labels_path, census, proposals, records_by_surface):
                         declared.append(h["role"])
                         declared.sort()
                     n_cov += 1
-    json.dump(doc, open(labels_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    open(labels_path, "a", encoding="utf-8").write("\n")
+    # The generator's renderer, not a second opinion about how this file is formatted. This call
+    # site said `indent=2` while the tree was indented with one space, so every campaign left the
+    # document in a shape `locale_labels.py --write` would immediately rewrite (#798).
+    open(labels_path, "w", encoding="utf-8").write(_GUARD._module().render(doc))
     if skipped:
         print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
               f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
