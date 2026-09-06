@@ -147,10 +147,22 @@ def apply(labels_path, census, proposals, records_by_surface):
     surface the match sat on. A variant gets a `provenance` block; a canonical-only match gets
     `coverage_records[locale]` so `measured` can be derived. Nothing is written for a label whose
     surface has no record — a citation to nothing is the shape the guard refuses."""
+    unbacked = {}
     doc = json.load(open(labels_path, encoding="utf-8"))
     host = census["host"]; locale = host["locale"]
     host_line = f"{host['app']} {host['version']} ({host['build']}) on {host['os']}"
-    date = datetime.date.today().isoformat()
+    # The RECORD's date, not today's. A provenance block says a string was observed, and the
+    # observation happened when the census was taken — the guard enforces exactly that
+    # ("provenance for X is dated D but its record was measured E"). Stamping `today` worked only
+    # while a campaign was applied on the same day its census was written; the clock rolled past
+    # midnight during one, and every block the proposer would write from then on was one the guard
+    # refuses. Read per record, because a campaign can cite several.
+    # Read through the GUARD's resolver, not a path this file works out for itself — the same
+    # reason the containment sets and the string comparison come from there. Two ways of finding a
+    # record are two ways of disagreeing about which one was cited.
+    def record_date(record_id):
+        rec = _GUARD._record(record_id)
+        return (rec or {}).get("date") or ""
     n_prov = n_cov = 0
     skipped = []
     for name, hits in proposals.items():
@@ -176,14 +188,55 @@ def apply(labels_path, census, proposals, records_by_surface):
         entry["match"] = match_mode(name)
         for h in hits:
             rid = records_by_surface.get(h["surface"])
-            if not rid:
+            # RESOLVED, not merely named. Checking the id is truthy let a surface map pointing at a
+            # record that does not exist write a block with an empty date and a dangling citation —
+            # the guard then rejects the ledger AFTER it has been mutated, which is the wrong end of
+            # the transaction.
+            #
+            # But resolution and DATE VALIDITY are two questions, and the first cut asked them as
+            # one. Coverage needs a resolved record and carries no date at all, so a record without
+            # one is perfectly good evidence for it and was being skipped; while a malformed but
+            # non-empty date passed and wrote provenance the guard then refused. Both raised by
+            # review, one round apart, and the second was introduced by the fix for the first.
+            # A RECORD, not merely valid JSON. `_record` returns whatever the file parsed to, and a
+            # list or a string is not None — so a malformed record file resolved, and then the two
+            # branches below crashed on `.get`: provenance immediately in `record_date`, coverage
+            # later inside the guard, after the ledger had already been written. Raised by review
+            # 2026-09-06.
+            if not rid or not isinstance(_GUARD._record(rid), dict):
+                continue
+            # And the record must actually CONTAIN the sighting. Records are found by SURFACE, so a
+            # census whose `surface` field matches a record says nothing about whether THAT record
+            # saw THIS row — the census supplied on the command line and the record cited for it are
+            # two different files, matched on a label. The guard validates the record, so a
+            # mismatch writes a block the guard then refuses, leaving the ledger invalid AFTER it
+            # has been mutated. Raised by review 2026-09-06, which proved it by proposing from a
+            # synthetic census and watching the block land and then be rejected.
+            #
+            # Asked with the guard's own `sighting_value`, so the two cannot disagree about what
+            # counts as seen.
+            # The value the GUARD will return, not the one this tool happened to match. `observed`
+            # is held to being a QUOTE of what the cited record carried, and the guard re-derives it
+            # by scanning that record and taking the FIRST row that matches. Under `contains` a
+            # record ordered `취소` then `취소 하시겠습니까` gives the guard the short one while this
+            # tool, iterating the census, may have found the long one — and the block is then
+            # refused for an `observed` mismatch. Named by review 2026-09-06.
+            seen = _GUARD.sighting_value(_GUARD._record(rid), h["string"], h["role"],
+                                         h["attribute"], h["match"])
+            if seen is None:
+                unbacked.setdefault(name, set()).add((h["string"], rid))
                 continue
             if h["string"] in (entry.get("variants") or []):
+                # A provenance block must carry a REAL date matching its record's — the coverage
+                # branch below has no date field and asks nothing of it.
+                if not _GUARD._is_real_date(record_date(rid)):
+                    continue
                 prov = entry.setdefault("provenance", {})
                 if h["string"] in prov:
                     continue
-                prov[h["string"]] = {"locale": locale, "date": date, "host": host_line, "record": rid,
-                                     "observed": h["observed"], "role": h["role"],
+                prov[h["string"]] = {"locale": locale, "date": record_date(rid),
+                                     "host": host_line, "record": rid,
+                                     "observed": seen, "role": h["role"],
                                      "attribute": h["attribute"], "match": h["match"]}
                 # The label must DECLARE the roles it may be read on, and the citation must name one
                 # of them. Seeded from the role actually observed — the first measurement is what
@@ -220,6 +273,12 @@ def apply(labels_path, census, proposals, records_by_surface):
         print(f"  not written for {len(skipped)} label(s) whose role this tool cannot constrain "
               f"— declare `roles` for them first: {', '.join(sorted(skipped)[:6])}"
               + (" …" if len(skipped) > 6 else ""))
+    if unbacked:
+        n = sum(len(v) for v in unbacked.values())
+        print(f"  not written for {n} sighting(s) whose cited record does not contain them — the "
+              f"census and the record for that surface disagree, so the citation would be false: "
+              + ", ".join(f"{k}→{sorted(v)[0][0]!r}" for k, v in sorted(unbacked.items())[:4])
+              + (" …" if len(unbacked) > 4 else ""))
     return n_prov, n_cov
 
 

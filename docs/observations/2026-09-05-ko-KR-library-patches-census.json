@@ -1,0 +1,88 @@
+{
+  "id": "2026-09-05-ko-KR-library-patches-census",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "Every string the library.patches surface exposes to AX in ko-KR",
+  "question": "What labels does Logic show on library.patches in ko-KR, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "library.patches",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ko-KR",
+    "expected": "a census in ko-KR whose library.patches rows carry the same 12 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-ko-KR-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on library.patches",
+      "rows": 27,
+      "distinct_strings": 12,
+      "distinct_identifiers": 18
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "검색 필드. 패치 및 프리셋을 이름으로 검색합니다. 돋보기를 클릭하여 최근 검색을 보거나 또는 검색 기록을 지웁니다. ",
+        "도구",
+        "동작 팝업 메뉴. 패치 병합 및 사용자 기본 명령에 접근합니다. ",
+        "라이브러리",
+        "라이브러리. 패치, 플러그인 프리셋, 또는 Sampler 악기를 선택한 채널 스트립 슬롯에 기반하여 로드하거나 저장합니다. 패치를 로드하면 여러 개의 채널 스트립에 영향을 줄 수 있습니다. ",
+        "복귀",
+        "복귀 버튼. 패치 또는 플러그인 프리셋에 저장된 설정으로 복귀합니다. 사용자가 만든 모든 변경 사항이 지워지므로, 복귀하기 전에 다른 이름으로 저장하십시오. ",
+        "삭제",
+        "삭제 버튼. 선택한 패치 또는 플러그인 프리셋을 삭제합니다. 이 동작은 취소할 수 없습니다. ",
+        "저장 버튼. 패치 또는 플러그인 프리셋 및 현재 설정을, 새로운 패치 또는 플러그인 프리셋으로 저장합니다. ",
+        "저장…",
+        "추가 사운드 가져오기"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_NS:10",
+        "_NS:16",
+        "_NS:329",
+        "_NS:337",
+        "_NS:400",
+        "_NS:406",
+        "_NS:410",
+        "_NS:564",
+        "_NS:568",
+        "_NS:647",
+        "_NS:653",
+        "_NS:675",
+        "_NS:686",
+        "_NS:693",
+        "_NS:875",
+        "_NS:88",
+        "_NS:94",
+        "getMoreSounds"
+      ]
+    }
+  ],
+  "conclusion": "On this host in ko-KR, library.patches exposes 27 elements carrying 12 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "102 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

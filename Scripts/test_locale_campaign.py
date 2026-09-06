@@ -120,7 +120,21 @@ def main():
         lp = write(tmp, labels(**{label_name: (canonical, [variant])}))
         _, _, props, _ = propose.main(cpath, lp)
         surface = "arrange.menus" if ax_path.startswith("AXMenuBar") else "arrange.window"
-        propose.apply(lp, json.load(open(cpath)), props, {surface: rid})
+        # `apply` now reads the cited record — for its DATE, which a provenance block must match —
+        # so it needs the same records directory the guard checks against. It used to stamp
+        # `today`, which passed only while a campaign ran on the day its census was written; the
+        # clock rolled past midnight during one and this test is what said so.
+        # BOTH module objects. This file loads its own copy of the guard for the assertion below,
+        # and the proposer loads a separate one for its own use — pointing only at this file's copy
+        # left `apply` reading the real repository's records, which is the same "two ways of
+        # finding a record" the proposer's own comment warns about, one level up.
+        saved_apply, guard.OBS = guard.OBS, str(obs)
+        saved_prop, propose._GUARD.OBS = propose._GUARD.OBS, str(obs)
+        try:
+            propose.apply(lp, json.load(open(cpath)), props, {surface: rid})
+        finally:
+            guard.OBS = saved_apply
+            propose._GUARD.OBS = saved_prop
         entry = json.load(open(lp, encoding="utf-8"))["labels"][label_name]
         block = (entry.get("provenance") or {}).get(variant) or {}
         case(f"{label_name}: the proposer declares the match the product uses",
@@ -143,12 +157,23 @@ def main():
     obs = Path(tempfile.mkdtemp())
     rid = "2026-09-05-ko-KR-arrange-window-census"
     json.dump({"id": rid, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               # The record carries the SAME rows the census does. `apply` asks the guard
+               # whether the cited record contains the sighting before writing a block, so
+               # a fixture whose record and census disagree is refused — correctly, and it
+               # was never a realistic pair. Raised by review 2026-09-06.
                "observations": [{"role": "AXButton", "title": "Solo"}]},
               open(obs / f"{rid}.json", "w", encoding="utf-8"), ensure_ascii=False)
     json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo")]), open(cpath, "w"))
     lp = write(tmp, labels(soloButton=("Solo", [])))
     _, _, props, _ = propose.main(cpath, lp)
-    _, n_cov = propose.apply(lp, json.load(open(cpath)), props, {"arrange.window": rid})
+    # `apply` resolves the cited record now — for its date, and to refuse a citation that names one
+    # which does not exist — so it needs this block's records directory, exactly as the provenance
+    # integration above does.
+    saved_cov, propose._GUARD.OBS = propose._GUARD.OBS, str(obs)
+    try:
+        _, n_cov = propose.apply(lp, json.load(open(cpath)), props, {"arrange.window": rid})
+    finally:
+        propose._GUARD.OBS = saved_cov
     entry = json.load(open(lp, encoding="utf-8"))["labels"]["soloButton"]
     case("a canonical match writes a coverage citation", n_cov == 1, entry)
     for field in ("coverage_records", "coverage_roles", "coverage_attributes"):
@@ -180,13 +205,165 @@ def main():
     case("...nor a coverage citation", entry.get("coverage_records") is None, entry)
 
     # ...but once a person DECLARES the roles, the same census does write.
+    #
+    # With a record that CONTAINS the row. The earlier version of this case cited the repository's
+    # real ko-KR menus census while feeding a one-row synthetic census, and those two disagree —
+    # the real record has `보기` where this fixture says `View`. `apply` now asks the guard whether
+    # the cited record backs the sighting, so the mismatch is refused instead of writing a citation
+    # the guard would later reject. The fixture was wrong; the refusal is right. Raised by review
+    # 2026-09-06.
+    obs_view = Path(tempfile.mkdtemp())
+    rid_view = "2026-09-05-ko-KR-arrange-menus-fixture"
+    json.dump({"id": rid_view, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXMenuItem", "title": "View"}]},
+              open(obs_view / f"{rid_view}.json", "w", encoding="utf-8"), ensure_ascii=False)
     doc = json.load(open(lp, encoding="utf-8"))
     doc["labels"]["pluginWindowViewSwitcher"]["roles"] = ["AXMenuItem"]
     open(lp, "w", encoding="utf-8").write(json.dumps(doc, ensure_ascii=False))
     _, _, props, _ = propose.main(cpath, lp)
-    _, n_cov = propose.apply(lp, json.load(open(cpath)), props,
-                             {"arrange.menus": "2026-09-05-ko-KR-arrange-menus-census"})
+    saved_view, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_view)
+    try:
+        _, n_cov = propose.apply(lp, json.load(open(cpath)), props,
+                                 {"arrange.menus": rid_view})
+    finally:
+        propose._GUARD.OBS = saved_view
     case("a declared role unblocks the write", n_cov == 1, n_cov)
+
+    # 5d. ...and a record that does NOT contain the row writes nothing. Records are found by
+    #     SURFACE, so the census on the command line and the record cited for it are two different
+    #     files matched on a label — a census whose surface says `arrange.menus` says nothing about
+    #     whether THAT record saw THIS row. Writing anyway produced a block the guard refuses, which
+    #     leaves the ledger invalid after it has been mutated: the wrong end of the transaction, and
+    #     the same shape as 6b one layer down. Raised by review 2026-09-06, which proved it by
+    #     proposing from a synthetic census against a real record.
+    obs_wrong = Path(tempfile.mkdtemp())
+    rid_wrong = "2026-09-05-ko-KR-arrange-menus-different-row"
+    json.dump({"id": rid_wrong, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXMenuItem", "title": "보기"}]},
+              open(obs_wrong / f"{rid_wrong}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    lp = write(tmp, labels(pluginWindowViewSwitcher=("View", [])))
+    doc = json.load(open(lp, encoding="utf-8"))
+    doc["labels"]["pluginWindowViewSwitcher"]["roles"] = ["AXMenuItem"]
+    open(lp, "w", encoding="utf-8").write(json.dumps(doc, ensure_ascii=False))
+    _, _, props_wrong, _ = propose.main(cpath, lp)
+    assert props_wrong, "the fixture must propose something, or the case below asserts nothing"
+    saved_wrong, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_wrong)
+    try:
+        counts_wrong = propose.apply(lp, json.load(open(cpath)), props_wrong,
+                                     {"arrange.menus": rid_wrong})
+    finally:
+        propose._GUARD.OBS = saved_wrong
+    entry_wrong = json.load(open(lp, encoding="utf-8"))["labels"]["pluginWindowViewSwitcher"]
+    case("a record that does not contain the row writes nothing", counts_wrong == (0, 0), counts_wrong)
+    case("...and leaves no coverage citation behind",
+         not entry_wrong.get("coverage_records"), entry_wrong)
+
+    # 5e. `observed` must be the value the GUARD will re-derive, not the one this tool happened to
+    #     match. The guard scans the cited record and takes the FIRST row that matches, so under
+    #     `contains` a record ordered `입력 슬롯` then `입력 슬롯 (스테레오)` hands it the short one
+    #     while the census may have supplied the long one — and the block is then refused for an
+    #     `observed` mismatch, after the ledger has been written. Named by review 2026-09-06.
+    #
+    #     It must be the VARIANT that matches, not the canonical: only the provenance branch writes
+    #     `observed`, and a first cut of this case matched the canonical, took the coverage branch,
+    #     and asserted nothing about the field it was written for.
+    obs_order = Path(tempfile.mkdtemp())
+    rid_order = "2026-09-05-ko-KR-arrange-window-ordered"
+    json.dump({"id": rid_order, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXButton", "title": "입력 슬롯"},
+                                {"role": "AXButton", "title": "입력 슬롯 (스테레오)"}]},
+              open(obs_order / f"{rid_order}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    # The census supplies the LONGER string, so a tool quoting its own row would write that one.
+    json.dump(census([row("AXButton", "AXWindow/AXButton[in]", title="입력 슬롯 (스테레오)")]),
+              open(cpath, "w"))
+    lp = write(tmp, labels(inputSlotHelpKeyword=("input slot", ["입력 슬롯"])))
+    _, _, props_order, _ = propose.main(cpath, lp)
+    assert any(h["string"] == "입력 슬롯" for h in props_order.get("inputSlotHelpKeyword", [])), (
+        "the fixture must propose the VARIANT, or the provenance branch never runs")
+    saved_order, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_order)
+    try:
+        n_prov_order, _ = propose.apply(lp, json.load(open(cpath)), props_order,
+                                        {"arrange.window": rid_order})
+    finally:
+        propose._GUARD.OBS = saved_order
+    e_order = json.load(open(lp, encoding="utf-8"))["labels"]["inputSlotHelpKeyword"]
+    block = (e_order.get("provenance") or {}).get("입력 슬롯") or {}
+    case("a provenance block was written at all", n_prov_order == 1 and bool(block),
+         (n_prov_order, e_order))
+    case("`observed` is the value the guard re-derives, not the census row",
+         block.get("observed") == "입력 슬롯", block.get("observed"))
+    saved_g, guard.OBS = guard.OBS, str(obs_order)
+    try:
+        problems_order = guard.provenance_problems("inputSlotHelpKeyword", e_order)
+    finally:
+        guard.OBS = saved_g
+    case("...and the guard accepts what was written", problems_order == [], problems_order)
+
+    # 6b. ...and nothing when the surface names a record that does not EXIST. Checking the id was
+    #     truthy let a dangling citation through with an empty date, and the guard then refused the
+    #     ledger after it had been mutated — the wrong end of the transaction. Raised by review
+    #     2026-09-06, and introduced by taking the date from the record: before that the date was
+    #     always well-formed and a missing record could only be caught downstream.
+    # The census and the proposals are rebuilt HERE rather than reused: the `props` in scope came
+    # from a different census, so an assertion using them would pass because nothing was proposed
+    # at all — a case that cannot fail, in a test written to catch a check that cannot fail. Caught
+    # by mutation-testing this very case: removing the rule under test changed nothing.
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[내보내기]",
+                          title="내보내기")]), open(cpath, "w"))
+    lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))
+    _, _, dangling_props, _ = propose.main(cpath, lp)
+    assert dangling_props, "the fixture must propose something, or the case below asserts nothing"
+    n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), dangling_props,
+                                  {"arrange.menus": "2026-09-05-a-record-nobody-wrote"})
+    entry = json.load(open(lp, encoding="utf-8"))["labels"]["exportMenuItem"]
+    case("a record that does not exist writes nothing", (n_prov, n_cov) == (0, 0), (n_prov, n_cov))
+    case("...and leaves no dangling citation", not entry.get("provenance")
+         and not entry.get("coverage_records"), entry)
+
+    # 6c. A record that RESOLVES but carries no date is valid evidence for COVERAGE, which has no
+    #     date field, and must not be skipped. The first cut asked resolution and date validity as
+    #     one question and dropped it. Raised by review 2026-09-06 — the fix for 6b introduced this.
+    obs_nodate = Path(tempfile.mkdtemp())
+    rid_nodate = "2026-09-05-ko-KR-arrange-window-nodate"
+    json.dump({"id": rid_nodate, "host": dict(HOST, locale="ko-KR"),
+               "observations": [{"role": "AXButton", "title": "Solo"},
+                                {"role": "AXButton", "title": "솔로"}]},
+              open(obs_nodate / f"{rid_nodate}.json", "w", encoding="utf-8"), ensure_ascii=False)
+    # The fixture carries the canonical AND a variant, so the two branches are separable: coverage
+    # comes from the canonical row and provenance would come from the variant row. An earlier cut
+    # used a variant-free label, and then `n_prov == 0` held whatever the date rule did — the case
+    # could not fail. Raised by review 2026-09-06.
+    json.dump(census([row("AXButton", "AXWindow/AXButton[Solo]", title="Solo"),
+                      row("AXButton", "AXWindow/AXButton[Solo2]", title="솔로")]), open(cpath, "w"))
+    lp = write(tmp, labels(soloButton=("Solo", ["솔로"])))
+    _, _, nodate_props, _ = propose.main(cpath, lp)
+    assert any(h["string"] == "솔로" for h in nodate_props.get("soloButton", [])), (
+        "the fixture must propose the VARIANT, or the provenance case below asserts nothing")
+    saved_nd, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_nodate)
+    try:
+        n_prov, n_cov = propose.apply(lp, json.load(open(cpath)), nodate_props,
+                                      {"arrange.window": rid_nodate})
+    finally:
+        propose._GUARD.OBS = saved_nd
+    case("a dateless record still backs COVERAGE", n_cov == 1, (n_prov, n_cov))
+    case("...and writes no provenance from it", n_prov == 0, (n_prov, n_cov))
+
+    # 6d. Resolution means a RECORD, not merely parseable JSON. A list is not None and passed, and
+    #     both branches then crashed dereferencing it. Raised by review 2026-09-06.
+    obs_bad = Path(tempfile.mkdtemp())
+    rid_bad = "2026-09-05-ko-KR-arrange-window-notadict"
+    json.dump(["not", "a", "record"], open(obs_bad / f"{rid_bad}.json", "w", encoding="utf-8"))
+    lp = write(tmp, labels(soloButton=("Solo", ["솔로"])))
+    _, _, bad_props, _ = propose.main(cpath, lp)
+    assert bad_props, "the fixture must propose something, or the case below asserts nothing"
+    saved_bad, propose._GUARD.OBS = propose._GUARD.OBS, str(obs_bad)
+    try:
+        counts = propose.apply(lp, json.load(open(cpath)), bad_props, {"arrange.window": rid_bad})
+    except AttributeError as exc:
+        counts = f"crashed: {exc}"
+    finally:
+        propose._GUARD.OBS = saved_bad
+    case("a record that is not an object writes nothing", counts == (0, 0), counts)
 
     # 6. --apply writes NOTHING when the surface has no record — a citation to nothing is refused upstream.
     lp = write(tmp, labels(exportMenuItem=("Export", ["내보내기"])))

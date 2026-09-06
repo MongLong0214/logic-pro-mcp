@@ -1,0 +1,89 @@
+{
+ "source_report": "Logic Pro-2026-09-05-235009.ips",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "os": "macOS 26.3 (25D125)",
+  "locale": "en-US"
+ },
+ "crashed_at": "2026-09-05 23:50:09.00 +0900",
+ "exception": {
+  "codes": "0x0000000000000002, 0x000000016b4d7fe0",
+  "message": "Thread stack size exceeded due to excessive recursion",
+  "rawCodes": [
+   2,
+   6095208416
+  ],
+  "type": "EXC_BAD_ACCESS",
+  "signal": "SIGSEGV",
+  "subtype": "KERN_PROTECTION_FAILURE at 0x000000016b4d7fe0"
+ },
+ "termination": {
+  "flags": 0,
+  "code": 11,
+  "namespace": "SIGNAL",
+  "indicator": "Segmentation fault: 11",
+  "byProc": "exc handler",
+  "byPid": 29495
+ },
+ "faulting_thread_frames": [
+  {
+   "image": "Foundation",
+   "symbol": "-[NSRecursiveLock lock]",
+   "offset": 26296
+  },
+  {
+   "image": "AppKit",
+   "symbol": "-[NSApplication _copyWindows]",
+   "offset": 96776
+  },
+  {
+   "image": "AppKit",
+   "symbol": "-[NSApplication windows]",
+   "offset": 96684
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 15294004
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 12255316
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 12256460
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 12256592
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 5130816
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 24881048
+  },
+  {
+   "image": "Logic",
+   "symbol": "",
+   "offset": 24881184
+  }
+ ],
+ "what_the_harness_was_doing": "driving `logic_edit toggle_step_input` twice and asking System Events for `name of every window` before, between and after — so Logic was being asked to enumerate its own windows while it was opening and closing one",
+ "what_the_run_recorded": {
+  "windows_after_close": "",
+  "second_call_state": "C",
+  "second_capture": "unreadable",
+  "note": "three failures that were one dead application"
+ }
+}

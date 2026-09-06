@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OBS = os.path.join(REPO, "docs", "observations")
@@ -56,6 +57,127 @@ def locale_of(text):
     if ASCII_ONLY.match(text or ""):
         return "en-US"
     return None
+
+
+# The removed chunk must be a whole word or two, not any substring. A ratio was the first attempt
+# and it was wrong in both directions — raised by review 2026-09-05: it reported
+# `createButton` -> `Create` against the unrelated menu command `Create Group`, which a reader
+# could act on, and it suppressed the real short-tail shape `Show EQ` -> `EQ`.
+#
+# The shape this signal is for has a direction: the POLICY string is the longer one, because Logic
+# dropped a word the policy still carries. `Create` against `Create Group` is the other way round
+# and is not it.
+AFFIX_MAX_WORDS = 2
+# A space-less policy string cannot be split into words, so the chunk is measured in characters.
+# `position` minus `on` leaves `positi`, six characters, which the budget already refuses — an
+# earlier cut also demanded the RETAINED side be three characters or more, and that rejected a real
+# Japanese shape: 「情報を表示」 -> 「情報」 drops three characters and keeps a valid two-character
+# label. Raised by review 2026-09-06; character count is not a proxy for whether a label in a
+# space-less language is a fragment, so it is asked only of the chunk, where it is a budget rather
+# than a judgement about words.
+AFFIX_MAX_CHARS = 4
+# What must SURVIVE on the observed side. Two, because `情報` and `삭제` are labels and `除` is not.
+AFFIX_MIN_RETAINED = 2
+
+
+def _dropped_chunk(policy, observed, mode="exact"):
+    """What `policy` has that `observed` does not, when one is an affix of the other. Else None.
+
+    NFC on both sides, like `_carries` and for the same reason: the product compares with canonical
+    equivalence, so a policy string in one normal form and a census string in the other are the
+    same text. Without it this signal silently missed the cases it exists for.
+    """
+    # Trimmed as well as folded and normalised. `carries` trims the label in every mode and the
+    # observed value in all but `exact_strict`, so a padded policy string was comparable there and
+    # not here — the two disagreed about the same pair. Raised by review 2026-09-06: case and NFC
+    # had been brought into line, trimming had not.
+    p = unicodedata.normalize("NFC", policy.strip()).casefold()
+    # `exact_strict` is the one mode that does NOT trim the observed value: to the product ` Foo `
+    # and `Foo` are different strings there. Trimming here anyway made this signal offer ` Foo ` as
+    # `FooBar` minus a word, a pair the product would never call a match. Raised by review
+    # 2026-09-06, one round after trimming was ADDED to fix the opposite disagreement in the other
+    # modes — the rule is to trim exactly where `carries` trims, not everywhere or nowhere.
+    o = unicodedata.normalize("NFC", observed if mode == "exact_strict" else observed.strip())
+    o = o.casefold()
+    if o == p or len(o) >= len(p):
+        return None          # the policy must be the LONGER side — that is the dropped-word shape
+    if p.startswith(o):
+        return p[len(o):]
+    if p.endswith(o):
+        return p[:len(p) - len(o)]
+    return None
+
+
+LATIN = re.compile(r"[A-Za-z]")
+
+
+def _chunk_is_a_dropped_word(policy, observed, chunk):
+    """Whether what the policy has extra is a WORD, not a fragment of one.
+
+    The branch is chosen by the script of the CHUNK — the part that was dropped — because that is
+    the thing being judged. Latin writes its words apart, so a Latin chunk with no space beside it
+    is a fragment of a word rather than a word; a chunk in a script that writes words closed up has
+    no space to look for and is budgeted instead.
+
+    Two earlier cuts each got this wrong in one direction. Choosing by `" " in policy` sent single
+    Latin words down the character budget, where `position` -> `posit` and `Mixer` -> `Mixe` passed.
+    Choosing by the script of the POLICY then refused mixed strings: `EQを表示` -> `EQ` has Latin in
+    it, so the Japanese chunk `を表示` was sent to look for a space boundary it could never have.
+    Raised by review 2026-09-06, one round apart, in opposite directions.
+    """
+    if LATIN.search(chunk):
+        if not (chunk.startswith(" ") or chunk.endswith(" ")):
+            return False
+        return 1 <= len(chunk.split()) <= AFFIX_MAX_WORDS
+    # Scripts that do not put spaces between words — Japanese writes `ステップインプットキーボード`
+    # as one run, and Korean compounds like `삭제하기` are written closed. There is no boundary to
+    # test, so budget the chunk AND require what is left to be long enough to be a label. Both
+    # halves are needed and each was wrong once: a floor of three dropped `情報を表示` -> `情報`, and
+    # removing the floor entirely let `削除` -> `除` through, a single kanji that is not the word.
+    # An empty observed value fails here too, which is the only thing stopping it in direct callers.
+    if len(observed.strip()) < AFFIX_MIN_RETAINED:
+        return False
+    # A dropped WORD contains a letter. Without this, `트랙 1` -> `트랙` reported the ordinal ` 1` as
+    # a dropped word: digits and punctuation carry no ASCII letter, so they took the budget branch
+    # and fitted it. Those are a different ELEMENT — track 1 rather than the track rail — not the
+    # same label with a word removed. Named by review 2026-09-06.
+    if not any(c.isalpha() for c in chunk):
+        return False
+    return 1 <= len(chunk.strip()) <= AFFIX_MAX_CHARS
+
+
+def _carries(value, text, mode):
+    """Whether an observed string counts as showing `text`, under the label's own mode.
+
+    The same three shapes `check-locale-labels-json.py` uses, normalised the same way. Kept small
+    rather than imported: this guard runs over every census and every label, and loading the other
+    module for its comparison would make a reporting tool depend on a gating one.
+    """
+    label = unicodedata.normalize("NFC", text.strip()).casefold()
+    subject = unicodedata.normalize("NFC", value).casefold()
+    # Branch order and FALLBACK mirror the original exactly. They did not: an unrecognised mode fell
+    # through to `exact` here and to `contains` there, the loosest possible answer, so the two
+    # disagreed on any mode name outside the four. Named by review 2026-09-06; the agreement test
+    # could not see it because it looped over the declared modes only.
+    if mode == "exact":
+        return subject.strip() == label
+    if mode == "exact_strict":
+        return subject == label
+    if mode == "prefix":
+        return subject.strip().startswith(label)
+    return label in subject
+
+
+def _affix_of(text, bag, mode="exact"):
+    """An observed string that is `text` minus a leading or trailing word, else None."""
+    best = None
+    for other in bag:
+        chunk = _dropped_chunk(text, other, mode)
+        if chunk is None or not _chunk_is_a_dropped_word(text, other, chunk):
+            continue
+        if best is None or len(other) > len(best):
+            best = other
+    return best
 
 
 def census_strings():
@@ -106,6 +228,7 @@ def main():
             loc = locale_of(text)
             if loc is None or loc not in seen:
                 continue
+            mode = entry.get("match") or "exact"
             if (entry.get("coverage") or {}).get(loc) in ("measured", "identifier", "retired"):
                 # The ledger already knows this one was read in this locale. Two candidates were
                 # dismissed by hand before this rule existed — `eventListColumnPosition` addresses
@@ -113,13 +236,31 @@ def main():
                 # which the navigation-free census walks — and both would keep reappearing.
                 continue
             bag = seen[loc]
-            if any(text.casefold() == s.casefold() for s in bag):
+            # ABSENT under the label's OWN mode. Testing equality regardless of it called a
+            # containment label absent when Logic plainly shows it inside a longer string —
+            # `nonInsertButtonText` carries `send` and the census has `send button`, which is a
+            # MATCH for that label and was being reported as a gap. Measured 2026-09-05: the
+            # affix signal below surfaced fifty such rows before this was fixed, and they were
+            # all the guard misreading its own subject.
+            if any(_carries(s, text, mode) for s in bag):
                 continue
             key = f"{name}→{text}"
             absent.append(key)
             hit = difflib.get_close_matches(text, list(bag), n=1, cutoff=NEAR)
             if hit and hit[0].casefold() != text.casefold():
-                near.append((key, hit[0]))
+                near.append((key, hit[0], "near"))
+                continue
+            # AFFIX, a second signal the similarity score cannot see. `Show Mixer` against `Mixer`
+            # scores 0.72 and never reached the list — measured 2026-09-05, and it was a real
+            # defect found instead by a unit-test fixture failing on its neighbour. The shape is
+            # specific and cheap to name: one string is the other plus a leading or trailing word.
+            # Every Show/Hide verb Logic 12.3 dropped has it, and none of them scored high enough.
+            # AFFIX applies only where the product compares by EQUALITY. For a containment label
+            # an affix is a match, not a miss — which is why it is asked here and not above.
+            if mode != "contains":
+                affix = _affix_of(text, bag, mode)
+                if affix:
+                    near.append((key, affix, "affix"))
 
     print(f"{len(absent)} variant(s) absent from a census in their own locale; "
           f"{len(near)} of them have a near miss")
@@ -130,8 +271,8 @@ def main():
         # review, 2026-09-05.
         for key in absent:
             print(f"   absent  {key}")
-    for key, hit in near:
-        print(f"   NEAR  {key}   ~   {hit!r}")
+    for key, hit, kind in near:
+        print(f"   {kind.upper():5s} {key}   ~   {hit!r}")
     if near:
         print("   A near miss is a string somebody may have typed instead of read. Check each "
               "against the census before dismissing it; the census is navigation-free, so a "

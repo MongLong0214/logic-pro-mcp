@@ -39,7 +39,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The measured floor. Raise it when a harness converts; never lower it to make a branch pass.
 # 8 -> 9 on 2026-09-05: live_778_japanese_ax_reads_resolve, whose three assertions are each about a
 # state a Japanese Logic used to be in, so each is written against the envelope that state produced.
-FLOOR = 9
+# 9 -> 10, same day: live_778_step_input_toggle_reaches_its_menu_item. Its counterexamples are the
+# State C envelope the operation really returned before the fix, and Logic's window list before the
+# toggle — one from the product, one from outside it.
+FLOOR = 10
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

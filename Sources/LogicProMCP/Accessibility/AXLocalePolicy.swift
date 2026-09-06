@@ -118,37 +118,64 @@ enum AXLocalePolicy {
 
     static let viewMenuBar = LabelSet(
         canonical: "View",
-        variants: ["보기"],
+        variants: ["보기", "表示"],
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// The third item this Logic build spells without a Show/Hide verb: the
+    /// View menu's entry is `Mixer`, not `Show Mixer`, in all three censuses of
+    /// 2026-09-05. Found by a unit-test fixture failing on its NEIGHBOUR — the
+    /// near-miss check did not report it, because `Show Mixer` against `Mixer`
+    /// scores 0.72 and the cutoff is 0.86, which is the limit that check prints
+    /// beside its own output.
     static let showMixerMenuItem = LabelSet(
-        canonical: "Show Mixer",
-        variants: ["믹서 보기"],
+        canonical: "Mixer",
+        variants: ["믹서", "ミキサー"],
         rationale: "Used only as a best-effort mixer reveal before structural mixer readback."
     )
 
     static let windowMenuBar = LabelSet(
         canonical: "Window",
-        variants: ["윈도우"],
+        variants: ["윈도우", "ウインドウ"],
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
+    /// This Logic build shows `All Plug-in Windows`, with no verb. `Hide All
+    /// Plug-in Windows` stood here and matches nothing; the item is a leaf with
+    /// no submenu, so the old spelling could not resolve at a deeper level
+    /// either. All three forms below are verbatim from the censuses of
+    /// 2026-09-05 — the Korean one carried `…가리기`, "…hide", and was wrong for
+    /// the same reason the English one was.
     static let hideAllPluginWindowsMenuItem = LabelSet(
-        canonical: "Hide All Plug-in Windows",
-        variants: ["모든 플러그인 윈도우 가리기"],
+        canonical: "All Plug-in Windows",
+        variants: ["모든 플러그인 윈도우", "すべてのプラグインウインドウ"],
         rationale: "Best-effort cleanup so stale plugin windows do not steal later menu focus."
     )
 
+    /// Same change, and this one was load-bearing: `edit.toggle_step_input`
+    /// resolves this item, and with `Show Step Input Keyboard` it answered
+    /// State C `element_not_found` and opened nothing — on an ENGLISH Logic,
+    /// twice, with the window list unchanged across both calls. Logic shows
+    /// `Step Input Keyboard`.
     static let showStepInputKeyboardMenuItem = LabelSet(
-        canonical: "Show Step Input Keyboard",
-        variants: ["스텝 입력 키보드 보기"],
+        canonical: "Step Input Keyboard",
+        variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
         rationale: "Native Window-menu toggle used with independent window-state readback."
     )
 
+    /// Japanese measured live 2026-09-06, from Logic's own window list during a toggle:
+    /// `lpm-locale-campaign - ステップインプットキーボード`. No navigation-free census can carry
+    /// this string — the window does not exist until the operation opens it — which is why the
+    /// gap survived three censuses and two rounds of menu-label work.
+    ///
+    /// Its absence is the SECOND half of why `edit.toggle_step_input` was dead in Japanese. With
+    /// the menu labels fixed the AX channel found the item and pressed it, the window opened, and
+    /// then this readback could not see it: twenty polls, State C, and the chain fell through to
+    /// the key-command destination, which toggles the window but cannot read anything back. The
+    /// operation reported State B `readback_unavailable` about a window that was plainly open.
     static let stepInputKeyboardWindowTitle = LabelSet(
         canonical: "Step Input Keyboard",
-        variants: ["스텝 입력 키보드"],
+        variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
         rationale: "Verifies the Step Input Keyboard window opened or closed after the menu action."
     )
 
@@ -1133,9 +1160,17 @@ enum AXLocalePolicy {
     )
 
     /// Empty audio-plugin insert-slot button classification.
+    /// `audio plug-in`, with the hyphen Logic actually renders. `audio plugin`
+    /// stood here and is not a substring of what Logic shows, so this set —
+    /// read with `containsAny` — could not match an empty slot on any English
+    /// Logic. The Korean form was already right; the Japanese one is new and
+    /// measured. Whether anything depended on the label is a separate question:
+    /// the call site falls through to `isLanguageNeutralEmptyAudioPluginSlot`,
+    /// which is substantial enough that the label may never have been
+    /// load-bearing, and that was not measured.
     static let audioPluginSlotLabel = LabelSet(
-        canonical: "audio plugin",
-        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트"],
+        canonical: "audio plug-in",
+        variants: ["audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"],
         rationale: "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists)."
     )
     static let sendOrIOControlLabel = LabelSet(
@@ -1350,9 +1385,19 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
     )
 
+    /// Japanese measured 2026-09-06 from the ja-JP arrange-regions census: Logic's help string for
+    /// a region reads `リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. …`.
+    ///
+    /// Its absence made `get_regions` return an EMPTY enumeration on a Japanese Logic while regions
+    /// were plainly there. `AccessibilityChannel+Regions.swift:244` classifies a layout item as a
+    /// region iff its help carries one of these, so every Japanese region counted as `nonRegion`:
+    /// four separate runs reported `layoutItems: 1, nonRegion: 1, returned_count: 0` where the same
+    /// project on an English Logic reported `nonRegion: 0` and one region. The envelope carried no
+    /// error and `complete` was true, so it did not look like a failure — it looked like an
+    /// arrangement with nothing in it.
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
-        variants: ["리전"],
+        variants: ["리전", "リージョン"],
         rationale: "Detects an arrange region by its AXHelp string; read-only classifier."
     )
 

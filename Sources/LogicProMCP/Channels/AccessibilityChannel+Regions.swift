@@ -409,13 +409,31 @@ extension AccessibilityChannel {
     }
 
     /// Extract (startBar, endBar) from Logic's localized region help text.
-    /// Returns (-1, -1) if neither pattern matches — callers should inspect rawHelp.
-    private static func parseRegionBars(from help: String) -> (Int, Int) {
-        // Korean: "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다."
-        // English: "Region starts at 128 bars and ends at 129 bars, MIDI region."
+    /// Returns (-1, -1) if no pattern matches — callers should inspect rawHelp.
+    ///
+    /// Internal rather than private so the locale patterns can be pinned directly against the
+    /// strings Logic emits. It is a pure function of its argument; the alternative was asserting
+    /// bar numbers through a live enumeration, which cannot distinguish "the pattern is wrong"
+    /// from "the region moved".
+    static func parseRegionBars(from help: String) -> (Int, Int) {
+        // Korean:   "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다."
+        // English:  "Region starts at 128 bars and ends at 129 bars, MIDI region."
+        // Japanese: "リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン."
+        //
+        // The Japanese row was added 2026-09-06, and it was needed the moment `regionHelpKeyword`
+        // learned `リージョン`: recognising a region and being unable to read its bars leaves the
+        // enumeration returning `startBar: -1, endBar: -1`, measured live on that day for the one
+        // region in the campaign project. Fail-closed downstream — `move_to_playhead` refuses a
+        // readback with `startBar <= 0` — but a caller reading the enumeration gets numbers that
+        // are not positions.
+        //
+        // Note the units are MIXED in Logic's own string: `1 bar ` in ASCII and `2 小節` in
+        // Japanese, in the same sentence. The pattern therefore anchors on the two POSITION nouns
+        // and not on any unit word.
         let patterns = [
             #"리전은\s*(\d+)\s*마디.*?시작.*?(\d+)\s*마디.*?끝"#,
             #"(?i)region\s+starts\s+at\s+(?:bar\s+)?(\d+)(?:\s*bars?)?.*?ends\s+at\s+(?:bar\s+)?(\d+)(?:\s*bars?)?"#,
+            #"リージョンの開始位置は\s*(\d+).*?終了位置は\s*(\d+)"#,
         ]
         for pat in patterns {
             guard let rx = try? NSRegularExpression(pattern: pat, options: [.dotMatchesLineSeparators]) else { continue }

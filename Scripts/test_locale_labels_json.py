@@ -701,6 +701,29 @@ def main():
     case("normalising does not make unrelated text match",
          not guard.carries(_ud.normalize("NFD", "출력 슬롯"), "입력 슬롯", "exact"), "")
 
+    # The COVERAGE half of `path_contains`. Two of the three false claims this branch retracts
+    # were coverage, not provenance — so a where-constraint on provenance alone would have left the
+    # same mistake available in the other half of the same file.
+    guard.OBS = _ledger({"2026-09-05-cov": ("en-US", [
+        _row("AXMenuItem", title="Delete",
+             path="AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete]")])})
+    en_cov = dict(U, **{"en-US": "measured"})
+
+    def covered(path):
+        e = _entry(["삭제"], None, en_cov, canonical="Delete", match="exact",
+                   declared=("AXMenuItem",), cites={"en-US": "2026-09-05-cov"},
+                   roles={"en-US": "AXMenuItem"}, attrs={"en-US": "title"})
+        if path is not None:
+            e["coverage_paths"] = {"en-US": path}
+        return e
+
+    case("without a path, the application's Edit menu backs the Marker List's label",
+         cp(covered(None), "markerListDeleteMenuItem") == [], cp(covered(None), "markerListDeleteMenuItem"))
+    case("with the Marker List named, the same record no longer backs it",
+         any("at a path containing" in x
+             for x in cp(covered("AXWindow[Marker List]"), "markerListDeleteMenuItem")),
+         cp(covered("AXWindow[Marker List]"), "markerListDeleteMenuItem"))
+
     # 16. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

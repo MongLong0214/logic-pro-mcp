@@ -1,0 +1,94 @@
+{
+  "id": "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
+  "date": "2026-09-05",
+  "schema": 2,
+  "subject": "What happened when a live harness read Logic's window list through System Events while toggling a window",
+  "question": "Is `name of every window` through System Events a safe way for a harness to observe Logic while it opens and closes a window?",
+  "verdict": "wall",
+  "issues": [
+    778
+  ],
+  "surface": "system.preferences",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "project lpm-locale-campaign.logicx; Logic had been driven all day by campaigns and harnesses"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Restore the System Events reader in Scripts/livekit/live_778_step_input_toggle_reaches_its_menu_item.py and run the harness. Whether it crashes again is the open question this record does not answer.",
+    "expected": "unknown — one crash is not a reproduction, and this was not retried on purpose",
+    "cost": "one harness run, plus a Logic restart if it does crash"
+  },
+  "depends": [
+    "Scripts/livekit/live_778_step_input_toggle_reaches_its_menu_item.py",
+    "Scripts/livekit/evidence.py"
+  ],
+  "evidence": [
+    "evidence/2026-09-05-logic-crashed-enumerating-its-own-windows.json"
+  ],
+  "method": "Read from Logic's own crash report, matched to the harness run that was in flight when it was written. The harness's evidence document for that head carries the three failures the crash produced.",
+  "observations": [
+    {
+      "what": "the crash",
+      "exception": "EXC_BAD_ACCESS (SIGSEGV)",
+      "message": "Thread stack size exceeded due to excessive recursion"
+    },
+    {
+      "what": "the faulting thread, top frames",
+      "rows": [
+        {
+          "image": "Foundation",
+          "symbol": "-[NSRecursiveLock lock]"
+        },
+        {
+          "image": "AppKit",
+          "symbol": "-[NSApplication _copyWindows]"
+        },
+        {
+          "image": "AppKit",
+          "symbol": "-[NSApplication windows]"
+        },
+        {
+          "image": "Logic",
+          "symbol": ""
+        }
+      ]
+    },
+    {
+      "what": "what the run recorded, which read as three unrelated failures",
+      "rows": [
+        {
+          "field": "windows after close",
+          "value": ""
+        },
+        {
+          "field": "second toggle call",
+          "value": "state C"
+        },
+        {
+          "field": "second capture",
+          "value": "unreadable"
+        }
+      ]
+    },
+    {
+      "what": "the same harness after switching to the CoreGraphics window list",
+      "checks": 5,
+      "passed": 5,
+      "visual_failed": 0,
+      "logic_still_running": true
+    }
+  ],
+  "conclusion": "Logic died inside its own window enumeration while a harness asked System Events to enumerate those windows, immediately before and after a toggle that opens and closes one. The recursion is in Logic and the trigger is plausibly that, but one crash is not a proof of cause and this was deliberately not retried — the reader was the wrong one regardless. CoreGraphics keeps the window server's own record and asks the application nothing, `evidence.py` already reads it that way, and it is exactly as independent of the product under test, which was the only reason System Events was chosen. The lesson that generalises is smaller and sharper than the crash: an observer that asks the application about itself is not a passive observer.",
+  "limits": [
+    "ONE crash. Not reproduced, and deliberately so — the fix does not depend on the cause and retrying costs a Logic restart. Whether the System Events reader crashes Logic reliably is unknown.",
+    "Logic had been running all day under campaigns, relaunches and harnesses when this happened. A long-lived process in an unusual state is not a clean subject.",
+    "It does not say that System Events window reads are unsafe in general — only that this one, during a window-opening toggle, coincided with a recursion crash in Logic's window enumeration.",
+    "The CoreGraphics reader is not a fix for the crash. It is a different instrument that does not ask the question that preceded it."
+  ],
+  "supersedes": null
+}

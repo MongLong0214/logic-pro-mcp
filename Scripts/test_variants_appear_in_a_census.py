@@ -18,6 +18,16 @@ spec = importlib.util.spec_from_file_location("nearmiss", HERE / "check-variants
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
+# The guard keeps its OWN copy of `carries`, deliberately: it runs over every census and every label,
+# and importing the gating guard for one comparison would make a reporting tool depend on a gating
+# one. A second copy goes stale the day someone changes the first — and it did, one mode at a time.
+# Trimming was brought into line for three modes and left wrong for `exact_strict`, so the two
+# disagreed about ` Foo ` and the near-miss report offered a pair the product would never match.
+# That was found by review 2026-09-06, not by anything here. A copy with a check cannot drift.
+_real_spec = importlib.util.spec_from_file_location("labelguard", HERE / "check-locale-labels-json.py")
+real_guard = importlib.util.module_from_spec(_real_spec)
+_real_spec.loader.exec_module(real_guard)
+
 failures, ran = [], [0]
 
 
@@ -104,6 +114,109 @@ rc, out = run({"playheadPositionGroupLabel": {
     rows=[{"role": "AXGroup", "description": "再生ヘッドの位置"}])
 case("a row with a role and an attribute is a reading", "0 variant(s) absent" in out, out)
 
+# The AFFIX signal, and the five real defects it is shaped for. Every one of them is a string that
+# lost a leading or trailing word when Logic 12.3 dropped the Show/Hide verb, and NONE of them
+# scored high enough for the similarity cutoff — `Show Mixer` against `Mixer` is 0.72. That one was
+# found by a unit-test fixture failing on its neighbour, which is not a method.
+for shown, observed in [
+    ("Show Mixer", "Mixer"),
+    ("Show Step Input Keyboard", "Step Input Keyboard"),
+    ("Hide All Plug-in Windows", "All Plug-in Windows"),
+    ("모든 플러그인 윈도우 가리기", "모든 플러그인 윈도우"),
+    ("스텝 입력 키보드 보기", "스텝 입력 키보드"),
+]:
+    case(f"affix finds {observed!r} for {shown!r}",
+         guard._affix_of(shown, {observed, "Untitled"}) == observed,
+         guard._affix_of(shown, {observed, "Untitled"}))
+
+# The short tail, which a length ratio suppressed. Raised by review 2026-09-05.
+case("affix finds a two-character tail", guard._affix_of("Show EQ", {"EQ"}) == "EQ",
+     guard._affix_of("Show EQ", {"EQ"}))
+
+# ...and the DIRECTION, which is what makes it a dropped-word signal rather than substring noise.
+# The policy string must be the longer one, because Logic dropped a word the policy still carries.
+case("affix does not report an unrelated LONGER menu command",
+     guard._affix_of("Create", {"Create Group"}) is None,
+     guard._affix_of("Create", {"Create Group"}))
+case("affix ignores a short label inside a long unrelated title",
+     guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}) is None,
+     guard._affix_of("Length", {"Move Locators Forward by Cycle Length"}))
+# A WORD, not a fragment of one. `str.split` makes every non-empty fragment a single "word", so
+# `position` minus `on` left `positi` and passed a limit that was never a word limit. Raised by
+# review 2026-09-06.
+case("affix ignores a partial word", guard._affix_of("position", {"on"}) is None,
+     guard._affix_of("position", {"on"}))
+# The branch is picked by SCRIPT, not by whether this string happens to contain a space. Latin
+# writes its words apart, so a Latin string with no space has no word to drop and every chunk taken
+# off it is a fragment; the character budget is for scripts that write words closed up. Choosing on
+# `" " in policy` let a single Latin word take the budget path, where `position` minus `posit` is
+# three characters and passed. Raised by review 2026-09-06, after removing a retained-length rule
+# that had been hiding this for an unrelated reason.
+case("affix ignores a fragment of a single Latin word",
+     guard._affix_of("position", {"posit"}) is None, guard._affix_of("position", {"posit"}))
+case("affix ignores one letter shaved off a Latin label",
+     guard._affix_of("Mixer", {"Mixe"}) is None, guard._affix_of("Mixer", {"Mixe"}))
+# ...and the branch is chosen by the CHUNK, not the policy. A mixed string has Latin in it while the
+# part Logic dropped is not Latin: `EQを表示` -> `EQ` drops `を表示`, which has no space to find and
+# never could. Keying on the policy's script refused it. Raised by review 2026-09-06, the round after
+# keying on the policy's script fixed the opposite error.
+case("affix keeps a non-Latin chunk dropped from a mixed-script label",
+     guard._affix_of("EQを表示", {"EQ"}) == "EQ", guard._affix_of("EQを表示", {"EQ"}))
+# ...and what is dropped must be a WORD, so a chunk of digits or punctuation is not one. `트랙 1`
+# against `트랙` drops ` 1`, which carries no letter and fitted the budget — but track 1 is a
+# different ELEMENT from the track rail, not the same label with a word removed. Named by review
+# 2026-09-06.
+case("affix ignores an ordinal dropped from a label",
+     guard._affix_of("트랙 1", {"트랙"}) is None, guard._affix_of("트랙 1", {"트랙"}))
+# ...while the same shape in a space-less script is a real dropped word: Korean writes `삭제하기`
+# closed up, and `하기` is the verb ending Logic drops.
+case("affix keeps a dropped ending in a closed-up Korean compound",
+     guard._affix_of("삭제하기", {"삭제"}) == "삭제", guard._affix_of("삭제하기", {"삭제"}))
+# The budget needs a floor on the other side too. `削除` minus `除` drops one kanji and fits any
+# chunk budget, but `除` is not the word — nothing was dropped, the label was cut in half. A floor of
+# THREE was tried first and killed `情報`, so the floor is two: the length of the shortest label
+# either census actually carries. Raised by review 2026-09-06, one round after the floor was deleted
+# rather than lowered.
+case("affix ignores a single kanji cut off a two-kanji word",
+     guard._affix_of("削除", {"除"}) is None, guard._affix_of("削除", {"除"}))
+case("affix ignores an empty observed value",
+     guard._affix_of("削除", {""}) is None, guard._affix_of("削除", {""}))
+# ...and the boundary test trims exactly where `carries` trims. `exact_strict` is the mode that does
+# not trim the observed value, so ` Foo ` is not `FooBar` minus a word there — though it is in every
+# other mode. Raised by review 2026-09-06, the round after trimming was added for the other modes.
+case("affix does not trim the observed value under exact_strict",
+     guard._dropped_chunk("FooBar", " Foo ", "exact_strict") is None,
+     guard._dropped_chunk("FooBar", " Foo ", "exact_strict"))
+case("...but does under every mode that trims",
+     guard._dropped_chunk("FooBar", " Foo ", "exact") == "bar",
+     guard._dropped_chunk("FooBar", " Foo ", "exact"))
+# ...and it normalises, like every other comparison in this ledger, because the product compares
+# with canonical equivalence.
+import unicodedata as _u
+case("affix sees through NFD/NFC",
+     guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}) == "스텝 입력 키보드",
+     guard._affix_of(_u.normalize("NFD", "스텝 입력 키보드 보기"), {"스텝 입력 키보드"}))
+# A two-character label in a space-less language is a label, not a fragment. An earlier cut
+# demanded three characters of the RETAINED side and silently dropped this shape. Raised by review
+# 2026-09-06.
+case("affix keeps a short retained label where the language has no spaces",
+     guard._affix_of("情報を表示", {"情報"}) == "情報", guard._affix_of("情報を表示", {"情報"}))
+# ...and it trims, like every other comparison here. A padded policy string was comparable to
+# `carries` and not to this one.
+case("affix sees through padding",
+     guard._affix_of("Show Mixer ", {"Mixer"}) == "Mixer", guard._affix_of("Show Mixer ", {"Mixer"}))
+case("affix ignores a chunk that is several words",
+     guard._affix_of("Stop and Go to Last Locate Position", {"Position"}) is None,
+     guard._affix_of("Stop and Go to Last Locate Position", {"Position"}))
+
+# A containment label is not absent because no string EQUALS it — Logic showing it inside a longer
+# value is a match for that label. Testing absence by equality regardless of mode reported fifty
+# such rows as gaps.
+case("a contains-label seen inside a longer value is not absent",
+     guard._carries("send button", "send", "contains"), "")
+case("...and an exact-label is not satisfied by the same thing",
+     not guard._carries("send button", "send", "exact"), "")
+
 # An empty vocabulary must not read as clean: the guard refuses rather than reporting no drift.
 ledger([], {})
 import io as _io
@@ -112,6 +225,34 @@ buf = _io.StringIO()
 with contextlib.redirect_stdout(buf):
     rc = guard.main()
 case("no census at all is a refusal, not a pass", rc == 1, (rc, buf.getvalue()))
+
+# --- the copy of `carries` must agree with the original, in every mode ---------------------------
+# The modes come from the ORIGINAL, so a mode added there and not here is a missing case rather than
+# a silently narrower loop.
+DRIFT_PAIRS = [(" Foo ", "Foo"), ("Foo", " Foo "), ("FooBar", "Foo"), ("foo", "FOO"),
+               ("  Mixer  ", "Mixer"), ("Show Mixer", "Mixer"), ("정보", "정보 "), ("削除", "削除"),
+               ("トラックヘッダ", "トラック"), ("", "Foo"),
+               # Decomposed on ONE side. Every pair above is already composed, so dropping
+               # `unicodedata.normalize` from the copy left all forty cases green — measured by
+               # mutation 2026-09-06, and named by review in the same round. A pair that differs
+               # only by normal form is the one shape that catches it.
+               (_u.normalize("NFD", "정보"), "정보"),
+               ("정보", _u.normalize("NFD", "정보")),
+               (_u.normalize("NFD", "ステップ"), "ステップ"),
+               (_u.normalize("NFD", "트랙 헤더"), "트랙 헤더")]
+# A mode OUTSIDE the declared four. The loop below walks `MATCH_MODES`, so it can never reach the
+# fallback branch — and the two implementations disagreed there: an unrecognised mode fell through
+# to `exact` in the copy and to `contains` in the original, the loosest answer. Named by review
+# 2026-09-06, which is also how it was found: the loop's own coverage hid it.
+case("the copy agrees with the original on a mode neither declares",
+     guard._carries("FooBar", "Foo", "bogus") == real_guard.carries("FooBar", "Foo", "bogus"),
+     (guard._carries("FooBar", "Foo", "bogus"), real_guard.carries("FooBar", "Foo", "bogus")))
+for _mode in real_guard.MATCH_MODES:
+    for _value, _text in DRIFT_PAIRS:
+        _mine, _theirs = guard._carries(_value, _text, _mode), real_guard.carries(_value, _text, _mode)
+        case(f"the copy of `carries` agrees with the original: {_mode} {_value!r} vs {_text!r}",
+             _mine == _theirs, (_mode, _value, _text, "copy", _mine, "original", _theirs))
+
 
 if failures:
     for f in failures:

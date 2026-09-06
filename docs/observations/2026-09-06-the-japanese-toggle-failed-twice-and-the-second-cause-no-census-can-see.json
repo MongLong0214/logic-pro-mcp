@@ -1,0 +1,94 @@
+{
+ "id": "2026-09-06-the-japanese-toggle-failed-twice-and-the-second-cause-no-census-can-see",
+ "date": "2026-09-06",
+ "schema": 2,
+ "subject": "`edit.toggle_step_input` on a Japanese Logic, and the two label gaps that kept it from State A",
+ "question": "The operation was proved working live at three heads. Does it work on a Logic that is not English?",
+ "verdict": "partial",
+ "issues": [
+  778
+ ],
+ "surface": "arrange.menus",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ja-JP",
+  "os": "macOS 26.3 (25D125)",
+  "note": "AppleLanguages set to `ja` and Logic relaunched; the project was reopened from File > 最近使った項目を開く. Restored afterwards."
+ },
+ "reverify": {
+  "kind": "harness",
+  "command": "python3 Scripts/livekit/live_778_step_input_toggle_reaches_its_menu_item.py <worktree> <head> (with LPM_EVIDENCE_ROOT exported, and `defaults write com.apple.logic10 AppleLanguages -array ja` plus a Logic relaunch beforehand)",
+  "expected": "State A with `observed_open` flipping true then false, and Logic's window list carrying `ステップインプットキーボード` between the two calls",
+  "cost": "about three minutes, plus a Logic relaunch either side of the language change"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Editing.swift"
+ ],
+ "evidence": [],
+ "method": "The harness was run unchanged against a Japanese Logic at three successive heads. The first run used the binary that had passed three English runs; the second added the Japanese menu-bar titles; the third added the window title. Each run's `observed` field was read rather than its pass/fail, because the operation's STATE is what distinguishes the two causes — a failure to find the menu and a failure to read back look the same from the check.",
+ "observations": [
+  {
+   "what": "what the operation answered on a Japanese Logic, by head",
+   "rows": [
+    {
+     "stage": "menu labels missing",
+     "state": "C",
+     "method": null,
+     "detail": "element_not_found · 'Window > Step Input Keyboard was not found.'",
+     "window_opened": false
+    },
+    {
+     "stage": "menu labels added",
+     "state": "B",
+     "method": "midi_key_command",
+     "detail": "readback_unavailable · 'Key command triggered: edit.toggle_step_input (CC 44 CH 16)'",
+     "window_opened": true,
+     "windows_between_calls": "lpm-locale-campaign - ステップインプットキーボード, lpm-locale-campaign - トラック"
+    }
+   ]
+  },
+  {
+   "what": "the two labels, and where each was measured",
+   "rows": [
+    {
+     "label": "windowMenuBar",
+     "before": [
+      "윈도우"
+     ],
+     "added": "ウインドウ",
+     "role": "AXMenuBarItem",
+     "source": "2026-09-05-ja-JP-arrange-menus-census"
+    },
+    {
+     "label": "viewMenuBar",
+     "before": [
+      "보기"
+     ],
+     "added": "表示",
+     "role": "AXMenuBarItem",
+     "source": "2026-09-05-ja-JP-arrange-menus-census"
+    },
+    {
+     "label": "stepInputKeyboardWindowTitle",
+     "before": [
+      "스텝 입력 키보드"
+     ],
+     "added": "ステップインプットキーボード",
+     "role": "AXWindow",
+     "source": "live window list during this run — no census can hold it"
+    }
+   ]
+  }
+ ],
+ "conclusion": "The operation was dead in Japanese for two independent reasons, and fixing the first exposed the second. `windowMenuBar` had no Japanese name, so the drive could not open the menu the item lives in — and the refusal named the English path, which reads as a missing item rather than a missing menu. With that fixed the AX channel found the item, pressed it and the window opened; then `stepInputKeyboardWindowTitle` could not see it, the channel polled twenty times, gave up with State C, and the chain fell through to the key-command destination, which toggles the window but reads nothing back. So the operation reported State B `readback_unavailable` about a window that was plainly open. The second gap is the interesting one: it is a WINDOW title, and the window does not exist until the operation opens it, so no navigation-free census can ever carry it. Three censuses and two rounds of menu-label work could not have found it; only driving the operation in that locale could.",
+ "limits": [
+  "One language. Korean has all three labels and was not re-driven here, so this says nothing about whether the same chain reaches State A there.",
+  "The record of 2026-09-05 said the dead toggle was 'not a locale failure'. That was true of the cause it measured and wrong as a statement about the operation: two of the three gaps were locale gaps. It is superseded rather than corrected in place.",
+  "WHY the key-command destination cannot read back is still not established — whether that is by design for that channel or a missing readback. The fall-through itself is now observed, which the earlier record could not see.",
+  "State A on a Japanese Logic is not yet demonstrated in this record; the run that should show it comes after this change."
+ ],
+ "supersedes": "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it"
+}
