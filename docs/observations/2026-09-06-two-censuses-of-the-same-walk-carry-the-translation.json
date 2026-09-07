@@ -1,0 +1,158 @@
+{
+ "id": "2026-09-06-two-censuses-of-the-same-walk-carry-the-translation",
+ "date": "2026-09-06",
+ "schema": 2,
+ "subject": "aligning two locale censuses of the same navigation-free walk",
+ "question": "Can a label's translation be READ out of two censuses, rather than confirmed against a string somebody already declared?",
+ "verdict": "partial",
+ "issues": [
+  795,
+  778
+ ],
+ "surface": "arrange.menus",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "the host of the 2026-09-05 censuses this analyses; no Logic was driven for this record"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "Scripts/observations/locale-align.py docs/observations/evidence/2026-09-05-en-US-navigation-free.census.json docs/observations/evidence/2026-09-05-ja-JP-navigation-free.census.json",
+  "expected": "1005 aligned pair(s); 71 dropped as system-owned; 34 base and 26 target row(s) unplaced; 29 label(s) with an unambiguous ja-JP string; 0 whose aligned rows disagree; 27 matching only inside a longer string; 29 of the 29 resting on the label's role alone"
+ },
+ "depends": [
+  "Scripts/observations/locale-align.py",
+  "docs/observations/evidence/2026-09-05-en-US-navigation-free.census.json",
+  "docs/observations/evidence/2026-09-05-ja-JP-navigation-free.census.json",
+  "docs/observations/evidence/2026-09-05-ko-KR-navigation-free.census.json",
+  "docs/locale/ui-labels.json"
+ ],
+ "evidence": null,
+ "method": "Strip every bracketed title out of each census row's `path` and prefix the role. What remains is a skeleton that does not depend on the UI language. Align the two skeleton lists with difflib.SequenceMatcher and keep ONLY the matching blocks, so an inserted row breaks one block instead of shifting every pair after it. Drop pairs under AXMenuBarItem[Apple], whose strings come from the system locale rather than Logic's. For each label, take the aligned rows whose base-locale string matches its canonical under the label's own match mode, its role shape and its evidence_scope; the target row of each pair then carries the translation.",
+ "observations": [
+  {
+   "what": "row counts",
+   "en-US": 1039,
+   "ja-JP": 1031,
+   "ko-KR": 1039
+  },
+  {
+   "what": "skeletons identical at the SAME INDEX",
+   "ja-JP": 886,
+   "ko-KR": 1014,
+   "note": "en-US/ja-JP differ by 8 rows, so 145 of 1031 ja-JP rows sit at an index whose en-US row has another shape"
+  },
+  {
+   "what": "aligned as matching blocks",
+   "ja-JP": 1005,
+   "ko-KR": 1014,
+   "of_target_rows": {
+    "ja-JP": 1031,
+    "ko-KR": 1039
+   }
+  },
+  {
+   "what": "pairs a sequence match recovers that an index alignment gets wrong",
+   "ja-JP": 119,
+   "derivation": "1005 aligned as blocks minus 886 sharing an index"
+  },
+  {
+   "what": "pairs dropped as system-owned (AXMenuBarItem[Apple])",
+   "ja-JP": 71,
+   "ko-KR": 71
+  },
+  {
+   "what": "rows neither run could place",
+   "ja-JP": {
+    "base": 34,
+    "target": 26
+   },
+   "ko-KR": {
+    "base": 25,
+    "target": 25
+   },
+   "note": "the 26 unplaced ja-JP rows are inside the Library pane; 9 of them carry a displayed string, so this is a NAMED hole and not an empty one"
+  },
+  {
+   "what": "labels with one unambiguous target string",
+   "ja-JP": 29,
+   "ko-KR": 6,
+   "note": "ko-KR is lower because most Korean variants are already declared; the tool never re-proposes one. Of the ja-JP candidates 28 are for labels currently unmeasured there, and of the ko-KR ones 5."
+  },
+  {
+   "what": "labels matching aligned rows whose targets DISAGREE, not proposed",
+   "ja-JP": 0,
+   "ko-KR": 0,
+   "note": "the mechanism is exercised by the self-tests; on this census pair every remaining candidate agreed once containment-only matches were removed first"
+  },
+  {
+   "what": "of the proposals, those admitted by the label's ROLE alone",
+   "ja-JP": 29,
+   "ko-KR": 6,
+   "note": "no evidence_scope declared, so a same-role element carrying the same string would have matched identically"
+  },
+  {
+   "what": "difflib autojunk makes no difference on this pair",
+   "autojunk_false": 1005,
+   "autojunk_true": 1005
+  },
+  {
+   "what": "example readings taken from aligned pairs",
+   "rows": [
+    {
+     "role": "AXMenuItem",
+     "en-US": "Export",
+     "ja-JP": "書き出す"
+    },
+    {
+     "role": "AXMenuItem",
+     "en-US": "Bounce",
+     "ja-JP": "バウンス"
+    },
+    {
+     "role": "AXSlider",
+     "attribute": "description",
+     "en-US": "Horizontal Zoom",
+     "ja-JP": "横方向にズーム"
+    }
+   ]
+  },
+  {
+   "what": "labels matching only INSIDE a longer string, refused",
+   "ja-JP": 27,
+   "ko-KR": 27,
+   "note": "an aligned pair returns the whole target string, so a containment match hands back the translation of the containing string. `regionHelpKeyword` is `region`, its row read `cycle region`, and the aligned Japanese was `サイクルリージョン`. Found by reading this tool's own first 18 candidates against what each label says it addresses; 2 of the 18 were this shape, and `arrangeWindowTitleSuffix` would have taken a project name into the ledger. Measured again after a label with no agreed match mode stopped matching anything: 31 before that rule, 27 after"
+  },
+  {
+   "what": "of the first 18 ja-JP candidates, those whose base row was the WRONG ELEMENT for the label",
+   "count": 7,
+   "examples": [
+    "libraryPanelLabel backed by the View menu's Library item rather than the panel",
+    "mixerNamedElement by the View menu's Mixer item rather than the mixer container",
+    "pluginWindowViewSwitcher by the application menu bar's View",
+    "trackRecordButton and trackSoloButton by the Control Bar's global buttons rather than a track's"
+   ],
+   "note": "read by hand against each label's rationale; this is the judgement the tool defers rather than makes, and it is why the run prints how many candidates rest on a role alone"
+  },
+  {
+   "what": "candidates when the BASE census is not the language the labels are named in",
+   "en-US_base_to_ja-JP": 29,
+   "ko-KR_base_to_ja-JP": 11,
+   "note": "a label is matched by its `canonical`, which is English, so a Korean base finds only the labels Logic leaves untranslated in Korean"
+  }
+ ],
+ "conclusion": "Two censuses of the same walk do carry the translation, and the alignment is strong where it matters: 1005 of 1031 ja-JP rows align as matching blocks against 886 that share an index, so a sequence match recovers 119 pairs an index alignment gets wrong. It yields 29 unambiguous ja-JP candidates and 6 ko-KR ones, and refuses 27 labels that matched only inside a longer string. The verdict is `partial` for three reasons that are properties of the method rather than of this run: all 29 candidates rest on the label's role alone, 7 of the first 18 were read by hand and were the wrong element for their label, and 9 unplaced rows carry strings inside the Library pane, which no alignment of these two walks can reach.",
+ "limits": [
+  "This finds STRINGS, not label bindings. A candidate says 'the element whose en-US string is X shows Y here'; whether that element is the one a label names is not established by the alignment and is exactly the #793 failure when it is assumed.",
+  "All 29 ja-JP candidates were admitted by role alone, because none of those labels declares an evidence_scope. Reading the first 18 by hand against their rationales found 7 that were the wrong element, so this is a measured rate and not a caution: the tool proposes, and a person decides.",
+  "The Library pane does not align: 9 of the unplaced ja-JP rows carry strings. A label whose element lives there needs measuring some other way.",
+  "Only en-US -> ja-JP and en-US -> ko-KR were run, both against the 2026-09-05 censuses. Nothing here says the alignment holds across Logic versions, or on a surface these two walks did not enter.",
+  "No Logic was driven for this record. It is an analysis of census files already in the tree, so it inherits every limit those censuses carry — including that they are navigation-free and never open a menu.",
+  "`ambiguous` is 0 on this census pair. That is not evidence the path is dead — it is exercised by the self-tests — but nothing here demonstrates it firing on real data.",
+  "The base census has to be the one whose language the labels are named in. Matching the base against a label's declared variants too would lift that and is deliberately not done: it would make this tool's answer depend on evidence the ledger already holds, and its purpose is to find strings the ledger does not know."
+ ],
+ "supersedes": null
+}
