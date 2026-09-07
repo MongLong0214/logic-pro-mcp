@@ -67,7 +67,13 @@ private final class LibraryEventRecorder: @unchecked Sendable {
     }
 }
 
-private func makeLibraryPanelFixture() -> (
+/// `browserChildrenReads`, when supplied, counts every census the browser
+/// subtree serves. `waitForSegmentVisible` re-reads that subtree once per poll,
+/// so the count is how many times the wait loop turned — a property of the
+/// implementation rather than of the machine running it (#804).
+private func makeLibraryPanelFixture(
+    browserChildrenReads: MutableBox<Int>? = nil
+) -> (
     builder: FakeAXRuntimeBuilder,
     app: AXUIElement,
     window: AXUIElement,
@@ -121,7 +127,19 @@ private func makeLibraryPanelFixture() -> (
     builder.setAttribute(categoryList, kAXSelectedChildrenAttribute as String, [bass])
     builder.setAttribute(presetList, kAXSelectedChildrenAttribute as String, [sub])
 
-    let runtime = builder.makeLogicRuntime(appElement: app)
+    var countBrowserChildren: (@Sendable (AXUIElement) -> [AXUIElement]?)?
+    if let browserChildrenReads {
+        countBrowserChildren = { element in
+            if CFEqual(element, browser) { browserChildrenReads.value += 1 }
+            return nil
+        }
+    }
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: countBrowserChildren,
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
     let library = LibraryAccessor.Runtime(
         ax: runtime.ax,
         postMouseClick: { _ in true },
@@ -198,18 +216,29 @@ private func makeLibraryPanelFixture() -> (
 }
 
 @Test func libraryAccessorWaitForSegmentReturnsPromptlyWhenAlreadyVisible() {
-    // Already-visible row must not burn the full timeout.
-    let fixture = makeLibraryPanelFixture()
-    let start = Date()
+    // Already-visible row must not burn the full timeout. Counted rather than
+    // timed: with a 1 s timeout and a 20 ms poll, burning the deadline is ~50
+    // turns of the loop, and each turn re-reads the browser subtree. A loaded
+    // machine makes the loop turn *fewer* times, so it cannot cross this
+    // ceiling — which is what the wall clock this replaces could not say (#804).
+    let polls = MutableBox(0)
+    let fixture = makeLibraryPanelFixture(browserChildrenReads: polls)
+
     LibraryAccessor.waitForSegmentVisible(
         named: "Sub", timeout: 1.0, pollInterval: 0.02, runtime: fixture.runtime
     )
-    #expect(Date().timeIntervalSince(start) < 0.5)
+
+    let returnedOnTheFirstLook = polls.value <= 4
+    #expect(returnedOnTheFirstLook)
 }
 
 @Test func libraryAccessorWaitForRightmostSegmentIgnoresSameNamedLeftColumn() {
-    let fixture = makeLibraryPanelFixture()
-    let start = Date()
+    // "Bass" exists, but only in the left column, so the rightmost-only wait
+    // must keep polling to its deadline instead of accepting it. Counting the
+    // browser censuses says the loop actually turned repeatedly; the elapsed
+    // time it replaces said only that the machine was not impossibly fast.
+    let polls = MutableBox(0)
+    let fixture = makeLibraryPanelFixture(browserChildrenReads: polls)
 
     LibraryAccessor.waitForSegmentVisible(
         named: "Bass",
@@ -219,7 +248,8 @@ private func makeLibraryPanelFixture() -> (
         runtime: fixture.runtime
     )
 
-    #expect(Date().timeIntervalSince(start) >= 0.10)
+    let polledToTheDeadline = polls.value >= 3
+    #expect(polledToTheDeadline)
 }
 
 @Test func libraryAccessorSelectionUsesInjectedSetAttributeAndActionRuntime() {
