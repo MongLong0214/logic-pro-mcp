@@ -13,18 +13,19 @@ The kernel ADRs are being delivered incrementally; their individual status entri
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-002 | Session-scoped Stable Target Reference | A | `In Implementation` | [#285](https://github.com/MongLong0214/logic-pro-mcp/issues/285) |
-| ADR-003 | Public Operation Contract Registry | A | `In Implementation` | [#286](https://github.com/MongLong0214/logic-pro-mcp/issues/286) |
-| ADR-005 | Operation Trace and Support Bundle | A | `In Implementation` | [#288](https://github.com/MongLong0214/logic-pro-mcp/issues/288) |
-| ADR-004 | Verified Mutation Saga | A | `In Implementation` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
+| ADR-002 | Session-scoped Stable Target Reference | A | `Shipped` | [#285](https://github.com/MongLong0214/logic-pro-mcp/issues/285) |
+| ADR-003 | Public Operation Contract Registry | A | `Shipped` | [#286](https://github.com/MongLong0214/logic-pro-mcp/issues/286) |
+| ADR-005 | Operation Trace and Support Bundle | A | `Shipped` | [#288](https://github.com/MongLong0214/logic-pro-mcp/issues/288) |
+| ADR-004 | Verified Mutation Saga | A | `Shipped` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
 | ADR-001 | Same-Release Live Qualification Gate | A | `In Implementation` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) |
 
 ## Category B — Shared infrastructure
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-006 | Versioned Cache | B | `In Implementation` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
-| ADR-007 | AX Selector Atlas | B | `In Implementation` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290) |
+| ADR-006 | Versioned Cache | B | `Shipped` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
+| ADR-007 | AX Selector Atlas | B | `Shipped` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290) |
+| ADR-019 | Observation Ledger | B | `Shipped` | no issue of its own; landed with [#768](https://github.com/MongLong0214/logic-pro-mcp/issues/768) |
 
 ## Category C — Expansion foundations
 
@@ -39,9 +40,9 @@ The kernel ADRs are being delivered incrementally; their individual status entri
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-011 | Full Verified Compressor Control | D | `In Implementation` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
-| ADR-012 | Spectral Analysis and EQ Recommendation | D | `In Implementation` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
-| ADR-013 | Verified Channel EQ Band Control | D | `In Implementation` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
-| ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
+| ADR-012 | Spectral Analysis and EQ Recommendation | D | `Shipped` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
+| ADR-013 | Verified Channel EQ Band Control | D | `Shipped` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
+| ADR-014 | Independent MIDI Event Readback | D | `In Implementation` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 | ADR-015 | Piano Roll Data-level Transform | D | `In Implementation` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `In Implementation` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
 | ADR-017 | Flex Pitch Inspection and Verified Editing | D | `In Implementation` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
