@@ -128,17 +128,21 @@ struct LibraryAccessorHelpersTests {
         }
         build[""] = categories
         let m = build  // immutable snapshot is Sendable
+        let calls = CallRecorder()
         let probe = TreeProbe(
-            childrenAt: { p in m[p.joined(separator: "/")] ?? nil },
+            childrenAt: { p in await calls.rec(); return m[p.joined(separator: "/")] ?? nil },
             focusOK: { true }, mutationSinceLastCheck: { false },
             sleep: { _ in }, visitedHash: { $0.joined(separator: "/").hashValue }
         )
-        let start = Date()
         let root = await LibraryAccessor.enumerateTree(maxDepth: 12, settleDelayMs: 0, probe: probe)
-        let elapsed = Date().timeIntervalSince(start)
+        // The budget is work, not seconds: one root census plus one per folder
+        // and one per leaf. Re-walking a subtree shows up here as extra calls,
+        // whereas the elapsed time this replaces mostly reported how loaded the
+        // machine was (#804) — and T8 #20 below already proves the 1 + 2n shape.
+        let probeCalls = await calls.n
         #expect(root != nil)
         #expect(root!.leafCount == 3000)
-        #expect(elapsed < 2.0, "pure traversal should be < 2s, got \(elapsed)")
+        #expect(probeCalls == 1 + 100 + 3000)
     }
 
     // ---- T8 #20 Linear scaling proof (probe calls grow 1 + 2n) ----

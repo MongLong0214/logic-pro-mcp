@@ -968,7 +968,6 @@ struct ControlsViewBooleanParameterWriterTests {
             behavior: .neverChanges,
             menuRevealAfterPolls: 3
         )
-        let started = Date()
 
         let result = ControlsViewBooleanParameterWriter.prepareView(
             .editor,
@@ -983,16 +982,62 @@ struct ControlsViewBooleanParameterWriterTests {
         } else {
             refused = false
         }
-        // The menu was measured at 28–46 ms with a 25 ms poll. This keeps a
-        // nonzero fixture reveal on both the attempted switch and restoration,
-        // so it remains a bounded-deadline test rather than an instant fixture.
-        let completedWithinBoundedRestore = Date().timeIntervalSince(started) < 0.75
+        // Both waits have to use the 25 ms `confirmationTimeout` passed in
+        // above rather than the 3 s default. A structural census is what
+        // `waitForView` repeats while it waits, so dropping the argument
+        // multiplies this count: measured 2026-09-07, 13 censuses with the
+        // argument and 119 without it. A loaded runner only makes the wait
+        // loop turn *fewer* times, so scheduling cannot cross this ceiling —
+        // unlike the wall clock it replaces, which failed three times on CI
+        // for branches containing no Swift at all (#804).
+        // `menuRevealAfterPolls: 3` keeps a nonzero fixture reveal on both the
+        // attempted switch and the restoration, so this stays a
+        // bounded-deadline test rather than an instant fixture.
+        let boundedBySuppliedTimeout = fixture.windowStructureCensuses.value <= 20
         let attemptedEditorSelection = fixture.editorSelections.value == 1
         let entryStructureRemainedControls = controlsStructureIsPresent(fixture)
         #expect(refused)
-        #expect(completedWithinBoundedRestore)
+        #expect(boundedBySuppliedTimeout)
         #expect(attemptedEditorSelection)
         #expect(entryStructureRemainedControls)
+    }
+
+    /// The control for the ceiling above, and the reason it discriminates.
+    ///
+    /// A ceiling nobody can cross is not a ceiling. This is the same fixture and
+    /// the same refusal with the `confirmationTimeout` argument left off, so the
+    /// writer's own 3 s `viewConfirmationTimeout` governs, and the census count
+    /// has to land in a different order of magnitude — measured 2026-09-07 at
+    /// 119 against 13. The bound here is a FLOOR because load takes the count
+    /// down and never up: a machine slow enough to turn this loop fewer than 40
+    /// times has failed for a reason worth seeing.
+    ///
+    /// It costs the ~3 s it is bounding. That is the price of the two
+    /// assertions meaning anything together, and it buys back the mutation run
+    /// that would otherwise have to be done by hand to read this number again.
+    @Test func viewSwitchWithNoSuppliedTimeoutWaitsOnTheWritersOwnThreeSecondDefault() {
+        let fixture = viewFixture(
+            entry: .controls,
+            title: "[100%]",
+            behavior: .neverChanges,
+            menuRevealAfterPolls: 3
+        )
+
+        let result = ControlsViewBooleanParameterWriter.prepareView(
+            .editor,
+            in: fixture.window,
+            runtime: fixture.runtime
+        )
+
+        let refused: Bool
+        if case .refused(.viewStructureDidNotConfirm(.editor, _), restoration: _) = result {
+            refused = true
+        } else {
+            refused = false
+        }
+        let waitedOnTheDefault = fixture.windowStructureCensuses.value >= 40
+        #expect(refused)
+        #expect(waitedOnTheDefault)
     }
 
     @Test func menuThatNeverAppearsRefusesWithTheAppearanceDeadline() {
@@ -1277,6 +1322,7 @@ struct ControlsViewBooleanParameterWriterTests {
         let switcherActionElementIDs: MutableBox<[Int]>
         let menuItemActions: MutableBox<[String]>
         let menuCensusPolls: MutableBox<Int>
+        let windowStructureCensuses: MutableBox<Int>
         let runtime: AXHelpers.Runtime
     }
 
@@ -1331,6 +1377,7 @@ struct ControlsViewBooleanParameterWriterTests {
         let tableChildrenReadCount = MutableBox(0)
         let windowChildrenReadCount = MutableBox(0)
         let postPickWindowReadCount = MutableBox(0)
+        let windowStructureCensuses = MutableBox(0)
         let statusFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
         let invalidElementFailure = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
 
@@ -1454,6 +1501,9 @@ struct ControlsViewBooleanParameterWriterTests {
                 return nil
             },
             childrenResultHandler: { element in
+                if CFEqual(element, window) || CFEqual(element, refreshedWindow) {
+                    windowStructureCensuses.value += 1
+                }
                 if CFEqual(element, window),
                    let pending = pendingWindowChildren.value,
                    Date() >= pending.settlesAt {
@@ -1605,6 +1655,7 @@ struct ControlsViewBooleanParameterWriterTests {
             switcherActionElementIDs: switcherActionElementIDs,
             menuItemActions: menuItemActions,
             menuCensusPolls: menuCensusPolls,
+            windowStructureCensuses: windowStructureCensuses,
             runtime: runtime
         )
     }
