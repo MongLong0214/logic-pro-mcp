@@ -263,8 +263,8 @@ enum AXLocalePolicy {
     /// measured for this submenu, so callers must refuse rather than translate or guess one.
     static let exportMenuItem = LabelSet(
         canonical: "Export",
-        variants: ["내보내기"],
-        rationale: "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label."
+        variants: ["내보내기", "書き出す"],
+        rationale: "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export."
     )
 
     /// #369: File > Export > All Tracks as Audio Files… — the only measured leaf that reaches the
@@ -277,8 +277,8 @@ enum AXLocalePolicy {
     /// as an unmeasured all-tracks-audio-file label instead of falling back to keyword matching.
     static let allTracksAsAudioFilesMenuItem = LabelSet(
         canonical: "All Tracks as Audio Files…",
-        variants: ["모든 트랙을 오디오 파일로…"],
-        rationale: "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`."
+        variants: ["모든 트랙을 오디오 파일로…", "すべてのトラックをオーディオファイルとして…"],
+        rationale: "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…."
     )
 
     /// #369: controls inside the per-track stem-export panel. The panel's own
@@ -469,8 +469,8 @@ enum AXLocalePolicy {
     /// guess in a LabelSet is what this defect was.
     static let saveAsMenuItem = LabelSet(
         canonical: "Save As…",
-        variants: ["별도 저장…"],
-        rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as."
+        variants: ["별도 저장…", "別名で保存…"],
+        rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…."
     )
 
     /// #747: the Save panel's own window title, and the two "Organize my project as" radios inside
@@ -505,8 +505,8 @@ enum AXLocalePolicy {
     /// #519: File > Bounce.
     static let bounceMenuItem = LabelSet(
         canonical: "Bounce",
-        variants: ["바운스"],
-        rationale: "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path."
+        variants: ["바운스", "バウンス"],
+        rationale: "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce."
     )
 
     /// #519: the Bounce submenu's "Project or Section…" leaf. Both the curly-ellipsis (`…`) and
@@ -514,8 +514,8 @@ enum AXLocalePolicy {
     /// locales, so all four spellings are kept rather than assuming one glyph.
     static let projectOrSectionMenuItem = LabelSet(
         canonical: "Project or Section…",
-        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션..."],
-        rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds."
+        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션...", "プロジェクトまたは選択範囲…"],
+        rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…."
     )
 
     /// #519: File > Import.
@@ -816,8 +816,8 @@ enum AXLocalePolicy {
     /// Includes `bpm` because that locator explicitly accepts `desc == "bpm"`.
     static let tempoSliderLabel = LabelSet(
         canonical: "tempo",
-        variants: ["bpm", "템포"],
-        rationale: "Identifies the tempo slider; verbatim (lowercased) description match; read-only."
+        variants: ["bpm", "템포", "テンポ"],
+        rationale: "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider."
     )
 
     /// Tempo slider description for the read-only `extractTransportState` slider
@@ -833,8 +833,8 @@ enum AXLocalePolicy {
     /// KO variant; matched by description substring.
     static let horizontalZoomSlider = LabelSet(
         canonical: "Horizontal Zoom",
-        variants: ["가로 확대/축소", "가로 확대"],
-        rationale: "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match."
+        variants: ["가로 확대/축소", "가로 확대", "横方向にズーム"],
+        rationale: "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the arrange horizontal-zoom slider."
     )
 
     // --- Track-header read-only locators ---
@@ -852,8 +852,8 @@ enum AXLocalePolicy {
 
     static let trackMuteButton = LabelSet(
         canonical: "Mute",
-        variants: ["음소거"],
-        rationale: "Identifies the track Mute button by description substring; read-only state extraction."
+        variants: ["음소거", "ミュート"],
+        rationale: "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button."
     )
 
     static let trackSoloButton = LabelSet(
@@ -918,8 +918,8 @@ enum AXLocalePolicy {
     )
     static let automationModeOff = LabelSet(
         canonical: "off",
-        variants: ["끔"],
-        rationale: "Classifies an explicit track-header automation Off token; read-only classifier."
+        variants: ["끔", "オフ"],
+        rationale: "Classifies an explicit track-header automation Off token; read-only classifier. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector track outline's automation popup."
     )
 
     // --- Plugin Setting popup locator (read-only, `.contains`) ---
@@ -1100,25 +1100,25 @@ enum AXLocalePolicy {
     )
     static let sliderVolumeHint = LabelSet(
         canonical: "volume",
-        variants: ["fader", "볼륨"],
-        rationale: "Classifies a slider as a volume fader; read-only."
+        variants: ["fader", "볼륨", "ボリューム"],
+        rationale: "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider."
     )
     static let sliderPanHint = LabelSet(
         canonical: "pan",
-        variants: ["panning", "패닝", "밸런스"],
-        rationale: "Classifies a slider as a pan control; read-only."
+        variants: ["panning", "패닝", "밸런스", "パン"],
+        rationale: "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider."
     )
 
     /// Plugin-slot child control locators.
     static let pluginBypassControl = LabelSet(
         canonical: "bypass",
-        variants: ["바이패스"],
-        rationale: "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists)."
+        variants: ["바이패스", "バイパス"],
+        rationale: "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's bypass checkbox."
     )
     static let pluginOpenOrListControl = LabelSet(
         canonical: "open",
-        variants: ["열기", "list", "목록"],
-        rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
+        variants: ["열기", "list", "목록", "開く"],
+        rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button."
     )
 
     /// Controls/editor switching is deliberately keyed from AXDescription:
@@ -1274,8 +1274,8 @@ enum AXLocalePolicy {
     /// `패닝` (different syllables), so it has never been the variant doing the work.
     static let headerPanHint = LabelSet(
         canonical: "pan",
-        variants: ["팬", "밸런스"],
-        rationale: "Retired locator for the track-header pan slider; superseded by sliderPanHint."
+        variants: ["팬", "밸런스", "パン"],
+        rationale: "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider."
     )
 
     /// Track-header rail description (normalized exact match).
