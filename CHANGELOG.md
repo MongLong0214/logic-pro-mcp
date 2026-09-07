@@ -12,6 +12,79 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [3.16.0] — 2026-09-07
+
+215 commits and 51 pull requests since v3.15.0. Written caller-facing: test infrastructure, guard
+scripts, live harnesses, CI and roadmap work are excluded because a caller cannot observe them.
+Where a change stated a limit, the limit is carried into the entry rather than dropped.
+
+### Breaking
+
+- **`observed_track_type` no longer claims `audio` for every track.** It answers `unknown` when the
+  track header carries no type signal, which is every header: the Input Monitoring button present
+  on all of them names an audio track and a software instrument track in the same sentence, so the
+  classifier matched both everywhere and the first branch always won. Reading deeper was ruled out
+  by measurement — at depth 8 the headers share 135 tokens and every unique one is the track's own
+  name or a track-stack arrow. Consumers that switched on this field were switching on a constant.
+  `requested_track_type` is unaffected and really is per-operation.
+- **Stem export refuses a completion it cannot prove.** `logic_project` per-track audio export
+  drives Logic's own export and reports failure rather than success when the files it claims cannot
+  be verified.
+
+### Added
+
+- **Per-track audio (stem) export**, driven through Logic's export menu and working on a localized
+  Logic rather than only an English one.
+- **Signal-flow graph** (`logic://tracks` routing): input and output slots are read and published,
+  without inventing vertices the surface does not name. Sends still name no destination in either
+  language — that is a property of the AX surface, and the graph says so rather than guessing.
+- **Verified control of Controls-view boolean parameters.** `set_param_verified` reaches the
+  checkbox path with an independent readback. Sliders and popups are measured NOT actuable on this
+  surface — an `AXValue` write reports success and the slider does not move, and popups expose only
+  the current choice — so they refuse rather than reporting a write that did not land.
+- **A Controls-view capability manifest**, where every unreadable read refuses instead of
+  answering.
+
+### Fixed
+
+- **`region.move_to_playhead` verified the wrong region.** It snapshotted and re-read the FIRST
+  selected region while Logic's Move to Playhead acts on the selection, so two selected regions
+  produced an envelope naming one.
+- **Region selection picked the last region by an unmeasured route.** It now uses an actuator that
+  was measured to work.
+- **`tracks.resolve_path` answered a warm-cache miss silently.** A miss now says why, and the
+  Library-panel refusal is classified as the environmental prerequisite it is rather than a
+  shortfall.
+- **Duplicate virtual MIDI endpoints.** A second server instance declines rather than publishing a
+  twin of a port that already exists; the degraded instance answers State C naming the contended
+  port, and an endpoint this process created can never be classified foreign to it. Reported
+  externally (#736); the reporter's remaining checklist item — that the surviving owner reports
+  `mcu.connected: true` — is still unconfirmed and needs their host.
+- **An inbound MIDI destination nothing reads is no longer published.**
+- **`save_as` failed on a Korean Logic.** Three further reads that failed on a Japanese Logic were
+  each fixed for their own reason rather than by one blanket change.
+
+### Localization
+
+Fourteen Japanese label forms landed, **read out of aligned censuses of the same walk rather than
+translated** — over half of the first eighteen candidates turned out to be the wrong element, so
+only vetted forms shipped. Five carry no provenance because no ja-JP record covers the arrange
+window, which is recorded with the measurement rather than papered over. The Japanese unmeasured
+ceiling moved from 122 label sets to 113.
+
+### Honestly deferred
+
+- The Controls-view **write** surface is measured shut for sliders and popups; what that ADR
+  promises needs a decision rather than more effort against the same surface.
+- ADR-001's release gate remains opt-in. Its four production-readiness debts are one fact — seven
+  gate steps sit behind a repository variable, and a step that can be skipped does not block — now
+  tracked rather than asserted by CI and written down nowhere.
+- Read-only qualification coverage is 21 of 23 operations driven live; the two that are not are
+  `tracks.list_library` (a pinned semantic mismatch) and `tracks.scan_plugin_presets` (needs a
+  plug-in window).
+
+---
+
 ## [3.15.0] — 2026-08-31
 
 ### Changed — BREAKING
