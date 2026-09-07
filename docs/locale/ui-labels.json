@@ -18,9 +18,10 @@
   "allTracksAsAudioFilesMenuItem": {
    "canonical": "All Tracks as Audio Files…",
    "variants": [
-    "모든 트랙을 오디오 파일로…"
+    "모든 트랙을 오디오 파일로…",
+    "すべてのトラックをオーディオファイルとして…"
    ],
-   "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`.",
+   "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files….",
    "provenance": {
     "모든 트랙을 오디오 파일로…": {
      "locale": "ko-KR",
@@ -28,6 +29,16 @@
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "observed": "모든 트랙을 오디오 파일로…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "すべてのトラックをオーディオファイルとして…": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "すべてのトラックをオーディオファイルとして…",
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
@@ -40,7 +51,7 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -141,9 +152,13 @@
   "automationModeOff": {
    "canonical": "off",
    "variants": [
-    "끔"
+    "끔",
+    "オフ"
    ],
-   "rationale": "Classifies an explicit track-header automation Off token; read-only classifier.",
+   "rationale": "Classifies an explicit track-header automation Off token; read-only classifier. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector track outline's automation popup.",
+   "roles": [
+    "AXPopUpButton"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -232,9 +247,10 @@
   "bounceMenuItem": {
    "canonical": "Bounce",
    "variants": [
-    "바운스"
+    "바운스",
+    "バウンス"
    ],
-   "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path.",
+   "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce.",
    "provenance": {
     "바운스": {
      "locale": "ko-KR",
@@ -242,6 +258,16 @@
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "observed": "바운스",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "バウンス": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "バウンス",
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
@@ -254,7 +280,7 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -586,9 +612,10 @@
   "exportMenuItem": {
    "canonical": "Export",
    "variants": [
-    "내보내기"
+    "내보내기",
+    "書き出す"
    ],
-   "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label.",
+   "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export.",
    "provenance": {
     "내보내기": {
      "locale": "ko-KR",
@@ -596,6 +623,16 @@
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "observed": "내보내기",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "書き出す": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "書き出す",
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
@@ -608,7 +645,7 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -782,9 +819,13 @@
    "canonical": "pan",
    "variants": [
     "팬",
-    "밸런스"
+    "밸런스",
+    "パン"
    ],
-   "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint.",
+   "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
+   "roles": [
+    "AXSlider"
+   ],
    "retired": {
     "reason": "Superseded by sliderPanHint. The track-header pan control this addressed is no longer read through this LabelSet, so no measurement in any locale can close it — left as `unmeasured` it was permanent debt that misreported the size of the gap.",
     "since": "2026-09-05"
@@ -846,9 +887,13 @@
    "canonical": "Horizontal Zoom",
    "variants": [
     "가로 확대/축소",
-    "가로 확대"
+    "가로 확대",
+    "横方向にズーム"
    ],
-   "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match.",
+   "rationale": "Locates the arrange horizontal-zoom AXSlider for verified set_zoom writes; description substring match. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the arrange horizontal-zoom slider.",
+   "roles": [
+    "AXSlider"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -1022,15 +1067,15 @@
    "roles": [
     "AXMenuItem"
    ],
+   "evidence_scope": {
+    "path_contains": "AXWindow[",
+    "reason": "This is the Delete in Logic's Marker List WINDOW. The application menu bar carries Edit > Delete with the same AXMenuItem role and the same string in all three locales, so `roles` cannot tell them apart. A provenance block citing the arrange-menus census was retracted on 2026-09-05 for exactly that, and the proposer re-added it verbatim on 2026-09-06 while attaching evidence for two unrelated labels (#793). Limit: this fragment says only that the element is inside a window, which is as much as a locale-independent path can say — window titles are localized. It refuses the menu bar, which is where the false match came from; it would not refuse a same-named item in another window."
+   },
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "evidence_scope": {
-    "path_contains": "AXWindow[",
-    "reason": "This is the Delete in Logic's Marker List WINDOW. The application menu bar carries Edit > Delete with the same AXMenuItem role and the same string in all three locales, so `roles` cannot tell them apart. A provenance block citing the arrange-menus census was retracted on 2026-09-05 for exactly that, and the proposer re-added it verbatim on 2026-09-06 while attaching evidence for two unrelated labels (#793). Limit: this fragment says only that the element is inside a window, which is as much as a locale-independent path can say — window titles are localized. It refuses the menu bar, which is where the false match came from; it would not refuse a same-named item in another window."
    }
   },
   "markerListEditMenuButton": {
@@ -1469,14 +1514,31 @@
   "pluginBypassControl": {
    "canonical": "bypass",
    "variants": [
-    "바이패스"
+    "바이패스",
+    "バイパス"
    ],
-   "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists).",
+   "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's bypass checkbox.",
+   "provenance": {
+    "バイパス": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "すべてのコントロールサーフェスをバイパス",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "contains"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    }
   },
   "pluginOpenOrListControl": {
@@ -1484,14 +1546,31 @@
    "variants": [
     "열기",
     "list",
-    "목록"
+    "목록",
+    "開く"
    ],
-   "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists).",
+   "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button.",
+   "provenance": {
+    "開く": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "開く…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "contains"
+    }
+   },
+   "roles": [
+    "AXButton",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    }
   },
   "pluginWindowControlsViewMenuItem": {
@@ -1516,15 +1595,15 @@
    "roles": [
     "AXMenuItem"
    ],
+   "evidence_scope": {
+    "path_contains": "AXWindow[",
+    "reason": "This is the Editor entry in a plug-in window's OWN View menu, measured in Compressor on 2026-09-02. The application's View menu carries `Editor` / `편집기` on the same role, and the ko-KR and en-US menus censuses both match it there. Same limit as markerListDeleteMenuItem: the fragment refuses the menu bar, not every other window — Logic titles a plug-in window by its track, so there is no stable locale-independent fragment that names the plug-in window itself."
+   },
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "evidence_scope": {
-    "path_contains": "AXWindow[",
-    "reason": "This is the Editor entry in a plug-in window's OWN View menu, measured in Compressor on 2026-09-02. The application's View menu carries `Editor` / `편집기` on the same role, and the ko-KR and en-US menus censuses both match it there. Same limit as markerListDeleteMenuItem: the fragment refuses the menu bar, not every other window — Logic titles a plug-in window by its track, so there is no stable locale-independent fragment that names the plug-in window itself."
    }
   },
   "pluginWindowSmartControlsControl": {
@@ -1556,9 +1635,10 @@
    "variants": [
     "프로젝트 또는 섹션…",
     "Project or Section...",
-    "프로젝트 또는 섹션..."
+    "프로젝트 또는 섹션...",
+    "プロジェクトまたは選択範囲…"
    ],
-   "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds.",
+   "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section….",
    "provenance": {
     "프로젝트 또는 섹션…": {
      "locale": "ko-KR",
@@ -1566,6 +1646,16 @@
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "observed": "프로젝트 또는 섹션…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "プロジェクトまたは選択範囲…": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "プロジェクトまたは選択範囲…",
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
@@ -1578,7 +1668,7 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1661,9 +1751,10 @@
   "saveAsMenuItem": {
    "canonical": "Save As…",
    "variants": [
-    "별도 저장…"
+    "별도 저장…",
+    "別名で保存…"
    ],
-   "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as.",
+   "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As….",
    "provenance": {
     "별도 저장…": {
      "locale": "ko-KR",
@@ -1671,6 +1762,16 @@
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "observed": "별도 저장…",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    },
+    "別名で保存…": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "別名で保存…",
      "role": "AXMenuItem",
      "attribute": "title",
      "match": "exact"
@@ -1683,7 +1784,7 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1875,14 +1976,31 @@
    "variants": [
     "panning",
     "패닝",
-    "밸런스"
+    "밸런스",
+    "パン"
    ],
-   "rationale": "Classifies a slider as a pan control; read-only.",
+   "rationale": "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
+   "provenance": {
+    "パン": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "同じパンナータイプのチャンネルストリップを選択",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "contains"
+    }
+   },
+   "roles": [
+    "AXMenuItem",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    }
   },
   "sliderSendHint": {
@@ -1902,14 +2020,31 @@
    "canonical": "volume",
    "variants": [
     "fader",
-    "볼륨"
+    "볼륨",
+    "ボリューム"
    ],
-   "rationale": "Classifies a slider as a volume fader; read-only.",
+   "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
+   "provenance": {
+    "ボリューム": {
+     "locale": "ja-JP",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "observed": "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "contains"
+    }
+   },
+   "roles": [
+    "AXMenuItem",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "measured"
    }
   },
   "sliderZoomHint": {
@@ -2217,9 +2352,13 @@
    "canonical": "tempo",
    "variants": [
     "bpm",
-    "템포"
+    "템포",
+    "テンポ"
    ],
-   "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only.",
+   "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider.",
+   "roles": [
+    "AXSlider"
+   ],
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
@@ -2374,9 +2513,13 @@
   "trackMuteButton": {
    "canonical": "Mute",
    "variants": [
-    "음소거"
+    "음소거",
+    "ミュート"
    ],
-   "rationale": "Identifies the track Mute button by description substring; read-only state extraction.",
+   "rationale": "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button.",
+   "roles": [
+    "AXButton"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
