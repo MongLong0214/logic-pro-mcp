@@ -1,0 +1,106 @@
+{
+  "id": "2026-09-07-an-opt-in-gate-is-not-a-gate",
+  "date": "2026-09-07",
+  "schema": 2,
+  "subject": "why four of the six open LPMCP-PRD-001 debts are open",
+  "question": "Which condition makes `pinnedTrustedVerifierStep` return nil, given that every step name and job shape it demands is already in release.yml?",
+  "verdict": "works",
+  "issues": [
+    815,
+    816,
+    373,
+    284
+  ],
+  "surface": "system.accessibility",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic was NOT driven. Every reading is of this repository — the contract evaluator's own findings, release.yml, and the checker's source. The host block is generated because rule 5 forbids typing one, not because a host is what this is true of."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-opt-in-gate.sh",
+    "expected": "REVERIFY PASS: seven steps carry the ADR001_QUALIFICATION_ENFORCED guard, the step R-REL calls missing is in the file, blockingStep still refuses an if-guarded step, and the open debt set is unchanged",
+    "cost": "offline, no Logic; one build"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Qualification/ProductionReadinessContracts.swift",
+    ".github/workflows/release.yml"
+  ],
+  "evidence": [],
+  "method": "Print the evaluator's findings rather than reading the checker and guessing, then locate the single condition each finding shares. The step names and job shape were checked FIRST and found present, which is what made the finer condition the only remaining candidate.",
+  "observations": [
+    {
+      "what": "the evaluator's own findings on this tree",
+      "findings": [
+        "R-REL: release.yml lacks step 'Enforce independent exact-artifact qualification' before publication",
+        "R-SEM: semantic coverage missing for 113/113 operations",
+        "R-MATRIX: release path does not bind managed-fixture matrix (2 axes)",
+        "R-MUT: no mutation/readback/restore/compensation evidence requirement in release path",
+        "R-PROV: release path does not enforce trusted independent provenance verification",
+        "R-PUB: release assets are owner-replaceable; no immutable/transparency-bound evidence publication exists"
+      ]
+    },
+    {
+      "what": "counts the evaluator reports",
+      "registered": 113,
+      "semantic_validators": 74,
+      "required_axes": 2,
+      "note": "74 registered validators credit ZERO operations: since #409 only a live qualification case with status .passed or a governed release-visible waiver counts, so inventory is not coverage"
+    },
+    {
+      "what": "the step R-REL says is absent",
+      "present_in_file": true,
+      "line": 197,
+      "name": "Enforce independent exact-artifact qualification"
+    },
+    {
+      "what": "why a present step reads as absent",
+      "condition": "ProductionReadinessContracts.swift blockingStep",
+      "quoted": "guard stepScalar(\"continue-on-error\", in: body) == nil, stepScalar(\"if\", in: body) == nil, stepScalar(\"shell\", in: body) == nil",
+      "consequence": "a step carrying an `if` is not a blocking step, so the ordered chain never resolves and four debts stay open"
+    },
+    {
+      "what": "steps carrying that if",
+      "count": 7,
+      "condition": "if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}",
+      "names": [
+        "Checkout pinned trusted verifier",
+        "Build pinned trusted verifier",
+        "Enforce independent exact-artifact qualification",
+        "trusted-provenance-verify",
+        "Checkout pinned trusted verifier for publish",
+        "Build pinned trusted verifier for publish",
+        "Reverify downloaded release artifact"
+      ]
+    },
+    {
+      "what": "why the gate was turned off, quoted from release.yml",
+      "date_in_comment": "2026-07-21",
+      "by": "owner decision",
+      "quoted": "the full same-artifact live matrix plus per-operation semantic coverage (#373) that would produce a passing signed evidence bundle does not exist yet (Scripts/live-qualification-runner.py can only emit a not_qualified skeleton)"
+    },
+    {
+      "what": "R-AUTH appeared in this probe and is NOT a real open debt",
+      "cause": "the probe passed expectedAuthorityBaseSHA: \"\" while the repository's own test passes a pinned SHA",
+      "note": "an artifact of the instrument, recorded so a later reader does not count seven open debts where there are six"
+    },
+    {
+      "what": "the diagnosis as a checked-in test rather than a note",
+      "suite": "Issue815OptInGateTests",
+      "tests": 3,
+      "note": "it flips when the gate is made unconditional, so the diagnosis and the fix cannot drift apart"
+    }
+  ],
+  "conclusion": "Four debts are one fact: the ADR-001 gate is opt-in, and `blockingStep` refuses a step that can be skipped. Seven steps carry the same `vars.ADR001_QUALIFICATION_ENFORCED` condition, so R-REL, R-MATRIX, R-MUT and R-PROV all resolve to nil together and would all close together. The dependency runs the opposite way from the issue order: the gate cannot be made unconditional until a passing evidence bundle exists to verify, that bundle needs per-operation semantic coverage (#373, R-SEM at 113/113 missing), and publishing it immutably is #816. So #373 is the first domino of the ADR-001 chain, not #815.",
+  "limits": [
+    "This says which condition fails, not that removing the `if` is sufficient. The chain also requires the step ORDER and exact `run` script lines to match, and those were not re-checked after the `if` was identified.",
+    "It says nothing about whether the release would PASS with the gate on. Three secrets and a hosted evidence bundle are named in the workflow comment and none was verified to exist.",
+    "R-SEM's 113/113 is the evaluator's count under the post-#409 rule. Whether any operation could be credited today by a live qualification run was not measured here.",
+    "Repository-only. No Logic was driven and no live qualification was attempted."
+  ],
+  "supersedes": null
+}
