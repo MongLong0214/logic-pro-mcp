@@ -531,6 +531,30 @@ def _png(path, colour):
 
 tmp = tempfile.mkdtemp()
 ev = E.Evidence(head="0" * 40, root=tmp, name="contract-drive")
+def _written_records():
+    """The records a real `Evidence.write()` produces, with no Logic and no evidence root of its own."""
+    root = _tempfile_for_modal.mkdtemp()
+    saved_repo, saved_bin = E.REPO, E.BIN
+    E.REPO, E.BIN = root, os.path.join(root, "nonexistent-binary")
+    try:
+        ev = E.Evidence("0" * 40, root)
+        ev.records.append({"kind": "check", "passed": True, "blocking_modal": None})
+        # `write()` returns the SUMMARY, not the document — so read the file it wrote. A first cut
+        # of this case asserted against the return value and passed while the writer recorded
+        # nothing, which is the shape it exists to refuse.
+        ev.write()
+        written = [os.path.join(dp, f)
+                   for dp, _, fs in os.walk(root) for f in fs if f.endswith(".evidence.json")]
+        if not written:
+            return []
+        import json as _j
+        return _j.load(open(written[0], encoding="utf-8")).get("records") or []
+    except Exception:                              # noqa: BLE001 - reported as an empty list below
+        return []
+    finally:
+        E.REPO, E.BIN = saved_repo, saved_bin
+
+
 def _touch_newer(root, binary):
     """The same binary, stamped after every source — the control for the case above."""
     latest = max(os.path.getmtime(os.path.join(root, f"Sources/{n}"))
@@ -670,6 +694,29 @@ _LOCK = [
     ("a session that could not be read is unknown, not unlocked",
      E.screen_is_locked({}) is None),
 ]
+# THE SOURCE of the value, not just its effect. `_SESSION_LOCKED` is False on any machine that can
+# read its login state, so a `summarize` that consults the PROCESS and one that reads the RECORD
+# agree there — and the first cut, which read the process, passed every local test and turned CI red
+# the moment it ran somewhere headless. These distinguish the two by recording a state the machine
+# does not have.
+_RECORDED = [
+    ("summarize reads the lock state the RUN recorded, not this process's",
+     E.summarize([{"kind": "environment", "screen_locked": True}])["screen_locked"] is True),
+    ("...and reports unlocked when that is what was recorded",
+     E.summarize([{"kind": "environment", "screen_locked": False}])["screen_locked"] is False),
+    ("a document that recorded nothing is unknown, not unlocked",
+     E.summarize([{"kind": "check", "passed": True}])["screen_locked"] is None),
+    ("a non-boolean in the record is unknown too",
+     E.summarize([{"kind": "environment", "screen_locked": "no"}])["screen_locked"] is None),
+    ("the LAST environment record wins, so a run that re-recorded is judged by its final reading",
+     E.summarize([{"kind": "environment", "screen_locked": False},
+                  {"kind": "environment", "screen_locked": True}])["screen_locked"] is True),
+    # And a document built by the writer carries one, so a real run is judgeable elsewhere.
+    ("the writer puts the environment into the document it writes",
+     any(r.get("kind") == "environment" and "screen_locked" in r
+         for r in _written_records())),
+]
+shapes.extend(_RECORDED)
 shapes.extend(_LOCK)
 
 # #794: the artifact is compared to its sources rather than assumed to match the head.

@@ -1340,6 +1340,12 @@ class Evidence:
     # -- output -------------------------------------------------------------
 
     def write(self):
+        # The environment this run happened in, written into the document so it travels with it.
+        # Recorded at write() from the value captured at import, which is before the harness did
+        # anything — a screen that locks mid-run is caught, and a document read back on another
+        # machine is judged by what its own run saw.
+        if not any((r or {}).get("kind") == "environment" for r in self.records):
+            self.records.append({"kind": "environment", "screen_locked": _SESSION_LOCKED})
         built_from, dirty = _worktree_head(REPO)
         stale = _sources_newer_than_binary(REPO, BIN)
         if stale:
@@ -1430,6 +1436,19 @@ class Evidence:
         return summarize(self.records, out)
 
 
+def _recorded_lock_state(recs):
+    """What the RUN observed about the login state, out of its own records.
+
+    Absent is `None` — a document written before this was recorded says nothing about it, and
+    saying nothing is not the same as saying unlocked.
+    """
+    for rec in reversed(list(recs or [])):
+        if isinstance(rec, dict) and rec.get("kind") == "environment" and "screen_locked" in rec:
+            value = rec["screen_locked"]
+            return value if isinstance(value, bool) else None
+    return None
+
+
 def summarize(recs, out=None):
     """The counters `is_clean` reads, from a list of records.
 
@@ -1468,12 +1487,19 @@ def summarize(recs, out=None):
         "checks_with_blocking_modal_unknown":
             sum(1 for c in checks if _modal_snapshot_is_unknown(c.get("blocking_modal"))),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
-        # THE SESSION, asked once per document rather than per check. A locked screen does not make
-        # the accessibility API fail — it makes the three paths this repository reads disagree, and
-        # none of them says "locked" (#797). `None` is not False: a session state that could not be
-        # read is `cannot_tell`, the same distinction the modal snapshot already makes, and
-        # `is_clean` refuses both.
-        "screen_locked": _SESSION_LOCKED,
+        # FROM THE RECORDS, not from this process. A locked screen does not make the accessibility
+        # API fail — it makes the three paths this repository reads disagree, and none of them says
+        # "locked" (#797). `None` is not False: a login state that could not be read is
+        # `cannot_tell`, the same distinction the modal snapshot already makes, and `is_clean`
+        # refuses both.
+        #
+        # The first cut read a module global captured at import, which made `is_clean` a fact about
+        # the machine EVALUATING a document rather than about the run that produced it. CI caught
+        # it immediately: a headless runner cannot read the login state at all, so every synthetic
+        # document in `test_harness_evidence_coverage.py` became `cannot_tell` and four cases that
+        # had nothing to do with locking went red. A document has to carry its own environment, or
+        # it cannot be judged anywhere but where it was written.
+        "screen_locked": _recorded_lock_state(recs),
         # The LAST declaration wins, and an absent or malformed one reads as None — which
         # `is_clean` treats as the UI surface, the stricter of the two. A document that never
         # declared itself is judged the way every document was judged before #754.

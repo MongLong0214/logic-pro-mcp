@@ -46,6 +46,11 @@ CLEAN = {"records": [
     {"kind": "visual", "passed": True, "subject": "Tracks header", "region": [0, 0, 1, 1]},
     {"kind": "recording"},
     {"kind": "operation"},
+    # The run's environment, which a real document carries (#797). Stated here rather than left
+    # absent because absent means `cannot_tell`, and a fixture that means "a clean run" has to say
+    # what a clean run saw. Reading it from the machine instead would make this file's verdict a
+    # statement about the machine — which is how the first cut of that change turned CI red.
+    {"kind": "environment", "screen_locked": False},
 ]}
 # A visual that FAILED, which `is_clean` has always refused. Deliberately not a subject-less one:
 # that clause is newer, and a case here that depends on it would make this file's verdict a
@@ -280,6 +285,9 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evr
             {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
             {"kind": "recording", "tag": "r"},
             {"kind": "operation", "tag": "o"},
+            # See the CLEAN fixture above: a document states the environment its run saw, because
+            # absent means `cannot_tell` and this one is meant to be judgeable anywhere.
+            {"kind": "environment", "screen_locked": False},
         ]}
         with open(os.path.join(headdir, f"{stem}.evidence.json"), "w") as fh:
             json.dump(doc, fh)
