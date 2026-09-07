@@ -1,0 +1,71 @@
+{
+ "id": "2026-09-07-the-qualification-table-is-a-one-language-table",
+ "date": "2026-09-07",
+ "schema": 2,
+ "subject": "the live qualification gate's known-failure set, under a UI language change",
+ "question": "Does `knownLiveGateFailuresMatchExactly` hold when Logic's UI language is not English?",
+ "verdict": "wall",
+ "issues": [
+  803,
+  774
+ ],
+ "surface": "system.accessibility",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)",
+  "note": "one host, one binary per row; the locale column below is the variable and the host block records the language the table was WRITTEN against"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Set the language, relaunch Logic on the fixture, then run the test from Tests/LogicProMCPTests/QualificationRunnerTests.swift: `defaults write com.apple.logic10 AppleLanguages -array ja` (then `-array en`), `open -a 'Logic Pro' ~/Music/Logic/lpm-locale-campaign.logicx`, `swift build -c release && swift test --no-parallel --filter realReleaseBinaryExecutesEveryOperationWithIndependentReadback`. The relaunch is why this is manual: the language only takes on a fresh process, and quitting Logic raises a save sheet that a script must answer structurally rather than by label.",
+  "expected": "the ja-JP run fails at QualificationRunnerTests.swift:1598 on knownLiveGateFailuresMatchExactly; the en-US run passes"
+ },
+ "depends": [
+  "Tests/LogicProMCPTests/QualificationRunnerTests.swift",
+  "Sources/LogicProMCP/Qualification/SemanticOracleTable.swift"
+ ],
+ "evidence": null,
+ "method": "Drive the release binary against the running Logic with the repository's own qualification test, changing only Logic's UI language between runs. The branch under suspicion is included as a third row so that its failure can be compared with the same failure on a tree that does not contain it.",
+ "observations": [
+  {
+   "what": "origin/main, Logic in ja-JP",
+   "result": "fail",
+   "at": "QualificationRunnerTests.swift:1598",
+   "expectation": "knownLiveGateFailuresMatchExactly"
+  },
+  {
+   "what": "origin/main, Logic in en-US",
+   "result": "pass",
+   "seconds": 45.729
+  },
+  {
+   "what": "fix/774 (region.move_to_playhead only), Logic in ja-JP",
+   "result": "fail",
+   "at": "QualificationRunnerTests.swift:1598",
+   "expectation": "knownLiveGateFailuresMatchExactly",
+   "note": "the same failure with none of this branch's code present on the row above it"
+  },
+  {
+   "what": "entries in knownLiveGateFailures",
+   "count": 1,
+   "only": "tracks.list_library",
+   "note": "its own comment records being removed on the strength of a run where the Library panel happened to be closed, and put back by this same exact-match assertion"
+  },
+  {
+   "what": "what the assertion reports on failure",
+   "shape": "a boolean",
+   "consequence": "the observed set is not printed beside the expected one, so which operation moved is not readable from the run"
+  }
+ ],
+ "conclusion": "The known-failure set holds in English and not in Japanese: the same commit and the same binary fail at QualificationRunnerTests.swift:1598 in ja-JP and pass in 45.729 seconds in en-US. A branch touching one operation failed the same assertion and was cleared by running the unmodified tree in the same language, so the language is sufficient to produce the failure on its own. Because the assertion reports only a boolean, this establishes THAT the set differs by language without establishing HOW.",
+ "limits": [
+  "Which operation's failure set moves is not measured. The assertion yields a boolean and does not print the observed set beside the expected one, so learning that would need a separate instrumented run.",
+  "Whether the Library panel's open/closed state is a second axis was not varied here. `tracks.list_library`'s own comment says it is one for that operation, so language is established as SUFFICIENT and not as the only cause.",
+  "Two languages, one host, one Logic build. Nothing here says how the set behaves in ko-KR or on another machine.",
+  "The runs were taken minutes apart on a machine also running builds. A timing-sensitive operation could in principle differ between them for reasons other than the language; the three rows are consistent with the language explanation and do not exclude that."
+ ],
+ "supersedes": null
+}

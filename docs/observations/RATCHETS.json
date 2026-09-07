@@ -633,7 +633,8 @@
    "2026-09-05-asking-logic-to-enumerate-its-windows-while-it-opens-one-crashed-it",
    "2026-09-05-logic-123-dropped-the-show-hide-verb-and-an-operation-died-with-it",
    "2026-09-05-the-qualification-live-gate-gains-a-failure-in-japanese",
-   "2026-09-07-a-locked-screen-is-three-different-answers"
+   "2026-09-07-a-locked-screen-is-three-different-answers",
+   "2026-09-07-the-qualification-table-is-a-one-language-table"
   ],
   "surfaces_without_records": [
    "en-US→editor.audio_track",
@@ -671,9 +672,9 @@
  "raised": {
   "manual_reverify": {
    "date": "2026-09-07",
-   "reason": "The record measures what the accessibility API reports while the login session is LOCKED. A script can lock a screen; it cannot unlock one, and it cannot be running unattended on the other side of a lock it created without holding a credential this repository must never hold. So the reverify is a person locking the screen and taking six readings, and calling it a script would be a command nobody can run.",
+   "reason": "The record measures a test whose outcome depends on Logic's UI LANGUAGE, and the language only takes on a fresh process. So reverifying means quitting Logic, which raises a save sheet, relaunching on the fixture, and doing it twice. A script can do all of that — `locale-campaign.sh` does — but that script also censuses and files records, and pointing a reverify at it would make re-checking this claim write six new files. The honest form is a person following the four commands the record lists.",
    "members": [
-    "2026-09-07-a-locked-screen-is-three-different-answers"
+    "2026-09-07-the-qualification-table-is-a-one-language-table"
    ]
   },
   "undocumented_variants": {
