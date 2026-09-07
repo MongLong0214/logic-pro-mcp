@@ -47,6 +47,23 @@ jobs:
         # reporting clean on a truncated issue list or a table it could not parse.
         run: bash Scripts/test-roadmap-table-guard.sh
 
+      - name: Self-test the ADR index guard (#815)
+        # Offline, fixtures only, except its last case which runs the real guard against the real
+        # tree — hence the token below rather than in this step.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 Scripts/test-adr-index-guard.py
+
+      - name: ADR index matches GitHub (#815)
+        # The sibling of the roadmap check and here for the same reason: it asks GitHub for issue
+        # state, so it needs the token this job has and `run-repo-guards.py` deliberately does not.
+        # On 2026-09-07 the index called eight ADRs `In Implementation` whose issues were CLOSED,
+        # and nothing noticed, because the drift guard beside it had never been pointed at this
+        # file. It reports CANNOT DETERMINE (exit 2) rather than passing when it cannot see.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 Scripts/adr-index-matches-github.py
+
       - name: Formula sha256 matches the release its version names (#775)
         # Same family as the check below — "does the repository agree with what GitHub actually
         # says" — so it lives in the same job: one ubuntu runner, one small download, `contents:

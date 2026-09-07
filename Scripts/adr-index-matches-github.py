@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The ADR index may not call an ADR unfinished after its issue closed.
 
-Discovered automatically by `run-repo-guards.py` (top-level `Scripts/check-*.py`), so it runs in
-both CI jobs that gate a merge.
+NOT discovered by `run-repo-guards.py`, and deliberately not named `check-*.py`. That runner's
+contract is plain Python needing neither Xcode nor a network, and this asks GitHub for issue state
+— the same reason `roadmap-table-matches-github.py` sits outside it. It runs in the `roadmap` CI
+job, which is the one job holding a token, beside the check it is the sibling of.
 
 THE FAILURE THIS REFUSES, eight rows at once. On 2026-09-07 `docs/adr/README.md` marked ADR-002,
 -003, -004, -005, -006, -007, -012 and -013 `In Implementation` while every one of those issues was

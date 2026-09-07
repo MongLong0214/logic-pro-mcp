@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove `Scripts/check-adr-index-matches-github.py` can fail, and on the right things.
+"""Prove `Scripts/adr-index-matches-github.py` can fail, and on the right things.
 
 The case that carries the rule is the first: the exact eight-row shape the index was in on
 2026-09-07 — `In Implementation` against a CLOSED issue — must be caught. The second-most
@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location(
-    "adr_index", HERE / "check-adr-index-matches-github.py"
+    "adr_index", HERE / "adr-index-matches-github.py"
 )
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
@@ -81,7 +81,7 @@ def main():
          states == {} and error and "did not return" in error, (states, error))
 
     # The real tree, through the real gh.
-    proc = subprocess.run([sys.executable, str(HERE / "check-adr-index-matches-github.py")],
+    proc = subprocess.run([sys.executable, str(HERE / "adr-index-matches-github.py")],
                           capture_output=True, text=True)
     case("the ADR index is honest on this tree",
          proc.returncode == 0, (proc.stdout + proc.stderr).strip()[:300])
