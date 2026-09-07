@@ -107,6 +107,16 @@ enum ProductionReadinessContractEvaluator {
         return lines[startIndex..<endIndex].joined(separator: "\n")
     }
 
+    /// Whether `blockingStep` recognises a named step — the one bit of it #815's diagnosis needs.
+    ///
+    /// The tuple `blockingStep` returns is line bookkeeping for the ordering chain and stays
+    /// private; what a reader of that issue has to be able to check is the RULE, that a step
+    /// carrying an `if` does not block. Exposing the verdict rather than the internals keeps the
+    /// diagnosis testable without turning the checker's shape into API.
+    static func blockingStepIsRecognised(named name: String, in job: String) -> Bool {
+        blockingStep(named: name, in: job) != nil
+    }
+
     private static func blockingStep(
         named name: String,
         in job: String
