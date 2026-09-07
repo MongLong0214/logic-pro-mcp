@@ -1547,6 +1547,68 @@ struct QualificationRunnerTests {
         #expect(rejectsChangedReason)
     }
 
+    /// #803. The exact-match assertion above reported a boolean, so three red runs on three
+    /// different trees said the same unreadable thing. These two helpers are what a red run now
+    /// prints, and they are proved here because a diagnostic nobody tests is a diagnostic that
+    /// prints the wrong thing exactly when it is needed.
+    @Test func liveGateFailureDescriptionNamesEachOperationAndItsReason() {
+        let described = Self.describe([
+            .init(operationID: "tracks.list_library", failureReason: "semantic readback mismatch"),
+            .init(operationID: "marker.list", failureReason: "no response"),
+        ])
+        let namesBothOperations = described.contains("tracks.list_library")
+            && described.contains("marker.list")
+        let carriesBothReasons = described.contains("semantic readback mismatch")
+            && described.contains("no response")
+        let oneLineEach = described.split(separator: "\n").count == 2
+
+        #expect(namesBothOperations)
+        #expect(carriesBothReasons)
+        #expect(oneLineEach)
+    }
+
+    @Test func liveGateFailureDescriptionSaysNoneRatherThanNothing() {
+        let described = Self.describe([])
+        let saysNone = described.contains("none")
+
+        #expect(saysNone)
+    }
+
+    /// The language is read from Logic's own `AppleLanguages`, not from the host locale. This
+    /// machine ran `ko-KR` throughout the campaign while Logic was switched between `en` and
+    /// `ja`, so a reading taken from the host would have named the wrong condition on every run.
+    ///
+    /// The first shape of this test wrote into a throwaway `UserDefaults(suiteName:)` and read it
+    /// back, and `absentIsUnset` failed: a suite's search list includes `NSGlobalDomain`, where
+    /// `AppleLanguages` actually lives, so removing the key from the suite did not make the read
+    /// empty — it made it fall through and answer `ko-KR`. That is the exact confusion the helper
+    /// exists to prevent, committed inside the helper. Taking a DOMAIN DICTIONARY instead of a
+    /// defaults object removes the fall-through by construction rather than by hoping.
+    @Test func logicUILanguageIsReadFromLogicsOwnDefaultsNotTheHostLocale() {
+        let readsTheFirstEntry =
+            Self.logicUILanguage(domain: ["AppleLanguages": ["ja", "en"]]) == "ja"
+        let emptyArrayIsUnset =
+            Self.logicUILanguage(domain: ["AppleLanguages": [String]()]).contains("unset")
+        // Logic's domain exists but has never carried a language: the answer is "unset", NOT the
+        // machine's `ko-KR`, and there is no search list here that could supply one.
+        let absentKeyIsUnset =
+            Self.logicUILanguage(domain: ["SomethingElse": 1]).contains("unset")
+        let noDomainIsUnset = Self.logicUILanguage(domain: nil).contains("unset")
+        // A value of the wrong shape is not a language. Logic writes an array; anything else is
+        // read as "we do not know" rather than coerced into a plausible string.
+        let wrongTypeIsUnset =
+            Self.logicUILanguage(domain: ["AppleLanguages": "ja"]).contains("unset")
+        let emptyStringIsUnset =
+            Self.logicUILanguage(domain: ["AppleLanguages": [""]]).contains("unset")
+
+        #expect(readsTheFirstEntry)
+        #expect(emptyArrayIsUnset)
+        #expect(absentKeyIsUnset)
+        #expect(noDomainIsUnset)
+        #expect(wrongTypeIsUnset)
+        #expect(emptyStringIsUnset)
+    }
+
     @Test func emptyKnownLiveGateFailureSetRejectsAnyFailure() {
         let observed = [QualificationLiveGateSummary.Failure(
             operationID: "synthetic.new.failure", failureReason: "a newly observed failure"
@@ -1594,6 +1656,52 @@ struct QualificationRunnerTests {
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
+        // The exactness is right and stays. What was wrong is that it reported a
+        // BOOLEAN: on 2026-09-07 this line went red on three different trees and
+        // the run could not say which operation had moved, so a branch that
+        // changed one unrelated file read as though it had broken qualification
+        // (#803). The two directions are separated and both carry their contents,
+        // and the message names the condition the table was measured under —
+        // Logic's UI language, which is the variable that actually moved.
+        let expectedFailures = Self.knownLiveGateFailures.map(\.failure)
+        let unexpectedFailures = liveGate.failures.filter { !expectedFailures.contains($0) }
+        let knownFailuresThatStoppedFailing = expectedFailures.filter {
+            !liveGate.failures.contains($0)
+        }
+        let uiLanguage = Self.logicUILanguage()
+        #expect(
+            unexpectedFailures.isEmpty,
+            """
+            live-gate failures that are not in knownLiveGateFailures:
+            \(Self.describe(unexpectedFailures))
+            Logic's UI language for this run: \(uiLanguage). The table was measured
+            against en-US, and an AX label this run could not read is indistinguishable
+            here from a regression until the operations above are named.
+            """
+        )
+        #expect(
+            knownFailuresThatStoppedFailing.isEmpty,
+            """
+            knownLiveGateFailures entries that no longer fail, so the table has rotted:
+            \(Self.describe(knownFailuresThatStoppedFailing))
+            Remove them only with the run that shows them passing; a pin removed on a run
+            where the operation refused for an environmental reason is how this one came
+            back (#284).
+            """
+        )
+        // The last way this line could go red without saying why. `liveGate.failures` is sorted by
+        // `operationID`, the match is an ARRAY comparison, and the table is hand-ordered — so an
+        // entry added out of order fails the exact match while both readings above stay green.
+        // With one entry that is unreachable; it stops being unreachable the next time something
+        // is pinned.
+        let tableIsInObservedOrder = expectedFailures
+            == expectedFailures.sorted { $0.operationID < $1.operationID }
+        #expect(
+            tableIsInObservedOrder,
+            """
+            knownLiveGateFailures must be listed in operationID order, because the observed             failures are sorted that way and the exact match below compares arrays.
+            """
+        )
         let knownLiveGateFailuresMatchExactly = Self.matchesKnownLiveGateFailures(liveGate.failures)
         #expect(knownLiveGateFailuresMatchExactly)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
@@ -3313,6 +3421,41 @@ struct QualificationRunnerTests {
         against known: [KnownLiveGateFailure] = knownLiveGateFailures
     ) -> Bool {
         observed == known.map(\.failure)
+    }
+
+    /// Logic's UI language for THIS run, read from Logic's OWN defaults domain.
+    ///
+    /// `AppleLanguages` under `com.apple.logic10` is what the language switch writes and what a
+    /// relaunched Logic picks up, so it is the same fact the run depended on rather than a guess
+    /// from the host's locale.
+    ///
+    /// Read through `persistentDomain(forName:)` rather than `UserDefaults(suiteName:)`, and the
+    /// difference is the whole point of the function. A suite's SEARCH LIST includes
+    /// `NSGlobalDomain`, and `AppleLanguages` lives there — so a suite read falls through and
+    /// answers with the machine's language whenever Logic's own domain is silent. Measured
+    /// 2026-09-07 on this machine: `com.apple.logic10` holds `en` while the global domain holds
+    /// `ko-KR`, which is exactly the pair that would have been confused. A helper written to
+    /// avoid reporting the host locale that reports the host locale is worse than no helper, and
+    /// `logicUILanguageIsReadFromLogicsOwnDefaultsNotTheHostLocale` caught this before it shipped.
+    ///
+    /// A domain with no such key means Logic has never been switched and follows the system,
+    /// which is stated as such instead of being filled in with a plausible value.
+    private static func logicUILanguage(
+        domain: [String: Any]? = UserDefaults.standard.persistentDomain(forName: "com.apple.logic10")
+    ) -> String {
+        guard let languages = domain?["AppleLanguages"] as? [String],
+              let first = languages.first, !first.isEmpty else {
+            return "unset (Logic follows the system language)"
+        }
+        return first
+    }
+
+    /// Failures as one line each, because a red run that prints nothing is why #803 was opened.
+    private static func describe(_ failures: [QualificationLiveGateSummary.Failure]) -> String {
+        guard !failures.isEmpty else { return "  (none)" }
+        return failures
+            .map { "  \($0.operationID): \($0.failureReason)" }
+            .joined(separator: "\n")
     }
 
     private static func hasValidKnownLiveGateFailureMetadata(

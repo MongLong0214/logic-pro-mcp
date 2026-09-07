@@ -1,0 +1,86 @@
+{
+  "id": "2026-09-07-the-campaign-projects-tracks-are-harness-residue",
+  "date": "2026-09-07",
+  "schema": 2,
+  "subject": "why the campaign fixture gained track headers across a working day",
+  "question": "What creates the track headers that appeared in lpm-locale-campaign.logicx between 2026-09-06 and 2026-09-07, and is anything doing it unintentionally?",
+  "verdict": "works",
+  "issues": [
+    796
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic was NOT driven for this record. Every reading below is of this repository — the operation's own contract, the harnesses that call it, and what one of them declares about its residue. The counts being EXPLAINED (4 to 6 to 7 headers) were taken on earlier runs and are quoted from the roadmap row, not re-measured here."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-record-sequence-residue.sh",
+    "expected": "REVERIFY PASS: six live harnesses invoke record_sequence, exactly once each; TrackDispatcher still documents 'creates a new track each call'; live_572 still declares that it leaves the imported track in place",
+    "cost": "offline, no Logic, under a second"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TrackDispatcher.swift",
+    "Scripts/livekit/live_572_record_sequence_first_call.py"
+  ],
+  "evidence": [],
+  "method": "Read the operation's declared contract, then count the harnesses that invoke it. Invocations were counted by matching the call shape `.tool(\"logic_tracks\", \"record_sequence\"` rather than by counting lines that mention the name, because one harness names it only in prose — counting lines reports seven callers where there are six, and this repository has been wrong that way before.",
+  "observations": [
+    {
+      "what": "what track.record_sequence declares it does",
+      "file": "Sources/LogicProMCP/Dispatchers/TrackDispatcher.swift",
+      "quoted": "SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call",
+      "note": "the growth is the documented contract, not a defect in it"
+    },
+    {
+      "what": "live harnesses that INVOKE record_sequence",
+      "count": 6,
+      "each_invokes": 1,
+      "harnesses": [
+        "live_293_the_collector_reads_a_real_note_row.py",
+        "live_519_region_op_on_a_localized_logic.py",
+        "live_572_record_sequence_first_call.py",
+        "live_575_move_to_playhead_reachable.py",
+        "live_576_viewport_limited_region_readback.py",
+        "live_594_first_import_after_project_new.py"
+      ]
+    },
+    {
+      "what": "harnesses that only NAME it",
+      "count": 1,
+      "which": "live_545_delete_confirm.py",
+      "quoted": "`track.record_sequence` is the supported route and was tried first; it failed at Logic's file-open panel",
+      "note": "counting lines that mention the string reports 7 callers; counting call sites reports 6"
+    },
+    {
+      "what": "what the harness says about its own residue",
+      "file": "Scripts/livekit/live_572_record_sequence_first_call.py",
+      "call": "ev.restored(\"572/the-imported-track-is-left-in-place\", True, …)",
+      "quoted": "the run imports one sequence and leaves it … Removing it would need a destructive delete this run has no reason to perform, and the project is a scratch document.",
+      "note": "declared, deliberate, and recorded in every evidence document that harness has ever written"
+    },
+    {
+      "what": "the growth being explained, as quoted from the #796 roadmap row",
+      "readings": "4 to 6 to 7 headers across 2026-09-06, read from get_regions._debug on runs bound to successive heads",
+      "source": "earlier runs; not re-measured for this record"
+    },
+    {
+      "what": "the two candidate causes the issue named",
+      "ship_gate_suite": "refuted — a before/after reading around a full 4427-test gate showed the header count unchanged",
+      "language_cycle": "refuted — a quit / language-change / reopen / Save cycle showed the count unchanged",
+      "source": "earlier runs quoted from the roadmap row"
+    }
+  ],
+  "conclusion": "The headers are the live harnesses' own declared residue. `record_sequence` creates a track on every call by contract, six harnesses call it once each, and one of them records in every evidence document it writes that it leaves the imported track behind on purpose. Six single-call harnesses run across a working day accounts for a rise of the size observed without anything unintended happening, and it is consistent with both candidate causes in the issue having been refuted by measurement: neither the suite nor the language cycle calls record_sequence.",
+  "limits": [
+    "No fresh live count was taken for this record. It explains readings made earlier rather than reproducing them, and a run that added a track without calling record_sequence would not be visible to anything here.",
+    "Six callers accounts for the growth; it does not prove no other route creates a track. `create_audio`, `create_instrument`, `create_drummer` and `create_external_midi` all do so by definition, and whether any harness invokes those was not counted.",
+    "This says nothing about whether the residue SHOULD be left. The coupling it once broke — an enumeration check that went red when 7 headers no longer fit a viewport where 6 had — was fixed separately, and no argument is made here that a growing fixture is safe for assertions not yet written.",
+    "The call-shape match is textual. A harness that reached record_sequence through a variable, a loop, or a helper of its own would not be counted, and the six found were not cross-checked against a run's actual traffic."
+  ],
+  "supersedes": null
+}
