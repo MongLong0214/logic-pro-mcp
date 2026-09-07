@@ -227,15 +227,18 @@ struct Issue519SaveAsMenuLocaleTests {
         #expect(bar.contains("파일"))
         #expect(bar.contains("ファイル"))
 
-        // The honest state of the item: two measured labels, no Japanese. Flip this the day someone
-        // reads the real label off a Japanese Logic — not before.
+        // Flipped 2026-09-07, on the condition this test set for itself: the label was READ off a
+        // Japanese Logic. `別名で保存…` comes from the ja-JP navigation-free census of 2026-09-05,
+        // aligned against the en-US walk of the same surfaces (#795) — File > Save As…, AXMenuItem
+        // title — and the reading is backed by a provenance block citing that census.
         let item = AXLocalePolicy.saveAsMenuItem.labels
         #expect(item.contains("Save As…"))
         #expect(item.contains("별도 저장…"))
+        #expect(item.contains("別名で保存…"))
         let itemHasAnyJapanese = item.contains { label in
             label.unicodeScalars.contains { (0x3040...0x30FF).contains(Int($0.value)) }
         }
-        #expect(!itemHasAnyJapanese)
+        #expect(itemHasAnyJapanese)
     }
 
     /// The shipped call site must not have drifted back to literals — the defect #519 is about is a

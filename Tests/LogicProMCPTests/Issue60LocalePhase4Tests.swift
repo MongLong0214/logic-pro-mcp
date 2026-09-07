@@ -23,10 +23,10 @@ struct Issue60LocalePhase4Tests {
             ("mixerNamedElement", AXLocalePolicy.mixerNamedElement.labels, ["mixer", "믹서"]),
             ("sliderSendHint", AXLocalePolicy.sliderSendHint.labels, ["send", "센드"]),
             ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels, ["zoom", "확대"]),
-            ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨"]),
-            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스"]),
-            ("pluginBypassControl", AXLocalePolicy.pluginBypassControl.labels, ["bypass", "바이패스"]),
-            ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl.labels, ["open", "열기", "list", "목록"]),
+            ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨", "ボリューム"]),
+            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン"]),
+            ("pluginBypassControl", AXLocalePolicy.pluginBypassControl.labels, ["bypass", "바이패스", "バイパス"]),
+            ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl.labels, ["open", "열기", "list", "목록", "開く"]),
             ("pluginAutomationLabelExact", AXLocalePolicy.pluginAutomationLabelExact.labels, ["읽기, 오토메이션이 활성화됨", "read"]),
             ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션"]),
             ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels, ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン"]),
@@ -38,7 +38,7 @@ struct Issue60LocalePhase4Tests {
                 "monitor", "모니터링", "volume", "볼륨", "fader", "페이더",
                 "pan", "패닝", "밸런스",
             ]),
-            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스"]),
+            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン"]),
             ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels, ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더"]),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
@@ -53,6 +53,13 @@ struct Issue60LocalePhase4Tests {
             // while a region was on screen — `nonRegion: 1, returned_count: 0` on four live heads
             // against `nonRegion: 0` for the same project in English.
             ("regionHelpKeyword", AXLocalePolicy.regionHelpKeyword.labels, ["region", "리전", "リージョン"]),
+            // Japanese added 2026-09-07 (#778). Every one was READ, not translated: the ja-JP and
+            // en-US navigation-free censuses of 2026-09-05 walk the same surfaces in the same
+            // order, 1005 of 1031 rows align as matching blocks, and the aligned ja-JP row is the
+            // label. Each is backed by the element it was read on — `パン` and `ボリューム` off
+            // AXSlider descriptions, `バイパス` off an insert slot's checkbox, `オフ` off the
+            // inspector's automation popup — and the live harness passed on a Japanese Logic at
+            // the head that added them.
         ]
         for (name, labels, expected) in cases {
             #expect(Set(labels) == expected, "\(name) token drift: \(Set(labels).symmetricDifference(expected))")
