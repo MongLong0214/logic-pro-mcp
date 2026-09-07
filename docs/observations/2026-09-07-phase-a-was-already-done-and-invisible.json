@@ -1,0 +1,99 @@
+{
+  "id": "2026-09-07-phase-a-was-already-done-and-invisible",
+  "date": "2026-09-07",
+  "schema": 2,
+  "subject": "#373 Phase A coverage, driven live against the release binary",
+  "question": "How many read-only operations actually reach `.passed` with `.semanticReadback` against live Logic today?",
+  "verdict": "works",
+  "issues": [
+    373,
+    284,
+    815
+  ],
+  "surface": "system.accessibility",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic WAS driven: the release binary was executed over stdio against the running Logic, one call plus one independent readback per registered operation."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-phase-a-coverage.sh",
+    "expected": "21 of 23 read-only operations report passed/semanticReadback; tracks.list_library and tracks.scan_plugin_presets do not; all 90 mutating operations report notQualified/typedDeferral",
+    "cost": "needs Logic running and `swift build -c release`; about a minute"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Qualification/QualificationTransport.swift",
+    "Sources/LogicProMCP/Qualification/SemanticOracleTable.swift"
+  ],
+  "evidence": [],
+  "method": "Drive every registered operation through `QualificationTransport` against the real release binary and the running Logic, then histogram the results by mutability, status and verification kind rather than by whether the run as a whole passed.",
+  "observations": [
+    {
+      "what": "operations driven",
+      "count": 113
+    },
+    {
+      "what": "mutating / notQualified / typedDeferral",
+      "count": 90,
+      "note": "by design — the runner probes mutating operations with parameters that must be refused and asserts writeAttempted == false, so a qualification run cannot modify a project"
+    },
+    {
+      "what": "readOnly / passed / semanticReadback",
+      "count": 21,
+      "operations": [
+        "audio.analyze_file",
+        "audio.analyze_spectrum",
+        "audio.recommend_eq",
+        "midi.list_ports",
+        "plugins.get_inventory",
+        "project.audit",
+        "project.cleanup_plan",
+        "project.export_plan",
+        "project.get_regions",
+        "project.is_running",
+        "system.clear_traces",
+        "system.get_trace",
+        "system.health",
+        "system.help",
+        "system.list_recent_traces",
+        "system.permissions",
+        "system.refresh_cache",
+        "system.saga_preflight",
+        "system.saga_status",
+        "tracks.resolve_path",
+        "tracks.scan_library"
+      ]
+    },
+    {
+      "what": "readOnly / notQualified / typedDeferral",
+      "count": 2,
+      "operations": [
+        "tracks.list_library",
+        "tracks.scan_plugin_presets"
+      ],
+      "note": "list_library is the failure already pinned in knownLiveGateFailures; scan_plugin_presets needs a plug-in window, an environmental precondition"
+    },
+    {
+      "what": "what the roadmap said before this reading",
+      "quoted": "23 read-only (15 already pass)",
+      "actual": 21
+    },
+    {
+      "what": "what the static contract evaluator reports for the same tree",
+      "R_SEM": "113/113 missing",
+      "reason": "quoted from its own source — this static repo-tree evaluator has no live .passed data, and waivers.json holds zero entries, so every operation counts missing by construction"
+    }
+  ],
+  "conclusion": "Phase A is 21 of 23, live, today — not the 15 the roadmap carried, and not the zero the contract evaluator reports. The two that do not pass are both already understood: one is the pinned semantic mismatch and the other needs a plug-in window. So the remaining work for the read-only surface is not producing coverage; it is carrying coverage that already exists into the release evidence bundle and into a form the static evaluator can read. R-SEM's 113-of-113 measures the evaluator's blindness, not the product's.",
+  "limits": [
+    "One run, one host, one project state, en-US. A different fixture could move `project.get_regions` or `tracks.scan_library`.",
+    "It says nothing about the 90 mutating operations, whose `.passed` branch deliberately does not exist; Phase B is unaffected by this reading.",
+    "`.passed` here is the transport's verdict on one call plus one independent readback. It is not the same as a release-grade evidence bundle, which additionally needs the raw transcript, the manifest entry and the signature.",
+    "The two failures were not re-diagnosed. They are quoted from their existing records rather than re-measured here."
+  ],
+  "supersedes": null
+}
