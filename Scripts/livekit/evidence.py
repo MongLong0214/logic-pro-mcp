@@ -203,6 +203,49 @@ def _on_screen_windows(Quartz):
         Quartz.kCGNullWindowID)
 
 
+# Read ONCE, when this module is imported — which is before a harness does anything. Asking again
+# at write() time would answer about the moment the document was written rather than the moment the
+# readings were taken, and a screen that locked mid-run is exactly the case worth catching.
+def screen_is_locked(session=None):
+    """Whether the login session's screen is locked, or None when it cannot be read.
+
+    ONE call, one boolean, no heuristics — and the only reading in this file that says what is
+    actually true when the session is locked. Measured 2026-09-07 (#797), screen locked, Logic Pro
+    running as pid 3574:
+
+        direct AXUIElement, AXWindows of the pid       1   titled 'Logic Pro'
+        System Events, `count of windows`              0
+        CGWindowList, on-screen, owner Logic Pro       1   name '', 260x282
+        logic_window()                                 None
+        _production_ax_modal_signals()                 _ModalReadError('AX sheet descendant
+                                                        search reached depth 32')
+
+    Three readings of the same application at the same moment, and none of them mentions the lock.
+    The System Events answer says "Logic has no windows" and the precondition names a recursion
+    guard; both are plausible product defects, and on 2026-09-06 the first was believed and Logic
+    was force-restarted on the strength of it, which changed nothing.
+
+    None rather than False when the dictionary cannot be read: a harness must be able to tell "not
+    locked" from "could not ask", the same distinction `is_clean` already makes with `cannot_tell`.
+
+    `session` is injectable so the MAPPING can be tested. Against a real machine the only available
+    assertion is "returns one of three values", which a function that always answers `False`
+    satisfies — and that is precisely the mutation this has to be able to fail on.
+    """
+    if session is None:
+        try:
+            import Quartz
+            session = Quartz.CGSessionCopyCurrentDictionary()
+        except Exception:  # noqa: BLE001 - no Quartz means the question cannot be asked
+            return None
+    if not session:
+        return None
+    return bool(session.get("CGSSessionScreenIsLocked", False))
+
+
+_SESSION_LOCKED = screen_is_locked()
+
+
 def logic_window(title_contains=None):
     """The on-screen bounds of a Logic window, via CoreGraphics rather than AX.
 
@@ -1297,7 +1340,38 @@ class Evidence:
     # -- output -------------------------------------------------------------
 
     def write(self):
+        # The environment this run happened in, written into the document so it travels with it.
+        # Recorded at write() from the value captured at import, which is before the harness did
+        # anything — a screen that locks mid-run is caught, and a document read back on another
+        # machine is judged by what its own run saw.
+        if not any((r or {}).get("kind") == "environment" for r in self.records):
+            self.records.append({"kind": "environment", "screen_locked": _SESSION_LOCKED})
         built_from, dirty = _worktree_head(REPO)
+        stale = _sources_newer_than_binary(REPO, BIN)
+        if stale:
+            # THE BINARY, not the checkout. `built_from` is the WORKTREE's head and nothing compared
+            # it to the artifact, so a document could read `built_from: <head>` with
+            # `worktree_clean: true` while the binary was built from an earlier commit — and the two
+            # fields together read as an attestation neither of them makes.
+            #
+            # Measured 2026-09-06 (#794): a fix was committed, `swift build` started, and the harness
+            # launched before it finished. The run used the previous commit's binary, claimed the new
+            # head, and reported 2 red checks — read as "the fix does not work". Driving the same
+            # operation by hand against the finished binary returned state A, verified true. So the
+            # false document did not merely mislabel itself: it asserted a BEHAVIOURAL conclusion
+            # about a commit whose code never ran.
+            #
+            # mtime is the cheap check, not the strong one. Embedding the commit in the binary and
+            # reading it back would MEASURE the correspondence rather than infer it; this only
+            # refuses the case where a source file is newer than the thing built from it, which is
+            # the case that actually happened.
+            self.records.append({
+                "kind": "provenance", "tag": "artifact/older-than-its-sources",
+                "source": "mtime(Sources/**) vs mtime(binary)", "cache_age_sec": None,
+                "usable_as_live_evidence": False,
+                "newer_than_binary": stale[:8],
+                "newer_than_binary_count": len(stale),
+            })
         if dirty:
             # A binary built from a dirty tree does not correspond to the commit it claims. Say so in
             # the document rather than letting the SHA imply a correspondence that does not hold.
@@ -1313,7 +1387,13 @@ class Evidence:
                 "path": BIN,
                 "sha256": _file_hash(BIN),
                 "built_from": built_from,
-                "worktree_clean": not dirty,
+                # BOTH, because the two fields are read together. `worktree_clean: true` beside a
+                # `built_from` nothing checked made the claim look MORE bound, not less; it now says
+                # false whenever either the tree was dirty or the binary predates its sources, and
+                # the reason is a record of its own.
+                "worktree_clean": not dirty and not stale,
+                "built_from_is_measured": False,
+                "artifact_older_than_sources": bool(stale),
             },
             "records": self.records,
         }
@@ -1356,6 +1436,19 @@ class Evidence:
         return summarize(self.records, out)
 
 
+def _recorded_lock_state(recs):
+    """What the RUN observed about the login state, out of its own records.
+
+    Absent is `None` — a document written before this was recorded says nothing about it, and
+    saying nothing is not the same as saying unlocked.
+    """
+    for rec in reversed(list(recs or [])):
+        if isinstance(rec, dict) and rec.get("kind") == "environment" and "screen_locked" in rec:
+            value = rec["screen_locked"]
+            return value if isinstance(value, bool) else None
+    return None
+
+
 def summarize(recs, out=None):
     """The counters `is_clean` reads, from a list of records.
 
@@ -1394,6 +1487,19 @@ def summarize(recs, out=None):
         "checks_with_blocking_modal_unknown":
             sum(1 for c in checks if _modal_snapshot_is_unknown(c.get("blocking_modal"))),
         "mutation_claimed": sum(1 for c in checks if c.get("mutation_claimed")),
+        # FROM THE RECORDS, not from this process. A locked screen does not make the accessibility
+        # API fail — it makes the three paths this repository reads disagree, and none of them says
+        # "locked" (#797). `None` is not False: a login state that could not be read is
+        # `cannot_tell`, the same distinction the modal snapshot already makes, and `is_clean`
+        # refuses both.
+        #
+        # The first cut read a module global captured at import, which made `is_clean` a fact about
+        # the machine EVALUATING a document rather than about the run that produced it. CI caught
+        # it immediately: a headless runner cannot read the login state at all, so every synthetic
+        # document in `test_harness_evidence_coverage.py` became `cannot_tell` and four cases that
+        # had nothing to do with locking went red. A document has to carry its own environment, or
+        # it cannot be judged anywhere but where it was written.
+        "screen_locked": _recorded_lock_state(recs),
         # The LAST declaration wins, and an absent or malformed one reads as None — which
         # `is_clean` treats as the UI surface, the stricter of the two. A document that never
         # declared itself is judged the way every document was judged before #754.
@@ -1536,6 +1642,10 @@ def is_clean(summary):
         and summary["checks_recorded_under_blocking_modal"] == 0
         and summary["checks_missing_blocking_modal_snapshot"] == 0
         and summary["checks_with_blocking_modal_unknown"] == 0
+        # A run recorded behind a locked screen read an application it could not see. False is the
+        # only value that passes; None means the session could not be asked, which is not evidence
+        # that it was unlocked.
+        and summary.get("screen_locked") is False
         # Non-vacuity: the run has to have looked, driven, and recorded. WHAT counts as having
         # looked depends on the surface the document declared — see `_non_vacuity_earned`.
         and _non_vacuity_earned(summary)
@@ -1669,6 +1779,39 @@ def _region_hash(png, region, window_points=None):
         return hashlib.sha256(bytes(data)).hexdigest()
     except Exception:
         return None
+
+
+def _sources_newer_than_binary(repo, binary):
+    """Tracked files under `Sources/` modified after the binary was built.
+
+    A non-empty answer means the artifact cannot be what this head describes. It is a necessary
+    check, not a sufficient one: a build that finished and was then reverted leaves no trace here,
+    and only embedding the commit in the binary would settle it. What this catches is the case that
+    happened — the harness launched while `swift build` was still running.
+    """
+    try:
+        built = os.path.getmtime(binary)
+    except OSError:
+        return []
+    try:
+        listed = subprocess.run(["git", "-C", repo, "ls-files", "Sources"],
+                                capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if listed.returncode != 0:
+        return []
+    newer = []
+    for rel in listed.stdout.splitlines():
+        rel = rel.strip()
+        if not rel:
+            continue
+        path = os.path.join(repo, rel)
+        try:
+            if os.path.getmtime(path) > built:
+                newer.append(rel)
+        except OSError:
+            continue
+    return sorted(newer)
 
 
 def _worktree_head(repo):
