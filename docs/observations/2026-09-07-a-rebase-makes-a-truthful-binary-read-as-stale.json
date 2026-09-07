@@ -1,0 +1,86 @@
+{
+  "id": "2026-09-07-a-rebase-makes-a-truthful-binary-read-as-stale",
+  "date": "2026-09-07",
+  "schema": 2,
+  "subject": "the #794 staleness half of `worktree_clean`, under a rebase that reapplies identical content",
+  "question": "Can the artifact-vs-sources mtime comparison report a binary stale when the binary is exactly what those sources produce?",
+  "verdict": "partial",
+  "issues": [
+    794,
+    815
+  ],
+  "surface": "system.accessibility",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic WAS driven — the readings come from live_534_goto_position runs — but what is measured here is the evidence document's own artifact block, not Logic."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-rebase-staleness.sh",
+    "expected": "REVERIFY PASS: touching a Sources file without changing its content leaves `swift build -c release` with nothing to relink, so the binary's mtime stays behind the source's",
+    "cost": "offline, no Logic; one release build"
+  },
+  "depends": [
+    "Scripts/livekit/evidence.py"
+  ],
+  "evidence": [],
+  "method": "Read the artifact block of a failing evidence document, then compare the release binary's mtime against every `git ls-files Sources` entry to find which file was newer and why.",
+  "observations": [
+    {
+      "what": "the gate's refusal",
+      "quoted": "[live_534_goto_position] worktree_clean=False — the evidence describes a build that did not match the tree, or a document too old to say"
+    },
+    {
+      "what": "the artifact block that produced it",
+      "worktree_clean": false,
+      "built_from_is_measured": false,
+      "artifact_older_than_sources": true
+    },
+    {
+      "what": "the tree at the moment of the refusal",
+      "git_status": "clean",
+      "note": "so the dirty half was not the cause; the staleness half was"
+    },
+    {
+      "what": "the mtimes",
+      "binary": "2026-09-07 18:24:26",
+      "newest_source": "2026-09-07 18:54:22",
+      "file": "Sources/LogicProMCP/Qualification/ProductionReadinessContracts.swift"
+    },
+    {
+      "what": "what moved the source mtime",
+      "cause": "a rebase onto main replayed the same commit",
+      "content_changed": false
+    },
+    {
+      "what": "why the build did not correct it",
+      "observed": "`swift build -c release` reported Build complete! (82.23s) and left the binary at 18:24",
+      "reason": "SwiftPM decides by content, and the content was identical, so there was nothing to relink"
+    },
+    {
+      "what": "forcing a relink",
+      "action": "rm .build/release/LogicProMCP && swift build -c release",
+      "seconds": 2.15,
+      "binary_after": "2026-09-07 19:09:11"
+    },
+    {
+      "what": "the evidence after the relink",
+      "worktree_clean": true,
+      "artifact_older_than_sources": false,
+      "checks": 7,
+      "passed": 7
+    }
+  ],
+  "conclusion": "The staleness half of `worktree_clean` is an mtime comparison, and a rebase that reapplies identical content moves source mtimes without changing content. SwiftPM then relinks nothing, so a binary that IS exactly what those sources produce reads as older than them and the live gate refuses a truthful document. The refusal is conservative rather than wrong — it cannot tell this case from a real stale build — but in this repository rebasing is constant, so it will recur on every branch that touches Sources and is rebased before its harness runs.",
+  "limits": [
+    "This is one occurrence. Whether every rebase produces it was not measured; it needs the source mtime to land after the last relink, which a rebase does only when it rewrites a file the branch touches.",
+    "It says nothing about the dirty half of `worktree_clean`, which was clean throughout and was not exercised.",
+    "The remedy measured here is a forced relink. Whether the check could distinguish this case — by comparing content hashes rather than mtimes — was not attempted, and `touch` is deliberately not a remedy because it asserts a build that did not happen.",
+    "`built_from_is_measured: False` was already false before and after, so nothing here says whether that field would have caught anything."
+  ],
+  "supersedes": null
+}
