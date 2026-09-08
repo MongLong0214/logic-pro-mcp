@@ -43,6 +43,25 @@ while read -r _local_ref local_sha _remote_ref remote_sha || [ -n "${local_sha:-
     case "$local_sha" in
         0000000000000000000000000000000000000000) continue ;;   # deletion
     esac
+    # ALREADY PUBLISHED CONTENT PASSES, for the same reason a deletion does: there is no new tree
+    # to have verified. This gate exists to stop UNPUSHED content going out without a preflight,
+    # and a commit already reachable from a remote-tracking ref went out through one.
+    #
+    # The case that forced this is a release TAG. `release-stable.sh` tags the merge commit on
+    # `main`, and at that moment `main` and `origin/main` are the same commit — so the tag adds
+    # nothing, and yet the push was refused. Worse, no honest route to the stamp existed: the ship
+    # gate keys its stamp on (tree, HEAD, BASE) and refuses to run at all when the base resolves to
+    # HEAD, so on `main` the token could be neither obtained nor waived. Measured 2026-09-08 with
+    # v3.16.0 — a tree carrying a green 4440-test suite, a passing preflight and live evidence
+    # bound to its head, stuck at the last step (#821).
+    #
+    # `--contains` and not `merge-base --is-ancestor <sha> origin/main`: the question is whether
+    # ANY remote-tracking ref already holds this commit, not whether one particular branch does,
+    # and a tag on a release branch is as published as one on main. New commits are not reachable
+    # from any of them, which is exactly the property that keeps this narrow.
+    if [ -n "$(git for-each-ref --contains "$local_sha" --count=1 --format='%(refname)' refs/remotes/ 2>/dev/null)" ]; then
+        continue
+    fi
     if ! bash "$STAMPER" check "$local_sha" >/dev/null 2>&1; then
         TREE=$(git rev-parse "${local_sha}^{tree}" 2>/dev/null)
         echo "pre-push REFUSED: no passing-preflight stamp for tree ${TREE:-<unresolved>} (commit ${local_sha:0:8})" >&2

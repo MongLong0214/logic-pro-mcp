@@ -1,83 +1,74 @@
-# Pipeline Status: #302 R2 — Event List column identity
+# Pipeline Status: #302 R2 — WITHDRAWN as scoped; column identity was never the blocker
 
 **ADR**: docs/adr/ADR-014-independent-midi-event-readback.md
 **Predecessor**: docs/tickets/issue-302-r1-independence-guard/ (R1 shipped)
-**Size**: S
-**Current Phase**: 3 (dev ticket) — this document
+**Current Phase**: withdrawn at gate 3, before any code
 
-## Why this is small, and why it was thought large
+## Why this is withdrawn rather than revised
 
-Two statements of the blocker were carried in the roadmap and **both were wrong**. Re-measured
-2026-09-04 on the live Event List:
+The first draft of this ticket scoped R2 as "bind column identity from the header sort buttons
+instead of from the columns", on the roadmap's reading that the live Event List exposes **6**
+columns named `L, M, 위치, 이름, 트랙, 길이`.
 
-| claim carried | measured |
-|---|---|
-| `AXColumns` is absent (issue header) | present, and resolves — status 0 |
-| `AXColumns` returns 8 columns (roadmap row) | **6** |
+Checked against the code before building on it, and the premise does not hold:
 
-So the blocker is not that columns cannot be read. It is that **identity does not live on them**:
-every column's `AXTitle` and `AXDescription` is empty. The names are on the `AXHeader` sort
-buttons — `L`, `M`, `위치`, `이름`, `트랙`, `길이` — which is the route
-`EventListReadbackCollector.sortButtonTitles` **already takes** today, filtering children by
-`AXSubrole == AXSortButton` and reading their titles verbatim.
+```swift
+private static let regionLevelHeaderColumns: [AXLocalePolicy.LabelSet] = [
+    eventListColumnL, eventListColumnM, eventListColumnPosition,
+    eventListColumnName, eventListColumnTrack, eventListColumnLength,
+]
+```
 
-R2 is therefore wiring and proof, not discovery.
+That is the measurement, exactly — six columns, those six names. `AXLocalePolicy` labels three of
+them "Region-level" in their own rationale strings. **The reading was taken while the Event List
+was showing REGIONS**, not the selected region's events, and the collector already classifies that
+state as `paneAtRegionLevel` — "a recoverable navigation failure, not a column-layout drift".
 
-## Gates
-| Gate | Artifact | Status |
-|------|----------|--------|
-| 1 | ADR (ADR-014) | PASS (R1) |
-| 2 | PRD | PASS (R1) — R2 adds no new contract |
-| 3 | Dev ticket (this) | DRAFT |
-| 4 | TDD | NOT STARTED |
-| final | exact-head | NOT STARTED |
+The note level, which is what this ADR reads, has **eight** columns:
 
-## Tickets
-| Ticket | Status | Notes |
-|--------|--------|-------|
-| T1 — column identity from the header, not the columns | DRAFT | see below |
+```
+["L", "M", "위치", "상태", "채널", "번호", "값", "길이/정보"]     measured, Korean Logic 12.3
+```
 
-## T1 — column identity from the header, not the columns
+## And identity is already bound, through the policy
 
-**What it must establish.** That a column's identity is bound to the sort-button title observed on
-the same read, and that a column whose identity cannot be established **refuses** rather than being
-positioned by index.
+`readHeaders` reads the header's `AXSortButton` children, refuses when they do not cover every
+child (`headerSortButtonsUnavailable`), matches each title against `expectedHeaderColumns` — label
+sets, not English literals — and throws `headerMismatch(expected:actual:)` naming the canonical
+column and whatever Logic actually rendered. The comment above the table records why: comparing
+against English literals "threw `headerMismatch` — the readback could not run at all outside
+English".
 
-**Why the refusal is the point.** Pairing a column with a name by ORDER is exactly the positional
-binding this repository refuses everywhere else, and the Event List is where it would be most
-tempting: six columns, six buttons, an obvious zip. The header is a separate subtree from the
-columns, and nothing observed says the two orders must agree — that they did on one host, in one
-locale, is not a rule.
+Positions are used, but only after the order has been PROVEN: the loop asserts
+`titles[i]` matches `expectedHeaderColumns[i]` for every `i`, and the count must match exactly.
+That is not the positional pairing this repository refuses; it is an index used after identity has
+been established at that index.
 
-**Localisation is load-bearing, not a footnote.** Four of the six titles measured are Korean
-(`위치`, `이름`, `트랙`, `길이`) and two are not (`L`, `M`). Any literal comparison against English
-column names is a one-language table of the kind #803 was opened for, so identity has to resolve
-through `AXLocalePolicy` label sets rather than through string equality.
+So the T1 that was drafted here would have re-implemented working code against a schema that
+belongs to a different pane.
 
-## Acceptance
+## What R2 actually is
 
-1. Column identity is derived from the header sort buttons and **carries the observed title**, so a
-   readback can say which rendered string it bound to.
-2. A column with no resolvable identity refuses, with a typed reason naming the column index and
-   what was read there. It does not fall back to position.
-3. The count is read rather than assumed: 6 on the measured host, and a different count is a
-   reported observation rather than a crash or a silent truncation.
-4. Mutation-tested: forcing the header read to return `[]`, returning one fewer button than there
-   are columns, and returning the buttons in a different order must each turn a test RED.
-5. A live run on a Japanese Logic is recorded before this closes, because the measured titles are
-   ko-KR only and #803's lesson is that a set measured in one language is a claim about that
-   language.
+From the R1 ticket, verbatim: *"R1 grants NO positive match in ANY configuration (incl. debug
+seam), positive grant is future R2."* R2 is the **positive grant** — `verifyRegion` answering a
+match rather than only rejecting.
 
-## Not in scope
+Its blocker is not columns. It is the one recorded on ADR-010 and ADR-015: `IndependentExpectedSeam`
+sits inside `#if QUALIFICATION_FAULT_SEAM`, `Package.swift` scopes that to debug, and the shipped
+release binary carries **zero** seam symbols — so `independentPayload` is always nil there and
+`verifyRegion` can only answer `incompleteCannotVerify`. A positive match is structurally
+impossible in what ships.
 
-- The 90 mutating operations' `.passed` branch. It deliberately does not exist (the runner probes
-  with parameters that must be refused and asserts `writeAttempted == false`), and adding one would
-  be moving the grader.
-- The release-build seam. `IndependentExpectedSeam` sits inside `#if QUALIFICATION_FAULT_SEAM` and
-  the shipped binary carries zero seam symbols; that is one fact shared with ADR-010/015/017 and
-  belongs to its own issue, not here.
+A ticket for R2 therefore has to start from that seam, and it is shared with two other ADRs rather
+than owned by this one.
 
-## Open, and honest about it
+## What this cost, and the rule it confirms
 
-Whether the header's button order and the column order ever disagree was **not** measured — the
-refusal above exists because it is unknown, not because a disagreement was observed.
+Nothing but the draft, because the premise was checked before code. The rule it confirms is the one
+that says a document built on a wrong contract is withdrawn rather than resubmitted: revising the
+acceptance criteria would have kept the misread measurement inside them.
+
+## Not claimed
+
+That the roadmap row's measurement was wrong — it was correct, and correctly transcribed. What was
+wrong is what it was taken to be ABOUT. The row should say the reading was at region level.
