@@ -91,6 +91,41 @@ with open(sin, "w") as f:
 time.sleep(38)
 
 alive = server.poll() is None
+
+# ALIVE IS NOT ANSWERING, and the earlier version of this harness recorded the first and claimed the
+# second. A process that is up and a write queue that is not parked are both true of a server that
+# has stopped serving; the defect's own signature was "no response, ever". So the reader starts
+# draining, a fresh request goes in, and its reply is read back BY ITS ID. Found by review 2026-09-09.
+answered = False
+answer_note = "not attempted"
+if alive:
+    try:
+        drain = os.open(sout, os.O_RDONLY | os.O_NONBLOCK)
+        with open(sin, "w") as f:
+            f.write('{"jsonrpc":"2.0","id":9001,"method":"tools/list","params":{}}\n')
+            f.flush()
+        buf, until = b"", time.time() + 45
+        while time.time() < until:
+            try:
+                chunk = os.read(drain, 65536)
+            except BlockingIOError:
+                chunk = b""
+            except OSError as exc:
+                answer_note = f"read failed: {exc}"
+                break
+            if chunk:
+                buf += chunk
+                if b'"id":9001' in buf:
+                    answered = True
+                    break
+            else:
+                time.sleep(0.2)
+        os.close(drain)
+        answer_note = answer_note if answer_note.startswith("read failed") else (
+            f"drained {len(buf)} bytes, reply to id 9001 {'seen' if answered else 'never arrived'}")
+    except Exception as exc:            # noqa: BLE001 - the note carries the reason into the document
+        answer_note = f"could not drain: {exc}"
+
 sample_path = os.path.join(work, "683.sample.txt")
 subprocess.run(["sample", str(server.pid), "2", "-mayDie", "-file", sample_path],
                capture_output=True)
@@ -101,18 +136,24 @@ parked = bool(block and "writeAll" in block.group(0) and "Darwin.write" in block
 reading = {
     "server_alive_after_deadline": alive,
     "write_queue_parked_in_writeAll": parked,
+    "answered_after_the_stall": answered,
     "sample_bytes": len(text),
 }
 
 ev.falsifiable(
     "683/a-stalled-reader-does-not-park-the-write-queue",
-    lambda o: o["sample_bytes"] > 0 and not o["write_queue_parked_in_writeAll"],
+    lambda o: (o["sample_bytes"] > 0
+               and not o["write_queue_parked_in_writeAll"]
+               and o["server_alive_after_deadline"]
+               and o["answered_after_the_stall"]),
     reading,
     {"server_alive_after_deadline": True, "write_queue_parked_in_writeAll": True,
-     "sample_bytes": 495662},
-    "after the write deadline has passed, the serial write queue is not parked in `writeAll` — the "
-    "counterexample is the pre-fix reading, where 1539 of 1539 samples were inside that frame and "
-    "the process answered nothing for as long as it was watched",
+     "answered_after_the_stall": False, "sample_bytes": 495662},
+    "after the write deadline has passed the serial write queue is not parked in `writeAll`, the "
+    "process is still up, and it ANSWERS a fresh request once the reader drains — the counterexample "
+    "is the pre-fix reading, where 1539 of 1539 samples were inside one frame and nothing was "
+    "answered for as long as it was watched. Alive and unparked are both true of a server that has "
+    "stopped serving, so the reply is read back by its id rather than inferred",
     mutation="remove the `waitUntilWritable` guard from `SerializedStdioTransport.send`",
 )
 
@@ -122,11 +163,12 @@ ev.check("683/the-sampler-actually-read-the-process",
          "sampler that could not attach",
          f"sample_bytes={len(text)}", None)
 
-ev.check("683/the-run-drove-the-server-before-sampling",
-         server.pid > 0,
-         "the binary was started and fed a real initialize plus 39 requests, so the pipe was filled "
-         "by traffic rather than left empty",
-         f"pid={server.pid} alive_after={alive}", None)
+ev.check("683/the-stalled-server-still-answers",
+         answered,
+         "a request sent AFTER the stall was answered once the reader drained, so the process is "
+         "serving rather than merely running. `pid > 0` stood here before and is true of a process "
+         "that answers nothing — a check that cannot fail for the reason it names",
+         answer_note, None)
 
 for p in (server, holder):
     try:

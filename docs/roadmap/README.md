@@ -166,7 +166,7 @@ Deliver confirmed feedback detection by the surviving owner and a server that re
 
 - **Issues it closes:** #683, #736.
 - **PRECONDITION:** None for diagnosis; repeat endpoint measurements after Phase 1 changes publication.
-- **DONE WHEN:** The surviving owner reports actual MCU feedback with `mcu.connected: true`, while a second instance declines conflicting ownership. The reported hang is resolved and the affected host confirms continued protocol responses. Closure remains blocked on a sample from the wedged reporter process or an equivalent reproducer; Desktop success alone does not resolve the Creator Studio report.
+- **DONE WHEN:** The surviving owner reports actual MCU feedback with `mcu.connected: true`, while a second instance declines conflicting ownership. The reported hang is resolved and the affected host confirms continued protocol responses. Closure remains blocked on a sample from the wedged reporter process or an equivalent reproducer; Desktop success alone does not resolve the Creator Studio report. The phase is NOT done while its two issues are closed: #683 and #736 close because the defects they name were reproduced, fixed and proven on the shipped binary, and this phase closes on a REPORTER confirmation that neither fix can supply by itself. A review pointed out that the two readings contradicted each other while both were written as though they agreed, so the distinction is written here rather than left to be noticed: a fixed defect is not a confirmed host.
 - **KIND:** `mixed`.
 
 ### Phase 4 — Verify the complete region move

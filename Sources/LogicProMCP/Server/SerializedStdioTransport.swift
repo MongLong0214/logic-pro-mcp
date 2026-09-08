@@ -104,9 +104,18 @@ actor SerializedStdioTransport: Transport {
     /// invalid" and "the peer hung up", and `send` would then report every one of them as
     /// `OutputStalled` — a closed descriptor described as a slow reader, which is the confusion this
     /// whole change exists to remove one layer down.
-    enum Writability { case ready; case timedOut; case failed(Int32) }
+    enum Writability: Equatable { case ready; case timedOut; case failed(Int32) }
 
-    private static func waitUntilWritable(_ fd: Int32, deadline: TimeInterval) -> Writability {
+    /// The `poll` and clock seams exist so the two paths a real pipe cannot produce are testable:
+    /// a `poll` interrupted by a signal, and time passing between attempts. Without them the
+    /// EINTR branch is unreachable from a test and its rule — that the deadline is an instant and
+    /// not a fresh duration per attempt — can only be asserted, never checked.
+    static func waitUntilWritable(
+        _ fd: Int32,
+        deadline: TimeInterval,
+        poll pollFn: (UnsafeMutablePointer<pollfd>, nfds_t, Int32) -> Int32 = { Darwin.poll($0, $1, $2) },
+        now: () -> Date = Date.init
+    ) -> Writability {
         // A NEGATIVE descriptor before anything else. POSIX `poll` IGNORES an entry whose fd is
         // negative and then returns 0 when the timeout expires — which is byte-for-byte the answer
         // it gives for a healthy-but-full pipe. Without this guard an invalid descriptor is
@@ -114,21 +123,42 @@ actor SerializedStdioTransport: Transport {
         // into three cases to prevent. Caught by the test that exists to keep the causes distinct.
         guard fd >= 0 else { return .failed(EBADF) }
         var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-        let milliseconds = Int32(max(0, min(deadline * 1000, Double(Int32.max))))
+        // The deadline is an INSTANT, not a duration handed to each `poll`. Restarting the full
+        // timeout after every `EINTR` was the earlier shape, and under repeated signals it extends
+        // the wait without bound — a deadline that any signal can reset is not a deadline, and the
+        // whole change exists to stop an unbounded wait. Found by review 2026-09-09.
+        let expiry = now().addingTimeInterval(max(0, deadline))
         while true {
-            let n = withUnsafeMutablePointer(to: &pfd) { poll($0, 1, milliseconds) }
+            let remaining = expiry.timeIntervalSince(now())
+            if remaining <= 0 { return .timedOut }
+            let milliseconds = Int32(max(0, min(remaining * 1000, Double(Int32.max))))
+            let n = withUnsafeMutablePointer(to: &pfd) { pollFn($0, 1, milliseconds) }
             if n < 0 {
                 if errno == EINTR { continue }
                 return .failed(errno)
             }
             if n == 0 { return .timedOut }
             if (pfd.revents & Int16(POLLNVAL)) != 0 { return .failed(EBADF) }
+            // POLLERR is tested BEFORE POLLHUP, so a descriptor reporting both answers `EIO` rather
+            // than `EPIPE`. That is deliberate — an error and a hangup together is an error — and
+            // it is stated here because the two are easy to describe as one rule and are not.
             if (pfd.revents & Int16(POLLERR)) != 0 { return .failed(EIO) }
             // EPIPE on purpose: the reader is gone, which is the ordinary end of a session and must
             // surface as the POSIX error a caller already handles, not as a novel stall type.
             if (pfd.revents & Int16(POLLHUP)) != 0 { return .failed(EPIPE) }
             return (pfd.revents & Int16(POLLOUT)) != 0 ? .ready : .failed(EIO)
         }
+    }
+
+    /// Where the mid-frame stall report goes. Replaceable so a test can observe it without
+    /// redirecting the process's stderr — a test that dup2s over `STDERR_FILENO` changes it for
+    /// every other test running beside it, and the claim being checked ("ordinary traffic writes no
+    /// stall line") is about whether the report HAPPENED, not about which file it landed in.
+    nonisolated(unsafe) static var reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void = {
+        bytes, seconds in
+        let line = "[stdio] a \(bytes)-byte frame has been writing for more than "
+            + "\(String(format: "%.1f", seconds))s; the reader is stalling mid-frame\n"
+        FileHandle.standardError.write(Data(line.utf8))
     }
 
     func send(_ data: Data) async throws {
@@ -156,17 +186,23 @@ actor SerializedStdioTransport: Transport {
                     cont.resume(throwing: POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO))
                     return
                 }
-                let startedAt = DispatchTime.now()
+                // A ONE-SHOT WATCHDOG, armed before the first byte and disarmed when the frame is
+                // out. Reporting the overrun AFTER `writeAll` returned was the earlier shape, and it
+                // says nothing while the stall is happening — the operator learns about a wedged
+                // write only once it has stopped being wedged, which is exactly when the report is
+                // no longer useful. It cannot abandon the frame: a part-written frame lets the next
+                // one interleave, which is #220's corruption by another route.
+                let finished = RunFlag()
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline) {
+                    guard !finished.isRunning else { return }
+                    SerializedStdioTransport.reportMidFrameStall(frame.count, deadline)
+                }
                 do {
                     try SerializedStdioTransport.writeAll(frame, to: fd)
-                    let elapsed = Double(DispatchTime.now().uptimeNanoseconds
-                        - startedAt.uptimeNanoseconds) / 1_000_000_000
-                    if elapsed > deadline {
-                        FileHandle.standardError.write(Data(
-                            "[stdio] a \(frame.count)-byte frame took \(String(format: "%.1f", elapsed))s to write; the reader is stalling mid-frame\n".utf8))
-                    }
+                    finished.start()
                     cont.resume()
                 } catch {
+                    finished.start()
                     cont.resume(throwing: error)
                 }
             }
@@ -214,18 +250,31 @@ actor SerializedStdioTransport: Transport {
     /// Blocking full-frame write. Loops over partial writes and EINTR until the
     /// entire frame is flushed. On a blocking fd there is no `EAGAIN`, so this
     /// never suspends mid-frame.
-    private static func writeAll(_ data: Data, to fd: Int32) throws {
+    ///
+    /// It returns normally only when every byte went out. Any other outcome throws, because the
+    /// caller's contract is "the frame was written or it was not" — a partial frame reported as
+    /// success is the interleaved stream #220 exists to prevent, arriving by the success path.
+    static func writeAll(
+        _ data: Data,
+        to fd: Int32,
+        write writeFn: (Int32, UnsafeRawPointer, Int) -> Int = { Darwin.write($0, $1, $2) }
+    ) throws {
         try data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
             guard let base = raw.baseAddress else { return }
             var offset = 0
             let total = raw.count
             while offset < total {
-                let written = Darwin.write(fd, base.advanced(by: offset), total - offset)
+                let written = writeFn(fd, base.advanced(by: offset), total - offset)
                 if written < 0 {
                     if errno == EINTR { continue }
                     throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
                 }
-                if written == 0 { break }
+                // A zero-byte result for a non-empty request wrote nothing and will keep writing
+                // nothing. Breaking out of the loop RETURNED NORMALLY with the frame half sent, so
+                // the caller was told the frame was flushed and the next frame followed the partial
+                // bytes — the newline framing #220 protects, broken by the success path rather than
+                // by an error. Found by review 2026-09-09.
+                if written == 0 { throw POSIXError(.EIO) }
                 offset += written
             }
         }
