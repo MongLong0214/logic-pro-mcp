@@ -30,9 +30,47 @@ printf 'refs/heads/x %s refs/heads/x %s\n' "$(git rev-parse HEAD)" "$(git rev-pa
 [ $? -eq 0 ] && ok "hook allows a stamped commit" || no "hook refused a stamped commit"
 
 rm -rf "$LPM_STAMP_DIR"
-printf 'refs/heads/x %s refs/heads/x %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" \
-  | bash "$HOOK" >/dev/null 2>&1
-[ $? -eq 1 ] && ok "hook refuses an unstamped commit" || no "hook did NOT refuse an unstamped commit"
+# The refusal case needs an UNPUBLISHED commit, which is what the gate is about. This clone's HEAD
+# is often `main` at `origin/main` — already reachable from a remote-tracking ref, and therefore
+# exempt by design (see the hook's "already published content passes" clause). Using it here would
+# have tested the exemption while claiming to test the refusal.
+UNPUB=$(mktemp -d) || { echo "CANNOT-TEST(2): mktemp failed"; exit 2; }
+(
+  cd "$UNPUB" || exit 1
+  git init -q . && git config user.email t@t && git config user.name t
+  echo x > f && git add f && git commit -qm "never pushed anywhere"
+  # The hook resolves its stamper as "$(git rev-parse --show-toplevel)/Scripts/preflight-stamp.sh"
+  # and, finding none, reports the gate as NOT ENFORCED and exits 0. Without this the fixture would
+  # have proved that a repo with no stamper lets everything through, while claiming to prove the
+  # refusal.
+  mkdir -p Scripts && cp "$OLDPWD/$STAMPER" Scripts/preflight-stamp.sh
+  git add Scripts/preflight-stamp.sh && git commit -qm "stamper"
+  # No remote at all, so nothing under refs/remotes/ can contain this commit.
+  [ -z "$(git for-each-ref --count=1 --format='%(refname)' refs/remotes/ 2>/dev/null)" ] || exit 9
+  printf 'refs/heads/x %s refs/heads/x %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" \
+    | LPM_STAMP_DIR="$UNPUB/st" bash "$OLDPWD/$HOOK" >/dev/null 2>&1
+  exit $?
+)
+case $? in
+  1) ok "hook refuses an unstamped commit that is not reachable from any remote" ;;
+  9) no "fixture broken: the scratch repo had a remote, so the refusal case was not exercised" ;;
+  *) no "hook did NOT refuse an unstamped, unpublished commit" ;;
+esac
+rm -rf "$UNPUB"
+
+# THE EXEMPTION, and it must not be wider than it says. A commit already reachable from a
+# remote-tracking ref went out through a preflight once already; re-demanding a stamp for it is what
+# left v3.16.0's tag unpushable with no honest route to the token (#821).
+rm -rf "$LPM_STAMP_DIR"
+if git for-each-ref --count=1 --format='%(refname)' refs/remotes/ >/dev/null 2>&1 \
+   && [ -n "$(git for-each-ref --contains "$(git rev-parse HEAD)" --count=1 --format='%(refname)' refs/remotes/ 2>/dev/null)" ]; then
+    printf 'refs/tags/v0 %s refs/tags/v0 %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD)" \
+      | bash "$HOOK" >/dev/null 2>&1
+    [ $? -eq 0 ] && ok "hook allows a tag on already-published content with no stamp" \
+                 || no "hook refused a tag on content already reachable from a remote"
+else
+    ok "SKIPPED: this HEAD is not published, so the exemption case is not available here"
+fi
 
 # The exploit an earlier revision shipped: the stamp was keyed on the TREE alone, so amending a message
 # to add forbidden metadata kept it valid and the gate permitted the very class the preflight refuses.
