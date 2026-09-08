@@ -1407,16 +1407,19 @@ actor ProductionMCUTransport: MCUTransportProtocol {
         private var eventSink: (@Sendable (MIDIFeedback.Event) -> Void)?
         private var ingressDropSink: (@Sendable (UInt64) -> Void)?
         private var callbackWorkBudgetDropSink: (@Sendable (UInt64) -> Void)?
+        private var unconvertedWordsSink: (@Sendable (UInt64) -> Void)?
 
         func set(
             onReceive: (@Sendable (MIDIFeedback.Event) -> Void)?,
             onIngressDrop: (@Sendable (UInt64) -> Void)?,
-            onCallbackWorkBudgetDrop: (@Sendable (UInt64) -> Void)?
+            onCallbackWorkBudgetDrop: (@Sendable (UInt64) -> Void)?,
+            onUnconvertedWords: (@Sendable (UInt64) -> Void)? = nil
         ) {
             lock.lock()
             eventSink = onReceive
             ingressDropSink = onIngressDrop
             callbackWorkBudgetDropSink = onCallbackWorkBudgetDrop
+            unconvertedWordsSink = onUnconvertedWords
             lock.unlock()
         }
 
@@ -1437,6 +1440,17 @@ actor ProductionMCUTransport: MCUTransportProtocol {
         func recordCallbackWorkBudgetDrop(_ count: UInt64) {
             lock.lock()
             let current = callbackWorkBudgetDropSink
+            lock.unlock()
+            current?(count)
+        }
+
+        /// Words carrying a message this server does not convert — SysEx7 under the current scope.
+        /// NOT an error and it must not make MCU unavailable: it is the expected count for SysEx
+        /// traffic, and a health field that says so is the difference between a known gap and a
+        /// silent one. Note the unlabelled `_ count`: the ingress's counterpart takes `count:`.
+        func recordUnconvertedWords(_ count: UInt64) {
+            lock.lock()
+            let current = unconvertedWordsSink
             lock.unlock()
             current?(count)
         }
@@ -1526,9 +1540,20 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                     }
                     let wordCount = declaredWords
                     if wordCount > 0 {
-                        let bytes: [UInt8] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
-                            Array(raw.prefix(wordCount * 4))
+                        // UMP WORDS, converted — not the words' memory image. Measured 2026-09-08:
+                        // slicing the image handed a MIDI 1.0 parser `[data2, data1, status, …]`,
+                        // so 161 packets from Logic produced 8 events instead of 112 and every
+                        // fader echo was dropped by the two-data-byte guard.
+                        let umpWords: [UInt32] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
+                            Array(raw.bindMemory(to: UInt32.self).prefix(wordCount))
                         }
+                        let converted = MIDIFeedback.midi1Bytes(fromUMPWords: umpWords)
+                        let bytes = converted.bytes
+                        if converted.unconverted > 0 {
+                            sink.recordUnconvertedWords(UInt64(converted.unconverted))
+                        }
+                        // The trace shows what the PARSER sees, which after this change is the
+                        // converted stream rather than the raw words.
                         MCUTrace.emit(.rx, bytes)
                         // v3.8.0 (WS6 / AC1) — deliver each parsed event to the
                         // CURRENT sink SYNCHRONOUSLY in arrival order. The

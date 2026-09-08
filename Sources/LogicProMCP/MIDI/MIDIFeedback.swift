@@ -33,6 +33,76 @@ enum MIDIFeedback {
         }
     }
 
+    /// Convert one CoreMIDI Universal MIDI Packet into the MIDI 1.0 byte stream `parseBytes` reads.
+    ///
+    /// The MCU port is created with `MIDIDestinationCreateWithProtocol(..., ._1_0, ...)`, so
+    /// CoreMIDI delivers MIDI 1.0 messages wrapped in 32-bit UMP words. A word's LAYOUT and its byte
+    /// order in memory are different things: the word is
+    ///
+    ///     (0x2 << 28) | (group << 24) | (status << 16) | (data1 << 8) | data2
+    ///
+    /// and on a little-endian host its bytes are `[data2, data1, status, 0x20|group]`. Slicing the
+    /// memory image and calling it a MIDI stream reverses every message. Measured 2026-09-08 against
+    /// a Logic whose Mackie surface was bound: 161 packets produced 8 events instead of 112, and
+    /// every fader position was dropped — a four-byte packet puts the status at index 2 and leaves
+    /// one byte after it, enough for channel pressure's guard and not for anything with two data
+    /// bytes. That is what `echo_timeout_500ms` was.
+    ///
+    /// Returns the messages this converter understands, concatenated, and the count of words it did
+    /// not convert — so a caller can report how much it did not read rather than presenting a
+    /// partial decode as a complete one.
+    static func midi1Bytes(fromUMPWords words: [UInt32]) -> (bytes: [UInt8], unconverted: Int) {
+        var out: [UInt8] = []
+        var unconverted = 0
+        var i = 0
+        while i < words.count {
+            let word = words[i]
+            let messageType = UInt8((word >> 28) & 0xF)
+            switch messageType {
+            case 0x0:                       // utility — carries no MIDI 1.0 message
+                i += 1
+            case 0x1, 0x2:                  // system real-time/common, and MIDI 1.0 channel voice
+                let status = UInt8((word >> 16) & 0xFF)
+                let data1 = UInt8((word >> 8) & 0x7F)
+                let data2 = UInt8(word & 0x7F)
+                switch dataByteCount(forStatus: status) {
+                case 0: out.append(status)
+                case 1: out.append(contentsOf: [status, data1])
+                default: out.append(contentsOf: [status, data1, data2])
+                }
+                i += 1
+            // The STRIDE matters as much as the order. Advancing one word past a 64-bit message
+            // reads its second word as a header, which turns a missing event into a FABRICATED one
+            // whenever that word happens to look like channel voice.
+            case 0x3, 0x4:                  // 64-bit: SysEx7 data, MIDI 2.0 channel voice
+                unconverted += 1
+                i += 2
+            case 0x5:                       // 128-bit
+                unconverted += 1
+                i += 4
+            default:
+                unconverted += 1
+                i += 1
+            }
+        }
+        return (out, unconverted)
+    }
+
+    /// How many data bytes a MIDI 1.0 status byte carries. `0` for a status that carries none.
+    private static func dataByteCount(forStatus status: UInt8) -> Int {
+        switch status & 0xF0 {
+        case 0x80, 0x90, 0xA0, 0xB0, 0xE0: return 2
+        case 0xC0, 0xD0: return 1
+        case 0xF0:
+            switch status {
+            case 0xF1, 0xF3: return 1
+            case 0xF2: return 2
+            default: return 0          // real-time, tune request, and SysEx framing bytes
+            }
+        default: return 2
+        }
+    }
+
     /// Parse raw MIDI bytes into one or more events.
     /// Handles running status and SysEx spanning.
     static func parseBytes(_ bytes: [UInt8]) -> [Event] {
