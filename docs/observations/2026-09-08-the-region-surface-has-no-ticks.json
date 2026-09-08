@@ -1,0 +1,127 @@
+{
+  "id": "2026-09-08-the-region-surface-has-no-ticks",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "whether a production observer can build ResolvedRegionIdentity from a live region read",
+  "question": "Does Logic's region surface expose the name, ordinal and startTick that ResolvedRegionIdentity requires?",
+  "verdict": "partial",
+  "issues": [
+    293,
+    303,
+    305,
+    306,
+    302
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Driven live: the release binary over stdio against the running Logic, one get_regions call on the campaign fixture."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-region-surface-fields.sh",
+    "expected": "REVERIFY PASS: the live region read publishes exactly endBar,kind,name,rawHelp,startBar,trackIndex — no tick, no ordinal",
+    "cost": "needs Logic open on a project with regions and a release binary; seconds"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackEvidence.swift",
+    "Sources/LogicProMCP/MIDIReadback/RegionIdentityRegistry.swift"
+  ],
+  "evidence": [],
+  "method": "Read the fields a live region actually publishes, rather than reading the type that consumes them. The type was checked first for what it demands, then the surface for what it supplies.",
+  "observations": [
+    {
+      "what": "fields a live region publishes",
+      "fields": [
+        "endBar",
+        "kind",
+        "name",
+        "rawHelp",
+        "startBar",
+        "trackIndex"
+      ],
+      "regions_returned": 8,
+      "sample": {
+        "name": "MIDI Region",
+        "kind": "midi",
+        "startBar": 1,
+        "endBar": 2,
+        "trackIndex": 11
+      }
+    },
+    {
+      "what": "the finest position granularity offered",
+      "value": "bars",
+      "quoted_rawHelp": "Region starts at 1 bar  and ends at 2 bars , MIDI region.",
+      "note": "prose, and localised — it is the same string the kind parser reads"
+    },
+    {
+      "what": "what ResolvedRegionIdentity requires",
+      "fields": [
+        "name",
+        "ordinal",
+        "startTick"
+      ]
+    },
+    {
+      "what": "where ResolvedRegionIdentity is constructed today",
+      "in_sources": 0,
+      "in_tests": 6,
+      "startTick_values": [
+        "0",
+        "Int64.min"
+      ],
+      "note": "every construction is a test fixture; no production code builds one"
+    },
+    {
+      "what": "where startTick exists in the product at all",
+      "file": "Sources/LogicProMCP/MIDI/SMFReader.swift",
+      "context": "parsed Standard MIDI File contents, not a live read"
+    },
+    {
+      "what": "the Event List, as a possible second source",
+      "result": "not measured",
+      "observed": "--probe-event-list answered {\"error\":\"Event List tab (AXDescription Event) was not found.\",\"ok\":false} because the pane was closed"
+    },
+    {
+      "what": "the Event List, measured after this record's first pass",
+      "opening_it": "View > List Editors, found by NAME not by index",
+      "lands_at": "region level",
+      "refusal": "{\"error\":\"Event List is at region level; event-level rows are unavailable.\",\"ok\":false}",
+      "note": "this is the state the roadmap's six-column reading was taken in"
+    },
+    {
+      "what": "note-level rows, after a selected MIDI region existed",
+      "live_columns": [
+        "L",
+        "M",
+        "Position",
+        "Status",
+        "Ch",
+        "Num",
+        "Val",
+        "Length/Info"
+      ],
+      "rows": 2,
+      "position_values": [
+        "1 1 1 1 ",
+        "1 2 1 1 "
+      ],
+      "length_info_value": "0 1 0 0",
+      "reading": "Position is bar / beat / division / TICK — four segments, as a string",
+      "caveat": "this is an EVENT's position, not the region's. Here the region starts at bar 1 and its first note reads 1 1 1 1, but a region whose first event is not at its start would not yield the region's startTick this way."
+    }
+  ],
+  "conclusion": "A production observer cannot build `ResolvedRegionIdentity` from a live REGION read. The region surface publishes six fields, none of them a tick or an ordinal, and its finest position is a bar offered as localised prose. Ticks do exist one level down: the Event List's Position column reads bar / beat / division / tick at note level. But that is an EVENT's position, so it supplies a region's startTick only when the region's first event sits exactly at its start — which is a coincidence of this fixture rather than a property. So the seam blocking five issues is not merely unwired: the identity its design requires is not obtainable from the region surface, and the surface that does carry ticks answers a different question.",
+  "limits": [
+    "One project, one call, en-US. A different project cannot add fields, but this does not prove the AX elements carry nothing more than the publisher exposes — only that the published surface has no tick.",
+    "It says nothing about whether `ordinal` could be derived. An index within the enumeration would be positional, which this repository refuses elsewhere, but that is a design judgement rather than a measurement.",
+    "`rawHelp` was read as published. Whether the underlying AXHelp carries finer granularity that the parser discards was not checked.",
+    "The Event List reading is one region with two notes, both landing on beat boundaries. Whether a region whose first event is offset reports anything about the REGION's start was not measured, and that is the case the caveat above turns on."
+  ],
+  "supersedes": null
+}
