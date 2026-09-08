@@ -219,6 +219,24 @@ def unproven(records):
     print(f"\nrecords whose reverify is manual prose rather than a command: {len(manual)}")
     for r in manual:
         print(f"      {r}")
+    # Every dimension the ratchet counts must appear here, or the report is a smaller ledger than the
+    # ceiling and a reader acts on the smaller one. `records_without_evidence` was added to the
+    # ratchet and not to this report, so 36 records whose readings live only in their own
+    # `observations` array were being counted as a gap and named nowhere. Found by a merge-gate
+    # inventory 2026-09-08.
+    no_evidence = sorted(gaps["records_without_evidence"])
+    print(f"\nrecords citing no evidence file — readings that live only in the record: {len(no_evidence)}")
+    for r in no_evidence:
+        print(f"      {r}")
+    # The one check that keeps this honest as dimensions are added: every key the ratchet holds must
+    # have been printed above. A new gap dimension that nobody reports is a gap nobody can act on.
+    reported = {"undocumented_variants", "unmeasured_coverage", "surfaces_without_records",
+                "schema_v1_records", "manual_reverify", "records_without_evidence"}
+    unreported = sorted(set(gaps) - reported)
+    if unreported:
+        print(f"\n!! {len(unreported)} ledger dimension(s) are counted by the ratchet and NOT named "
+              f"in this report: {', '.join(unreported)}")
+        print("   Add them above; a ceiling nobody can enumerate is a number, not a list of work.")
     # Which claims rest on a machine-produced census, and which on a row the record's author typed.
     # Both are legitimate — a record carries readings, and a person writing down what they saw is
     # how most of this ledger was built. But the guard cannot tell them apart, and neither could a

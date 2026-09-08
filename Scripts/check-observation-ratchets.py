@@ -19,6 +19,7 @@ The gaps, and where each is read from:
     unmeasured_coverage[loc]   docs/locale/ui-labels.json  coverage[loc] == "unmeasured"
     schema_v1_records          docs/observations/*.json    records without "schema": 2
     manual_reverify            docs/observations/*.json    reverify.kind == "manual"
+    records_without_evidence   docs/observations/*.json    records citing no evidence file
     surfaces_without_records   SURFACES.md vs records      surfaces no record names
 
 Exit 0 when every count equals its ceiling, 1 otherwise, 2 if an input cannot be read.
@@ -67,6 +68,19 @@ def live_state(repo=REPO):
                if re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(path))]
     schema_v1 = {r.get("id") for r in records if r.get("schema", 1) != 2}
     manual = {r.get("id") for r in records if (r.get("reverify") or {}).get("kind") == "manual"}
+    # A record whose readings live only in its own `observations` array cites nothing anyone else
+    # can re-open. That is allowed — the schema says so — but it is a GAP, and it was invisible:
+    # measured 2026-09-08, 36 of 59 records cite no evidence file at all, and nothing said so.
+    #
+    # Held as a set for the same reason every dimension here is: a count would let a new uncited
+    # record in whenever an old one gained a citation, and the ledger would read as standing still
+    # while it learned strictly less about the newer claim.
+    #
+    # Note what this does NOT check: that a cited file supports the claim. `evidence` entries are
+    # already checked to EXIST by check-observation-records.py; whether the bytes in them say what
+    # the conclusion says is a different and much heavier rule. This closes the cheap gap — a record
+    # that cites nothing — and leaves the expensive one named rather than pretended away.
+    uncited = {r.get("id") for r in records if not (r.get("evidence") or [])}
 
     surfaces = re.findall(r"\|\s*`([a-z_]+\.[a-z_]+)`",
                           open(os.path.join(obs_dir, "SURFACES.md"), encoding="utf-8").read())
@@ -81,6 +95,7 @@ def live_state(repo=REPO):
         "unmeasured_coverage": unmeasured,
         "schema_v1_records": schema_v1,
         "manual_reverify": manual,
+        "records_without_evidence": uncited,
         "surfaces_without_records": bare,
     }
 
