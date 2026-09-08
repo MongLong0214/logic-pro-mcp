@@ -114,6 +114,24 @@
       "length_info_value": "0 1 0 0",
       "reading": "Position is bar / beat / division / TICK — four segments, as a string",
       "caveat": "this is an EVENT's position, not the region's. Here the region starts at bar 1 and its first note reads 1 1 1 1, but a region whose first event is not at its start would not yield the region's startTick this way."
+    },
+    {
+      "what": "descriptor collisions, measured after the design call named them the likeliest failure",
+      "regions": 10,
+      "name_collisions": {
+        "MIDI Region": 10
+      },
+      "distinct_4_tuples": 10,
+      "colliding_4_tuples": 0,
+      "tracks_holding_more_than_one_region": 0,
+      "note": "the tuple's uniqueness here is a property of the FIXTURE, not of the surface: record_sequence creates a new track per call by contract, so this project has one region per track"
+    },
+    {
+      "what": "an attempt to force a same-track collision",
+      "route": "logic_edit duplicate on the region record_sequence had just created",
+      "result": "{\"state\":\"B\",\"reason\":\"readback_unavailable\",\"success\":true,\"method\":\"midi_key_command\"}",
+      "region_count_change": 0,
+      "claim": "the collision case was NOT produced by this route; this does not establish that it cannot occur"
     }
   ],
   "conclusion": "A production observer cannot build `ResolvedRegionIdentity` from a live REGION read. The region surface publishes six fields, none of them a tick or an ordinal, and its finest position is a bar offered as localised prose. Ticks do exist one level down: the Event List's Position column reads bar / beat / division / tick at note level. But that is an EVENT's position, so it supplies a region's startTick only when the region's first event sits exactly at its start — which is a coincidence of this fixture rather than a property. So the seam blocking five issues is not merely unwired: the identity its design requires is not obtainable from the region surface, and the surface that does carry ticks answers a different question.",
@@ -121,7 +139,8 @@
     "One project, one call, en-US. A different project cannot add fields, but this does not prove the AX elements carry nothing more than the publisher exposes — only that the published surface has no tick.",
     "It says nothing about whether `ordinal` could be derived. An index within the enumeration would be positional, which this repository refuses elsewhere, but that is a design judgement rather than a measurement.",
     "`rawHelp` was read as published. Whether the underlying AXHelp carries finer granularity that the parser discards was not checked.",
-    "The Event List reading is one region with two notes, both landing on beat boundaries. Whether a region whose first event is offset reports anything about the REGION's start was not measured, and that is the case the caveat above turns on."
+    "The Event List reading is one region with two notes, both landing on beat boundaries. Whether a region whose first event is offset reports anything about the REGION's start was not measured, and that is the case the caveat above turns on.",
+    "Descriptor uniqueness was measured on one project whose every region sits on its own track. A project with several regions on one track was not available and could not be produced through edit.duplicate, so the collision case the design must refuse remains unmeasured."
   ],
   "supersedes": null
 }
