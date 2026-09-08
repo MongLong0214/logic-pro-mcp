@@ -249,17 +249,6 @@
         "controlBarGroupLabel",
         "createButton",
         "deleteTracksPrimaryButton",
-        "eventListColumnChannel",
-        "eventListColumnL",
-        "eventListColumnLength",
-        "eventListColumnLengthInfo",
-        "eventListColumnM",
-        "eventListColumnName",
-        "eventListColumnNumber",
-        "eventListColumnPosition",
-        "eventListColumnStatus",
-        "eventListColumnTrack",
-        "eventListColumnValue",
         "eventListTab",
         "eventPositionAsTimeMenuItem",
         "goToPositionDialogTitle",
@@ -634,7 +623,6 @@
     ],
     "surfaces_without_records": [
       "en-US→editor.audio_track",
-      "en-US→editor.event_list",
       "en-US→editor.piano_roll",
       "en-US→editor.step",
       "en-US→mixer.inserts",
@@ -648,6 +636,7 @@
       "ja-JP→editor.event_list",
       "ja-JP→editor.piano_roll",
       "ja-JP→editor.step",
+      "ja-JP→inspector.channel_strip",
       "ja-JP→mixer.routing",
       "ja-JP→plugin.controls_view",
       "ja-JP→plugin.native_view",
@@ -658,6 +647,7 @@
       "ja-JP→system.midi",
       "ja-JP→system.preferences",
       "ko-KR→editor.step",
+      "ko-KR→inspector.channel_strip",
       "ko-KR→project.export",
       "ko-KR→project.lifecycle",
       "ko-KR→system.midi",
@@ -743,11 +733,11 @@
       ]
     },
     "surfaces_without_records": {
-      "date": "2026-09-07",
-      "reason": "`system.accessibility` is a new row in SURFACES.md — the AX bridge itself, which nothing had ever measured as a surface even though every live harness reads through it. Naming it creates two gaps rather than hiding them: the locked-session readings were taken on an en-US host only. It is TEMPTING to argue a lock is locale-independent and close these by reasoning; that is exactly the move this ledger exists to refuse, so they stay open until somebody takes the readings on a Japanese and a Korean Logic.",
+      "date": "2026-09-08",
+      "reason": "`inspector.channel_strip` is a new row in SURFACES.md. #766's classifier comment said reading the strip \"needs the Mixer revealed\"; measuring it showed the Inspector's left strip carries the same slots in the main window with the Mixer closed, which is a different surface from `mixer.channel_strips` and was worth naming rather than filing under the Mixer. Naming it opens two gaps: the slot inventory was read on an en-US Logic only. The slot names are localised — `Input slot` and `MIDI Effect slot` are English strings — so the rule they support is exactly the kind that a locale can break, and reasoning that a slot's PRESENCE is locale-independent would be closing a measurement gap with an argument. They stay open until somebody reads the strips on a Japanese and a Korean Logic.",
       "members": [
-        "ja-JP→system.accessibility",
-        "ko-KR→system.accessibility"
+        "ja-JP→inspector.channel_strip",
+        "ko-KR→inspector.channel_strip"
       ]
     },
     "records_without_evidence": {

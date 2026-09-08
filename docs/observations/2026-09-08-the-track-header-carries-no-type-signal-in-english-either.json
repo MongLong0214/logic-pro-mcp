@@ -1,0 +1,87 @@
+{
+  "id": "2026-09-08-the-track-header-carries-no-type-signal-in-english-either",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "every attribute a track header exposes within the radius `inferTrackType` searches",
+  "question": "Does any field of a track header differ by track type, or only by the track's name?",
+  "verdict": "partial",
+  "issues": [
+    766
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic's UI language is `en` while the system's is ko-KR, which is why this measures the locale #766 could only infer about. Logic's own preference reads `AppleLanguages = (en)`; `en-US` is this repository's key for that label set."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-track-header-type-signal.sh",
+    "expected": "REVERIFY PASS — the only thing that varies across track headers is still the track's name",
+    "cost": "live; Logic running with a project whose tracks are not all one kind; a few seconds"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+    "Scripts/livekit/ax_track_type_signal_census.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-track-header-type-signal-census-en.json"
+  ],
+  "method": "A probe outside the product walked the same subtree `inferTrackType` reads — the header and its descendants to depth 4 — collecting AXDescription, AXTitle, AXIdentifier, AXHelp, AXValue, AXRoleDescription and AXSubrole from every element. The field sets were then intersected across all 21 headers, so that anything present on every header is disqualified as a discriminator no matter what it says, and only what is NOT shared can be a type signal.",
+  "observations": [
+    {
+      "what": "headers censused",
+      "count": 21,
+      "container": "group:structural",
+      "kinds_present": "measured separately the same day: one strip shows an Input slot, nineteen show a MIDI Effect slot, one shows neither — see 2026-09-08-the-inspector-strip-slots-discriminate-track-type"
+    },
+    {
+      "what": "fields carried by EVERY header",
+      "count": 23,
+      "note": "chrome. Present on all 21, so none of them can separate one header from another."
+    },
+    {
+      "what": "fields NOT shared by every header",
+      "per_header": "exactly two on twenty headers, four on one",
+      "the_two": [
+        "AXDescription=<the track's name>",
+        "AXDescription=Track N “<the track's name>”"
+      ],
+      "the_extra_two": [
+        "AXHelp=Track stack disclosure arrow. …",
+        "AXRoleDescription=disclosure triangle"
+      ],
+      "which_header": "Absolute Zero, a Track Stack"
+    },
+    {
+      "what": "the sentence that collapses the classifier, now read in English",
+      "element": "Input Monitoring button",
+      "help": "Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled.",
+      "present_on": "all 21 headers",
+      "satisfies": [
+        "trackTypeAudio",
+        "trackTypeInstrument"
+      ]
+    },
+    {
+      "what": "child lists the sweep could NOT read",
+      "count": 60,
+      "error_name": "kAXErrorFailure",
+      "across": "21 headers",
+      "stability": "identical across three consecutive runs",
+      "note": "`noValue` and `attributeUnsupported` are real answers and are not counted; these sixty refused the question"
+    }
+  ],
+  "conclusion": "Within the radius the classifier searches, a track header carries nothing that varies with the kinds of track PRESENT HERE — audio, software instrument and a Track Stack, the three the inspector strips distinguish in this project. Aux, bus, master and external-MIDI headers were absent and are not covered by that statement. The only per-header variation is the name the user typed, plus a disclosure arrow on the one Track Stack. The issue this record belongs to measured the same collapse in ko-KR and marked English as inference; English is now measured, and the English help text names an audio track and a software instrument track in the same sentence exactly as the Korean does. No reordering of the token sets can repair this, which is why the shipped classifier counts matches and answers `.unknown` when more than one set matches.",
+  "limits": [
+    "The sweep does not reach everything. Sixty child reads fail across the 21 headers, so those subtrees were never walked. The comparison stays like-for-like if the same positions fail on every header, which was not established — a field present only on some headers, inside a subtree that refuses to be read, would be invisible to this method and would look like a field that does not vary. The probe did not count these until a merge-gate inventory flagged the class.",
+    "Depth 4 is the radius the product searches, so this says nothing about attributes deeper than that. It is a measurement of the classifier's input, not of the header's whole subtree.",
+    "Attribute-based only. An icon's image data is not read here, and a type drawn as a picture would be invisible to this probe and to the classifier alike.",
+    "One project on one host. A project containing kinds absent here — aux, bus, master, external MIDI — could carry a field these 21 headers do not.",
+    "Names were read, not verified against the kinds they suggest. That the kinds genuinely differ rests on the inspector-strip census taken the same day, not on the names in this record."
+  ],
+  "supersedes": null
+}

@@ -1,0 +1,102 @@
+{
+  "id": "2026-09-08-the-inspector-strip-slots-discriminate-track-type",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "which slots the Inspector's left channel strip exposes for each kind of track",
+  "question": "Is there a readable signal that separates an audio track from a software instrument track, and does reading it require the Mixer?",
+  "verdict": "works",
+  "issues": [
+    766
+  ],
+  "surface": "inspector.channel_strip",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Mixer closed throughout. The strip read is the one the Inspector shows in the main window. Logic's own preference reads `AppleLanguages = (en)`; `en-US` is this repository's key for that label set."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-inspector-strip-type-slots.sh",
+    "expected": "REVERIFY PASS — the input slot and the MIDI Effect slot still separate the two kinds",
+    "cost": "live; Logic running with the Inspector open and both kinds of track present; changes the selection and puts it back; ~5s for 21 tracks"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+    "Scripts/livekit/ax_inspector_strip_type_census.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-inspector-strip-slot-census-en.json"
+  ],
+  "method": "Each of 21 track headers was selected in turn through the header rail's AXSelectedChildren. After each selection the probe waited for the Inspector's left strip to report the selected track's own name as its AXDescription — settling on the strip's identity rather than on a timer — and then read the leading clause of every child's AXHelp, keeping the ones that name a slot. The original selection was restored at the end.",
+  "observations": [
+    {
+      "what": "slots on the one audio-shaped strip",
+      "track": "Audio 1",
+      "slots": [
+        "Audio Effect slot",
+        "Group slot",
+        "Input slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "has_input_slot": true,
+      "has_midi_effect_slot": false
+    },
+    {
+      "what": "slots on every instrument-shaped strip",
+      "count": 19,
+      "slots": [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "has_input_slot": false,
+      "has_midi_effect_slot": true
+    },
+    {
+      "what": "the one strip the rule does not classify",
+      "track": "Absolute Zero",
+      "kind": "Track Stack",
+      "slots": [
+        "Audio Effect slot",
+        "Audio Effect slot",
+        "Group slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "has_input_slot": false,
+      "has_midi_effect_slot": false
+    },
+    {
+      "what": "strips showing both slots",
+      "count": 0,
+      "note": "this is the clause that makes it a discriminator rather than a coincidence"
+    },
+    {
+      "what": "where the strip lives",
+      "path": "window > AXGroup > AXList > AXGroup > AXLayoutArea > AXLayoutItem",
+      "depth": 5,
+      "identified_by": "AXHelp beginning \"Left inspector channel strip\"",
+      "mixer_open": false
+    },
+    {
+      "what": "how long the strip took to follow the selection",
+      "polls_of_50ms": "1 or 2 on every one of the 21 tracks",
+      "unsettled": 0
+    }
+  ],
+  "conclusion": "The kind of track IS readable, and the signal is the strip's slot inventory rather than any prose: an audio strip has an Input slot and no MIDI Effect slot, an instrument strip has a MIDI Effect slot and no Input slot, and no strip observed has both. It also corrects what this repository had written down about the cost of reading it — the comment in `inferTrackType` says the strip read \"needs the Mixer revealed\", and it does not. The Inspector's left strip carries the same slots in the main window with the Mixer closed, and it follows the track selection within one or two 50ms polls.",
+  "limits": [
+    "Two kinds separated, not seven. Drummer, external MIDI, aux, bus and master were not present in this project and are unmeasured here; #766's earlier ko-KR comments measured drummer and external MIDI, and this record does not restate them.",
+    "The Track Stack shows neither slot, so a rule built on these two slots needs a third outcome, not a default. Reading a stack's kind is not solved by this measurement.",
+    "The strip is bound to the track only by name agreement, and nineteen of these tracks share a name with another (nine `Deluxe Classic`, ten `Studio Grand`), so for those the settle proves the inspector caught up rather than that the strip belongs to the track selected. The two rows the rule actually turns on — `Audio 1` and `Absolute Zero` — are uniquely named, so their readings do not rest on that weakness; the nineteen agree with each other regardless of which of them was read.",
+    "Selection was driven by AXSelectedChildren. Whether the product's own selection path produces the same strip state is not established here."
+  ],
+  "supersedes": null
+}
