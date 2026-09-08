@@ -1405,6 +1405,51 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
     )
 
+    /// en measured 2026-09-09 on Logic 12.3 (6674), inspector channel strip: an `AXButton` whose
+    /// help reads `MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the
+    /// plug-in.`, described `MIDI plug-in`.
+    ///
+    /// The full phrase again, and here the neighbour is two words wide rather than one: every
+    /// strip that has this one ALSO has `Audio Effect slot`, so a match on `effect slot` would
+    /// report an audio track's insert as a MIDI effect slot and make every strip an instrument.
+    ///
+    /// What this set does NOT establish, and the reason it is not enough on its own: a DRUMMER
+    /// track's strip carries the identical slot. Measured the same day on `SoCal`
+    /// (`create_drummer`) and `Studio Grand` (`create_instrument`) — same slot, different
+    /// instrument-group description, and that description is the plug-in loaded rather than the
+    /// kind of track. So this set marks the instrument FAMILY and narrowing it further is a
+    /// confident wrong answer on every drummer track.
+    static let midiEffectSlotHelpKeyword = LabelSet(
+        canonical: "midi effect slot",
+        variants: [],
+        rationale: "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier."
+    )
+
+    /// en measured 2026-09-09: the inspector's channel strip for the SELECTED track is an
+    /// `AXLayoutItem` whose help begins `Left inspector channel strip`.
+    ///
+    /// A prefix rather than a substring, because the phrase names the element itself; nothing else
+    /// on the window was observed to carry it.
+    static let inspectorChannelStripHelpPrefix = LabelSet(
+        canonical: "left inspector channel strip",
+        variants: [],
+        rationale: "Identifies the inspector's channel strip for the selected track; read-only locator."
+    )
+
+    /// en measured 2026-09-09 on an `create_external_midi` track (`Off 1`): its strip has NO
+    /// output slot, NO send slot, NO audio effect slot and no EQ, and instead carries
+    /// button/slider pairs whose help reads `Assign control. Assign to a MIDI controller, used to
+    /// remotely control parameters such as v…`.
+    ///
+    /// This set is the POSITIVE half of a claim whose other half is an absence, so it is only
+    /// usable where the child list was actually read: a strip nobody could read shows no output
+    /// slot either.
+    static let assignControlHelpKeyword = LabelSet(
+        canonical: "assign control",
+        variants: [],
+        rationale: "Marks an external-MIDI strip's controller-assignment rows; read-only classifier."
+    )
+
     /// Japanese measured 2026-09-06 from the ja-JP arrange-regions census: Logic's help string for
     /// a region reads `リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. …`.
     ///
@@ -1772,6 +1817,9 @@ enum AXLocalePolicy {
         regionKindAudio,
         outputSlotHelpKeyword,
         inputSlotHelpKeyword,
+        midiEffectSlotHelpKeyword,
+        inspectorChannelStripHelpPrefix,
+        assignControlHelpKeyword,
         regionHelpKeyword,
     ]
 }

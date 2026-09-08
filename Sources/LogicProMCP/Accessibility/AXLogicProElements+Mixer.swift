@@ -397,6 +397,111 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
+    /// The leading sentence of every direct child's `AXHelp` on a channel strip, or `nil` when the
+    /// child list could not be read (#766).
+    ///
+    /// `nil` and `[]` are kept apart on purpose. A strip nobody could read otherwise reports no
+    /// slots, and every clause phrased as an ABSENCE — "no output slot", "no audio effect slot" —
+    /// then passes over it and classifies it confidently. The census this was derived from gained
+    /// the same distinction from a review on 2026-09-08 for exactly that reason.
+    ///
+    /// Direct children only, because that is where the measurement was taken: the slots sit on the
+    /// strip itself, and descending further would pull in the inserted plug-ins' own controls.
+    static func slotKinds(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> [String]? {
+        guard case let .success(children) = AXHelpers.childrenResult(strip, runtime: runtime) else {
+            return nil
+        }
+        return children.compactMap { child -> String? in
+            let help = AXHelpers.getHelp(child, runtime: runtime) ?? ""
+            guard let dot = help.firstIndex(of: ".") else { return nil }
+            return String(help[help.startIndex..<dot]).lowercased()
+        }
+    }
+
+    /// What the SELECTED track's inspector channel strip says the track is (#766).
+    ///
+    /// Measured 2026-09-09 on Logic 12.3 (6674), en, on tracks created by each `create_*`:
+    ///
+    ///     Input slot                                    audio
+    ///     MIDI Effect slot                              software instrument OR DRUMMER
+    ///     no output slot + an Assign control row        external MIDI
+    ///
+    /// The middle row is why this returns a THREE-valued reading rather than a `TrackType`: a drummer track's
+    /// strip is identical to a software instrument's, so the honest answer for that shape is no
+    /// answer, and the caller keeps whatever the header said. Returning `.softwareInstrument` there
+    /// would be a confident wrong answer on every drummer track.
+    ///
+    /// External MIDI is the one claim here resting on an ABSENCE, so it is made only from a child
+    /// list that was actually read: `slotKinds` returns `nil` rather than `[]` when it was not, and
+    /// this refuses on `nil` instead of reading it as "no output slot".
+    static func inspectorStripReading(
+        expectedName: String,
+        runtime: Runtime = .production
+    ) -> StripReading {
+        guard let window = mainWindow(runtime: runtime),
+              let strip = inspectorChannelStrip(named: expectedName, in: window, runtime: runtime.ax)
+        else { return .undetermined }
+        return reading(fromSlotKinds: slotKinds(in: strip, runtime: runtime.ax))
+    }
+
+    /// What a strip's slots amount to (#766).
+    ///
+    /// `instrumentFamily` is a THIRD answer rather than a second spelling of `undetermined`,
+    /// because the two are different facts and the create path publishes them differently: one
+    /// says the strip was read and its answer is a family this read cannot narrow, the other says
+    /// no strip answered. Collapsing them would also make the MIDI-effect branch unobservable —
+    /// it would return the same thing as falling through, and a rule nothing can distinguish is
+    /// not a rule.
+    enum StripReading: Equatable {
+        case type(TrackType)
+        case instrumentFamily
+        case undetermined
+    }
+
+    /// The classification itself, separated from reading it off a live strip so it can be tested
+    /// against the shapes that were measured rather than only against a running Logic (#766).
+    ///
+    /// `nil` in means the child list was unreadable and `nil` out is the only correct answer: the
+    /// external-MIDI clause is phrased as an absence, and a strip nobody could read shows no output
+    /// slot either.
+    static func reading(fromSlotKinds kinds: [String]?) -> StripReading {
+        guard let kinds else { return .undetermined }
+        let has = { (set: AXLocalePolicy.LabelSet) in kinds.contains { set.containsAny(in: $0) } }
+        if has(AXLocalePolicy.inputSlotHelpKeyword) { return .type(.audio) }
+        // A drummer strip is identical to a software instrument's, so the family is where this
+        // stops. Narrowing here is the confident wrong answer #766's first half removed.
+        if has(AXLocalePolicy.midiEffectSlotHelpKeyword) { return .instrumentFamily }
+        if has(AXLocalePolicy.assignControlHelpKeyword),
+           !has(AXLocalePolicy.outputSlotHelpKeyword) { return .type(.externalMIDI) }
+        return .undetermined
+    }
+
+    /// The inspector's channel strip for the SELECTED track, or `nil` (#766).
+    ///
+    /// The inspector rebuilds this strip when the selection changes, so the caller must say which
+    /// track it expects and this refuses until the strip's own name agrees. Without that wait the
+    /// read races the rebuild and reports the PREVIOUS track's strip, which looks like a settled
+    /// answer. Two tracks with the same name defeat the agreement and that is not detectable here.
+    static func inspectorChannelStrip(
+        named expected: String,
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
+        let items = AXHelpers.findAllDescendants(
+            of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
+        )
+        for item in items {
+            let help = (AXHelpers.getHelp(item, runtime: runtime) ?? "").lowercased()
+            guard AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: help) else { continue }
+            guard AXHelpers.getDescription(item, runtime: runtime) == expected else { continue }
+            return item
+        }
+        return nil
+    }
+
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production

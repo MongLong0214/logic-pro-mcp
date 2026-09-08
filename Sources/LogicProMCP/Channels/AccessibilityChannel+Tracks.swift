@@ -2056,8 +2056,30 @@ extension AccessibilityChannel {
                     if observedTrack.liveIdentityBacked {
                         merged["observed_track_name"] = observedTrack.name
                     }
-                    merged["observed_track_type"] = observedTrack.type.rawValue
-                    merged["track_type_verification_source"] = "observed_header"
+                    // #766 — the header aggregate cannot tell the types apart, so it answers
+                    // `unknown`; the inspector channel strip CAN, for two of them. The strip is
+                    // the one the inspector rebuilt for the track just created, which is the
+                    // selected one, so this costs no selection change — and it is only consulted
+                    // when the name it has to agree with was actually read, because the
+                    // placeholder "Untitled" would match whatever strip happened to carry it.
+                    let stripReading = observedTrack.liveIdentityBacked
+                        ? AXLogicProElements.inspectorStripReading(expectedName: observedTrack.name)
+                        : .undetermined
+                    switch stripReading {
+                    case let .type(readType):
+                        merged["observed_track_type"] = readType.rawValue
+                        merged["track_type_verification_source"] = "inspector_channel_strip"
+                    case .instrumentFamily:
+                        // The strip WAS read and its answer is a family this read cannot narrow —
+                        // a drummer's strip and a software instrument's are identical. The type
+                        // stays `unknown`, and the source says which of the two unknowns this is:
+                        // a read that answered a family, not a read that did not happen.
+                        merged["observed_track_type"] = TrackType.unknown.rawValue
+                        merged["track_type_verification_source"] = "inspector_channel_strip_instrument_family"
+                    case .undetermined:
+                        merged["observed_track_type"] = observedTrack.type.rawValue
+                        merged["track_type_verification_source"] = "observed_header"
+                    }
                 }
                 return .success(HonestContract.encodeStateA(extras: merged))
             }
