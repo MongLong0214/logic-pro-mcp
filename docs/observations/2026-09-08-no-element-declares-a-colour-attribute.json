@@ -1,0 +1,115 @@
+{
+  "id": "2026-09-08-no-element-declares-a-colour-attribute",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "whether any element reachable from Logic's main window declares a colour-bearing accessibility attribute",
+  "question": "Is a track colour write observable through AX at all, or is there nothing to read back?",
+  "verdict": "partial",
+  "issues": [
+    448
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Read-only sweep; nothing in Logic was actuated. Logic's own preference reads `AppleLanguages = (en)`; `en-US` is this repository's key for that label set."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-no-colour-attribute-is-declared.sh",
+    "expected": "REVERIFY PASS — no element in the main window declares a colour-bearing attribute",
+    "cost": "live; Logic running with a project open; read-only; a few seconds"
+  },
+  "depends": [
+    "Scripts/livekit/ax_attribute_name_census.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-attribute-name-census-main-window-en.json",
+    "evidence/2026-09-08-attribute-name-census-mixer-open-en.json"
+  ],
+  "method": "`AXUIElementCopyAttributeNames` was called on every element reachable from the frontmost non-dialog window to depth 16, and separately on every track header to depth 4 — the radius the product's own header readers use. The union of names was then filtered for the substring `color`. Because the claim is an ABSENCE, the sweep also counts the elements whose name call failed and the elements that answered with an empty list; an absence reported by an instrument that was failing silently would look identical to a real one.",
+  "observations": [
+    {
+      "what": "elements reachable from the main window",
+      "count": 1648,
+      "maxDepth": 16
+    },
+    {
+      "what": "distinct attribute names anywhere in that window",
+      "count": 91
+    },
+    {
+      "what": "attribute names containing `color`",
+      "count": 0,
+      "in_window": [],
+      "on_track_headers": []
+    },
+    {
+      "what": "elements whose attribute-name call failed",
+      "count": 0
+    },
+    {
+      "what": "elements that answered with an empty name list",
+      "count": 0
+    },
+    {
+      "what": "every attribute name a track header subtree declares",
+      "count": 19,
+      "names": [
+        "AXChildren",
+        "AXDescription",
+        "AXEnabled",
+        "AXFocused",
+        "AXFrame",
+        "AXHelp",
+        "AXMaxValue",
+        "AXMinValue",
+        "AXOrientation",
+        "AXParent",
+        "AXPosition",
+        "AXRole",
+        "AXRoleDescription",
+        "AXSelected",
+        "AXSize",
+        "AXTitle",
+        "AXTopLevelUIElement",
+        "AXValue",
+        "AXWindow"
+      ],
+      "headers": 21
+    },
+    {
+      "what": "the same sweep with the Mixer revealed",
+      "how": "the Mixer button was pressed by its own AXDescription with AXPress — a named element, not a keystroke another view can swallow — and its AXValue went 0 -> 1 within one 50ms poll",
+      "elementsVisited": 1648,
+      "distinctAttributeNames": 91,
+      "attributeNamesTheMixerAdded": [],
+      "colourBearingNames": 0,
+      "nameCallFailures": 0,
+      "emptyNameLists": 0,
+      "note": "channel-strip elements were present while it was open — 57 elements whose help names a channel strip, against the 21 track-header mentions with it closed"
+    },
+    {
+      "what": "child lists the sweep could NOT read",
+      "count": 20,
+      "error_code": -25200,
+      "error_name": "kAXErrorFailure",
+      "stability": "identical across three consecutive runs",
+      "note": "not `noValue` and not `attributeUnsupported` — those mean the element genuinely has no child list and are counted as an answer. These twenty refused the question."
+    }
+  ],
+  "conclusion": "No element the sweep could REACH declares a colour-bearing attribute. Twenty child lists answer kAXErrorFailure, so twenty subtrees were never entered and are not covered by that statement — with the Mixer closed or revealed, which adds no attribute name at all — and the sweep that says so read every element it visited — no failed calls, no empty answers. So the remaining colour question on the issue this record belongs to is not \"what should verified mean for a colour write\" but \"does any observable consequence of a colour write exist\", and on this surface the answer is no. A track header declares nineteen attribute names in total, and none of them could carry a colour.",
+  "limits": [
+    "The sweep does not reach everything. Twenty elements refuse a child read with kAXErrorFailure, stably, so their subtrees were never walked and a colour attribute inside one would be reported as absent. This was missed when the record was first written: the probe counted failed ATTRIBUTE-NAME calls and reported zero, and never counted failed CHILD reads at all — the sweep looked exhaustive because the only failure it could see was one that never happened.",
+    "Names, not values. A colour could be carried inside an `AXValue`, or spelled into an `AXDescription` as a localised word, and a name census sees neither. This establishes that no element DECLARES a colour attribute.",
+    "The frontmost non-dialog window only. The Mixer WAS swept — revealed by pressing its own named button — and added no attribute name at all, so it is measured rather than owed. The colour palette and every dialog were closed and remain unswept; if a colour value is exposed anywhere, one of those is where to look next.",
+    "Depth 16 from the window. 1648 elements fell within that bound; a deeper subtree is uncovered.",
+    "One host, one project, one UI language. A substring match on `color` would also miss an attribute named in another language, though Apple's AX attribute names are English by convention.",
+    "An absence of readback is not by itself an argument for any particular design. It rules out one route; choosing between the project file, another window, and an explicit refusal is a decision this record does not make.",
+    "The element count is view-dependent, not a property of the application. The same window measured 1648, then 886, then 1648 again with the Mixer revealed — with the same 91 attribute names and the same zero colour matches every time. What differed between those readings was not established: the 886 reading was taken with the Event List at region level, but the level at the first reading was never measured, so the drop is unexplained rather than attributed. Either way the count is context for the sweep's reach and not a figure to match on re-run, which is why the reverify checks a floor."
+  ],
+  "supersedes": null
+}

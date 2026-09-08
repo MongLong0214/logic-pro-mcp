@@ -1,0 +1,82 @@
+{
+  "columns" : 8,
+  "headerCells" : [
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "L",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "M",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Position",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Status",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Ch",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Num",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Val",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Length\/Info",
+      "value" : ""
+    }
+  ],
+  "headerChildren" : 8,
+  "headerRole" : "AXGroup",
+  "ok" : true,
+  "rows" : 1,
+  "tablesUnderEventPane" : 1
+}

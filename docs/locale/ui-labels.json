@@ -453,9 +453,27 @@
    "rationale": "Event List channel column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnL": {
@@ -464,9 +482,27 @@
    "rationale": "Event List lock column; unlabelled in every locale measured.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnLength": {
@@ -477,9 +513,27 @@
    "rationale": "Region-level length column; distinguishes the region list from the event list.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnLengthInfo": {
@@ -490,9 +544,27 @@
    "rationale": "Event List length column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnM": {
@@ -501,9 +573,27 @@
    "rationale": "Event List mute column; unlabelled in every locale measured.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnName": {
@@ -514,9 +604,27 @@
    "rationale": "Region-level name column; distinguishes the region list from the event list.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnNumber": {
@@ -527,9 +635,27 @@
    "rationale": "Event List number column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnPosition": {
@@ -540,9 +666,27 @@
    "rationale": "Event List position column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnStatus": {
@@ -553,9 +697,27 @@
    "rationale": "Event List status column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnTrack": {
@@ -566,9 +728,27 @@
    "rationale": "Region-level track column; distinguishes the region list from the event list.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListColumnValue": {
@@ -579,9 +759,27 @@
    "rationale": "Event List value column; identity is the canonical English form.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "surfaces": [
+     "editor.event_list"
+    ],
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
+   },
+   "coverage_records": {
+    "en-US": "2026-09-08-en-US-event-list-column-titles"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "eventListTab": {
