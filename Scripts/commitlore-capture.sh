@@ -50,6 +50,9 @@ require_transcript() {
 
 command -v commitlore >/dev/null 2>&1 || { echo "commitlore CLI not on PATH" >&2; exit 2; }
 
+WORKERR="$(mktemp)"
+trap 'rm -f "$WORKERR"' EXIT
+
 CMD="${1:?usage: $0 prompt|stage|outcome [...]}"
 shift
 
@@ -82,13 +85,21 @@ print(d.get("prompt") or "")'
       [ -f "$DRAFT" ] || { echo "no draft at $DRAFT" >&2; exit 2; }
       SRC=$(find_transcript "${2:-}") || exit 2
       SLICE=$(require_transcript "$SRC") || exit 2
-      RAW=$(commitlore capture --json --unattended --transcript "$SLICE" --draft "$DRAFT" 2>/dev/null) || true
+      RAW=$(commitlore capture --json --unattended --transcript "$SLICE" --draft "$DRAFT" 2>"$WORKERR") || true
+      grep -v "ExperimentalWarning\|trace-warnings" "$WORKERR" >&2 || true
       [ -n "$RAW" ] || { echo "capture produced no JSON" >&2; exit 2; }
       printf '%s' "$RAW" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 outcome = d.get("outcome")
 print("outcome={} staged={} nonce={}".format(outcome, d.get("staged"), d.get("nonce")))
+# A rejection that does not say why is unactionable, and this wrapper used to print exactly that:
+# `outcome=rejected staged=False` and nothing else, while the CLI had said on stderr which rule
+# fired and on which record. Measured 2026-09-08 — a draft was rejected for `evidence-gap` and the
+# caller could not tell that from a malformed file without re-running the CLI by hand. The reason
+# travels with the outcome now.
+for r in d.get("rejected") or []:
+    print("  record {}: {} — {}".format(r.get("index"), r.get("rule"), r.get("detail")))
 # staged is a success; empty is an honest "nothing to record"; rejected is a FAILURE that exits 0
 # from the CLI and must not be read as either of the other two.
 sys.exit({"staged": 0, "empty": 0, "rejected": 1}.get(outcome, 2))'

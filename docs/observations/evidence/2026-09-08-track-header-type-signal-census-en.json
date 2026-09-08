@@ -1,0 +1,245 @@
+{
+  "headerCount" : 21,
+  "headers" : [
+    {
+      "fieldCount" : 27,
+      "headerDescription" : "Track 1 “Absolute Zero”",
+      "headerTitle" : "",
+      "index" : 0,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Absolute Zero",
+        "AXDescription=Track 1 “Absolute Zero”",
+        "AXHelp=Track stack disclosure arrow. Show or hide subtracks. Use the controls on the main track to control all subtracks in the track stack. ",
+        "AXRoleDescription=disclosure triangle"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 25 “Audio 1”",
+      "headerTitle" : "",
+      "index" : 1,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Audio 1",
+        "AXDescription=Track 25 “Audio 1”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 26 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 2,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 26 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 27 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 3,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 27 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 28 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 4,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 28 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 29 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 5,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 29 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 30 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 6,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 30 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 31 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 7,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 31 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 32 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 8,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 32 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 33 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 9,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 33 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 34 “Deluxe Classic”",
+      "headerTitle" : "",
+      "index" : 10,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Deluxe Classic",
+        "AXDescription=Track 34 “Deluxe Classic”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 35 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 11,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 35 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 36 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 12,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 36 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 37 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 13,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 37 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 38 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 14,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 38 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 39 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 15,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 39 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 40 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 16,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 40 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 41 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 17,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 41 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 42 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 18,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 42 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 43 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 19,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 43 “Studio Grand”"
+      ]
+    },
+    {
+      "fieldCount" : 25,
+      "headerDescription" : "Track 44 “Studio Grand”",
+      "headerTitle" : "",
+      "index" : 20,
+      "notSharedByAllHeaders" : [
+        "AXDescription=Studio Grand",
+        "AXDescription=Track 44 “Studio Grand”"
+      ]
+    }
+  ],
+  "ok" : true,
+  "sharedByAllHeaders" : [
+    "AXDescription=0 Pan",
+    "AXDescription=Has Focus",
+    "AXDescription=Individual Track Zoom",
+    "AXDescription=Input Monitoring",
+    "AXDescription=Mute",
+    "AXDescription=Record Enable",
+    "AXDescription=Solo",
+    "AXDescription=Volume",
+    "AXHelp=Individual track zoom. Drag the track’s bottom divider line to adjust its vertical track zoom level. Command-drag to adjust all tracks of the same track type. Shift-click to reset all tracks to the default zoom level. ",
+    "AXHelp=Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled. This is useful when setting levels or practicing parts before recording. ",
+    "AXHelp=Mute button. Silence a track’s signal, audibly removing it from project playback. Corresponds to the Mute button on the channel strip in the Mixer, so that changing one also changes the other. ",
+    "AXHelp=Name field. Double-click to rename the track. ",
+    "AXHelp=Pan\/Balance knob. Drag vertically to position the track signal in the stereo field. ",
+    "AXHelp=Record Enable button. Prepare the track for recording, or deactivate a record-ready track. The button changes to indicate whether the track is inactive, record enabled, or currently recording. ",
+    "AXHelp=Solo button. Isolate a track’s signal so that it can be heard without other tracks. Use on an aux or output channel strip to isolate that part of the mix. ",
+    "AXHelp=Track header. Mute or solo the track’s channel strip signal, enable the track for recording, and adjust volume or pan. Control-click and choose Track Header Components to select which controls to show or hide. ",
+    "AXHelp=Volume fader. Set a track’s playback volume. Use on an aux or output channel strip to adjust the volume of that part of the mix, or on the output channel strip to set the overall project volume. ",
+    "AXRoleDescription=checkbox",
+    "AXRoleDescription=group",
+    "AXRoleDescription=radio button",
+    "AXRoleDescription=slider",
+    "AXRoleDescription=splitter",
+    "AXRoleDescription=text field"
+  ],
+  "sharedByAllHeadersCount" : 23,
+  "step" : "group:structural"
+}

@@ -136,6 +136,27 @@ case("a command naming a file that does not exist is rejected",
 bad = problems(record(surface="arrange.invented"))
 case("an undeclared surface is rejected", any("surface" in b for b in bad), f"{bad!r}")
 
+# 10. The locale has to be one the coverage axis groups by. `check-observation-ratchets.py` matches
+#     `host.locale` against `supported_locales` exactly, so `"en"` where the axis says `"en-US"` is
+#     a record counted in no locale — it looks measured and closes nothing. Two records written the
+#     day this case was added had exactly that value.
+bad = problems(record(host={"app": "Logic Pro", "version": "12.3", "build": "6674",
+                            "locale": "en", "os": "macOS 26.3 (25D125)"}))
+case("a locale outside the coverage axis is rejected",
+     any("counted in no locale" in b for b in bad), f"{bad!r}")
+
+#     …and the axis's own values still pass, or the rule would be rejecting every record.
+for loc in G.known_locales():
+    case(f"the axis value {loc!r} is accepted",
+         problems(record(host={"app": "Logic Pro", "version": "12.3", "build": "6674",
+                               "locale": loc, "os": "macOS 26.3 (25D125)"})) == [], loc)
+
+#     A missing locale is caught by the required-key rule, not silently skipped by this one.
+bad = problems(record(host={"app": "Logic Pro", "version": "12.3", "build": "6674",
+                            "os": "macOS 26.3 (25D125)"}))
+case("a record with no locale at all is rejected",
+     any("host.locale is required" in b for b in bad), f"{bad!r}")
+
 # --- schema 2: `schema` and `evidence` (ADR-019 D5) -------------------------------------------
 # Both are optional, because a schema-1 record is still valid and is counted as a burn-down. A
 # record that DECLARES them has to mean them: a citation to a file that is missing, or that sits

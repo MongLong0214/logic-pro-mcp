@@ -37,6 +37,21 @@ make_stub rejected
 PATH="$STUB/bin:$PATH" bash "$HELPER" stage "$STUB/draft.json" "$STUB/t.jsonl" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "rejected FAILS even though the CLI exits 0" || no "a rejected record was read as success"
 
+# A rejection has to say WHY. The helper printed only `outcome=rejected staged=False` for a while,
+# which is indistinguishable from a malformed draft, a bad transcript, or a policy refusal — the
+# caller had to re-run the CLI by hand to learn that one trailer key lacked evidence.
+cat > "$STUB/bin/commitlore" <<'EOF'
+#!/bin/sh
+printf '{"outcome":"rejected","staged":false,"nonce":null,"rejected":[{"index":0,"rule":"evidence-gap","detail":"no evidence cites Warn"}]}'
+exit 0
+EOF
+chmod +x "$STUB/bin/commitlore"
+OUT=$(PATH="$STUB/bin:$PATH" bash "$HELPER" stage "$STUB/draft.json" "$STUB/t.jsonl" 2>&1)
+case "$OUT" in
+    *evidence-gap*"no evidence cites Warn"*) ok "a rejection carries the rule and the detail" ;;
+    *) no "a rejection said nothing about why: $OUT" ;;
+esac
+
 # An unknown outcome is not silently a pass either: a new word from a future CLI must stop the
 # caller rather than fall through whichever branch happens to be last.
 make_stub something_new

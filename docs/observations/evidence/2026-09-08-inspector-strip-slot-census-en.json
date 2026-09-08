@@ -1,0 +1,279 @@
+{
+  "ok" : true,
+  "trackCount" : 21,
+  "tracks" : [
+    {
+      "header" : "Absolute Zero",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Audio Effect slot",
+        "Group slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Absolute Zero"
+    },
+    {
+      "header" : "Audio 1",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "Input slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Audio 1"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 1,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 1,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Deluxe Classic",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Deluxe Classic"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 1,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 2,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 1,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    },
+    {
+      "header" : "Studio Grand",
+      "polls" : 1,
+      "settled" : true,
+      "slots" : [
+        "Audio Effect slot",
+        "Group slot",
+        "MIDI Effect slot",
+        "Output slot",
+        "Send slot"
+      ],
+      "stripName" : "Studio Grand"
+    }
+  ]
+}
