@@ -52,12 +52,22 @@ chmod +x "$STUB/bin/commitlore"
 PATH="$STUB/bin:$PATH" bash "$HELPER" stage "$STUB/draft.json" "$STUB/t.jsonl" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "no JSON is refused rather than treated as empty" || no "silence was read as an outcome"
 
-# The slice must be BOUNDED — the whole point of the wrapper (commitlore#873).
-make_stub empty
+# THE WINDOW MUST BE THE ONE UPSTREAM ACTUALLY USED. commitlore#873 was fixed in v1.2.3: capture
+# bounds the prompt itself and reports `transcript_window`. The wrapper stopped slicing when that
+# landed — two windows would mean the reported one is not the used one — so what is tested now is
+# that it REPORTS upstream's numbers rather than any of its own.
+cat > "$STUB/bin/commitlore" <<'EOF'
+#!/bin/sh
+printf '{"outcome":"empty","staged":false,"nonce":null,"prompt":"p","transcript_window":{"first_line":91,"last_line":100,"total_lines":100,"window_bytes":123,"truncated":true}}'
+exit 0
+EOF
+chmod +x "$STUB/bin/commitlore"
 seq 1 5000 > "$STUB/big.jsonl"
-OUT=$(PATH="$STUB/bin:$PATH" LPM_CAPTURE_WINDOW=10 bash "$HELPER" prompt "$STUB/big.jsonl" 2>/dev/null)
-printf '%s' "$OUT" | grep -q "last 10 lines" && ok "the prompt declares the window it used" \
-    || no "the prompt did not say it was a slice"
+OUT=$(PATH="$STUB/bin:$PATH" bash "$HELPER" prompt "$STUB/big.jsonl" 2>/dev/null)
+printf '%s' "$OUT" | grep -q "lines 91-100 of 100" && ok "the prompt reports upstream's window verbatim" \
+    || no "the reported window is not the one capture used"
+printf '%s' "$OUT" | grep -q "truncated=True" && ok "truncation is reported, not hidden" \
+    || no "a truncated window did not say so"
 
 echo
 if [ "$FAIL" -ne 0 ]; then echo "FAIL: the capture wrapper does not do what it claims ($FAIL of $((PASS+FAIL)))"; exit 1; fi
