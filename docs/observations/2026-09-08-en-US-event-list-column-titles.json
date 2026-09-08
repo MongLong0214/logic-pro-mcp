@@ -1,0 +1,78 @@
+{
+  "id": "2026-09-08-en-US-event-list-column-titles",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "both Event List header schemas on an English Logic, read through the product's own header path",
+  "question": "What does the Event pane's header actually render in en-US at each level, and on which role and attribute?",
+  "verdict": "works",
+  "issues": [302, 293],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "The note-level reading required a region to be selected; the selection was made by writing AXSelected from an empty selection and reading it back. Logic's own preference reads `AppleLanguages = (en)`; `en-US` is this repository's key for that label set."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-event-list-columns-en.sh",
+    "expected": "REVERIFY PASS — region-level schema, titles unchanged  (or: note-level schema, titles unchanged)",
+    "cost": "live; Logic running with the Event pane open; read-only; seconds. Either pane state is accepted, because which one is showing depends on the selection rather than on the check."
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackCollector.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    "Scripts/livekit/ax_event_list_header_cells.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-event-list-region-level-header-cells-en.json",
+    "evidence/2026-09-08-event-list-note-level-header-cells-en.json"
+  ],
+  "method": "The probe walks the path `readHeaders` walks: the Event pane's table, its `AXHeader`, and that header's children, reading each child's role, subrole and `AXTitle`, and tagging each row with the surface and path it was read from. Reading the same elements the product reads is what lets a coverage claim name the role and attribute the product actually uses rather than a role that merely happened to carry the same string somewhere else in the window. Both schemas were captured: the region list with no region selected, and a region's events after one region was selected.",
+  "observations": [
+    {
+      "what": "region-level header, in order",
+      "count": 6,
+      "titles": ["L", "M", "Position", "Name", "Trk", "Length"],
+      "role": "AXButton",
+      "subrole": "AXSortButton",
+      "attribute": "title",
+      "rows": 10,
+      "selection": "no region selected"
+    },
+    {
+      "what": "note-level header, in order",
+      "count": 8,
+      "titles": ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+      "role": "AXButton",
+      "subrole": "AXSortButton",
+      "attribute": "title",
+      "rows": 1,
+      "selection": "one MIDI region selected, help reading `Region starts at 1 bar and ends at 2 bars`"
+    },
+    {
+      "what": "AXColumnTitles on the same table",
+      "error": -25205,
+      "value": null,
+      "note": "unsupported. A reader looking for titles there finds nothing and cannot tell that from an empty table; the titles live on each column's header cell."
+    },
+    {
+      "what": "how the note level was reached",
+      "action": "AXSelected written true on one region from an empty selection, then read back",
+      "selected_before": 0,
+      "selected_after": 1,
+      "polls_of_50ms": 1,
+      "note": "a write to AXSelected TOGGLES rather than sets, so it lands on exactly one region only from a selection that was read as empty first"
+    }
+  ],
+  "conclusion": "On an English Logic the Event List renders two header schemas, both as `AXSortButton` buttons read by `AXTitle`: `L, M, Position, Name, Trk, Length` for the region list and `L, M, Position, Status, Ch, Num, Val, Length/Info` for a selected region's events. All eleven distinct strings match the canonicals `AXLocalePolicy` already carried, which were English by convention and had never been observed — including the three abbreviations `Ch`, `Num` and `Val`, where an expansion to `Channel`, `Number` or `Value` would have failed to match on an English Logic exactly as the `Event` tab literal once did. The read path is the header cell, not `AXColumnTitles`, which the table does not support.",
+  "limits": [
+    "Titles, not identity. That a column titled `Position` carries positions is a separate claim; this records what the header renders.",
+    "One project on one host. Column titles are a property of the application, but a Logic update can relabel them, which is what the reverify exists to catch.",
+    "Nothing here measures the ko-KR or ja-JP forms. The Korean variants already in the label file remain without provenance and are unaffected by this record.",
+    "The note-level reading is of ONE selected region with one event row. A schema is not row-dependent, but nothing here establishes that a region with other event types renders the same eight columns."
+  ],
+  "supersedes": null
+}

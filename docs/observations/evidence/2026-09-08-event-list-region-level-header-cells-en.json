@@ -1,0 +1,65 @@
+{
+  "childReadFailures" : 20,
+  "columns" : 6,
+  "headerCells" : [
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "L",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "M",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Position",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Name",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Trk",
+      "value" : ""
+    },
+    {
+      "description" : "",
+      "path" : "AXWindow > AXGroup[Event] > AXScrollArea > AXTable > AXHeader",
+      "role" : "AXButton",
+      "subrole" : "AXSortButton",
+      "surface" : "editor.event_list",
+      "title" : "Length",
+      "value" : ""
+    }
+  ],
+  "headerChildren" : 6,
+  "headerRole" : "AXGroup",
+  "ok" : true,
+  "rows" : 10,
+  "tablesUnderEventPane" : 1
+}
