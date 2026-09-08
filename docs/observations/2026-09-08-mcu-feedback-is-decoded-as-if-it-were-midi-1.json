@@ -1,0 +1,113 @@
+{
+  "id": "2026-09-08-mcu-feedback-is-decoded-as-if-it-were-midi-1",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "what reaches MIDIFeedback.parseBytes from Logic's MCU control-surface feedback",
+  "question": "Logic's Mackie surface is bound and health says connected — how much of what Logic sends actually becomes an event?",
+  "verdict": "wall",
+  "issues": [
+    736,
+    683
+  ],
+  "surface": "system.midi",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Mackie Control bound to LogicProMCP-MCU-Internal; `com.apple.logic.pro.cs` carries `Mackie Control` and the port name twice, in and out. Logic's own preference reads `AppleLanguages = (en)`; `en-US` is this repository's key for that label set."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-mcu-ump-decode.sh",
+    "expected": "REVERIFY PASS — historical replay: the captured traffic still decodes to 8 events instead of 112",
+    "cost": "offline; replays the captured trace, no Logic needed",
+    "note": "This record describes a DEFECT, so its reverify passes while the defect is present and fails once the decode is corrected. It is a REPLAY: it runs a Python port of the shipped parser over a frozen capture and checks that the source still slices the words' memory image. It does not execute the shipped decoder, so it cannot certify today's binary — only that the captured traffic decodes this way under the source as written."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Server/LogicProServer.swift",
+    "Sources/LogicProMCP/MIDI/MIDIFeedback.swift",
+    "Sources/LogicProMCP/MIDI/MIDIPortManager.swift",
+    "Tests/LogicProMCPTests/MCURestartFeedbackTests.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-mcu-feedback-trace-en.json"
+  ],
+  "method": "The release binary was run with `MCU_TRACE=1` against a Logic whose Mackie Control surface is bound to our port, capturing every byte sequence the receive callback slices. The shipped parser's channel-voice branch — guards included — was then ported faithfully and replayed over that capture alongside a UMP-correct read, so the two readings are compared on identical input rather than on reasoning about the code.",
+  "observations": [
+    {
+      "what": "packets Logic sent",
+      "count": 161,
+      "window": "within seconds of the port appearing; the handshake query went out at 09:31:38.879 and the first feedback arrived at 09:31:39.142"
+    },
+    {
+      "what": "events the shipped read produces from them",
+      "count": 8,
+      "kinds": {
+        "channel_pressure": 8
+      },
+      "note": "and their values are wrong: the byte taken as data is the next strip's index"
+    },
+    {
+      "what": "events a UMP-correct read produces from the same packets",
+      "count": 112,
+      "kinds": {
+        "channel_pressure": 8,
+        "control_change": 20,
+        "note_on": 73,
+        "pitch_bend": 11
+      },
+      "note": "Counted by STRIDING message types. An earlier count of 121 walked every fourth byte and read the second word of each 64-bit SysEx message as a channel-voice message; the nine extras carried status nibbles that are not valid MIDI statuses (0x50, 0x30, 0x20, 0x00). The record noted those nine as unchased — the cause was the missing stride, found by a merge-gate inventory 2026-09-08."
+    },
+    {
+      "what": "the fader positions that are dropped",
+      "count": 11,
+      "decoded": "ch0..ch8 = 12443, ch9 = 0, and one ch0 = 8192",
+      "raw": "61 1b e0 20 … 61 1b e8 20, then 40 00 e0 20"
+    },
+    {
+      "what": "why only channel pressure survives",
+      "code": "case 0xE0: guard i + 1 < bytes.count else { i += 1; break }",
+      "reason": "a single-word packet is four bytes and the status byte lands at index 2, leaving one byte after it — so every two-data-byte message fails its guard while one-data-byte channel pressure passes"
+    },
+    {
+      "what": "how the bytes are obtained",
+      "file": "Sources/LogicProMCP/Server/LogicProServer.swift",
+      "line": 1529,
+      "code": "let bytes: [UInt8] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in Array(raw.prefix(wordCount * 4)) }",
+      "note": "the little-endian memory image of UMP words, handed to a MIDI 1.0 byte-stream parser"
+    },
+    {
+      "what": "what the byte order actually is",
+      "ump_word": "(0x2 << 28) | (group << 24) | (status << 16) | (data1 << 8) | data2",
+      "memory_bytes_on_arm64": "[data2, data1, status, 0x20|group]",
+      "example_raw": "00 10 d0 20",
+      "example_as_ump": "0x20D01000 — channel pressure, data1 0x10, the strip index",
+      "example_as_read": "status 0xD0 with data 0x20 — every strip reports the next one's index"
+    },
+    {
+      "what": "the test that covers this path",
+      "file": "Tests/LogicProMCPTests/MCURestartFeedbackTests.swift",
+      "line": 59,
+      "code": "let word = UInt32(status) | (UInt32(lsb) << 8) | (UInt32(msb) << 16)",
+      "comment_in_source": "The crafted UMP word's little-endian bytes are `[status, lsb, msb, 0]` — exactly what the callback slices out",
+      "note": "the fixture is a MIDI 1.0 byte stream laid into a word, which is not a UMP message; it certifies the implementation rather than the contract, so it passes on input Logic never sends"
+    },
+    {
+      "what": "why sending is unaffected",
+      "file": "Sources/LogicProMCP/MIDI/MIDIEngine.swift",
+      "line": 115,
+      "code": "return MIDIReceived(source, packetList)",
+      "note": "transmission uses the legacy MIDIPacketList API, which CoreMIDI converts to UMP correctly; only reception uses the UMP API and decodes it as legacy"
+    }
+  ],
+  "conclusion": "Logic's MCU feedback arrives in volume and is almost entirely discarded before anything can read it. The port is created with `MIDIDestinationCreateWithProtocol(..., ._1_0, ...)` so CoreMIDI delivers UMP words, and the callback hands their little-endian memory image to a parser that expects a MIDI 1.0 byte stream. Of 161 packets, 8 events survive (a correct read yields 112) — all channel pressure, all misvalued — and every fader position, button LED and controller message is dropped. Those 8 are also why health reports the surface connected and registered: `handle` marks the connection on any event, so a fully broken decode still looks alive. The test covering this path builds its fixture the way the code reads rather than the way CoreMIDI writes, so it cannot fail on the defect it covers.",
+  "limits": [
+    "This does not establish that correcting the decode restores echo verification. No packets arrived after our own fader write, and `MCUProtocol` has no encoder for the connection reply Logic's handshake expects; that may be a second gap.",
+    "One host and one Logic build. The word layout is a property of CoreMIDI and arm64 rather than of this machine, but the traffic shape is Logic's and another project would send different messages.",
+    "The comparison replays a faithful PORT of the shipped parser, not the shipped parser itself. It reproduces the guards and the running-status handling that decide this outcome, but a divergence between the port and the Swift would change the counts.",
+    "The 112 is a count of MESSAGES a correct converter would hand the parser, taken by striding UMP message types. It is not a count of UMP words: 96 words carry SysEx and are not converted at all under the ticket's scope."
+  ],
+  "supersedes": null
+}
