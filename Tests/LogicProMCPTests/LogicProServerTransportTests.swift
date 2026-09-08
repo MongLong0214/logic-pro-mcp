@@ -7,6 +7,36 @@ private enum MockPortManagerError: Error {
     case createFailed
 }
 
+/// Pack a MIDI 1.0 message into the UMP words CoreMIDI actually delivers.
+///
+/// Callers of the helper below pass MIDI bytes because that is what they mean — "a note-on". The
+/// helper used to copy those bytes straight into the packet's `words` storage, which builds the
+/// little-endian MEMORY IMAGE of a word rather than a word: `[0x90, 0x40, 0x7F, 0x00]` in memory is
+/// the word `0x007F4090`, whose message type is 0 and whose status is `0x7F`. That is not what
+/// CoreMIDI hands a `._1_0` destination, and it is exactly the mistake #736 fixed in production —
+/// a fixture built the way the code READ rather than the way CoreMIDI WRITES.
+///
+/// A MIDI 1.0 channel-voice message is one UMP word:
+///     (0x2 << 28) | (group << 24) | (status << 16) | (data1 << 8) | data2
+private func umpWords(fromMIDI1 bytes: [UInt8]) -> [UInt32] {
+    var words: [UInt32] = []
+    var i = 0
+    while i < bytes.count {
+        let status = bytes[i]
+        let dataCount: Int
+        switch status & 0xF0 {
+        case 0xC0, 0xD0: dataCount = 1
+        case 0xF0: dataCount = 0
+        default: dataCount = 2
+        }
+        let d1 = i + 1 < bytes.count ? UInt32(bytes[i + 1]) : 0
+        let d2 = i + 2 < bytes.count ? UInt32(bytes[i + 2]) : 0
+        words.append((UInt32(0x2) << 28) | (UInt32(status) << 16) | (d1 << 8) | d2)
+        i += 1 + dataCount
+    }
+    return words
+}
+
 private func withTestMIDIEventList(
     bytes: [UInt8],
     numPackets: UInt32 = 1,
@@ -30,7 +60,13 @@ private func withTestMIDIEventList(
     list.pointee.numPackets = numPackets
 
     if numPackets > 0 {
-        var padded = bytes
+        // The words CoreMIDI would deliver, in word order — not the caller's bytes laid into memory.
+        var words = umpWords(fromMIDI1: bytes)
+        while words.count < wordCount { words.append(0) }
+        var padded = [UInt8]()
+        for word in words.prefix(max(wordCount, 1)) {
+            padded.append(contentsOf: withUnsafeBytes(of: word.littleEndian) { Array($0) })
+        }
         if padded.count < paddedByteCount {
             padded.append(contentsOf: repeatElement(0, count: paddedByteCount - padded.count))
         }

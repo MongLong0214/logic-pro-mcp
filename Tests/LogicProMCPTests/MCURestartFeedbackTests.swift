@@ -47,16 +47,19 @@ private actor ReusingPortManager: VirtualPortManaging {
         return created
     }
 
-    /// Fire the registered CoreMIDI callback with a synthetic MIDI 1.0
-    /// pitch-bend, driving the transport's real parse-and-deliver loop. The
-    /// crafted UMP word's little-endian bytes are `[status, lsb, msb, 0]` —
-    /// exactly what the callback slices out and hands to `MIDIFeedback.parseBytes`.
+    /// Fire the registered CoreMIDI callback with a synthetic MIDI 1.0 pitch-bend, driving the
+    /// transport's real parse-and-deliver loop. The word is built the way CoreMIDI builds one, so
+    /// the callback has to convert it rather than reinterpret its bytes.
     func firePitchBend(channel: UInt8, value: UInt16) {
         guard let installedCallback else { return }
         let status = UInt8(0xE0) | (channel & 0x0F)
         let lsb = UInt8(value & 0x7F)
         let msb = UInt8((value >> 7) & 0x7F)
-        let word = UInt32(status) | (UInt32(lsb) << 8) | (UInt32(msb) << 16)
+        // A real UMP MIDI 1.0 channel-voice word, not a byte stream laid into a word. The previous
+        // form produced `[status, lsb, msb, 0]` in memory, which is what the OLD callback sliced —
+        // a fixture written to match the implementation rather than the contract, so it passed on
+        // input CoreMIDI never sends (#736).
+        let word = (UInt32(0x2) << 28) | (UInt32(status) << 16) | (UInt32(lsb) << 8) | UInt32(msb)
 
         var list = MIDIEventList()
         list.numPackets = 1

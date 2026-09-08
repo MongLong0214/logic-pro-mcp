@@ -74,10 +74,13 @@ d = E.Driver()
 # Logic answers the device query within a second on a bound surface; the extra time is for the
 # state burst that follows it (meters, LCD, fader positions).
 time.sleep(8)
-d.tool("logic_system", "health")
+# `refresh_cache`, not `health`: health is served from the poller cache, and the framework records
+# a cached read presented as live — which invalidates the run, correctly. The call is here to touch
+# the product so the receipt records a run that drove something, not to read MCU state; the MCU
+# state this harness is about comes from the trace, which the callback writes as packets arrive.
+d.tool("logic_system", "refresh_cache")
 time.sleep(2)
 stderr = open(d._stderr_path, encoding="utf-8", errors="replace").read()
-d.close()
 
 rx = [m.group(1).split() for m in re.finditer(r"MCU RX: ([0-9a-f ]+)", stderr)]
 tx = [m.group(1).split() for m in re.finditer(r"MCU TX: ([0-9a-f ]+)", stderr)]
@@ -116,6 +119,12 @@ ev.check("736/the-server-transmitted-as-well-as-received",
          "the device query went out, so the MCU channel started and the port exists -- without this "
          "an empty RX set could mean the channel never came up",
          f"tx_frames={len(tx)}", None)
+
+# CLOSE AFTER the checks, not before. Each check records a blocking-modal snapshot, and the detector
+# reads the running application — with the driver already closed every snapshot came back `unknown`,
+# which `is_clean` refuses and rightly so: a check recorded while nothing could be inspected is not a
+# check taken under known conditions.
+d.close()
 
 out = ev.write()
 print(json.dumps(out, indent=1))
