@@ -112,17 +112,22 @@ ev.falsifiable(
     "736/traced-mcu-frames-start-with-a-status-byte",
     lambda o: (o["rx_frames"] > 0
                and o["frames_starting_with_a_data_byte"] == 0
-               and o["distinct_status_kinds"] >= 2),
+               and o["distinct_status_kinds"] >= 2
+               and o["rx_frames"] > o["rx_lines_with_no_bytes"]),
     reading,
-    {"rx_frames": 4, "rx_trace_lines": 4, "rx_lines_with_no_bytes": 0, "tx_frames": 1,
+    {"rx_frames": 2, "rx_trace_lines": 60, "rx_lines_with_no_bytes": 58, "tx_frames": 1,
      "frames_starting_with_a_data_byte": 4, "distinct_status_kinds": 1,
      "status_kinds_seen": ["0x0"],
      "first_bytes_seen": ["0x0"], "sample_frames": ["00 00 d0 20"]},
     "every frame the callback handed the parser begins with a byte whose bit 7 is set, which is a "
     "MIDI status byte -- and none begins with a 7-bit data byte, which is what the UMP memory image "
     "produced. MORE THAN ONE KIND of status arrives, because a converter that emitted one fixed "
-    "status-led frame per packet would satisfy the first half on its own. The counterexample is the "
-    "pre-fix reading verbatim: `00 00 d0 20`, four frames, all starting 0x00",
+    "status-led frame per packet would satisfy the first half on its own. And MOST packets produce "
+    "bytes: `MCU RX:` lines carrying nothing are the messages this converter does not read, and a "
+    "converter that dropped nearly everything would otherwise pass on the handful it kept. The "
+    "counterexample here is that shape -- 60 trace lines, 58 of them empty, two real statuses among "
+    "the rest -- which satisfies every other clause. Recording those two fields without putting "
+    "them in the predicate is what a review found: a reading that is written down and not checked",
     mutation="restore `Array(raw.prefix(wordCount * 4))` in the MCU receive callback",
 )
 

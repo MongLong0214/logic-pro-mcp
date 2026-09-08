@@ -1537,17 +1537,20 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                         let converted = MIDIFeedback.midi1Bytes(fromUMPWords: umpWords)
                         let bytes = converted.bytes
                         // Words this converter does not read — SysEx7 today, and anything else
-                        // Logic sends that is not MIDI 1.0 channel voice or system. It is a known
-                        // gap rather than an error, and it is LOGGED rather than published: the
-                        // earlier shape here set a sink that `FeedbackSink()` never supplied and a
-                        // comment that promised a health field, so the count reached nothing while
-                        // reading as though it reached a health snapshot. Publishing it needs a
-                        // field on `MCUFeedbackIngressSnapshot` and is a separate change.
+                        // Logic sends that is not MIDI 1.0 channel voice or system. A known gap
+                        // rather than an error, and it goes on the TRACE gate, which is off unless
+                        // asked for.
+                        //
+                        // Two shapes were wrong here before. The first set a sink `FeedbackSink()`
+                        // never supplied, so the count reached nothing while a comment promised a
+                        // health field. The second replaced it with `Log.info`, which is worse than
+                        // silent: CoreMIDI documents this block as real-time and non-blocking, and
+                        // that call takes locks and writes stderr synchronously, so a backpressured
+                        // stderr stalls the callback and delays the valid feedback in this very
+                        // packet. Publishing the count properly needs a field on
+                        // `MCUFeedbackIngressSnapshot` and is a separate change.
                         if converted.unconverted > 0 {
-                            Log.info(
-                                "MCU feedback: \(converted.unconverted) word(s) carried a message "
-                                    + "this converter does not read",
-                                subsystem: "midi")
+                            MCUTrace.note("\(converted.unconverted) word(s) not read")
                         }
                         // The trace shows what the PARSER sees, which after this change is the
                         // converted stream rather than the raw words.
