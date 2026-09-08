@@ -57,6 +57,11 @@ private func withTestMIDIEventList(
     defer { raw.deallocate() }
 
     let list = raw.assumingMemoryBound(to: MIDIEventList.self)
+    // CoreMIDI stamps the protocol on the list it delivers, and a zero here is not a protocol any
+    // endpoint negotiates. Production ignores the field today, so the fixture still distinguishes
+    // the endian bug either way — but a fixture that claims to be "what CoreMIDI delivers" should
+    // not be leaving a field at a value CoreMIDI never sends. Noted by review 2026-09-09.
+    list.pointee.protocol = ._1_0
     list.pointee.numPackets = numPackets
 
     if numPackets > 0 {

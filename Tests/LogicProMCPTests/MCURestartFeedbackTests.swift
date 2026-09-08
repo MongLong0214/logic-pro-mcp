@@ -62,6 +62,7 @@ private actor ReusingPortManager: VirtualPortManaging {
         let word = (UInt32(0x2) << 28) | (UInt32(status) << 16) | (UInt32(lsb) << 8) | UInt32(msb)
 
         var list = MIDIEventList()
+        list.protocol = ._1_0        // what CoreMIDI stamps; zero is not a protocol it sends
         list.numPackets = 1
         list.packet.wordCount = 1
         list.packet.words.0 = word
@@ -74,6 +75,7 @@ private actor ReusingPortManager: VirtualPortManaging {
     func fireOversizedWordCount() {
         guard let installedCallback else { return }
         var list = MIDIEventList()
+        list.protocol = ._1_0        // what CoreMIDI stamps; zero is not a protocol it sends
         list.numPackets = 1
         list.packet.wordCount = 65
         withUnsafePointer(to: &list) { installedCallback($0, nil) }
