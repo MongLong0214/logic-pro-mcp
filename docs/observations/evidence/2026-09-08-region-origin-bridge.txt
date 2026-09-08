@@ -1,0 +1,42 @@
+Readings for 2026-09-08-the-region-origin-is-the-bridge-not-a-label.
+Captured from the repository at the commit this record was written against.
+
+--- the expression a literal migration could not cover ---
+$ grep -n "regionStartTick" Sources/LogicProMCP/MIDIReadback/MIDIReadbackAssessment.swift
+205:        switch parseNote(row: row, roles: roles, regionStartTick: observed.startTick) {
+325:    regionStartTick: Int64
+364:    let (relativeStart, overflow) = start.subtractingReportingOverflow(regionStartTick)
+
+--- what the parser does with the origin, verbatim (lines 362-365) ---
+    // Region-relative start; overflow-safe subtraction.
+    let (relativeStart, overflow) = start.subtractingReportingOverflow(regionStartTick)
+    guard !overflow, relativeStart >= 0, duration > 0 else { return nil }
+
+--- the compile error that remained after every mechanical substitution ---
+$ swift build --build-tests 2>&1 | grep -E "^/Users.*error:"
+/Users/isaac/lpm-wt-815/Sources/LogicProMCP/MIDIReadback/MIDIReadbackAssessment.swift:205:76:
+    error: value of type 'ObservedRegionDescriptor' has no member 'startTick'
+(one error; every other call site resolved mechanically)
+
+--- what the Event List reports, measured live the same day ---
+row0 Position valueDescription "1 1 1 1 "
+row1 Position valueDescription "1 2 1 1 "
+row0 Length/Info valueDescription "0 1 0 0"
+live_columns ["L","M","Position","Status","Ch","Num","Val","Length/Info"]
+  -> bar / beat / division / tick, ABSOLUTE
+
+--- what the region surface reports, measured live the same day ---
+$ logic_project get_regions {}
+union of field names across 9 regions:
+  ["endBar","kind","name","rawHelp","startBar","trackIndex"]
+sample: {"name":"MIDI Region","kind":"midi","startBar":1,"endBar":2,"trackIndex":11}
+rawHelp: "Region starts at 1 bar  and ends at 2 bars , MIDI region. ..."
+  -> no tick, no ordinal; finest granularity a BAR, as localised prose
+
+--- the refusal representation already present ---
+$ grep -c "case " on enum PartialReason  -> 18 cases
+siblings of the same shape: timingUnproven, columnUnresolved, calibrationNotDistinct
+    private enum AssessmentOutcome {
+        case complete([MIDINoteEvent])
+        case incomplete(PartialReason)
+    }
