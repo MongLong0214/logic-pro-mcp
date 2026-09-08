@@ -32,7 +32,7 @@ struct SerializedStdioTransportStallTests {
     }
 
     @Test("a reader that stopped draining is OutputStalled, and the suite does not hang")
-    func aStalledReaderIsReportedRatherThanWaitedOnForever() async throws {
+    func aStalledReaderIsReportedRatherThanWaitedOnForever() {
         let p = Self.fullPipe()
         defer { close(p.read); close(p.write) }
         let transport = SerializedStdioTransport(input: p.read, output: p.write, writeDeadline: 0.2)
@@ -40,7 +40,7 @@ struct SerializedStdioTransportStallTests {
         // The send is raced against a bound. Without one, DELETING the deadline does not fail this
         // test — it HANGS it, and a hung test is not a red test: it is a suite that never finishes
         // and a mutation that cannot be shown to be caught. Found by review 2026-09-09.
-        let outcome = await Self.withBound(seconds: 5) {
+        let outcome = Self.withBound(seconds: 5) {
             do {
                 try await transport.send(Data(#"{"jsonrpc":"2.0"}"#.utf8))
                 return "accepted"
@@ -57,24 +57,36 @@ struct SerializedStdioTransportStallTests {
         #expect(outcome == "stalled")
     }
 
-    /// Runs `body` against a wall-clock bound and answers `"unbounded"` if the bound wins.
+    /// Runs `body` and answers `"unbounded"` if it has not finished within `seconds`.
     ///
-    /// The bound is not a nicety. The subject of this suite is a write that never returns, so a
-    /// test that simply awaits it inherits exactly the defect under test.
+    /// A task group does NOT bound this. `cancelAll` only requests cooperative cancellation, and
+    /// leaving the group's scope waits for every child — so a body suspended on a `send` whose
+    /// dispatch queue is blocked inside `write` never lets the group return, and the "bound" hangs
+    /// exactly where the defect does. Found by review 2026-09-09.
+    ///
+    /// A detached task plus a semaphore does bound the VERDICT: the blocked task is still there, but
+    /// the test reports and fails instead of hanging, which is what a mutation needs in order to be
+    /// caught rather than merely to stall the suite.
     private static func withBound(
         seconds: Double,
         _ body: @escaping @Sendable () async -> String
-    ) async -> String {
-        await withTaskGroup(of: String.self) { group in
-            group.addTask { await body() }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                return "unbounded"
-            }
-            let first = await group.next() ?? "unbounded"
-            group.cancelAll()
-            return first
+    ) -> String {
+        let box = Box()
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            let value = await body()
+            box.set(value)
+            done.signal()
         }
+        guard done.wait(timeout: .now() + seconds) == .success else { return "unbounded" }
+        return box.value ?? "unbounded"
+    }
+
+    private final class Box: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: String?
+        func set(_ value: String) { lock.lock(); stored = value; lock.unlock() }
+        var value: String? { lock.lock(); defer { lock.unlock() }; return stored }
     }
 
     /// A closed descriptor is not a slow reader. A Bool return made these identical.
@@ -173,17 +185,19 @@ struct SerializedStdioTransportStallTests {
         #expect(attempts.value <= 8)
     }
 
-    /// A clock that moves only when it is read, so the test does not sleep and does not flake.
+    /// A monotonic clock that moves only when it is read, so the test does not sleep and does not
+    /// flake. Nanoseconds, matching production: the deadline is measured against `DispatchTime`
+    /// rather than `Date`, because a wall clock can be corrected backwards and lengthen the very
+    /// wait the deadline exists to bound.
     private final class TickingClock: @unchecked Sendable {
         private let lock = NSLock()
-        private let step: TimeInterval
-        private var elapsed: TimeInterval = 0
-        private let origin = Date()
-        init(step: TimeInterval) { self.step = step }
-        func now() -> Date {
+        private let step: UInt64
+        private var elapsed: UInt64 = 0
+        init(step: TimeInterval) { self.step = UInt64(step * 1_000_000_000) }
+        func now() -> UInt64 {
             lock.lock(); defer { lock.unlock() }
-            let value = origin.addingTimeInterval(elapsed)
-            elapsed += step
+            let value = elapsed
+            elapsed &+= step
             return value
         }
     }
@@ -257,21 +271,25 @@ struct SerializedStdioTransportStallTests {
     /// completes and the send succeeds — the report is the only observable difference, which is the
     /// point of arming it.
     @Test("a write still going at the deadline is reported while it is stuck")
-    func theMidFrameWatchdogFiresDuringTheStall() async throws {
+    func theMidFrameWatchdogFiresDuringTheStall() {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
         defer { close(fds[0]); close(fds[1]) }
         let readEnd = fds[0]
 
-        let reports = Counter()
+        // The report has to arrive WHILE the write is stuck. Counting it after `send` returns is
+        // satisfied by an implementation that reports afterwards — which is the shape this replaced,
+        // so the test would not have told the two apart. The sink signals, and the test waits for
+        // that signal BEFORE the send completes. Found by review 2026-09-09.
+        let reported = DispatchSemaphore(value: 0)
         let original = SerializedStdioTransport.reportMidFrameStall
-        SerializedStdioTransport.reportMidFrameStall = { _, _ in reports.bump() }
+        SerializedStdioTransport.reportMidFrameStall = { _, _ in reported.signal() }
         defer { SerializedStdioTransport.reportMidFrameStall = original }
 
         // A reader that sleeps first, so the write blocks mid-frame past the deadline and then
         // completes. 256KB is comfortably past a pipe buffer.
         let late = Thread {
-            Thread.sleep(forTimeInterval: 1.0)
+            Thread.sleep(forTimeInterval: 3.0)
             var buf = [UInt8](repeating: 0, count: 65536)
             while true {
                 let n = buf.withUnsafeMutableBytes { Darwin.read(readEnd, $0.baseAddress, $0.count) }
@@ -281,8 +299,15 @@ struct SerializedStdioTransportStallTests {
         late.start()
 
         let transport = SerializedStdioTransport(input: STDIN_FILENO, output: fds[1], writeDeadline: 0.3)
-        try await transport.send(Data(String(repeating: "z", count: 262_144).utf8))
-        #expect(reports.value >= 1)
+        let sent = DispatchSemaphore(value: 0)
+        Task.detached {
+            try? await transport.send(Data(String(repeating: "z", count: 262_144).utf8))
+            sent.signal()
+        }
+        // The reader wakes at 3s; a report seen before then happened while the write was blocked.
+        #expect(reported.wait(timeout: .now() + 2.0) == .success,
+                "no stall report arrived while the write was still blocked")
+        #expect(sent.wait(timeout: .now() + 10.0) == .success, "the frame never completed")
     }
 
     /// Criterion 3 of the ticket, which had no test. After a frame is refused, what reached the pipe

@@ -114,7 +114,7 @@ actor SerializedStdioTransport: Transport {
         _ fd: Int32,
         deadline: TimeInterval,
         poll pollFn: (UnsafeMutablePointer<pollfd>, nfds_t, Int32) -> Int32 = { Darwin.poll($0, $1, $2) },
-        now: () -> Date = Date.init
+        now: () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
     ) -> Writability {
         // A NEGATIVE descriptor before anything else. POSIX `poll` IGNORES an entry whose fd is
         // negative and then returns 0 when the timeout expires — which is byte-for-byte the answer
@@ -127,11 +127,16 @@ actor SerializedStdioTransport: Transport {
         // timeout after every `EINTR` was the earlier shape, and under repeated signals it extends
         // the wait without bound — a deadline that any signal can reset is not a deadline, and the
         // whole change exists to stop an unbounded wait. Found by review 2026-09-09.
-        let expiry = now().addingTimeInterval(max(0, deadline))
+        // MONOTONIC, not the wall clock. `Date` moves when the system clock is corrected: a
+        // rollback lengthens the wait this function exists to bound and a forward jump shortens it,
+        // so an elapsed-time deadline measured against it is not bounded by anything the process
+        // controls. Found by review 2026-09-09, after the first fix here used `Date`.
+        let expiry = now() &+ UInt64(max(0, deadline) * 1_000_000_000)
         while true {
-            let remaining = expiry.timeIntervalSince(now())
-            if remaining <= 0 { return .timedOut }
-            let milliseconds = Int32(max(0, min(remaining * 1000, Double(Int32.max))))
+            let current = now()
+            if current >= expiry { return .timedOut }
+            let remainingMS = Double(expiry - current) / 1_000_000
+            let milliseconds = Int32(max(0, min(remainingMS, Double(Int32.max))))
             let n = withUnsafeMutablePointer(to: &pfd) { pollFn($0, 1, milliseconds) }
             if n < 0 {
                 if errno == EINTR { continue }
@@ -154,11 +159,20 @@ actor SerializedStdioTransport: Transport {
     /// redirecting the process's stderr — a test that dup2s over `STDERR_FILENO` changes it for
     /// every other test running beside it, and the claim being checked ("ordinary traffic writes no
     /// stall line") is about whether the report HAPPENED, not about which file it landed in.
-    nonisolated(unsafe) static var reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void = {
+    /// Guarded, because the watchdog reads it from a global queue while a test may be replacing it.
+    /// An unsynchronised `nonisolated(unsafe) var` raced on both sides: a report could be charged to
+    /// whichever sink happened to be installed. Found by review 2026-09-09.
+    private static let stallReportLock = NSLock()
+    nonisolated(unsafe) private static var stallReporter: @Sendable (Int, TimeInterval) -> Void = {
         bytes, seconds in
         let line = "[stdio] a \(bytes)-byte frame has been writing for more than "
             + "\(String(format: "%.1f", seconds))s; the reader is stalling mid-frame\n"
         FileHandle.standardError.write(Data(line.utf8))
+    }
+
+    static var reportMidFrameStall: @Sendable (Int, TimeInterval) -> Void {
+        get { stallReportLock.lock(); defer { stallReportLock.unlock() }; return stallReporter }
+        set { stallReportLock.lock(); stallReporter = newValue; stallReportLock.unlock() }
     }
 
     func send(_ data: Data) async throws {
@@ -192,17 +206,21 @@ actor SerializedStdioTransport: Transport {
                 // write only once it has stopped being wedged, which is exactly when the report is
                 // no longer useful. It cannot abandon the frame: a part-written frame lets the next
                 // one interleave, which is #220's corruption by another route.
-                let finished = RunFlag()
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline) {
-                    guard !finished.isRunning else { return }
+                // CANCELLED when the frame is out, not merely flagged. The first shape scheduled an
+                // uncancellable block per frame that stayed queued for the whole deadline — thirty
+                // seconds of retained work items and captured frames on a busy server, growing with
+                // throughput. A `DispatchWorkItem` is cancelled the moment the write returns.
+                let watchdog = DispatchWorkItem {
                     SerializedStdioTransport.reportMidFrameStall(frame.count, deadline)
                 }
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + deadline,
+                                                               execute: watchdog)
                 do {
                     try SerializedStdioTransport.writeAll(frame, to: fd)
-                    finished.start()
+                    watchdog.cancel()
                     cont.resume()
                 } catch {
-                    finished.start()
+                    watchdog.cancel()
                     cont.resume(throwing: error)
                 }
             }

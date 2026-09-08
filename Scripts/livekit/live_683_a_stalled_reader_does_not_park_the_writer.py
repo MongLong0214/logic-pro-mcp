@@ -115,14 +115,26 @@ if alive:
                 break
             if chunk:
                 buf += chunk
-                if b'"id":9001' in buf:
-                    answered = True
+                # A COMPLETE object, not the substring. `b'"id":9001' in buf` is satisfied by a
+                # reply that arrived half-written — which is the very thing a stalled writer
+                # produces, so the check could have been met by the defect it is testing for.
+                # Demonstrated by review 2026-09-09 on the literal `{"jsonrpc":"2.0","id":9001`.
+                *lines, buf = buf.split(b"\n")
+                for line in lines:
+                    try:
+                        message = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(message, dict) and message.get("id") == 9001:
+                        answered = True
+                        break
+                if answered:
                     break
             else:
                 time.sleep(0.2)
         os.close(drain)
         answer_note = answer_note if answer_note.startswith("read failed") else (
-            f"drained {len(buf)} bytes, reply to id 9001 {'seen' if answered else 'never arrived'}")
+            f"reply to id 9001 {'parsed as a complete object' if answered else 'never arrived'}")
     except Exception as exc:            # noqa: BLE001 - the note carries the reason into the document
         answer_note = f"could not drain: {exc}"
 
