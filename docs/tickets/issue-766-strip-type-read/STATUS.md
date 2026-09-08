@@ -167,3 +167,31 @@ Three, all enumerated:
   selection and by name agreement, and two tracks with one name defeat that.
 - That drummer and software instrument are indistinguishable **anywhere** — only that the
   inspector channel strip does not distinguish them.
+
+---
+
+## What changed during implementation, and why
+
+The ticket above is left as it was written. Three things came out differently, and the reasons are
+recorded here rather than folded back into the specification, because a ticket edited to match its
+implementation stops being able to disagree with it.
+
+**1. The classifier returns three values, not an optional `TrackType`.**
+The ticket said the MIDI-effect case returns `nil`. Implemented that way it returned exactly what
+falling through returns, so the branch was behaviourally dead: mutating it changed nothing, and a
+rule nothing can distinguish is not a rule. It answers `instrumentFamily` instead, and the create
+path publishes `track_type_verification_source: "inspector_channel_strip_instrument_family"` — which
+is also better information than the ticket asked for: "the strip was read and its answer is a family
+this read cannot narrow" is not the same fact as "no strip answered".
+
+**2. The phrase-precision mutation is asserted on the LABEL, not through the classifier.**
+The ticket's mutation table said widening `midi effect slot` to the tail it shares with
+`audio effect slot` must turn the audio-strip test red. Measured: it does not, and cannot. The
+classifier answers from the input slot before it ever reaches the MIDI-effect branch, so the widened
+phrase is invisible from there and a test written that way would be a check that cannot fail. The
+assertion moved to `AXLocalePolicy.midiEffectSlotHelpKeyword` itself, where the mutation does go red.
+
+**3. The `no Audio Effect slot` clause was dropped from the external-MIDI rule.**
+Every strip that has a MIDI effect slot also has an audio effect one, so the clause could not change
+any answer and could not be made to fail. The rule is `Assign control present AND no output slot`,
+and the conjunction is witnessed by a fixture carrying both an assign control and an output slot.
