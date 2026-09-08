@@ -39,9 +39,10 @@ REQUIRED = ("id", "date", "subject", "question", "verdict", "issues", "surface",
 # nine records in the tree were found carrying an OS the machine had never run — a value typed
 # once and inherited by copy. Generate the block with `Scripts/observation_host.py` instead of
 # writing it: a copied field is not a measurement.
-HOST_KEYS = ("app", "version", "build", "os")
+HOST_KEYS = ("app", "version", "build", "os", "locale")
 REVERIFY_KINDS = ("script", "harness", "manual")
 SURFACES_DOC = os.path.join(REPO, "docs", "observations", "SURFACES.md")
+LABELS_DOC = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
 
 def known_surfaces():
@@ -54,7 +55,45 @@ def known_surfaces():
         if m:
             out.add(m.group(1))
     return out
+def known_locales():
+    """The locale axis, read from the file the coverage report groups by.
+
+    `check-observation-ratchets.py` counts surfaces-per-locale by matching `host.locale` against
+    `supported_locales` EXACTLY, so a record naming anything else is counted in no locale at all
+    and no check notices: the gap it should have closed stays open and the record looks fine. Two
+    records written the day this was added said `locale: "en"` — Logic's own preference string —
+    where the axis calls that label set `en-US`, and both would have measured a surface for nobody.
+    """
+    out = set()
+    if not os.path.exists(LABELS_DOC):
+        return out
+    try:
+        out.update(json.load(open(LABELS_DOC, encoding="utf-8")).get("supported_locales") or ())
+    except ValueError:
+        return set()
+    return out
+
+
 VERDICTS = ("works", "wall", "partial", "inconclusive")
+
+
+def _locales_in(node):
+    """Every value of a `locale` key anywhere under `observations`.
+
+    Records that exercise more than one locale carry it per reading rather than in the header, and
+    the header is all the ratchet ever looked at.
+    """
+    out = set()
+    if isinstance(node, dict):
+        v = node.get("locale")
+        if isinstance(v, str) and v:
+            out.add(v)
+        for value in node.values():
+            out |= _locales_in(value)
+    elif isinstance(node, list):
+        for value in node:
+            out |= _locales_in(value)
+    return out
 
 
 def numbers(text):
@@ -108,6 +147,22 @@ def check(path):
         for k in HOST_KEYS:
             if not host.get(k):
                 bad.append(f"{stem}: host.{k} is required — drift is computed from it")
+        locales = known_locales()
+        if locales and host.get("locale") and host["locale"] not in locales:
+            bad.append(f"{stem}: host.locale {host['locale']!r} is not one of {sorted(locales)} — "
+                       f"the per-locale coverage in RATCHETS.json matches this string exactly, so a "
+                       f"record naming anything else is counted in no locale and closes no gap")
+        # …and every locale the READINGS name, not only the one the header declares. A review found
+        # the hole 2026-09-08: the ratchet credits `host.locale` alone, so a record can declare a
+        # supported locale at the top and carry rows measured on another — the top-level rule passes
+        # and the per-locale accounting is still wrong. A record measured on two locales is fine;
+        # naming one the axis does not know is not.
+        if locales:
+            for loc in sorted(_locales_in(doc.get("observations"))):
+                if loc not in locales:
+                    bad.append(f"{stem}: an observation names locale {loc!r}, which is not one of "
+                               f"{sorted(locales)} — a reading in a locale the axis does not carry "
+                               f"is credited to nothing")
 
     # A claim nobody can re-run is a claim nobody can retire.
     rv = doc["reverify"]
