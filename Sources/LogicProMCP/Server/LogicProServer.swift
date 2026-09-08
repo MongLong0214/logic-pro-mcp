@@ -1407,19 +1407,16 @@ actor ProductionMCUTransport: MCUTransportProtocol {
         private var eventSink: (@Sendable (MIDIFeedback.Event) -> Void)?
         private var ingressDropSink: (@Sendable (UInt64) -> Void)?
         private var callbackWorkBudgetDropSink: (@Sendable (UInt64) -> Void)?
-        private var unconvertedWordsSink: (@Sendable (UInt64) -> Void)?
 
         func set(
             onReceive: (@Sendable (MIDIFeedback.Event) -> Void)?,
             onIngressDrop: (@Sendable (UInt64) -> Void)?,
-            onCallbackWorkBudgetDrop: (@Sendable (UInt64) -> Void)?,
-            onUnconvertedWords: (@Sendable (UInt64) -> Void)? = nil
+            onCallbackWorkBudgetDrop: (@Sendable (UInt64) -> Void)?
         ) {
             lock.lock()
             eventSink = onReceive
             ingressDropSink = onIngressDrop
             callbackWorkBudgetDropSink = onCallbackWorkBudgetDrop
-            unconvertedWordsSink = onUnconvertedWords
             lock.unlock()
         }
 
@@ -1444,16 +1441,6 @@ actor ProductionMCUTransport: MCUTransportProtocol {
             current?(count)
         }
 
-        /// Words carrying a message this server does not convert — SysEx7 under the current scope.
-        /// NOT an error and it must not make MCU unavailable: it is the expected count for SysEx
-        /// traffic, and a health field that says so is the difference between a known gap and a
-        /// silent one. Note the unlabelled `_ count`: the ingress's counterpart takes `count:`.
-        func recordUnconvertedWords(_ count: UInt64) {
-            lock.lock()
-            let current = unconvertedWordsSink
-            lock.unlock()
-            current?(count)
-        }
     }
 
     private let portManager: any VirtualPortManaging
@@ -1549,8 +1536,18 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                         }
                         let converted = MIDIFeedback.midi1Bytes(fromUMPWords: umpWords)
                         let bytes = converted.bytes
+                        // Words this converter does not read — SysEx7 today, and anything else
+                        // Logic sends that is not MIDI 1.0 channel voice or system. It is a known
+                        // gap rather than an error, and it is LOGGED rather than published: the
+                        // earlier shape here set a sink that `FeedbackSink()` never supplied and a
+                        // comment that promised a health field, so the count reached nothing while
+                        // reading as though it reached a health snapshot. Publishing it needs a
+                        // field on `MCUFeedbackIngressSnapshot` and is a separate change.
                         if converted.unconverted > 0 {
-                            sink.recordUnconvertedWords(UInt64(converted.unconverted))
+                            Log.info(
+                                "MCU feedback: \(converted.unconverted) word(s) carried a message "
+                                    + "this converter does not read",
+                                subsystem: "midi")
                         }
                         // The trace shows what the PARSER sees, which after this change is the
                         // converted stream rather than the raw words.

@@ -84,27 +84,45 @@ stderr = open(d._stderr_path, encoding="utf-8", errors="replace").read()
 
 rx = [m.group(1).split() for m in re.finditer(r"MCU RX: ([0-9a-f ]+)", stderr)]
 tx = [m.group(1).split() for m in re.finditer(r"MCU TX: ([0-9a-f ]+)", stderr)]
+# Every `MCU RX:` the server wrote, including the EMPTY ones. The pattern above needs at least one
+# hex byte, so a packet the converter produced nothing for is invisible to it — and a converter that
+# silently dropped most of the traffic would look identical to one that read all of it. Counting the
+# blanks is what tells those apart. Found by review 2026-09-09.
+rx_lines = len(re.findall(r"MCU RX:", stderr))
 first_bytes = [int(f[0], 16) for f in rx if f]
 data_first = [f for f in rx if f and int(f[0], 16) < 0x80]
+# The KIND of message, not just "some status byte". A converter that emitted one fixed status-led
+# frame for every packet satisfies "nothing starts with a data byte" — so the reading also records
+# how many different channel-voice kinds arrived, and the check requires more than one.
+status_kinds = sorted({hex(b & 0xF0) for b in first_bytes})
 
 reading = {
     "rx_frames": len(rx),
+    "rx_trace_lines": rx_lines,
+    "rx_lines_with_no_bytes": rx_lines - len(rx),
     "tx_frames": len(tx),
     "frames_starting_with_a_data_byte": len(data_first),
+    "distinct_status_kinds": len(status_kinds),
+    "status_kinds_seen": status_kinds,
     "first_bytes_seen": sorted({hex(b) for b in first_bytes})[:12],
     "sample_frames": [" ".join(f) for f in rx[:4]],
 }
 
 ev.falsifiable(
     "736/traced-mcu-frames-start-with-a-status-byte",
-    lambda o: o["rx_frames"] > 0 and o["frames_starting_with_a_data_byte"] == 0,
+    lambda o: (o["rx_frames"] > 0
+               and o["frames_starting_with_a_data_byte"] == 0
+               and o["distinct_status_kinds"] >= 2),
     reading,
-    {"rx_frames": 4, "tx_frames": 1, "frames_starting_with_a_data_byte": 4,
+    {"rx_frames": 4, "rx_trace_lines": 4, "rx_lines_with_no_bytes": 0, "tx_frames": 1,
+     "frames_starting_with_a_data_byte": 4, "distinct_status_kinds": 1,
+     "status_kinds_seen": ["0x0"],
      "first_bytes_seen": ["0x0"], "sample_frames": ["00 00 d0 20"]},
     "every frame the callback handed the parser begins with a byte whose bit 7 is set, which is a "
     "MIDI status byte -- and none begins with a 7-bit data byte, which is what the UMP memory image "
-    "produced. The counterexample is the pre-fix reading verbatim: `00 00 d0 20`, four frames, all "
-    "starting 0x00",
+    "produced. MORE THAN ONE KIND of status arrives, because a converter that emitted one fixed "
+    "status-led frame per packet would satisfy the first half on its own. The counterexample is the "
+    "pre-fix reading verbatim: `00 00 d0 20`, four frames, all starting 0x00",
     mutation="restore `Array(raw.prefix(wordCount * 4))` in the MCU receive callback",
 )
 
