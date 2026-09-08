@@ -1,0 +1,101 @@
+{
+  "id": "2026-09-08-the-region-origin-is-the-bridge-not-a-label",
+  "date": "2026-09-08",
+  "schema": 2,
+  "subject": "what `startTick` was actually load-bearing for in MIDI note readback",
+  "question": "Is the region's start tick part of the identity contract only, or is it required to compute anything?",
+  "verdict": "wall",
+  "issues": [
+    293,
+    302,
+    303,
+    305,
+    306
+  ],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "note": "Logic was driven earlier for the Event List readings this rests on; the finding itself is a reading of the source, made when a literal implementation of a spec stopped at the one expression the spec did not cover."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "bash Scripts/observations/reverify-region-origin-bridge.sh",
+    "expected": "REVERIFY PASS: parseNote still takes regionStartTick and subtracts it from the absolute start, and ObservedRegionDescriptor still has no startTick",
+    "cost": "offline, no Logic; a grep"
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/MIDIReadbackAssessment.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-08-region-origin-bridge.txt"
+  ],
+  "method": "A migration was specified literally and handed to an implementer with no judgement latitude, instructed to STOP rather than guess at any call site the rules did not cover. It stopped at exactly one, and that stop is the finding.",
+  "observations": [
+    {
+      "what": "the expression the spec could not cover",
+      "file": "Sources/LogicProMCP/MIDIReadback/MIDIReadbackAssessment.swift",
+      "line": 205,
+      "code": "switch parseNote(row: row, roles: roles, regionStartTick: observed.startTick) {"
+    },
+    {
+      "what": "what the parser does with it",
+      "line": 364,
+      "code": "let (relativeStart, overflow) = start.subtractingReportingOverflow(regionStartTick)",
+      "comment_in_source": "Region-relative start; overflow-safe subtraction."
+    },
+    {
+      "what": "what the Event List supplies",
+      "position_valueDescription": "1 1 1 1 ",
+      "reading": "bar / beat / division / tick, ABSOLUTE"
+    },
+    {
+      "what": "what the caller asks for",
+      "coordinates": "region-relative"
+    },
+    {
+      "what": "the only bridge between the two",
+      "operation": "start - regionStartTick"
+    },
+    {
+      "what": "what the region surface supplies",
+      "fields": [
+        "endBar",
+        "kind",
+        "name",
+        "rawHelp",
+        "startBar",
+        "trackIndex"
+      ],
+      "start_tick": null,
+      "note": "measured separately the same day; finest granularity a bar, as localised prose"
+    },
+    {
+      "what": "how many compile errors remained after the literal migration",
+      "count": 1,
+      "which": "the expression above"
+    },
+    {
+      "what": "the refusal representation already present in the API",
+      "type": "AssessmentOutcome.incomplete(PartialReason)",
+      "existing_cases": 18,
+      "siblings": [
+        "timingUnproven",
+        "columnUnresolved",
+        "calibrationNotDistinct"
+      ],
+      "note": "so refusing needs one more case rather than a new mechanism"
+    }
+  ],
+  "conclusion": "The region's start tick is not a label on an identity. It is the only bridge between what the Event List reports (absolute bar/beat/division/tick) and what a caller asks for (region-relative), and the bridge is one subtraction. Remove the region origin and region-relative note verification cannot be COMPUTED — not merely cannot be identified, which is what the contract change had been treated as. Since the region surface supplies no exact start tick, the honest outcome is an explicit unavailable result, and the API already has the shape for it.",
+  "limits": [
+    "This is a reading of the source, not of Logic. It establishes what the code requires, not what Logic could be made to report.",
+    "It says nothing about whether a live signature-and-tempo map read could supply the origin. ADR-016 reads the tempo map; no live signature-map reader was looked for here.",
+    "Every region observed so far starts on a bar boundary and `startBar` is an Int, but bar-granular readings cannot establish that a region's true start is exactly on that boundary.",
+    "One unresolved call site is not an inventory. Compilation succeeding elsewhere does not establish that the other migrated call sites kept their meaning."
+  ],
+  "supersedes": null
+}
