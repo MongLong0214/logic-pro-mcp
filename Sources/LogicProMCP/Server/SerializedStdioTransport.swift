@@ -40,9 +40,21 @@ actor SerializedStdioTransport: Transport {
     private let running = RunFlag()
     private var readThread: Thread?
 
-    init(input: Int32 = STDIN_FILENO, output: Int32 = STDOUT_FILENO, logger: Logger? = nil) {
+    /// Seconds to wait for stdout to ACCEPT a frame before declaring the output stalled. Injectable
+    /// so a test can stall a real descriptor without stalling the suite.
+    ///
+    /// 30, not 5: a large `tools/list` to a slow client is normal traffic and must not be mistaken
+    /// for a stall. The value this defends against is infinity — measured 2026-09-08 on the release
+    /// binary with a reader that stopped draining, 1539 of 1539 samples parked in `write` with no
+    /// deadline above it, and every reply AND every 25s timeout envelope queued behind that one
+    /// write on this serial queue (#683).
+    private let writeDeadline: TimeInterval
+
+    init(input: Int32 = STDIN_FILENO, output: Int32 = STDOUT_FILENO, logger: Logger? = nil,
+         writeDeadline: TimeInterval = 30) {
         self.inputFD = input
         self.outputFD = output
+        self.writeDeadline = writeDeadline
         self.logger = logger ?? Logger(label: "logic-pro-mcp.serialized-stdio") { _ in
             SwiftLogNoOpLogHandler()
         }
@@ -75,17 +87,84 @@ actor SerializedStdioTransport: Transport {
         stream
     }
 
+    /// The output stopped accepting bytes. Distinct from a POSIX error because nothing FAILED — the
+    /// reader stopped reading, and a caller that cannot tell those apart reports the wrong thing.
+    struct OutputStalled: Swift.Error, CustomStringConvertible {
+        let bytes: Int
+        let seconds: TimeInterval
+        var description: String {
+            "stdout did not accept a \(bytes)-byte frame within \(seconds)s: the reader has stopped "
+                + "draining. No part of the frame was written."
+        }
+    }
+
+    /// Whether `fd` accepted a writer within `deadline`, and if not, WHY.
+    ///
+    /// A CASE and not a Bool. A Bool collapses "the deadline passed" with "the descriptor is
+    /// invalid" and "the peer hung up", and `send` would then report every one of them as
+    /// `OutputStalled` — a closed descriptor described as a slow reader, which is the confusion this
+    /// whole change exists to remove one layer down.
+    enum Writability { case ready; case timedOut; case failed(Int32) }
+
+    private static func waitUntilWritable(_ fd: Int32, deadline: TimeInterval) -> Writability {
+        // A NEGATIVE descriptor before anything else. POSIX `poll` IGNORES an entry whose fd is
+        // negative and then returns 0 when the timeout expires — which is byte-for-byte the answer
+        // it gives for a healthy-but-full pipe. Without this guard an invalid descriptor is
+        // reported as a stalled reader, which is precisely the confusion this function was split
+        // into three cases to prevent. Caught by the test that exists to keep the causes distinct.
+        guard fd >= 0 else { return .failed(EBADF) }
+        var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        let milliseconds = Int32(max(0, min(deadline * 1000, Double(Int32.max))))
+        while true {
+            let n = withUnsafeMutablePointer(to: &pfd) { poll($0, 1, milliseconds) }
+            if n < 0 {
+                if errno == EINTR { continue }
+                return .failed(errno)
+            }
+            if n == 0 { return .timedOut }
+            if (pfd.revents & Int16(POLLNVAL)) != 0 { return .failed(EBADF) }
+            if (pfd.revents & Int16(POLLERR)) != 0 { return .failed(EIO) }
+            // EPIPE on purpose: the reader is gone, which is the ordinary end of a session and must
+            // surface as the POSIX error a caller already handles, not as a novel stall type.
+            if (pfd.revents & Int16(POLLHUP)) != 0 { return .failed(EPIPE) }
+            return (pfd.revents & Int16(POLLOUT)) != 0 ? .ready : .failed(EIO)
+        }
+    }
+
     func send(_ data: Data) async throws {
         var mutableFrame = data
         mutableFrame.append(UInt8(ascii: "\n"))
         let frame = mutableFrame  // immutable snapshot ⇒ compiler-provable Sendable capture
         let fd = outputFD
+        let deadline = writeDeadline
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Swift.Error>) in
             // Serial queue + blocking write ⇒ each frame is flushed atomically,
             // start-to-finish, before the next send's bytes touch the fd.
+            // The wait for writability is BEFORE the first byte; the write after it is still
+            // blocking. A deadline cannot be applied MID-frame: #220 exists because a frame written
+            // in pieces lets a second frame interleave, and abandoning a part-written frame is that
+            // same corruption by another route. So the residual — a reader that stalls after the
+            // frame begins — is made LOUD rather than fixed.
             writeQueue.async {
+                switch SerializedStdioTransport.waitUntilWritable(fd, deadline: deadline) {
+                case .ready:
+                    break
+                case .timedOut:
+                    cont.resume(throwing: OutputStalled(bytes: frame.count, seconds: deadline))
+                    return
+                case let .failed(code):
+                    cont.resume(throwing: POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO))
+                    return
+                }
+                let startedAt = DispatchTime.now()
                 do {
                     try SerializedStdioTransport.writeAll(frame, to: fd)
+                    let elapsed = Double(DispatchTime.now().uptimeNanoseconds
+                        - startedAt.uptimeNanoseconds) / 1_000_000_000
+                    if elapsed > deadline {
+                        FileHandle.standardError.write(Data(
+                            "[stdio] a \(frame.count)-byte frame took \(String(format: "%.1f", elapsed))s to write; the reader is stalling mid-frame\n".utf8))
+                    }
                     cont.resume()
                 } catch {
                     cont.resume(throwing: error)
