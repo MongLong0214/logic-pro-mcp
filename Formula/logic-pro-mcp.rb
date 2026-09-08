@@ -21,7 +21,7 @@ class LogicProMcp < Formula
   # file. Bump `version` and this line together, and let CI confirm it.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"
-    sha256 "0776b0d257606460164b3e197f6542223c9d0657501f97e96f5f9a250b994788"
+    sha256 "30f632d83f70e02e67754e6cfe8e809a4d218b78a4f47bc58ff374fbdd74bf91"
   end
 
   depends_on :macos => :sonoma
