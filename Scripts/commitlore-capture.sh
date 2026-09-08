@@ -17,11 +17,15 @@
 #    shape of false green this repository keeps finding elsewhere. So this reads `--json` and
 #    branches on `outcome`.
 #
-# 2. THE PROMPT IS THE WHOLE TRANSCRIPT. Measured the same day: a 67,981,436-byte session produced a
-#    67,468,122-byte prompt, which no model can consume, and `capture` reports that as
-#    `outcome: "empty"` with exit 0. Filed as commitlore#873. Until it is bounded upstream, this
-#    slices the transcript to a tail window and SAYS SO in its output, because a caller who cannot
-#    tell a slice from a session cannot judge the record that comes out of it.
+# 2. THE PROMPT USED TO BE THE WHOLE TRANSCRIPT, and this wrapper existed partly to work around it.
+#    Measured 2026-09-08: a 67,981,436-byte transcript produced a 67,468,122-byte prompt, which no
+#    model can consume, reported as `outcome: "empty"` with exit 0. Filed as commitlore#873 and
+#    FIXED UPSTREAM in v1.2.3 — `capture` now bounds the prompt itself and declares what it used in
+#    a `transcript_window` field: measured on 69,095,624 bytes it returned 261,254. So the local
+#    slicing is gone rather than kept "just in case": two windows would mean the one that is
+#    reported is not the one that was used, which is worse than either alone. What stays is
+#    REPORTING the window, because a caller who cannot tell a slice from the whole cannot judge the
+#    record that comes out of it — and upstream now supplies the numbers to report.
 #
 # Usage:
 #   Scripts/commitlore-capture.sh prompt [<transcript>]   write the bounded prompt to stdout
@@ -29,7 +33,6 @@
 #   Scripts/commitlore-capture.sh outcome [<transcript>]  print just the outcome word
 set -uo pipefail
 
-WINDOW="${LPM_CAPTURE_WINDOW:-400}"
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "not a git repository" >&2; exit 2; }
 cd "$REPO" || exit 2
 
@@ -40,15 +43,15 @@ find_transcript() {
     ls -t "$dir"/*.jsonl 2>/dev/null | head -1
 }
 
-slice_of() {
-    local src="$1" out
-    [ -f "$src" ] || { echo "no transcript at $src" >&2; return 2; }
-    out=$(mktemp -t commitlore-slice) || return 2
-    tail -n "$WINDOW" "$src" > "$out" || return 2
-    printf '%s' "$out"
+require_transcript() {
+    [ -f "$1" ] || { echo "no transcript at $1" >&2; return 2; }
+    printf '%s' "$1"
 }
 
 command -v commitlore >/dev/null 2>&1 || { echo "commitlore CLI not on PATH" >&2; exit 2; }
+
+WORKERR="$(mktemp)"
+trap 'rm -f "$WORKERR"' EXIT
 
 CMD="${1:?usage: $0 prompt|stage|outcome [...]}"
 shift
@@ -56,18 +59,23 @@ shift
 case "$CMD" in
   prompt|outcome)
       SRC=$(find_transcript "${1:-}") || exit 2
-      SLICE=$(slice_of "$SRC") || exit 2
-      trap 'rm -f "$SLICE"' EXIT
+      SLICE=$(require_transcript "$SRC") || exit 2
       RAW=$(commitlore capture --json --unattended --transcript "$SLICE" 2>/dev/null) || true
       [ -n "$RAW" ] || { echo "capture produced no JSON" >&2; exit 2; }
       if [ "$CMD" = "outcome" ]; then
           printf '%s' "$RAW" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("outcome","<none>"))'
       else
           # The window is reported alongside the prompt so a reader knows what it is looking at.
-          printf '%s' "$RAW" | WINDOW="$WINDOW" SRC="$SRC" python3 -c '
+          printf '%s' "$RAW" | SRC="$SRC" python3 -c '
 import json, os, sys
 d = json.load(sys.stdin)
-print("# transcript slice: last {} lines of {}".format(os.environ["WINDOW"], os.environ["SRC"]))
+w = d.get("transcript_window") or {}
+# Reported, not computed here: v1.2.3 chooses the window and says which lines it used. Recomputing
+# it locally would report a window that is not the one the prompt was built from.
+print("# transcript: {}".format(os.environ["SRC"]))
+print("# window: lines {}-{} of {} ({} bytes, truncated={})".format(
+    w.get("first_line"), w.get("last_line"), w.get("total_lines"),
+    w.get("window_bytes"), w.get("truncated")))
 print("# capture outcome without a draft: {}".format(d.get("outcome")))
 print(d.get("prompt") or "")'
       fi
@@ -76,15 +84,22 @@ print(d.get("prompt") or "")'
       DRAFT="${1:?usage: $0 stage <draft.json> [<transcript>]}"
       [ -f "$DRAFT" ] || { echo "no draft at $DRAFT" >&2; exit 2; }
       SRC=$(find_transcript "${2:-}") || exit 2
-      SLICE=$(slice_of "$SRC") || exit 2
-      trap 'rm -f "$SLICE"' EXIT
-      RAW=$(commitlore capture --json --unattended --transcript "$SLICE" --draft "$DRAFT" 2>/dev/null) || true
+      SLICE=$(require_transcript "$SRC") || exit 2
+      RAW=$(commitlore capture --json --unattended --transcript "$SLICE" --draft "$DRAFT" 2>"$WORKERR") || true
+      grep -v "ExperimentalWarning\|trace-warnings" "$WORKERR" >&2 || true
       [ -n "$RAW" ] || { echo "capture produced no JSON" >&2; exit 2; }
       printf '%s' "$RAW" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 outcome = d.get("outcome")
 print("outcome={} staged={} nonce={}".format(outcome, d.get("staged"), d.get("nonce")))
+# A rejection that does not say why is unactionable, and this wrapper used to print exactly that:
+# `outcome=rejected staged=False` and nothing else, while the CLI had said on stderr which rule
+# fired and on which record. Measured 2026-09-08 — a draft was rejected for `evidence-gap` and the
+# caller could not tell that from a malformed file without re-running the CLI by hand. The reason
+# travels with the outcome now.
+for r in d.get("rejected") or []:
+    print("  record {}: {} — {}".format(r.get("index"), r.get("rule"), r.get("detail")))
 # staged is a success; empty is an honest "nothing to record"; rejected is a FAILURE that exits 0
 # from the CLI and must not be read as either of the other two.
 sys.exit({"staged": 0, "empty": 0, "rejected": 1}.get(outcome, 2))'

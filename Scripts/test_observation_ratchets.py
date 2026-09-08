@@ -103,6 +103,10 @@ def main():
         "unmeasured_coverage": {"en-US": ["L"], "ko-KR": [], "ja-JP": ["L"]},
         "schema_v1_records": ["2026-09-05-r2"],
         "manual_reverify": ["2026-09-05-r2"],
+        # Neither fixture record carries an `evidence` list, so both are uncited. Seeded rather
+        # than left out: an unlisted dimension makes the guard refuse, which is correct behaviour
+        # and would have failed this fixture for the wrong reason.
+        "records_without_evidence": ["2026-09-05-r1", "2026-09-05-r2"],
         "surfaces_without_records": sorted(
             f"{loc}\u2192{s_}" for loc in ("en-US", "ko-KR", "ja-JP")
             for s_ in ("arrange.regions", "mixer.inserts")
