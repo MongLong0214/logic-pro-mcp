@@ -97,16 +97,17 @@ struct BoundedProcessRunnerTests {
     /// reader is blocked on it, and `BoundedProcessRunner` has no seam to inject that through;
     /// writing one would be a larger change than the fix. Recorded here rather than left as a
     /// green test that reads like coverage.
+    /// No wall-clock assertion. A hang does not need one: `run` never returning IS the failure, and
+    /// the harness reports a test that does not finish. Reading the clock instead would add exactly
+    /// the load-sensitive assertion `check-test-wall-clock-assertions.py` exists to refuse — and it
+    /// refused this one, correctly, when it was written that way.
     @Test func aChildThatDiesWithHotPipesStillLetsTheRunnerReturn() {
-        let started = Date()
         let result = BoundedProcessRunner.run(
             executable: "/bin/sh",
             arguments: ["-c", "printf 'out'; printf 'err' >&2; kill -9 $$"],
             timeout: 5
         )
-        let elapsed = Date().timeIntervalSince(started)
 
-        #expect(elapsed < 4.0)
         switch result {
         case .completed, .timedOut:
             break
