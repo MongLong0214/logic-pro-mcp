@@ -2198,6 +2198,17 @@ extension AccessibilityChannel {
             String(track.isMuted),
             String(track.isSoloed),
             String(track.isArmed),
+            // ALWAYS EMPTY, and kept deliberately. Nothing populates `TrackState.color`, so this
+            // component cannot move and a recoloured track produces an identical fingerprint — a
+            // consumer comparing fingerprints will not see the change. That is not an oversight to
+            // be fixed here: measured 2026-09-09 across 1406 elements to depth 16, including the
+            // colour palette opened through View > Colors, Logic exposes no attribute of colour
+            // type and no value naming one, so there is nothing for a reader to read
+            // (`docs/observations/2026-09-09-no-attribute-value-anywhere-carries-a-track-colour`).
+            //
+            // The component stays rather than being deleted so that a future colour reader lights
+            // it up without changing this string's shape, and the silence is written down here so
+            // the next reader does not have to re-derive it. #448.
             track.color ?? ""
         ].joined(separator: "|")
     }

@@ -1,0 +1,71 @@
+{
+ "conclusion": "A track colour has no observable consequence in the accessibility tree. Not one of 1406 elements declares an attribute of colour type, and no value names a colour except the palette window's own title. This is stronger than the 2026-09-08 record for the same issue, which swept names rather than values and reported twenty subtrees it could not read: with the absence/failure distinction made correctly, zero subtrees refuse. The verdict is therefore `wall` rather than `partial` FOR THIS SURFACE. `TrackState.color` is consequently never populated by anything, and the track fingerprint that joins it with `|` carries an always-empty component — so a colour change is invisible to every consumer of that fingerprint.",
+ "date": "2026-09-09",
+ "depends": [],
+ "evidence": [
+  "evidence/2026-09-09-colour-value-sweep-en.json"
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "build": "6674",
+  "locale": "en-US",
+  "note": "Logic's UI language is `en`; the fixture is lpm-locale-campaign with 19 tracks.",
+  "os": "macOS 26.6",
+  "version": "12.3"
+ },
+ "id": "2026-09-09-no-attribute-value-anywhere-carries-a-track-colour",
+ "issues": [
+  448
+ ],
+ "limits": [
+  "The project FILE was not read. A colour that Logic persists into the .logicx package would not appear here, and that is the one route the 2026-09-08 record named which this does not close.",
+  "Values only, at depth 16, from the application's windows. A colour carried in a non-string, non-CGColor attribute type would be missed, though no such attribute was seen.",
+  "The palette was opened but not INTERACTED with. Whether selecting a swatch makes some element momentarily expose a value was not measured.",
+  "One project, 19 tracks, none of which had a colour deliberately assigned first. If Logic only exposes something for a track whose colour differs from the default, this sweep would not have seen it."
+ ],
+ "method": "The 2026-09-08 record for this issue swept attribute NAMES. This sweeps VALUES: from every window of the application, to depth 16, it reads EVERY attribute each element declares, and reports (a) any value whose text names a colour and (b) any attribute whose CFTypeID is CGColor — which is what a real colour observable would be. Run twice: with the colour palette closed, and with it open via View > Colors.",
+ "observations": [
+  {
+   "container": "application windows, depth 16",
+   "count": 1304,
+   "what": "elements visited, palette closed"
+  },
+  {
+   "container": "application windows, depth 16",
+   "count": 1406,
+   "what": "elements visited, palette open"
+  },
+  {
+   "container": "both runs",
+   "count": 0,
+   "what": "attributes of CGColor type"
+  },
+  {
+   "container": "both runs",
+   "count": 0,
+   "what": "values naming a colour, palette closed"
+  },
+  {
+   "container": "the palette WINDOW's own AXTitle and AXValue, both the literal `Color`; no swatch exposes a value",
+   "count": 2,
+   "what": "values naming a colour, palette open"
+  },
+  {
+   "container": "counting only a real failure — `noValue` and `attributeUnsupported` mean the element has no children, and conflating them reported 879 refused subtrees out of 1304 on the first run of this probe",
+   "count": 0,
+   "what": "child lists genuinely unreadable"
+  }
+ ],
+ "question": "Does setting a track colour have ANY observable consequence in the accessibility tree?",
+ "reverify": {
+  "command": "bash Scripts/observations/reverify-colour-has-no-observable.sh",
+  "cost": "live; Logic running with a project open; a few seconds",
+  "expected": "REVERIFY PASS — no attribute of colour type and no value naming a colour, outside the palette window's own title",
+  "kind": "script"
+ },
+ "schema": 2,
+ "subject": "every attribute VALUE reachable from Logic's windows, including the colour palette",
+ "supersedes": null,
+ "surface": "arrange.track_headers",
+ "verdict": "wall"
+}
