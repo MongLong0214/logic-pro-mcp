@@ -713,6 +713,171 @@ struct QualificationGateTests {
         )
     }
 
+    // MARK: - #373 — what a live attestation credits
+
+    /// The producer that carries live coverage to `ProductionReadinessContracts`.
+    ///
+    /// Each case below differs from the credited one by EXACTLY ONE conjunct, so a passing
+    /// assertion here says which conjunct is load-bearing rather than only that the whole
+    /// predicate rejected something. A single "everything wrong" negative would stay green if
+    /// three of the four checks were deleted.
+    @Test func liveCreditedOperationIDsRequiresEveryConjunct() {
+        func operationCase(
+            _ operationID: String,
+            status: QualificationStatus = .passed,
+            verified: Bool = true,
+            kind: QualificationVerificationKind = .semanticReadback,
+            readbackVerified: Bool? = true
+        ) -> QualificationCase {
+            QualificationCase(
+                id: "in-process/\(operationID)",
+                status: status,
+                tool: "logic_system",
+                command: operationID,
+                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+                verified: verified,
+                evidenceFiles: ["evidence/\(operationID).json"],
+                binarySHA256: binarySHA256,
+                operationID: operationID,
+                verificationKind: kind,
+                readback: readbackVerified.map {
+                    QualificationReadbackEvidence(
+                        source: "logic://\(operationID)",
+                        requestID: "rb-\(operationID)",
+                        verified: $0,
+                        sha256: String(repeating: "b", count: 64)
+                    )
+                }
+            )
+        }
+
+        let credited = PromotionGate.liveCreditedOperationIDs(in: attestation(
+            cases: [
+                operationCase("op.credited"),
+                operationCase("op.not_passed", status: .notQualified),
+                operationCase("op.unverified", verified: false),
+                operationCase("op.smoke_kind", kind: .protocolSmoke),
+                operationCase("op.readback_says_no", readbackVerified: false),
+                operationCase("op.readback_absent", readbackVerified: nil),
+            ],
+            waivers: []
+        ))
+        #expect(credited == ["op.credited"])
+    }
+
+    /// A case whose id does not match `in-process/<operationID>` credits nothing, because the
+    /// release gate finds an operation's case by BOTH and would not have found this one either.
+    /// Crediting on the weaker of the two identifiers would credit a case the release gate
+    /// refuses -- the two evaluators disagreeing is the whole failure this shares a predicate to
+    /// avoid.
+    @Test func liveCreditedOperationIDsIgnoresACaseWhoseIDDoesNotMatchItsOperation() {
+        let mismatched = QualificationCase(
+            id: "in-process/op.something_else",
+            status: .passed,
+            tool: "logic_system",
+            command: "op.claimed",
+            traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+            verified: true,
+            evidenceFiles: ["evidence/op.claimed.json"],
+            binarySHA256: binarySHA256,
+            operationID: "op.claimed",
+            verificationKind: .semanticReadback,
+            readback: QualificationReadbackEvidence(
+                source: "logic://op.claimed",
+                requestID: "rb",
+                verified: true,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+        let credited = PromotionGate.liveCreditedOperationIDs(
+            in: attestation(cases: [mismatched], waivers: [])
+        )
+        #expect(credited.isEmpty)
+    }
+
+    /// The attestation that separates "duplicate operation" from "duplicate case id".
+    ///
+    /// Found by review. Two cases share the id `in-process/op.a`; one declares `operationID`
+    /// `op.a`, the other `op.b`. Counting duplicates AFTER the canonical filter drops the second as
+    /// a mismatch and leaves the first looking unique, so `op.a` gets credited — out of an
+    /// attestation `evaluate` refuses outright with `duplicateCaseID`. Sharing the pass predicate
+    /// did not prevent this; the two authorities have to agree about WHICH CASES EXIST as well as
+    /// which of them passed.
+    ///
+    /// This asserts both halves, so it cannot go green by one of them changing.
+    @Test func aDuplicateCaseIDCreditsNothingAndTheReleaseGateRefusesTheSameAttestation() {
+        func caseFor(_ operationID: String) -> QualificationCase {
+            QualificationCase(
+                id: "in-process/op.a",
+                status: .passed,
+                tool: "logic_system",
+                command: operationID,
+                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+                verified: true,
+                evidenceFiles: ["evidence/\(operationID).json"],
+                binarySHA256: binarySHA256,
+                operationID: operationID,
+                verificationKind: .semanticReadback,
+                readback: QualificationReadbackEvidence(
+                    source: "logic://\(operationID)",
+                    requestID: "rb-\(operationID)",
+                    verified: true,
+                    sha256: String(repeating: "b", count: 64)
+                )
+            )
+        }
+        let cases = [caseFor("op.a"), caseFor("op.b")]
+
+        #expect(PromotionGate.liveCreditedOperationIDs(
+            in: attestation(cases: cases, waivers: [])
+        ).isEmpty)
+
+        let decision = PromotionGate().evaluate(
+            attestation: attestation(cases: cases, waivers: []),
+            releaseVersion: "1.2.3",
+            expectedBinarySHA256: binarySHA256,
+            presentArtifacts: [],
+            requiredArtifacts: [],
+            requiredOperationIDs: ["op.a"]
+        )
+        let refusedAsDuplicate = decision.rejections.contains(.duplicateCaseID(caseID: "in-process/op.a"))
+        #expect(refusedAsDuplicate)
+        #expect(!decision.promotable)
+    }
+
+    /// Two cases for one operation credit NOTHING, even when one of them passes.
+    ///
+    /// `evaluate` rejects a duplicate case id outright, so such an attestation is one the release
+    /// gate refuses -- and a producer that read a pass out of it would hand the debt board a
+    /// credit the release itself would never honour. It is also the obvious way to forge one:
+    /// append a passing duplicate beside a failing case.
+    @Test func liveCreditedOperationIDsRefusesADuplicatedOperation() {
+        func caseFor(_ status: QualificationStatus) -> QualificationCase {
+            QualificationCase(
+                id: "in-process/op.doubled",
+                status: status,
+                tool: "logic_system",
+                command: "op.doubled",
+                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+                verified: status == .passed,
+                evidenceFiles: ["evidence/op.doubled.json"],
+                binarySHA256: binarySHA256,
+                operationID: "op.doubled",
+                verificationKind: .semanticReadback,
+                readback: QualificationReadbackEvidence(
+                    source: "logic://op.doubled",
+                    requestID: "rb",
+                    verified: status == .passed,
+                    sha256: String(repeating: "b", count: 64)
+                )
+            )
+        }
+        let credited = PromotionGate.liveCreditedOperationIDs(
+            in: attestation(cases: [caseFor(.failed), caseFor(.passed)], waivers: [])
+        )
+        #expect(credited.isEmpty)
+    }
+
     private func attestation(
         serverVersion: String = "1.2.3",
         binarySHA256: String? = nil,

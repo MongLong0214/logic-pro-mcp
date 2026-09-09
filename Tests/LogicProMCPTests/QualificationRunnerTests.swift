@@ -1754,6 +1754,95 @@ struct QualificationRunnerTests {
             .sorted()
         print("read-only short of passed (\(readOnlyShort.count) of \(readOnly.count)): "
                 + (readOnlyShort.isEmpty ? "none" : readOnlyShort.joined(separator: ", ")))
+
+        // #373 — the credit chain, end to end, on THIS run's real results.
+        //
+        // Review named this as the thing that stayed untested: the producer and the static
+        // evaluator were each tested against hand-built cases, and nothing showed that a real live
+        // run reaches R-SEM at all. Everything above this line is a real drive of the release
+        // binary against a running Logic, so the cases it produced are the honest input.
+        //
+        // The line is printed in a machine-readable shape because a live harness outside this
+        // process reads it (`live_373_live_credit_reaches_the_debt_board`), and a number nobody can
+        // extract is a number nobody checks.
+        let liveCases: [QualificationCase] = operationResults.map { result in
+            QualificationCase(
+                id: "in-process/\(result.operationID)",
+                status: result.status,
+                tool: "qualification",
+                command: result.operationID,
+                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+                verified: result.status == .passed,
+                evidenceFiles: [],
+                operationID: result.operationID,
+                verificationKind: result.verificationKind,
+                deferral: result.deferral,
+                readback: result.readback
+            )
+        }
+        let attestation = ReleaseQualificationAttestation(
+            schema: "release-qualification-attestation/v2",
+            serverVersion: "0.0.0",
+            commitSHA: String(repeating: "0", count: 40),
+            binarySHA256: String(repeating: "0", count: 64),
+            logicVariant: .desktop,
+            logicVersion: "unknown",
+            locale: .enUS,
+            profile: .core,
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 0),
+            total: liveCases.count,
+            passed: liveCases.filter { $0.status == .passed }.count,
+            failed: 0,
+            waived: 0,
+            cases: liveCases,
+            waivers: [],
+            evidenceManifestSHA256: String(repeating: "0", count: 64)
+        )
+        let credited = PromotionGate.liveCreditedOperationIDs(in: attestation)
+        let registered = OperationRegistry.specs.map(\.id.rawValue)
+
+        func missingCount(crediting: Set<String>) -> Int {
+            ProductionReadinessContractEvaluator.evaluate(
+                releaseWorkflowYAML: "",
+                registeredOperationIDs: registered,
+                semanticValidatorOperationIDs: [],
+                requiredMatrixAxisCount: 0,
+                debtBoardMarkdown: nil,
+                expectedAuthorityBaseSHA: nil,
+                publishedReleaseEvidencePresent: false,
+                mutationRestoreCompensationEvidencePresent: false,
+                independentProvenanceEnforced: false,
+                liveCreditedOperationIDs: crediting
+            ).findings
+                .filter { $0.id == .semanticCoverageIncomplete }
+                .compactMap { finding -> Int? in
+                    // "semantic coverage missing (…) for <n>/<total> operations (…)"
+                    guard let after = finding.detail.components(separatedBy: " for ").dropFirst().first,
+                          let n = after.components(separatedBy: "/").first else { return nil }
+                    return Int(n)
+                }
+                .first ?? 0
+        }
+
+        let withoutCredit = missingCount(crediting: [])
+        let withCredit = missingCount(crediting: credited)
+        // The drop is EXACTLY the credited set, not merely smaller. A change that credited an
+        // operation twice, or credited one the registry does not list, would still shrink the count.
+        let dropIsExactlyTheCreditedSet = withoutCredit - withCredit == credited.count
+        let everyCreditedOperationIsRegistered = credited.isSubset(of: Set(registered))
+
+        print("373 live-credit: credited=\(credited.count) registered=\(registered.count) "
+              + "missingWithoutCredit=\(withoutCredit) missingWithCredit=\(withCredit) "
+              + "dropIsExactlyTheCreditedSet=\(dropIsExactlyTheCreditedSet) "
+              + "everyCreditedOperationIsRegistered=\(everyCreditedOperationIsRegistered)")
+
+        #expect(withoutCredit == registered.count)
+        #expect(dropIsExactlyTheCreditedSet)
+        #expect(everyCreditedOperationIsRegistered)
+        // A live run that credits nothing would satisfy every line above, so the run has to have
+        // produced credit at all. This is the same positive control the other live harnesses carry.
+        #expect(!credited.isEmpty)
     }
 
     /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
