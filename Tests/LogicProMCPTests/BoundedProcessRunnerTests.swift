@@ -85,6 +85,37 @@ struct BoundedProcessRunnerTests {
         #expect(out.stdout.utf8.count <= 1000)
     }
 
+    /// A child that dies with both pipes hot still lets `run` return.
+    ///
+    /// NOT a regression test for #843, and it was written as one before a mutant said otherwise.
+    /// Restoring `availableData` in the drain leaves this GREEN: a child that `kill -9`s itself
+    /// closes its pipes normally, the read returns empty, and the exception #843 is about never
+    /// fires. So this pins a real property — the runner does not hang when a child dies mid-stream
+    /// — and pins nothing about the fix.
+    ///
+    /// #843 itself has NO regression test. The condition is a file descriptor going bad WHILE a
+    /// reader is blocked on it, and `BoundedProcessRunner` has no seam to inject that through;
+    /// writing one would be a larger change than the fix. Recorded here rather than left as a
+    /// green test that reads like coverage.
+    /// No wall-clock assertion. A hang does not need one: `run` never returning IS the failure, and
+    /// the harness reports a test that does not finish. Reading the clock instead would add exactly
+    /// the load-sensitive assertion `check-test-wall-clock-assertions.py` exists to refuse — and it
+    /// refused this one, correctly, when it was written that way.
+    @Test func aChildThatDiesWithHotPipesStillLetsTheRunnerReturn() {
+        let result = BoundedProcessRunner.run(
+            executable: "/bin/sh",
+            arguments: ["-c", "printf 'out'; printf 'err' >&2; kill -9 $$"],
+            timeout: 5
+        )
+
+        switch result {
+        case .completed, .timedOut:
+            break
+        case .spawnFailed(let why):
+            Issue.record("the child should spawn; got spawnFailed(\(why))")
+        }
+    }
+
     @Test func missingExecutableFailsToSpawn() {
         let result = BoundedProcessRunner.run(
             executable: "/nonexistent/definitely-not-a-real-binary",
