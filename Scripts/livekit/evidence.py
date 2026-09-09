@@ -964,6 +964,49 @@ AX_REGION_LABELS = {
 }
 
 
+# A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`
+# write a container header even when they capture nothing, so "the file exists" is not enough and
+# "greater than zero bytes" is not either.
+#
+# The number is measured rather than asserted, because a threshold nobody measured is a threshold
+# that rejects real evidence. Across the 581 recordings this project has on disk the SMALLEST is
+# 371,432 bytes, so 32 KiB sits about eleven times below anything a real run has produced. It is a
+# floor against a header-only stub, not a judgement about what is in the frames — and it is
+# deliberately far from the observed minimum so that a short but genuine capture is not refused.
+MIN_RECORDING_BYTES = 32 * 1024
+
+
+def _recording_is_usable(record, statter=os.path.getsize):
+    """Whether one `recording` record stands for a video that is actually there.
+
+    ONE predicate, because there are two counters and De Morgan is not a place to keep a rule: the
+    valid and invalid comprehensions used to spell this separately, so adding a condition meant
+    remembering to invert it in the other one.
+
+    The filesystem is re-read HERE rather than trusted from the record. `recording()` samples
+    `isfile`/`getsize` once at capture time and stores the answers, and a stored answer is the
+    thing this whole gate exists not to believe: a file deleted or truncated afterwards, a document
+    hand-written with `exists: True` and a large `bytes` and no file at all, both passed. So a
+    record must NAME a file, and the file must still be there and still be big enough when the
+    document is read.
+
+    A record with no `file` key is not usable — that is the hand-written case, and there is nothing
+    to go and look at.
+    """
+    if record.get("kind") != "recording":
+        return False
+    path = record.get("file")
+    if not isinstance(path, str) or not path:
+        return False
+    try:
+        if not os.path.isfile(path):
+            return False
+        size = statter(path)
+    except OSError:
+        return False
+    return size >= MIN_RECORDING_BYTES
+
+
 class Evidence:
     """Accumulates records and writes `<root>/<head>/evidence.json`.
 
@@ -1521,7 +1564,15 @@ def summarize(recs, out=None):
         "captures": len(caps),
         "visual_assertions": len(vis),
         "visual_failed": sum(1 for v in vis if not v.get("passed")),
-        "recordings": sum(1 for r in recs if r["kind"] == "recording"),
+        # A RECORDING THAT IS NOT THERE IS NOT A RECORDING. This counted every `recording` record,
+        # including one whose own fields say `exists: False, bytes: 0` — so a run whose screen
+        # capture never started satisfied `recordings > 0`, and the video half of the UI gate was
+        # met by a record stating the video is missing. The floor is deliberately tiny: it rejects
+        # an empty or truncated file without pretending to judge what is IN the frames.
+        "recordings": sum(1 for r in recs if _recording_is_usable(r)),
+        "recordings_missing_or_empty": sum(1 for r in recs
+                                           if r["kind"] == "recording"
+                                           and not _recording_is_usable(r)),
         "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
         # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
         # dict, or any other truthy object as a name.
@@ -1553,6 +1604,7 @@ _REQUIRED_SUMMARY_KEYS = (
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
     "visual_assertions", "visual_failed", "visual_assertions_without_a_subject",
+    "recordings_missing_or_empty",
     "recordings", "declared_surface",
 )
 
@@ -1573,6 +1625,19 @@ def _non_vacuity_earned(summary):
     An undeclared document is judged as UI. Silence is not a class.
     """
     if summary.get("declared_surface") == "non_ui":
+        # A document that declares there is nothing to photograph, and then photographs, refutes
+        # itself. This is a CONSISTENCY check, not a judgement of the author's intent: it costs
+        # nothing, and it catches the case where a harness was written against a UI effect and the
+        # declaration was left behind.
+        #
+        # What it does NOT catch, said plainly because the declaration is otherwise taken on trust:
+        # a run that drives an operation with a plainly visible consequence — creating a track, say —
+        # and simply never captures. The product does not report per-call mutability in a form this
+        # file can read (`write_attempted` is absent from those responses, measured 2026-09-09), so
+        # there is nothing here to check the claim against. The declaration remains the author's
+        # word for that case, and this is the half that can be enforced.
+        if summary["captures"] > 0 or summary["visual_assertions"] > 0:
+            return False
         return summary["checks_with_a_counterexample"] > 0
     return (summary["captures"] > 0
             and summary["visual_assertions"] > 0
@@ -1659,6 +1724,10 @@ def is_clean(summary):
         and summary["restorations_failed"] == 0
         and summary["cached_reads_used_as_live"] == 0
         and summary["visual_assertions_without_a_subject"] == 0
+        # A recording record whose own fields say the file is absent or empty. Counted separately
+        # from `recordings` so the document says WHICH failure happened: a run that never started a
+        # recording reports `recordings: 0`, and a run whose recording failed reports the gap.
+        and summary.get("recordings_missing_or_empty", 0) == 0
     )
 
 
