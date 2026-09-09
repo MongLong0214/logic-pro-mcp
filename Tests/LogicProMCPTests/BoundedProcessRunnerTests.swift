@@ -85,6 +85,39 @@ struct BoundedProcessRunnerTests {
         #expect(out.stdout.utf8.count <= 1000)
     }
 
+    /// #843 — a child that dies while its pipes are hot must still let `run` return.
+    ///
+    /// The readers used `FileHandle.availableData`, which raises an Objective-C
+    /// `NSFileHandleOperationException` when the pipe goes bad. Inside a `readabilityHandler` that
+    /// is worse than a crash in a loop: the exception unwinds past `group.leave()`, so a process
+    /// that survived it would wait on the group forever. Observed for real in a full-suite run —
+    /// the exception killed the test process outright, and every test after it went UNRUN.
+    ///
+    /// What this pins is the outcome, not the mechanism: a child writing to both pipes and then
+    /// killing ITSELF mid-stream must produce a returned result within the timeout, never a hang.
+    /// The assertion is that `run` came back at all and did so well inside its own budget.
+    @Test func aChildThatDiesWithHotPipesStillLetsTheRunnerReturn() {
+        let started = Date()
+        let result = BoundedProcessRunner.run(
+            executable: "/bin/sh",
+            // Write to both pipes, then SIGKILL self. The handles go bad under both readers while
+            // they are subscribed, which is the condition that raised.
+            arguments: ["-c", "printf 'out'; printf 'err' >&2; kill -9 $$"],
+            timeout: 5
+        )
+        let elapsed = Date().timeIntervalSince(started)
+
+        // A hang would be caught by the 5s timeout turning this into `.timedOut` after ~5s; a
+        // return well under that says the readers finished rather than were cut off by the budget.
+        #expect(elapsed < 4.0)
+        switch result {
+        case .completed, .timedOut:
+            break
+        case .spawnFailed(let why):
+            Issue.record("the child should spawn; got spawnFailed(\(why))")
+        }
+    }
+
     @Test func missingExecutableFailsToSpawn() {
         let result = BoundedProcessRunner.run(
             executable: "/nonexistent/definitely-not-a-real-binary",

@@ -1906,7 +1906,14 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             var pending = Data()
             do {
                 while true {
-                    let chunk = output.availableData
+                    // `read(upToCount:)`, not `availableData`. #843: `availableData` raises an
+                    // Objective-C `NSFileHandleOperationException`, and a Swift `catch` cannot see
+                    // one — it unwound past this `do`, past the `defer` below, and killed the whole
+                    // test process, so every test after that point went unrun rather than failed.
+                    // The throwing Swift API reports the same condition as an `Error`, which the
+                    // `catch` already routes to `frames.fail(error)`: the path this was written to
+                    // take. A nil return means end of file, which is what an empty chunk meant.
+                    let chunk = try output.read(upToCount: 64 * 1024) ?? Data()
                     guard !chunk.isEmpty else { break }
                     pending.append(chunk)
                     while let newline = pending.firstIndex(of: 0x0A) {
@@ -1934,10 +1941,19 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         readers.enter()
         DispatchQueue.global(qos: .utility).async { [stderr, readers] in
             defer { readers.leave() }
-            while true {
-                let chunk = error.availableData
-                guard !chunk.isEmpty else { break }
-                stderr.append(chunk)
+            // The stdout reader at least LOOKED like it handled this. This one had no `do`/`catch`
+            // at all, so the same exception here is the same process death with nothing to point
+            // at. A stderr read that fails is not fatal to the run — the diagnostic is truncated,
+            // not the transport — so it is recorded and the loop ends rather than propagated.
+            do {
+                while true {
+                    let chunk = try error.read(upToCount: 64 * 1024) ?? Data()
+                    guard !chunk.isEmpty else { break }
+                    stderr.append(chunk)
+                }
+            } catch {
+                stderr.append(Data(
+                    "\n[qualification-transport] stderr capture ended early: \(error)\n".utf8))
             }
         }
     }

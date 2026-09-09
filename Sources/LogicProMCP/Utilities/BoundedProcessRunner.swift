@@ -51,27 +51,26 @@ enum BoundedProcessRunner {
         let stderrBuffer = PipeDrainBuffer(maxBytes: maxBytes)
         let group = DispatchGroup()
 
-        group.enter()
-        stdout.fileHandleForReading.readabilityHandler = { fileHandle in
-            let chunk = fileHandle.availableData
-            if chunk.isEmpty {
-                fileHandle.readabilityHandler = nil
-                group.leave()
-                return
+        // #843: `availableData` raises an Objective-C `NSFileHandleOperationException` when the pipe
+        // goes bad, and a Swift `catch` cannot see one. Inside a `readabilityHandler` that is worse
+        // than a crash in a plain loop: the exception unwinds past `group.leave()`, so a process
+        // that survived it would wait on this group forever. `read(upToCount:)` reports the same
+        // condition as a Swift `Error`, and a failed read is treated exactly as end of file —
+        // whatever was buffered is what the caller gets, and the group is always released.
+        func drain(_ pipe: Pipe, into buffer: PipeDrainBuffer) {
+            group.enter()
+            pipe.fileHandleForReading.readabilityHandler = { fileHandle in
+                let chunk = (try? fileHandle.read(upToCount: 64 * 1024)) ?? nil
+                guard let chunk, !chunk.isEmpty else {
+                    fileHandle.readabilityHandler = nil
+                    group.leave()
+                    return
+                }
+                buffer.append(chunk)
             }
-            stdoutBuffer.append(chunk)
         }
-
-        group.enter()
-        stderr.fileHandleForReading.readabilityHandler = { fileHandle in
-            let chunk = fileHandle.availableData
-            if chunk.isEmpty {
-                fileHandle.readabilityHandler = nil
-                group.leave()
-                return
-            }
-            stderrBuffer.append(chunk)
-        }
+        drain(stdout, into: stdoutBuffer)
+        drain(stderr, into: stderrBuffer)
 
         group.enter()
         process.terminationHandler = { _ in group.leave() }
