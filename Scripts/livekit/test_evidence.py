@@ -27,6 +27,9 @@ GOOD = {
     "visual_assertions": 1, "visual_failed": 0, "visual_assertions_without_a_subject": 0,
     "declared_surface": None,
     "recordings": 1,
+    # Added with the rule that a recording whose file is absent or a stub does not count as one.
+    # `is_clean` refuses a summary missing any dimension it reads, so this fixture carries it.
+    "recordings_missing_or_empty": 0,
     # #797. Absent is not False here either: every fixture below inherits this, and a run that
     # never recorded the session state is one that cannot say it read an application it could see.
     "screen_locked": False,
@@ -761,6 +764,98 @@ shapes.extend(_OPS)
 for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
+
+
+
+# A RECORDING THAT IS NOT THERE IS NOT A RECORDING. `recordings` counted every `recording` record,
+# including one whose own fields said `exists: False, bytes: 0` — so a run whose screen capture never
+# started still satisfied the UI gate's "recordings > 0", and the video requirement was met by a
+# record stating the video was missing.
+def _summary_for(**kw):
+    d = {k: 0 for k in E._REQUIRED_SUMMARY_KEYS}
+    d.update(dict(checks=1, passed=1, screen_locked=False, declared_surface="ui",
+                  captures=1, visual_assertions=1, recordings=1, operations_driven=1,
+                  checks_with_a_counterexample=1, mutation_claimed=1))
+    d.update(kw)
+    return d
+
+for kw, want, why in [
+    ({}, True, "a healthy UI run is clean"),
+    ({"recordings": 0, "recordings_missing_or_empty": 1}, False,
+     "a recording whose file is absent does not satisfy `recordings > 0`"),
+    ({"recordings_missing_or_empty": 1}, False,
+     "an empty recording invalidates the run even beside a good one"),
+]:
+    got = E.is_clean(_summary_for(**kw))
+    ok = got is want
+    print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
+    if not ok:
+        failed += 1
+
+# And the counter itself: a record that exists but is a stub must not be counted as a recording.
+_root = _tempfile.mkdtemp()
+_ev = E.Evidence("d" * 40, _root)
+_stub = os.path.join(_ev.dir, "stub.mov")
+open(_stub, "wb").write(b"0" * 10)          # a container header and nothing else
+_ev.recording(_stub)
+_ev.recording(os.path.join(_ev.dir, "never-written.mov"))
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 2
+print(f"{'ok  ' if ok else 'FAIL'} a stub and a missing file both count as missing -> "
+      f"recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    failed += 1
+
+# And the stored fields do not get the last word. A record that CLAIMS a present, large file is
+# read against the filesystem, so a hand-written document cannot vouch for a video nobody has.
+_ev.records.append({"kind": "recording", "file": os.path.join(_ev.dir, "claimed.mov"),
+                    "exists": True, "bytes": 99_000_000})
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 3
+print(f"{'ok  ' if ok else 'FAIL'} a record claiming a file that is not on disk is not a recording"
+      f" -> recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    failed += 1
+
+# A recording record with no `file` at all names nothing to go and look at.
+_ev.records.append({"kind": "recording", "exists": True, "bytes": 99_000_000})
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 4
+print(f"{'ok  ' if ok else 'FAIL'} a recording record naming no file is not a recording"
+      f" -> recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    failed += 1
+
+# The floor is a floor: one byte under is refused, exactly at it is accepted. Without this pair the
+# threshold could be any number, including one that rejects every real capture.
+for _size, _want, _why in [(E.MIN_RECORDING_BYTES - 1, 0, "one byte under the floor is refused"),
+                           (E.MIN_RECORDING_BYTES, 1, "exactly the floor is accepted")]:
+    _f = os.path.join(_ev.dir, f"floor-{_size}.mov")
+    open(_f, "wb").write(b"0" * _size)
+    ok = E._recording_is_usable({"kind": "recording", "file": _f}) == bool(_want)
+    print(f"{'ok  ' if ok else 'FAIL'} {_why}")
+    if not ok:
+        failed += 1
+
+
+# A `non_ui` document says there is nothing to photograph. If it then photographs, it refutes itself,
+# and the gate should not have to decide which half to believe.
+for kw, want, why in [
+    ({"declared_surface": "non_ui", "captures": 0, "visual_assertions": 0, "recordings": 0,
+      "checks_with_a_counterexample": 2}, True,
+     "non_ui with a counterexample and no photographs is clean"),
+    ({"declared_surface": "non_ui", "captures": 1, "visual_assertions": 0, "recordings": 0,
+      "checks_with_a_counterexample": 2}, False,
+     "non_ui that captured a screenshot contradicts its own declaration"),
+    ({"declared_surface": "non_ui", "captures": 0, "visual_assertions": 1, "recordings": 0,
+      "checks_with_a_counterexample": 2}, False,
+     "non_ui that made a visual assertion contradicts its own declaration"),
+]:
+    got = E.is_clean(_summary_for(**kw))
+    ok = got is want
+    print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
+    if not ok:
+        failed += 1
 
 E.blocking_modal = _headless_blocking_modal
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
