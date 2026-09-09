@@ -1704,6 +1704,33 @@ private struct RPCResponse<Result: Decodable>: Decodable {
     let error: RPCError?
 }
 
+
+/// One `read(2)` on a file handle, without Foundation's exceptions and without its blocking.
+///
+/// #843. Two Foundation APIs were tried here and both are wrong for a pipe carrying small frames:
+///
+///   * `availableData` returns what is there, which is the right SHAPE, but it raises an
+///     Objective-C `NSFileHandleOperationException` when the descriptor goes bad — and a Swift
+///     `catch` cannot see one, so it unwinds past the handler and kills the process.
+///   * `read(upToCount:)` throws a Swift error like it should, but it WAITS for the count. Measured
+///     2026-09-09: swapping it in made the qualification transport time out on its handshake, a
+///     small frame that never fills a 64 KiB request. The suite went from 27 seconds green to a
+///     45-second `timeout:handshake`.
+///
+/// POSIX `read` has both properties: it returns whatever is available, and it reports failure
+/// through the return value rather than by unwinding. `EINTR` is retried; anything else is an
+/// error the caller can route. Zero bytes means end of file, exactly as an empty `Data` did.
+private func readAvailable(_ handle: FileHandle, upTo limit: Int = 64 * 1024) throws -> Data {
+    var buffer = [UInt8](repeating: 0, count: limit)
+    while true {
+        let n = buffer.withUnsafeMutableBytes { Darwin.read(handle.fileDescriptor, $0.baseAddress, limit) }
+        if n >= 0 { return Data(buffer.prefix(n)) }
+        if errno == EINTR { continue }
+        throw QualificationTransportError.malformedFrame(
+            "read failed on fd \(handle.fileDescriptor): errno \(errno)")
+    }
+}
+
 private final class QualificationSubprocessSession: @unchecked Sendable {
     struct ShutdownOutcome {
         let status: Int32
@@ -1906,14 +1933,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             var pending = Data()
             do {
                 while true {
-                    // `read(upToCount:)`, not `availableData`. #843: `availableData` raises an
-                    // Objective-C `NSFileHandleOperationException`, and a Swift `catch` cannot see
-                    // one — it unwound past this `do`, past the `defer` below, and killed the whole
-                    // test process, so every test after that point went unrun rather than failed.
-                    // The throwing Swift API reports the same condition as an `Error`, which the
-                    // `catch` already routes to `frames.fail(error)`: the path this was written to
-                    // take. A nil return means end of file, which is what an empty chunk meant.
-                    let chunk = try output.read(upToCount: 64 * 1024) ?? Data()
+                    let chunk = try readAvailable(output)
                     guard !chunk.isEmpty else { break }
                     pending.append(chunk)
                     while let newline = pending.firstIndex(of: 0x0A) {
@@ -1941,13 +1961,12 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         readers.enter()
         DispatchQueue.global(qos: .utility).async { [stderr, readers] in
             defer { readers.leave() }
-            // The stdout reader at least LOOKED like it handled this. This one had no `do`/`catch`
-            // at all, so the same exception here is the same process death with nothing to point
-            // at. A stderr read that fails is not fatal to the run — the diagnostic is truncated,
-            // not the transport — so it is recorded and the loop ends rather than propagated.
+            // The stdout reader at least LOOKED like it handled a bad descriptor. This one had no
+            // `do`/`catch` at all. A stderr read that fails is not fatal to the run — the
+            // diagnostic is truncated, not the transport — so it is recorded and the loop ends.
             do {
                 while true {
-                    let chunk = try error.read(upToCount: 64 * 1024) ?? Data()
+                    let chunk = try readAvailable(error)
                     guard !chunk.isEmpty else { break }
                     stderr.append(chunk)
                 }
