@@ -1,0 +1,14 @@
+{
+ "captured": "2026-09-09",
+ "host": "Logic Pro 12.3 (6674) on macOS 26.6, UI language en, fixture lpm-locale-campaign (19 tracks)",
+ "how": "Scripts/livekit/ax_colour_value_sweep.swift — from every application window, depth 16, reads EVERY attribute each element declares and reports values naming a colour and attributes whose CFTypeID is CGColor. Run twice: palette closed, then open via View > Colors.",
+ "runs": [
+  {"palette": "closed", "elements_visited": 1304, "child_lists_unreadable": 0,
+   "values_naming_a_colour": 0, "attributes_of_cgcolor_type": 0, "samples": []},
+  {"palette": "open", "elements_visited": 1406, "child_lists_unreadable": 0,
+   "values_naming_a_colour": 2, "attributes_of_cgcolor_type": 0,
+   "samples": ["AXTitle=Color", "AXValue=Color"],
+   "note": "both are the palette WINDOW's own title and value; no swatch exposes a value"}
+ ],
+ "first_run_correction": "The probe's first version counted `noValue` and `attributeUnsupported` on AXChildren as unreadable and reported 879 refused subtrees out of 1304. An element that HAS no children is not a subtree that could not be read; with the distinction made, zero subtrees refuse."
+}
