@@ -1592,6 +1592,19 @@ def _non_vacuity_earned(summary):
     An undeclared document is judged as UI. Silence is not a class.
     """
     if summary.get("declared_surface") == "non_ui":
+        # A document that declares there is nothing to photograph, and then photographs, refutes
+        # itself. This is a CONSISTENCY check, not a judgement of the author's intent: it costs
+        # nothing, and it catches the case where a harness was written against a UI effect and the
+        # declaration was left behind.
+        #
+        # What it does NOT catch, said plainly because the declaration is otherwise taken on trust:
+        # a run that drives an operation with a plainly visible consequence — creating a track, say —
+        # and simply never captures. The product does not report per-call mutability in a form this
+        # file can read (`write_attempted` is absent from those responses, measured 2026-09-09), so
+        # there is nothing here to check the claim against. The declaration remains the author's
+        # word for that case, and this is the half that can be enforced.
+        if summary["captures"] > 0 or summary["visual_assertions"] > 0:
+            return False
         return summary["checks_with_a_counterexample"] > 0
     return (summary["captures"] > 0
             and summary["visual_assertions"] > 0

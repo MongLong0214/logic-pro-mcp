@@ -808,3 +808,23 @@ print(f"{'ok  ' if ok else 'FAIL'} a stub and a missing file both count as missi
       f"recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
 if not ok:
     FAILURES.append("stub/missing recordings were counted as recordings")
+
+
+# A `non_ui` document says there is nothing to photograph. If it then photographs, it refutes itself,
+# and the gate should not have to decide which half to believe.
+for kw, want, why in [
+    ({"declared_surface": "non_ui", "captures": 0, "visual_assertions": 0, "recordings": 0,
+      "checks_with_a_counterexample": 2}, True,
+     "non_ui with a counterexample and no photographs is clean"),
+    ({"declared_surface": "non_ui", "captures": 1, "visual_assertions": 0, "recordings": 0,
+      "checks_with_a_counterexample": 2}, False,
+     "non_ui that captured a screenshot contradicts its own declaration"),
+    ({"declared_surface": "non_ui", "captures": 0, "visual_assertions": 1, "recordings": 0,
+      "checks_with_a_counterexample": 2}, False,
+     "non_ui that made a visual assertion contradicts its own declaration"),
+]:
+    got = E.is_clean(_summary_for(**kw))
+    ok = got is want
+    print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
+    if not ok:
+        FAILURES.append(why)
