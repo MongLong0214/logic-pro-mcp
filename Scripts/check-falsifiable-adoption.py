@@ -42,7 +42,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 9 -> 10, same day: live_778_step_input_toggle_reaches_its_menu_item. Its counterexamples are the
 # State C envelope the operation really returned before the fix, and Logic's window list before the
 # toggle — one from the product, one from outside it.
-FLOOR = 11
+# 10 -> 11 on 2026-09-08: live_736_mcu_feedback_decodes_as_midi, whose counterexample is the pre-fix
+# trace verbatim — `00 00 d0 20`, four frames, all starting with a data byte.
+# 11 -> 12 on 2026-09-09: live_683_a_stalled_reader_does_not_park_the_writer, arriving on this branch
+# through a merge of `main` rather than written here. The floor rises anyway: the ratchet is about
+# what the tree can prove, not about who added it, and leaving it at 11 would let the next branch
+# drop that harness without the guard noticing.
+FLOOR = 12
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
