@@ -42,6 +42,75 @@ struct PromotionDecision: Equatable, Sendable {
 }
 
 struct PromotionGate {
+    /// What it takes for a live qualification case to CREDIT its operation.
+    ///
+    /// #373. This was four inline conjuncts inside `evaluate`, which was fine while the release
+    /// gate was the only reader. It is not the only reader any more:
+    /// `ProductionReadinessContracts` reports R-SEM over the same question and had no way to ask
+    /// it, so it counted every operation as uncovered no matter how much live evidence existed.
+    /// Two evaluators answering "did this operation pass?" from two spellings is a second
+    /// authority — the first divergence would let a release promote while the debt board said the
+    /// coverage was missing, or the reverse. One function, both callers.
+    ///
+    /// Every conjunct is load-bearing and none is redundant:
+    ///   * `status == .passed` — the case's own verdict.
+    ///   * `verified` — the case asserts it verified something rather than merely not failing.
+    ///   * `verificationKind == .semanticReadback` — a protocol smoke test also reaches `.passed`;
+    ///     #373 asks for semantic evidence specifically, so the KIND is checked, not just the
+    ///     verdict.
+    ///   * `readback?.verified == true` — the readback is present AND says it verified. `?? false`
+    ///     is deliberate here (an absent readback does not credit); written as `== true` so a nil
+    ///     cannot read as a pass.
+    static func operationIsLiveCredited(_ operationCase: QualificationCase) -> Bool {
+        operationCase.status == .passed
+            && operationCase.verified
+            && operationCase.verificationKind == .semanticReadback
+            && operationCase.readback?.verified == true
+    }
+
+    /// The operations a live attestation credits — the ONLY supported way to build the set
+    /// `ProductionReadinessContracts.evaluate` reads.
+    ///
+    /// #373. The static evaluator must not be handed a list of operation IDs someone typed: that
+    /// would let a stored artifact authorize itself, and R-SEM would close because a file said so.
+    /// It is handed the output of this function instead, which reads real cases and applies the
+    /// same predicate the release gate applies.
+    ///
+    /// The case id is checked as well as `operationID`, because the release gate identifies an
+    /// operation case by BOTH (`in-process/<id>` with a matching `operationID`) and crediting on
+    /// the weaker of the two would credit a case the release gate would not.
+    ///
+    /// A duplicated CASE ID credits NOTHING. `evaluate` rejects a duplicate case id outright, so an
+    /// attestation carrying two cases under one id is one the release gate refuses, and this
+    /// function must not read a pass out of it.
+    ///
+    /// The duplicate is counted over RAW case ids, before any filtering, because that is the domain
+    /// `evaluate` uses (`Dictionary(grouping: attestation.cases, by: \.id)`). Counting after the
+    /// canonical filter is not the same question, and review found the attestation that separates
+    /// them: two cases both with id `in-process/op.a`, one declaring `operationID` `op.a` and the
+    /// other `op.b`. The filter drops the second as a mismatch, leaving the first looking unique,
+    /// so a producer counting filtered cases credits `op.a` from an attestation the release gate
+    /// rejects as a duplicate. Two authorities disagreeing about one attestation is precisely what
+    /// sharing the predicate was for, and the predicate alone did not achieve it.
+    static func liveCreditedOperationIDs(
+        in attestation: ReleaseQualificationAttestation
+    ) -> Set<String> {
+        var seenCaseIDs: Set<String> = []
+        var duplicatedCaseIDs: Set<String> = []
+        for operationCase in attestation.cases where !seenCaseIDs.insert(operationCase.id).inserted {
+            duplicatedCaseIDs.insert(operationCase.id)
+        }
+        var credited: Set<String> = []
+        for operationCase in attestation.cases {
+            let operationID = operationCase.operationID
+            guard operationCase.id == "in-process/\(operationID)",
+                  !duplicatedCaseIDs.contains(operationCase.id),
+                  operationIsLiveCredited(operationCase) else { continue }
+            credited.insert(operationID)
+        }
+        return credited
+    }
+
     func evaluate(
         attestation: ReleaseQualificationAttestation,
         releaseVersion: String,
@@ -141,10 +210,7 @@ struct PromotionGate {
                 rejections.append(.requiredOperationNotSatisfied(operationID: operationID))
                 continue
             }
-            let operationPassed = operationCase.status == .passed
-                && operationCase.verified
-                && operationCase.verificationKind == .semanticReadback
-                && operationCase.readback?.verified == true
+            let operationPassed = PromotionGate.operationIsLiveCredited(operationCase)
             let operationWaived = operationCase.status == .waived
                 && !operationCase.verified
                 && operationCase.verificationKind == .typedDeferral
