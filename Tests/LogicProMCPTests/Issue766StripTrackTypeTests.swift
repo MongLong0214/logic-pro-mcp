@@ -157,6 +157,89 @@ struct Issue766StripTrackTypeTests {
         #expect(AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: right))
     }
 
+    // This project measured on 2026-09-08, and wrote into
+    // `Scripts/observations/reverify-inspector-strip-type-slots.sh`, that the strip's NAME can
+    // arrive before its SLOTS: the first run after a rebuild put a `Studio Grand` strip in
+    // `neither`. So a reading taken once off a surface still catching up is a reading of the
+    // transition. Here the first read is the transitional one and the two after it agree.
+    @Test("the slots must read the same twice before they are classified")
+    func aTransitionalSlotReadingIsNotClassified() {
+        let settled = Self.instrumentStrip
+        var reads = 0
+        let value = AXLogicProElements.settledReading(attempts: 8, interval: 1) {
+            reads += 1
+            return reads == 1 ? ["name field", "mute button"] : settled   // mid-rebuild, then settled
+        }
+        #expect(value == .instrumentFamily, "the transitional reading was classified")
+        #expect(reads >= 3, "it did not wait for two readings to agree")
+    }
+
+    // A child list that could not be read is refused OUTRIGHT, not carried into the settle loop.
+    // Without the guard the loop rides out an unreadable read and classifies whatever comes next,
+    // so a strip that was being torn down would still produce a confident answer. Measured by
+    // mutation: removing the guard left every other case green, because two unreadable reads agree
+    // with each other and land on the same `undetermined` by a different route.
+    @Test("an unreadable read is refused rather than settled through")
+    func anUnreadableReadIsNotRiddenOut() {
+        let settled = Self.audioStrip
+        var reads = 0
+        let value = AXLogicProElements.settledReading(attempts: 8, interval: 1) {
+            reads += 1
+            return reads == 1 ? nil : settled       // unreadable, then a perfectly good strip
+        }
+        #expect(value == .undetermined, "an unreadable read was ridden out and then classified")
+        #expect(reads == 1, "it kept reading after a read that failed")
+    }
+
+    // `slotKinds` must refuse when a child's LABEL could not be read, not only when the child LIST
+    // could not be. A present output slot whose help failed would otherwise look like "no output
+    // slot", and the external-MIDI clause is phrased as an absence.
+    @Test("a child whose label cannot be read makes the whole strip unreadable")
+    func anUnreadableLabelRefusesTheStrip() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = builder.element(1)
+        let good = builder.element(2)
+        let bad = builder.element(3)
+        builder.setAttribute(good, kAXHelpAttribute as String, "Input slot. Choose the source.")
+        builder.setChildren(strip, [good, bad])
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { element, attribute in
+            guard attribute == kAXHelpAttribute as String, CFEqual(element, bad) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+        }, setAttributeHandler: nil, performActionHandler: nil)
+
+        #expect(AXLogicProElements.slotKinds(in: strip, runtime: runtime) == nil,
+                "an unreadable label was treated as a child with no label")
+    }
+
+    // The LOCATOR must use the prefix matcher, not merely the label be capable of it. Asserting the
+    // label alone left this undetected: switching `hasPrefixAny` to `containsAny` at the call site
+    // kept every other case green, measured by mutation. Here the right strip carries the left
+    // strip's phrase in a later sentence and both strips share a description, so containment finds
+    // TWO and refuses, while a prefix finds the left one.
+    @Test("the locator matches the phrase as a prefix, not anywhere in the help")
+    func theLocatorAnchorsTheMatch() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(1)
+        let left = builder.element(2)
+        let right = builder.element(3)
+        for (element, help) in [
+            (left, "왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다."),
+            (right, "오른쪽 인스펙터 채널 스트립. 왼쪽 인스펙터 채널 스트립의 출력 채널 스트립을 표시합니다."),
+        ] {
+            builder.setAttribute(element, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setAttribute(element, kAXHelpAttribute as String, help)
+            builder.setAttribute(element, kAXDescriptionAttribute as String, "Studio Grand")
+        }
+        builder.setChildren(window, [left, right])
+        let runtime = builder.makeAXRuntime(setAttributeHandler: nil, performActionHandler: nil)
+
+        let found = AXLogicProElements.inspectorChannelStrip(
+            named: "Studio Grand", in: window, settleAttempts: 2, settleInterval: 1,
+            runtime: runtime)
+        #expect(found != nil, "the left strip was not found")
+        if let found { #expect(CFEqual(found, left), "the RIGHT strip was returned") }
+    }
+
     // Two tracks sharing a name let the stale strip pass the name check and publish the OLD track's
     // type confidently. Exactly one match, or no answer.
     @Test("two strips with the same name are refused, not resolved by tree order")

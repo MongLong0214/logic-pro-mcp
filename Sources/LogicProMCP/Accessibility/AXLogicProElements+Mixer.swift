@@ -467,15 +467,31 @@ extension AXLogicProElements {
         // after it agreed. So settling on the name does NOT close the rebuild race, and a rule read
         // once off a surface that is still catching up is a reading of the transition rather than of
         // the state. Found by review 2026-09-09, which cited this project's own note back at it.
+        return settledReading(attempts: settleAttempts, interval: settleInterval) {
+            slotKinds(in: strip, runtime: runtime.ax)
+        }
+    }
+
+    /// Reads slot kinds until two consecutive readings AGREE, then classifies.
+    ///
+    /// Split from the live lookup so the stability rule can be driven directly: a test that has to
+    /// stand up a whole window cannot easily make the slots change between reads, and a rule nothing
+    /// exercises is a rule nothing checks. Measured by mutation — collapsing this to a single read
+    /// left the rest of the suite green.
+    static func settledReading(
+        attempts: Int,
+        interval: useconds_t,
+        read: () -> [String]?
+    ) -> StripReading {
         var previous: [String]?
-        for attempt in 0..<max(1, settleAttempts) {
-            let current = slotKinds(in: strip, runtime: runtime.ax)
-            if let previous, previous == current { return reading(fromSlotKinds: current) }
+        for attempt in 0..<max(1, attempts) {
+            let current = read()
             // An unreadable child list is not a state to settle on: it is refused outright rather
             // than compared against the next read, which could agree with it for the wrong reason.
             guard current != nil else { return .undetermined }
+            if let previous, previous == current { return reading(fromSlotKinds: current) }
             previous = current
-            if attempt + 1 < max(1, settleAttempts) { usleep(settleInterval) }
+            if attempt + 1 < max(1, attempts) { usleep(interval) }
         }
         return .undetermined
     }
