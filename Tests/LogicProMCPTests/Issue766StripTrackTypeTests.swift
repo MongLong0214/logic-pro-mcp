@@ -191,6 +191,28 @@ struct Issue766StripTrackTypeTests {
         #expect(reads == 1, "it kept reading after a read that failed")
     }
 
+    // A child that HAS no help is not a child whose help could not be read, and conflating them
+    // killed the feature outright: measured live on one strip, 20 children answer success and 8
+    // answer `kAXErrorNoValue`, so refusing the whole non-success set made every strip undetermined
+    // and every create fall back to the header. The live harness caught it; no unit test here could
+    // have, because the fixtures only ever returned values.
+    @Test("a child with no help is not a child whose help failed")
+    func absentHelpIsNotAFailedRead() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = builder.element(1)
+        let slot = builder.element(2)
+        let plain = builder.element(3)
+        builder.setAttribute(slot, kAXHelpAttribute as String, "Input slot. Choose the source.")
+        builder.setChildren(strip, [slot, plain])
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { element, attribute in
+            guard attribute == kAXHelpAttribute as String, CFEqual(element, plain) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        }, setAttributeHandler: nil, performActionHandler: nil)
+
+        #expect(AXLogicProElements.slotKinds(in: strip, runtime: runtime) == ["input slot"],
+                "a child with no help was treated as an unreadable strip")
+    }
+
     // `slotKinds` must refuse when a child's LABEL could not be read, not only when the child LIST
     // could not be. A present output slot whose help failed would otherwise look like "no output
     // slot", and the external-MIDI clause is phrased as an absence.

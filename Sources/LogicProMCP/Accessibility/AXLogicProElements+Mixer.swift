@@ -424,8 +424,15 @@ extension AXLogicProElements {
             let read: Result<String?, AXHelpers.AXStatusError> =
                 AXHelpers.getAttributeResult(child, kAXHelpAttribute as String, runtime: runtime)
             switch read {
-            case .failure:
-                return nil
+            case let .failure(error):
+                // A child that simply HAS no help is not a child whose help could not be read.
+                // Measured live 2026-09-09 on one strip: 20 children answer success and 8 answer
+                // `kAXErrorNoValue`. Refusing on the whole non-success set made every strip
+                // undetermined and the feature silently dead — the live harness caught it, no unit
+                // test could have. Only a genuine read failure refuses.
+                guard error.raw == AXError.noValue.rawValue
+                    || error.raw == AXError.attributeUnsupported.rawValue else { return nil }
+                continue
             case let .success(value):
                 let help = value ?? ""
                 guard let dot = help.firstIndex(of: ".") else { continue }
