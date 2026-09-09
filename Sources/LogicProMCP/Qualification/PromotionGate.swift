@@ -80,22 +80,35 @@ struct PromotionGate {
     /// operation case by BOTH (`in-process/<id>` with a matching `operationID`) and crediting on
     /// the weaker of the two would credit a case the release gate would not.
     ///
-    /// A duplicated id credits NOTHING: `evaluate` rejects a duplicate case id outright, so an
-    /// attestation carrying two cases for one operation is one the release gate refuses, and this
+    /// A duplicated CASE ID credits NOTHING. `evaluate` rejects a duplicate case id outright, so an
+    /// attestation carrying two cases under one id is one the release gate refuses, and this
     /// function must not read a pass out of it.
+    ///
+    /// The duplicate is counted over RAW case ids, before any filtering, because that is the domain
+    /// `evaluate` uses (`Dictionary(grouping: attestation.cases, by: \.id)`). Counting after the
+    /// canonical filter is not the same question, and review found the attestation that separates
+    /// them: two cases both with id `in-process/op.a`, one declaring `operationID` `op.a` and the
+    /// other `op.b`. The filter drops the second as a mismatch, leaving the first looking unique,
+    /// so a producer counting filtered cases credits `op.a` from an attestation the release gate
+    /// rejects as a duplicate. Two authorities disagreeing about one attestation is precisely what
+    /// sharing the predicate was for, and the predicate alone did not achieve it.
     static func liveCreditedOperationIDs(
         in attestation: ReleaseQualificationAttestation
     ) -> Set<String> {
+        var seenCaseIDs: Set<String> = []
+        var duplicatedCaseIDs: Set<String> = []
+        for operationCase in attestation.cases where !seenCaseIDs.insert(operationCase.id).inserted {
+            duplicatedCaseIDs.insert(operationCase.id)
+        }
         var credited: Set<String> = []
-        var seen: Set<String> = []
-        var duplicated: Set<String> = []
         for operationCase in attestation.cases {
             let operationID = operationCase.operationID
-            guard operationCase.id == "in-process/\(operationID)" else { continue }
-            if !seen.insert(operationID).inserted { duplicated.insert(operationID) }
-            if operationIsLiveCredited(operationCase) { credited.insert(operationID) }
+            guard operationCase.id == "in-process/\(operationID)",
+                  !duplicatedCaseIDs.contains(operationCase.id),
+                  operationIsLiveCredited(operationCase) else { continue }
+            credited.insert(operationID)
         }
-        return credited.subtracting(duplicated)
+        return credited
     }
 
     func evaluate(

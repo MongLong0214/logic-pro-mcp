@@ -795,6 +795,56 @@ struct QualificationGateTests {
         #expect(credited.isEmpty)
     }
 
+    /// The attestation that separates "duplicate operation" from "duplicate case id".
+    ///
+    /// Found by review. Two cases share the id `in-process/op.a`; one declares `operationID`
+    /// `op.a`, the other `op.b`. Counting duplicates AFTER the canonical filter drops the second as
+    /// a mismatch and leaves the first looking unique, so `op.a` gets credited — out of an
+    /// attestation `evaluate` refuses outright with `duplicateCaseID`. Sharing the pass predicate
+    /// did not prevent this; the two authorities have to agree about WHICH CASES EXIST as well as
+    /// which of them passed.
+    ///
+    /// This asserts both halves, so it cannot go green by one of them changing.
+    @Test func aDuplicateCaseIDCreditsNothingAndTheReleaseGateRefusesTheSameAttestation() {
+        func caseFor(_ operationID: String) -> QualificationCase {
+            QualificationCase(
+                id: "in-process/op.a",
+                status: .passed,
+                tool: "logic_system",
+                command: operationID,
+                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+                verified: true,
+                evidenceFiles: ["evidence/\(operationID).json"],
+                binarySHA256: binarySHA256,
+                operationID: operationID,
+                verificationKind: .semanticReadback,
+                readback: QualificationReadbackEvidence(
+                    source: "logic://\(operationID)",
+                    requestID: "rb-\(operationID)",
+                    verified: true,
+                    sha256: String(repeating: "b", count: 64)
+                )
+            )
+        }
+        let cases = [caseFor("op.a"), caseFor("op.b")]
+
+        #expect(PromotionGate.liveCreditedOperationIDs(
+            in: attestation(cases: cases, waivers: [])
+        ).isEmpty)
+
+        let decision = PromotionGate().evaluate(
+            attestation: attestation(cases: cases, waivers: []),
+            releaseVersion: "1.2.3",
+            expectedBinarySHA256: binarySHA256,
+            presentArtifacts: [],
+            requiredArtifacts: [],
+            requiredOperationIDs: ["op.a"]
+        )
+        let refusedAsDuplicate = decision.rejections.contains(.duplicateCaseID(caseID: "in-process/op.a"))
+        #expect(refusedAsDuplicate)
+        #expect(!decision.promotable)
+    }
+
     /// Two cases for one operation credit NOTHING, even when one of them passes.
     ///
     /// `evaluate` rejects a duplicate case id outright, so such an attestation is one the release
