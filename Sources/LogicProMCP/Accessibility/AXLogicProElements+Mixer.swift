@@ -474,9 +474,26 @@ extension AXLogicProElements {
         // after it agreed. So settling on the name does NOT close the rebuild race, and a rule read
         // once off a surface that is still catching up is a reading of the transition rather than of
         // the state. Found by review 2026-09-09, which cited this project's own note back at it.
-        return settledReading(attempts: settleAttempts, interval: settleInterval) {
+        let value = settledReading(attempts: settleAttempts, interval: settleInterval) {
             slotKinds(in: strip, runtime: runtime.ax)
         }
+        // The strip must STILL be the one we acquired. Two equal readings prove the slots stopped
+        // moving; they do not prove the strip did not become a different track's midway. Re-reading
+        // the name afterwards closes that, and it is the part of the freshness question that CAN be
+        // closed cheaply.
+        //
+        // What it does NOT close, stated because a review asked for it and the answer is a residual
+        // rather than a fix: two consecutive PRE-rebuild readings also agree, so a strip whose name
+        // has already changed while its slots have not yet been rebuilt settles on the old slots.
+        // Requiring an observed TRANSITION instead would refuse the ordinary case, where the strip
+        // is already correct when it is acquired and never changes. Bounding staleness therefore
+        // rests on the create path's own settling in front of this, and the honest description of
+        // this rule is "the slots stopped moving and the strip is still the same one", not "the
+        // slots are fresh".
+        guard AXHelpers.getDescription(strip, runtime: runtime.ax) == expectedName else {
+            return .undetermined
+        }
+        return value
     }
 
     /// Reads slot kinds until two consecutive readings AGREE, then classifies.
@@ -534,8 +551,25 @@ extension AXLogicProElements {
         // first-match-wins, which is what #766 is about. Found by review 2026-09-09.
         let inputSlot = has(AXLocalePolicy.inputSlotHelpKeyword)
         let midiEffectSlot = has(AXLocalePolicy.midiEffectSlotHelpKeyword)
+        // External MIDI rests on ABSENCES, and one unreadable label must not be able to fake them.
+        // A review traced it: a strip with a readable `Assign control` child and an output slot
+        // whose help answers `noValue` yields `["assign control"]`, and a rule of "assign control
+        // and no output slot" then answers external MIDI for an ordinary strip.
+        //
+        // So the audio path must be absent in THREE places at once. Measured 2026-09-09: the
+        // external-MIDI strip (`Off 1`) has no output slot, no send slot and no audio effect slot,
+        // and carries four `Assign control` rows; every other strip in that project has all three.
+        // One unreadable label cannot produce that shape — three would have to fail together on the
+        // one strip that also carries assign controls.
+        //
+        // It is still an absence rule and still the weakest clause here. The recorded limit on this
+        // file (`45d6a4b6`) — an unfound output slot means "not identified", never "routed nowhere"
+        // — still applies. This raises the number of coincidences a wrong answer needs; it does not
+        // remove the class.
         let externalMIDIShape = has(AXLocalePolicy.assignControlHelpKeyword)
             && !has(AXLocalePolicy.outputSlotHelpKeyword)
+            && !has(AXLocalePolicy.sendOrIOControlLabel)
+            && !has(AXLocalePolicy.audioPluginSlotLabel)
 
         let signals = [inputSlot, midiEffectSlot, externalMIDIShape].filter { $0 }.count
         guard signals == 1 else { return .undetermined }

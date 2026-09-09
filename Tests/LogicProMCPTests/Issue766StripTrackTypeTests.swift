@@ -36,7 +36,15 @@ struct Issue766StripTrackTypeTests {
         "audio effect slot", "midi effect slot", "eq display", "gain reduction meter",
         "setting button",
     ]
-    private static let drummerStrip = instrumentStrip
+    // Written out rather than aliased to `instrumentStrip`. As an alias the equality assertion
+    // below compared a list to itself and said nothing about Logic; spelled out, it records the
+    // measured fact that the two strips carry the same slots.
+    private static let drummerStrip = [
+        "name field", "mute button", "solo button", "volume fader", "volume display",
+        "peak level display", "pan/balance knob", "group slot", "output slot", "send slot",
+        "audio effect slot", "midi effect slot", "eq display", "gain reduction meter",
+        "setting button",
+    ]
     private static let externalMIDIStrip = [
         "name field", "mute button", "volume fader", "volume display", "pan/balance knob",
         "group slot", "assign control", "assign control", "assign control", "assign control",
@@ -94,6 +102,23 @@ struct Issue766StripTrackTypeTests {
     // The external-MIDI clause is a conjunction: the Assign control rows AND the absence of an
     // output slot. Dropping the absence half would classify any strip that carries an assign
     // control as external MIDI.
+    // The reported case, which the earlier fixtures missed: a strip whose output-slot label answers
+    // `noValue` looks exactly like a strip with no output slot. With a readable assign-control row
+    // beside it, a rule of "assign control and no output slot" answers external MIDI for an
+    // ordinary strip. Requiring the audio path absent in THREE places is what makes one unreadable
+    // label insufficient.
+    @Test("one unreadable label cannot fake the external-MIDI shape")
+    func anUnreadableOutputLabelDoesNotFakeExternalMIDI() {
+        // Send and audio-effect slots still read, so the audio path is plainly present.
+        let masked = ["name field", "assign control", "send slot", "audio effect slot"]
+        #expect(AXLogicProElements.reading(fromSlotKinds: masked) == .undetermined,
+                "a masked output slot produced a confident external-MIDI answer")
+
+        // And the genuine shape, which has none of the three, still reads.
+        #expect(AXLogicProElements.reading(fromSlotKinds: Self.externalMIDIStrip)
+                == .type(.externalMIDI))
+    }
+
     @Test("assign control beside an output slot is not external MIDI")
     func assignControlAloneIsNotExternal() {
         let both = Self.externalMIDIStrip + ["output slot"]
