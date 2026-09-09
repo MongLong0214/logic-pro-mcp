@@ -512,7 +512,8 @@ enum ProductionReadinessContractEvaluator {
         mutationRestoreCompensationEvidencePresent: Bool,
         independentProvenanceEnforced: Bool,
         governedWaivers: [QualificationWaiver] = [],
-        managedFixturesPresent: Bool = false
+        managedFixturesPresent: Bool = false,
+        liveCreditedOperationIDs: Set<String> = []
     ) -> ProductionReadinessContractReport {
         var findings: [ProductionReadinessDebtFinding] = []
 
@@ -537,10 +538,23 @@ enum ProductionReadinessContractEvaluator {
         // #409: a registered semantic-readback validator is inventory, not
         // coverage. Only live qualification (a case with status .passed and
         // verificationKind .semanticReadback, per PromotionGate) or a governed
-        // release-visible waiver credits an operation. This static repo-tree
-        // evaluator has no live .passed data (that matrix is #284), so an
-        // operation counts as missing unless a qualifying governed waiver covers it.
+        // release-visible waiver credits an operation.
+        //
+        // #373: this evaluator used to stop there and say so -- it had no live `.passed` data, so
+        // it counted EVERY registered operation as missing. That made R-SEM structurally unable to
+        // close: running the live matrix to completion would not have moved the number by one,
+        // because there was no channel through which the result could arrive. The channel is
+        // `liveCreditedOperationIDs`, and it is narrow on purpose:
+        //
+        //   * it DEFAULTS TO EMPTY, so this evaluator's answer on a bare repo tree is exactly what
+        //     it was before -- nothing closes by accident, and the debt stays open on a tree that
+        //     has no run behind it;
+        //   * the only supported producer is `PromotionGate.liveCreditedOperationIDs(in:)`, which
+        //     applies the release gate's OWN predicate to real cases. A caller that types a list
+        //     of operation IDs is writing a claim, not reading evidence, and this parameter is not
+        //     a place to put one.
         let missingSemantic = registered.filter { operationID in
+            if liveCreditedOperationIDs.contains(operationID) { return false }
             return !governedWaivers.contains { waiver in
                 waiver.governsOperation(
                     caseID: "in-process/\(operationID)",

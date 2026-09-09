@@ -42,6 +42,62 @@ struct PromotionDecision: Equatable, Sendable {
 }
 
 struct PromotionGate {
+    /// What it takes for a live qualification case to CREDIT its operation.
+    ///
+    /// #373. This was four inline conjuncts inside `evaluate`, which was fine while the release
+    /// gate was the only reader. It is not the only reader any more:
+    /// `ProductionReadinessContracts` reports R-SEM over the same question and had no way to ask
+    /// it, so it counted every operation as uncovered no matter how much live evidence existed.
+    /// Two evaluators answering "did this operation pass?" from two spellings is a second
+    /// authority — the first divergence would let a release promote while the debt board said the
+    /// coverage was missing, or the reverse. One function, both callers.
+    ///
+    /// Every conjunct is load-bearing and none is redundant:
+    ///   * `status == .passed` — the case's own verdict.
+    ///   * `verified` — the case asserts it verified something rather than merely not failing.
+    ///   * `verificationKind == .semanticReadback` — a protocol smoke test also reaches `.passed`;
+    ///     #373 asks for semantic evidence specifically, so the KIND is checked, not just the
+    ///     verdict.
+    ///   * `readback?.verified == true` — the readback is present AND says it verified. `?? false`
+    ///     is deliberate here (an absent readback does not credit); written as `== true` so a nil
+    ///     cannot read as a pass.
+    static func operationIsLiveCredited(_ operationCase: QualificationCase) -> Bool {
+        operationCase.status == .passed
+            && operationCase.verified
+            && operationCase.verificationKind == .semanticReadback
+            && operationCase.readback?.verified == true
+    }
+
+    /// The operations a live attestation credits — the ONLY supported way to build the set
+    /// `ProductionReadinessContracts.evaluate` reads.
+    ///
+    /// #373. The static evaluator must not be handed a list of operation IDs someone typed: that
+    /// would let a stored artifact authorize itself, and R-SEM would close because a file said so.
+    /// It is handed the output of this function instead, which reads real cases and applies the
+    /// same predicate the release gate applies.
+    ///
+    /// The case id is checked as well as `operationID`, because the release gate identifies an
+    /// operation case by BOTH (`in-process/<id>` with a matching `operationID`) and crediting on
+    /// the weaker of the two would credit a case the release gate would not.
+    ///
+    /// A duplicated id credits NOTHING: `evaluate` rejects a duplicate case id outright, so an
+    /// attestation carrying two cases for one operation is one the release gate refuses, and this
+    /// function must not read a pass out of it.
+    static func liveCreditedOperationIDs(
+        in attestation: ReleaseQualificationAttestation
+    ) -> Set<String> {
+        var credited: Set<String> = []
+        var seen: Set<String> = []
+        var duplicated: Set<String> = []
+        for operationCase in attestation.cases {
+            let operationID = operationCase.operationID
+            guard operationCase.id == "in-process/\(operationID)" else { continue }
+            if !seen.insert(operationID).inserted { duplicated.insert(operationID) }
+            if operationIsLiveCredited(operationCase) { credited.insert(operationID) }
+        }
+        return credited.subtracting(duplicated)
+    }
+
     func evaluate(
         attestation: ReleaseQualificationAttestation,
         releaseVersion: String,
@@ -141,10 +197,7 @@ struct PromotionGate {
                 rejections.append(.requiredOperationNotSatisfied(operationID: operationID))
                 continue
             }
-            let operationPassed = operationCase.status == .passed
-                && operationCase.verified
-                && operationCase.verificationKind == .semanticReadback
-                && operationCase.readback?.verified == true
+            let operationPassed = PromotionGate.operationIsLiveCredited(operationCase)
             let operationWaived = operationCase.status == .waived
                 && !operationCase.verified
                 && operationCase.verificationKind == .typedDeferral
