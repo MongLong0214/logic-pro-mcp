@@ -61,3 +61,21 @@ that names why: the only route Logic offers is a drag, and a drag is a screen co
 That colour is unobservable anywhere — only that it is unobservable through the accessibility tree,
 which is what the product reads. And that no key command exists for reorder — only that two ways of
 opening the window to look did not work.
+
+
+## The issue's own harness cannot run on the current fixture
+
+`live_448_track_stack_readback` fails two PRECONDITIONS here, before it tests anything:
+
+    448/precondition-the-project-has-exactly-one-track-stack
+        arrows: 2, value: 0, owner: 'Absolute Zero'
+    448/precondition-logic-offers-a-disclosure-command-that-is-not-a-structural-one
+        accepted={} rejected={} — every Track-menu item classified structural
+
+The `lpm-locale-campaign` fixture has grown a second disclosure arrow, so the harness's "exactly one
+track stack" no longer holds. That is a fixture fact, not a regression in the code under test, and
+it means this issue's own live proof is currently unrunnable — which is worth knowing before anyone
+reads its silence as a pass.
+
+Closing #448 will need either a fixture with exactly one stack, or a harness whose precondition is
+stated in terms it can establish itself.
