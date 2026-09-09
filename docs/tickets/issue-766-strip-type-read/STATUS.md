@@ -239,3 +239,35 @@ bounds are stated here rather than tuned quietly, because raising them trades la
 path for a reading that was already correct in the ordinary case, and that trade should be made with
 a measurement of how long the rebuild actually takes rather than by enlarging the number until the
 test stops failing.
+
+
+## A recorded limit this rule brushes against, found by `commitlore context`
+
+`commitlore context Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift` surfaces
+record `45d6a4b6` on this very file:
+
+> only the English output-slot help string is measured; on any other locale the reader yields
+> nothing, so an absent output means 'not identified' and never 'routed nowhere'
+
+The external-MIDI rule here is `assign control present AND no output slot`, which reads an unfound
+output slot as an absent one — the conflation that record warns against.
+
+**Why it is not wrong today, and why that is not a defence.** `assignControlHelpKeyword` is also
+English-only, so on an unmeasured locale neither half of the conjunction fires and no external-MIDI
+claim is made. The rule is safe by the coincidence that both labels are English-only, not by
+construction. The moment someone measures the assign-control string in another locale without also
+measuring the output-slot string there, this becomes a false external-MIDI answer on a strip that
+has an output slot nobody could name.
+
+**The closure condition** is therefore not "add more variants" but: the external-MIDI clause must
+require that the output-slot label was LOOKED FOR in a locale where it is measured, and refuse
+otherwise — the same shape as `slotKinds` refusing an unreadable child rather than reading it as an
+absence. That is a change to this rule, and it is written here rather than made now because it
+wants the same treatment everything else here got: a measurement first.
+
+Two other records on the same file confirm decisions this change re-derived independently rather
+than contradicted. `83b75171` had already ruled out matching the slot on the bare word `input`,
+because the Input Monitoring button on the same strip begins with it. `3edbb497` records that the
+unreadable-child refusal cannot be exercised live — inducing an unreadable AX child would corrupt
+the tree being measured — so it must rest on an injected unit test plus a mutation, which is how it
+is proven here.
