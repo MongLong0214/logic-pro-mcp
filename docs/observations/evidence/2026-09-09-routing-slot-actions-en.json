@@ -1,0 +1,16 @@
+{
+ "captured": "2026-09-09",
+ "host": "Logic Pro 12.3 (6674) on macOS 26.6, UI language en, fixture lpm-locale-campaign",
+ "how": "Scripts/livekit/ax_routing_slot_actions.swift — locates the left inspector channel strip, then for each routing slot child reads its role, AXEnabled, the status of AXUIElementCopyActionNames, and the action list. A separate probe attempted AXPress on the send slot.",
+ "strip": "Deluxe Classic (software instrument)",
+ "slots": [
+  {"help_prefix": "Output slot", "role": "AXButton", "ax_enabled": false,
+   "action_names_status": 0, "actions": ["AXPress"]},
+  {"help_prefix": "Send slot", "role": "AXButton", "ax_enabled": false,
+   "action_names_status": 0, "actions": ["AXPress"]}
+ ],
+ "press_attempt": {"target": "Send slot", "result": "refused",
+   "note": "AXUIElementPerformAction(kAXPressAction) did not return success; no menu opened and the slot description was unchanged"},
+ "send_descriptions_across_the_fixture": {"send button": 20,
+   "note": "every send slot in the project reads the same, because none has a send assigned; no destination is named"}
+}
