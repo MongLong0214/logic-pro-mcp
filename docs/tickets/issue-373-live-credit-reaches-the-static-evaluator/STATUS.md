@@ -48,8 +48,31 @@ real attestation. Two properties decide whether this is honest:
 
 ## Status
 
-- [ ] extract PromotionGate's pass predicate to a named function; PromotionGate uses it
-- [ ] `ProductionReadinessContracts.evaluate` gains `liveCreditedOperationIDs`, default empty
-- [ ] a producer that derives that set from an attestation via the named predicate
-- [ ] tests: empty default preserves today's finding; a credited operation leaves
+- [x] extract PromotionGate's pass predicate to a named function; PromotionGate uses it
+- [x] `ProductionReadinessContracts.evaluate` gains `liveCreditedOperationIDs`, default empty
+- [x] a producer that derives that set from an attestation via the named predicate
+- [x] tests: empty default preserves today's finding; a credited operation leaves
       `missingSemantic`; a `.passed` case that fails any conjunct does NOT credit
+- [x] duplicates counted where `evaluate` counts them — over RAW case ids, before filtering
+- [x] a live harness proving a real run reaches the debt board
+
+## What review added that the plan did not have
+
+Sharing the predicate was not sufficient, and the plan said it would be. Two evaluators also have to
+agree about which cases EXIST: counting duplicates after the canonical filter credits an operation
+out of an attestation the release gate refuses. The plan's property 1 said "the pass predicate must
+not be restated" and that was true but incomplete — the CASE SET is a second thing both authorities
+read, and it was restated too.
+
+## Measured, 2026-09-09, this branch
+
+    credited                        21   of 113 registered
+    missing without credit         113
+    missing with credit             92
+    drop equals the credited set   yes
+    read-only short of passed        2   tracks.list_library, tracks.scan_plugin_presets
+
+R-SEM stays open on a bare tree: the parameter defaults to empty and nothing in `Sources/` feeds it
+yet. Making a real release reach it is #815's half of the chain, and #815 is blocked on #284 — see
+the comment on #815 for why removing the workflow guards would break every release rather than close
+the debt.
