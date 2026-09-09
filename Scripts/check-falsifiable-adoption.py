@@ -42,10 +42,20 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 9 -> 10, same day: live_778_step_input_toggle_reaches_its_menu_item. Its counterexamples are the
 # State C envelope the operation really returned before the fix, and Logic's window list before the
 # toggle — one from the product, one from outside it.
-# 10 -> 11 on 2026-09-09: live_766_the_strip_names_the_track_type, whose two counterexamples are
-# both readings that have existed — the pre-change state where every create answered `unknown`, and
-# the narrowing this change refuses, where a drummer would be called a software instrument.
-FLOOR = 11
+# 10 -> 11 on 2026-09-08: live_736_mcu_feedback_decodes_as_midi, whose counterexample is the pre-fix
+# trace verbatim — `00 00 d0 20`, four frames, all starting with a data byte.
+# 11 -> 12 on 2026-09-09: live_683_a_stalled_reader_does_not_park_the_writer. The floor rises even
+# for a harness that arrives through a merge rather than being written here: the ratchet is about
+# what the TREE can prove, not about who added it, and leaving it behind would let the next branch
+# drop that harness with the guard silent.
+# 12 -> 13 on 2026-09-09: live_766_the_strip_names_the_track_type, whose two counterexamples are both
+# readings that have existed — the pre-change state where every create answered `unknown`, and the
+# narrowing this change refuses, where a drummer would be called a software instrument.
+#
+# Three raises in two days is not churn: each names the harness that made the number true. This one
+# was a MERGE conflict, both sides having raised the same constant for different harnesses, and the
+# resolution is the union rather than either side.
+FLOOR = 13
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )

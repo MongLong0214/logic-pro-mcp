@@ -33,6 +33,110 @@ enum MIDIFeedback {
         }
     }
 
+    /// Convert one CoreMIDI Universal MIDI Packet into the MIDI 1.0 byte stream `parseBytes` reads.
+    ///
+    /// The MCU port is created with `MIDIDestinationCreateWithProtocol(..., ._1_0, ...)`, so
+    /// CoreMIDI delivers MIDI 1.0 messages wrapped in 32-bit UMP words. A word's LAYOUT and its byte
+    /// order in memory are different things: the word is
+    ///
+    ///     (0x2 << 28) | (group << 24) | (status << 16) | (data1 << 8) | data2
+    ///
+    /// and on a little-endian host its bytes are `[data2, data1, status, 0x20|group]`. Slicing the
+    /// memory image and calling it a MIDI stream reverses every message. Measured 2026-09-08 against
+    /// a Logic whose Mackie surface was bound: 161 packets produced 8 events instead of 112, and
+    /// every fader position was dropped — a four-byte packet puts the status at index 2 and leaves
+    /// one byte after it, enough for channel pressure's guard and not for anything with two data
+    /// bytes. That is what `echo_timeout_500ms` was.
+    ///
+    /// Returns the messages this converter understands, concatenated, and the number of WORDS it did
+    /// not convert — so a caller can report how much it did not read rather than presenting a
+    /// partial decode as a complete one. Words, not messages: a 128-bit message this converter skips
+    /// is four words of feedback lost, and counting it as one understates the gap by four.
+    static func midi1Bytes(fromUMPWords words: [UInt32]) -> (bytes: [UInt8], unconverted: Int) {
+        var out: [UInt8] = []
+        var unconverted = 0
+        var i = 0
+        while i < words.count {
+            let word = words[i]
+            let messageType = UInt8((word >> 28) & 0xF)
+            let size = wordCount(forMessageType: messageType)
+
+            // A message whose words are not all here. Walking into it would read a truncated tail as
+            // a header, so the remainder is counted as lost and the loop stops.
+            guard i + size <= words.count else {
+                unconverted += words.count - i
+                break
+            }
+
+            switch messageType {
+            case 0x0:                       // utility — carries no MIDI 1.0 message and loses none
+                break
+            case 0x1, 0x2:                  // system real-time/common, and MIDI 1.0 channel voice
+                let status = UInt8((word >> 16) & 0xFF)
+                let data1 = UInt8((word >> 8) & 0xFF)
+                let data2 = UInt8(word & 0xFF)
+                // A data byte with bit 7 set is not a data byte. Masking it produced a valid-looking
+                // event out of a malformed word and destroyed the evidence that anything was wrong;
+                // the word is counted as unconverted instead. `0xF0`/`0xF7` are SysEx FRAMING, which
+                // lives in message type 0x3 — accepted here they would open a SysEx event that no
+                // word in this stream can close.
+                let statusIsFramingInTheWrongType = (messageType == 0x1 && (status == 0xF0 || status == 0xF7))
+                switch dataByteCount(forStatus: status) {
+                case _ where statusIsFramingInTheWrongType:
+                    unconverted += size
+                case 0:
+                    out.append(status)
+                case 1 where data1 < 0x80:
+                    out.append(contentsOf: [status, data1])
+                case 2 where data1 < 0x80 && data2 < 0x80:
+                    out.append(contentsOf: [status, data1, data2])
+                default:
+                    unconverted += size
+                }
+            default:
+                // Everything else is a message this converter does not read: SysEx7 data, MIDI 2.0
+                // channel voice, Data128, Flex Data, UMP Stream. It is skipped WHOLE.
+                unconverted += size
+            }
+            i += size
+        }
+        return (out, unconverted)
+    }
+
+    /// How many 32-bit words a UMP message of this type occupies.
+    ///
+    /// The STRIDE matters as much as the byte order. Advancing one word past a multi-word message
+    /// reads its continuation as a header, which turns a message this converter merely does not
+    /// understand into a FABRICATED one whenever that continuation happens to look like channel
+    /// voice — the same class of defect as reading the words as bytes, one level up.
+    ///
+    /// The table is the UMP specification's, and the four entries CoreMIDI names agree with it:
+    /// `MIDIMessages.h` records utility/system/channel-voice-1 as one word, SysEx as two,
+    /// channel-voice-2 as two, Data128 as four, Flex Data as four and UMP Stream as four.
+    private static func wordCount(forMessageType type: UInt8) -> Int {
+        switch type {
+        case 0x0, 0x1, 0x2, 0x6, 0x7: return 1
+        case 0x3, 0x4, 0x8, 0x9, 0xA: return 2
+        case 0xB, 0xC: return 3
+        default: return 4              // 0x5, 0xD, 0xE, 0xF
+        }
+    }
+
+    /// How many data bytes a MIDI 1.0 status byte carries. `0` for a status that carries none.
+    private static func dataByteCount(forStatus status: UInt8) -> Int {
+        switch status & 0xF0 {
+        case 0x80, 0x90, 0xA0, 0xB0, 0xE0: return 2
+        case 0xC0, 0xD0: return 1
+        case 0xF0:
+            switch status {
+            case 0xF1, 0xF3: return 1
+            case 0xF2: return 2
+            default: return 0          // real-time, tune request, and SysEx framing bytes
+            }
+        default: return 2
+        }
+    }
+
     /// Parse raw MIDI bytes into one or more events.
     /// Handles running status and SysEx spanning.
     static func parseBytes(_ bytes: [UInt8]) -> [Event] {
