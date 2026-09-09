@@ -1,0 +1,62 @@
+{
+ "conclusion": "Both routing slots advertise `AXPress`, report `AXEnabled = false`, and answer the press with SUCCESS while changing nothing. In four runs the call returned 0 for both slots (once -25204 for the output slot), and in every run the slot's description, value, child count, the strip's child count, and the set of menus the application was showing were identical before and after. In the same run and through the same signature, the strip's mute button moved `off` -> `on` -> `off`, so the press is not inert on this strip and this instrument can see one that works. A routing edge therefore cannot be created or changed at these elements through the accessibility tree, and — this is the part that bites — a caller that trusts the return code will believe it succeeded. ADR-008's send edges are blocked on an actuation route, not on a model or a reader: `outputSlotDestination` already reads the output edge.",
+ "date": "2026-09-09",
+ "depends": [],
+ "evidence": [
+  "evidence/2026-09-09-routing-slot-actions-en.json"
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "build": "6674",
+  "locale": "en-US",
+  "note": "measured on the left inspector channel strip for a software-instrument track, main window, Mixer closed",
+  "os": "macOS 26.6",
+  "version": "12.3"
+ },
+ "id": "2026-09-09-the-routing-slots-answer-a-press-with-success-and-do-nothing",
+ "issues": [
+  291
+ ],
+ "limits": [
+  "One strip, one track kind (software instrument), one locale. Whether a selected or focused strip enables these buttons was not tested.",
+  "The MIXER's own routing controls were not measured. This is the Inspector's channel strip with the Mixer closed, which the surface table treats as a distinct surface, and nothing here says what the Mixer's strips do.",
+  "Only `AXPress` was attempted. A different action, a menu route, or a key command was not tried, and the insert-slot work for this app found a route where the obvious one failed — so this says the obvious route is closed, not that every route is.",
+  "No send was created by any means, so whether an ASSIGNED send names its destination in `AXDescription` — the way the output slot names `Stereo Output` — is unmeasured. The probe cannot assign one.",
+  "The observable is the slot's own description/value/children plus the strip's child count and the application's menu titles. A press with an effect that shows up in none of those would read here as no effect. Counting menus was rejected as an observable: on the insert slots the count drifts on its own (60 -> 65 with nothing pressed), so menus are compared by title instead."
+ ],
+ "method": "A probe outside the product presses the strip's mute button first and requires it to move — a press that changes nothing is only evidence if the instrument could have seen a change. It then reads each routing slot's role, `AXEnabled` and advertised actions, performs `AXPress`, and reports the observed difference. The action list and the enabled flag are read rather than inferred, and the return code is recorded beside the observation rather than instead of it, because in this application a return code and a settability claim are not evidence of an effect.",
+ "observations": [
+  {
+   "container": "AXButton, AXEnabled=false, actions=[AXPress]",
+   "count": 1,
+   "what": "Output slot"
+  },
+  {
+   "container": "AXButton, AXEnabled=false, actions=[AXPress]",
+   "count": 1,
+   "what": "Send slot"
+  },
+  {
+   "container": "rc=0 (success) and nothing changed — no menu by title, no description, value, or child-count difference at the slot or the strip",
+   "count": 2,
+   "what": "routing slots that moved when pressed"
+  },
+  {
+   "container": "value off -> on -> off through the same signature in the same run, proving the instrument is not blind",
+   "count": 1,
+   "what": "control: the mute button of the same strip"
+  }
+ ],
+ "question": "Can a routing edge be created or changed through the accessibility tree?",
+ "reverify": {
+  "command": "bash Scripts/observations/reverify-routing-slots-not-actuable.sh",
+  "cost": "live; Logic running with a project open and a track selected; a few seconds; mutes and unmutes the selected track as its control",
+  "expected": "REVERIFY PASS — the control moved, 2 routing slot press(es) changed nothing",
+  "kind": "script"
+ },
+ "schema": 2,
+ "subject": "the output and send slots of the inspector channel strip, as actuable elements",
+ "supersedes": null,
+ "surface": "inspector.channel_strip",
+ "verdict": "wall"
+}
