@@ -488,16 +488,30 @@ extension AXLogicProElements {
     static func inspectorChannelStrip(
         named expected: String,
         in window: AXUIElement,
+        settleAttempts: Int = 40,
+        settleInterval: useconds_t = 50_000,
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
-        let items = AXHelpers.findAllDescendants(
-            of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
-        )
-        for item in items {
-            let help = (AXHelpers.getHelp(item, runtime: runtime) ?? "").lowercased()
-            guard AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: help) else { continue }
-            guard AXHelpers.getDescription(item, runtime: runtime) == expected else { continue }
-            return item
+        // The inspector REBUILDS this strip when the selection changes, and the rebuild is not
+        // finished when the operation that changed the selection returns. Reading once was the
+        // first shape here and it makes the answer a race: the strip still names the previous
+        // track, the name does not agree, and the read degrades to the header's `unknown` —
+        // intermittently, which is worse than never. The census this was derived from waits the
+        // same way and needed one or two polls in practice.
+        //
+        // Bounded, because the other reason the name never agrees is that it never will: a track
+        // whose name was not live-identity-backed, or two tracks sharing a name. Two seconds and
+        // then the caller keeps whatever the header said.
+        for attempt in 0..<max(1, settleAttempts) {
+            let items = AXHelpers.findAllDescendants(
+                of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
+            )
+            for item in items {
+                let help = (AXHelpers.getHelp(item, runtime: runtime) ?? "").lowercased()
+                guard AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: help) else { continue }
+                if AXHelpers.getDescription(item, runtime: runtime) == expected { return item }
+            }
+            if attempt + 1 < max(1, settleAttempts) { usleep(settleInterval) }
         }
         return nil
     }

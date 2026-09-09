@@ -109,6 +109,47 @@ struct Issue766StripTrackTypeTests {
         #expect(AXLogicProElements.reading(fromSlotKinds: []) == .undetermined)
     }
 
+    // The inspector rebuilds its strip when the selection changes, and the rebuild is not finished
+    // when the operation that changed the selection returns. Reading ONCE makes the answer a race:
+    // the strip still names the previous track, the name does not agree, and the read degrades to
+    // the header's `unknown` — intermittently. The strip here names the wrong track for the first
+    // three reads and the right one after, so a single-pass reader misses it and a settling one
+    // does not.
+    @Test("the strip is read after the inspector has rebuilt it, not before")
+    func theStripIsAwaitedRatherThanRacedFor() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(1)
+        let strip = builder.element(2)
+        builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(strip, kAXHelpAttribute as String, "Left inspector channel strip")
+        builder.setChildren(window, [strip])
+
+        let reads = Counter()
+        let runtime = builder.makeAXRuntime(attributeValueHandler: { element, attribute in
+            guard attribute == kAXDescriptionAttribute as String, CFEqual(element, strip) else {
+                return nil
+            }
+            reads.bump()
+            // The previous track for the first three reads, then the one that was just created.
+            return .some(reads.value > 3 ? "Audio 7" as AnyObject : "Studio Grand" as AnyObject)
+        }, setAttributeHandler: nil, performActionHandler: nil)
+
+        let raced = AXLogicProElements.inspectorChannelStrip(
+            named: "Audio 7", in: window, settleAttempts: 1, settleInterval: 1, runtime: runtime)
+        #expect(raced == nil, "a single pass found a strip the inspector had not rebuilt yet")
+
+        let settled = AXLogicProElements.inspectorChannelStrip(
+            named: "Audio 7", in: window, settleAttempts: 40, settleInterval: 1, runtime: runtime)
+        #expect(settled != nil, "the strip never settled on the expected name")
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func bump() { lock.lock(); count += 1; lock.unlock() }
+        var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    }
+
     @Test("slotKinds keeps an unreadable child list apart from an empty one")
     func slotKindsPreservesTheDistinction() {
         let builder = FakeAXRuntimeBuilder()
