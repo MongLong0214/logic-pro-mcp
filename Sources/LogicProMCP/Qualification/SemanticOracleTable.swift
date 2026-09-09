@@ -1978,16 +1978,26 @@ enum SemanticOracleTable {
     // these four oracles check that A track was created and that the envelope is well formed, not
     // WHICH kind. Both fields are pinned as typed fields so a missing one is still caught.
     //
-    // What would restore a real discriminator is reading the type from the channel strip, where an
-    // input slot marks audio and a MIDI effect slot marks an instrument. That read needs the Mixer
-    // revealed and one of four strips measured was undetermined, so it is not attempted yet — and
-    // until it is, an oracle that claims to tell these apart would be claiming more than the
-    // product can see.
+    // 2026-09-09: the channel-strip read now exists, and it does NOT restore a full discriminator.
+    // An input slot marks audio and the external-MIDI shape marks external MIDI, but a DRUMMER strip
+    // is identical to a software instrument's — same `MIDI Effect slot`, differing only in the
+    // plug-in loaded — so that case reports a family and `observed_track_type` stays `unknown`. The
+    // per-op pin therefore stays on `requested_track_type`.
+    //
+    // What did change is the PROVENANCE field, which now carries one of three tokens instead of the
+    // single constant this pinned. Leaving `valueEquals(observed_header)` here would have made live
+    // qualification reject the feature's own successful outputs — the read succeeds, the source says
+    // so, and the oracle calls it malformed. Found by review 2026-09-09; the ticket's "three call
+    // sites, all enumerated" had missed this consumer entirely.
     private static func createTrackSemantics() -> [OracleConstraint] {
         [
             .valueEquals(key: "requested_delta", expected: .number(1)),
             .valueEquals(key: "verification_source", expected: .string("track_count_delta")),
-            .valueEquals(key: "track_type_verification_source", expected: .string("observed_header")),
+            .enumMember(key: "track_type_verification_source", allowed: [
+                "observed_header",
+                "inspector_channel_strip",
+                "inspector_channel_strip_instrument_family",
+            ]),
             .typedField(key: "requested_track_type", type: .string),
             .typedField(key: "observed_track_type", type: .string),
             .numericRange(key: "observed_delta", min: 1, max: 10_000),

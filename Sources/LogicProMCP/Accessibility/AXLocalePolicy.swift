@@ -102,6 +102,21 @@ enum AXLocalePolicy {
                 haystack.range(of: label, options: [.caseInsensitive]) != nil
             }
         }
+
+        /// True when `haystack` BEGINS with one of the labels.
+        ///
+        /// Separate from `containsAny` because for some elements the phrase appears inside a
+        /// NEIGHBOUR's help as well. Measured in the ko-KR census: the right inspector strip's help
+        /// is `오른쪽 인스펙터 채널 스트립. … 왼쪽 인스펙터 채널 스트립의 출력 …`, which contains the
+        /// LEFT strip's phrase in a later sentence. A locator built on `containsAny` therefore
+        /// accepts the wrong element, and the set that needs this is the one whose name already
+        /// said `Prefix`.
+        func hasPrefixAny(_ haystack: String) -> Bool {
+            let text = haystack.trimmingCharacters(in: .whitespacesAndNewlines)
+            return labels.contains { label in
+                text.range(of: label, options: [.caseInsensitive, .anchored]) != nil
+            }
+        }
     }
 
     struct MenuPath: Sendable, Equatable {
@@ -1405,6 +1420,62 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's input slot by its AXHelp string; read-only classifier."
     )
 
+    /// en measured 2026-09-09 on Logic 12.3 (6674), inspector channel strip: an `AXButton` whose
+    /// help reads `MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the
+    /// plug-in.`, described `MIDI plug-in`.
+    ///
+    /// The full phrase again, and here the neighbour is two words wide rather than one: every
+    /// strip that has this one ALSO has `Audio Effect slot`, so a match on `effect slot` would
+    /// report an audio track's insert as a MIDI effect slot and make every strip an instrument.
+    ///
+    /// What this set does NOT establish, and the reason it is not enough on its own: a DRUMMER
+    /// track's strip carries the identical slot. Measured the same day on `SoCal`
+    /// (`create_drummer`) and `Studio Grand` (`create_instrument`) — same slot, different
+    /// instrument-group description, and that description is the plug-in loaded rather than the
+    /// kind of track. So this set marks the instrument FAMILY and narrowing it further is a
+    /// confident wrong answer on every drummer track.
+    static let midiEffectSlotHelpKeyword = LabelSet(
+        canonical: "midi effect slot",
+        variants: [],
+        rationale: "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier."
+    )
+
+    /// The inspector's channel strip for the SELECTED track: an `AXLayoutItem` whose help BEGINS
+    /// with this phrase. Verbatim from the 2026-09-05 navigation-free censuses:
+    ///
+    ///     en-US  `Left inspector channel strip. Control the signal of the selected track…`
+    ///     ko-KR  `왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다.`
+    ///     ja-JP  `インスペクタの左チャンネルストリップ. 選択したトラックの信号をコントロールします。`
+    ///
+    /// A PREFIX and not a substring, and the ko-KR census is why that distinction is load-bearing
+    /// rather than tidy. The RIGHT strip's help reads
+    /// `오른쪽 인스펙터 채널 스트립. … 왼쪽 인스펙터 채널 스트립의 출력 채널 스트립을 표시합니다.` —
+    /// it CONTAINS the left strip's phrase in a later sentence, so a substring match selects the
+    /// wrong element. Found by review 2026-09-09, after the first version of this set matched by
+    /// substring while calling itself a prefix.
+    ///
+    /// Note the Japanese word order: the modifier follows the noun, so the phrase is not a
+    /// translation of the English one and could not have been derived from it.
+    static let inspectorChannelStripHelpPrefix = LabelSet(
+        canonical: "left inspector channel strip",
+        variants: ["왼쪽 인스펙터 채널 스트립", "インスペクタの左チャンネルストリップ"],
+        rationale: "Identifies the inspector's channel strip for the selected track; read-only locator. Matched as a PREFIX: the right inspector strip's help contains the left strip's phrase in a later sentence (ko-KR census 2026-09-05), so a substring match selects the wrong element."
+    )
+
+    /// en measured 2026-09-09 on an `create_external_midi` track (`Off 1`): its strip has NO
+    /// output slot, NO send slot, NO audio effect slot and no EQ, and instead carries
+    /// button/slider pairs whose help reads `Assign control. Assign to a MIDI controller, used to
+    /// remotely control parameters such as v…`.
+    ///
+    /// This set is the POSITIVE half of a claim whose other half is an absence, so it is only
+    /// usable where the child list was actually read: a strip nobody could read shows no output
+    /// slot either.
+    static let assignControlHelpKeyword = LabelSet(
+        canonical: "assign control",
+        variants: [],
+        rationale: "Marks an external-MIDI strip's controller-assignment rows; read-only classifier."
+    )
+
     /// Japanese measured 2026-09-06 from the ja-JP arrange-regions census: Logic's help string for
     /// a region reads `リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン. …`.
     ///
@@ -1772,6 +1843,9 @@ enum AXLocalePolicy {
         regionKindAudio,
         outputSlotHelpKeyword,
         inputSlotHelpKeyword,
+        midiEffectSlotHelpKeyword,
+        inspectorChannelStripHelpPrefix,
+        assignControlHelpKeyword,
         regionHelpKeyword,
     ]
 }

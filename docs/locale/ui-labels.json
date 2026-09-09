@@ -23,25 +23,25 @@
    ],
    "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files….",
    "provenance": {
-    "모든 트랙을 오디오 파일로…": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "모든 트랙을 오디오 파일로…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "すべてのトラックをオーディオファイルとして…": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "すべてのトラックをオーディオファイルとして…",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "모든 트랙을 오디오 파일로…": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "모든 트랙을 오디오 파일로…",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -77,6 +77,17 @@
     "ja-JP": "unmeasured"
    }
   },
+  "assignControlHelpKeyword": {
+   "canonical": "assign control",
+   "variants": [],
+   "rationale": "Marks an external-MIDI strip's controller-assignment rows; read-only classifier.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured"
+   }
+  },
   "audioPluginSlotLabel": {
    "canonical": "audio plug-in",
    "variants": [
@@ -88,20 +99,20 @@
    "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists).",
    "provenance": {
     "オーディオプラグイン": {
-     "record": "2026-09-05-ja-JP-mixer-channel_strips-census",
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "role": "AXButton",
      "attribute": "description",
-     "observed": "オーディオプラグイン"
+     "date": "2026-09-05",
+     "locale": "ja-JP",
+     "observed": "オーディオプラグイン",
+     "record": "2026-09-05-ja-JP-mixer-channel_strips-census",
+     "role": "AXButton"
     },
     "오디오 플러그인": {
-     "record": "2026-09-05-ko-KR-mixer-channel_strips-census",
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "role": "AXButton",
      "attribute": "description",
-     "observed": "오디오 플러그인"
+     "date": "2026-09-05",
+     "locale": "ko-KR",
+     "observed": "오디오 플러그인",
+     "record": "2026-09-05-ko-KR-mixer-channel_strips-census",
+     "role": "AXButton"
     }
    },
    "roles": [
@@ -252,25 +263,25 @@
    ],
    "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce.",
    "provenance": {
-    "바운스": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "바운스",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "バウンス": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "バウンス",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "바운스": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "바운스",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -343,24 +354,24 @@
    "rationale": "Navigate menu entry that creates a marker at the playhead.",
    "provenance": {
     "マーカーを作成": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "マーカーを作成",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "마커 생성": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "마커 생성",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -406,24 +417,24 @@
    "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome.",
    "provenance": {
     "編集": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "編集",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
     },
     "편집": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "편집",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -451,20 +462,20 @@
     "채널"
    ],
    "rationale": "Event List channel column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -480,20 +491,20 @@
    "canonical": "L",
    "variants": [],
    "rationale": "Event List lock column; unlabelled in every locale measured.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -511,20 +522,20 @@
     "길이"
    ],
    "rationale": "Region-level length column; distinguishes the region list from the event list.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -542,20 +553,20 @@
     "길이/정보"
    ],
    "rationale": "Event List length column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -571,20 +582,20 @@
    "canonical": "M",
    "variants": [],
    "rationale": "Event List mute column; unlabelled in every locale measured.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -602,20 +613,20 @@
     "이름"
    ],
    "rationale": "Region-level name column; distinguishes the region list from the event list.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -633,20 +644,20 @@
     "번호"
    ],
    "rationale": "Event List number column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -664,20 +675,20 @@
     "위치"
    ],
    "rationale": "Event List position column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -695,20 +706,20 @@
     "상태"
    ],
    "rationale": "Event List status column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -726,20 +737,20 @@
     "트랙"
    ],
    "rationale": "Region-level track column; distinguishes the region list from the event list.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -757,20 +768,20 @@
     "값"
    ],
    "rationale": "Event List value column; identity is the canonical English form.",
+   "roles": [
+    "AXButton"
+   ],
+   "evidence_scope": {
+    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce.",
+    "surfaces": [
+     "editor.event_list"
+    ]
+   },
    "match": "exact",
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured"
-   },
-   "roles": [
-    "AXButton"
-   ],
-   "evidence_scope": {
-    "surfaces": [
-     "editor.event_list"
-    ],
-    "reason": "These are the Event List's header columns. The same words appear elsewhere in Logic — `Name` on a track header, `Position` in the transport, `Length` on a region — so a sighting from any other surface would be a different element carrying the same string. Scoping the evidence to `editor.event_list` is what stops that, and it is why the probe tags each row with the surface it read rather than leaving the record header to speak for rows it did not produce."
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -815,25 +826,25 @@
    ],
    "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export.",
    "provenance": {
-    "내보내기": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "내보내기",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "書き出す": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "書き出す",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "내보내기": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "내보내기",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -864,24 +875,24 @@
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
    "provenance": {
     "ファイル": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "ファイル",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
     },
     "파일": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "파일",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -912,24 +923,24 @@
    "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position.",
    "provenance": {
     "移動": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "移動",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "이동": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "이동",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -974,24 +985,24 @@
    "rationale": "Go To submenu leaf that opens the Go To Position dialog.",
    "provenance": {
     "位置…": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "位置…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "위치…": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "위치…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1044,22 +1055,22 @@
    "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus.",
    "provenance": {
     "すべてのプラグインウインドウ": {
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "role": "AXMenuItem",
      "attribute": "title",
+     "date": "2026-09-05",
+     "locale": "ja-JP",
+     "observed": "すべてのプラグインウインドウ",
      "path_contains": "AXMenuBarItem[ウインドウ]/",
-     "observed": "すべてのプラグインウインドウ"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "모든 플러그인 윈도우": {
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "role": "AXMenuItem",
      "attribute": "title",
+     "date": "2026-09-05",
+     "locale": "ko-KR",
+     "observed": "모든 플러그인 윈도우",
      "path_contains": "AXMenuBarItem[윈도우]/",
-     "observed": "모든 플러그인 윈도우"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1108,24 +1119,24 @@
    "rationale": "File menu entry that opens the Import submenu used by midi.import_file.",
    "provenance": {
     "読み込む": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "読み込む",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "가져오기": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "가져오기",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1207,16 +1218,16 @@
    "rationale": "Detects a channel strip's input slot by its AXHelp string; read-only classifier.",
    "provenance": {
     "입력 슬롯": {
-     "locale": "ko-KR",
+     "attribute": "help",
+     "count_seen": 1,
      "date": "2026-09-04",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
-     "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…",
-     "count_seen": 1,
+     "locale": "ko-KR",
+     "match": "contains",
      "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase",
-     "role": "AXButton",
-     "attribute": "help",
-     "match": "contains"
+     "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…",
+     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+     "role": "AXButton"
     }
    },
    "roles": [
@@ -1227,6 +1238,45 @@
     "en-US": "unmeasured",
     "ko-KR": "measured",
     "ja-JP": "unmeasured"
+   }
+  },
+  "inspectorChannelStripHelpPrefix": {
+   "canonical": "left inspector channel strip",
+   "variants": [
+    "왼쪽 인스펙터 채널 스트립",
+    "インスペクタの左チャンネルストリップ"
+   ],
+   "rationale": "Identifies the inspector's channel strip for the selected track; read-only locator. Matched as a PREFIX: the right inspector strip's help contains the left strip's phrase in a later sentence (ko-KR census 2026-09-05), so a substring match selects the wrong element.",
+   "provenance": {
+    "インスペクタの左チャンネルストリップ": {
+     "attribute": "help",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "prefix",
+     "observed": "インスペクタの左チャンネルストリップ. 選択したトラックの信号をコントロールします。ミキサーを開く手間を省きます。 ",
+     "record": "2026-09-05-ja-JP-mixer-channel_strips-census",
+     "role": "AXLayoutItem"
+    },
+    "왼쪽 인스펙터 채널 스트립": {
+     "attribute": "help",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "prefix",
+     "observed": "왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다. ",
+     "record": "2026-09-05-ko-KR-mixer-channel_strips-census",
+     "role": "AXLayoutItem"
+    }
+   },
+   "roles": [
+    "AXLayoutItem"
+   ],
+   "match": "prefix",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "measured"
    }
   },
   "libraryPanelLabel": {
@@ -1304,6 +1354,17 @@
     "ja-JP": "unmeasured"
    }
   },
+  "midiEffectSlotHelpKeyword": {
+   "canonical": "midi effect slot",
+   "variants": [],
+   "rationale": "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured"
+   }
+  },
   "midiFileMenuItem": {
    "canonical": "MIDI File…",
    "variants": [
@@ -1312,25 +1373,25 @@
    ],
    "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file.",
    "provenance": {
-    "MIDIファイル…": {
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
-     "observed": "MIDIファイル…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "MIDI 파일…": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "MIDI 파일…",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "MIDIファイル…": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "MIDIファイル…",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1403,24 +1464,24 @@
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
    "provenance": {
     "移動": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "移動",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
     },
     "탐색": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "탐색",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -1451,24 +1512,24 @@
    "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it.",
    "provenance": {
     "新規": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "新規",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "신규": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "신규",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1566,24 +1627,24 @@
    "rationale": "Navigate menu entry that opens the Marker List window.",
    "provenance": {
     "マーカーリストを開く": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "マーカーリストを開く",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "마커 목록 열기": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "마커 목록 열기",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1613,15 +1674,15 @@
    "rationale": "Detects a channel strip's output slot by its AXHelp string; read-only classifier.",
    "provenance": {
     "출력 슬롯": {
-     "locale": "ko-KR",
+     "attribute": "help",
+     "count_seen": 4,
      "date": "2026-09-04",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+     "locale": "ko-KR",
+     "match": "contains",
      "observed": "출력 슬롯. 채널 스트립 신호가 전송되는…",
-     "count_seen": 4,
-     "role": "AXButton",
-     "attribute": "help",
-     "match": "contains"
+     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
+     "role": "AXButton"
     }
    },
    "roles": [
@@ -1656,12 +1717,12 @@
    "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
    "provenance": {
     "再生ヘッドの位置": {
-     "record": "2026-09-05-ja-JP-arrange-transport-census",
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "role": "AXGroup",
      "attribute": "description",
-     "observed": "再生ヘッドの位置"
+     "date": "2026-09-05",
+     "locale": "ja-JP",
+     "observed": "再生ヘッドの位置",
+     "record": "2026-09-05-ja-JP-arrange-transport-census",
+     "role": "AXGroup"
     }
    },
    "roles": [
@@ -1718,14 +1779,14 @@
    "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's bypass checkbox.",
    "provenance": {
     "バイパス": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "contains",
      "observed": "すべてのコントロールサーフェスをバイパス",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1750,14 +1811,14 @@
    "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button.",
    "provenance": {
     "開く": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "contains",
      "observed": "開く…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1838,25 +1899,25 @@
    ],
    "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section….",
    "provenance": {
-    "프로젝트 또는 섹션…": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "프로젝트 또는 섹션…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "プロジェクトまたは選択範囲…": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "プロジェクトまたは選択範囲…",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "프로젝트 또는 섹션…": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "프로젝트 또는 섹션…",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1954,25 +2015,25 @@
    ],
    "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As….",
    "provenance": {
-    "별도 저장…": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "별도 저장…",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "別名で保存…": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "別名で保存…",
-     "role": "AXMenuItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "별도 저장…": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "별도 저장…",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2119,22 +2180,22 @@
    "rationale": "Native Window-menu toggle used with independent window-state readback.",
    "provenance": {
     "ステップインプットキーボード": {
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "role": "AXMenuItem",
      "attribute": "title",
+     "date": "2026-09-05",
+     "locale": "ja-JP",
+     "observed": "ステップインプットキーボード",
      "path_contains": "AXMenuBarItem[ウインドウ]/",
-     "observed": "ステップインプットキーボード"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     },
     "스텝 입력 키보드": {
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "role": "AXMenuItem",
      "attribute": "title",
+     "date": "2026-09-05",
+     "locale": "ko-KR",
+     "observed": "스텝 입력 키보드",
      "path_contains": "AXMenuBarItem[윈도우]/",
-     "observed": "스텝 입력 키보드"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2180,14 +2241,14 @@
    "rationale": "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
    "provenance": {
     "パン": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "contains",
      "observed": "同じパンナータイプのチャンネルストリップを選択",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2224,14 +2285,14 @@
    "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
    "provenance": {
     "ボリューム": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "contains",
      "observed": "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2589,20 +2650,20 @@
    "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
    "provenance": {
     "tracks contents": {
-     "record": "2026-09-05-en-US-arrange-regions-census",
-     "locale": "en-US",
-     "date": "2026-09-05",
-     "role": "AXGroup",
      "attribute": "description",
-     "observed": "Tracks contents"
+     "date": "2026-09-05",
+     "locale": "en-US",
+     "observed": "Tracks contents",
+     "record": "2026-09-05-en-US-arrange-regions-census",
+     "role": "AXGroup"
     },
     "トラックコンテンツ": {
-     "record": "2026-09-05-ja-JP-arrange-regions-census",
-     "locale": "ja-JP",
-     "date": "2026-09-05",
-     "role": "AXGroup",
      "attribute": "description",
-     "observed": "トラックコンテンツ"
+     "date": "2026-09-05",
+     "locale": "ja-JP",
+     "observed": "トラックコンテンツ",
+     "record": "2026-09-05-ja-JP-arrange-regions-census",
+     "role": "AXGroup"
     }
    },
    "roles": [
@@ -2669,24 +2730,24 @@
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
    "provenance": {
     "トラック": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "トラック",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
     },
     "트랙": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "exact",
      "observed": "트랙",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -3061,14 +3122,14 @@
    "rationale": "Menu item includes the operation name after the localized Undo prefix.",
    "provenance": {
     "실행 취소": {
-     "locale": "ko-KR",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "locale": "ko-KR",
+     "match": "prefix",
      "observed": "실행 취소할 수 없음",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "prefix"
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -3111,25 +3172,25 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
    "provenance": {
-    "보기": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "보기",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "表示": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "表示",
-     "role": "AXMenuBarItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
+    "보기": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "보기",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -3159,25 +3220,25 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
    "provenance": {
-    "윈도우": {
-     "locale": "ko-KR",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "observed": "윈도우",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
-    },
     "ウインドウ": {
-     "locale": "ja-JP",
+     "attribute": "title",
      "date": "2026-09-05",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "locale": "ja-JP",
+     "match": "exact",
      "observed": "ウインドウ",
-     "role": "AXMenuBarItem",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
+    "윈도우": {
      "attribute": "title",
-     "match": "exact"
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "윈도우",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [

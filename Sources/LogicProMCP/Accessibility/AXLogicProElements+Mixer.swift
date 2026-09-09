@@ -397,6 +397,251 @@ extension AXLogicProElements {
         slotDescription(in: strip, matching: AXLocalePolicy.inputSlotHelpKeyword, runtime: runtime)
     }
 
+    /// The leading sentence of every direct child's `AXHelp` on a channel strip, or `nil` when the
+    /// child list could not be read (#766).
+    ///
+    /// `nil` and `[]` are kept apart on purpose. A strip nobody could read otherwise reports no
+    /// slots, and every clause phrased as an ABSENCE — "no output slot", "no audio effect slot" —
+    /// then passes over it and classifies it confidently. The census this was derived from gained
+    /// the same distinction from a review on 2026-09-08 for exactly that reason.
+    ///
+    /// Direct children only, because that is where the measurement was taken: the slots sit on the
+    /// strip itself, and descending further would pull in the inserted plug-ins' own controls.
+    static func slotKinds(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> [String]? {
+        guard case let .success(children) = AXHelpers.childrenResult(strip, runtime: runtime) else {
+            return nil
+        }
+        var kinds: [String] = []
+        for child in children {
+            // A help read that FAILED is not a child without help. Flattening both to "" made a
+            // present output slot whose label could not be read look like "no output slot", and the
+            // external-MIDI clause is phrased as an absence — so an unreadable label could produce a
+            // confident `externalMIDI`. A readable child LIST does not prove every child's label was
+            // read. Found by review 2026-09-09.
+            let read: Result<String?, AXHelpers.AXStatusError> =
+                AXHelpers.getAttributeResult(child, kAXHelpAttribute as String, runtime: runtime)
+            switch read {
+            case let .failure(error):
+                // A child that simply HAS no help is not a child whose help could not be read.
+                // Measured live 2026-09-09 on one strip: 20 children answer success and 8 answer
+                // `kAXErrorNoValue`. Refusing on the whole non-success set made every strip
+                // undetermined and the feature silently dead — the live harness caught it, no unit
+                // test could have. Only a genuine read failure refuses.
+                guard error.raw == AXError.noValue.rawValue
+                    || error.raw == AXError.attributeUnsupported.rawValue else { return nil }
+                continue
+            case let .success(value):
+                let help = value ?? ""
+                guard let dot = help.firstIndex(of: ".") else { continue }
+                kinds.append(String(help[help.startIndex..<dot]).lowercased())
+            }
+        }
+        return kinds
+    }
+
+    /// What the SELECTED track's inspector channel strip says the track is (#766).
+    ///
+    /// Measured 2026-09-09 on Logic 12.3 (6674), en, on tracks created by each `create_*`:
+    ///
+    ///     Input slot                                    audio
+    ///     MIDI Effect slot                              software instrument OR DRUMMER
+    ///     no output slot + an Assign control row        external MIDI
+    ///
+    /// The middle row is why this returns a THREE-valued reading rather than a `TrackType`: a drummer track's
+    /// strip is identical to a software instrument's, so the honest answer for that shape is no
+    /// answer, and the caller keeps whatever the header said. Returning `.softwareInstrument` there
+    /// would be a confident wrong answer on every drummer track.
+    ///
+    /// External MIDI is the one claim here resting on an ABSENCE, so it is made only from a child
+    /// list that was actually read: `slotKinds` returns `nil` rather than `[]` when it was not, and
+    /// this refuses on `nil` instead of reading it as "no output slot".
+    static func inspectorStripReading(
+        expectedName: String,
+        settleAttempts: Int = 20,
+        settleInterval: useconds_t = 50_000,
+        runtime: Runtime = .production
+    ) -> StripReading {
+        guard let window = mainWindow(runtime: runtime),
+              let strip = inspectorChannelStrip(named: expectedName, in: window, runtime: runtime.ax)
+        else { return .undetermined }
+
+        // TWICE, and they must agree. The strip's NAME can arrive before its SLOTS do — measured
+        // 2026-09-08 and written into `Scripts/observations/reverify-inspector-strip-type-slots.sh`:
+        // the first run after a rebuild put a `Studio Grand` strip in `neither` and the three runs
+        // after it agreed. So settling on the name does NOT close the rebuild race, and a rule read
+        // once off a surface that is still catching up is a reading of the transition rather than of
+        // the state. Found by review 2026-09-09, which cited this project's own note back at it.
+        let value = settledReading(attempts: settleAttempts, interval: settleInterval) {
+            slotKinds(in: strip, runtime: runtime.ax)
+        }
+        // The strip must STILL be the one we acquired. Two equal readings prove the slots stopped
+        // moving; they do not prove the strip did not become a different track's midway. Re-reading
+        // the name afterwards closes that, and it is the part of the freshness question that CAN be
+        // closed cheaply.
+        //
+        // What it does NOT close, stated because a review asked for it and the answer is a residual
+        // rather than a fix: two consecutive PRE-rebuild readings also agree, so a strip whose name
+        // has already changed while its slots have not yet been rebuilt settles on the old slots.
+        // Requiring an observed TRANSITION instead would refuse the ordinary case, where the strip
+        // is already correct when it is acquired and never changes. Bounding staleness therefore
+        // rests on the create path's own settling in front of this, and the honest description of
+        // this rule is "the slots stopped moving and the strip is still the same one", not "the
+        // slots are fresh".
+        guard AXHelpers.getDescription(strip, runtime: runtime.ax) == expectedName else {
+            return .undetermined
+        }
+        return value
+    }
+
+    /// Reads slot kinds until two consecutive readings AGREE, then classifies.
+    ///
+    /// Split from the live lookup so the stability rule can be driven directly: a test that has to
+    /// stand up a whole window cannot easily make the slots change between reads, and a rule nothing
+    /// exercises is a rule nothing checks. Measured by mutation — collapsing this to a single read
+    /// left the rest of the suite green.
+    static func settledReading(
+        attempts: Int,
+        interval: useconds_t,
+        read: () -> [String]?
+    ) -> StripReading {
+        var previous: [String]?
+        for attempt in 0..<max(1, attempts) {
+            let current = read()
+            // An unreadable child list is not a state to settle on: it is refused outright rather
+            // than compared against the next read, which could agree with it for the wrong reason.
+            guard current != nil else { return .undetermined }
+            if let previous, previous == current { return reading(fromSlotKinds: current) }
+            previous = current
+            if attempt + 1 < max(1, attempts) { usleep(interval) }
+        }
+        return .undetermined
+    }
+
+    /// What a strip's slots amount to (#766).
+    ///
+    /// `instrumentFamily` is a THIRD answer rather than a second spelling of `undetermined`,
+    /// because the two are different facts and the create path publishes them differently: one
+    /// says the strip was read and its answer is a family this read cannot narrow, the other says
+    /// no strip answered. Collapsing them would also make the MIDI-effect branch unobservable —
+    /// it would return the same thing as falling through, and a rule nothing can distinguish is
+    /// not a rule.
+    enum StripReading: Equatable {
+        case type(TrackType)
+        case instrumentFamily
+        case undetermined
+    }
+
+    /// The classification itself, separated from reading it off a live strip so it can be tested
+    /// against the shapes that were measured rather than only against a running Logic (#766).
+    ///
+    /// `nil` in means the child list was unreadable and `nil` out is the only correct answer: the
+    /// external-MIDI clause is phrased as an absence, and a strip nobody could read shows no output
+    /// slot either.
+    static func reading(fromSlotKinds kinds: [String]?) -> StripReading {
+        guard let kinds else { return .undetermined }
+        let has = { (set: AXLocalePolicy.LabelSet) in kinds.contains { set.containsAny(in: $0) } }
+
+        // The three signals are COUNTED, not tried in order. Ordering them made source position
+        // decide every shape the census did not sample: the sampled strips are disjoint, so
+        // swapping the first two branches left every fixture green while changing the answer for
+        // any strip carrying both. That is the same defect as the header classifier's
+        // first-match-wins, which is what #766 is about. Found by review 2026-09-09.
+        let inputSlot = has(AXLocalePolicy.inputSlotHelpKeyword)
+        let midiEffectSlot = has(AXLocalePolicy.midiEffectSlotHelpKeyword)
+        // External MIDI rests on ABSENCES, and one unreadable label must not be able to fake them.
+        // A review traced it: a strip with a readable `Assign control` child and an output slot
+        // whose help answers `noValue` yields `["assign control"]`, and a rule of "assign control
+        // and no output slot" then answers external MIDI for an ordinary strip.
+        //
+        // So the audio path must be absent in THREE places at once. Measured 2026-09-09: the
+        // external-MIDI strip (`Off 1`) has no output slot, no send slot and no audio effect slot,
+        // and carries four `Assign control` rows; every other strip in that project has all three.
+        // One unreadable label cannot produce that shape — three would have to fail together on the
+        // one strip that also carries assign controls.
+        //
+        // It is still an absence rule and still the weakest clause here. The recorded limit on this
+        // file (`45d6a4b6`) — an unfound output slot means "not identified", never "routed nowhere"
+        // — still applies. This raises the number of coincidences a wrong answer needs; it does not
+        // remove the class.
+        let externalMIDIShape = has(AXLocalePolicy.assignControlHelpKeyword)
+            && !has(AXLocalePolicy.outputSlotHelpKeyword)
+            && !has(AXLocalePolicy.sendOrIOControlLabel)
+            && !has(AXLocalePolicy.audioPluginSlotLabel)
+
+        let signals = [inputSlot, midiEffectSlot, externalMIDIShape].filter { $0 }.count
+        guard signals == 1 else { return .undetermined }
+
+        if inputSlot { return .type(.audio) }
+        // A drummer strip is identical to a software instrument's, so the family is where this
+        // stops. Narrowing here is the confident wrong answer #766's first half removed.
+        if midiEffectSlot { return .instrumentFamily }
+        return .type(.externalMIDI)
+    }
+
+    /// The inspector's channel strip for the SELECTED track, or `nil` (#766).
+    ///
+    /// The inspector rebuilds this strip when the selection changes, so the caller must say which
+    /// track it expects and this refuses until the strip's own name agrees. Without that wait the
+    /// read races the rebuild and reports the PREVIOUS track's strip, which looks like a settled
+    /// answer. Two tracks with the same name defeat the agreement and that is not detectable here.
+    static func inspectorChannelStrip(
+        named expected: String,
+        in window: AXUIElement,
+        settleAttempts: Int = 40,
+        settleInterval: useconds_t = 50_000,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
+        // The inspector REBUILDS this strip when the selection changes, and the rebuild is not
+        // finished when the operation that changed the selection returns. Reading once made the
+        // answer a race: the strip still names the previous track, the name does not agree, and the
+        // read degrades to the header's `unknown` — intermittently, which is worse than never.
+        //
+        // Bounded, because the other reason the name never agrees is that it never will: a name
+        // that was not live-identity-backed, or two tracks sharing one.
+        for attempt in 0..<max(1, settleAttempts) {
+            if let only = soleInspectorStrip(named: expected, in: window, runtime: runtime) {
+                return only
+            }
+            if attempt + 1 < max(1, settleAttempts) { usleep(settleInterval) }
+        }
+        return nil
+    }
+
+    /// The one inspector strip carrying `expected`, or nil when there is not exactly one.
+    ///
+    /// Split out of the settle loop so the candidate set is counted at one place instead of once
+    /// per attempt — `Scripts/check-ax-locator-census.py` reads the SHAPE of a lookup, and a
+    /// count-and-refuse written inside a loop reads to it as a reduction to the first hit.
+    ///
+    /// EXACTLY ONE, or no answer. Returning the first of several published the OLD track's type
+    /// confidently whenever two tracks share a name — the ticket admitted that identity weakness
+    /// and the code promoted the ambiguous match anyway. Refusing is the rule the rest of this file
+    /// already applies. Found by review 2026-09-09.
+    private static func soleInspectorStrip(
+        named expected: String,
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let matches = AXHelpers.findAllDescendants(
+            of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
+        ).filter { item in
+            let help = AXHelpers.getHelp(item, runtime: runtime) ?? ""
+            guard AXLocalePolicy.inspectorChannelStripHelpPrefix.hasPrefixAny(help) else {
+                return false
+            }
+            return AXHelpers.getDescription(item, runtime: runtime) == expected
+        }
+        if matches.count == 1 { return matches[0] }
+        if matches.count > 1 {
+            Log.info("soleInspectorStrip: \(matches.count) strips are named \(expected); "
+                + "refusing rather than returning the first in tree order", subsystem: "ax")
+        }
+        return nil
+    }
+
     static func findVolumeFader(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production

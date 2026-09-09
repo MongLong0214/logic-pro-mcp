@@ -2056,8 +2056,38 @@ extension AccessibilityChannel {
                     if observedTrack.liveIdentityBacked {
                         merged["observed_track_name"] = observedTrack.name
                     }
-                    merged["observed_track_type"] = observedTrack.type.rawValue
-                    merged["track_type_verification_source"] = "observed_header"
+                    // #766 — the header aggregate cannot tell the types apart, so it answers
+                    // `unknown`; the inspector channel strip CAN, for two of them. The strip is
+                    // the one the inspector rebuilt for the track just created, which is the
+                    // selected one, so this costs no selection change — and it is only consulted
+                    // when the name it has to agree with was actually read, because the
+                    // placeholder "Untitled" would match whatever strip happened to carry it.
+                    // The strip is identified by NAME, so a name shared by more than one track
+                    // cannot identify anything: the inspector shows one strip at a time, so
+                    // "exactly one strip carries this name" is trivially true even when the strip
+                    // belongs to the OTHER track of that name. Counting strips does not close this
+                    // — counting TRACKS does, and the caller is the only place that can. Found by
+                    // review 2026-09-09, which pointed out that the strip-side check was answering
+                    // a different question than the one the hazard asks.
+                    let nameIsUnique = currentTracks.filter { $0.name == observedTrack.name }.count == 1
+                    let stripReading = (observedTrack.liveIdentityBacked && nameIsUnique)
+                        ? AXLogicProElements.inspectorStripReading(expectedName: observedTrack.name)
+                        : .undetermined
+                    switch stripReading {
+                    case let .type(readType):
+                        merged["observed_track_type"] = readType.rawValue
+                        merged["track_type_verification_source"] = "inspector_channel_strip"
+                    case .instrumentFamily:
+                        // The strip WAS read and its answer is a family this read cannot narrow —
+                        // a drummer's strip and a software instrument's are identical. The type
+                        // stays `unknown`, and the source says which of the two unknowns this is:
+                        // a read that answered a family, not a read that did not happen.
+                        merged["observed_track_type"] = TrackType.unknown.rawValue
+                        merged["track_type_verification_source"] = "inspector_channel_strip_instrument_family"
+                    case .undetermined:
+                        merged["observed_track_type"] = observedTrack.type.rawValue
+                        merged["track_type_verification_source"] = "observed_header"
+                    }
                 }
                 return .success(HonestContract.encodeStateA(extras: merged))
             }

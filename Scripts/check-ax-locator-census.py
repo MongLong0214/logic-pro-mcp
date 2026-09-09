@@ -67,7 +67,18 @@ import sys
 # defect was fixed, which is the only direction it is allowed to move. The check fails when the
 # count comes in UNDER budget too, on purpose: ground gained and not recorded is ground that the
 # next change can quietly give back.
-BLIND_SITE_BUDGET = 55
+# 55 -> 48 -> 54 (2026-09-09, #766), and the middle number was wrong. The detector read
+# `if xs.count == 1 { return xs[0] }` as a blind reduction, so sites that DID say how many
+# candidates they had were reported as if they did not. Teaching it that spelling was right; the
+# first rule for it was not — it suppressed a lookup whenever `xs.count == 1` appeared anywhere in
+# the window, and a review defeated it with `if matches.count == 1 { audit() }; return matches.first`,
+# where the count is present and the reduction is unguarded. Six sites were being suppressed on that
+# looseness, so 48 measured the weakened detector rather than the tree.
+#
+# The rule now requires the count to GUARD the reduction. 54 is what the tightened detector sees, and
+# it is still one below the 55 this started at, because two sites really are count-guarded. The bar
+# falls by what was actually gained and not by what a loose regex hid.
+BLIND_SITE_BUDGET = 54
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
@@ -105,7 +116,29 @@ def blind_sites(root):
                             window,
                         )
                     )
-                    if re.search(r"\)\s*\.first\b", window) or reduced_by_name:
+                    # A reduction GUARDED BY A COUNT is not a blind lookup: `if xs.count == 1 {
+                    # return xs[0] }` returns an element only when the candidate set has exactly one
+                    # member, which is the property this census exists to establish. Without this the
+                    # detector reported the counted spelling as blind — a census of the spelling
+                    # rather than of the defect, which is the failure this file's own header names.
+                    # Added 2026-09-09 for `soleInspectorStrip`, whose lookup matches on AXHelp and
+                    # therefore cannot go through `censusDescendant` (that helper reads title and
+                    # description only).
+                    # The count must GUARD the reduction, not merely appear near it. A first cut
+                    # accepted any `xs.count == 1` anywhere in the window, which a review defeated
+                    # with `if matches.count == 1 { audit() }; return matches.first` — the count is
+                    # present, the reduction is unguarded, and the detector said nothing. That is a
+                    # false negative introduced by the rule meant to remove a false positive.
+                    name = re.escape(bound.group(1)) if bound else None
+                    counted = bool(
+                        name and re.search(
+                            r"if\s+" + name + r"\s*\.count\s*==\s*1\s*\{[^{}]*\b"
+                            + name + r"\s*\[\s*0\s*\]",
+                            window, re.S)
+                    )
+                    if counted:
+                        pass
+                    elif re.search(r"\)\s*\.first\b", window) or reduced_by_name:
                         out.append((path, i + 1, "findAllDescendants(...) reduced to one"))
                     elif re.search(r"\bfor\b[^\n]*\{", window) and re.search(r"\breturn\b", window):
                         # `for candidate in … { if matches { return candidate } }` is the same
