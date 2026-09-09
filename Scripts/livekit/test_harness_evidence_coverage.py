@@ -9,11 +9,31 @@ never looked like an absence.
 """
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import evidence as E  # noqa: E402
 import harness_evidence_coverage as C  # noqa: E402
 
 failed = 0
+
+_REAL_RECORDING = None
+
+
+def _a_real_recording():
+    """A file on disk big enough to be a recording, for the fixtures that stand for a clean run.
+
+    These used to claim `exists: True` with a plausible byte count and no file. That is precisely
+    the document `_recording_is_usable` refuses, so a fixture has to put something where it says it
+    is. Written once per process and reused.
+    """
+    global _REAL_RECORDING
+    if _REAL_RECORDING is None:
+        path = os.path.join(tempfile.mkdtemp(prefix="lpm-fixture-recording-"), "run.mov")
+        with open(path, "wb") as fh:
+            fh.write(b"0" * (E.MIN_RECORDING_BYTES + 1))
+        _REAL_RECORDING = path
+    return _REAL_RECORDING
 
 # --- which paths count as a changed harness ----------------------------------------------------
 #
@@ -44,11 +64,11 @@ CLEAN = {"records": [
     {"kind": "check", "passed": True, "mutation_claimed": True, "blocking_modal": None},
     {"kind": "capture", "settled": True, "display": {"wholly_within": True}},
     {"kind": "visual", "passed": True, "subject": "Tracks header", "region": [0, 0, 1, 1]},
-    # A recording record has to say the FILE is there. A bare `{"kind": "recording"}` means
-    # `exists: false, bytes: 0` to the summary, and a run whose screen capture never started does
-    # not satisfy the video half of the UI gate — so a fixture standing for "a clean run" carries a
-    # real one.
-    {"kind": "recording", "exists": True, "bytes": 2_400_000},
+    # A recording record has to NAME A FILE THAT IS THERE. The summary re-reads the filesystem
+    # rather than believing the record's own `exists`/`bytes`, so a fixture standing for "a clean
+    # run" writes a real file above the floor — claiming one would be exactly the forgery the rule
+    # exists to refuse.
+    {"kind": "recording", "file": _a_real_recording()},
     {"kind": "operation"},
     # The run's environment, which a real document carries (#797). Stated here rather than left
     # absent because absent means `cannot_tell`, and a fixture that means "a clean run" has to say
@@ -287,8 +307,8 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evr
             {"kind": "capture", "tag": "c", "settled": True,
              "display": {"wholly_within": True}},
             {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
-            # A recording record has to say the file is there; see the CLEAN fixture above.
-            {"kind": "recording", "tag": "r", "exists": True, "bytes": 2_400_000},
+            # A recording record has to name a file that is there; see the CLEAN fixture above.
+            {"kind": "recording", "tag": "r", "file": _a_real_recording()},
             {"kind": "operation", "tag": "o"},
             # See the CLEAN fixture above: a document states the environment its run saw, because
             # absent means `cannot_tell` and this one is meant to be judgeable anywhere.

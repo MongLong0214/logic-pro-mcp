@@ -765,9 +765,6 @@ for why, ok in shapes:
     failed += 0 if ok else 1
     print(f"{'ok  ' if ok else 'FAIL'} shape: {why}")
 
-E.blocking_modal = _headless_blocking_modal
-print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
-sys.exit(1 if failed else 0)
 
 
 # A RECORDING THAT IS NOT THERE IS NOT A RECORDING. `recordings` counted every `recording` record,
@@ -793,7 +790,7 @@ for kw, want, why in [
     ok = got is want
     print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
     if not ok:
-        FAILURES.append(why)
+        failed += 1
 
 # And the counter itself: a record that exists but is a stub must not be counted as a recording.
 _root = _tempfile.mkdtemp()
@@ -807,7 +804,38 @@ ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 2
 print(f"{'ok  ' if ok else 'FAIL'} a stub and a missing file both count as missing -> "
       f"recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
 if not ok:
-    FAILURES.append("stub/missing recordings were counted as recordings")
+    failed += 1
+
+# And the stored fields do not get the last word. A record that CLAIMS a present, large file is
+# read against the filesystem, so a hand-written document cannot vouch for a video nobody has.
+_ev.records.append({"kind": "recording", "file": os.path.join(_ev.dir, "claimed.mov"),
+                    "exists": True, "bytes": 99_000_000})
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 3
+print(f"{'ok  ' if ok else 'FAIL'} a record claiming a file that is not on disk is not a recording"
+      f" -> recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    failed += 1
+
+# A recording record with no `file` at all names nothing to go and look at.
+_ev.records.append({"kind": "recording", "exists": True, "bytes": 99_000_000})
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 4
+print(f"{'ok  ' if ok else 'FAIL'} a recording record naming no file is not a recording"
+      f" -> recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    failed += 1
+
+# The floor is a floor: one byte under is refused, exactly at it is accepted. Without this pair the
+# threshold could be any number, including one that rejects every real capture.
+for _size, _want, _why in [(E.MIN_RECORDING_BYTES - 1, 0, "one byte under the floor is refused"),
+                           (E.MIN_RECORDING_BYTES, 1, "exactly the floor is accepted")]:
+    _f = os.path.join(_ev.dir, f"floor-{_size}.mov")
+    open(_f, "wb").write(b"0" * _size)
+    ok = E._recording_is_usable({"kind": "recording", "file": _f}) == bool(_want)
+    print(f"{'ok  ' if ok else 'FAIL'} {_why}")
+    if not ok:
+        failed += 1
 
 
 # A `non_ui` document says there is nothing to photograph. If it then photographs, it refutes itself,
@@ -827,4 +855,8 @@ for kw, want, why in [
     ok = got is want
     print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
     if not ok:
-        FAILURES.append(why)
+        failed += 1
+
+E.blocking_modal = _headless_blocking_modal
+print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
+sys.exit(1 if failed else 0)

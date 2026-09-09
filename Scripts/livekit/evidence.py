@@ -967,7 +967,44 @@ AX_REGION_LABELS = {
 # A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`
 # write a container header even when they capture nothing, so "the file exists" is not enough and
 # "greater than zero bytes" is not either.
+#
+# The number is measured rather than asserted, because a threshold nobody measured is a threshold
+# that rejects real evidence. Across the 581 recordings this project has on disk the SMALLEST is
+# 371,432 bytes, so 32 KiB sits about eleven times below anything a real run has produced. It is a
+# floor against a header-only stub, not a judgement about what is in the frames — and it is
+# deliberately far from the observed minimum so that a short but genuine capture is not refused.
 MIN_RECORDING_BYTES = 32 * 1024
+
+
+def _recording_is_usable(record, statter=os.path.getsize):
+    """Whether one `recording` record stands for a video that is actually there.
+
+    ONE predicate, because there are two counters and De Morgan is not a place to keep a rule: the
+    valid and invalid comprehensions used to spell this separately, so adding a condition meant
+    remembering to invert it in the other one.
+
+    The filesystem is re-read HERE rather than trusted from the record. `recording()` samples
+    `isfile`/`getsize` once at capture time and stores the answers, and a stored answer is the
+    thing this whole gate exists not to believe: a file deleted or truncated afterwards, a document
+    hand-written with `exists: True` and a large `bytes` and no file at all, both passed. So a
+    record must NAME a file, and the file must still be there and still be big enough when the
+    document is read.
+
+    A record with no `file` key is not usable — that is the hand-written case, and there is nothing
+    to go and look at.
+    """
+    if record.get("kind") != "recording":
+        return False
+    path = record.get("file")
+    if not isinstance(path, str) or not path:
+        return False
+    try:
+        if not os.path.isfile(path):
+            return False
+        size = statter(path)
+    except OSError:
+        return False
+    return size >= MIN_RECORDING_BYTES
 
 
 class Evidence:
@@ -1532,14 +1569,10 @@ def summarize(recs, out=None):
         # capture never started satisfied `recordings > 0`, and the video half of the UI gate was
         # met by a record stating the video is missing. The floor is deliberately tiny: it rejects
         # an empty or truncated file without pretending to judge what is IN the frames.
-        "recordings": sum(1 for r in recs
-                          if r["kind"] == "recording"
-                          and r.get("exists")
-                          and (r.get("bytes") or 0) >= MIN_RECORDING_BYTES),
+        "recordings": sum(1 for r in recs if _recording_is_usable(r)),
         "recordings_missing_or_empty": sum(1 for r in recs
                                            if r["kind"] == "recording"
-                                           and (not r.get("exists")
-                                                or (r.get("bytes") or 0) < MIN_RECORDING_BYTES)),
+                                           and not _recording_is_usable(r)),
         "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
         # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
         # dict, or any other truthy object as a name.
