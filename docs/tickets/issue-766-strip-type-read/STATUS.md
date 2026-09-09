@@ -224,3 +224,18 @@ the locator. They are measured now, with provenance. It remains true for the two
 strip-name wait must turn a test red, and no locator test existed at all. There are three now: the
 rebuild race, a duplicate name, and the right inspector strip — the last from the ko-KR census,
 where the RIGHT strip's help contains the LEFT strip's phrase in a later sentence.
+
+
+## A sensitivity the live runs exposed, 2026-09-09
+
+One run of the live harness answered the family check FALSE and the very next run, same head and
+same binary, answered TRUE. Both settle loops are bounded — the strip locator at 40 x 50ms and the
+slot-stability loop at 20 x 50ms — so a Logic that is busy enough can exhaust them and the read
+degrades to the header's `unknown`.
+
+That degradation is SAFE (it never answers wrongly, only declines to answer) but it is not free: it
+makes the live check itself flaky, and a flaky check is one that gets re-run until it is green. The
+bounds are stated here rather than tuned quietly, because raising them trades latency on the create
+path for a reading that was already correct in the ordinary case, and that trade should be made with
+a measurement of how long the rebuild actually takes rather than by enlarging the number until the
+test stops failing.
