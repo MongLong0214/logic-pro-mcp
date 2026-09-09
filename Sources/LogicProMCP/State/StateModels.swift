@@ -64,6 +64,14 @@ struct TrackState: Sendable, Codable, Identifiable {
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
     var automationMode: AutomationMode = .off
+    /// Never populated. Logic exposes no colour observable to read it from: measured 2026-09-09
+    /// over 1406 elements to depth 16, including the palette opened via View > Colors, there is no
+    /// attribute of colour type and no value naming a colour
+    /// (`docs/observations/2026-09-09-no-attribute-value-anywhere-carries-a-track-colour`).
+    ///
+    /// Kept rather than removed so a future reader — the project file is the one route that record
+    /// does not close — can populate it without a schema change. Anything comparing tracks must not
+    /// treat this as a colour that happens to be unset. #448.
     var color: String?
     /// v3.1.8 (Issue #7) — true when this row was synthesised from
     /// MetaData.plist's `NumberOfTracks` because the AX walker returned
