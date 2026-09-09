@@ -662,6 +662,143 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         }
     }
 
+    /// #373 — the static evaluator can now be told what a live run credited, and the default
+    /// keeps that channel shut.
+    ///
+    /// Before this, `evaluate` had no live input at all: it counted every registered operation as
+    /// missing and said so in its own comment. R-SEM was therefore not open because coverage was
+    /// short -- it was open because nothing could ever reach it. Running the whole live matrix
+    /// would not have moved the count by one operation.
+    ///
+    /// Three assertions, because the interesting property is not "a credit works" but "a credit
+    /// works AND costs a real live pass":
+    ///   1. the default is empty, so a bare repo tree answers exactly as it did before;
+    ///   2. a credited operation leaves `missingSemantic` with no waiver anywhere;
+    ///   3. the set that does the crediting is the one `PromotionGate` computed from real cases --
+    ///      the same predicate the release gate uses, not a second spelling of it.
+    @Test func r_sem_liveCreditFromAnAttestationClosesWhatAWaiverWouldHaveHadTo() throws {
+        func evaluate(liveCredited: Set<String>) -> ProductionReadinessContractReport {
+            ProductionReadinessContractEvaluator.evaluate(
+                releaseWorkflowYAML: fullGreenWorkflowYAML(),
+                registeredOperationIDs: ["system.health"],
+                semanticValidatorOperationIDs: ["system.health"],
+                requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+                debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+                expectedAuthorityBaseSHA: expectedBaseSHA,
+                publishedReleaseEvidencePresent: true,
+                mutationRestoreCompensationEvidencePresent: true,
+                independentProvenanceEnforced: true,
+                managedFixturesPresent: true,
+                liveCreditedOperationIDs: liveCredited
+            )
+        }
+
+        // 1. Omitting the parameter must not change today's answer. If this ever goes green with
+        //    an empty set, the debt closed because the evaluator stopped asking, not because
+        //    anything was covered.
+        let bare = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            managedFixturesPresent: true
+        )
+        #expect(bare.openDebts == [.semanticCoverageIncomplete])
+
+        // 2/3. The credit comes from a real attestation read through the release gate's own
+        //      predicate. Building the set by hand here would prove only that a Set works.
+        let passing = QualificationCase(
+            id: "in-process/system.health",
+            status: .passed,
+            tool: "logic_system",
+            command: "system.health",
+            traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+            verified: true,
+            evidenceFiles: ["evidence/system.health.json"],
+            binarySHA256: String(repeating: "a", count: 64),
+            operationID: "system.health",
+            verificationKind: .semanticReadback,
+            readback: QualificationReadbackEvidence(
+                source: "logic://system/health",
+                requestID: "rb-health",
+                verified: true,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+        let attestation = ReleaseQualificationAttestation(
+            schema: "release-qualification-attestation/v2",
+            serverVersion: "1.2.3",
+            commitSHA: String(repeating: "c", count: 40),
+            binarySHA256: String(repeating: "a", count: 64),
+            logicVariant: .desktop,
+            logicVersion: "11.2.0",
+            locale: .enUS,
+            profile: .core,
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            completedAt: Date(timeIntervalSince1970: 1_060),
+            total: 1,
+            passed: 1,
+            failed: 0,
+            waived: 0,
+            cases: [passing],
+            waivers: [],
+            evidenceManifestSHA256: String(repeating: "d", count: 64)
+        )
+        let credited = PromotionGate.liveCreditedOperationIDs(in: attestation)
+        #expect(credited == ["system.health"])
+
+        let withLiveCredit = evaluate(liveCredited: credited)
+        #expect(withLiveCredit.openDebts.isEmpty)
+        #expect(withLiveCredit.findings.allSatisfy { $0.id != .semanticCoverageIncomplete })
+
+        // And a case that falls one conjunct short does NOT credit, so the closure above was paid
+        // for. `verified: false` is the cheapest forgery: a `.passed` case that verified nothing.
+        let unverified = QualificationCase(
+            id: "in-process/system.health",
+            status: .passed,
+            tool: "logic_system",
+            command: "system.health",
+            traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+            verified: false,
+            evidenceFiles: ["evidence/system.health.json"],
+            binarySHA256: String(repeating: "a", count: 64),
+            operationID: "system.health",
+            verificationKind: .semanticReadback,
+            readback: QualificationReadbackEvidence(
+                source: "logic://system/health",
+                requestID: "rb-health",
+                verified: true,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+        #expect(PromotionGate.liveCreditedOperationIDs(
+            in: ReleaseQualificationAttestation(
+                schema: "release-qualification-attestation/v2",
+                serverVersion: "1.2.3",
+                commitSHA: String(repeating: "c", count: 40),
+                binarySHA256: String(repeating: "a", count: 64),
+                logicVariant: .desktop,
+                logicVersion: "11.2.0",
+                locale: .enUS,
+                profile: .core,
+                startedAt: Date(timeIntervalSince1970: 1_000),
+                completedAt: Date(timeIntervalSince1970: 1_060),
+                total: 1,
+                passed: 1,
+                failed: 0,
+                waived: 0,
+                cases: [unverified],
+                waivers: [],
+                evidenceManifestSHA256: String(repeating: "d", count: 64)
+            )
+        ).isEmpty)
+    }
+
     @Test func r_sem_rejectsWhenSemanticValidatorsCoverOnlyHealth() {
         let ops = (0..<10).map { "op.\($0)" } + ["system.health"]
         let report = ProductionReadinessContractEvaluator.evaluate(
