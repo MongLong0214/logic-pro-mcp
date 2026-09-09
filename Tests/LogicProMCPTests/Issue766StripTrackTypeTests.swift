@@ -143,6 +143,44 @@ struct Issue766StripTrackTypeTests {
         #expect(settled != nil, "the strip never settled on the expected name")
     }
 
+    // The ko-KR census records the RIGHT inspector strip's help as
+    // `오른쪽 인스펙터 채널 스트립. … 왼쪽 인스펙터 채널 스트립의 출력 채널 스트립을 표시합니다.` — it
+    // CONTAINS the left strip's phrase in a later sentence. A locator matching by containment
+    // therefore accepts the right strip, and the label set is the one whose name says `Prefix`.
+    @Test("the right inspector strip is not accepted by the left strip's phrase")
+    func theRightStripIsNotMistakenForTheLeftOne() {
+        let right = "오른쪽 인스펙터 채널 스트립. 왼쪽 인스펙터 채널 스트립의 출력 채널 스트립을 표시합니다."
+        let left = "왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다."
+        #expect(AXLocalePolicy.inspectorChannelStripHelpPrefix.hasPrefixAny(left))
+        #expect(!AXLocalePolicy.inspectorChannelStripHelpPrefix.hasPrefixAny(right))
+        // Containment cannot tell them apart, which is why the locator does not use it.
+        #expect(AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: right))
+    }
+
+    // Two tracks sharing a name let the stale strip pass the name check and publish the OLD track's
+    // type confidently. Exactly one match, or no answer.
+    @Test("two strips with the same name are refused, not resolved by tree order")
+    func aDuplicateNameIsRefused() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(1)
+        var strips: [AXUIElement] = []
+        for id in 2...3 {
+            let strip = builder.element(id)
+            builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setAttribute(strip, kAXHelpAttribute as String,
+                                 "Left inspector channel strip. Control the signal…")
+            builder.setAttribute(strip, kAXDescriptionAttribute as String, "Deluxe Classic")
+            strips.append(strip)
+        }
+        builder.setChildren(window, strips)
+        let runtime = builder.makeAXRuntime(setAttributeHandler: nil, performActionHandler: nil)
+
+        let found = AXLogicProElements.inspectorChannelStrip(
+            named: "Deluxe Classic", in: window, settleAttempts: 2, settleInterval: 1,
+            runtime: runtime)
+        #expect(found == nil, "an ambiguous name resolved to one of the two strips")
+    }
+
     private final class Counter: @unchecked Sendable {
         private let lock = NSLock()
         private var count = 0

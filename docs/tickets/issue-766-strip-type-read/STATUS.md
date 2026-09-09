@@ -81,9 +81,9 @@ Add, beside `inputSlotSource` (line 393):
     /// The kinds of slot a channel strip exposes, as the leading sentence of each child's AXHelp.
     static func slotKinds(in strip: AXUIElement, runtime: AXHelpers.Runtime = .production) -> [String]?
 
-Returns `nil` when the strip's child list cannot be read. **`nil` and `[]` must stay apart**: a
-strip nobody could read otherwise reports no slots, classifies as undetermined, and every
-absence-based clause below passes over it. The census carries this same distinction in
+Returns `nil` when the strip's child list cannot be read, and `nil` again when any child's LABEL could not
+be read — a readable child list does not prove every label was read, and a present output slot whose
+help failed would otherwise look like "no output slot". The census carries this same distinction in
 `childrenReadable` and gained it from a review on 2026-09-08.
 
 ### 2c. `Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift`
@@ -195,3 +195,32 @@ assertion moved to `AXLocalePolicy.midiEffectSlotHelpKeyword` itself, where the 
 Every strip that has a MIDI effect slot also has an audio effect one, so the clause could not change
 any answer and could not be made to fail. The rule is `Assign control present AND no output slot`,
 and the conjunction is witnessed by a fixture carrying both an assign control and an output slot.
+
+
+---
+
+## Corrections after review, 2026-09-09
+
+Three claims above are wrong and are corrected here rather than edited away, because a ticket
+rewritten to agree with its implementation stops being able to disagree with it.
+
+**"Three call sites, all enumerated" is wrong — there are four.** The fourth is
+`SemanticOracleTable.createTrackSemantics`, which pinned `track_type_verification_source` to the
+literal `observed_header`. Live qualification would have rejected this feature's own successful
+outputs. The enumeration was made by searching for callers of the functions being changed, which
+cannot find a consumer that pins a VALUE those functions emit.
+
+**The `nil` versus `[]` rationale overstated its consequence.** An empty slot list would not have
+become external MIDI: that clause needs an assign-control row, which an empty list also lacks. The
+distinction is still worth keeping — an unreadable list is not an empty strip — but the danger named
+was the wrong one. The real one is an unreadable child LABEL, which is now refused.
+
+**"The project supports two live locales" is wrong — the generated contract lists three**: en-US,
+ko-KR and ja-JP. Worse for the ticket's central claim: the ko-KR and ja-JP inspector-strip strings
+were ALREADY in this repository, in the 2026-09-05 censuses, so "measured on en only" was false for
+the locator. They are measured now, with provenance. It remains true for the two slot labels.
+
+**And the promised wrong-strip fixture was missing.** The ticket said a mutation dropping the
+strip-name wait must turn a test red, and no locator test existed at all. There are three now: the
+rebuild race, a duplicate name, and the right inspector strip — the last from the ko-KR census,
+where the RIGHT strip's help contains the LEFT strip's phrase in a later sentence.
