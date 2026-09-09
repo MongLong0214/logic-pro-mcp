@@ -44,7 +44,11 @@ CLEAN = {"records": [
     {"kind": "check", "passed": True, "mutation_claimed": True, "blocking_modal": None},
     {"kind": "capture", "settled": True, "display": {"wholly_within": True}},
     {"kind": "visual", "passed": True, "subject": "Tracks header", "region": [0, 0, 1, 1]},
-    {"kind": "recording"},
+    # A recording record has to say the FILE is there. A bare `{"kind": "recording"}` means
+    # `exists: false, bytes: 0` to the summary, and a run whose screen capture never started does
+    # not satisfy the video half of the UI gate — so a fixture standing for "a clean run" carries a
+    # real one.
+    {"kind": "recording", "exists": True, "bytes": 2_400_000},
     {"kind": "operation"},
     # The run's environment, which a real document carries (#797). Stated here rather than left
     # absent because absent means `cannot_tell`, and a fixture that means "a clean run" has to say
@@ -283,7 +287,8 @@ with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as evr
             {"kind": "capture", "tag": "c", "settled": True,
              "display": {"wholly_within": True}},
             {"kind": "visual", "tag": "v", "passed": True, "subject": "a named thing"},
-            {"kind": "recording", "tag": "r"},
+            # A recording record has to say the file is there; see the CLEAN fixture above.
+            {"kind": "recording", "tag": "r", "exists": True, "bytes": 2_400_000},
             {"kind": "operation", "tag": "o"},
             # See the CLEAN fixture above: a document states the environment its run saw, because
             # absent means `cannot_tell` and this one is meant to be judgeable anywhere.
