@@ -54,4 +54,21 @@ enum MCUTrace {
         guard let data = (formatLine(direction, bytes) + "\n").data(using: .utf8) else { return }
         handle.write(data)
     }
+
+    /// A one-line note on the same gate as `emit`.
+    ///
+    /// It exists so the receive callback can say how much of a packet it did not read WITHOUT
+    /// doing I/O on the default path. CoreMIDI documents that block as real-time and non-blocking,
+    /// and an unconditional `Log.info` there takes locks and writes to stderr synchronously — a
+    /// backpressured stderr then stalls the callback and delays the valid feedback in the SAME
+    /// packet. Found by review 2026-09-09, in code added to make a silent gap visible.
+    static func note(
+        _ text: String,
+        enabled: Bool = MCUTrace.isEnabled,
+        to handle: FileHandle = .standardError
+    ) {
+        guard enabled else { return }
+        guard let data = ("MCU NOTE: " + text + "\n").data(using: .utf8) else { return }
+        handle.write(data)
+    }
 }

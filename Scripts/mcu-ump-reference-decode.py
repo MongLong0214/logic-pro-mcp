@@ -39,6 +39,24 @@ def data_byte_count(status):
     return 2
 
 
+def word_count(message_type):
+    """How many 32-bit words a UMP message of this type occupies.
+
+    The stride is the UMP size table, not one. Advancing a single word past a multi-word message
+    reads its continuation as a header, which FABRICATES a message whenever that continuation looks
+    like channel voice. This oracle carried the one-word default until 2026-09-09, which is to say
+    it encoded the same defect it exists to catch, and its `unconverted` counted MESSAGES while
+    calling them words.
+    """
+    if message_type in (0x0, 0x1, 0x2, 0x6, 0x7):
+        return 1
+    if message_type in (0x3, 0x4, 0x8, 0x9, 0xA):
+        return 2
+    if message_type in (0xB, 0xC):
+        return 3
+    return 4                                          # 0x5, 0xD, 0xE, 0xF
+
+
 def midi1_bytes(words):
     """UMP words -> a MIDI 1.0 byte stream, plus the count of words this does not convert.
 
@@ -51,25 +69,31 @@ def midi1_bytes(words):
     while i < len(words):
         word = words[i]
         message_type = (word >> 28) & 0xF
-        if message_type == 0x0:                       # utility: no MIDI 1.0 message
-            i += 1
+        size = word_count(message_type)
+        if i + size > len(words):                     # a message whose words are not all here
+            unconverted += len(words) - i
+            break
+        if message_type == 0x0:                       # utility: no MIDI 1.0 message, none lost
+            pass
         elif message_type in (0x1, 0x2):              # system, and MIDI 1.0 channel voice
             status = (word >> 16) & 0xFF
-            data1 = (word >> 8) & 0x7F
-            data2 = word & 0x7F
+            data1 = (word >> 8) & 0xFF
+            data2 = word & 0xFF
             count = data_byte_count(status)
-            out += [status] if count == 0 else ([status, data1] if count == 1
-                                                else [status, data1, data2])
-            i += 1
-        elif message_type in (0x3, 0x4):              # 64-bit: SysEx7 data, MIDI 2.0 channel voice
-            unconverted += 1
-            i += 2
-        elif message_type == 0x5:                     # 128-bit
-            unconverted += 1
-            i += 4
+            framing_in_the_wrong_type = message_type == 0x1 and status in (0xF0, 0xF7)
+            if framing_in_the_wrong_type:
+                unconverted += size
+            elif count == 0:
+                out += [status]
+            elif count == 1 and data1 < 0x80:
+                out += [status, data1]
+            elif count == 2 and data1 < 0x80 and data2 < 0x80:
+                out += [status, data1, data2]
+            else:                                     # a data byte with bit 7 set is not a data byte
+                unconverted += size
         else:
-            unconverted += 1
-            i += 1
+            unconverted += size
+        i += size
     return out, unconverted
 
 
@@ -171,8 +195,17 @@ def main():
     # second word would decode as a plausible channel-voice header, which is the case that fabricates
     # an event rather than miscounting one. The ticket covers that with a synthetic packet; this
     # oracle covers only what the capture can see, and says so rather than implying more.
-    if unconverted != 96:
-        print("ORACLE DISAGREES: expected 96 unconverted words, got %d" % unconverted,
+    # 192, not 96, and the change is a UNIT rather than a measurement: every unconverted message in
+    # this capture is a 64-bit SysEx7 packet, so 96 messages are 192 words. The old figure came from
+    # a loop that counted messages while its own name and its caller said words — the same defect
+    # the product carried, in the oracle written to catch it.
+    #
+    # The event side is unchanged by the correction: 112 events, the same
+    # {0xd0: 8, 0xb0: 20, 0x90: 73, 0xe0: 11} split and the same eleven pitch bends. That is what
+    # says the stricter reading drops no valid feedback — it refuses only what was already
+    # unconverted.
+    if unconverted != 192:
+        print("ORACLE DISAGREES: expected 192 unconverted words, got %d" % unconverted,
               file=sys.stderr)
         return 1
     return 0

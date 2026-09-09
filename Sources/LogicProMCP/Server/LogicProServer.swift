@@ -1440,6 +1440,7 @@ actor ProductionMCUTransport: MCUTransportProtocol {
             lock.unlock()
             current?(count)
         }
+
     }
 
     private let portManager: any VirtualPortManaging
@@ -1526,9 +1527,33 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                     }
                     let wordCount = declaredWords
                     if wordCount > 0 {
-                        let bytes: [UInt8] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
-                            Array(raw.prefix(wordCount * 4))
+                        // UMP WORDS, converted — not the words' memory image. Measured 2026-09-08:
+                        // slicing the image handed a MIDI 1.0 parser `[data2, data1, status, …]`,
+                        // so 161 packets from Logic produced 8 events instead of 112 and every
+                        // fader echo was dropped by the two-data-byte guard.
+                        let umpWords: [UInt32] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
+                            Array(raw.bindMemory(to: UInt32.self).prefix(wordCount))
                         }
+                        let converted = MIDIFeedback.midi1Bytes(fromUMPWords: umpWords)
+                        let bytes = converted.bytes
+                        // Words this converter does not read — SysEx7 today, and anything else
+                        // Logic sends that is not MIDI 1.0 channel voice or system. A known gap
+                        // rather than an error, and it goes on the TRACE gate, which is off unless
+                        // asked for.
+                        //
+                        // Two shapes were wrong here before. The first set a sink `FeedbackSink()`
+                        // never supplied, so the count reached nothing while a comment promised a
+                        // health field. The second replaced it with `Log.info`, which is worse than
+                        // silent: CoreMIDI documents this block as real-time and non-blocking, and
+                        // that call takes locks and writes stderr synchronously, so a backpressured
+                        // stderr stalls the callback and delays the valid feedback in this very
+                        // packet. Publishing the count properly needs a field on
+                        // `MCUFeedbackIngressSnapshot` and is a separate change.
+                        if converted.unconverted > 0 {
+                            MCUTrace.note("\(converted.unconverted) word(s) not read")
+                        }
+                        // The trace shows what the PARSER sees, which after this change is the
+                        // converted stream rather than the raw words.
                         MCUTrace.emit(.rx, bytes)
                         // v3.8.0 (WS6 / AC1) — deliver each parsed event to the
                         // CURRENT sink SYNCHRONOUSLY in arrival order. The
