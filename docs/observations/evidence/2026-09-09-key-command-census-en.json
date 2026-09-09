@@ -1,0 +1,25 @@
+{
+ "captured": "2026-09-09",
+ "host": "Logic Pro 12.3 (6674) on macOS 26.6, UI language en, fixture lpm-locale-campaign",
+ "how": "Scripts/livekit/ax_key_command_census.swift — opens Logic Pro > Key Commands > Edit Assignments… by menu TITLE (no coordinates), reads the command name of every row in the assignment table, looks up four commands that certainly exist as controls, filters for a name that would move a track, and closes the window again. Nothing is typed into the search field and no assignment is changed.",
+ "commands_read": 2203,
+ "controls": {
+  "note": "All four must be present, or a census that found no track-move command found nothing for the wrong reason.",
+  "Rename Track": 3,
+  "Delete Track": 2,
+  "New Track": 11,
+  "Toggle Track Freeze": 1
+ },
+ "track_move_candidates": 0,
+ "every_near_match_and_what_it_actually_is": [
+  {"name": "Move Track Automation with Regions", "subject": "automation, not the track"},
+  {"name": "Set Move Track Automation with Regions to Never/Always/Ask", "subject": "automation"},
+  {"name": "Move Marquee Selection Up/Down 1 Track", "subject": "a marquee selection moving BETWEEN tracks"},
+  {"name": "Extend Track Selection Up/Down", "subject": "the selection extent, not track order"},
+  {"name": "Move Active Take or Comp to New Track", "subject": "a take"},
+  {"name": "Move Selected Regions to Focused Track", "subject": "regions"},
+  {"name": "Move Visible/All Region Data to Track Automation", "subject": "automation data"},
+  {"name": "Select Next Upper Cell, or Previous Track", "subject": "selection"}
+ ],
+ "sort_tracks_is_absent_and_that_is_correct": "`Sort Tracks by` is a submenu PARENT in the Track menu rather than a command, and it does not appear in the assignment list. It was tried as a control first and dropped for that reason — its absence is a fact about the list, not a failure of the probe."
+}

@@ -1,0 +1,61 @@
+{
+ "conclusion": "None of Logic's 2203 key commands moves a track's position in the track list. Every near match is about something else — automation, a marquee selection moving BETWEEN tracks, a take, regions, or the selection extent — and the census is not blind, because four commands that certainly exist (`Rename Track`, `Delete Track`, `New Track`, `Toggle Track Freeze`) are all present in the same pass. With the Track menu offering only `Sort Tracks by` and `Edit > Move` being entirely region operations, the key-command route was the last non-drag one, and it is not there. So anchor-based track reorder cannot be built without screen coordinates, which this project does not do. The reorder half of this issue is a documented refusal rather than unfinished work; the sort route that DOES exist is already shipped as `tracks.sort_verified`.",
+ "date": "2026-09-09",
+ "depends": [],
+ "evidence": [
+  "evidence/2026-09-09-key-command-census-en.json"
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "build": "6674",
+  "locale": "en-US",
+  "note": "the Key Commands window opened from the Logic Pro menu by title; the U.S. preset, as shipped",
+  "os": "macOS 26.6",
+  "version": "12.3"
+ },
+ "id": "2026-09-09-no-key-command-moves-a-track-in-the-track-list",
+ "issues": [
+  448
+ ],
+ "limits": [
+  "One locale (en) and ONE PRESET — the U.S. key command set. A different preset assigns different keys to the same commands; it does not add commands, but that was not measured.",
+  "The judgement is by NAME. A command whose name does not say it moves a track, but does, would be missed — the eight near matches are listed in the evidence so a reader can check the exclusions rather than trust them.",
+  "This says no KEY COMMAND exists. It does not say no route exists: drag is a route, and this project declines it because it needs screen coordinates. An AppleScript or a `.logicx` package edit was not tried.",
+  "`Sort Tracks by` is absent from the list because it is a submenu parent rather than a command. Whether its LEAVES (by name, type, and so on) are individually assignable was not measured, and it does not affect the conclusion — sorting is not positioning."
+ ],
+ "method": "A probe outside the product opens the Key Commands window from the Logic Pro menu by title, reads the command name of every row in the assignment table, and closes it again. Read-only with respect to the assignments: nothing is typed into the search field and nothing is reassigned, because a probe that edits what it measures is not a measurement. Four commands that certainly exist are looked up in the same pass, because a census that could not find anything would report the same zero as a census that found nothing.",
+ "observations": [
+  {
+   "container": "the U.S. preset, read row by row",
+   "count": 2203,
+   "what": "key commands in the assignment list"
+  },
+  {
+   "container": "Rename Track 3, Delete Track 2, New Track 11, Toggle Track Freeze 1",
+   "count": 4,
+   "what": "control commands found of 4 looked for"
+  },
+  {
+   "container": "after excluding automation / marquee / take / comp / region / selection / cell",
+   "count": 0,
+   "what": "commands that move a track's position"
+  },
+  {
+   "container": "all eight listed in the evidence with what each actually acts on",
+   "count": 8,
+   "what": "near matches that are about something else"
+  }
+ ],
+ "question": "Is there any key command that moves a track up or down in the track list?",
+ "reverify": {
+  "command": "bash Scripts/observations/reverify-no-key-command-moves-a-track.sh",
+  "cost": "live; Logic running with a project open; a few seconds; opens and closes the Key Commands window",
+  "expected": "REVERIFY PASS — 2203 key commands, 4/4 controls found, none moves a track",
+  "kind": "script"
+ },
+ "schema": 2,
+ "subject": "the key command assignment list, as a route to reordering tracks",
+ "supersedes": null,
+ "surface": "arrange.menus",
+ "verdict": "wall"
+}
