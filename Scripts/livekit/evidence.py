@@ -964,6 +964,12 @@ AX_REGION_LABELS = {
 }
 
 
+# A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`
+# write a container header even when they capture nothing, so "the file exists" is not enough and
+# "greater than zero bytes" is not either.
+MIN_RECORDING_BYTES = 32 * 1024
+
+
 class Evidence:
     """Accumulates records and writes `<root>/<head>/evidence.json`.
 
@@ -1521,7 +1527,19 @@ def summarize(recs, out=None):
         "captures": len(caps),
         "visual_assertions": len(vis),
         "visual_failed": sum(1 for v in vis if not v.get("passed")),
-        "recordings": sum(1 for r in recs if r["kind"] == "recording"),
+        # A RECORDING THAT IS NOT THERE IS NOT A RECORDING. This counted every `recording` record,
+        # including one whose own fields say `exists: False, bytes: 0` — so a run whose screen
+        # capture never started satisfied `recordings > 0`, and the video half of the UI gate was
+        # met by a record stating the video is missing. The floor is deliberately tiny: it rejects
+        # an empty or truncated file without pretending to judge what is IN the frames.
+        "recordings": sum(1 for r in recs
+                          if r["kind"] == "recording"
+                          and r.get("exists")
+                          and (r.get("bytes") or 0) >= MIN_RECORDING_BYTES),
+        "recordings_missing_or_empty": sum(1 for r in recs
+                                           if r["kind"] == "recording"
+                                           and (not r.get("exists")
+                                                or (r.get("bytes") or 0) < MIN_RECORDING_BYTES)),
         "operations_driven": sum(1 for r in recs if r["kind"] == "operation"),
         # A subject must be a non-empty STRING. `not v.get("subject")` alone accepted True, a
         # dict, or any other truthy object as a name.
@@ -1553,6 +1571,7 @@ _REQUIRED_SUMMARY_KEYS = (
     "captures", "captures_unsettled", "captures_straddling_displays",
     "restorations_failed", "cached_reads_used_as_live",
     "visual_assertions", "visual_failed", "visual_assertions_without_a_subject",
+    "recordings_missing_or_empty",
     "recordings", "declared_surface",
 )
 
@@ -1659,6 +1678,10 @@ def is_clean(summary):
         and summary["restorations_failed"] == 0
         and summary["cached_reads_used_as_live"] == 0
         and summary["visual_assertions_without_a_subject"] == 0
+        # A recording record whose own fields say the file is absent or empty. Counted separately
+        # from `recordings` so the document says WHICH failure happened: a run that never started a
+        # recording reports `recordings: 0`, and a run whose recording failed reports the gap.
+        and summary.get("recordings_missing_or_empty", 0) == 0
     )
 
 

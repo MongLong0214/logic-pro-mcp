@@ -27,6 +27,9 @@ GOOD = {
     "visual_assertions": 1, "visual_failed": 0, "visual_assertions_without_a_subject": 0,
     "declared_surface": None,
     "recordings": 1,
+    # Added with the rule that a recording whose file is absent or a stub does not count as one.
+    # `is_clean` refuses a summary missing any dimension it reads, so this fixture carries it.
+    "recordings_missing_or_empty": 0,
     # #797. Absent is not False here either: every fixture below inherits this, and a run that
     # never recorded the session state is one that cannot say it read an application it could see.
     "screen_locked": False,
@@ -765,3 +768,43 @@ for why, ok in shapes:
 E.blocking_modal = _headless_blocking_modal
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)
+
+
+# A RECORDING THAT IS NOT THERE IS NOT A RECORDING. `recordings` counted every `recording` record,
+# including one whose own fields said `exists: False, bytes: 0` — so a run whose screen capture never
+# started still satisfied the UI gate's "recordings > 0", and the video requirement was met by a
+# record stating the video was missing.
+def _summary_for(**kw):
+    d = {k: 0 for k in E._REQUIRED_SUMMARY_KEYS}
+    d.update(dict(checks=1, passed=1, screen_locked=False, declared_surface="ui",
+                  captures=1, visual_assertions=1, recordings=1, operations_driven=1,
+                  checks_with_a_counterexample=1, mutation_claimed=1))
+    d.update(kw)
+    return d
+
+for kw, want, why in [
+    ({}, True, "a healthy UI run is clean"),
+    ({"recordings": 0, "recordings_missing_or_empty": 1}, False,
+     "a recording whose file is absent does not satisfy `recordings > 0`"),
+    ({"recordings_missing_or_empty": 1}, False,
+     "an empty recording invalidates the run even beside a good one"),
+]:
+    got = E.is_clean(_summary_for(**kw))
+    ok = got is want
+    print(f"{'ok  ' if ok else 'FAIL'} {why} -> is_clean={got}")
+    if not ok:
+        FAILURES.append(why)
+
+# And the counter itself: a record that exists but is a stub must not be counted as a recording.
+_root = _tempfile.mkdtemp()
+_ev = E.Evidence("d" * 40, _root)
+_stub = os.path.join(_ev.dir, "stub.mov")
+open(_stub, "wb").write(b"0" * 10)          # a container header and nothing else
+_ev.recording(_stub)
+_ev.recording(os.path.join(_ev.dir, "never-written.mov"))
+_s = _ev._summary({})
+ok = _s["recordings"] == 0 and _s["recordings_missing_or_empty"] == 2
+print(f"{'ok  ' if ok else 'FAIL'} a stub and a missing file both count as missing -> "
+      f"recordings={_s['recordings']} missing={_s['recordings_missing_or_empty']}")
+if not ok:
+    FAILURES.append("stub/missing recordings were counted as recordings")
