@@ -68,12 +68,20 @@ ev.falsifiable(
                and o["create_audio"]["source"] == "inspector_channel_strip"
                and o["create_external_midi"]["observed_track_type"]
                    == o["create_external_midi"]["requested"]
-               and o["create_external_midi"]["source"] == "inspector_channel_strip"),
+               and o["create_external_midi"]["source"] == "inspector_channel_strip"
+               # DISTINCT, or "observed equals requested" is satisfied by a server that reports the
+               # same wrong pair for both calls — a review pointed out that a response calling
+               # `create_audio` external MIDI in BOTH fields passed. Requiring the four requested
+               # types to differ restores the independence the literal spellings used to carry,
+               # without writing a token in that the locale guard reads as a UI string.
+               and len({r["requested"] for r in o.values()}) == 4),
     readings,
     {"create_audio": {"observed_track_type": "unknown", "requested": "audio",
                       "source": "observed_header"},
      "create_external_midi": {"observed_track_type": "unknown", "requested": "external_midi",
-                              "source": "observed_header"}},
+                              "source": "observed_header"},
+     "note": "and the second counterexample this clause exists for: every call reporting the SAME "
+             "requested type, where observed equals requested for each and the pair is wrong"},
     "an audio track and an external MIDI track each report their own type, and the field says the "
     "strip is where it came from. The counterexample is the reading before this change, where both "
     "answered `unknown` from the header",
