@@ -67,7 +67,13 @@ import sys
 # defect was fixed, which is the only direction it is allowed to move. The check fails when the
 # count comes in UNDER budget too, on purpose: ground gained and not recorded is ground that the
 # next change can quietly give back.
-BLIND_SITE_BUDGET = 55
+# 55 -> 48 (2026-09-09, #766). NOT eight sites converted: the DETECTOR changed. It read
+# `if xs.count == 1 { return xs[0] }` as a blind reduction, when a reduction guarded by a count is
+# exactly the property this census exists to establish — so eight sites that already said how many
+# candidates they had were being reported as if they did not. The bar falls to the truth, and the
+# header's own warning applies to the direction it fell from: a detector blind to a spelling is a
+# census of the spelling, not of the defect.
+BLIND_SITE_BUDGET = 48
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 
@@ -105,7 +111,21 @@ def blind_sites(root):
                             window,
                         )
                     )
-                    if re.search(r"\)\s*\.first\b", window) or reduced_by_name:
+                    # A reduction GUARDED BY A COUNT is not a blind lookup: `if xs.count == 1 {
+                    # return xs[0] }` returns an element only when the candidate set has exactly one
+                    # member, which is the property this census exists to establish. Without this the
+                    # detector reported the counted spelling as blind — a census of the spelling
+                    # rather than of the defect, which is the failure this file's own header names.
+                    # Added 2026-09-09 for `soleInspectorStrip`, whose lookup matches on AXHelp and
+                    # therefore cannot go through `censusDescendant` (that helper reads title and
+                    # description only).
+                    counted = bool(
+                        bound and re.search(
+                            r"\b" + re.escape(bound.group(1)) + r"\s*\.count\s*==\s*1\b", window)
+                    )
+                    if counted:
+                        pass
+                    elif re.search(r"\)\s*\.first\b", window) or reduced_by_name:
                         out.append((path, i + 1, "findAllDescendants(...) reduced to one"))
                     elif re.search(r"\bfor\b[^\n]*\{", window) and re.search(r"\breturn\b", window):
                         # `for candidate in … { if matches { return candidate } }` is the same

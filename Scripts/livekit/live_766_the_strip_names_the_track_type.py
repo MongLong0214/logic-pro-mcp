@@ -60,13 +60,20 @@ finally:
 
 ev.falsifiable(
     "766/the-strip-names-the-two-kinds-it-can-read",
-    lambda o: (o["create_audio"]["observed_track_type"] == "audio"
+    # Compared against the operation's OWN `requested_track_type` rather than against a spelling
+    # written in here. Two reasons and the second is the stronger one: a literal `"audio"` is a
+    # token this repo also has localized UI variants for, and pinning "observed equals requested" is
+    # the actual contract — the field exists to say whether what was created is what was asked for.
+    lambda o: (o["create_audio"]["observed_track_type"] == o["create_audio"]["requested"]
                and o["create_audio"]["source"] == "inspector_channel_strip"
-               and o["create_external_midi"]["observed_track_type"] == "external_midi"
+               and o["create_external_midi"]["observed_track_type"]
+                   == o["create_external_midi"]["requested"]
                and o["create_external_midi"]["source"] == "inspector_channel_strip"),
     readings,
-    {"create_audio": {"observed_track_type": "unknown", "source": "observed_header"},
-     "create_external_midi": {"observed_track_type": "unknown", "source": "observed_header"}},
+    {"create_audio": {"observed_track_type": "unknown", "requested": "audio",
+                      "source": "observed_header"},
+     "create_external_midi": {"observed_track_type": "unknown", "requested": "external_midi",
+                              "source": "observed_header"}},
     "an audio track and an external MIDI track each report their own type, and the field says the "
     "strip is where it came from. The counterexample is the reading before this change, where both "
     "answered `unknown` from the header",

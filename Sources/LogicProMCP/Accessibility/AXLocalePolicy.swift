@@ -102,6 +102,21 @@ enum AXLocalePolicy {
                 haystack.range(of: label, options: [.caseInsensitive]) != nil
             }
         }
+
+        /// True when `haystack` BEGINS with one of the labels.
+        ///
+        /// Separate from `containsAny` because for some elements the phrase appears inside a
+        /// NEIGHBOUR's help as well. Measured in the ko-KR census: the right inspector strip's help
+        /// is `오른쪽 인스펙터 채널 스트립. … 왼쪽 인스펙터 채널 스트립의 출력 …`, which contains the
+        /// LEFT strip's phrase in a later sentence. A locator built on `containsAny` therefore
+        /// accepts the wrong element, and the set that needs this is the one whose name already
+        /// said `Prefix`.
+        func hasPrefixAny(_ haystack: String) -> Bool {
+            let text = haystack.trimmingCharacters(in: .whitespacesAndNewlines)
+            return labels.contains { label in
+                text.range(of: label, options: [.caseInsensitive, .anchored]) != nil
+            }
+        }
     }
 
     struct MenuPath: Sendable, Equatable {
@@ -1425,15 +1440,26 @@ enum AXLocalePolicy {
         rationale: "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier."
     )
 
-    /// en measured 2026-09-09: the inspector's channel strip for the SELECTED track is an
-    /// `AXLayoutItem` whose help begins `Left inspector channel strip`.
+    /// The inspector's channel strip for the SELECTED track: an `AXLayoutItem` whose help BEGINS
+    /// with this phrase. Verbatim from the 2026-09-05 navigation-free censuses:
     ///
-    /// A prefix rather than a substring, because the phrase names the element itself; nothing else
-    /// on the window was observed to carry it.
+    ///     en-US  `Left inspector channel strip. Control the signal of the selected track…`
+    ///     ko-KR  `왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다.`
+    ///     ja-JP  `インスペクタの左チャンネルストリップ. 選択したトラックの信号をコントロールします。`
+    ///
+    /// A PREFIX and not a substring, and the ko-KR census is why that distinction is load-bearing
+    /// rather than tidy. The RIGHT strip's help reads
+    /// `오른쪽 인스펙터 채널 스트립. … 왼쪽 인스펙터 채널 스트립의 출력 채널 스트립을 표시합니다.` —
+    /// it CONTAINS the left strip's phrase in a later sentence, so a substring match selects the
+    /// wrong element. Found by review 2026-09-09, after the first version of this set matched by
+    /// substring while calling itself a prefix.
+    ///
+    /// Note the Japanese word order: the modifier follows the noun, so the phrase is not a
+    /// translation of the English one and could not have been derived from it.
     static let inspectorChannelStripHelpPrefix = LabelSet(
         canonical: "left inspector channel strip",
-        variants: [],
-        rationale: "Identifies the inspector's channel strip for the selected track; read-only locator."
+        variants: ["왼쪽 인스펙터 채널 스트립", "インスペクタの左チャンネルストリップ"],
+        rationale: "Identifies the inspector's channel strip for the selected track; read-only locator. Matched as a PREFIX: the right inspector strip's help contains the left strip's phrase in a later sentence (ko-KR census 2026-09-05), so a substring match selects the wrong element."
     )
 
     /// en measured 2026-09-09 on an `create_external_midi` track (`Off 1`): its strip has NO

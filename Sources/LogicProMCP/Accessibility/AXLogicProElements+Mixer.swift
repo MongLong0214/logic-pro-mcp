@@ -414,11 +414,25 @@ extension AXLogicProElements {
         guard case let .success(children) = AXHelpers.childrenResult(strip, runtime: runtime) else {
             return nil
         }
-        return children.compactMap { child -> String? in
-            let help = AXHelpers.getHelp(child, runtime: runtime) ?? ""
-            guard let dot = help.firstIndex(of: ".") else { return nil }
-            return String(help[help.startIndex..<dot]).lowercased()
+        var kinds: [String] = []
+        for child in children {
+            // A help read that FAILED is not a child without help. Flattening both to "" made a
+            // present output slot whose label could not be read look like "no output slot", and the
+            // external-MIDI clause is phrased as an absence — so an unreadable label could produce a
+            // confident `externalMIDI`. A readable child LIST does not prove every child's label was
+            // read. Found by review 2026-09-09.
+            let read: Result<String?, AXHelpers.AXStatusError> =
+                AXHelpers.getAttributeResult(child, kAXHelpAttribute as String, runtime: runtime)
+            switch read {
+            case .failure:
+                return nil
+            case let .success(value):
+                let help = value ?? ""
+                guard let dot = help.firstIndex(of: ".") else { continue }
+                kinds.append(String(help[help.startIndex..<dot]).lowercased())
+            }
         }
+        return kinds
     }
 
     /// What the SELECTED track's inspector channel strip says the track is (#766).
@@ -439,12 +453,31 @@ extension AXLogicProElements {
     /// this refuses on `nil` instead of reading it as "no output slot".
     static func inspectorStripReading(
         expectedName: String,
+        settleAttempts: Int = 20,
+        settleInterval: useconds_t = 50_000,
         runtime: Runtime = .production
     ) -> StripReading {
         guard let window = mainWindow(runtime: runtime),
               let strip = inspectorChannelStrip(named: expectedName, in: window, runtime: runtime.ax)
         else { return .undetermined }
-        return reading(fromSlotKinds: slotKinds(in: strip, runtime: runtime.ax))
+
+        // TWICE, and they must agree. The strip's NAME can arrive before its SLOTS do — measured
+        // 2026-09-08 and written into `Scripts/observations/reverify-inspector-strip-type-slots.sh`:
+        // the first run after a rebuild put a `Studio Grand` strip in `neither` and the three runs
+        // after it agreed. So settling on the name does NOT close the rebuild race, and a rule read
+        // once off a surface that is still catching up is a reading of the transition rather than of
+        // the state. Found by review 2026-09-09, which cited this project's own note back at it.
+        var previous: [String]?
+        for attempt in 0..<max(1, settleAttempts) {
+            let current = slotKinds(in: strip, runtime: runtime.ax)
+            if let previous, previous == current { return reading(fromSlotKinds: current) }
+            // An unreadable child list is not a state to settle on: it is refused outright rather
+            // than compared against the next read, which could agree with it for the wrong reason.
+            guard current != nil else { return .undetermined }
+            previous = current
+            if attempt + 1 < max(1, settleAttempts) { usleep(settleInterval) }
+        }
+        return .undetermined
     }
 
     /// What a strip's slots amount to (#766).
@@ -470,13 +503,25 @@ extension AXLogicProElements {
     static func reading(fromSlotKinds kinds: [String]?) -> StripReading {
         guard let kinds else { return .undetermined }
         let has = { (set: AXLocalePolicy.LabelSet) in kinds.contains { set.containsAny(in: $0) } }
-        if has(AXLocalePolicy.inputSlotHelpKeyword) { return .type(.audio) }
+
+        // The three signals are COUNTED, not tried in order. Ordering them made source position
+        // decide every shape the census did not sample: the sampled strips are disjoint, so
+        // swapping the first two branches left every fixture green while changing the answer for
+        // any strip carrying both. That is the same defect as the header classifier's
+        // first-match-wins, which is what #766 is about. Found by review 2026-09-09.
+        let inputSlot = has(AXLocalePolicy.inputSlotHelpKeyword)
+        let midiEffectSlot = has(AXLocalePolicy.midiEffectSlotHelpKeyword)
+        let externalMIDIShape = has(AXLocalePolicy.assignControlHelpKeyword)
+            && !has(AXLocalePolicy.outputSlotHelpKeyword)
+
+        let signals = [inputSlot, midiEffectSlot, externalMIDIShape].filter { $0 }.count
+        guard signals == 1 else { return .undetermined }
+
+        if inputSlot { return .type(.audio) }
         // A drummer strip is identical to a software instrument's, so the family is where this
         // stops. Narrowing here is the confident wrong answer #766's first half removed.
-        if has(AXLocalePolicy.midiEffectSlotHelpKeyword) { return .instrumentFamily }
-        if has(AXLocalePolicy.assignControlHelpKeyword),
-           !has(AXLocalePolicy.outputSlotHelpKeyword) { return .type(.externalMIDI) }
-        return .undetermined
+        if midiEffectSlot { return .instrumentFamily }
+        return .type(.externalMIDI)
     }
 
     /// The inspector's channel strip for the SELECTED track, or `nil` (#766).
@@ -493,25 +538,49 @@ extension AXLogicProElements {
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
         // The inspector REBUILDS this strip when the selection changes, and the rebuild is not
-        // finished when the operation that changed the selection returns. Reading once was the
-        // first shape here and it makes the answer a race: the strip still names the previous
-        // track, the name does not agree, and the read degrades to the header's `unknown` —
-        // intermittently, which is worse than never. The census this was derived from waits the
-        // same way and needed one or two polls in practice.
+        // finished when the operation that changed the selection returns. Reading once made the
+        // answer a race: the strip still names the previous track, the name does not agree, and the
+        // read degrades to the header's `unknown` — intermittently, which is worse than never.
         //
-        // Bounded, because the other reason the name never agrees is that it never will: a track
-        // whose name was not live-identity-backed, or two tracks sharing a name. Two seconds and
-        // then the caller keeps whatever the header said.
+        // Bounded, because the other reason the name never agrees is that it never will: a name
+        // that was not live-identity-backed, or two tracks sharing one.
         for attempt in 0..<max(1, settleAttempts) {
-            let items = AXHelpers.findAllDescendants(
-                of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
-            )
-            for item in items {
-                let help = (AXHelpers.getHelp(item, runtime: runtime) ?? "").lowercased()
-                guard AXLocalePolicy.inspectorChannelStripHelpPrefix.containsAny(in: help) else { continue }
-                if AXHelpers.getDescription(item, runtime: runtime) == expected { return item }
+            if let only = soleInspectorStrip(named: expected, in: window, runtime: runtime) {
+                return only
             }
             if attempt + 1 < max(1, settleAttempts) { usleep(settleInterval) }
+        }
+        return nil
+    }
+
+    /// The one inspector strip carrying `expected`, or nil when there is not exactly one.
+    ///
+    /// Split out of the settle loop so the candidate set is counted at one place instead of once
+    /// per attempt — `Scripts/check-ax-locator-census.py` reads the SHAPE of a lookup, and a
+    /// count-and-refuse written inside a loop reads to it as a reduction to the first hit.
+    ///
+    /// EXACTLY ONE, or no answer. Returning the first of several published the OLD track's type
+    /// confidently whenever two tracks share a name — the ticket admitted that identity weakness
+    /// and the code promoted the ambiguous match anyway. Refusing is the rule the rest of this file
+    /// already applies. Found by review 2026-09-09.
+    private static func soleInspectorStrip(
+        named expected: String,
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let matches = AXHelpers.findAllDescendants(
+            of: window, role: kAXLayoutItemRole as String, maxDepth: 8, runtime: runtime
+        ).filter { item in
+            let help = AXHelpers.getHelp(item, runtime: runtime) ?? ""
+            guard AXLocalePolicy.inspectorChannelStripHelpPrefix.hasPrefixAny(help) else {
+                return false
+            }
+            return AXHelpers.getDescription(item, runtime: runtime) == expected
+        }
+        if matches.count == 1 { return matches[0] }
+        if matches.count > 1 {
+            Log.info("soleInspectorStrip: \(matches.count) strips are named \(expected); "
+                + "refusing rather than returning the first in tree order", subsystem: "ax")
         }
         return nil
     }

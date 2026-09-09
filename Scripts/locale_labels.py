@@ -247,6 +247,13 @@ def swift_prefix(repo=REPO):
             names |= set(re.findall(
                 r"AXLocalePolicy\s*\.\s*(\w+)\s*\.matches\((?:[^()]|\([^()]*\))*mode:\s*\.prefix",
                 body, re.S))
+            # `AXLocalePolicy.<name>.hasPrefixAny(<help>)` — the third spelling of an ANCHORED read,
+            # added 2026-09-09 with `inspectorChannelStripHelpPrefix`. Without this the generator saw
+            # no prefix site, declared the label `exact`, and the guard then refused the label's own
+            # provenance for declaring `prefix` — a label read one way and recorded another, which is
+            # the drift this file exists to prevent.
+            names |= set(re.findall(
+                r"AXLocalePolicy\s*\.\s*(\w+)\s*\.hasPrefixAny", body))
     return names
 
 
