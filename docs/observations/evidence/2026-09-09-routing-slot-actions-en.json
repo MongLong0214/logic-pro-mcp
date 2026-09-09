@@ -1,0 +1,31 @@
+{
+ "captured": "2026-09-09",
+ "host": "Logic Pro 12.3 (6674) on macOS 26.6, UI language en, fixture lpm-locale-campaign",
+ "how": "Scripts/livekit/ax_routing_slot_actions.swift — locates the left inspector channel strip; presses the strip's mute button first as a control and requires it to move; then for each routing slot child reads role, AXEnabled, the status of AXUIElementCopyActionNames and the action list, PERFORMS AXPress, and reports the difference in the slot's description, value, child count, the strip's child count, and the set of menu titles the application is showing.",
+ "strip": "Deluxe Classic (software instrument)",
+ "control": {
+  "target": "Mute button, same strip, same instrument",
+  "press": {"rc": 0, "value_before": "off", "value_after": "on", "changed": true},
+  "restore": {"rc": 0, "value_before": "on", "value_after": "off", "changed": true},
+  "why": "AXPress is not inert on this strip and this signature can see it work, so a routing slot that does not change is a fact about the slot rather than about the probe."
+ },
+ "slots": [
+  {"help_prefix": "Output slot", "role": "AXButton", "ax_enabled": false,
+   "action_names_status": 0, "actions": ["AXPress"],
+   "press": {"rc": 0, "changed": false, "menus_appeared": [],
+     "signature_before": "desc=Stereo Output|value=nil|children=0|stripChildren=19",
+     "signature_after": "desc=Stereo Output|value=nil|children=0|stripChildren=19"}},
+  {"help_prefix": "Send slot", "role": "AXButton", "ax_enabled": false,
+   "action_names_status": 0, "actions": ["AXPress"],
+   "press": {"rc": 0, "changed": false, "menus_appeared": [],
+     "signature_before": "desc=send button|value=nil|children=0|stripChildren=19",
+     "signature_after": "desc=send button|value=nil|children=0|stripChildren=19"}}
+ ],
+ "return_code_is_not_stable": {
+  "note": "One run out of four returned -25204 (kAXErrorCannotComplete) for the Output slot; the other three returned 0 for both slots, and every run observed no change. The return code is therefore not the finding — the absence of an effect is.",
+  "observed": [-25204, 0, 0, 0]
+ },
+ "same_wall_on_neighbouring_slots": {
+  "note": "Aimed at two other buttons of the same strip on the same day, the identical instrument reported rc=0 with no change: the Group slot (AXPopUpButton, actions [AXPress]) and the Audio Effect slot (AXButton, actions [AXPress, a legacy plug-in menu action]). Recorded because it says the wall is not specific to routing, but these are not the record's subject and the reverify script does not gate on them."
+ }
+}
