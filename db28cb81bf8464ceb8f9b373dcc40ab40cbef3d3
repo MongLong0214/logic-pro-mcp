@@ -1,0 +1,9 @@
+Limit: the judgement is by NAME, over one locale and one preset; a command whose name does not say it moves a track would be missed
+Ruled-out: build anchor-based track reorder on a key command | none of the 2203 key commands moves a track's position; every near match is automation, a marquee selection, a take, regions, or the selection extent
+Ruled-out: use Sort Tracks as a control for the census | it is a submenu parent rather than a command and is genuinely absent from the assignment list
+Warn: this says no KEY COMMAND exists, not that no route exists - drag is a route this project declines because it needs screen coordinates
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-1de2a0677663
+Provenance: inherited 7d1490f71103062250c4bfb62cf190a80d17e494
