@@ -197,7 +197,27 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(extras: extras))
         }
         extras["rollback_attempted"] = true
-        extras["rollback_succeeded"] = rollback()
+        // #872 — the rollback is CONFIRMED, not assumed. `undoLastLogicAction` posts a Cmd+Z and
+        // returns true unconditionally, so reporting its return value meant `rollback_succeeded`
+        // said "a key event was posted" rather than "the insert was undone". A rollback is what a
+        // caller trusts when a verified write fails its readback; one that cannot fail is worse
+        // than none, because the envelope says the project was put back when nobody looked.
+        //
+        // The slot is the readback this operation already has. After the undo it is re-read: the
+        // insert is undone when the slot no longer carries the plug-in that was just put there.
+        // That is an observation of the world, and it can say no.
+        let rollbackPosted = rollback()
+        let slotAfterRollback = await pollPluginSlotName(
+            track: track,
+            slot: slotIndex,
+            runtime: runtime,
+            timeoutMs: readbackTimeoutMs
+        )
+        let rolledBack = slotAfterRollback.map { !spec.matches($0) } ?? true
+        extras["rollback_action_posted"] = rollbackPosted
+        extras["rollback_observed_plugin_name"] = slotAfterRollback ?? NSNull()
+        extras["rollback_verify_source"] = "ax_plugin_slot"
+        extras["rollback_succeeded"] = rolledBack
         extras["requested_plugin_name"] = spec.canonicalName
         if observed == nil {
             return .success(HonestContract.encodeStateB(

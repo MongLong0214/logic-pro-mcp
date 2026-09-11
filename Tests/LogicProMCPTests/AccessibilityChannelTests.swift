@@ -4218,6 +4218,73 @@ private final class LockedFlag: @unchecked Sendable {
     #expect(rollbackBox.called)
 }
 
+/// #872 — a rollback that reports success must be able to report failure.
+///
+/// `undoLastLogicAction` posts a Cmd+Z and returns true unconditionally, so `rollback_succeeded`
+/// used to mean "a key event was posted". This drives the case that value existed for: the insert's
+/// own readback failed, the rollback ran, and the plug-in is STILL in the slot afterwards. The
+/// envelope has to say so.
+@Test func testInsertPluginRollbackThatDidNotRollBackIsReportedAsFailed() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let window = builder.element(2)
+    let mixer = builder.element(3)
+    let strip = builder.element(4)
+    let emptyAudioSlot = builder.element(5)
+    let gainGroup = builder.element(6)
+    let bypass = builder.element(7)
+    let open = builder.element(8)
+    let menu = builder.element(9)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [mixer])
+    builder.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    builder.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+    builder.setChildren(mixer, [strip])
+    builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setChildren(strip, [emptyAudioSlot])
+    builder.setAttribute(emptyAudioSlot, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(emptyAudioSlot, kAXDescriptionAttribute as String, "Audio Plugin")
+    builder.setAttribute(emptyAudioSlot, kAXHelpAttribute as String, "Audio effect slot. Insert an audio effect.")
+
+    builder.setAttribute(gainGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(gainGroup, kAXDescriptionAttribute as String, "Gain")
+    builder.setChildren(gainGroup, [bypass, open, menu])
+    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXDescriptionAttribute as String, "Bypass")
+    builder.setAttribute(bypass, kAXValueAttribute as String, 0)
+    builder.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(open, kAXDescriptionAttribute as String, "Open")
+    builder.setAttribute(menu, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(menu, kAXDescriptionAttribute as String, "Menu")
+
+    let result = await AccessibilityChannel.defaultInsertPlugin(
+        params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
+        runtime: builder.makeLogicRuntime(appElement: app),
+        // The insert leaves the slot EMPTY, so the operation's own readback fails and the rollback
+        // path is the one under test.
+        selectPlugin: { _, _, _, _ in .selected(.pressed(leaf: "Stereo")) },
+        // The rollback posts its action and the plug-in appears anyway — a Cmd+Z that went to a
+        // focused plug-in window, or an undo stack whose top was something else. This is the world
+        // the old `return true` could not describe.
+        rollback: {
+            builder.setChildren(strip, [gainGroup])
+            return true
+        },
+        readbackTimeoutMs: 50
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["rollback_attempted"] as? Bool)!)
+    // The action was posted AND the rollback failed. Keeping the two apart is the point: the old
+    // field conflated them, and a caller reading `true` had no way to tell which it meant.
+    #expect((obj["rollback_action_posted"] as? Bool)!)
+    #expect(!((obj["rollback_succeeded"] as? Bool)!))
+    #expect(obj["rollback_observed_plugin_name"] as? String == "Gain")
+    #expect(obj["rollback_verify_source"] as? String == "ax_plugin_slot")
+}
+
 @Test func testAccessibilityChannelAXBackedMixerAndProjectErrorPaths() async {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(320)
