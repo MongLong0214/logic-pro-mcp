@@ -192,10 +192,21 @@ enum AXLocalePolicy {
     /// State C `element_not_found` and opened nothing — on an ENGLISH Logic,
     /// twice, with the window list unchanged across both calls. Logic shows
     /// `Step Input Keyboard`.
+    /// Logic prefixes this item with a VERB that its own label set does not carry. Measured live on
+    /// 2026-09-12, Logic 12.3 (6674), en-US UI: the Window menu offers `Show Step Input Keyboard`,
+    /// and — unlike most show/hide pairs — it reads `Show …` in BOTH states. Clicking it with the
+    /// window already open still closes it, so the verb is not a state readback either.
+    ///
+    /// An `.exact` match on the bare name therefore matched nothing, and `edit.toggle_step_input`
+    /// answered `Window > Step Input Keyboard was not found` on a menu that plainly carries it. The
+    /// path below matches on CONTAINMENT of the measured core string, so the verb may be present or
+    /// absent and may be localized independently of the name — which is what the Korean and
+    /// Japanese forms here already assume, since neither was measured WITH a verb attached.
     static let showStepInputKeyboardMenuItem = LabelSet(
         canonical: "Step Input Keyboard",
         variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
-        rationale: "Native Window-menu toggle used with independent window-state readback."
+        rationale: "Native Window-menu toggle used with independent window-state readback. Matched by "
+            + "containment: Logic prefixes a verb this set does not carry."
     )
 
     /// Japanese measured live 2026-09-06, from Logic's own window list during a toggle:
@@ -1496,7 +1507,8 @@ enum AXLocalePolicy {
     static let hidePluginWindowsMenuPath = MenuPath(bar: windowMenuBar, item: hideAllPluginWindowsMenuItem)
     static let showStepInputKeyboardMenuPath = MenuPath(
         bar: windowMenuBar,
-        item: showStepInputKeyboardMenuItem
+        item: showStepInputKeyboardMenuItem,
+        itemMode: .contains
     )
     static let editUndoMenuPath = MenuPath(bar: editMenuBar, item: undoMenuItemPrefix, itemMode: .prefix)
     // #864 deliberately adds NO Redo label set. A `Redo` prefix would be a second authority claiming
