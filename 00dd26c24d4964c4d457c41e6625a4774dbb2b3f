@@ -1,0 +1,39 @@
+Limit: GitHub performs the squash on its own servers where no local git hook runs, so the prepare-commit-msg hook that covers `git merge --squash` cannot see the merge button at all
+Ruled-out: trigger on pull_request rather than pull_request_target | rejected: a pull request from a fork gets a read-only token on pull_request, so the job would build the record and then fail to publish it
+Warn: pull_request_target runs with a writable token: never check out the pull request's head in this workflow and never execute anything reachable from refs/commitlore/pr-head
+Blast: system
+Undo: easy
+Certainty: firm
+Unverified: this workflow cannot be exercised until a pull request is squash-merged with it on the base branch; nothing here proves it runs, only that its trigger and permissions match the action's documented contract
+Record-Id: r-4b4c32bbe1ea
+Provenance: inherited d93813cab07178e2c560fb695813b8b08f7b4c06
+
+Limit: cli-path is a required input because CommitLore publishes no npm package, so an npx fallback inside a job holding a write token would run whoever registers the unclaimed name
+Ruled-out: pin the action by tag as the README recipe does | rejected: on pull_request_target with contents: write a movable tag is code execution with a write token on every squash merge, and same-owner is not a control because that repository can have different tag protection
+Warn: point cli-path at dist/commitlore.mjs, the bundle, not dist/cli.js; the action's own input description names cli.js and is wrong, while its error message names the bundle and is right
+Blast: system
+Undo: easy
+Certainty: firm
+Unverified: this workflow has never been exercised by an actual squash merge; it cannot be until it is on the base branch, so what is checked is that its pins resolve and its required input is satisfied
+Record-Id: r-4abd3b9d3779
+Provenance: inherited bd1873a94fc60c53ba12005bb2b8b16172aeb299
+
+Limit: the record does not explain the channel-strip routing slots, which open their menus with the focus step removed; those share this failure signature for a different reason, a readback aimed at the slot's own value
+Ruled-out: write the Mute label as an English literal in the probe | rejected: AXLocalePolicy.trackMuteButton carries 음소거 and ミュート, so an English literal would make the probe answer 'no Mute buttons' on a Japanese Logic, which reads as a finding rather than as a blind probe
+Warn: the focused press is this probe's positive control and must stay; without a press that is required to land, 'the unfocused press did nothing' is equally satisfied by an instrument that cannot press at all
+Blast: local
+Undo: easy
+Certainty: firm
+Unverified: what causes focus to sit where it does was not investigated, so this says how to actuate and not how Logic decides
+Record-Id: r-89daf083132a
+Provenance: inherited f2e8f2025ce5457cf19732e74990613805c5c144
+
+Limit: a missing field must never default to a check's success value; ${UNFOCUSED:-0} would have passed a probe that stopped printing the line it exists to read
+Ruled-out: restore the subject with bare presses | rejected: they depend on focus still being where the probe put it, which is the very claim under test, so a restore relying on the claim cannot undo a run that disproved it
+Warn: the restore verdict is read before every other exit, because an INCONCLUSIVE that returns early would otherwise leave the user's project muted and say nothing about it
+Blast: local
+Undo: easy
+Certainty: firm
+Unverified: the track-header help prefix falls back to the English 'Track header' because AXLocalePolicy declares no LabelSet for it; on a non-English Logic the ancestor test would find nothing and the run reports inconclusive rather than measuring the wrong element
+Record-Id: r-106f30044721
+Provenance: inherited f0439281c4dac9a381aa4588ca653d9f2cf1e766
