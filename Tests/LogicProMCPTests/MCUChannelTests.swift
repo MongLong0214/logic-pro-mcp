@@ -279,12 +279,19 @@ import Testing
 
     let staleHealth = await channel.healthCheck()
     #expect(staleHealth.available)
-    #expect(staleHealth.detail.contains("stale"))
     #expect(staleHealth.detail.contains("device registration confirmed"))
 
-    // The detail says THAT feedback is stale, never HOW LONG. `last_feedback_at` carries the age as
-    // a machine field; rendering it here too put one fact in two places and only one of them is
-    // projected away for byte-stability, so the payload kept moving on its own.
+    // #851 — the detail no longer says anything about staleness, in either direction. It used to
+    // say THAT feedback was stale (never how long); that word was a SECOND derivation of a rule the
+    // dispatcher also evaluates, and the two reads could straddle an arriving feedback event and
+    // put a stale word beside a fresh boolean in one payload. It is rendered once now, by the
+    // dispatcher, from the snapshot it publishes.
+    #expect(!staleHealth.detail.contains("stale"))
+    #expect(!staleHealth.detail.contains("feedback active"))
+
+    // No clock in the prose either — the original reason this detail was trimmed. `last_feedback_at`
+    // carries the age as a machine field; rendering it here too put one fact in two places and only
+    // one of them is projected away for byte-stability, so the payload kept moving on its own.
     //
     // Asserted as "no digits" rather than "not (6s)": the defect is a clock in prose, and a reworded
     // "stale for 6 seconds" would pass a check written against the old spelling while being the
@@ -302,8 +309,11 @@ import Testing
 
     let activeHealth = await channel.healthCheck()
     #expect(activeHealth.available)
-    #expect(activeHealth.detail.contains("feedback active"))
     #expect(activeHealth.detail.contains("device registration not confirmed"))
+    // Same connection, opposite staleness — and the detail is UNCHANGED except for the registration
+    // clause it does own. That is the property #851 needs: nothing in this string moves with the
+    // clock, so it cannot disagree with a boolean taken at another instant.
+    #expect(!activeHealth.detail.contains("stale"))
 }
 
 @Test func testMCUChannelUnknownOperationFails() async {

@@ -369,6 +369,14 @@ struct SystemDispatcher: OperationTraceDispatching {
 
         case "health":
             let report = await router.healthReport()
+            // #851 — ONE reading of MCU staleness for the whole payload. It is taken here, before
+            // the channel rows are built, and the same boolean decides both `mcu.feedback_stale`
+            // below and the clause appended to the MCU channel's `detail`. Previously `healthCheck`
+            // derived the word from its own read of the cache and this block derived the boolean
+            // from a second one, so feedback landing between them produced a document that
+            // contradicted itself with neither field wrong at the instant it was taken.
+            let mcu = await cache.getMCUConnection()
+            let mcuFeedbackStale = mcu.isFeedbackStale()
             var entries: [HealthResponse.ChannelSection] = []
             for (id, health) in report.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
                 entries.append(
@@ -377,13 +385,16 @@ struct SystemDispatcher: OperationTraceDispatching {
                         available: health.available,
                         ready: health.ready,
                         latencyMs: health.latencyMs.map { Double(String(format: "%.1f", $0)) ?? $0 },
-                        detail: health.detail,
+                        detail: id == .mcu
+                            ? health.detail + Self.mcuStalenessClause(
+                                connected: mcu.isConnected, stale: mcuFeedbackStale
+                            )
+                            : health.detail,
                         verificationStatus: health.verificationStatus.rawValue
                     )
                 )
             }
             let snap = await cache.snapshot()
-            let mcu = await cache.getMCUConnection()
             let permissions = PermissionChecker.check()
             let process = ProcessUtils.currentProcessMetrics()
             // Single source of truth shared with `project.is_running` so the
@@ -415,7 +426,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                     connected: mcu.isConnected,
                     registeredAsDevice: mcu.registeredAsDevice,
                     lastFeedbackAt: mcu.lastFeedbackAt,
-                    feedbackStale: mcu.isFeedbackStale(),
+                    feedbackStale: mcuFeedbackStale,
                     portName: mcu.portName,
                     portCensus: .init(
                         state: mcu.portCensus.state.rawValue,
@@ -1307,6 +1318,18 @@ struct SystemDispatcher: OperationTraceDispatching {
     /// the drain's true number alongside the snapshot it corrects. Schema stays
     /// `.v1`: both fields are additive and the tag brands the record shape, so
     /// a consumer branching on it keeps parsing every line.
+    /// #851 — the ONE place MCU staleness becomes prose.
+    ///
+    /// A disconnected port is not stale under the rule (`isFeedbackStale` returns false when
+    /// `isConnected` is false), and calling it "active" would be worse than saying nothing, so the
+    /// clause is omitted entirely rather than picking one of two wrong words. The caller passes the
+    /// boolean it also published as `mcu.feedback_stale`, so agreement is structural: there is no
+    /// second evaluation that could disagree, and no second clock to disagree by.
+    static func mcuStalenessClause(connected: Bool, stale: Bool) -> String {
+        guard connected else { return "" }
+        return stale ? ", feedback stale" : ", feedback active"
+    }
+
     private static func traceClearReceiptFields(
         traceCountAtReceipt: Int,
         actualClearedCount: Int? = nil

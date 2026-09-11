@@ -167,7 +167,14 @@ import Foundation
     let transport = MockMCUTransport()
     let channel = MCUChannel(transport: transport, cache: cache)
     let health = await channel.healthCheck()
-    #expect(health.detail.contains("stale"))
+
+    // #851 — the channel reports the port, not the clock. Staleness is rendered once, by the
+    // dispatcher, from the same snapshot it publishes as `mcu.feedback_stale`; asserting it here
+    // was asserting a SECOND derivation, which is the defect. The detection this test names still
+    // has a subject: the cached state the dispatcher would render from.
+    #expect(health.available)
+    #expect(await cache.getMCUConnection().isFeedbackStale())
+    #expect(!health.detail.contains("stale"))
 }
 
 @Test func testDegradedModeNoAXPermission() async {
