@@ -1,0 +1,10 @@
+Limit: folding is only safe while no label set contains two labels differing only by case; the guard asserts that property rather than assuming it
+Ruled-out: keep the probe and the product in sync with a comment | a comment is what failed here, so the check is a guard instead
+Ruled-out: fold user-supplied identifiers too | track names, window titles and plug-in names are the user's data, not policy vocabulary
+Warn: the probe cannot import the product, so this rule is restated - if the product stops lowercasing, the guard fails and BOTH must move together
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no regression run on the Korean fixture live_306 targets; it is inert there by construction because every observed string is Hangul, where folding is the identity
+Record-Id: r-a38363f026e6
+Provenance: inherited 7c71b4a0a6a72328ff7dc76750271a3d7734955d
