@@ -1,0 +1,153 @@
+{
+ "id": "2026-09-11-axpress-focus-en",
+ "probe": "Scripts/livekit/ax_press_focus_probe.swift",
+ "driver": "Scripts/observations/reverify-axpress-focus.sh",
+ "raw_stdout": [
+  "frontmost: com.apple.logic10",
+  "mute labels: Mute|음소거|ミュート",
+  "mute buttons: 19",
+  "focused mute buttons: 1",
+  "unfocused press actuated: 0",
+  "focus set rc: 0",
+  "focus took: 1",
+  "focused press actuated: 1",
+  "restored: 1"
+ ],
+ "parsed": {
+  "frontmost": "com.apple.logic10",
+  "mute labels": "Mute|음소거|ミュート",
+  "mute buttons": "19",
+  "focused mute buttons": "1",
+  "unfocused press actuated": "0",
+  "focus set rc": "0",
+  "focus took": "1",
+  "focused press actuated": "1",
+  "restored": "1"
+ },
+ "discriminator_sweep": {
+  "note": "the run that FOUND the discriminator, before the probe above existed",
+  "mute_buttons": 19,
+  "all_identical_on": [
+   "AXRole",
+   "AXDescription",
+   "AXEnabled",
+   "actionNames",
+   "AXValue",
+   "attributeNameCount"
+  ],
+  "attribute_name_count": 16,
+  "pressed_individually": [
+   {
+    "index": 0,
+    "rc": 0,
+    "value": "0 -> 0"
+   },
+   {
+    "index": 1,
+    "rc": 0,
+    "value": "0 -> 0"
+   },
+   {
+    "index": 2,
+    "rc": 0,
+    "value": "0 -> 0"
+   },
+   {
+    "index": 3,
+    "rc": 0,
+    "value": "0 -> 0"
+   },
+   {
+    "index": 4,
+    "rc": 0,
+    "value": "0 -> 0"
+   },
+   {
+    "index": 5,
+    "rc": 0,
+    "value": "0 -> 1",
+    "restored": "1 -> 0"
+   }
+  ],
+  "settle_probe": {
+   "index": 1,
+   "reads_every_500ms_for_4s": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "attribute_diff_live_vs_inert": {
+   "AXFocused": {
+    "live": 1,
+    "inert": 0
+   },
+   "AXFrame": {
+    "live": "x:701 y:487",
+    "inert": "x:701 y:227"
+   },
+   "AXPosition": {
+    "live": "x:701 y:487",
+    "inert": "x:701 y:227"
+   }
+  },
+  "parents": {
+   "live": "Track 29 “Deluxe Classic”",
+   "inert": "Track 25 “Audio 1”"
+  }
+ },
+ "negative_results_elsewhere_same_session": {
+  "channel_strip_slots_without_focus_step": [
+   {
+    "slot": "Group slot",
+    "role": "AXPopUpButton",
+    "enabled": false,
+    "focus_took": false,
+    "press_rc": -25204,
+    "ax_menu": "0 -> 1"
+   },
+   {
+    "slot": "Output slot",
+    "role": "AXButton",
+    "enabled": false,
+    "focus_took": false,
+    "press_rc": -25204,
+    "ax_menu": "0 -> 12"
+   },
+   {
+    "slot": "Audio Effect slot",
+    "role": "AXButton",
+    "enabled": false,
+    "focus_took": true,
+    "press_rc": -25204,
+    "ax_menu": "0 -> 172"
+   }
+  ],
+  "compressor_native_editor_slider": {
+   "set_focused_rc": 0,
+   "focused_after": false,
+   "value_write_unfocused": {
+    "target": 220.0,
+    "before": 200.0,
+    "after": 200.0
+   },
+   "value_write_focused": {
+    "target": 220.0,
+    "before": 200.0,
+    "after": 200.0
+   }
+  },
+  "track_header_volume_slider": {
+   "target": 172.85,
+   "before": 173.0,
+   "after": 172.0,
+   "focused": false,
+   "restored": 173.0
+  }
+ }
+}
