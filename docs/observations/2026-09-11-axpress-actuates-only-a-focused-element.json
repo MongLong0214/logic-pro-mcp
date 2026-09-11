@@ -1,0 +1,126 @@
+{
+  "id": "2026-09-11-axpress-actuates-only-a-focused-element",
+  "schema": 2,
+  "date": "2026-09-11",
+  "subject": "AXPress on arrange track-header buttons, and whether AXFocused gates it",
+  "question": "Does AXPress actuate an unfocused arrange track-header button?",
+  "verdict": "partial",
+  "issues": [
+    854,
+    291
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-axpress-focus.sh",
+    "expected": "an unfocused track-header Mute press actuates nothing; the same element actuates once AXFocused is set, and the value is restored",
+    "cost": "needs Logic open on a project with track headers in view; ~10 s"
+  },
+  "evidence": [
+    "evidence/2026-09-11-axpress-focus-en.json"
+  ],
+  "depends": [],
+  "method": "Logic activated and the frontmost bundle id printed in the same run, because a non-key window answers AXPress with kAXErrorCannotComplete and changes nothing -- a third way to produce this record's failure signature. All windows walked to depth 13; every AXCheckBox described `Mute` collected. One unfocused, unmuted subject pressed once; then AXFocused set and the same element pressed again; then restored by pressing until the original value returned. The second press is the run's POSITIVE CONTROL: without a press that is required to land, `the unfocused press did nothing` is equally satisfied by an instrument that cannot press at all. NOT done: no attempt to determine what gives focus in Logic's own UI, no measurement on any surface other than arrange track headers, and no test of whether focus persists across a window change.",
+  "observations": [
+    {
+      "reading": "track-header Mute buttons found",
+      "value": 19
+    },
+    {
+      "reading": "of those carrying AXFocused=true",
+      "value": 1
+    },
+    {
+      "reading": "attributes that differ between a live and an inert Mute",
+      "value": [
+        "AXFocused",
+        "AXFrame",
+        "AXPosition"
+      ]
+    },
+    {
+      "reading": "attribute names on each",
+      "value": 16
+    },
+    {
+      "reading": "AXEnabled on every Mute",
+      "value": true
+    },
+    {
+      "reading": "action names on every Mute",
+      "value": [
+        "AXPress"
+      ]
+    },
+    {
+      "reading": "unfocused press, rc",
+      "value": 0
+    },
+    {
+      "reading": "unfocused press, value change",
+      "value": "0 -> 0"
+    },
+    {
+      "reading": "unfocused press repeated, whether it took focus",
+      "value": false
+    },
+    {
+      "reading": "unfocused press held under repeated reads for 4s",
+      "value": "0 -> 0"
+    },
+    {
+      "reading": "set AXFocused, rc",
+      "value": 0
+    },
+    {
+      "reading": "set AXFocused, whether it took",
+      "value": true
+    },
+    {
+      "reading": "focused press, value change",
+      "value": "0 -> 1"
+    },
+    {
+      "reading": "focused press again, value change",
+      "value": "1 -> 0"
+    },
+    {
+      "reading": "individually pressed Mutes that actuated, before focus was understood",
+      "value": "1 of 6"
+    },
+    {
+      "reading": "channel-strip slots: whether removing the focus step changed the outcome",
+      "value": false
+    },
+    {
+      "reading": "Compressor native-editor slider, set AXFocused result",
+      "value": "rc=0, focused stayed false"
+    },
+    {
+      "reading": "Compressor native-editor slider, AXValue write with and without focus",
+      "value": "200.0 -> 200.0, target 220.0"
+    },
+    {
+      "reading": "track-header Volume slider, AXValue write without focus",
+      "value": "173.0 -> 172.0, target 172.85"
+    }
+  ],
+  "conclusion": "AXPress actuates an arrange track-header button only while that element carries AXFocused. Pressing an unfocused one returns rc=0, changes nothing, and does not take focus; setting AXFocused first makes the identical press land, and pressing again reverses it. Nineteen such buttons are indistinguishable by role, description, AXEnabled, action names, value, ancestors and attribute-name set, so nothing a census reads separates the one that works from the eighteen that do not.",
+  "limits": [
+    "measured on arrange track-header Mute buttons only; no other role or surface was tested this way",
+    "does NOT explain the channel-strip routing slots, which were measured in the same session to open their menus with the focus step removed -- those share this failure signature for a different reason, namely a readback aimed at the slot's own value",
+    "does NOT apply to plug-in editor sliders: a Compressor native-editor slider refuses AXFocused outright (rc=0, focused stayed false) and takes no AXValue write either way",
+    "does NOT generalise to all sliders: a track-header Volume slider accepts writes with no focus at all, quantised to integers",
+    "what CAUSES focus to sit where it does was not investigated, so this says how to actuate, not how Logic decides",
+    "Logic's UI locale was en-US for this run -- every label read was English -- while the host block records the machine locale ko-KR, which the schema does not treat as a drift axis",
+    "one run on one host; no second machine, no other Logic build"
+  ],
+  "supersedes": null
+}
