@@ -1,0 +1,230 @@
+{
+ "id": "2026-09-11-mcu-surface-was-never-installed-en",
+ "subject": "#856 — whether the MCU plane can carry plug-in parameters, and what the host state actually was",
+ "IMPORTANT": "This file contains measurements from TWO DIFFERENT HOST STATES. Logic had NO control surface installed until 2026-09-11, when one was installed during this investigation. Readings from before and after are not comparable and are kept apart for that reason.",
+ "host_state_A_no_control_surface": {
+  "what_was_true": {
+   "control_surface_setup_device_table_rows": 0,
+   "device_field": "No Device",
+   "elements_mentioning_mackie_or_logicpromcp": 0,
+   "note": "the product still reported mcu.connected=true and registered_as_device=true"
+  },
+  "runs": {
+   "assignment_mode_switch": {
+    "spike": "856-mcu-plugin-mode",
+    "phases": {
+     "baseline": {
+      "rx_frames": 111,
+      "vpot": {
+       "0x30": 86,
+       "0x31": 86,
+       "0x32": 86,
+       "0x33": 86,
+       "0x34": 86,
+       "0x35": 86,
+       "0x36": 86,
+       "0x37": 86
+      },
+      "lcd": []
+     },
+     "control_transport": {
+      "new_rx_frames": 4,
+      "sample": [
+       "90 5e 7f",
+       "90 5d 00",
+       "90 5d 7f",
+       "90 5e 00"
+      ]
+     },
+     "switch_response": {
+      "state": "B",
+      "spike_mode": "plugin",
+      "spike_note": 43,
+      "spike_sent": true,
+      "error": null,
+      "hint": null
+     },
+     "after_plugin_switch": {
+      "new_rx_frames": 0,
+      "vpot": {},
+      "lcd": []
+     },
+     "after_restore": {
+      "new_rx_frames": 0,
+      "vpot": {},
+      "lcd": []
+     }
+    },
+    "control_logic_answers_our_sends": true,
+    "switch_command_succeeded": true,
+    "restore_command_succeeded": true,
+    "control_baseline_had_vpots": true,
+    "vpots_arrived_after_switch": false,
+    "values_differ_from_baseline": true,
+    "verdict": "NOT-MAPPED"
+   },
+   "which_buttons_logic_answers": {
+    "probe": "856-mcu-which-buttons-does-logic-answer",
+    "baseline_frames": 111,
+    "baseline_sysex_events": 49,
+    "buttons": {
+     "select_ch2": {
+      "note": "0x19",
+      "sent": true,
+      "rx_frames": 0,
+      "sysex_events": 0,
+      "answered": false,
+      "sample": []
+     },
+     "channel_right": {
+      "note": "0x31",
+      "sent": true,
+      "rx_frames": 0,
+      "sysex_events": 0,
+      "answered": false,
+      "sample": []
+     },
+     "assign_plugin": {
+      "note": "0x2b",
+      "sent": true,
+      "rx_frames": 0,
+      "sysex_events": 0,
+      "answered": false,
+      "sample": []
+     },
+     "assign_pan": {
+      "note": "0x2a",
+      "sent": true,
+      "rx_frames": 0,
+      "sysex_events": 0,
+      "answered": false,
+      "sample": []
+     }
+    },
+    "baseline_has_assign_led": true,
+    "all_sent_correctly": true,
+    "verdict": "SURFACE-IGNORES-ALL-NOTES"
+   },
+   "do_our_notes_reach_logic": {
+    "probe": "856-do-our-notes-reach-logic",
+    "before": "Track 1 “Absolute Zero”",
+    "after_select_strip0": {
+     "note": "0x18",
+     "sent": true,
+     "selected": "Track 32 “Deluxe Classic”"
+    },
+    "selection_moved": true,
+    "verdict": "NOTES-REACH-LOGIC"
+   },
+   "does_any_mcu_write_reach_logic": {
+    "probe": "856-does-any-mcu-write-reach-logic",
+    "set_0.70": {
+     "state": "B",
+     "success": true,
+     "verified": false,
+     "error": null,
+     "hint": null,
+     "readback_source": "mcu_echo",
+     "observed": null
+    },
+    "set_0.75": {
+     "state": "B",
+     "success": true,
+     "verified": false,
+     "error": null,
+     "hint": null,
+     "readback_source": "mcu_echo",
+     "observed": null
+    },
+    "any_state_A": false
+   },
+   "selection_readback_control": {
+    "probe": "856-selection-readback-control",
+    "before": "Track 1 “Absolute Zero”",
+    "ax_select_response": {
+     "state": "A",
+     "success": true,
+     "verified": true,
+     "error": null,
+     "hint": null
+    },
+    "after_ax_select": "Track 25 “Audio 1”",
+    "readback_can_see_a_change": true,
+    "verdict": "READBACK-WORKS"
+   }
+  },
+  "conclusion": "Nothing this product sent on the MCU port reached Logic: four button classes produced no effect and no echo, and a fader write produced no echo, while an AX selection readback moved in the same run. The cause was not the plug-in mode and not the protocol - there was no surface to receive anything."
+ },
+ "change_made": {
+  "when": "2026-09-11",
+  "what": [
+   "installed 'Mackie Control' (Loud Technologies / Mackie, profile 'Logic Control', 2.61r0)",
+   "Output Port: Off -> LogicProMCP-MCU-Internal",
+   "Input Port: 'Invalid Port' -> LogicProMCP-MCU-Internal"
+  ],
+  "mistake_and_repair": "The first Add installed 'Recording Light' because setting AXSelected on a row did not move the table's real selection and Add used the unfiltered first row. It was deleted (the device table was verified empty beforehand, so the delete restored the found state) and the target was then isolated with the search field.",
+  "note_on_ports": "The product's virtual endpoints exist only while the server runs, so LogicProMCP-MCU-Internal is absent from Logic's port popups when it is not. The Input Port read 'Invalid Port' before binding, which is what a persisted binding to a vanished endpoint looks like."
+ },
+ "host_state_B_mackie_control_bound": {
+  "do_our_notes_reach_logic": {
+   "mcu_select_strip0": "selection moved Track 1 -> Track 32",
+   "verdict": "NOTES-REACH-LOGIC"
+  },
+  "plugin_assignment_mode": {
+   "vpot_baseline_pan": {
+    "0x30": 86,
+    "0x31": 86,
+    "0x32": 86,
+    "0x33": 86,
+    "0x34": 86,
+    "0x35": 86,
+    "0x36": 86,
+    "0x37": 86
+   },
+   "vpot_after_plugin_switch": {
+    "0x30": 1,
+    "0x31": 1,
+    "0x32": 1,
+    "0x33": 5,
+    "0x34": 5,
+    "0x35": 5,
+    "0x36": 5,
+    "0x37": 5
+   },
+   "vpot_after_restore_to_pan": {
+    "0x30": 86,
+    "0x31": 86,
+    "0x32": 86,
+    "0x33": 86,
+    "0x34": 86,
+    "0x35": 86,
+    "0x36": 86,
+    "0x37": 86
+   },
+   "sysex_words_after_switch": 28,
+   "verdict": "MAPPED"
+  },
+  "lcd_text": {
+   "probe": "856-does-the-lcd-name-the-parameter",
+   "switch_sent_plugin": true,
+   "sysex_bytes_after_switch": 74,
+   "ascii_after_switch": [
+    "8--     --     --     Cha EQ Cha EQ Cha EQ Cha EQ Cha EQ"
+   ],
+   "ascii_after_restore": [
+    "                                                        Angle  Divers LFE    Spread        CStrip Ang/Dv X/Y   ",
+    "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn 0      0      0      0      0      0      0      0  ",
+    "Pan/Surround parameter: Pa",
+    "StdGrn StdGrn StdGrn StdGr"
+   ],
+   "restored": true
+  },
+  "conclusion": "Plug-in assignment mode remaps the V-Pots and the surface reports it two ways: the LED ring values change and restore, and the LCD names what is being controlled ('Cha EQ' per strip in plug-in mode; pan parameter names and track names in pan mode). The LCD is SysEx, which this product's converter drops whole, so the richer readback is arriving and being discarded."
+ },
+ "limits": [
+  "one host, one project, one Logic version",
+  "the LCD decode is from a THROWAWAY raw-UMP dump added for this investigation; the product cannot read SysEx today",
+  "no plug-in PARAMETER was written through the V-Pots - only the mode switch and its reporting were measured",
+  "every state-A reading in this file predates the surface being installed and describes a host that had none"
+ ]
+}
