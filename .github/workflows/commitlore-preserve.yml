@@ -1,9 +1,9 @@
 name: CommitLore squash inheritance
 
 # This repository merges with the squash button, and GitHub performs that merge on its own servers
-# where no local git hook runs. A squash replaces the branch's commits with one new commit that does
-# not carry their trailers, so without this workflow every decision record made on a branch is
-# dropped by the merge and the author sees a green merge with nothing missing.
+# where no local git hook exists. A squash replaces the branch's commits with one new commit that
+# does not carry their trailers, so without this workflow every decision record made on a branch is
+# dropped at merge time and the author sees a green merge with nothing missing.
 #
 # `commitlore doctor` reported this as off under `squash inheritance`, and separately listed five
 # records on already-merged branches it could no longer find in HEAD's history.
@@ -29,7 +29,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # the merge commit is on the base branch, and a closed pull request has no merge ref
           # left to check out
@@ -45,7 +45,25 @@ jobs:
       - run: git fetch --no-tags --force origin
           '+refs/pull/${{ github.event.pull_request.number }}/head:refs/commitlore/pr-head'
 
-      - uses: MongLong0214/commitlore/action/preserve@v1.2.13
+      # `cli-path` below is a REQUIRED input, and the action says why in its own comment: CommitLore
+      # publishes no npm package, so an `npx` fallback would run whoever registers the unclaimed
+      # name -- inside this job, which holds a write token. So the CLI is checked out explicitly, at
+      # the same commit the action itself is pinned to. `dist/` is committed in that repository
+      # (its ADR-0011), so there is nothing to build here.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: MongLong0214/commitlore
+          ref: 5f9a957173d825e36e1f39b895f3dea5384ad75d # v1.2.13
+          path: .commitlore-cli
+          persist-credentials: false
+
+      # Pinning by tag, as the README recipe does, was rejected here. A tag can be moved, and this job runs on
+      # pull_request_target with `contents: write`, so a moved tag would be code execution with a
+      # write token on every squash merge. Same-owner is not a control: that repository can have
+      # different tag protection or collaborators. 5f9a9571 is what v1.2.13 peels to.
+      - uses: MongLong0214/commitlore/action/preserve@5f9a957173d825e36e1f39b895f3dea5384ad75d # v1.2.13
+        with:
+          cli-path: .commitlore-cli/dist/commitlore.mjs
 
 # Two rules for whoever edits this next, because pull_request_target runs with a writable token:
 # never check out the pull request's head here, and never execute anything reachable from
