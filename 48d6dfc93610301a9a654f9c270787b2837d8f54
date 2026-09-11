@@ -1,0 +1,17 @@
+Limit: the predicate stays in TimeInterval rather than deriving from lastFeedbackAgeMs, which truncates to whole milliseconds and would move the boundary for ages in (5.0, 5.001) seconds
+Warn: the two former spellings agreed, so no behaviour test could have separated them; the truth-table rows exist to make the guard and the threshold independently falsifiable
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-87de589c83fd
+Provenance: inherited 7c1baf571adce80f10a8e20175c0a0e8c294ba33
+
+Limit: mcu.feedback_stale and the word in channels[].detail ship in one payload but come from two cache reads (SystemDispatcher.swift:371 and :386), so this harness compares the bit against its own snapshot and never against the prose
+Ruled-out: assert that mcu.feedback_stale matches the word in channels[].detail | that was the first shape tried and it was dropped: the two fields are read from different cache snapshots, so the check would have been green by luck and red on a race
+Warn: the threshold is written out in this file on purpose; importing the product constant would make the oracle agree with any value the product chose, including a wrong one
+Blast: local
+Undo: easy
+Certainty: firm
+Unverified: this harness would have passed before the staleness unification, because the two former spellings agreed; it pins the exposed rule, it does not witness the refactor
+Record-Id: r-abb8633b9e67
+Provenance: inherited c347a087b51f3ec2d1e6a9332d714c807b228b20
