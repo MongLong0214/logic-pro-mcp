@@ -195,8 +195,14 @@ extension ChannelRouter {
         "nav.set_zoom_level":         [.accessibility, .midiKeyCommands, .cgEvent],
 
         // Editing — MIDIKeyCommands primary, CGEvent fallback
-        "edit.undo":                  [.midiKeyCommands, .cgEvent],
-        "edit.redo":                  [.midiKeyCommands, .cgEvent],
+        // #864 — AX FIRST. The MIDI key-command rung sends CC 30/31 on channel 16, which does
+        // nothing unless the operator bound it in Controller Assignments, and because a send-only
+        // channel succeeds at the wire the `.cgEvent` rung behind it was never reached. Measured:
+        // two inserted plug-ins survived two `edit.undo` calls that each answered success. The AX
+        // path presses Logic's own Edit-menu entry and reads the entry back, so it is the only rung
+        // that can report what it did.
+        "edit.undo":                  [.accessibility, .midiKeyCommands, .cgEvent],
+        "edit.redo":                  [.accessibility, .midiKeyCommands, .cgEvent],
         "edit.cut":                   [.midiKeyCommands, .cgEvent],
         "edit.copy":                  [.midiKeyCommands, .cgEvent],
         "edit.paste":                 [.midiKeyCommands, .cgEvent],

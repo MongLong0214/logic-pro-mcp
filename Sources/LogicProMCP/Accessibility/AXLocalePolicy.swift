@@ -1499,6 +1499,11 @@ enum AXLocalePolicy {
         item: showStepInputKeyboardMenuItem
     )
     static let editUndoMenuPath = MenuPath(bar: editMenuBar, item: undoMenuItemPrefix, itemMode: .prefix)
+    // #864 deliberately adds NO Redo label set. A `Redo` prefix would be a second authority claiming
+    // the row can be found by its wording, and the measurement says it cannot: with an empty stack
+    // Logic writes `Can't Undo`, which the prefix misses, and three Edit-menu titles carry the undo
+    // word. `AccessibilityChannel.editStackEntry` finds the row by its SHORTCUT instead, and the
+    // menu-bar item above is the only part of that path the wording still decides.
 
     /// #304: the complete, measured application-menu path. This deliberately does not name the
     /// six disabled region-tempo actions or `Open Smart Tempo Editor`: neither surface was opened

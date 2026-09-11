@@ -332,6 +332,11 @@ actor AccessibilityChannel: Channel {
         case "edit.toggle_step_input":
             return runtime.toggleStepInputKeyboard()
 
+        case "edit.undo":
+            return await AccessibilityChannel.defaultUndoOrRedo(redo: false)
+        case "edit.redo":
+            return await AccessibilityChannel.defaultUndoOrRedo(redo: true)
+
         case "transport.play":
             return runtime.toggleTransportButton("Play")
         case "transport.stop":
