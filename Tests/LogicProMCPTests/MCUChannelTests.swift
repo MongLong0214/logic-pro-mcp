@@ -282,6 +282,20 @@ import Testing
     #expect(staleHealth.detail.contains("stale"))
     #expect(staleHealth.detail.contains("device registration confirmed"))
 
+    // The detail says THAT feedback is stale, never HOW LONG. `last_feedback_at` carries the age as
+    // a machine field; rendering it here too put one fact in two places and only one of them is
+    // projected away for byte-stability, so the payload kept moving on its own.
+    //
+    // Asserted as "no digits" rather than "not (6s)": the defect is a clock in prose, and a reworded
+    // "stale for 6 seconds" would pass a check written against the old spelling while being the
+    // same defect.
+    #expect(!staleHealth.detail.contains { $0.isNumber })
+
+    // A second read a moment later must be byte-identical. This is the property the qualification
+    // projection needs and the one the age broke: same connection state, same string.
+    let staleAgain = await channel.healthCheck()
+    #expect(staleAgain.detail == staleHealth.detail)
+
     connected.registeredAsDevice = false
     connected.lastFeedbackAt = Date()
     await cache.updateMCUConnection(connected)
