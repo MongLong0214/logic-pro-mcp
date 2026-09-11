@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Drive check-probe-label-matching.py against the defects it names.
+"""Drive check-probe-product-drift.py against the defects it names.
 
 Each case injects one defect into a COPY of the tree and asserts the guard reports it, then asserts
 the unmodified tree passes. Three of these cases exist because they were holes: the first version of
 the guard missed them, and a mutation run found them rather than a reading did.
 
-    python3 Scripts/test_probe_label_matching.py
+The last five cases arrived with the role clause on 2026-09-11. The defect that clause exists to
+catch -- the probe's three-role literal against the product's eleven -- is the FIRST of them, written
+as the tree actually stood, so the clause is shown catching the real thing and not only a synthetic
+neighbour of it.
+
+    python3 Scripts/test_probe_product_drift.py
 """
 import os
 import shutil
@@ -14,10 +19,11 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GUARD = "Scripts/check-probe-label-matching.py"
+GUARD = "Scripts/check-probe-product-drift.py"
 PROBE = "Scripts/livekit/ax_plugin_menu_probe.swift"
 POLICY = "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
 PRODUCT = "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift"
+WRITER = "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift"
 
 # (name, file, find, replace, a phrase the report must contain)
 CASES = [
@@ -45,6 +51,23 @@ CASES = [
     ("the product stops folding, so the rule the probe mirrors is gone",
      PRODUCT, ".whitespacesAndNewlines).lowercased()", ".whitespacesAndNewlines)",
      "no longer trims-then-lowercases before comparing"),
+    # --- the role clause, added 2026-09-11 with #852 ---------------------------------------------
+    ("the probe cannot see AXCheckBox — #852 exactly as it stood",
+     PROBE, '    "AXCheckBox",\n    "AXSlider",', '    "AXSlider",',
+     "the probe cannot see AXCheckBox"),
+    ("the probe accepts a role the product refuses",
+     PROBE, '    "AXScrollBar",\n]', '    "AXScrollBar",\n    "AXOutline",\n]',
+     "the probe accepts AXOutline"),
+    ("the product gains a role and the probe is not moved with it",
+     WRITER, '        "AXScrollBar",\n    ]', '        "AXScrollBar",\n        "AXDisclosureTriangle",\n    ]',
+     "the probe cannot see AXDisclosureTriangle"),
+    ("the named set is right but the census inlines its own list",
+     PROBE, "controlsViewControlRoles.contains(roleText($0))",
+     '["AXSlider"].contains(roleText($0))',
+     "the named set is not what decides"),
+    ("the probe's role set is renamed away",
+     PROBE, "let controlsViewControlRoles", "let controlsViewControlRolesRenamed",
+     "no controlsViewControlRoles set"),
 ]
 
 
@@ -59,7 +82,7 @@ def main():
         tree = os.path.join(tmp, "tree")
         # Only the files the guard reads; copying the repository would be slow and would drag in
         # build products the guard never looks at.
-        for relative in (GUARD, PROBE, POLICY, PRODUCT):
+        for relative in (GUARD, PROBE, POLICY, PRODUCT, WRITER):
             destination = os.path.join(tree, relative)
             os.makedirs(os.path.dirname(destination), exist_ok=True)
             shutil.copy(os.path.join(ROOT, relative), destination)
