@@ -500,8 +500,18 @@ actor MCUChannel: Channel {
         let age = conn.lastFeedbackAt.map { Date().timeIntervalSince($0) } ?? .infinity
         let stale = age > 5.0
         let registered = conn.registeredAsDevice ? "device registration confirmed" : "MIDI feedback active, device registration not confirmed"
+        // The AGE stays out of the prose. `last_feedback_at` already carries it as a machine field,
+        // and rendering it here made the same fact live in two places with only one of them
+        // projected away: `stableHealthData` strips `feedback_stale` and `last_feedback_at`, then
+        // compares a payload whose `detail` is still counting seconds. Measured 2026-09-11 on a warm
+        // server, `channels[].detail` was the only field that kept moving after that projection —
+        // "feedback stale (8s)" then "feedback stale (13s)" four seconds apart.
+        //
+        // The WORD stays. Three call sites read it (`IntegrationTests:170`, `MCUChannelTests:282`
+        // and `:291`) and an operator reading a health line needs to know staleness at all; what
+        // none of them reads is the integer.
         let detail = stale
-            ? "MCU \(registered), feedback stale (\(Int(age))s)"
+            ? "MCU \(registered), feedback stale"
             : "MCU \(registered), feedback active"
         return .healthy(latencyMs: nil, detail: detail + workBudgetDetail)
     }
