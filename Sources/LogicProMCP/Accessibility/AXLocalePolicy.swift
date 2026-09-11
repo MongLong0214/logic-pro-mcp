@@ -205,8 +205,7 @@ enum AXLocalePolicy {
     static let showStepInputKeyboardMenuItem = LabelSet(
         canonical: "Step Input Keyboard",
         variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
-        rationale: "Native Window-menu toggle used with independent window-state readback. Matched by "
-            + "containment: Logic prefixes a verb this set does not carry."
+        rationale: "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry."
     )
 
     /// Japanese measured live 2026-09-06, from Logic's own window list during a toggle:
