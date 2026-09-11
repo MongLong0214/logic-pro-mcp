@@ -1,0 +1,10 @@
+Limit: the age is still available to callers as last_feedback_at; this removes the second rendering, not the information
+Ruled-out: strip the age in the qualification projection instead | that leaves the wire still carrying a live counter, and puts a second normalisation rule where the product should simply not emit one
+Ruled-out: drop the word stale as well as the number | three call sites read the word and an operator needs to know staleness at all; what none of them reads is the integer
+Ruled-out: assert the detail is not the old spelling | a reworded clock would pass a check written against the old string while being the same defect, so the assertion is that no digit appears
+Warn: health_read_stable records this instability but nothing gates on it - isFailClosedAndStable deliberately excludes it, so this fix closes a second-authority defect and not a release blocker
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-859babb3fb4e
+Provenance: inherited fb1c643bb590072d70187e629267fd30aec8ecf6
