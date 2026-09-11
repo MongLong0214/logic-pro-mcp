@@ -102,6 +102,9 @@ struct OperationCatalogTests {
         .mixerSetMasterVolume: ["value", "volume"],
         .mixerSetPluginParam: ["insert", "param", "value"],
         .mixerInsertPlugin: [
+            // #871 `configuration` (and its alias) name the CHANNEL CONFIGURATION, used only when
+            // the strip offers several and none is the spec's preference.
+            "channel_configuration", "configuration",
             "confirmed", "insert", "name", "plugin", "plugin_name", "slot", "track_index",
         ],
         .navigateGotoBar: ["bar"],

@@ -52,6 +52,71 @@ struct PluginInsertLeafConfigurationTests {
         #expect(AccessibilityChannel.leafChoice(preferred: "Stereo", offered: []) == nil)
     }
 
+    // MARK: - #871: the caller may name the configuration
+
+    /// The case that was unreachable before. Measured live on a mono strip: Gain offers
+    /// `["Mono", "Mono->Stereo"]`, neither is the spec's preferred `Stereo`, so the operation
+    /// refused and the caller had no way to express a choice.
+    @Test("a requested configuration reaches a strip that offers several and none preferred")
+    func requestedConfigurationUnlocksTheRefusedCase() {
+        let offered = ["Mono", "Mono->Stereo"]
+        #expect(AccessibilityChannel.leafChoice(preferred: "Stereo", offered: offered) == nil)
+        #expect(
+            AccessibilityChannel.leafChoice(preferred: "Stereo", offered: offered, requested: "Mono")
+                == "Mono"
+        )
+        #expect(
+            AccessibilityChannel.leafChoice(
+                preferred: "Stereo", offered: offered, requested: "Mono->Stereo"
+            ) == "Mono->Stereo"
+        )
+    }
+
+    /// A requested value the strip does not offer FAILS CLOSED. Falling back to the preference — or
+    /// to a single entry — would hand the caller a channel layout they did not ask for, which is the
+    /// same harm the refusal exists to prevent, arrived at from the opposite direction.
+    @Test("a requested configuration the strip lacks is refused, not quietly replaced")
+    func requestedConfigurationThatIsNotOfferedFailsClosed() {
+        #expect(
+            AccessibilityChannel.leafChoice(
+                preferred: "Stereo", offered: ["Stereo", "Dual Mono"], requested: "Mono"
+            ) == nil
+        )
+        // Including when the strip offers exactly one — the single-entry shortcut must not override
+        // an explicit request, or naming a configuration would be less safe than omitting it.
+        #expect(
+            AccessibilityChannel.leafChoice(
+                preferred: "Stereo", offered: ["Mono"], requested: "Stereo"
+            ) == nil
+        )
+    }
+
+    /// The request outranks the spec's preference when the strip offers both. A caller who names a
+    /// layout means it.
+    @Test("the request outranks the preference when both are on offer")
+    func requestOutranksPreference() {
+        #expect(
+            AccessibilityChannel.leafChoice(
+                preferred: "Stereo", offered: ["Stereo", "Dual Mono"], requested: "Dual Mono"
+            ) == "Dual Mono"
+        )
+    }
+
+    /// An empty or absent request is not a request. Both spellings reach the unchanged behaviour,
+    /// because a dispatcher trimming whitespace can turn `"  "` into `""` and that must not become
+    /// a configuration nothing offers.
+    @Test("an absent or empty request leaves the previous behaviour exactly as it was")
+    func absentRequestIsNotARequest() {
+        #expect(
+            AccessibilityChannel.leafChoice(preferred: "Stereo", offered: ["Mono"], requested: nil)
+                == "Mono"
+        )
+        #expect(
+            AccessibilityChannel.leafChoice(preferred: "Stereo", offered: ["Mono"], requested: "")
+                == "Mono"
+        )
+    }
+
     // MARK: - what the failure says
 
     /// Every one of these used to be the sentence "plugin menu selection failed". Finding the real
@@ -105,6 +170,9 @@ struct PluginInsertLeafConfigurationTests {
         // The point of the sentence, not just its contents: a reader has to learn WHOSE property
         // the missing segment is, or they will go on believing the menu path is wrong.
         #expect(hint.lowercased().contains("channel configuration"))
+        // #871 — the refusal has to say how to get past it, or a caller learns only that they
+        // cannot proceed. The legal values are already in the hint; this is the verb.
+        #expect(hint.contains("configuration"))
     }
 
     @Test("a root that never opened says so instead of blaming the path")

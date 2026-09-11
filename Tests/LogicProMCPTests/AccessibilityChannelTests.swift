@@ -4114,7 +4114,7 @@ private final class LockedFlag: @unchecked Sendable {
     let result = await AccessibilityChannel.defaultInsertPlugin(
         params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
         runtime: builder.makeLogicRuntime(appElement: app),
-        selectPlugin: { _, _, _ in
+        selectPlugin: { _, _, _, _ in
             Issue.record("occupied slot must fail before menu selection")
             return .selected(.pressed(leaf: "Stereo"))
         }
@@ -4162,7 +4162,7 @@ private final class LockedFlag: @unchecked Sendable {
     let result = await AccessibilityChannel.defaultInsertPlugin(
         params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
         runtime: builder.makeLogicRuntime(appElement: app),
-        selectPlugin: { spec, _, _ in
+        selectPlugin: { spec, _, _, _ in
             #expect(spec.canonicalName == "Gain")
             builder.setChildren(strip, [gainGroup])
             return .selected(.pressed(leaf: "Stereo"))
@@ -4201,7 +4201,7 @@ private final class LockedFlag: @unchecked Sendable {
     let result = await AccessibilityChannel.defaultInsertPlugin(
         params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
         runtime: builder.makeLogicRuntime(appElement: app),
-        selectPlugin: { _, _, _ in .selected(.pressed(leaf: "Stereo")) },
+        selectPlugin: { _, _, _, _ in .selected(.pressed(leaf: "Stereo")) },
         rollback: {
             rollbackBox.called = true
             return true

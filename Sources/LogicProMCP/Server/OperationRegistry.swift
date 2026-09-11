@@ -564,8 +564,8 @@ enum OperationRegistry {
             .l2,
             .none,
             [
-                "confirmed", "index", "insert", "name", "plugin", "plugin_name", "slot",
-                "track", "track_index",
+                "channel_configuration", "configuration", "confirmed", "index", "insert", "name",
+                "plugin", "plugin_name", "slot", "track", "track_index",
             ]
         ),
     ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)]).map { entry in
