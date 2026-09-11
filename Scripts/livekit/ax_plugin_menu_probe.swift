@@ -397,7 +397,7 @@ func press(_ element: AXUIElement, _ action: String = kAXPressAction as String) 
 
 func closeWindow(_ window: AXUIElement, closeLabel: String) -> JSON {
     let buttons = descendants(window).filter {
-        roleText($0) == "AXButton" && descriptionText($0) == closeLabel
+        roleText($0) == "AXButton" && matchesPolicyLabel(descriptionText($0), anyOf: [closeLabel])
     }
     var result: JSON = [
         "close_button_candidates": buttons.map(snapshot),
@@ -427,6 +427,37 @@ func trimmed(_ text: String) -> String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+// MARK: - Policy-label matching
+
+/// Compare an OBSERVED accessibility string against a policy label set the way the PRODUCT does.
+///
+/// `AXLogicProElements+Mixer.swift` lowercases before comparing against `AXLocalePolicy`; this probe
+/// runs outside the product and cannot import it, so the rule is restated here — and restating a
+/// rule is exactly how the two drifted. Measured 2026-09-10 on an en-US Logic: the label set spells
+/// the mixer `"mixer"`, Logic answers `AXDescription` with `"Mixer"`, and the probe's whitespace-only
+/// comparison could never match. Only a locale without case distinction (`믹서`) passed, which is why
+/// the harness driving this was written against a Korean fixture.
+///
+/// Both sides are folded HERE, in one place, so no caller can normalise one side and forget the
+/// other — the shape that produced the bug. `Scripts/check-probe-label-matching.py` fails if a
+/// policy label is compared with a bare `==` anywhere in this file.
+///
+/// Folding is safe because no label set contains two labels differing only by case (asserted by that
+/// same guard), so it can never merge two distinct members of one set.
+///
+/// NOT for user-supplied identifiers. Track names, window titles and plug-in names are the user's
+/// data, not policy vocabulary, and stay exact — a track called `Bass` must not match one called
+/// `bass`.
+func normalizedPolicyLabel(_ text: String) -> String {
+    trimmed(text).lowercased()
+}
+
+/// Whether an observed string is one of a policy label set's members.
+func matchesPolicyLabel(_ observed: String, anyOf labels: [String]) -> Bool {
+    let folded = normalizedPolicyLabel(observed)
+    return labels.contains { normalizedPolicyLabel($0) == folded }
+}
+
 struct AncestorGroupSearch {
     let found: Bool
     let matchingDescription: String?
@@ -451,7 +482,7 @@ func matchingGroupAncestor(
             return AncestorGroupSearch(found: false, matchingDescription: nil, boundHit: false)
         }
         if roleText(parent) == (kAXGroupRole as String) {
-            let parentDescription = trimmed(descriptionText(parent))
+            let parentDescription = normalizedPolicyLabel(descriptionText(parent))
             if expectedDescriptions.contains(parentDescription) {
                 return AncestorGroupSearch(
                     found: true,
@@ -483,7 +514,7 @@ struct MixerContainerSearch {
 }
 
 func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
-    let targets = Set(mixerLabels.map(trimmed))
+    let targets = Set(mixerLabels.map(normalizedPolicyLabel))
     guard !targets.isEmpty else {
         return MixerContainerSearch(
             layoutAreasSeen: [],
@@ -514,7 +545,7 @@ func mixerContainers(named mixerLabels: [String]) -> MixerContainerSearch {
         // Only a layout area inside a labelled mixer group is a description candidate. Require
         // the same exact label so one configured synonym cannot admit another by coincidence.
         // Keep a failed read observable: descriptionText records it in ax_read_failures.
-        let layoutAreaDescription = trimmed(descriptionText(container))
+        let layoutAreaDescription = normalizedPolicyLabel(descriptionText(container))
         if layoutAreaDescription == ancestorDescription {
             containers.append(container)
             continue
@@ -691,7 +722,7 @@ func openPlugin(
     // toggled it and toggled it back before the witness looked.
     beforePress?(slot)
     let buttons = childElements(slot).filter {
-        roleText($0) == "AXButton" && descriptionText($0) == openLabel
+        roleText($0) == "AXButton" && matchesPolicyLabel(descriptionText($0), anyOf: [openLabel])
     }
     result["slot_children"] = childElements(slot).map(snapshot)
     result["open_button_candidates"] = buttons.map(snapshot)
@@ -747,7 +778,7 @@ func menuItems(for button: AXUIElement) -> [AXUIElement] {
 
 func selectView(in window: AXUIElement, viewLabels: [String], wanted: String) -> JSON {
     let buttons = descendants(window).filter {
-        roleText($0) == "AXMenuButton" && viewLabels.contains(descriptionText($0))
+        roleText($0) == "AXMenuButton" && matchesPolicyLabel(descriptionText($0), anyOf: viewLabels)
     }
     var result: JSON = [
         "button_candidates": buttons.map(snapshot),
@@ -763,7 +794,7 @@ func selectView(in window: AXUIElement, viewLabels: [String], wanted: String) ->
     result["show_menu_status"] = press(buttons[0], kAXShowMenuAction as String)
     usleep(700_000)
     let items = menuItems(for: buttons[0])
-    let selected = items.filter { elementName($0) == wanted }
+    let selected = items.filter { matchesPolicyLabel(elementName($0), anyOf: [wanted]) }
     result["items"] = items.map(snapshot)
     result["item_candidates"] = selected.map(snapshot)
     result["outcome"] = candidateOutcome(selected.count)
@@ -799,7 +830,7 @@ func runChannelEQ() {
         mixerLabels: mixerLabels.isEmpty ? nil : mixerLabels
     ) { slot in
         bypasses = childElements(slot).filter {
-            roleText($0) == "AXCheckBox" && bypassLabels.contains(descriptionText($0))
+            roleText($0) == "AXCheckBox" && matchesPolicyLabel(descriptionText($0), anyOf: bypassLabels)
         }
         if bypasses.count == 1 {
             bypassBefore = scalarValue(bypasses[0], kAXValueAttribute as String)
@@ -948,7 +979,7 @@ func runExportMenu() {
         return
     }
     let fileItems = childElements(menuBar).filter {
-        roleText($0) == "AXMenuBarItem" && fileLabels.contains(elementName($0))
+        roleText($0) == "AXMenuBarItem" && matchesPolicyLabel(elementName($0), anyOf: fileLabels)
     }
     result["file_candidates"] = fileItems.map(snapshot)
     guard fileItems.count == 1 else {
@@ -967,10 +998,10 @@ func runExportMenu() {
 
     let fileMenu = menus[0]
     let exportItems = childElements(fileMenu).filter {
-        roleText($0) == "AXMenuItem" && elementName($0) == exportLabel
+        roleText($0) == "AXMenuItem" && matchesPolicyLabel(elementName($0), anyOf: [exportLabel])
     }
     let openItems = childElements(fileMenu).filter {
-        roleText($0) == "AXMenuItem" && elementName($0) == openLabel
+        roleText($0) == "AXMenuItem" && matchesPolicyLabel(elementName($0), anyOf: [openLabel])
     }
     result["export_candidates"] = exportItems.map(snapshot)
     result["open_candidates"] = openItems.map(snapshot)
@@ -990,8 +1021,8 @@ func runExportMenu() {
     }
 
     let leaves = childElements(exportMenus[0]).filter { roleText($0) == "AXMenuItem" }
-    let allTracks = leaves.filter { elementName($0) == allTracksLabel }
-    let oneTrack = leaves.filter { elementName($0) == oneTrackLabel }
+    let allTracks = leaves.filter { matchesPolicyLabel(elementName($0), anyOf: [allTracksLabel]) }
+    let oneTrack = leaves.filter { matchesPolicyLabel(elementName($0), anyOf: [oneTrackLabel]) }
     result["all_tracks_candidates"] = allTracks.map(snapshot)
     result["one_track_candidates"] = oneTrack.map(snapshot)
     result["all_tracks_path"] = allTracks.count == 1
