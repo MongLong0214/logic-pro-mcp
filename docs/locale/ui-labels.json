@@ -2177,7 +2177,7 @@
     "스텝 입력 키보드",
     "ステップインプットキーボード"
    ],
-   "rationale": "Native Window-menu toggle used with independent window-state readback.",
+   "rationale": "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry.",
    "provenance": {
     "ステップインプットキーボード": {
      "attribute": "title",
