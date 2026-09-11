@@ -752,13 +752,38 @@ func sliders(in root: AXUIElement) -> [JSON] {
     descendants(root).filter { roleText($0) == "AXSlider" }.map(snapshot)
 }
 
+/// The roles that count as a Controls-view row's control.
+///
+/// RESTATED from `ControlsViewBooleanParameterWriter.interactiveControlRoles`, because this probe
+/// runs outside the product and cannot import it -- the same reason `normalizedPolicyLabel` restates
+/// the label rule. `check-probe-product-drift.py` is what keeps the two spellings together; a
+/// comment saying "keep these in sync" is what failed last time.
+///
+/// It listed three roles until 2026-09-11 -- AXSlider, AXRadioButton, AXPopUpButton -- and AXCheckBox
+/// was not among them. The checkbox is the ONLY Controls-view role this repository has ever
+/// actuated, so the census was blind to the one path that works, and a checkbox row came back as
+/// `control_roles: []`: not "this probe does not look for checkboxes" but "this row has no control".
+let controlsViewControlRoles: Set<String> = [
+    "AXCheckBox",
+    "AXSlider",
+    "AXPopUpButton",
+    "AXRadioButton",
+    "AXButton",
+    "AXMenuButton",
+    "AXTextField",
+    "AXComboBox",
+    "AXIncrementor",
+    "AXValueIndicator",
+    "AXScrollBar",
+]
+
 func rowCensus(in root: AXUIElement) -> [JSON] {
     descendants(root).filter { roleText($0) == "AXRow" }.map { row in
         let cells = descendants(row, 6).filter { roleText($0) == "AXCell" }
         let cellData: [JSON] = cells.map { cell in
             let staticTexts = descendants(cell, 6).filter { roleText($0) == "AXStaticText" }
             let controls = descendants(cell, 6).filter {
-                ["AXSlider", "AXRadioButton", "AXPopUpButton"].contains(roleText($0))
+                controlsViewControlRoles.contains(roleText($0))
             }
             return [
                 "static_texts": staticTexts.map { textValueText($0).isEmpty ? elementName($0) : textValueText($0) },
