@@ -1,0 +1,9 @@
+Limit: a SysEx that starts in one CoreMIDI packet and ends in a later one is not assembled; this function is called per packet and holds no state between calls, so those words are counted as unconverted rather than emitted as a truncated frame
+Ruled-out: clamp an over-long numBytes to six | rejected: a packet that lies about its length is not one to half-believe, and a truncated display write would read as a real one
+Warn: parseBytes has handled .sysEx all along; the gap was only in the UMP converter, so nothing downstream needed changing and nothing downstream should be given a partial frame
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: cross-packet SysEx assembly is untested on real traffic because every MCU display write observed on this host arrived within one packet
+Record-Id: r-cd5d11ecd6f7
+Provenance: inherited 27f4ec9d67252efe32c79bea76d7e83e2cd09d21
