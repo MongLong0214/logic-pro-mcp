@@ -1,0 +1,9 @@
+Limit: the LCD decode came from a throwaway raw-UMP dump on an unmerged spike; the shipped converter drops SysEx7 whole, so nothing in this record's strong readback is reachable through the product today
+Ruled-out: cover both halves in one reverify script | rejected: the send half needs a build carrying the #856 spike, and a reverify that cannot run on the shipped tree is a reverify nobody can run
+Warn: the reverify closes the Control Surface Setup window it opens; leaving it open makes every live harness report checks_with_blocking_modal_unknown and the gate correctly refuses them
+Blast: system
+Undo: easy
+Certainty: firm
+Unverified: no plug-in parameter was written through a V-Pot; only the mode switch and its reporting were measured, so this is not a verified write
+Record-Id: r-376eef01c49e
+Provenance: inherited cbc001520f36aa32a243731a7b73085370508ccf
