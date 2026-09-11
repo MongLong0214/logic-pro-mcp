@@ -302,6 +302,33 @@ extension MCUConnectionState {
         guard let last = lastFeedbackAt else { return nil }
         return max(0, Int(now.timeIntervalSince(last) * 1000.0))
     }
+
+    /// How long inbound MCU feedback may be silent before the connection counts
+    /// as stale.
+    static let feedbackStaleAfter: TimeInterval = 5.0
+
+    /// Whether inbound MCU feedback has gone silent.
+    ///
+    /// The rule used to be written twice — `MCUChannel.health` computed
+    /// `age > 5.0` after an early return on `!isConnected`, and
+    /// `SystemDispatcher` computed `isConnected && age > 5.0` inline for the
+    /// `feedback_stale` wire field. The two agreed, but only because one of them
+    /// hoisted the guard the other spelled out; nothing made them agree, and the
+    /// threshold itself lived as a bare literal in two files. Whoever moved one
+    /// would have had to know to move the other.
+    ///
+    /// Kept in `TimeInterval` rather than derived from `lastFeedbackAgeMs`: that
+    /// function truncates to whole milliseconds, so routing through it would move
+    /// the boundary for ages in (5.0, 5.001) seconds. This predicate is the same
+    /// comparison both sites already made.
+    ///
+    /// A connection that has never received feedback is stale, not fresh — both
+    /// former sites spelled that `?? .infinity`.
+    func isFeedbackStale(now: Date = Date()) -> Bool {
+        guard isConnected else { return false }
+        guard let last = lastFeedbackAt else { return true }
+        return now.timeIntervalSince(last) > Self.feedbackStaleAfter
+    }
 }
 
 /// MCU LCD display state.

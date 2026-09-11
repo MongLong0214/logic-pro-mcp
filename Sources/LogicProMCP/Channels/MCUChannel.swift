@@ -497,8 +497,7 @@ actor MCUChannel: Channel {
                     + workBudgetDetail
             )
         }
-        let age = conn.lastFeedbackAt.map { Date().timeIntervalSince($0) } ?? .infinity
-        let stale = age > 5.0
+        let stale = conn.isFeedbackStale()
         let registered = conn.registeredAsDevice ? "device registration confirmed" : "MIDI feedback active, device registration not confirmed"
         // The AGE stays out of the prose. `last_feedback_at` already carries it as a machine field,
         // and rendering it here made the same fact live in two places with only one of them

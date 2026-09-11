@@ -386,7 +386,6 @@ struct SystemDispatcher: OperationTraceDispatching {
             let mcu = await cache.getMCUConnection()
             let permissions = PermissionChecker.check()
             let process = ProcessUtils.currentProcessMetrics()
-            let lastFeedbackAge = mcu.lastFeedbackAt.map { Date().timeIntervalSince($0) }
             // Single source of truth shared with `project.is_running` so the
             // two signals can never disagree. AppleScript availability is
             // already surfaced separately in the `channels` array; mixing it
@@ -416,7 +415,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                     connected: mcu.isConnected,
                     registeredAsDevice: mcu.registeredAsDevice,
                     lastFeedbackAt: mcu.lastFeedbackAt,
-                    feedbackStale: mcu.isConnected && (lastFeedbackAge ?? .infinity) > 5.0,
+                    feedbackStale: mcu.isFeedbackStale(),
                     portName: mcu.portName,
                     portCensus: .init(
                         state: mcu.portCensus.state.rawValue,
