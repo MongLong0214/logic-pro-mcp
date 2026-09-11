@@ -40,11 +40,19 @@ field at a time and reads what the product put on the bus:
     track B, insert 0, param 0     only `track` moved
     track A, insert 0, param 3     only `param` moved
 
-`insert` and `track` are accepted, validated and echoed -- and neither reaches the bus. The emitted
-`cc` and `midi_channel` are identical across the first three and change only with `param`. So the
-only field of the request that leaves this product is a controller NUMBER, and what that number
-reaches is an assignment the operator made by hand inside Scripter. The product is not addressing a
-plug-in parameter; it is addressing whatever the operator wired that controller to.
+The request carries three fields that look like a target, and not one of them addresses a plug-in:
+
+    `insert`  accepts exactly ONE value. `insert: 1` is refused outright -- "currently supports only
+              insert: 0 on the selected track". A field with a single legal value is not addressing
+              anything; it is documentation that the caller cannot choose a slot.
+    `track`   is accepted, validated against our own track cache, echoed back -- and does not reach
+              the bus. Two different tracks emit the identical CC on the identical channel.
+    `param`   is the only field that reaches the bus, and what it emits is a controller NUMBER
+              (0 -> CC 102, 3 -> CC 105 on channel 16).
+
+What that controller number reaches is an assignment the operator made by hand inside Scripter. The
+product is not addressing a plug-in parameter; it is addressing whatever the operator wired that
+controller to.
 
 That is why no readback could close ADR-009 on this plane. It is not that the reply omits a name --
 it is that the product never had one to omit.
@@ -128,6 +136,8 @@ requests = []
 if track_a is not None and track_b is not None:
     requests = [
         ("baseline", {"track": track_a, "insert": 0, "param": 0, "value": 0.5}),
+        # Expected to be REFUSED, and recorded as such rather than dropped: a field whose only
+        # legal value is 0 cannot be the thing selecting a plug-in.
         ("only-insert-moved", {"track": track_a, "insert": 1, "param": 0, "value": 0.5}),
         ("only-track-moved", {"track": track_b, "insert": 0, "param": 0, "value": 0.5}),
         ("only-param-moved", {"track": track_a, "insert": 0, "param": 3, "value": 0.5}),
@@ -168,19 +178,29 @@ def same_wire(a, b):
     return bool(a and b and a["cc"] == b["cc"] and a["midi_channel"] == b["midi_channel"])
 
 
+# The replies that REACHED the wire. `only-insert-moved` is expected to be refused before it, so the
+# clauses about what the bus carried are asked of the three that got there; the refusal is asserted
+# separately, as a refusal.
+on_the_wire = [r for r in readings if r["label"] != "only-insert-moved"]
+
 reading = {
     "census_readable": census["readable"] is True,
     "census_source": census["source"],
     "requests_driven": len(readings),
-    "all_state_b": all(r["state"] == "B" for r in readings),
-    "all_unverified": all(r["verified"] is False for r in readings),
-    "all_send_only": all(r["readback_source"] == "scripter_send_only" for r in readings),
-    "all_echo_the_request": all(r["echoes_the_request"] for r in readings),
+    "requests_that_reached_the_wire": len(on_the_wire),
+    "all_state_b": all(r["state"] == "B" for r in on_the_wire),
+    "all_unverified": all(r["verified"] is False for r in on_the_wire),
+    "all_send_only": all(r["readback_source"] == "scripter_send_only" for r in on_the_wire),
+    "all_echo_the_request": all(r["echoes_the_request"] for r in on_the_wire),
     "fields_no_caller_could_have_supplied": sorted(
-        {k for r in readings for k in r["keys_outside_the_caller_echo_and_our_own_wire"]}
+        {k for r in on_the_wire for k in r["keys_outside_the_caller_echo_and_our_own_wire"]}
     ),
     # The three clauses the claim rests on.
-    "insert_does_not_reach_the_wire": same_wire(base, moved_insert),
+    "insert_accepts_exactly_one_value": bool(
+        moved_insert
+        and moved_insert["state"] == "C"
+        and "insert: 0" in (moved_insert["body"].get("hint") or "")
+    ),
     "track_does_not_reach_the_wire": same_wire(base, moved_track),
     "param_is_the_only_field_that_does": bool(base and moved_param and base["cc"] != moved_param["cc"]),
     "observed": readings,
@@ -190,36 +210,39 @@ ev.falsifiable(
     "856/only-a-controller-number-leaves-this-product-so-it-cannot-name-a-parameter",
     lambda o: (o["census_readable"]
                and o["requests_driven"] == 4
+               and o["requests_that_reached_the_wire"] == 3
                and o["all_state_b"]
                and o["all_unverified"]
                and o["all_send_only"]
                and o["all_echo_the_request"]
                and o["fields_no_caller_could_have_supplied"] == []
-               and o["insert_does_not_reach_the_wire"]
+               and o["insert_accepts_exactly_one_value"]
                and o["track_does_not_reach_the_wire"]
                and o["param_is_the_only_field_that_does"]),
     reading,
     {"census_readable": True, "census_source": "ax_live", "requests_driven": 4,
+     "requests_that_reached_the_wire": 3,
      "all_state_b": True, "all_unverified": True, "all_send_only": True,
      "all_echo_the_request": True, "fields_no_caller_could_have_supplied": [],
-     "insert_does_not_reach_the_wire": False,
-     "track_does_not_reach_the_wire": True,
+     "insert_accepts_exactly_one_value": True,
+     "track_does_not_reach_the_wire": False,
      "param_is_the_only_field_that_does": True,
      "observed": []},
-    "changing `insert`, and changing `track`, leave the emitted CC and MIDI channel identical; only "
-    "`param` changes them. Both fields are accepted, validated against our own cache and echoed back, "
-    "and neither reaches the bus -- so the only part of the request that leaves this product is a "
-    "controller NUMBER, and what that number reaches is an assignment the operator made by hand "
-    "inside Scripter. The product never held a parameter identity, which is why no readback could "
-    "close ADR-009 here: the reply does not omit the name, there was never a name to omit. THE "
-    "COUNTEREXAMPLE is a run where `insert` DOES change the wire -- every other clause still "
-    "satisfied -- because that is the world in which this operation addresses a plug-in slot and a "
-    "readback would have something to be about",
-    mutation="`ScripterChannel` derives its CC from `insert` as well as `param` (cc = base + insert*18). "
-             "`insert_does_not_reach_the_wire` goes false on its own, leaving the other clauses "
-             "untouched, which is what makes that clause load-bearing rather than decorative. The "
-             "separate mutation of adding any Logic-sourced field to the reply is caught by "
-             "`fields_no_caller_could_have_supplied`",
+    "the request carries three fields that look like a target and not one addresses a plug-in: "
+    "`insert` accepts exactly one value and refuses 1 outright; `track` is accepted, validated "
+    "against our own cache and echoed back while two different tracks emit the IDENTICAL CC on the "
+    "identical channel; `param` is the only field that reaches the bus and what it emits is a "
+    "controller NUMBER. What that number reaches is an assignment the operator made by hand inside "
+    "Scripter. The product never held a parameter identity, which is why no readback could close "
+    "ADR-009 here: the reply does not omit the name, there was never a name to omit. THE "
+    "COUNTEREXAMPLE is a run where `track` DOES change the wire -- every other clause still "
+    "satisfied -- because that is the world in which this operation addresses a strip and a readback "
+    "would have something to be about",
+    mutation="`ScripterChannel` derives its CC from the track index as well as the param index "
+             "(cc = base + param + track). `track_does_not_reach_the_wire` goes false on its own and "
+             "the other clauses are untouched, which is what makes that clause load-bearing rather "
+             "than decorative. The separate mutation of adding any Logic-sourced field to the reply "
+             "is caught by `fields_no_caller_could_have_supplied`",
 )
 
 d.close()
