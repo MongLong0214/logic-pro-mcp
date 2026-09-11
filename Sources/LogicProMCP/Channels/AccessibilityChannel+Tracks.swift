@@ -2071,7 +2071,17 @@ extension AccessibilityChannel {
                     // a different question than the one the hazard asks.
                     let nameIsUnique = currentTracks.filter { $0.name == observedTrack.name }.count == 1
                     let stripReading = (observedTrack.liveIdentityBacked && nameIsUnique)
-                        ? AXLogicProElements.inspectorStripReading(expectedName: observedTrack.name)
+                        // #866 — THE CALLER'S RUNTIME. This read defaulted to `.production` while
+                        // every other AX read on this path went through the injected one, so a test
+                        // that built a complete fake tree still had its verdict decided by the real
+                        // Logic inspector. It produced a false GREEN in the ship gate, not a false
+                        // red: the same test passed the full suite half an hour before it started
+                        // failing, with no change to anything it touches — what differed was which
+                        // track the live session had selected. CI never saw it because CI has no
+                        // Logic, so the read finds nothing there and falls through to the header.
+                        ? AXLogicProElements.inspectorStripReading(
+                            expectedName: observedTrack.name, runtime: runtime
+                          )
                         : .undetermined
                     switch stripReading {
                     case let .type(readType):
