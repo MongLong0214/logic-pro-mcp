@@ -1,0 +1,9 @@
+Limit: routing a strip to No Output leaves it with no menu to open afterwards; it does not recover after 30s or by pressing another element, only by changing the destination back, so a caller must not read that as a failed press
+Ruled-out: test the write with the No Output destination | rejected: it is the one value that leaves the slot with no menu, so a probe using it measures its own test value and reports a wall — which is how the first attempt here looked non-reproducible
+Warn: Stereo Output appears twice among the Output menu's enabled titles, so an implementation must refuse or disambiguate rather than take the first
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: only the Output slot was actuated; Send and Group slots were read but never selected from, and none of this is wired into the product
+Record-Id: r-bd2b9d2c804f
+Provenance: inherited 4ec074952d849cf4cdeefd52831945afa6a34caf
