@@ -1,0 +1,69 @@
+{
+  "edit_menu_spelling" : "Edit",
+  "entries" : [
+    {
+      "cmd_char" : "Z",
+      "cmd_modifiers" : 0,
+      "enabled" : false,
+      "title" : "Can’t Undo"
+    },
+    {
+      "cmd_char" : "Z",
+      "cmd_modifiers" : 1,
+      "enabled" : true,
+      "title" : "Redo Insert Plug-in in Channel Strip"
+    },
+    {
+      "cmd_char" : "Z",
+      "cmd_modifiers" : 6,
+      "enabled" : true,
+      "title" : "Undo History…"
+    },
+    {
+      "cmd_char" : "",
+      "cmd_modifiers" : 8,
+      "enabled" : true,
+      "title" : "Delete Undo History"
+    },
+    {
+      "cmd_char" : "",
+      "cmd_modifiers" : 0,
+      "enabled" : false,
+      "title" : ""
+    },
+    {
+      "cmd_char" : "X",
+      "cmd_modifiers" : 0,
+      "enabled" : true,
+      "title" : "Cut"
+    },
+    {
+      "cmd_char" : "C",
+      "cmd_modifiers" : 0,
+      "enabled" : true,
+      "title" : "Copy"
+    },
+    {
+      "cmd_char" : "V",
+      "cmd_modifiers" : 0,
+      "enabled" : true,
+      "title" : "Paste"
+    }
+  ],
+  "menu_opened" : true,
+  "outcome" : "read",
+  "rows_matching_cmd_z_no_modifier" : 1,
+  "rows_matching_shift_cmd_z" : 1,
+  "titles_containing_undo" : 3,
+  "titles_prefixed_undo" : 1,
+  "titles_while_closed" : [
+    "Can’t Undo",
+    "Redo Insert Plug-in in Channel Strip",
+    "Undo History…",
+    "Delete Undo History",
+    "",
+    "Cut",
+    "Copy",
+    "Paste"
+  ]
+}

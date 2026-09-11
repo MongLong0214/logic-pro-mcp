@@ -100,11 +100,16 @@ def strip_plugins(track):
     return None
 
 
+# The Edit menu's own spelling, MEASURED rather than translated. Logic's menu-bar titles are
+# localized independently of the host locale — this machine is ko-KR and answers `Edit` — so the
+# restore tries each spelling in turn and uses whichever one the running Logic actually has.
+EDIT_MENU_NAMES = ("Edit", "편집", "編集")
+
 UNDO_MENU = """
 tell application "Logic Pro" to activate
 delay 0.5
 tell application "System Events" to tell process "Logic Pro"
-  click menu item 1 of menu 1 of menu bar item "Edit" of menu bar 1
+  click menu item 1 of menu 1 of menu bar item "{name}" of menu bar 1
 end tell
 """
 
@@ -118,7 +123,13 @@ def undo_and_verify(track, expect_empty_slot):
     twice left both inserted plug-ins in place. A restore step that cannot be shown to have
     restored is worse than none, because it reads as cleanup in the receipt.
     """
-    subprocess.run(["/usr/bin/osascript", "-e", UNDO_MENU], capture_output=True, timeout=60)
+    for name in EDIT_MENU_NAMES:
+        done = subprocess.run(
+            ["/usr/bin/osascript", "-e", UNDO_MENU.format(name=name)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if done.returncode == 0:
+            break
     time.sleep(1.5)
     d.tool("logic_system", "refresh_cache")
     after = strip_plugins(track)
