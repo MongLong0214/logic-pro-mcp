@@ -673,7 +673,7 @@ private func insertParams(
         runtime: runtime,
         selectPlugin: { _, _, _ in
             Issue.record("a zero-slot strip must fail before menu selection")
-            return true
+            return .selected(.pressed(leaf: "Stereo"))
         }
     )
     #expect(!result.isSuccess)

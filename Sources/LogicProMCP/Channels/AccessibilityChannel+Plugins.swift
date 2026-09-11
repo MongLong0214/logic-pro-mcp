@@ -48,7 +48,7 @@ extension AccessibilityChannel {
     static func defaultInsertPlugin(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
-        selectPlugin: (PluginInsertSpec, AXUIElement, AXHelpers.Runtime) async -> Bool = selectLivePluginFromOpenMenu,
+        selectPlugin: (PluginInsertSpec, AXUIElement, AXHelpers.Runtime) async -> MenuSelectionOutcome = selectLivePluginFromOpenMenu,
         rollback: () -> Bool = undoLastLogicAction,
         readbackTimeoutMs: Int = 2_000
     ) async -> ChannelResult {
@@ -148,12 +148,24 @@ extension AccessibilityChannel {
 
         _ = AXHelpers.performAction(targetSlot.element, kAXPressAction, runtime: runtime.ax)
         try? await Task.sleep(for: .milliseconds(250))
-        guard await selectPlugin(spec, app, runtime.ax) else {
+        let selection = await selectPlugin(spec, app, runtime.ax)
+        guard selection.succeeded else {
             dismissOpenMenu()
+            // #855 — the failure names WHICH step failed and, for the one that actually bites, what
+            // the menu offered instead. All three used to be "plugin menu selection failed", and a
+            // caller reading that had no way to tell a wrong category name from a channel
+            // configuration this strip does not have.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "plugin menu selection failed",
-                extras: ["track": track, "slot": slotIndex, "plugin_name": spec.canonicalName]
+                hint: menuSelectionHint(selection, spec: spec),
+                extras: [
+                    "track": track,
+                    "slot": slotIndex,
+                    "plugin_name": spec.canonicalName,
+                    "menu_failure": menuFailureLabel(selection),
+                    "menu_paths_tried": spec.menuPaths.map { $0.joined(separator: " > ") },
+                    "menu_leaf_offered": menuLeafOffered(selection),
+                ]
             ))
         }
 
@@ -169,6 +181,10 @@ extension AccessibilityChannel {
             "plugin_name": spec.canonicalName,
             "observed_plugin_name": observed ?? NSNull(),
             "verify_source": "ax_plugin_slot",
+            // #855 — WHICH channel configuration was pressed. It is not always the one the spec
+            // prefers: on a mono strip the only configuration on offer is `Mono`, and reporting the
+            // request back instead of the choice would hide the entire behaviour this fix adds.
+            "menu_leaf_chosen": menuLeafChosen(selection),
         ]
         if let observed, spec.matches(observed) {
             return .success(HonestContract.encodeStateA(extras: extras))
@@ -210,32 +226,135 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// The configuration actually pressed, or "" when nothing was.
+    static func menuLeafChosen(_ outcome: MenuSelectionOutcome) -> String {
+        guard case .selected(let step) = outcome, case .pressed(let leaf) = step else { return "" }
+        return leaf
+    }
+
+    /// A label a caller can branch on, as distinct from the prose hint.
+    static func menuFailureLabel(_ outcome: MenuSelectionOutcome) -> String {
+        switch outcome {
+        case .selected: return "none"
+        case .rootMenuNotFound: return "root_menu_not_found"
+        case .noPathWalked(let attempts):
+            // The most informative ending wins. A leaf that was REACHED and read says more than a
+            // category name that did not match, because reaching it proves the category walked.
+            if attempts.contains(where: { if case .leafMissing = $0 { return true } else { return false } }) {
+                return "leaf_not_offered_by_this_strip"
+            }
+            if attempts.contains(where: { if case .pressRefused = $0 { return true } else { return false } }) {
+                return "leaf_press_refused"
+            }
+            if attempts.contains(where: { if case .submenuNeverAppeared = $0 { return true } else { return false } }) {
+                return "submenu_never_appeared"
+            }
+            return "no_path_segment_matched"
+        }
+    }
+
+    /// What the leaf menu actually contained, when one was reached. Empty when none was.
+    static func menuLeafOffered(_ outcome: MenuSelectionOutcome) -> [String] {
+        guard case .noPathWalked(let attempts) = outcome else { return [] }
+        for attempt in attempts {
+            if case .leafMissing(_, let offered) = attempt, !offered.isEmpty { return offered }
+        }
+        return []
+    }
+
+    static func menuSelectionHint(_ outcome: MenuSelectionOutcome, spec: PluginInsertSpec) -> String {
+        switch outcome {
+        case .selected:
+            return ""
+        case .rootMenuNotFound:
+            return "the plug-in menu never opened: the slot was pressed and no menu carrying the "
+                + "audio plug-in library was found"
+        case .noPathWalked:
+            let offered = menuLeafOffered(outcome)
+            if !offered.isEmpty {
+                return "\(spec.canonicalName) was found, but this strip offers only "
+                    + "\(offered.joined(separator: ", ")) for it — the last segment of a menu path is "
+                    + "the CHANNEL CONFIGURATION, which belongs to the strip and not to the request"
+            }
+            return "no configured menu path matched: none of "
+                + spec.menuPaths.map { $0.joined(separator: " > ") }.joined(separator: " | ")
+                + " walked this menu"
+        }
+    }
+
+    /// #855 — what happened to the whole attempt, not just whether it worked.
+    enum MenuSelectionOutcome {
+        case selected(MenuPathOutcome)
+        /// The slot was pressed and no menu matching the audio-plug-in root ever appeared.
+        case rootMenuNotFound
+        /// The root was found and every configured path was tried; here is how each ended.
+        case noPathWalked([MenuPathOutcome])
+
+        var succeeded: Bool {
+            if case .selected = self { return true }
+            return false
+        }
+    }
+
     private static func selectLivePluginFromOpenMenu(
         spec: PluginInsertSpec,
         app: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) async -> Bool {
+    ) async -> MenuSelectionOutcome {
         guard let rootMenu = findAudioPluginRootMenu(in: app, runtime: runtime) else {
-            return false
+            return .rootMenuNotFound
         }
+        var attempts: [MenuPathOutcome] = []
         for path in spec.menuPaths {
-            if await pressMenuPath(path, rootMenu: rootMenu, runtime: runtime) {
-                return true
-            }
+            let outcome = await pressMenuPath(path, rootMenu: rootMenu, runtime: runtime)
+            attempts.append(outcome)
+            if case .pressed = outcome { return .selected(outcome) }
         }
-        return false
+        return .noPathWalked(attempts)
+    }
+
+    /// Why one path did not walk, in the words the failure needs.
+    ///
+    /// #855 — every one of these used to be the single sentence "plugin menu selection failed",
+    /// which is why locating the real cause needed a replication of this algorithm against the live
+    /// tree rather than a reading of a response. They are distinguished now because they call for
+    /// different fixes: a missing SEGMENT is a wrong category name, a missing LEAF is a channel
+    /// configuration this strip does not offer, and no root at all is the menu never having opened.
+    enum MenuPathOutcome: Equatable {
+        case pressed(leaf: String)
+        case segmentMissing(String)
+        case submenuNeverAppeared(String)
+        /// The leaf menu was reached and read; `offered` is what it actually contained.
+        case leafMissing(wanted: String, offered: [String])
+        case pressRefused(leaf: String)
+    }
+
+    /// The item to press in a leaf menu, given what the caller preferred.
+    ///
+    /// #855 — the last segment of a configured path is the CHANNEL CONFIGURATION (`Stereo`,
+    /// `Mono`, …), and that is a property of the STRIP, not of the request. Measured 2026-09-12: on
+    /// a mono audio track the Compressor submenu offers exactly `["Mono"]`, so all four configured
+    /// paths — each ending in `Stereo` or `스테레오` — missed, and the operation refused to insert a
+    /// plug-in that was sitting right there. On a stereo strip the same paths walk end to end.
+    ///
+    /// So the preference is honoured when the strip offers it, and a menu with exactly ONE item is
+    /// taken because there is no choice to make. Anything else refuses: picking the first of several
+    /// unrequested configurations would be choosing a channel layout on the operator's behalf.
+    static func leafChoice(preferred: String, offered: [String]) -> String? {
+        if offered.contains(preferred) { return preferred }
+        return offered.count == 1 ? offered[0] : nil
     }
 
     private static func pressMenuPath(
         _ path: [String],
         rootMenu: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) async -> Bool {
-        guard !path.isEmpty else { return false }
+    ) async -> MenuPathOutcome {
+        guard !path.isEmpty else { return .segmentMissing("") }
         var menu = rootMenu
         for segment in path.dropLast() {
             guard let item = menuItem(named: segment, in: menu, runtime: runtime) else {
-                return false
+                return .segmentMissing(segment)
             }
             if AXHelpers.getChildren(item, runtime: runtime).first(where: {
                 (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
@@ -246,14 +365,21 @@ extension AccessibilityChannel {
             guard let submenu = AXHelpers.getChildren(item, runtime: runtime).first(where: {
                 (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
             }) else {
-                return false
+                return .submenuNeverAppeared(segment)
             }
             menu = submenu
         }
-        guard let leaf = menuItem(named: path[path.count - 1], in: menu, runtime: runtime) else {
-            return false
+        let preferred = path[path.count - 1]
+        let offered = AXHelpers.getChildren(menu, runtime: runtime)
+            .filter { (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String) }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
+        guard let wanted = leafChoice(preferred: preferred, offered: offered),
+              let leaf = menuItem(named: wanted, in: menu, runtime: runtime) else {
+            return .leafMissing(wanted: preferred, offered: offered)
         }
         return AXHelpers.performAction(leaf, kAXPressAction, runtime: runtime)
+            ? .pressed(leaf: wanted)
+            : .pressRefused(leaf: wanted)
     }
 
     private static func menuItem(

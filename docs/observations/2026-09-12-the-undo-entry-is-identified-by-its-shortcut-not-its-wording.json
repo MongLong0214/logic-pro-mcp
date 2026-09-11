@@ -1,0 +1,91 @@
+{
+  "id": "2026-09-12-the-undo-entry-is-identified-by-its-shortcut-not-its-wording",
+  "schema": 2,
+  "date": "2026-09-12",
+  "subject": "Logic's Edit menu undo/redo entries, and what can serve as their identity",
+  "question": "Can the Undo entry be located by its title, and if not, what locates it?",
+  "verdict": "works",
+  "issues": [864, 855],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-edit-stack-menu.sh",
+    "expected": "exactly one Edit-menu row carries cmd-Z with no modifier and exactly one carries shift-cmd-Z, while two or more row titles carry the undo word",
+    "cost": "needs Logic open on any project; ~5 s; reads only, presses nothing, so the undo stack is not touched"
+  },
+  "evidence": [
+    "evidence/2026-09-12-edit-stack-menu-en.json"
+  ],
+  "depends": [],
+  "method": "A read-only AX census (`Scripts/livekit/ax_edit_stack_menu_census.swift`) opens Logic's Edit menu, reads every entry's AXTitle, AXEnabled, AXMenuItemCmdChar and AXMenuItemCmdModifiers, then sends Escape. Nothing is pressed, which matters more than usual here: the subject IS the undo stack, and a probe that popped it to look at it would change what it measures. The Edit menu's own spelling is resolved by trying `Edit`, `편집` and `編集` and reporting which one answered, rather than assuming the host locale decides it. Two separate readings were taken by hand on the same host before the census existed, one with an empty stack and one with a plug-in insert on top, because the WORDING differs between those states and a single-state run could not have shown it. NOT done: no run from a freshly launched Logic, no non-English Logic UI, and no measurement of what a remapped ⌘Z does to the shortcut attributes.",
+  "observations": [
+    {
+      "reading": "Edit-menu spelling this host answered to",
+      "value": "Edit"
+    },
+    {
+      "reading": "rows whose shortcut is cmd-Z with no modifier",
+      "value": 1
+    },
+    {
+      "reading": "rows whose shortcut is shift-cmd-Z",
+      "value": 1
+    },
+    {
+      "reading": "row titles containing the undo word",
+      "value": 3
+    },
+    {
+      "reading": "row titles that START with 'Undo', with the stack empty",
+      "value": 1
+    },
+    {
+      "reading": "and the one title that does start with it, with the stack empty",
+      "value": "Undo History…"
+    },
+    {
+      "reading": "the undo entry's title with an empty stack",
+      "value": "Can’t Undo"
+    },
+    {
+      "reading": "the redo entry's title with a plug-in insert on top",
+      "value": "Redo Insert Plug-in in Channel Strip"
+    },
+    {
+      "reading": "the undo entry's AXEnabled with an empty stack",
+      "value": false
+    },
+    {
+      "reading": "shortcut modifier masks sharing the letter Z",
+      "value": [0, 1, 6]
+    },
+    {
+      "reading": "what mask 6 turns out to be",
+      "value": "Undo History…"
+    },
+    {
+      "reading": "the undo entry's title read WITHOUT opening the menu, on a process that had not opened it yet",
+      "value": "Undo"
+    },
+    {
+      "reading": "the same read after the menu had been opened once",
+      "value": "Can’t Undo"
+    }
+  ],
+  "conclusion": "The wording of Logic's Undo entry cannot be its identity, for two independent reasons that compound. It is LOCALIZED, and it is STATE-DEPENDENT: with an empty stack it reads `Can’t Undo`, which does not start with `Undo`, so a prefix match skips it and lands on `Undo History…` — the one title that does start with the word. Widening to a containment match makes it worse rather than better: three titles carry the word. The SHORTCUT is unique. Exactly one row carries cmd-Z with no modifier and exactly one carries shift-cmd-Z, while `Undo History…` sits at mask 6 and `Delete Undo History` carries no character at all. AXEnabled is readable on the closed menu and is the right signal for 'there is nothing to undo', so that case can be refused before anything is pressed.",
+  "limits": [
+    "one host, one Logic build, and an en-US Logic UI — the ko-KR spelling of `Can’t Undo` was NOT measured, and nothing in the conclusion depends on recognising it",
+    "the ⌘Z shortcut is remappable in Logic's Key Commands; a host that remapped it would match no row, and this run did not measure what the attributes look like in that case",
+    "the title's populated suffix behaved differently across two runs: a process that had not yet opened the menu read the bare word `Undo`, and a later read after the menu had been opened once returned the full `Can’t Undo`. Whether it is the FIRST open in the process that populates it, or every open, is NOT established — no run started from a freshly launched Logic",
+    "the census reads the first eight entries only, which is enough for the undo/redo pair and is not a census of the whole Edit menu",
+    "says nothing about whether pressing the entry undoes anything; that is #864's subject, and this record only establishes how to find the row"
+  ],
+  "supersedes": null
+}
