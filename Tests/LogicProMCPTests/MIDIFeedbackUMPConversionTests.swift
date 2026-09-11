@@ -70,10 +70,15 @@ struct MIDIFeedbackUMPConversionTests {
     /// the case failed for the right reason. The fabrication is only visible when a real message
     /// follows: with the proper stride the continuation is consumed and one event comes out; with a
     /// one-word stride the continuation is read as a header and a second, invented event appears.
+    ///
+    /// The witness was SysEx7 until #856, which taught this converter to read it. That made the case
+    /// fail for a reason that had nothing to do with the stride, so the witness moved to a type that
+    /// is still skipped whole. What it proves is unchanged: a 64-bit message costs two words and a
+    /// converter that advanced one would read its tail as a header.
     @Test("a continuation word that looks like channel voice is not read as a header")
     func aContinuationWordIsNotReadAsAHeader() {
         let (bytes, unconverted) = MIDIFeedback.midi1Bytes(
-            fromUMPWords: [0x30060000, 0x20903C64, 0x20B03010])
+            fromUMPWords: [0x40903C00, 0x20903C64, 0x20B03010])
         let events = MIDIFeedback.parseBytes(bytes)
         #expect(events.count == 1)          // the control change only; the note-on would be invented
         #expect(unconverted == 2)           // the 64-bit message is two words of loss, not one
@@ -110,8 +115,10 @@ struct MIDIFeedbackUMPConversionTests {
     @Test("every multi-word message type is skipped whole, not walked into")
     func multiWordStridesDoNotFabricate() {
         let fakeChannelVoice: UInt32 = 0x20903C64      // reads as note-on if walked into
+        // SysEx7 (0x3) is DELIBERATELY absent: #856 taught this converter to read it, because the
+        // MCU display arrives that way and was being discarded. Its stride is asserted below
+        // instead, so dropping it from this sweep does not drop the coverage.
         let cases: [(name: String, header: UInt32, words: Int)] = [
-            ("SysEx7 / Data64", 0x30060000, 2),
             ("MIDI 2.0 channel voice", 0x40903C00, 2),
             ("Data128", 0x50000000, 4),
             ("64-bit reserved 0x8", 0x80000000, 2),
@@ -127,6 +134,23 @@ struct MIDIFeedbackUMPConversionTests {
             // Words, not messages: a message this converter skips costs its whole width.
             #expect(unconverted == testCase.words, "\(testCase.name) reported \(unconverted)")
         }
+
+        // SysEx7's stride, asserted here rather than assumed: a complete message consumes BOTH its
+        // words, so the note-on that follows is the only channel-voice event. A one-word stride
+        // would read the payload word as a header and invent one.
+        let sysExThenNote: [UInt32] = [0x30060000, 0x20903C64, 0x20B03010]
+        let (bytes, unconverted) = MIDIFeedback.midi1Bytes(fromUMPWords: sysExThenNote)
+        let events = MIDIFeedback.parseBytes(bytes)
+        #expect(unconverted == 0, "SysEx7 is read now, so nothing is lost")
+        #expect(events.count == 2, "the SysEx and the control change, and no invented note-on")
+        var sawSysEx = false
+        var sawControlChange = false
+        for event in events {
+            if case .sysEx = event { sawSysEx = true }
+            if case .controlChange = event { sawControlChange = true }
+        }
+        #expect(sawSysEx)
+        #expect(sawControlChange)
     }
 
     /// A message whose words are not all present. Walking into the remainder reads a truncated tail

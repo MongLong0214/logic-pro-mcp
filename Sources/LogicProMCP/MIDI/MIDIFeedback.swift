@@ -56,6 +56,12 @@ enum MIDIFeedback {
         var out: [UInt8] = []
         var unconverted = 0
         var i = 0
+        // SysEx7 assembly state, for a message split across several words of THIS packet. A message
+        // that starts here and ends in a later CoreMIDI packet is not assembled — this function is
+        // called per packet and holds no state between calls — and its words are counted as
+        // unconverted at the end rather than emitted as a truncated frame.
+        var sysExPending: [UInt8] = []
+        var inSysEx = false
         while i < words.count {
             let word = words[i]
             let messageType = UInt8((word >> 28) & 0xF)
@@ -93,12 +99,81 @@ enum MIDIFeedback {
                 default:
                     unconverted += size
                 }
+            case 0x3:
+                // SysEx7. Skipping this whole is what hid the MCU display: the surface reports WHAT
+                // it is controlling on its LCD, by name, and every one of those messages arrives
+                // here. Measured 2026-09-11 with a Mackie Control bound, plug-in assignment mode
+                // wrote `Cha EQ` per strip and pan mode wrote `Angle Divers LFE Spread` — none of
+                // which reached `parseBytes`, which has handled `.sysEx` all along.
+                //
+                //   word0 = mt(4) group(4) status(4) numBytes(4) data0(8) data1(8)
+                //   word1 = data2(8) data3(8) data4(8) data5(8)
+                //
+                // status: 0 complete, 1 start, 2 continue, 3 end. The `F0`/`F7` framing is IMPLIED
+                // by the status and is not in the data, so it is added back here.
+                let status = UInt8((word >> 20) & 0xF)
+                let declared = Int((word >> 16) & 0xF)
+                // `numBytes` is a claim by the sender and six is the physical maximum. A larger
+                // value would read past the two words that exist, so it is refused rather than
+                // clamped. Clamping to six was rejected: a packet that lies about its length is
+                // not one to half-believe, and a truncated display write would read as a real one.
+                guard declared <= 6 else {
+                    unconverted += size
+                    sysExPending = []
+                    inSysEx = false
+                    i += size
+                    continue
+                }
+                let word1 = words[i + 1]
+                let available: [UInt8] = [
+                    UInt8((word >> 8) & 0xFF), UInt8(word & 0xFF),
+                    UInt8((word1 >> 24) & 0xFF), UInt8((word1 >> 16) & 0xFF),
+                    UInt8((word1 >> 8) & 0xFF), UInt8(word1 & 0xFF),
+                ]
+                let payload = Array(available.prefix(declared))
+                switch status {
+                case 0x0:
+                    out.append(0xF0)
+                    out.append(contentsOf: payload)
+                    out.append(0xF7)
+                    sysExPending = []
+                    inSysEx = false
+                case 0x1:
+                    sysExPending = payload
+                    inSysEx = true
+                case 0x2:
+                    // A continue with no start is a fragment whose head this call never saw. It is
+                    // counted rather than emitted: half a display write is not a display write.
+                    if inSysEx {
+                        sysExPending.append(contentsOf: payload)
+                    } else {
+                        unconverted += size
+                    }
+                case 0x3:
+                    if inSysEx {
+                        out.append(0xF0)
+                        out.append(contentsOf: sysExPending)
+                        out.append(contentsOf: payload)
+                        out.append(0xF7)
+                    } else {
+                        unconverted += size
+                    }
+                    sysExPending = []
+                    inSysEx = false
+                default:
+                    unconverted += size
+                }
             default:
-                // Everything else is a message this converter does not read: SysEx7 data, MIDI 2.0
-                // channel voice, Data128, Flex Data, UMP Stream. It is skipped WHOLE.
+                // Everything else is a message this converter does not read: MIDI 2.0 channel voice,
+                // Data128, Flex Data, UMP Stream. It is skipped WHOLE.
                 unconverted += size
             }
             i += size
+        }
+        // A SysEx left open when the packet ended is not a message. Counting its words keeps the
+        // gap visible instead of letting a partial display write look like a complete one.
+        if inSysEx {
+            unconverted += (sysExPending.count + 5) / 6 * 2
         }
         return (out, unconverted)
     }
