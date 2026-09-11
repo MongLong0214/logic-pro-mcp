@@ -301,8 +301,20 @@ enum SemanticOracleTable {
             + "one-step increment-walk behavior only; no end-to-end write/readback round "
             + "trip has been run, so a State-A fixture would claim qualification not yet earned",
         .mixerSetPluginParam:
-            "send-only State B — routes to [.scripter], whose handler emits only "
-            + "readback_unavailable / scripter_send_only; there is no State A to verify",
+            // #856 reworded. "There is no State A to verify" described OUR ROUTING, which is the
+            // same sentence #373 rejected elsewhere as a label for an operation nobody had routed —
+            // it says where the code goes, not what the world allows, and read that way the
+            // exclusion looks like work someone could finish. The reason is about the TARGET.
+            // `ScripterChannel` sends a MIDI CC on channel 16 to a Scripter instance the operator
+            // inserted by hand, and what that CC reaches is a controller assignment the operator
+            // made in Scripter's own UI. The product neither creates that assignment nor can
+            // enumerate it, so it cannot say WHICH parameter it just moved; a readback on this plane
+            // could only report that something changed. That is unverifiable by construction, not
+            // pending work, and no amount of readback plumbing on our side changes it.
+            "unverifiable by construction — the Scripter plane sends a MIDI CC on channel 16 whose "
+            + "destination is a controller assignment the OPERATOR made by hand in Scripter's UI, "
+            + "which this product neither creates nor can enumerate, so it cannot name the parameter "
+            + "it moved and any readback could only say that something changed",
         // B2 audit: these four transport/navigate ops route ONLY to send-only
         // channels and their handlers can never reach State A. Kept explicit so
         // their absence from the B2 increment is a reviewed decision, not a gap.
