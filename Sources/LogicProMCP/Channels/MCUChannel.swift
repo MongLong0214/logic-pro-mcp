@@ -497,22 +497,28 @@ actor MCUChannel: Channel {
                     + workBudgetDetail
             )
         }
-        let stale = conn.isFeedbackStale()
         let registered = conn.registeredAsDevice ? "device registration confirmed" : "MIDI feedback active, device registration not confirmed"
-        // The AGE stays out of the prose. `last_feedback_at` already carries it as a machine field,
-        // and rendering it here made the same fact live in two places with only one of them
-        // projected away: `stableHealthData` strips `feedback_stale` and `last_feedback_at`, then
-        // compares a payload whose `detail` is still counting seconds. Measured 2026-09-11 on a warm
-        // server, `channels[].detail` was the only field that kept moving after that projection —
-        // "feedback stale (8s)" then "feedback stale (13s)" four seconds apart.
+        // THE AGE, AND NOW THE WORD, STAY OUT OF THE PROSE.
         //
-        // The WORD stays. Three call sites read it (`IntegrationTests:170`, `MCUChannelTests:282`
-        // and `:291`) and an operator reading a health line needs to know staleness at all; what
-        // none of them reads is the integer.
-        let detail = stale
-            ? "MCU \(registered), feedback stale"
-            : "MCU \(registered), feedback active"
-        return .healthy(latencyMs: nil, detail: detail + workBudgetDetail)
+        // The age went first: `last_feedback_at` already carries it as a machine field, and
+        // rendering it here made the same fact live in two places with only one of them projected
+        // away — `stableHealthData` strips `feedback_stale` and `last_feedback_at`, then compares a
+        // payload whose `detail` was still counting seconds. Measured 2026-09-11 on a warm server,
+        // `channels[].detail` was the only field that kept moving after that projection: "feedback
+        // stale (8s)" then "feedback stale (13s)" four seconds apart.
+        //
+        // #851 takes the WORD as well, and for a sharper reason than tidiness. `healthCheck` reads
+        // the cache here; `SystemDispatcher` reads it AGAIN to build the `mcu` block. Feedback
+        // arriving between those two reads put `detail: "…feedback stale"` in the same payload as
+        // `mcu.feedback_stale: false` — one document contradicting itself, and neither field wrong
+        // at the instant it was taken. `live_849` refused to compare the two fields for exactly
+        // this reason and filed it rather than writing a check that would be green by luck.
+        //
+        // So staleness is rendered ONCE, by the dispatcher, from the single snapshot that also
+        // produces `mcu.feedback_stale` — see `SystemDispatcher.mcuStalenessClause`. This channel
+        // reports what it can answer from its own read without a clock: whether the port carries and
+        // whether Logic registered the device.
+        return .healthy(latencyMs: nil, detail: "MCU \(registered)" + workBudgetDetail)
     }
 
     /// Handle incoming feedback event (called from tests or transport callback).

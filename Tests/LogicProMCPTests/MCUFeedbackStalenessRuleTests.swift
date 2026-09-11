@@ -59,4 +59,46 @@ struct MCUFeedbackStalenessRuleTests {
     func negativeAgeIsNotStale() {
         #expect(!state(connected: true, feedbackAgo: -120).isFeedbackStale(now: now))
     }
+
+    // MARK: - #851: the rule is evaluated once per payload, not once per surface
+
+    /// The prose clause and the wire boolean now come from ONE argument, so the health payload
+    /// cannot contradict itself. This pins that the clause is a function of that argument alone —
+    /// the renderer takes no cache, no clock and no connection state it could re-read.
+    @Test("the staleness clause is a function of the published boolean and nothing else")
+    func stalenessClauseIsAFunctionOfTheBoolean() {
+        #expect(SystemDispatcher.mcuStalenessClause(connected: true, stale: true) == ", feedback stale")
+        #expect(SystemDispatcher.mcuStalenessClause(connected: true, stale: false) == ", feedback active")
+    }
+
+    /// A disconnected port is NOT stale under the rule, and it is not active either. Calling it
+    /// active — which a naive `stale ? … : …` does — would be a claim the surface cannot support,
+    /// so the clause is omitted. Both values of `stale` are pinned here because the interesting
+    /// failure is a renderer that reads only `stale` and reports "feedback active" on a dead port.
+    @Test("a disconnected port gets no staleness clause at all, under either boolean")
+    func disconnectedPortGetsNoClause() {
+        #expect(SystemDispatcher.mcuStalenessClause(connected: false, stale: false).isEmpty)
+        #expect(SystemDispatcher.mcuStalenessClause(connected: false, stale: true).isEmpty)
+    }
+
+    /// The channel no longer renders staleness at all. Asserted on a state that IS stale under the
+    /// rule, so a regression that re-adds the second derivation fails here rather than passing by
+    /// happening to be fresh — and asserted as "no staleness vocabulary" rather than against one
+    /// spelling, because a reworded duplicate is the same defect.
+    @Test("MCUChannel.healthCheck renders no staleness word, so there is no second derivation")
+    func channelHealthCarriesNoStalenessWord() async {
+        let cache = StateCache()
+        var conn = MCUConnectionState()
+        conn.isConnected = true
+        conn.registeredAsDevice = true
+        conn.lastFeedbackAt = Date(timeIntervalSinceNow: -600)
+        await cache.updateMCUConnection(conn)
+
+        let detail = await MCUChannel(transport: MockMCUTransport(), cache: cache)
+            .healthCheck()
+            .detail
+        #expect(!detail.contains("stale"))
+        #expect(!detail.contains("feedback active"))
+        #expect(detail.contains("device registration confirmed"))
+    }
 }
