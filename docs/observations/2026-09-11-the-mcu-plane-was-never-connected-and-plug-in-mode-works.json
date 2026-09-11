@@ -1,0 +1,120 @@
+{
+  "id": "2026-09-11-the-mcu-plane-was-never-connected-and-plug-in-mode-works",
+  "schema": 2,
+  "date": "2026-09-11",
+  "subject": "Whether MCU writes reach Logic at all, and whether plug-in assignment mode maps parameters onto the V-Pots",
+  "question": "Can the MCU plane carry a plug-in parameter with a readback, and was it ever connected?",
+  "verdict": "partial",
+  "issues": [
+    856,
+    292,
+    291
+  ],
+  "surface": "system.midi",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-mcu-surface-binding.sh",
+    "expected": "prints what Logic's Control Surface Setup contains; 0 device rows is the state-A this record found, a non-zero count means a surface has since been installed and the state-A readings are not comparable to a run taken now",
+    "cost": "needs Logic open; opens and closes the Setup window itself; ~15 s. Covers the READ half only — the send half needs a build carrying the #856 spike"
+  },
+  "evidence": [
+    "evidence/2026-09-11-mcu-surface-and-plugin-mode-en.json"
+  ],
+  "depends": [],
+  "method": "Two host states, kept apart because they are not comparable. STATE A, as found: Logic's Control Surface Setup listed ZERO devices and the inspector read 'No Device'. Four MCU button classes (SELECT 0x18-0x1b, CHANNEL RIGHT 0x31, assignPlugin 0x2B, assignPan 0x2A) were sent and verified sent by echoing the note number back from the send path; none produced an effect or an echo. A master-fader write produced no echo either. In the same run an AX track selection moved and was read back, proving the readback instrument worked. STATE B, after installing 'Mackie Control' and binding both ports to LogicProMCP-MCU-Internal: one MCU SELECT moved the selection, and assignPlugin remapped the V-Pots. The LCD was read through a THROWAWAY raw-UMP dump, because the product's converter drops SysEx7 whole. NOT done: no plug-in parameter was written through a V-Pot; only the mode switch and its reporting were measured.",
+  "observations": [
+    {
+      "reading": "state A: devices in Logic's Control Surface Setup",
+      "value": 0
+    },
+    {
+      "reading": "state A: Device field",
+      "value": "No Device"
+    },
+    {
+      "reading": "state A: product's mcu.connected / registered_as_device",
+      "value": [
+        true,
+        true
+      ]
+    },
+    {
+      "reading": "state A: MCU SELECT x4, did the AX selection move",
+      "value": false
+    },
+    {
+      "reading": "state A: AX select in the same run, did it move",
+      "value": true
+    },
+    {
+      "reading": "state A: master-fader write, MCU echo",
+      "value": "none, state B readback_unavailable"
+    },
+    {
+      "reading": "state A: inbound frames from Logic during startup",
+      "value": 111
+    },
+    {
+      "reading": "the Input Port popup before binding",
+      "value": "Invalid Port"
+    },
+    {
+      "reading": "state B: one MCU SELECT, selection change",
+      "value": "Track 1 -> Track 32"
+    },
+    {
+      "reading": "state B: V-Pot ring values in pan mode",
+      "value": 86
+    },
+    {
+      "reading": "state B: V-Pot ring values after assignPlugin",
+      "value": [
+        1,
+        1,
+        1,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "reading": "state B: V-Pot ring values after restoring pan",
+      "value": 86
+    },
+    {
+      "reading": "state B: SysEx words after the switch",
+      "value": 28
+    },
+    {
+      "reading": "state B: LCD text in plug-in mode",
+      "value": "8--     --     --     Cha EQ Cha EQ Cha EQ Cha EQ Cha EQ"
+    },
+    {
+      "reading": "state B: LCD text in pan mode",
+      "value": "Angle  Divers LFE    Spread        CStrip Ang/Dv X/Y"
+    },
+    {
+      "reading": "state B: LCD track names in pan mode",
+      "value": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn"
+    }
+  ],
+  "conclusion": "Until 2026-09-11 this host had no control surface installed, so nothing the product sent on the MCU port reached Logic - while the product reported mcu.connected and registered_as_device true, because those are set by ANY inbound traffic rather than by a handshake reply. With a Mackie Control installed and both ports bound, MCU sends take effect: a SELECT moves the track selection, and plug-in assignment mode remaps the V-Pots, whose LED ring values change and restore. The surface also reports WHAT it is controlling by name on its LCD - 'Cha EQ' per strip in plug-in mode - and that message is SysEx, which this product's converter discards whole.",
+  "limits": [
+    "the two host states are not comparable and every state-A reading describes a host with no surface; they are kept apart in the evidence file for that reason",
+    "the LCD decode came from a throwaway raw-UMP dump on an unmerged spike branch - the product cannot read SysEx today, so nothing here is reachable through the shipped build",
+    "no plug-in PARAMETER was written through a V-Pot; the mode switch and its reporting are what was measured, not a verified write",
+    "the V-Pot ring is an 11-step coarse value, so it is a weak readback on its own; the LCD value string is the strong one and is exactly the message that is dropped",
+    "one host, one project, one Logic version, en-US",
+    "installing the surface changed this machine: earlier MCU measurements in this repository were taken without one, and their results describe that state"
+  ],
+  "supersedes": null
+}
