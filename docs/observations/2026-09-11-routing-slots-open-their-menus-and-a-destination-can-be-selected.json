@@ -1,0 +1,152 @@
+{
+  "id": "2026-09-11-routing-slots-open-their-menus-and-a-destination-can-be-selected",
+  "schema": 2,
+  "date": "2026-09-11",
+  "subject": "AXPress on Mixer channel-strip routing slots, and selecting a destination by name",
+  "question": "Do the routing slots open a menu, and can a destination be chosen by title with the slot reading it back?",
+  "verdict": "works",
+  "issues": [
+    291
+  ],
+  "surface": "mixer.routing",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-routing-slot-menu.sh",
+    "expected": "the press opens 2+ menus with 20+ distinct enabled titles; selecting 'Output 3-4' changes the slot readback; Edit > Undo restores the original destination",
+    "cost": "needs Logic open with the Mixer showing; MUTATES one strip's output and undoes it; ~25 s"
+  },
+  "evidence": [
+    "evidence/2026-09-11-routing-slot-menus-en.json"
+  ],
+  "depends": [],
+  "method": "Logic activated and the frontmost bundle id printed in the same run. A track-header Mute toggled off->on->off first as the run's POSITIVE CONTROL, so a silent instrument cannot pass as a silent surface. The slot pressed, every AXMenu swept, every enabled AXMenuItem's title and duplicate-count recorded, then Escape and the menu count confirmed back to zero. For the mutating half, exactly one enabled item with the wanted title is required -- a duplicate is a refusal, not a pick -- and after selecting, the slot's AXDescription is re-read from a fresh sweep. Restored through Edit > Undo, whose effect is verified by re-reading the slot rather than by the osascript return, because osascript returns the menu item's name whether or not the click lands. NOT done: no Send or Group slot was selected from, only read; no locale other than en-US; the Mixer was open throughout and a Mixer-closed run was not tried.",
+  "observations": [
+    {
+      "reading": "control: track-header Mute moved off->on->off",
+      "value": true
+    },
+    {
+      "reading": "Output slot AXEnabled",
+      "value": false
+    },
+    {
+      "reading": "Output slot AXPress rc",
+      "value": -25204
+    },
+    {
+      "reading": "Output slot menus opened by that press",
+      "value": 11
+    },
+    {
+      "reading": "enabled items carrying a title",
+      "value": 274
+    },
+    {
+      "reading": "distinct titles among them",
+      "value": 273
+    },
+    {
+      "reading": "titles appearing more than once",
+      "value": 1
+    },
+    {
+      "reading": "Send slot menus / enabled / distinct",
+      "value": [
+        13,
+        276,
+        275
+      ]
+    },
+    {
+      "reading": "Group slot menus / enabled / distinct",
+      "value": [
+        1,
+        3,
+        3
+      ]
+    },
+    {
+      "reading": "slot destination before selecting",
+      "value": "Stereo Output"
+    },
+    {
+      "reading": "selected by title",
+      "value": "Output 3-4"
+    },
+    {
+      "reading": "slot destination after selecting",
+      "value": "Output 3-4"
+    },
+    {
+      "reading": "Logic's undo stack named the change",
+      "value": "Undo Change Output in Channel Strip"
+    },
+    {
+      "reading": "slot destination after undo",
+      "value": "Stereo Output"
+    },
+    {
+      "reading": "open/escape cycles with no selection",
+      "value": [
+        11,
+        11,
+        11
+      ]
+    },
+    {
+      "reading": "open attempts after selecting 'No Output'",
+      "value": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "reading": "open attempts after selecting 'Output 3-4'",
+      "value": [
+        11,
+        11,
+        11
+      ]
+    },
+    {
+      "reading": "recovery from the 'No Output' state without undo, menus at 0/5/15/30s",
+      "value": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "reading": "output slots after restore: Stereo Output / output / No Output",
+      "value": [
+        36,
+        3,
+        0
+      ]
+    },
+    {
+      "reading": "muted tracks after restore",
+      "value": "0 of 19"
+    }
+  ],
+  "conclusion": "AXPress on a Mixer routing slot opens its destination menu, and a destination can be selected by title with the slot reading back the new value. The Output slot exposes 273 distinct enabled titles out of 274; selecting 'Output 3-4' moved the slot from 'Stereo Output' and Logic recorded it as 'Change Output in Channel Strip'. Both halves of the coordinate-free write are therefore reachable. The slot reports AXEnabled=false and the press returns kAXErrorCannotComplete throughout, so neither is a refusal here.",
+  "limits": [
+    "supersedes the 2026-09-09 record, which read the SLOT'S OWN VALUE after the press; a press never changes that, so that reading could not have observed a success and its 'wall' verdict was about the instrument",
+    "routing a strip to 'No Output' leaves it with NO menu to open afterwards -- measured, and it does not recover after 30s or by pressing another element, only by changing the destination back. A caller must not treat that as a failure of the press",
+    "'Stereo Output' appears twice among the Output menu's enabled titles, so an implementation must refuse or disambiguate rather than take the first",
+    "only the Output slot was SELECTED from; Send and Group slots were read but never actuated",
+    "read in en-US; every title here is a localised string and must be addressed through AXLocalePolicy, never as a literal",
+    "one host, one project, one strip; the bus and track names are this project's",
+    "the Mixer window was open for every run; whether an Inspector-only strip behaves the same was not tested"
+  ],
+  "supersedes": "2026-09-09-the-routing-slots-answer-a-press-with-success-and-do-nothing"
+}
