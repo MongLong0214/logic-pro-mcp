@@ -1,0 +1,53 @@
+name: CommitLore squash inheritance
+
+# This repository merges with the squash button, and GitHub performs that merge on its own servers
+# where no local git hook runs. A squash replaces the branch's commits with one new commit that does
+# not carry their trailers, so without this workflow every decision record made on a branch is
+# dropped by the merge and the author sees a green merge with nothing missing.
+#
+# `commitlore doctor` reported this as off under `squash inheritance`, and separately listed five
+# records on already-merged branches it could no longer find in HEAD's history.
+#
+# Triggering on `pull_request` was rejected in favour of `pull_request_target`: a pull request from
+# a fork gets a read-only token on `pull_request`, so the job would build the record and then fail
+# to publish it.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write # the one push to refs/notes/commitlore
+
+concurrency:
+  group: commitlore-notes
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    # An unmerged pull request still reports a merge_commit_sha -- GitHub's test-merge commit --
+    # and that object is not in the repository.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the merge commit is on the base branch, and a closed pull request has no merge ref
+          # left to check out
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      # the mirror this action writes; publishing from a checkout that never read it would fork
+      # the notes history, so the action stops rather than do that
+      - run: git fetch --no-tags origin '+refs/notes/commitlore:refs/notes/commitlore'
+
+      # a squash merge usually deletes the branch, and then the pull request's own ref is the only
+      # one still reaching the commits that carry records
+      - run: git fetch --no-tags --force origin
+          '+refs/pull/${{ github.event.pull_request.number }}/head:refs/commitlore/pr-head'
+
+      - uses: MongLong0214/commitlore/action/preserve@v1.2.13
+
+# Two rules for whoever edits this next, because pull_request_target runs with a writable token:
+# never check out the pull request's head here, and never execute anything reachable from
+# refs/commitlore/pr-head. The fork's commits arrive as data to read trailers from, not as code
+# to run.
