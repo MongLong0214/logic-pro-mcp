@@ -1,0 +1,9 @@
+Limit: the probe runs outside the product and cannot import it, so the role set is necessarily restated rather than shared; the guard is what holds the two spellings together
+Ruled-out: a separate guard file for the role rule | rejected in favour of widening this one: the property is that the probe restates product rules, and a guard per instance is how the second one went unwatched while the first was covered
+Warn: the declaration regex must anchor past the NAME with a trailing colon; without it a renamed set matched as a prefix and the guard parsed the very declaration the rename removed
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: the Compressor and Gain Controls-view checkbox counts this fix was written to obtain were NOT measured; the probe returned zero matching mixer strips on a real Mixer window and that is a separate unisolated question
+Record-Id: r-5222b23eda33
+Provenance: inherited 42b9ce589a7e2d3f8df61bbf839ced3af3bd8d64
