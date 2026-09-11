@@ -1,0 +1,127 @@
+{
+ "id": "2026-09-11-routing-slot-menus-en",
+ "probe": "Scripts/livekit/ax_routing_slot_menu_probe.swift",
+ "driver": "Scripts/observations/reverify-routing-slot-menu.sh",
+ "read_only_run": [
+  "frontmost: com.apple.logic10",
+  "slot destination: Stereo Output",
+  "control mute moved: 1",
+  "press rc: -25204",
+  "menus opened: 11",
+  "enabled titled items: 274",
+  "distinct titles: 273",
+  "titles appearing more than once: 1",
+  "menus after escape: 0",
+  "selected: skipped"
+ ],
+ "select_run": {
+  "control_mute_moved": 1,
+  "press_rc": -25204,
+  "menus_opened": 11,
+  "enabled_titled_items": 274,
+  "distinct_titles": 273,
+  "titles_appearing_more_than_once": 1,
+  "slot_destination_before": "Stereo Output",
+  "destination_after_select": "Output 3-4",
+  "readback_changed": 1,
+  "restored_to": "Stereo Output",
+  "undo_item_name": "Undo Change Output in Channel Strip"
+ },
+ "menu_shape_by_slot": {
+  "Output slot": {
+   "menus": 12,
+   "items": 285,
+   "enabled": 279,
+   "titled": 278,
+   "distinct": 277,
+   "duplicated": [
+    "Stereo Output"
+   ]
+  },
+  "Send slot": {
+   "menus": 13,
+   "items": 285,
+   "enabled": 276,
+   "titled": 275,
+   "distinct": 275,
+   "duplicated": []
+  },
+  "Group slot": {
+   "menus": 1,
+   "items": 6,
+   "enabled": 3,
+   "titled": 3,
+   "distinct": 3,
+   "duplicated": []
+  }
+ },
+ "sample_titles": {
+  "Output slot": [
+   "Stereo Output",
+   "No Output",
+   "Output",
+   "Bus",
+   "Pan",
+   "Binaural Panner",
+   "Output 3-4",
+   "Surround",
+   "Mono",
+   "Output 1",
+   "Output 2"
+  ],
+  "Send slot": [
+   "No Send",
+   "Bus",
+   "Output",
+   "Absolute Zero",
+   "Bus 4",
+   "Bus 5",
+   "Bus 13"
+  ],
+  "Group slot": [
+   "Open Group Settings…",
+   "No Group",
+   "Group 1: (new)"
+  ]
+ },
+ "no_output_is_a_dead_end": {
+  "note": "the value that made the first attempt look non-reproducible",
+  "cycles_without_selecting": [
+   11,
+   11,
+   11
+  ],
+  "after_selecting_No_Output": [
+   0,
+   0,
+   0
+  ],
+  "after_selecting_Output_3_4": [
+   11,
+   11,
+   11
+  ],
+  "recovery_without_undo": {
+   "waited_sec": [
+    0,
+    5,
+    15,
+    30
+   ],
+   "menus": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "after_toggling_mute": 0
+  }
+ },
+ "slot_census_after_restore": {
+  "total": 39,
+  "Stereo Output": 36,
+  "output": 3,
+  "No Output": 0,
+  "muted_tracks": "0 of 19"
+ }
+}
