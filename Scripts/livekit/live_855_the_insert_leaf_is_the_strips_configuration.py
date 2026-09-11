@@ -48,6 +48,7 @@ Every insert is undone, and the undo is verified by re-reading the strip rather 
 """
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -82,8 +83,12 @@ d = E.Driver()
 d.tool("logic_system", "refresh_cache")
 
 # The band this run watches. Resolved from the live tree rather than written as four numbers, so the
-# receipt can say what the rectangle IS and not only where it was.
-band, band_subject = ev.located_band("Tracks")
+# receipt can say what the rectangle IS and not only where it was. The Korean spelling first because
+# the host is a ko-KR machine; an unresolved band is a red precondition, not a whole-window compare.
+band, band_subject = ev.located_band("트랙 헤더")
+if band is None:
+    band, band_subject = ev.located_band("Tracks header")
+ev.note("855/watched-band", {"region": band, "subject": band_subject})
 before_shot = ev.shot("855/before-any-insert", settle_region=band)
 
 
@@ -95,10 +100,26 @@ def strip_plugins(track):
     return None
 
 
+UNDO_MENU = """
+tell application "Logic Pro" to activate
+delay 0.5
+tell application "System Events" to tell process "Logic Pro"
+  click menu item 1 of menu 1 of menu bar item "Edit" of menu bar 1
+end tell
+"""
+
+
 def undo_and_verify(track, expect_empty_slot):
-    """Undo the last action and CONFIRM by re-reading, rather than trusting the keystroke."""
-    d.tool("logic_edit", "undo")
-    time.sleep(1.2)
+    """Undo through Logic's own Edit menu and CONFIRM by re-reading.
+
+    NOT `logic_edit undo`. Measured 2026-09-12: that command routes to `[.midiKeyCommands]` and
+    answers State B `readback_unavailable` with `method: midi_key_command, cc: 30, channel: 16` --
+    a send-only CC that depends on a controller assignment this project does not have. Driving it
+    twice left both inserted plug-ins in place. A restore step that cannot be shown to have
+    restored is worse than none, because it reads as cleanup in the receipt.
+    """
+    subprocess.run(["/usr/bin/osascript", "-e", UNDO_MENU], capture_output=True, timeout=60)
+    time.sleep(1.5)
     d.tool("logic_system", "refresh_cache")
     after = strip_plugins(track)
     return after is not None and all(i != expect_empty_slot for i, _ in after)
