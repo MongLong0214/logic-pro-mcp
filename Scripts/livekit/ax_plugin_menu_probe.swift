@@ -734,8 +734,23 @@ func openPlugin(
     let before = windows()
     result["pressed_children"] = [snapshot(buttons[0])]
     result["open_press_status"] = press(buttons[0])
-    usleep(1_400_000)
-    let opened = newWindows(since: before)
+    // #852 — POLL, do not sleep a fixed amount. 1.4s was not always enough: pressing the Open button
+    // of a freshly inserted plug-in reported `opened_windows: []` while the same press driven by hand
+    // with a 2s wait opened the window every time. A fixed wait that is usually enough is a probe
+    // that reports "nothing happened" on the runs where the application was busy — and it reports it
+    // in the shape of a finding, which is how this cost four wrong diagnoses on #852 before the wait
+    // was suspected. The product reads the same surface by polling (`pollPluginSlotName`), and the
+    // `-25200` description reads on this same tree needed longer than four seconds to settle.
+    var opened: [AXUIElement] = []
+    var waitedMs = 0
+    while waitedMs < 6_000 {
+        usleep(200_000)
+        waitedMs += 200
+        opened = newWindows(since: before)
+        if !opened.isEmpty { break }
+    }
+    // What the wait actually cost, so a slow run is visible rather than inferred.
+    result["open_wait_ms"] = waitedMs
     result["opened_windows_scope"] = "all_logic_application_windows"
     result["opened_windows_scope_widened_from_pressed_slot"] = true
     result["opened_windows_scope_note"] = "new windows are not bound to the pressed \(slotName) slot"
