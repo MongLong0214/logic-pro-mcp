@@ -153,6 +153,7 @@
    "beatSliderLabel→비트",
    "cancelButton→キャンセル",
    "cancelButton→취소",
+   "controlBarGroupLabel→Steuerungsleiste",
    "controlBarGroupLabel→コントロールバー",
    "controlBarGroupLabel→컨트롤 막대",
    "createButton→作成",
@@ -400,7 +401,6 @@
     "eventListColumnValue",
     "eventListTab",
     "eventPositionAsTimeMenuItem",
-    "goToPositionDialogTitle",
     "horizontalZoomSlider",
     "inline:Dual Mono",
     "inline:Mono",
@@ -904,13 +904,14 @@
   "undocumented_variants": {
    "date": "2026-09-12",
    "members": [
+    "controlBarGroupLabel→Steuerungsleiste",
     "markerListEditMenuButton→Bearbeiten",
     "trackContentExplicit→Spuren enthält",
     "trackHeadersDescription→Spuren Titel",
     "trackMuteButton→Ton aus",
     "trackRecordButton→Aufnahme"
    ],
-   "reason": "The same shape as the five Japanese forms raised 2026-09-07, and for the same reason. All five German strings were READ — off the 2026-09-12 de-DE navigation-free census, aligned against the en-US walk of the same day (#876) — and all five sit on census surface `arrange.window`, which no record covers, so `locale-propose.py --apply` will not cite one. The citation gap is in the pipeline, not in the reading: `apply` keys records by the census row's RAW surface field, and every window row carries `arrange.window` whatever it is classified as. Fixing that is a change to the campaign for every locale at once and is deliberately not made while adding one."
+   "reason": "The same shape as the five Japanese forms raised 2026-09-07, and for the same reason. All six German strings were READ — off the 2026-09-12 de-DE navigation-free census, aligned against the en-US walk of the same day (#876) — and all six sit on census surface `arrange.window`, which no record covers, so `locale-propose.py --apply` will not cite one. The citation gap is in the pipeline, not in the reading: `apply` keys records by the census row's RAW surface field, and every window row carries `arrange.window` whatever it is classified as. Fixing that is a change to the campaign for every locale at once and is deliberately not made while adding one."
   },
   "unmeasured_coverage.de-DE": {
    "date": "2026-09-12",
@@ -944,7 +945,6 @@
     "eventListColumnValue",
     "eventListTab",
     "eventPositionAsTimeMenuItem",
-    "goToPositionDialogTitle",
     "horizontalZoomSlider",
     "inline:Dual Mono",
     "inline:Mono",
@@ -1031,7 +1031,7 @@
     "transportTextFieldHint",
     "undoPluginInsertMenuItem"
    ],
-   "reason": "#876 added de-DE as a supported locale, which widens every label's coverage map by one column and starts all 145 of them `unmeasured` in it. 29 were closed the same day by the first German campaign; these 115 are what one navigation-free campaign cannot reach — window titles, dialog buttons, column headers, plug-in menu leaves and the editors, none of which the census walks. This set is the honest size of the gap a German user has, not a ceiling anyone intends to keep: it shrinks as aimed censuses are taken."
+   "reason": "#876 added de-DE as a supported locale, which widens every label's coverage map by one column and starts all 145 of them `unmeasured` in it. 30 were closed the same day — 29 by the first German campaign and one, the Go To Position dialog, by opening it — and these 114 are what one navigation-free campaign cannot reach — window titles, dialog buttons, column headers, plug-in menu leaves and the editors, none of which the census walks. This set is the honest size of the gap a German user has, not a ceiling anyone intends to keep: it shrinks as aimed censuses are taken."
   },
   "unmeasured_coverage.en-US": {
    "date": "2026-09-09",

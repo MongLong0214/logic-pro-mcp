@@ -935,7 +935,7 @@ AX_REGION_LABELS = {
     # `no element with that exact AXDescription` on a Korean Logic and three harnesses failed a
     # precondition about a window frame. Every other region in this table already had its row —
     # this was one missing line, not a missing mechanism.
-    "Control Bar": ["컨트롤 막대", "コントロールバー"],
+    "Control Bar": ["컨트롤 막대", "コントロールバー", "Steuerungsleiste"],
     # The Japanese column below is measured, not translated: every string is a verbatim
     # AXDescription from the ja-JP arrange census of 2026-09-05 (Logic 12.3 build 6674), filed
     # under docs/observations/evidence/. Until then `Control Bar` was the only row with one, so on

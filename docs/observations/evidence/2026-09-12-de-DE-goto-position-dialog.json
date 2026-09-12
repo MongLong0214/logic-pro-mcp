@@ -1,0 +1,29 @@
+{
+ "note": "Not a census. Two OPENS of one dialog, written in the census row shape so a provenance block can cite it the way it cites a census — a sighting is a role plus a label-bearing attribute, and a claim about a string nobody can point at an element for is exactly what the guards refuse.",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "de-DE",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "method": "Scripts/observations/reverify-goto-position-dialog-title.sh, run twice",
+ "census": [
+  {
+   "role": "AXWindow",
+   "subrole": "AXFloatingWindow",
+   "title": "Zu Position",
+   "surface": "arrange.menus",
+   "path": "AXApplication[Logic Pro]/AXWindow[Zu Position]",
+   "open": 1
+  },
+  {
+   "role": "AXWindow",
+   "subrole": "AXFloatingWindow",
+   "title": "Zu Position",
+   "surface": "arrange.menus",
+   "path": "AXApplication[Logic Pro]/AXWindow[Zu Position]",
+   "open": 2
+  }
+ ]
+}

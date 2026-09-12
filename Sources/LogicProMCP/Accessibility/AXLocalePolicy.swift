@@ -659,8 +659,8 @@ enum AXLocalePolicy {
 
     static let goToPositionDialogTitle = LabelSet(
         canonical: "Go To Position",
-        variants: ["위치로 이동", "位置の移動"],
-        rationale: "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately."
+        variants: ["위치로 이동", "位置の移動", "Zu Position"],
+        rationale: "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately. German read 2026-09-12 by OPENING the dialog on a de-DE Logic and reading its window title (#876), twice, both times `Zu Position` on an AXFloatingWindow. It is not in the navigation-free census — the census opens nothing — which is why the live run that needed it reported `dialog_unidentified_new_window`: the menu leaf fired, the window appeared, and the product could not name it. The AppleScript literal list this LabelSet now renders also carried `Go to Position`, and it is NOT carried here. It had no provenance, `matches(_:mode:.exactStrict)` is case-sensitive so the Swift side never accepted it either, and keeping it would put two members in this set that differ only by case — which `check-probe-product-drift.py` refuses, because a later move to case-folded matching would merge them. So the generated handler is deliberately NARROWER than the literal it replaced by exactly that one string, and the two sides now agree."
     )
 
     static let cancelButton = LabelSet(
@@ -821,8 +821,8 @@ enum AXLocalePolicy {
 
     static let controlBarGroupLabel = LabelSet(
         canonical: "control bar",
-        variants: ["컨트롤 막대", "コントロールバー"],
-        rationale: "Identifies the control-bar AXGroup by description; read-only locator."
+        variants: ["컨트롤 막대", "コントロールバー", "Steuerungsleiste"],
+        rationale: "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows."
     )
 
     static let barSliderLabel = LabelSet(

@@ -25,6 +25,16 @@
    ],
    "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Alle Spuren als Audiodateien …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Alle Spuren als Audiodateien …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "すべてのトラックをオーディオファイルとして…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -44,16 +54,6 @@
      "observed": "모든 트랙을 오디오 파일로…",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Alle Spuren als Audiodateien …": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Alle Spuren als Audiodateien …",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -289,6 +289,16 @@
    ],
    "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Bouncen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bouncen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "バウンス": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -308,16 +318,6 @@
      "observed": "바운스",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Bouncen": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Bouncen",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -359,9 +359,10 @@
    "canonical": "control bar",
    "variants": [
     "컨트롤 막대",
-    "コントロールバー"
+    "コントロールバー",
+    "Steuerungsleiste"
    ],
-   "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
+   "rationale": "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows.",
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
@@ -394,6 +395,16 @@
    ],
    "rationale": "Navigate menu entry that creates a marker at the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Marker erzeugen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Marker erzeugen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "マーカーを作成": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -413,16 +424,6 @@
      "observed": "마커 생성",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Marker erzeugen": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Marker erzeugen",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -470,6 +471,16 @@
    ],
    "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Bearbeiten": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bearbeiten",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "編集": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -489,16 +500,6 @@
      "observed": "편집",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Bearbeiten": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Bearbeiten",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -905,6 +906,16 @@
    ],
    "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Exportieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Exportieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "書き出す": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -924,16 +935,6 @@
      "observed": "내보내기",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Exportieren": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Exportieren",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -965,6 +966,16 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Ablage": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Ablage",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "ファイル": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -984,16 +995,6 @@
      "observed": "파일",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Ablage": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Ablage",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1025,6 +1026,16 @@
    ],
    "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Gehe zu": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Gehe zu",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "移動": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1044,16 +1055,6 @@
      "observed": "이동",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Gehe zu": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Gehe zu",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1080,15 +1081,31 @@
    "canonical": "Go To Position",
    "variants": [
     "위치로 이동",
-    "位置の移動"
+    "位置の移動",
+    "Zu Position"
    ],
-   "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately.",
+   "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately. German read 2026-09-12 by OPENING the dialog on a de-DE Logic and reading its window title (#876), twice, both times `Zu Position` on an AXFloatingWindow. It is not in the navigation-free census — the census opens nothing — which is why the live run that needed it reported `dialog_unidentified_new_window`: the menu leaf fired, the window appeared, and the product could not name it. The AppleScript literal list this LabelSet now renders also carried `Go to Position`, and it is NOT carried here. It had no provenance, `matches(_:mode:.exactStrict)` is case-sensitive so the Swift side never accepted it either, and keeping it would put two members in this set that differ only by case — which `check-probe-product-drift.py` refuses, because a later move to case-folded matching would merge them. So the generated handler is deliberately NARROWER than the literal it replaced by exactly that one string, and the two sides now agree.",
+   "provenance": {
+    "Zu Position": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact_strict",
+     "observed": "Zu Position",
+     "record": "2026-09-12-the-german-go-to-position-dialog-is-called-zu-position",
+     "role": "AXWindow"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
-    "de-DE": "unmeasured"
+    "de-DE": "measured"
    }
   },
   "goToPositionMenuItem": {
@@ -1100,6 +1117,16 @@
    ],
    "rationale": "Go To submenu leaf that opens the Go To Position dialog. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Position …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Position …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "位置…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1119,16 +1146,6 @@
      "observed": "위치…",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Position …": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Position …",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1183,6 +1200,16 @@
    ],
    "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Alle Plug-in-Fenster": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Alle Plug-in-Fenster",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "すべてのプラグインウインドウ": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1200,16 +1227,6 @@
      "path_contains": "AXMenuBarItem[윈도우]/",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Alle Plug-in-Fenster": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Alle Plug-in-Fenster",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1260,6 +1277,16 @@
    ],
    "rationale": "File menu entry that opens the Import submenu used by midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Importieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Importieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "読み込む": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1279,16 +1306,6 @@
      "observed": "가져오기",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Importieren": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Importieren",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1550,6 +1567,16 @@
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
     },
+    "MIDI-Datei …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "MIDI-Datei …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "MIDIファイル…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1559,16 +1586,6 @@
      "observed": "MIDIファイル…",
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "MIDI-Datei …": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "MIDI-Datei …",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1628,14 +1645,14 @@
    "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
     "Bewegen": {
-     "locale": "de-DE",
+     "attribute": "title",
      "date": "2026-09-12",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "locale": "de-DE",
+     "match": "exact",
      "observed": "Bewegen",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1658,6 +1675,16 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Navigieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Navigieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "移動": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1677,16 +1704,6 @@
      "observed": "탐색",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Navigieren": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Navigieren",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1718,6 +1735,16 @@
    ],
    "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Neu": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Neu",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "新規": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1737,16 +1764,6 @@
      "observed": "신규",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Neu": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Neu",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -1848,6 +1865,16 @@
    ],
    "rationale": "Navigate menu entry that opens the Marker List window. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Marker-Liste öffnen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Marker-Liste öffnen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "マーカーリストを開く": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1867,16 +1894,6 @@
      "observed": "마커 목록 열기",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Marker-Liste öffnen": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Marker-Liste öffnen",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -2049,6 +2066,16 @@
    ],
    "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button.",
    "provenance": {
+    "list": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "contains",
+     "observed": "Tempoliste einblenden",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "開く": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2058,16 +2085,6 @@
      "observed": "開く…",
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "list": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Tempoliste einblenden",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
     }
    },
    "roles": [
@@ -2154,6 +2171,16 @@
    ],
    "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Projekt oder Abschnitt …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Projekt oder Abschnitt …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "プロジェクトまたは選択範囲…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2173,16 +2200,6 @@
      "observed": "프로젝트 또는 섹션…",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Projekt oder Abschnitt …": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Projekt oder Abschnitt …",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -2287,6 +2304,16 @@
    ],
    "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Sichern unter …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Sichern unter …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "別名で保存…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2306,16 +2333,6 @@
      "observed": "별도 저장…",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Sichern unter …": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Sichern unter …",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -2471,6 +2488,16 @@
    ],
    "rationale": "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Step-Input-Keyboard": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Step-Input-Keyboard",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "ステップインプットキーボード": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2488,16 +2515,6 @@
      "path_contains": "AXMenuBarItem[윈도우]/",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "Step-Input-Keyboard": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Step-Input-Keyboard",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -2529,14 +2546,14 @@
    "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
     "Tempoliste einblenden": {
-     "locale": "de-DE",
+     "attribute": "title",
      "date": "2026-09-12",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "locale": "de-DE",
+     "match": "exact",
      "observed": "Tempoliste einblenden",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2615,6 +2632,16 @@
    ],
    "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
    "provenance": {
+    "fader": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "contains",
+     "observed": "Pre-Fader-Metering",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "ボリューム": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2624,16 +2651,6 @@
      "observed": "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "role": "AXMenuItem"
-    },
-    "fader": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Pre-Fader-Metering",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "contains"
     }
    },
    "roles": [
@@ -3016,14 +3033,14 @@
    "rationale": "Move submenu leaf that repositions the selected region to the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
     "Für Abspielposition": {
-     "locale": "de-DE",
+     "attribute": "title",
      "date": "2026-09-12",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "locale": "de-DE",
+     "match": "exact",
      "observed": "Für Abspielposition",
-     "role": "AXMenuItem",
-     "attribute": "title",
-     "match": "exact"
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -3134,6 +3151,16 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Spur": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Spur",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "トラック": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -3153,16 +3180,6 @@
      "observed": "트랙",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Spur": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Spur",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -3584,16 +3601,16 @@
     "de-DE": "measured"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census",
-    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+    "de-DE": "2026-09-12-de-DE-arrange-menus-census",
+    "en-US": "2026-09-05-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "en-US": "AXMenuItem",
-    "de-DE": "AXMenuItem"
+    "de-DE": "AXMenuItem",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "en-US": "title",
-    "de-DE": "title"
+    "de-DE": "title",
+    "en-US": "title"
    }
   },
   "undoPluginInsertMenuItem": {
@@ -3619,6 +3636,16 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Ansicht": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Ansicht",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "表示": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -3638,16 +3665,6 @@
      "observed": "보기",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Ansicht": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Ansicht",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [
@@ -3679,6 +3696,16 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Fenster": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Fenster",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "ウインドウ": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -3698,16 +3725,6 @@
      "observed": "윈도우",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
      "role": "AXMenuBarItem"
-    },
-    "Fenster": {
-     "locale": "de-DE",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "observed": "Fenster",
-     "role": "AXMenuBarItem",
-     "attribute": "title",
-     "match": "exact"
     }
    },
    "roles": [

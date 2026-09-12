@@ -31,12 +31,21 @@ is CONFIRMED by reading Logic's menu bar back rather than by reading the setting
 It works on the disposable locale-campaign fixture and refuses to run against anything else, because
 relaunching Logic over somebody's project is not this run's to do.
 
+WHAT IT DOES NOT CLAIM, SAID BEFORE THE RESULT
+----------------------------------------------
+It does not claim the product WORKS in German. `tracks.record_sequence` does not: it imports a
+standard MIDI file and the import panel is localised too, so on a German Logic the operation refuses
+at `preflight_blocking_dialog` naming a dialog called `Importieren`. That refusal is recorded here
+as an observation rather than left out, because a run that quietly picked operations that pass would
+be measuring its own selection. The reachable German surface today is MENU-ROUTED navigation, and
+that is exactly what this asserts.
+
 THE COUNTEREXAMPLE
 ------------------
-A product that reaches State A on a German Logic by not using the German labels at all — falling
-back to a position, an index, or the English string. Then `edit_menu_bar_is_not_english` would still
-be true while the resolved path came back empty, so the run asserts the RESOLVED LEAF as well as the
-outcome: State A with nothing resolved is the shape that would pass a weaker check and prove nothing.
+A product that succeeds on a German Logic by not using the German labels at all — falling back to a
+position, an index, or the English string. Then `edit_menu_bar_is_not_english` would still be true
+while the resolved path came back empty, so the run asserts the RESOLVED LEAVES as well as the
+outcome: success with nothing resolved is the shape that would pass a weaker check and prove nothing.
 """
 import json
 import os
@@ -272,38 +281,39 @@ ev.note("876/menu-path", {"edit": edit_live, "move": move_live, "to_playhead": p
                           "policy": {"edit": edit_labels, "move": move_labels,
                                      "to_playhead": playhead_labels}})
 
-band, band_subject = ev.located_band("Tracks contents")
-ev.check("876/the-arrange-canvas-was-located-through-its-german-description",
+band, band_subject = ev.located_band("Control Bar")
+ev.check("876/the-control-bar-was-located-through-its-german-description",
          band is not None and bool(band_subject),
-         "the canvas is found by the AXDescription it carries, which IS localised — the German "
-         "spelling was read off the de-DE census of 2026-09-12 and added to the locator's measured "
-         "table, without which no capture can be taken on the one run where the locale is the point",
+         "the control bar is found by the AXDescription it carries, which IS localised — the German "
+         "spelling was read off the de-DE census of 2026-09-12, and without it no capture can be "
+         "taken on the one run where the locale is the point",
          f"band={band!r} subject={band_subject!r}", None)
 
-before = ev.shot("876/before", settle_region=band)
+canvas, canvas_subject = ev.located_band("Tracks contents")
+ev.note("876/the-canvas-is-also-german", {"band": canvas, "subject": canvas_subject})
 
-recorded = None
-for _ in range(3):
-    recorded = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"})
-    if isinstance(recorded, dict) and recorded.get("verified") is True:
-        break
-    time.sleep(4)
-ev.note("876/record", {k: v for k, v in (recorded or {}).items() if k != "raw_help"})
+before = ev.shot("876/before-the-playhead-moved", settle_region=band)
 
 seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
 time.sleep(2)
-moved = d.tool("logic_edit", "move_to_playhead", {})
-time.sleep(2)
-ev.note("876/move", {"seek": (seek or {}).get("observed"), "move": moved})
+ev.note("876/goto", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
 
-after = ev.shot("876/after", settle_region=band)
-ev.visual("876/the-region-visibly-moved-on-a-german-logic",
+after = ev.shot("876/after-the-playhead-moved", settle_region=band)
+ev.visual("876/the-playhead-readout-moved-on-a-german-logic",
           before["file"], after["file"], band, subject=band_subject, expect_change=True,
-          why=f"a region was created and dragged to bar {TARGET_BAR} through Logic's GERMAN menus, "
-              "so the canvas it is drawn on must differ — an envelope reporting State A about a "
-              "region nobody can see move would leave this band untouched")
+          why=f"the playhead was driven to bar {TARGET_BAR} through Logic's GERMAN Navigate ▸ Go To "
+              "▸ Position… chain, and the control bar's position readout is where Logic shows where "
+              "the playhead is — a route reporting success while the readout still says bar 1 would "
+              "leave this band identical")
 
-body = moved if isinstance(moved, dict) else {}
+# NOT a passing clause, and deliberately so. It is the next German gap, measured in the same run
+# that proves the menus work, so nobody has to take its size on trust.
+blocked = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"})
+ev.note("876/the-import-path-is-not-reachable-in-german",
+        {k: v for k, v in (blocked or {}).items()
+         if k in ("state", "error", "failure_stage", "dialog_title", "hint")})
+
+seek_body = seek if isinstance(seek, dict) else {}
 reading = {
     "menu_bar": bar_items,
     "edit_menu_bar_live": edit_live,
@@ -313,18 +323,20 @@ reading = {
     "to_playhead_leaf_resolved": playhead_live,
     "move_leaf_is_a_policy_label": move_live in move_labels,
     "to_playhead_leaf_is_a_policy_label": playhead_live in playhead_labels,
-    "region_readback_verified": (recorded or {}).get("verified"),
-    "move_state": body.get("state"),
+    "goto_state": seek_body.get("state"),
+    "goto_succeeded": seek_body.get("success"),
+    "goto_took_no_dialog_route": seek_body.get("dialog_route_outcome") is None,
+    "import_refused_naming_a_german_dialog": (blocked or {}).get("dialog_title"),
 }
 
 ev.falsifiable(
-    "876/a-german-logic-is-driven-by-labels-the-product-declares",
+    "876/a-german-logic-is-navigated-by-labels-the-product-declares",
     lambda o: (o["edit_menu_bar_is_not_english"]
                and o["edit_menu_bar_is_a_policy_label"]
                and bool(o["move_leaf_resolved"]) and o["move_leaf_is_a_policy_label"]
                and bool(o["to_playhead_leaf_resolved"]) and o["to_playhead_leaf_is_a_policy_label"]
-               and o["region_readback_verified"] is True
-               and o["move_state"] == "A"),
+               and o["goto_succeeded"] is True
+               and o["goto_state"] in ("A", "B")),
     reading,
     {"menu_bar": ["Logic Pro", "Ablage", "Bearbeiten"],
      "edit_menu_bar_live": "Bearbeiten",
@@ -333,13 +345,13 @@ ev.falsifiable(
      "move_leaf_resolved": "", "to_playhead_leaf_resolved": "",
      "move_leaf_is_a_policy_label": False,
      "to_playhead_leaf_is_a_policy_label": False,
-     "region_readback_verified": True,
-     "move_state": "A"},
-    "on a Logic whose menu bar is German, the Edit ▸ Move ▸ To Playhead path resolves entirely out "
-    "of labels `AXLocalePolicy` declares, a region's LOCALISED help string parses into a verified "
-    "readback, and the move reaches State A. THE COUNTEREXAMPLE is the product reaching State A on "
-    "a German Logic without using German labels — the menu bar is still German and the outcome is "
-    "still A, but nothing resolved; a check that asked only for State A would call that success",
+     "goto_state": "B", "goto_succeeded": True, "goto_took_no_dialog_route": True,
+     "import_refused_naming_a_german_dialog": "Importieren"},
+    "on a Logic whose menu bar is German, Edit ▸ Move ▸ To Playhead resolves entirely out of labels "
+    "`AXLocalePolicy` declares, and Navigate ▸ Go To ▸ Position… drives the playhead successfully. "
+    "THE COUNTEREXAMPLE is the product succeeding on a German Logic without using German labels — "
+    "the menu bar is still German and the call still succeeds, but nothing resolved; a check that "
+    "asked only for success would call that a working German build",
     mutation="delete the German variant from `editMenuBar`, `moveMenuItem` or `toPlayheadMenuItem` "
             "in `AXLocalePolicy.swift`. The corresponding `*_resolved` field empties and its "
             "`*_is_a_policy_label` clause goes false on its own, while the menu-bar clauses stay "

@@ -1,0 +1,61 @@
+{
+ "id": "2026-09-12-the-german-go-to-position-dialog-is-called-zu-position",
+ "date": "2026-09-12",
+ "schema": 2,
+ "subject": "The Go To Position dialog's window title on a de-DE Logic",
+ "question": "What is the Go To Position dialog called in German, and why did the census not have it?",
+ "verdict": "works",
+ "issues": [
+  876
+ ],
+ "surface": "arrange.menus",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "de-DE",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "Scripts/observations/reverify-goto-position-dialog-title.sh",
+  "expected": "`Zu Position|AXFloatingWindow;` on a German Logic; the menu path is tried in every measured spelling, so the same script answers on en-US, ko-KR and ja-JP with their own titles",
+  "cost": "needs Logic open on any project; ~10 s, opens the dialog and closes it with Escape"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:goToPositionDialogTitle"
+ ],
+ "evidence": [
+  "evidence/2026-09-12-de-DE-goto-position-dialog.json"
+ ],
+ "method": "Navigate ▸ Go To ▸ Position… was opened through the menu, each segment matched against the spellings the policy declares rather than a translated one, and every non-standard window was listed with its subrole. Escape closed the dialog; nothing was submitted, so the playhead did not move. Run twice to distinguish a title from a one-off.",
+ "observations": [
+  {
+   "what": "first open: the only non-standard window and its subrole",
+   "title": "Zu Position",
+   "subrole": "AXFloatingWindow"
+  },
+  {
+   "what": "second open, same session",
+   "title": "Zu Position",
+   "subrole": "AXFloatingWindow"
+  },
+  {
+   "what": "what the product reported before the variant existed",
+   "outcome": "dialog_unidentified_new_window",
+   "state": "C",
+   "error": "ax_write_failed"
+  },
+  {
+   "what": "the navigation-free census of the same day, searched for this string",
+   "occurrences": 0
+  }
+ ],
+ "conclusion": "On this host in German the dialog is titled `Zu Position`, the same string on both opens, on an AXFloatingWindow. It occurs 0 times in the 2026-09-12 de-DE navigation-free census, because that census opens nothing — which is why the label was missing and why the product answered `dialog_unidentified_new_window` rather than naming the window it had just caused to appear.",
+ "limits": [
+  "One dialog. Every other German dialog title is still unmeasured, and they are unmeasurable the same way — a navigation-free census cannot reach any of them.",
+  "One host and one build. A Logic update can rename a dialog without renaming the menu item that opens it.",
+  "It says what the window is CALLED, not that dismissing it by that name works — the product's use of this label is to recognise a stale dialog, and this record does not exercise that path."
+ ],
+ "supersedes": null
+}

@@ -1252,13 +1252,7 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        -- These are the measured, operable titles, not an absence policy. Locale expansion is
-        -- tracked in #519; the reviewed JA title is covered here, while all other unrecognised
-        -- titles must still be withheld as unidentified.
-        on knownGoToPositionDialogTitle(dialogTitle)
-            if dialogTitle is "위치로 이동" or dialogTitle is "位置の移動" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
-            return false
-        end knownGoToPositionDialogTitle
+        \(goToPositionDialogTitleHandlerAppleScript())
 
         -- Count only windows that satisfy the measured input-target predicate. All properties used
         -- here are readable from Logic Pro; errors are intentionally fail-closed. This numeric
@@ -2241,6 +2235,38 @@ extension AccessibilityChannel {
 
     /// Kept as one generated fragment so the timeout reconciler and its no-System-Events parser
     /// regression test execute exactly the same parent-owned snapshot boundary behavior.
+    /// The AppleScript handler that decides whether a window IS the Go To Position dialog, rendered
+    /// from `AXLocalePolicy.goToPositionDialogTitle` rather than written out.
+    ///
+    /// It used to be a literal `if dialogTitle is "…" or …` chain, written twice — once in the
+    /// position route and once in the stray-UI sweep — restating the titles the policy already
+    /// declares. That is a second authority, and it behaved exactly like one: German was added to
+    /// the LabelSet on 2026-09-12 and the route went on answering `dialog_unidentified_new_window`,
+    /// because the two copies of the list were where the decision actually lived (#876). The menu
+    /// path beside it had already been moved onto the policy for #519; this is the half that was
+    /// left behind, and its own comment said so.
+    ///
+    /// `matches(_:mode:.exactStrict)` compares the whole string with no folding, so the rendered
+    /// comparison is `is`, which is AppleScript's exact string equality.
+    static func goToPositionDialogTitleHandlerAppleScript() -> String {
+        // A title carrying a quote or a backslash would break out of the generated literal. None
+        // does today, and one that did would be dropped rather than smuggled into the script — a
+        // handler that silently accepts fewer titles refuses, which is the safe direction here.
+        let titles = AXLocalePolicy.goToPositionDialogTitle.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "dialogTitle is \"\($0)\"" }
+        let condition = titles.isEmpty ? "false" : titles.joined(separator: " or ")
+        return """
+        -- The measured, operable titles. Rendered from AXLocalePolicy.goToPositionDialogTitle, so a
+        -- locale added to that LabelSet reaches this comparison; an unrecognised title is still
+        -- withheld as unidentified rather than treated as an input target.
+        on knownGoToPositionDialogTitle(dialogTitle)
+            if \(condition) then return true
+            return false
+        end knownGoToPositionDialogTitle
+        """
+    }
+
     static func preLeafGoToPositionWindowSnapshotParserAppleScript() -> String {
         """
         use framework "Foundation"
@@ -2302,10 +2328,7 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        on knownGoToPositionDialogTitle(dialogTitle)
-            if dialogTitle is "위치로 이동" or dialogTitle is "位置の移動" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
-            return false
-        end knownGoToPositionDialogTitle
+        \(goToPositionDialogTitleHandlerAppleScript())
 
         \(preLeafGoToPositionWindowSnapshotParserAppleScript())
 
