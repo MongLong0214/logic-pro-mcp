@@ -183,7 +183,12 @@ def _running_harness_name():
 # so `shot` took its no-window branch and recorded `settled: false`, `region: null` and
 # `wholly_within: false` — and I read those three as a settling problem and blamed blinking level
 # meters. They were one missing translation, and the capture never happened at all.
-ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック"]
+# The arrange window's title SUFFIX, in every language measured. German joined on 2026-09-12 (#876)
+# and it is the same failure the Korean note below records, one attribute over: a de-DE window is
+# called `<project> - Spuren`, no candidate matched, `logic_window` returned None, and every capture
+# in the German run recorded `no Logic window on screen` while Logic was plainly on screen. The
+# checks passed and the visual assertion failed on empty pixels.
+ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック", "Spuren"]
 
 
 def _is_logic_owned_window(window):
@@ -462,6 +467,19 @@ def _first_ax_sheet(ax, window, max_depth=32):
     return None
 
 
+LOGIC_BUNDLE_IDS = {"com.apple.logic10", "com.apple.mobilelogic"}
+
+
+def _live_logic_apps(applications):
+    """The Logic processes that are still running, out of whatever the workspace answered.
+
+    A terminated entry is not an unreadable Logic — it is a Logic that is gone — and treating it as
+    the former is what made the detector answer cannot-tell forever after the first relaunch.
+    """
+    return [app for app in applications
+            if app.bundleIdentifier() in LOGIC_BUNDLE_IDS and not app.isTerminated()]
+
+
 def _production_ax_modal_signals():
     """Return app-wide modal AX windows and sheets for every running Logic process.
 
@@ -471,13 +489,28 @@ def _production_ax_modal_signals():
     labels the application clear while its AX sheet enumeration is scoped to the wrong window.
     """
     try:
-        from AppKit import NSWorkspace
+        from AppKit import NSWorkspace, NSRunLoop, NSDate
+        # NSWorkspace's application list is maintained by notifications, and a plain Python process
+        # has no run loop to deliver them — so after Logic quits and relaunches, this list can still
+        # hold the DEAD application object. Its `processIdentifier()` is the old pid, and
+        # `AXUIElementCreateApplication(dead pid)` answers -25204 forever: the detector goes
+        # permanently cannot-tell from the first relaunch onward, while Logic is plainly up and
+        # readable by every other means in this file.
+        #
+        # Measured 2026-09-12 on the German run (#876): the check taken BEFORE the first quit
+        # recorded a clean `null`, and all four after it recorded `AXWindows (AX status -25204)` —
+        # including one taken at the same moment `located_band` successfully read the live tree.
+        # Waiting does not fix it, because nothing is going to arrive.
+        #
+        # Pumping the run loop briefly lets those notifications land; filtering terminated apps is
+        # the belt to that braces, since a stale entry that survives the pump must not be treated as
+        # an unreadable Logic.
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.2))
         applications = NSWorkspace.sharedWorkspace().runningApplications()
     except Exception as exc:  # noqa: BLE001 - no workspace means the off-screen check did not run
         raise _ModalReadError(f"could not enumerate running Logic applications: {exc!r}") from exc
 
-    logic_apps = [app for app in applications
-                  if app.bundleIdentifier() in {"com.apple.logic10", "com.apple.mobilelogic"}]
+    logic_apps = _live_logic_apps(applications)
     ax = _AXRuntime()
     try:
         first_unreadable = None
@@ -935,7 +968,7 @@ AX_REGION_LABELS = {
     # `no element with that exact AXDescription` on a Korean Logic and three harnesses failed a
     # precondition about a window frame. Every other region in this table already had its row —
     # this was one missing line, not a missing mechanism.
-    "Control Bar": ["컨트롤 막대", "コントロールバー"],
+    "Control Bar": ["컨트롤 막대", "コントロールバー", "Steuerungsleiste"],
     # The Japanese column below is measured, not translated: every string is a verbatim
     # AXDescription from the ja-JP arrange census of 2026-09-05 (Logic 12.3 build 6674), filed
     # under docs/observations/evidence/. Until then `Control Bar` was the only row with one, so on
@@ -947,21 +980,30 @@ AX_REGION_LABELS = {
     # row lists its own: the policy declares four and nothing here knows which one a given Logic
     # renders, so a spelling the product would match must be one the locator can try.
     "Tracks contents": ["트랙 콘텐츠", "トラックコンテンツ",
-                        "track content", "track contents", "tracks content"],
+                        "track content", "track contents", "tracks content",
+                        "Spuren enthält"],
     # Four ASCII spellings because the policy declares four and nothing here knows which one a
     # given Logic renders — measured `Tracks header` in English 12.x, `트랙 헤더` in Korean. The
     # alias guard found the other three unreachable: the policy claimed to know them and the
     # locator would never have tried them.
-    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers", "トラックヘッダ"],
-    "Tracks": ["트랙", "トラック"],
-    "Library": ["라이브러리", "ライブラリ"],
+    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers", "トラックヘッダ",
+                      "Spuren Titel"],
+    "Tracks": ["트랙", "トラック", "Spuren"],
+    "Library": ["라이브러리", "ライブラリ", "Bibliothek"],
     "Mixer": ["믹서", "ミキサー"],
-    "Inspector": ["인스펙터", "インスペクタ"],
+    "Inspector": ["인스펙터", "インスペクタ", "Informationen"],
+    # German, measured 2026-09-12 off `evidence/2026-09-12-de-DE-navigation-free.census.json`
+    # (#876). Each spelling was read from an element whose role can carry the band this locator
+    # looks for — AXGroups, not the control-bar AXCheckBoxes that share three of the words and are
+    # toggles rather than panes. `Mixer` needs no row: German keeps the English word, and the key
+    # already IS that word, so adding it would have looked like coverage and measured nothing.
+    #
     # No row at all until now, and two harnesses ask for it by this name — so on any Logic that is
     # not English they were locating nothing. The Korean form is the policy's; the Japanese one is
     # measured, and it is `再生ヘッドの位置` rather than the `再生ヘッド位置` the policy carried.
-    "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置"],
+    "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置", "Position der Abspielposition"],
 }
+
 
 
 # A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`

@@ -6,7 +6,8 @@
  "supported_locales": [
   "en-US",
   "ko-KR",
-  "ja-JP"
+  "ja-JP",
+  "de-DE"
  ],
  "coverage_values": [
   "measured",
@@ -19,10 +20,21 @@
    "canonical": "All Tracks as Audio Files…",
    "variants": [
     "모든 트랙을 오디오 파일로…",
-    "すべてのトラックをオーディオファイルとして…"
+    "すべてのトラックをオーディオファイルとして…",
+    "Alle Spuren als Audiodateien …"
    ],
-   "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files….",
+   "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Alle Spuren als Audiodateien …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Alle Spuren als Audiodateien …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "すべてのトラックをオーディオファイルとして…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -51,7 +63,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -74,7 +87,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "assignControlHelpKeyword": {
@@ -85,7 +99,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "audioPluginSlotLabel": {
@@ -122,7 +137,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-mixer-channel_strips-census"
@@ -144,7 +160,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeLatch": {
@@ -157,7 +174,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeOff": {
@@ -174,7 +192,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeRead": {
@@ -187,7 +206,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeTouch": {
@@ -200,7 +220,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeTrim": {
@@ -213,7 +234,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "automationModeWrite": {
@@ -226,7 +248,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "barSliderLabel": {
@@ -239,7 +262,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "beatSliderLabel": {
@@ -252,17 +276,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "bounceMenuItem": {
    "canonical": "Bounce",
    "variants": [
     "바운스",
-    "バウンス"
+    "バウンス",
+    "Bouncen"
    ],
-   "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce.",
+   "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Bouncen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bouncen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "バウンス": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -291,7 +327,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -314,21 +351,24 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "controlBarGroupLabel": {
    "canonical": "control bar",
    "variants": [
     "컨트롤 막대",
-    "コントロールバー"
+    "コントロールバー",
+    "Steuerungsleiste"
    ],
-   "rationale": "Identifies the control-bar AXGroup by description; read-only locator.",
+   "rationale": "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows.",
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "createButton": {
@@ -342,17 +382,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "createMarkerMenuItem": {
    "canonical": "Create Marker",
    "variants": [
     "마커 생성",
-    "マーカーを作成"
+    "マーカーを作成",
+    "Marker erzeugen"
    ],
-   "rationale": "Navigate menu entry that creates a marker at the playhead.",
+   "rationale": "Navigate menu entry that creates a marker at the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Marker erzeugen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Marker erzeugen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "マーカーを作成": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -381,7 +433,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -405,17 +458,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "editMenuBar": {
    "canonical": "Edit",
    "variants": [
     "편집",
-    "編集"
+    "編集",
+    "Bearbeiten"
    ],
-   "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome.",
+   "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Bearbeiten": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bearbeiten",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "編集": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -444,7 +509,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -475,7 +541,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -504,7 +571,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -535,7 +603,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -566,7 +635,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -595,7 +665,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -626,7 +697,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -657,7 +729,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -688,7 +761,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -719,7 +793,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -750,7 +825,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -781,7 +857,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-08-en-US-event-list-column-titles"
@@ -804,7 +881,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "eventPositionAsTimeMenuItem": {
@@ -815,17 +893,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "exportMenuItem": {
    "canonical": "Export",
    "variants": [
     "내보내기",
-    "書き出す"
+    "書き出す",
+    "Exportieren"
    ],
-   "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export.",
+   "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Exportieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Exportieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "書き出す": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -854,7 +944,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -870,10 +961,21 @@
    "canonical": "File",
    "variants": [
     "파일",
-    "ファイル"
+    "ファイル",
+    "Ablage"
    ],
-   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Ablage": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Ablage",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "ファイル": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -902,7 +1004,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -918,10 +1021,21 @@
    "canonical": "Go To",
    "variants": [
     "이동",
-    "移動"
+    "移動",
+    "Gehe zu"
    ],
-   "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position.",
+   "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Gehe zu": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Gehe zu",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "移動": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -950,7 +1064,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -966,24 +1081,52 @@
    "canonical": "Go To Position",
    "variants": [
     "위치로 이동",
-    "位置の移動"
+    "位置の移動",
+    "Zu Position"
    ],
-   "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately.",
+   "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately. German read 2026-09-12 by OPENING the dialog on a de-DE Logic and reading its window title (#876), twice, both times `Zu Position` on an AXFloatingWindow. It is not in the navigation-free census — the census opens nothing — which is why the live run that needed it reported `dialog_unidentified_new_window`: the menu leaf fired, the window appeared, and the product could not name it. The AppleScript literal list this LabelSet now renders also carried `Go to Position`, and it is NOT carried here. It had no provenance, `matches(_:mode:.exactStrict)` is case-sensitive so the Swift side never accepted it either, and keeping it would put two members in this set that differ only by case — which `check-probe-product-drift.py` refuses, because a later move to case-folded matching would merge them. So the generated handler is deliberately NARROWER than the literal it replaced by exactly that one string, and the two sides now agree.",
+   "provenance": {
+    "Zu Position": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact_strict",
+     "observed": "Zu Position",
+     "record": "2026-09-12-the-german-go-to-position-dialog-is-called-zu-position",
+     "role": "AXWindow"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
    }
   },
   "goToPositionMenuItem": {
    "canonical": "Position…",
    "variants": [
     "위치…",
-    "位置…"
+    "位置…",
+    "Position …"
    ],
-   "rationale": "Go To submenu leaf that opens the Go To Position dialog.",
+   "rationale": "Go To submenu leaf that opens the Go To Position dialog. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Position …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Position …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "位置…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1012,7 +1155,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1043,17 +1187,29 @@
    "coverage": {
     "en-US": "retired",
     "ko-KR": "retired",
-    "ja-JP": "retired"
+    "ja-JP": "retired",
+    "de-DE": "retired"
    }
   },
   "hideAllPluginWindowsMenuItem": {
    "canonical": "All Plug-in Windows",
    "variants": [
     "모든 플러그인 윈도우",
-    "すべてのプラグインウインドウ"
+    "すべてのプラグインウインドウ",
+    "Alle Plug-in-Fenster"
    ],
-   "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus.",
+   "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Alle Plug-in-Fenster": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Alle Plug-in-Fenster",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "すべてのプラグインウインドウ": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1080,7 +1236,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1107,17 +1264,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "importMenuItem": {
    "canonical": "Import",
    "variants": [
     "가져오기",
-    "読み込む"
+    "読み込む",
+    "Importieren"
    ],
-   "rationale": "File menu entry that opens the Import submenu used by midi.import_file.",
+   "rationale": "File menu entry that opens the Import submenu used by midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Importieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Importieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "読み込む": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1146,7 +1315,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1168,7 +1338,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "inline:Mono": {
@@ -1181,7 +1352,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "inline:Mono->Stereo": {
@@ -1194,7 +1366,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "inline:Stereo": {
@@ -1207,7 +1380,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "inputSlotHelpKeyword": {
@@ -1237,7 +1411,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -1276,7 +1451,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    }
   },
   "libraryPanelLabel": {
@@ -1289,7 +1465,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "markerContainerKeywords": {
@@ -1302,7 +1479,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "markerListDeleteMenuItem": {
@@ -1323,21 +1501,24 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "markerListEditMenuButton": {
    "canonical": "Edit",
    "variants": [
     "編集",
-    "편집"
+    "편집",
+    "Bearbeiten"
    ],
-   "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu.",
+   "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "markerListNumberOfItemsLabel": {
@@ -1351,7 +1532,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "midiEffectSlotHelpKeyword": {
@@ -1362,16 +1544,18 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "midiFileMenuItem": {
    "canonical": "MIDI File…",
    "variants": [
     "MIDI 파일…",
-    "MIDIファイル…"
+    "MIDIファイル…",
+    "MIDI-Datei …"
    ],
-   "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file.",
+   "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
     "MIDI 파일…": {
      "attribute": "title",
@@ -1381,6 +1565,16 @@
      "match": "exact",
      "observed": "MIDI 파일…",
      "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "MIDI-Datei …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "MIDI-Datei …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
      "role": "AXMenuItem"
     },
     "MIDIファイル…": {
@@ -1401,7 +1595,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1423,7 +1618,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "mixerNamedElement": {
@@ -1436,15 +1632,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "moveMenuItem": {
    "canonical": "Move",
    "variants": [
-    "이동"
+    "이동",
+    "Bewegen"
    ],
-   "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region.",
+   "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
+   "provenance": {
+    "Bewegen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bewegen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
@@ -1452,17 +1662,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
    }
   },
   "navigateMenuBar": {
    "canonical": "Navigate",
    "variants": [
     "탐색",
-    "移動"
+    "移動",
+    "Navigieren"
    ],
-   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Navigieren": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Navigieren",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "移動": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1491,7 +1713,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1507,10 +1730,21 @@
    "canonical": "New",
    "variants": [
     "신규",
-    "新規"
+    "新規",
+    "Neu"
    ],
-   "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it.",
+   "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Neu": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Neu",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "新規": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1539,7 +1773,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1562,7 +1797,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "nonInsertButtonText": {
@@ -1602,7 +1838,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "oneFilePerTrackPopupValue": {
@@ -1615,17 +1852,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "openMarkerListMenuItem": {
    "canonical": "Open Marker List",
    "variants": [
     "마커 목록 열기",
-    "マーカーリストを開く"
+    "マーカーリストを開く",
+    "Marker-Liste öffnen"
    ],
-   "rationale": "Navigate menu entry that opens the Marker List window.",
+   "rationale": "Navigate menu entry that opens the Marker List window. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Marker-Liste öffnen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Marker-Liste öffnen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "マーカーリストを開く": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1654,7 +1903,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1692,7 +1942,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "playheadPositionFieldLabel": {
@@ -1705,7 +1956,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "playheadPositionGroupLabel": {
@@ -1732,7 +1984,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-transport-census"
@@ -1754,7 +2007,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginAutomationLabelSubstring": {
@@ -1767,7 +2021,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginBypassControl": {
@@ -1797,7 +2052,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginOpenOrListControl": {
@@ -1810,6 +2066,16 @@
    ],
    "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button.",
    "provenance": {
+    "list": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "contains",
+     "observed": "Tempoliste einblenden",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "開く": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1829,7 +2095,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    }
   },
   "pluginWindowControlsViewMenuItem": {
@@ -1842,7 +2109,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginWindowEditorViewMenuItem": {
@@ -1862,7 +2130,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginWindowSmartControlsControl": {
@@ -1873,7 +2142,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -1886,7 +2156,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "projectOrSectionMenuItem": {
@@ -1895,10 +2166,21 @@
     "프로젝트 또는 섹션…",
     "Project or Section...",
     "프로젝트 또는 섹션...",
-    "プロジェクトまたは選択範囲…"
+    "プロジェクトまたは選択範囲…",
+    "Projekt oder Abschnitt …"
    ],
-   "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section….",
+   "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Projekt oder Abschnitt …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Projekt oder Abschnitt …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "プロジェクトまたは選択範囲…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -1927,7 +2209,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -1951,7 +2234,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "regionHelpKeyword": {
@@ -1965,7 +2249,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "regionKindAudio": {
@@ -1978,7 +2263,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "regionKindDrummer": {
@@ -1993,7 +2279,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "regionKindMidi": {
@@ -2004,17 +2291,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "saveAsMenuItem": {
    "canonical": "Save As…",
    "variants": [
     "별도 저장…",
-    "別名で保存…"
+    "別名で保存…",
+    "Sichern unter …"
    ],
-   "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As….",
+   "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Sichern unter …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Sichern unter …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "別名で保存…": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2043,7 +2342,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -2067,7 +2367,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "savePanelFolderRadio": {
@@ -2080,7 +2381,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "savePanelPackageRadio": {
@@ -2093,7 +2395,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "savePanelWindowTitle": {
@@ -2106,7 +2409,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "sendOrIOControlLabel": {
@@ -2123,7 +2427,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "setLocatorsMenuItem": {
@@ -2136,7 +2441,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "settingPopupValue": {
@@ -2151,7 +2457,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "showMixerMenuItem": {
@@ -2168,17 +2475,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "showStepInputKeyboardMenuItem": {
    "canonical": "Step Input Keyboard",
    "variants": [
     "스텝 입력 키보드",
-    "ステップインプットキーボード"
+    "ステップインプットキーボード",
+    "Step-Input-Keyboard"
    ],
-   "rationale": "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry.",
+   "rationale": "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Step-Input-Keyboard": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Step-Input-Keyboard",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "ステップインプットキーボード": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2205,7 +2524,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -2220,14 +2540,31 @@
   "showTempoListMenuItem": {
    "canonical": "Show Tempo List",
    "variants": [
-    "템포 목록 보기"
+    "템포 목록 보기",
+    "Tempoliste einblenden"
    ],
-   "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table.",
+   "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
+   "provenance": {
+    "Tempoliste einblenden": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Tempoliste einblenden",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
    }
   },
   "sliderPanHint": {
@@ -2259,7 +2596,17 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "de-DE": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "de-DE": "title"
    }
   },
   "sliderSendHint": {
@@ -2272,7 +2619,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "sliderVolumeHint": {
@@ -2284,6 +2632,16 @@
    ],
    "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
    "provenance": {
+    "fader": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "contains",
+     "observed": "Pre-Fader-Metering",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
     "ボリューム": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2303,7 +2661,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    }
   },
   "sliderZoomHint": {
@@ -2316,7 +2675,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -2330,7 +2690,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2353,7 +2714,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2376,7 +2738,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2399,7 +2762,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2422,7 +2786,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2445,7 +2810,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2468,7 +2834,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2491,7 +2858,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -2513,7 +2881,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "stemExportDismissButton": {
@@ -2526,7 +2895,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "stemExportProgressWindowTitle": {
@@ -2537,7 +2907,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "stepInputKeyboardWindowTitle": {
@@ -2551,7 +2922,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "tempoFieldLabel": {
@@ -2565,7 +2937,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "tempoListNumberOfItemsLabel": {
@@ -2578,7 +2951,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "tempoMenuItem": {
@@ -2587,11 +2961,24 @@
     "템포"
    ],
    "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "de-DE": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "de-DE": "title"
    }
   },
   "tempoSliderContainsLabel": {
@@ -2604,7 +2991,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "tempoSliderLabel": {
@@ -2616,26 +3004,54 @@
    ],
    "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider.",
    "roles": [
+    "AXMenuItem",
     "AXSlider"
    ],
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "de-DE": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "de-DE": "title"
    }
   },
   "toPlayheadMenuItem": {
    "canonical": "To Playhead",
    "variants": [
-    "재생헤드로"
+    "재생헤드로",
+    "Für Abspielposition"
    ],
-   "rationale": "Move submenu leaf that repositions the selected region to the playhead.",
+   "rationale": "Move submenu leaf that repositions the selected region to the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
+   "provenance": {
+    "Für Abspielposition": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Für Abspielposition",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
    }
   },
   "trackContentExplicit": {
@@ -2645,9 +3061,10 @@
     "track contents",
     "tracks content",
     "tracks contents",
-    "トラックコンテンツ"
+    "トラックコンテンツ",
+    "Spuren enthält"
    ],
-   "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+   "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "provenance": {
     "tracks contents": {
      "attribute": "description",
@@ -2673,7 +3090,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    }
   },
   "trackContentGeneric": {
@@ -2690,7 +3108,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "unmeasured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "unmeasured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-regions-census",
@@ -2711,24 +3130,37 @@
     "track header",
     "tracks header",
     "tracks headers",
-    "트랙 헤더"
+    "트랙 헤더",
+    "Spuren Titel"
    ],
-   "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred).",
+   "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackMenuBar": {
    "canonical": "Track",
    "variants": [
     "트랙",
-    "トラック"
+    "トラック",
+    "Spur"
    ],
-   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Spur": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Spur",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "トラック": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -2757,7 +3189,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -2773,9 +3206,10 @@
    "canonical": "Mute",
    "variants": [
     "음소거",
-    "ミュート"
+    "ミュート",
+    "Ton aus"
    ],
-   "rationale": "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button.",
+   "rationale": "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "roles": [
     "AXButton"
    ],
@@ -2783,7 +3217,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackRecordButton": {
@@ -2791,14 +3226,16 @@
    "variants": [
     "Rec",
     "녹음 활성화",
-    "레코드 활성화"
+    "레코드 활성화",
+    "Aufnahme"
    ],
-   "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction.",
+   "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackRecordEnableCheckbox": {
@@ -2812,7 +3249,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackSoloButton": {
@@ -2825,7 +3263,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeAudio": {
@@ -2838,7 +3277,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeAux": {
@@ -2849,7 +3289,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeBus": {
@@ -2860,7 +3301,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeDrummer": {
@@ -2871,7 +3313,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeExternalMIDI": {
@@ -2884,7 +3327,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeGMDevice": {
@@ -2895,7 +3339,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeInstrument": {
@@ -2909,7 +3354,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "trackTypeMaster": {
@@ -2922,7 +3368,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportAutopunchControl": {
@@ -2936,7 +3383,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportContainerControlKeywords": {
@@ -2965,7 +3413,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportContainerMetadata": {
@@ -2980,7 +3429,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportCycleControl": {
@@ -2995,7 +3445,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportKeywordFalseFriends": {
@@ -3018,7 +3469,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportMetronomeControl": {
@@ -3036,7 +3488,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportPlayControl": {
@@ -3050,7 +3503,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportRecordArmExclusion": {
@@ -3063,7 +3517,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportRecordControl": {
@@ -3077,7 +3532,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportSliderHints": {
@@ -3095,7 +3551,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "transportTextFieldHint": {
@@ -3111,7 +3568,8 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "undoMenuItemPrefix": {
@@ -3139,15 +3597,19 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "measured"
    },
    "coverage_records": {
+    "de-DE": "2026-09-12-de-DE-arrange-menus-census",
     "en-US": "2026-09-05-en-US-arrange-menus-census"
    },
    "coverage_roles": {
+    "de-DE": "AXMenuItem",
     "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
+    "de-DE": "title",
     "en-US": "title"
    }
   },
@@ -3161,17 +3623,29 @@
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured"
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "viewMenuBar": {
    "canonical": "View",
    "variants": [
     "보기",
-    "表示"
+    "表示",
+    "Ansicht"
    ],
-   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Ansicht": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Ansicht",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "表示": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -3200,7 +3674,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -3216,10 +3691,21 @@
    "canonical": "Window",
    "variants": [
     "윈도우",
-    "ウインドウ"
+    "ウインドウ",
+    "Fenster"
    ],
-   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic.",
+   "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
+    "Fenster": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Fenster",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    },
     "ウインドウ": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -3248,7 +3734,8 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "measured",
-    "ja-JP": "measured"
+    "ja-JP": "measured",
+    "de-DE": "measured"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"

@@ -39,10 +39,15 @@ struct Issue60LocalePhase4Tests {
                 "pan", "패닝", "밸런스",
             ]),
             ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン"]),
-            ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels, ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더"]),
+            // `Spuren Titel` added 2026-09-12 (#876), read off the de-DE navigation-free census as the
+            // AXDescription of the AXGroup this label addresses. Not drift: without it `located_band`
+            // and every reader keyed on this description find nothing on a German Logic, which is the
+            // same shape as the `リージョン` note below — an empty answer where something is on screen.
+            ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels, ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더", "Spuren Titel"]),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
-            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ"]),
+            // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
+            ("trackContentExplicit", AXLocalePolicy.trackContentExplicit.labels, ["트랙 콘텐츠", "track content", "track contents", "tracks content", "tracks contents", "トラックコンテンツ", "Spuren enthält"]),
             ("trackContentGeneric", AXLocalePolicy.trackContentGeneric.labels, ["콘텐츠", "content", "contents"]),
             ("regionKindDrummer", AXLocalePolicy.regionKindDrummer.labels, ["drummer", "session player", "드러머", "세션 플레이어"]),
             ("regionKindMidi", AXLocalePolicy.regionKindMidi.labels, ["midi"]),

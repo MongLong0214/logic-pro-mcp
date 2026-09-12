@@ -141,7 +141,11 @@ def localised_canonicals(doc=None):
     return out
 
 
-SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP")
+# de-DE joined on 2026-09-12 (#876, an external report that the product did not work on a German
+# Logic — it did not, and the report's premise that Chinese worked was also wrong: zh appeared in
+# exactly two arrays and in no LabelSet variant). Adding a locale here widens every label's coverage
+# map by one column, so every label starts `unmeasured` in it and the campaign fills them in.
+SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE")
 COVERAGE_VALUES = ("measured", "identifier", "unmeasured", "retired")
 
 

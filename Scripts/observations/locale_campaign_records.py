@@ -30,12 +30,14 @@ SURFACE_RULES = [
 # under the FIRST surface whose marker appears in its path; unmatched rows stay unclassified and are
 # counted in limits. Adding a locale means adding its spellings here — from a census, not a guess.
 ANCESTRY = [
-    ("arrange.transport",     ("{Transport}", "[컨트롤 막대", "[Control Bar", "[LCD", "[コントロールバー")),
+    ("arrange.transport",     ("{Transport}", "[컨트롤 막대", "[Control Bar", "[LCD", "[コントロールバー",
+                               "[Steuerungsleiste")),
     ("mixer.channel_strips",  ("[왼쪽 인스펙터 채널 스트립", "[오른쪽 인스펙터 채널 스트립", "[Left Inspector", "[Right Inspector", "[믹서", "[Mixer", "[ミキサー")),
-    ("library.patches",       ("[라이브러리", "[Library", "[ライブラリ")),
+    ("library.patches",       ("[라이브러리", "[Library", "[ライブラリ", "[Bibliothek")),
     # Regions BEFORE headers: a region's path passes through a layout area described "N개의 ‘name’ 트랙",
     # which the headers marker would otherwise claim. First match wins, so the more specific goes first.
-    ("arrange.regions",       ("[트랙 콘텐츠", "[Track Content", "[Tracks contents", "[トラックコンテンツ")),
+    ("arrange.regions",       ("[트랙 콘텐츠", "[Track Content", "[Tracks contents", "[トラックコンテンツ",
+                               "[Spuren enthält")),
     ("arrange.track_headers", ("[트랙 헤더", "[Track Header", "[트랙 헤더 목록", "’ 트랙]", "' Track]",
                                "[トラックヘッダ")),
 ]
@@ -45,6 +47,17 @@ ANCESTRY = [
 # as its en-US counterpart. Without them every window row in Japanese fell through — 414 of 617 —
 # so a locale campaign produced ONE surface in Japanese and six in English, and the ledger recorded
 # that asymmetry as if it were something about Logic rather than about this list.
+#
+# The de-DE spellings were read the same way, off the census of 2026-09-12 (#876): `[Steuerungsleiste`,
+# `[Bibliothek`, `[Spuren enthält`. `[Mixer` needed nothing — German keeps the English word there.
+#
+# `[Spuren Titel` was tried here and REMOVED. It is the counterpart of `[Tracks header`, which
+# appears 230 times in both censuses and is deliberately not a marker on either side — English
+# reaches those 38 rows through the help text instead. Adding it in German only would have filed
+# 230 German rows against 38 English ones and made the per-locale counts incomparable, which is the
+# same trap `[インスペクタ` is held out of below. Without them a German campaign produced THREE surfaces against English's six, with 447
+# rows unclassified, and the ledger would have recorded that as a fact about German Logic rather than
+# about this list — exactly the asymmetry the Japanese note below describes.
 #
 # `[インスペクタ` is deliberately absent. It is the exact counterpart of `[Inspector` (99 rows in
 # both censuses), and `[Inspector` is not here either — adding it on one side only would make the
@@ -61,7 +74,11 @@ def classify(row):
     help_ = row.get("help") or ""
     if "리전" in help_ or "region" in help_.lower():
         return "arrange.regions"
-    if "트랙 헤더" in help_ or "track header" in help_.lower():
+    # German spells the same help string `Spur-Header.`, which contains neither of the two above.
+    # Read off the de-DE census of 2026-09-12: 38 rows carry it, the same count as the en-US
+    # `Track Header` rows, which is what makes the two locales' taxonomies comparable.
+    if ("트랙 헤더" in help_ or "track header" in help_.lower()
+            or "spur-header" in help_.lower()):
         return "arrange.track_headers"
     return None
 

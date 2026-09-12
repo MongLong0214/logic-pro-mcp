@@ -133,8 +133,8 @@ enum AXLocalePolicy {
 
     static let viewMenuBar = LabelSet(
         canonical: "View",
-        variants: ["보기", "表示"],
-        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+        variants: ["보기", "表示", "Ansicht"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// The third item this Logic build spells without a Show/Hide verb: the
@@ -171,8 +171,8 @@ enum AXLocalePolicy {
 
     static let windowMenuBar = LabelSet(
         canonical: "Window",
-        variants: ["윈도우", "ウインドウ"],
-        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+        variants: ["윈도우", "ウインドウ", "Fenster"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// This Logic build shows `All Plug-in Windows`, with no verb. `Hide All
@@ -183,8 +183,8 @@ enum AXLocalePolicy {
     /// the same reason the English one was.
     static let hideAllPluginWindowsMenuItem = LabelSet(
         canonical: "All Plug-in Windows",
-        variants: ["모든 플러그인 윈도우", "すべてのプラグインウインドウ"],
-        rationale: "Best-effort cleanup so stale plugin windows do not steal later menu focus."
+        variants: ["모든 플러그인 윈도우", "すべてのプラグインウインドウ", "Alle Plug-in-Fenster"],
+        rationale: "Best-effort cleanup so stale plugin windows do not steal later menu focus. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// Same change, and this one was load-bearing: `edit.toggle_step_input`
@@ -204,8 +204,8 @@ enum AXLocalePolicy {
     /// Japanese forms here already assume, since neither was measured WITH a verb attached.
     static let showStepInputKeyboardMenuItem = LabelSet(
         canonical: "Step Input Keyboard",
-        variants: ["스텝 입력 키보드", "ステップインプットキーボード"],
-        rationale: "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry."
+        variants: ["스텝 입력 키보드", "ステップインプットキーボード", "Step-Input-Keyboard"],
+        rationale: "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// Japanese measured live 2026-09-06, from Logic's own window list during a toggle:
@@ -274,22 +274,22 @@ enum AXLocalePolicy {
 
     static let fileMenuBar = LabelSet(
         canonical: "File",
-        variants: ["파일", "ファイル"],
-        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+        variants: ["파일", "ファイル", "Ablage"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     static let newProjectMenuItem = LabelSet(
         canonical: "New",
-        variants: ["신규", "新規"],
-        rationale: "Reveals the New Project chooser, or creates the project directly where Logic skips it."
+        variants: ["신규", "新規", "Neu"],
+        rationale: "Reveals the New Project chooser, or creates the project directly where Logic skips it. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #369: File > Export. Both forms were read from Logic's File menu; no other locale has been
     /// measured for this submenu, so callers must refuse rather than translate or guess one.
     static let exportMenuItem = LabelSet(
         canonical: "Export",
-        variants: ["내보내기", "書き出す"],
-        rationale: "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export."
+        variants: ["내보내기", "書き出す", "Exportieren"],
+        rationale: "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #369: File > Export > All Tracks as Audio Files… — the only measured leaf that reaches the
@@ -302,8 +302,8 @@ enum AXLocalePolicy {
     /// as an unmeasured all-tracks-audio-file label instead of falling back to keyword matching.
     static let allTracksAsAudioFilesMenuItem = LabelSet(
         canonical: "All Tracks as Audio Files…",
-        variants: ["모든 트랙을 오디오 파일로…", "すべてのトラックをオーディオファイルとして…"],
-        rationale: "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…."
+        variants: ["모든 트랙을 오디오 파일로…", "すべてのトラックをオーディオファイルとして…", "Alle Spuren als Audiodateien …"],
+        rationale: "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #369: controls inside the per-track stem-export panel. The panel's own
@@ -343,8 +343,8 @@ enum AXLocalePolicy {
 
     static let editMenuBar = LabelSet(
         canonical: "Edit",
-        variants: ["편집", "編集"],
-        rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
+        variants: ["편집", "編集", "Bearbeiten"],
+        rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #304: Edit > Tempo > Show Tempo List. These are the only Tempo-menu labels this surface
@@ -360,8 +360,8 @@ enum AXLocalePolicy {
 
     static let showTempoListMenuItem = LabelSet(
         canonical: "Show Tempo List",
-        variants: ["템포 목록 보기"],
-        rationale: "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table."
+        variants: ["템포 목록 보기", "Tempoliste einblenden"],
+        rationale: "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// The Tempo List's independent count witness. On the measured Korean build its AXStaticText
@@ -382,8 +382,8 @@ enum AXLocalePolicy {
     /// a future editor straight at deleting the measured label.)
     static let navigateMenuBar = LabelSet(
         canonical: "Navigate",
-        variants: ["탐색", "移動"],
-        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+        variants: ["탐색", "移動", "Navigieren"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: the Track menu bar item.
@@ -395,8 +395,8 @@ enum AXLocalePolicy {
     /// language can join them instead of becoming a fourth element in a literal array.
     static let trackMenuBar = LabelSet(
         canonical: "Track",
-        variants: ["트랙", "トラック"],
-        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+        variants: ["트랙", "トラック", "Spur"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #448 — Track > Sort Tracks By. Measured on 2026-09-02 on Logic Pro
@@ -494,8 +494,8 @@ enum AXLocalePolicy {
     /// guess in a LabelSet is what this defect was.
     static let saveAsMenuItem = LabelSet(
         canonical: "Save As…",
-        variants: ["별도 저장…", "別名で保存…"],
-        rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…."
+        variants: ["별도 저장…", "別名で保存…", "Sichern unter …"],
+        rationale: "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #747: the Save panel's own window title, and the two "Organize my project as" radios inside
@@ -530,8 +530,8 @@ enum AXLocalePolicy {
     /// #519: File > Bounce.
     static let bounceMenuItem = LabelSet(
         canonical: "Bounce",
-        variants: ["바운스", "バウンス"],
-        rationale: "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce."
+        variants: ["바운스", "バウンス", "Bouncen"],
+        rationale: "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: the Bounce submenu's "Project or Section…" leaf. Both the curly-ellipsis (`…`) and
@@ -539,36 +539,36 @@ enum AXLocalePolicy {
     /// locales, so all four spellings are kept rather than assuming one glyph.
     static let projectOrSectionMenuItem = LabelSet(
         canonical: "Project or Section…",
-        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션...", "プロジェクトまたは選択範囲…"],
-        rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…."
+        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션...", "プロジェクトまたは選択範囲…", "Projekt oder Abschnitt …"],
+        rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: File > Import.
     static let importMenuItem = LabelSet(
         canonical: "Import",
-        variants: ["가져오기", "読み込む"],
-        rationale: "File menu entry that opens the Import submenu used by midi.import_file."
+        variants: ["가져오기", "読み込む", "Importieren"],
+        rationale: "File menu entry that opens the Import submenu used by midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: File > Import > MIDI File….
     static let midiFileMenuItem = LabelSet(
         canonical: "MIDI File…",
-        variants: ["MIDI 파일…", "MIDIファイル…"],
-        rationale: "Import submenu leaf that opens the MIDI file chooser for midi.import_file."
+        variants: ["MIDI 파일…", "MIDIファイル…", "MIDI-Datei …"],
+        rationale: "Import submenu leaf that opens the MIDI file chooser for midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Edit > Move.
     static let moveMenuItem = LabelSet(
         canonical: "Move",
-        variants: ["이동"],
-        rationale: "Edit menu entry that opens the Move submenu used to reposition a selected region."
+        variants: ["이동", "Bewegen"],
+        rationale: "Edit menu entry that opens the Move submenu used to reposition a selected region. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Edit > Move > To Playhead.
     static let toPlayheadMenuItem = LabelSet(
         canonical: "To Playhead",
-        variants: ["재생헤드로"],
-        rationale: "Move submenu leaf that repositions the selected region to the playhead."
+        variants: ["재생헤드로", "Für Abspielposition"],
+        rationale: "Move submenu leaf that repositions the selected region to the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Navigate > Set Locators….
@@ -584,36 +584,36 @@ enum AXLocalePolicy {
     /// specifier, so the shared Korean text never crosses into the wrong menu.
     static let goToMenuItem = LabelSet(
         canonical: "Go To",
-        variants: ["이동", "移動"],
-        rationale: "Navigate menu entry that opens the Go To submenu used by goto_position."
+        variants: ["이동", "移動", "Gehe zu"],
+        rationale: "Navigate menu entry that opens the Go To submenu used by goto_position. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Navigate > Go To > Position….
     static let goToPositionMenuItem = LabelSet(
         canonical: "Position…",
-        variants: ["위치…", "位置…"],
-        rationale: "Go To submenu leaf that opens the Go To Position dialog."
+        variants: ["위치…", "位置…", "Position …"],
+        rationale: "Go To submenu leaf that opens the Go To Position dialog. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Navigate > Open Marker List.
     static let openMarkerListMenuItem = LabelSet(
         canonical: "Open Marker List",
-        variants: ["마커 목록 열기", "マーカーリストを開く"],
-        rationale: "Navigate menu entry that opens the Marker List window."
+        variants: ["마커 목록 열기", "マーカーリストを開く", "Marker-Liste öffnen"],
+        rationale: "Navigate menu entry that opens the Marker List window. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// #519: Navigate > Create Marker.
     static let createMarkerMenuItem = LabelSet(
         canonical: "Create Marker",
-        variants: ["마커 생성", "マーカーを作成"],
-        rationale: "Navigate menu entry that creates a marker at the playhead."
+        variants: ["마커 생성", "マーカーを作成", "Marker erzeugen"],
+        rationale: "Navigate menu entry that creates a marker at the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// The Marker List toolbar's own Edit menu button, not the application menu bar.
     static let markerListEditMenuButton = LabelSet(
         canonical: "Edit",
-        variants: ["編集", "편집"],
-        rationale: "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
+        variants: ["編集", "편집", "Bearbeiten"],
+        rationale: "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// The Marker List's own "Number of Items" static text — Logic's independent rendering of
@@ -659,8 +659,8 @@ enum AXLocalePolicy {
 
     static let goToPositionDialogTitle = LabelSet(
         canonical: "Go To Position",
-        variants: ["위치로 이동", "位置の移動"],
-        rationale: "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately."
+        variants: ["위치로 이동", "位置の移動", "Zu Position"],
+        rationale: "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately. German read 2026-09-12 by OPENING the dialog on a de-DE Logic and reading its window title (#876), twice, both times `Zu Position` on an AXFloatingWindow. It is not in the navigation-free census — the census opens nothing — which is why the live run that needed it reported `dialog_unidentified_new_window`: the menu leaf fired, the window appeared, and the product could not name it. The AppleScript literal list this LabelSet now renders also carried `Go to Position`, and it is NOT carried here. It had no provenance, `matches(_:mode:.exactStrict)` is case-sensitive so the Swift side never accepted it either, and keeping it would put two members in this set that differ only by case — which `check-probe-product-drift.py` refuses, because a later move to case-folded matching would merge them. So the generated handler is deliberately NARROWER than the literal it replaced by exactly that one string, and the two sides now agree."
     )
 
     static let cancelButton = LabelSet(
@@ -821,8 +821,8 @@ enum AXLocalePolicy {
 
     static let controlBarGroupLabel = LabelSet(
         canonical: "control bar",
-        variants: ["컨트롤 막대", "コントロールバー"],
-        rationale: "Identifies the control-bar AXGroup by description; read-only locator."
+        variants: ["컨트롤 막대", "コントロールバー", "Steuerungsleiste"],
+        rationale: "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows."
     )
 
     static let barSliderLabel = LabelSet(
@@ -877,8 +877,8 @@ enum AXLocalePolicy {
 
     static let trackMuteButton = LabelSet(
         canonical: "Mute",
-        variants: ["음소거", "ミュート"],
-        rationale: "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button."
+        variants: ["음소거", "ミュート", "Ton aus"],
+        rationale: "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     static let trackSoloButton = LabelSet(
@@ -889,8 +889,8 @@ enum AXLocalePolicy {
 
     static let trackRecordButton = LabelSet(
         canonical: "Record",
-        variants: ["Rec", "녹음 활성화", "레코드 활성화"],
-        rationale: "Identifies the track Record/arm button by description substring; read-only state extraction."
+        variants: ["Rec", "녹음 활성화", "레코드 활성화", "Aufnahme"],
+        rationale: "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
     /// Per-track record-enable AXCheckBox description. Verbatim match preserves
@@ -1306,8 +1306,8 @@ enum AXLocalePolicy {
     /// Track-header rail description (normalized exact match).
     static let trackHeadersDescription = LabelSet(
         canonical: "track headers",
-        variants: ["track header", "tracks header", "tracks headers", "트랙 헤더"],
-        rationale: "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred)."
+        variants: ["track header", "tracks header", "tracks headers", "트랙 헤더", "Spuren Titel"],
+        rationale: "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them."
     )
 
     /// The Event tab of the List Editors pane, by `AXDescription`.
@@ -1348,8 +1348,8 @@ enum AXLocalePolicy {
     static let trackContentExplicit = LabelSet(
         canonical: "트랙 콘텐츠",
         variants: ["track content", "track contents", "tracks content", "tracks contents",
-                   "トラックコンテンツ"],
-        rationale: "Identifies the arrange Track-Content group by normalized description; read-only classifier."
+                   "トラックコンテンツ", "Spuren enthält"],
+        rationale: "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them."
     )
     /// Fallback for a canvas that is labelled `Contents` rather than
     /// `Tracks contents`. It has NO Japanese form on purpose: the ja-JP census
