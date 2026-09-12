@@ -2088,7 +2088,8 @@ extension AccessibilityChannel {
                     axDescription: axDescription,
                     outcome: outcome,
                     rollback: rollback,
-                    before: before
+                    before: before,
+                    walkTarget: walkTarget
                 ))
             }
 
@@ -2300,7 +2301,8 @@ extension AccessibilityChannel {
         axDescription: String,
         outcome: SliderIncrementWalk.WalkOutcome,
         rollback: SliderRollback,
-        before: Double?
+        before: Double?,
+        walkTarget: SliderIncrementWalk.Target?
     ) -> String {
         let error: HonestContract.FailureError
         var extras: [String: Any] = [
@@ -2317,6 +2319,21 @@ extension AccessibilityChannel {
             "safe_to_retry": false,
             "write_attempted": true,
         ]
+        // The string the walk was looking for, on the FAILURE path as well as the success one. It
+        // was reported only when the walk arrived, which is the half that needs it least: a run
+        // that stops beside its target and cannot say what it was comparing against costs hours —
+        // #292 spent them, deducing the requested rendering from step counts.
+        switch walkTarget {
+        case let .display(targetDisplay):
+            extras["requested_display"] = targetDisplay
+            extras["walk_target_kind"] = "display"
+        case let .rawValue(value, tolerance):
+            extras["requested_raw_value"] = value
+            extras["tolerance"] = tolerance
+            extras["walk_target_kind"] = "raw_value"
+        case .none:
+            extras["walk_target_kind"] = "none"
+        }
         switch outcome {
         case let .noProgress(steps, last):
             error = .incrementWalkNoProgress

@@ -422,4 +422,117 @@ struct SliderIncrementWalkTests {
             #expect(nudgeCalls == 0)
         }
     }
+
+    // MARK: - #292: the same reading, rendered two ways
+
+    /// A Channel EQ gain slider as Logic actually renders it: ALWAYS one decimal, signed.
+    /// One raw unit is 0.1 dB, measured (raw 302 = `+6.2 dB`, raw 480 = `+24.0 dB`).
+    private func gainSlider(startingAt raw: Double) -> (read: () -> Reading?, nudge: (Double) -> Bool) {
+        var current = raw
+        let render: (Double) -> String = { value in
+            let dB = (value / 10 * 10).rounded() / 10
+            return dB >= 0 ? String(format: "+%.1f dB", dB) : String(format: "%.1f dB", dB)
+        }
+        return ({ Reading(value: current, display: render(current)) },
+                { requested in current += requested > current ? 1 : -1; return true })
+    }
+
+    @Test func aWholeNumberDecibelTargetIsTheSameReadingLogicRendersWithADecimal() {
+        // #292, measured live 2026-09-12: every half-dB request landed and every WHOLE-dB request
+        // failed `increment_walk_no_progress` — `-5.5` arrived in 82 steps, `-5.0` died in 6 from a
+        // start five steps away. The walk reaches the value and does not recognise it.
+        //
+        // `displayTargetValueText` renders -5.0 as `-5`, because dropping a trailing `.0` is right
+        // for Hz (`400 Hz`) and wrong for dB, where Logic always shows the decimal. One formatting
+        // rule for every unit is the defect; `-5 dB` and `-5.0 dB` are the same reading.
+        let slider = gainSlider(startingAt: -45)   // -4.5 dB, five steps above the target
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("-5 dB"),
+            read: slider.read,
+            nudge: slider.nudge,
+            budget: 64
+        )
+
+        // Mutation caught: comparing renderings as strings instead of as the readings they name.
+        // Restore the exact-string compare and this walk sails past -5.0 dB and reports no progress.
+        guard case let .arrived(steps, final) = outcome else {
+            Issue.record("expected to arrive, got \(outcome)")
+            return
+        }
+        // Seven, not five: the walk opens with an UPWARD calibration probe, sees the rendering
+        // move away from the target, and flips once — so a five-step descent costs two extra.
+        // That probe is deliberate (`walkDisplay` says so) and is not what this case is about.
+        #expect(steps == 7)
+        #expect(final.display == "-5.0 dB")
+    }
+
+    @Test func aTargetRenderedWithMoreDecimalsThanTheRequestIsStillTheSameReading() {
+        // The same defect, from the other direction, and the reason Q lands NOTHING on any band:
+        // a request of `1.5` never matches a control Logic renders `1.50`.
+        var current = 140.0
+        let read: () -> Reading? = { Reading(value: current, display: String(format: "%.2f", current / 100)) }
+        let nudge: (Double) -> Bool = { requested in current += requested > current ? 1 : -1; return true }
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("1.5"), read: read, nudge: nudge, budget: 64
+        )
+
+        guard case let .arrived(_, final) = outcome else {
+            Issue.record("expected to arrive, got \(outcome)")
+            return
+        }
+        #expect(final.display == "1.50")
+    }
+
+    @Test func aDifferentUnitIsNotTheSameReadingHoweverEqualTheNumbers() {
+        // The comparison must stay a comparison. `400 Hz` and `400 dB` share a number and name
+        // different readings; a numeric compare that ignored the unit would accept either.
+        let reading = Reading(value: 10, display: "400 Hz")
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("400 dB"),
+            read: { reading },
+            nudge: { _ in true },
+            budget: 0
+        )
+
+        #expect(outcome == .budgetExhausted(steps: 0, last: reading))
+    }
+
+    @Test func aRenderingWithNoNumberFallsBackToTheStringItIs() {
+        // Not every display carries a number — `Off`, `Auto`, `-∞ dB`. Those can only be compared
+        // as strings, and equal strings must still arrive.
+        let reading = Reading(value: 0, display: "Off")
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("Off"), read: { reading }, nudge: { _ in true }, budget: 4
+        )
+        #expect(outcome == .arrived(steps: 0, final: reading))
+    }
+
+    @Test func theExactLiveWalkThatFailedIsReproducedFromItsOwnNumbers() {
+        // The failing live call, rebuilt from the envelope it returned: start raw 315 (`rollback_to`),
+        // target `-5 dB`, and Logic's measured rendering — raw 190 reads `-5.0 dB`, 189 reads
+        // `-5.1 dB`, 195 reads `-4.5 dB`, all four read back through the product on 2026-09-12.
+        // If this arrives while the live call reports `noProgress` at 128 steps, the divergence is
+        // not in this algorithm.
+        var current = 315.0
+        let render: (Double) -> String = { raw in
+            let dB = ((raw / 10) - 24 + 0.0).rounded(.toNearestOrEven)
+            _ = dB
+            let exact = (raw / 10) - 24
+            let scaled = (exact * 10).rounded() / 10
+            return scaled >= 0 ? String(format: "+%.1f dB", scaled) : String(format: "%.1f dB", scaled)
+        }
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("-5 dB"),
+            read: { Reading(value: current, display: render(current)) },
+            nudge: { requested in current += requested > current ? 1 : -1; return true },
+            budget: 256
+        )
+        guard case let .arrived(steps, final) = outcome else {
+            Issue.record("expected to arrive, got \(outcome)")
+            return
+        }
+        #expect(final.display == "-5.0 dB")
+        #expect(steps == 127)
+    }
 }

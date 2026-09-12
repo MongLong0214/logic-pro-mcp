@@ -172,7 +172,7 @@ enum SliderIncrementWalk {
             guard let next = read() else {
                 return .readbackLost(steps: steps)
             }
-            if next.display == targetDisplay {
+            if namesTheSameReading(next.display, targetDisplay) {
                 return .arrived(steps: steps, final: next)
             }
 
@@ -216,7 +216,7 @@ enum SliderIncrementWalk {
         case .rawValue(let value, let tolerance):
             isWithinTolerance(reading.value, of: value, tolerance: abs(tolerance))
         case .display(let display):
-            reading.display == display
+            namesTheSameReading(reading.display, display)
         }
     }
 
@@ -278,6 +278,32 @@ enum SliderIncrementWalk {
             return nil
         }
         return (number, String(decoding: bytes[end...], as: UTF8.self))
+    }
+
+    /// Whether two renderings name the SAME reading.
+    ///
+    /// Exact string equality was the rule, and it made half of Channel EQ's dB space unreachable.
+    /// The request renders -5.0 as `-5` — correct for `400 Hz`, wrong for dB, where Logic always
+    /// shows the decimal — so the walk arrived at `-5.0 dB` and did not recognise it. Measured live
+    /// 2026-09-12 (#292): every half-dB target landed and every WHOLE-dB target died
+    /// `increment_walk_no_progress` a few steps from the value it had already reached, `-5.5`
+    /// arriving in 82 steps while `-5.0` died in 6 from a start five steps away. Q lands nothing on
+    /// any band for the mirror reason: a request of `1.5` against a control Logic renders `1.50`.
+    ///
+    /// This is NOT a unit conversion and invents no mapping. The number compared is the one LOGIC
+    /// rendered, read by the same parser the ordering test uses, and the text after it must match
+    /// exactly — `400 Hz` and `400 dB` stay different readings. A rendering carrying no number at
+    /// all (`Off`, `Auto`) can only be compared as the string it is, and still is.
+    private static func namesTheSameReading(_ rendered: String, _ requested: String) -> Bool {
+        if rendered == requested { return true }
+        guard let left = leadingNumber(in: rendered),
+              let right = leadingNumber(in: requested) else { return false }
+        return left.number == right.number && trimmed(left.suffix) == trimmed(right.suffix)
+    }
+
+    /// Stdlib-only, because this file deliberately imports nothing.
+    private static func trimmed(_ text: String) -> String {
+        String(text.drop(while: { $0 == " " }).reversed().drop(while: { $0 == " " }).reversed())
     }
 
     private static func isASCIIDigit(_ byte: UInt8) -> Bool {
