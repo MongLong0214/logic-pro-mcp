@@ -857,6 +857,44 @@ for kw, want, why in [
     if not ok:
         failed += 1
 
+# --- the workspace's application list goes stale, and a stale entry is not an unreadable Logic ---
+#
+# Regression for #876. A plain Python process has no run loop, so NSWorkspace's application list can
+# still hold the DEAD Logic after a relaunch. Its `processIdentifier()` is the old pid, and
+# `AXUIElementCreateApplication(dead pid)` answers -25204 forever — so the detector reported
+# cannot-tell for the whole rest of the run while Logic was up and readable by every other means in
+# this file. Measured on the German run: the check taken before the first quit recorded a clean
+# `null`, and all four after it recorded `AXWindows (AX status -25204)`, one of them at the same
+# moment `located_band` read the live tree successfully.
+class _FakeApp:
+    def __init__(self, bundle, terminated, pid):
+        self._bundle, self._terminated, self._pid = bundle, terminated, pid
+
+    def bundleIdentifier(self):
+        return self._bundle
+
+    def isTerminated(self):
+        return self._terminated
+
+    def processIdentifier(self):
+        return self._pid
+
+
+_STALE = _FakeApp("com.apple.logic10", True, 111)
+_LIVE = _FakeApp("com.apple.logic10", False, 222)
+_OTHER = _FakeApp("com.apple.Safari", False, 333)
+
+for apps, want, why in [
+    ([_STALE, _LIVE], [222], "a terminated Logic beside a live one is dropped"),
+    ([_LIVE], [222], "a live Logic survives on its own"),
+    ([_OTHER], [], "another application is never in the list"),
+    ([_STALE], [], "every entry terminated is nothing to read, not something unreadable"),
+]:
+    got = [a.processIdentifier() for a in E._live_logic_apps(apps)]
+    ok = got == want
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} _live_logic_apps -> {got!r} {why}")
+
 E.blocking_modal = _headless_blocking_modal
 print(f"\n{'FAILED' if failed else 'all cases behaved'} ({failed} unexpected)")
 sys.exit(1 if failed else 0)

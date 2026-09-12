@@ -467,6 +467,19 @@ def _first_ax_sheet(ax, window, max_depth=32):
     return None
 
 
+LOGIC_BUNDLE_IDS = {"com.apple.logic10", "com.apple.mobilelogic"}
+
+
+def _live_logic_apps(applications):
+    """The Logic processes that are still running, out of whatever the workspace answered.
+
+    A terminated entry is not an unreadable Logic — it is a Logic that is gone — and treating it as
+    the former is what made the detector answer cannot-tell forever after the first relaunch.
+    """
+    return [app for app in applications
+            if app.bundleIdentifier() in LOGIC_BUNDLE_IDS and not app.isTerminated()]
+
+
 def _production_ax_modal_signals():
     """Return app-wide modal AX windows and sheets for every running Logic process.
 
@@ -476,13 +489,28 @@ def _production_ax_modal_signals():
     labels the application clear while its AX sheet enumeration is scoped to the wrong window.
     """
     try:
-        from AppKit import NSWorkspace
+        from AppKit import NSWorkspace, NSRunLoop, NSDate
+        # NSWorkspace's application list is maintained by notifications, and a plain Python process
+        # has no run loop to deliver them — so after Logic quits and relaunches, this list can still
+        # hold the DEAD application object. Its `processIdentifier()` is the old pid, and
+        # `AXUIElementCreateApplication(dead pid)` answers -25204 forever: the detector goes
+        # permanently cannot-tell from the first relaunch onward, while Logic is plainly up and
+        # readable by every other means in this file.
+        #
+        # Measured 2026-09-12 on the German run (#876): the check taken BEFORE the first quit
+        # recorded a clean `null`, and all four after it recorded `AXWindows (AX status -25204)` —
+        # including one taken at the same moment `located_band` successfully read the live tree.
+        # Waiting does not fix it, because nothing is going to arrive.
+        #
+        # Pumping the run loop briefly lets those notifications land; filtering terminated apps is
+        # the belt to that braces, since a stale entry that survives the pump must not be treated as
+        # an unreadable Logic.
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.2))
         applications = NSWorkspace.sharedWorkspace().runningApplications()
     except Exception as exc:  # noqa: BLE001 - no workspace means the off-screen check did not run
         raise _ModalReadError(f"could not enumerate running Logic applications: {exc!r}") from exc
 
-    logic_apps = [app for app in applications
-                  if app.bundleIdentifier() in {"com.apple.logic10", "com.apple.mobilelogic"}]
+    logic_apps = _live_logic_apps(applications)
     ax = _AXRuntime()
     try:
         first_unreadable = None
