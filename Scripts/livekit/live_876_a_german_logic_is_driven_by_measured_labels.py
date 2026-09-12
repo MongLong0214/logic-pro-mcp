@@ -85,6 +85,28 @@ POLICY = os.path.join(WT, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swif
 ev = E.Evidence(HEAD, os.environ["LPM_EVIDENCE_ROOT"], surface="ui")
 
 
+def settled_modal(seconds=30):
+    """A modal snapshot taken once the detector can actually answer.
+
+    `blocking_modal()` returns cannot-tell while Logic is mid-launch — `AXWindows` answers -25204 —
+    and this run relaunches Logic twice by design, so four of its five checks recorded
+    `blocking_modal: cannot_tell` and `is_clean` retired the whole run for a reason about TIMING
+    rather than about the product. Measured 2026-09-12: the same detector answers `None` a few
+    seconds later on the same machine.
+
+    It waits for a DECIDED answer and returns whatever that is. A detected blocker is still
+    reported, so waiting cannot turn a real modal into a clear scan, and a detector that never
+    decides still records cannot-tell — the run is not allowed to pass by giving up quietly.
+    """
+    deadline = time.time() + seconds
+    snap = E.blocking_modal()
+    while (time.time() < deadline
+           and isinstance(snap, dict) and snap.get("state") == "cannot_tell"):
+        time.sleep(1)
+        snap = E.blocking_modal()
+    return snap
+
+
 def osa(script):
     r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     return (r.stdout or "").strip()
@@ -236,7 +258,7 @@ ev.check("876/precondition-only-the-disposable-fixture-is-open",
          not foreign,
          f"no document other than {FIXTURE_NAME} is open, so the relaunches below cannot discard "
          f"anyone's unsaved work",
-         f"documents={open_docs!r}", None)
+         f"documents={open_docs!r}", None, modal_snapshot=settled_modal())
 if foreign:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -246,7 +268,8 @@ ev.check("876/precondition-logic-stopped-before-the-language-was-switched",
          "Logic is not running, so the language written next is the one the launch reads — a quit "
          "that was merely SENT leaves the old language in place and the run measures English while "
          "reporting German",
-         f"running={logic_running()} windows={windows()!r}", None)
+         f"running={logic_running()} windows={windows()!r}", None,
+         modal_snapshot=settled_modal())
 if not stopped:
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -268,7 +291,8 @@ if not edit_live or edit_live == edit_english:
     ev.check("876/precondition-logic-came-up-in-german", False,
              "Logic's own menu bar is not English, read from the application rather than from the "
              "setting that was written",
-             f"menu bar={bar_items!r} · Edit reads {edit_live!r}", None)
+             f"menu bar={bar_items!r} · Edit reads {edit_live!r}", None,
+             modal_snapshot=settled_modal())
     set_language(original[0])
     print(json.dumps(ev.write(), indent=1)); sys.exit(1)
 
@@ -295,7 +319,7 @@ ev.check("876/the-control-bar-was-located-through-its-german-description",
          "the control bar's position readout is found by the AXDescription it carries, which IS localised — the German "
          "spelling was read off the de-DE census of 2026-09-12, and without it no capture can be "
          "taken on the one run where the locale is the point",
-         f"band={band!r} subject={band_subject!r}", None)
+         f"band={band!r} subject={band_subject!r}", None, modal_snapshot=settled_modal())
 
 canvas, canvas_subject = ev.located_band("Tracks contents")
 ev.note("876/the-canvas-is-also-german", {"band": canvas, "subject": canvas_subject})
@@ -365,6 +389,7 @@ ev.falsifiable(
             "`*_is_a_policy_label` clause goes false on its own, while the menu-bar clauses stay "
             "green — which is why the resolved leaves are asserted separately from the outcome "
             "rather than folded into it",
+    modal_snapshot=settled_modal(),
 )
 
 # ---- put the machine back, and CONFIRM it from Logic rather than from the setting ---------------
@@ -379,7 +404,8 @@ ev.check("876/the-original-language-was-restored-and-confirmed-from-logic",
               or original[0] == "de"),
          "Logic is back on the language this run found it in, read back off its own menu bar — "
          "checking the `defaults` value would only confirm that the write happened",
-         f"original={original!r} menu bar now={restored_bar!r}", None)
+         f"original={original!r} menu bar now={restored_bar!r}", None,
+         modal_snapshot=settled_modal())
 
 ev.stop_recording(recording)
 out = ev.write()

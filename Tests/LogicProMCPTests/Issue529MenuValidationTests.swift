@@ -267,13 +267,27 @@ struct Issue529MenuValidationTests {
             ),
             encoding: .utf8
         )
+        // The two observers used to be held to agreement by COUNTING this predicate twice in the
+        // source. They agree structurally now: both render the same handler from
+        // `AXLocalePolicy.goToPositionDialogTitle`, which is what #876 changed after adding a German
+        // title to that LabelSet and watching the route go on refusing — the decision lived in these
+        // literals, not in the policy. So the source must carry NO hand-written copy of the
+        // predicate, and the generated handler must carry every title the LabelSet declares. That is
+        // strictly stronger than the count: a second literal list cannot come back, and a title
+        // dropped from the policy fails here instead of silently narrowing the route.
         let titlePredicateOccurrences = issue529Positions(
             of: "dialogTitle is \"位置の移動\"", in: source
         )
+        let handler = AccessibilityChannel.goToPositionDialogTitleHandlerAppleScript()
 
         #expect(writeScript.contains("dialogTitle is \"位置の移動\""))
         #expect(writeScript.contains("button \"キャンセル\""))
-        #expect(titlePredicateOccurrences.count == 2, "write and timeout observers must agree on the exact JA title")
+        #expect(titlePredicateOccurrences.count == 0,
+                "the title predicate must be rendered from the LabelSet, never written into the source")
+        for title in AXLocalePolicy.goToPositionDialogTitle.labels {
+            #expect(handler.contains("dialogTitle is \"\(title)\""),
+                    "the rendered handler drops \(title), so the route would not recognise that dialog")
+        }
     }
 
     @Test("the dialog-ready poll remains the authority after the resolved leaf click")
