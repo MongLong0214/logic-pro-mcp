@@ -734,12 +734,58 @@ func openPlugin(
     let before = windows()
     result["pressed_children"] = [snapshot(buttons[0])]
     result["open_press_status"] = press(buttons[0])
-    usleep(1_400_000)
-    let opened = newWindows(since: before)
+    // #852 — POLL, do not sleep a fixed amount. 1.4s was not always enough: pressing the Open button
+    // of a freshly inserted plug-in reported `opened_windows: []` while the same press driven by hand
+    // with a 2s wait opened the window every time. A fixed wait that is usually enough is a probe
+    // that reports "nothing happened" on the runs where the application was busy — and it reports it
+    // in the shape of a finding, which is how this cost four wrong diagnoses on #852 before the wait
+    // was suspected. The product reads the same surface by polling (`pollPluginSlotName`), and the
+    // `-25200` description reads on this same tree needed longer than four seconds to settle.
+    var opened: [AXUIElement] = []
+    var waitedMs = 0
+    while waitedMs < 6_000 {
+        usleep(200_000)
+        waitedMs += 200
+        opened = newWindows(since: before)
+        if !opened.isEmpty { break }
+    }
+    // What the wait actually cost, so a slow run is visible rather than inferred.
+    result["open_wait_ms"] = waitedMs
     result["opened_windows_scope"] = "all_logic_application_windows"
     result["opened_windows_scope_widened_from_pressed_slot"] = true
     result["opened_windows_scope_note"] = "new windows are not bound to the pressed \(slotName) slot"
     result["opened_windows"] = opened.map(snapshot)
+    // #852 — a press that CLOSED a window is not "nothing happened". The Open button is a TOGGLE:
+    // measured 2026-09-12, pressing it with the plug-in window already up took the window count
+    // from 3 to 2. `newWindows` can only see additions, so that run reported `opened_windows: []`
+    // and the outcome read `not_found` — the same sentence a missing slot produces. Every failure
+    // collapsing into one word is why four wrong diagnoses fit this receipt today.
+    let afterCount = windows().count
+    result["windows_before_press"] = before.count
+    result["windows_after_press"] = afterCount
+    if opened.isEmpty, afterCount < before.count {
+        // TOGGLED CLOSED — so press again to open it. This is not a retry in the hopeful sense: the
+        // first press is now KNOWN to have acted, and the direction it acted in is known too, so
+        // the second press is the rest of one operation rather than another attempt at it.
+        //
+        // `insert_plugin` leaves the plug-in window OPEN, which is how a probe run that inserts and
+        // then presses Open ends up closing it. Every `not_found` this file reported on #852 was
+        // that, and it looked identical to a missing slot.
+        result["press_closed_an_open_window"] = true
+        result["reopen_press_status"] = press(buttons[0])
+        var reopened: [AXUIElement] = []
+        var reopenWaitedMs = 0
+        while reopenWaitedMs < 6_000 {
+            usleep(200_000)
+            reopenWaitedMs += 200
+            reopened = newWindows(since: before)
+            if !reopened.isEmpty { break }
+        }
+        result["reopen_wait_ms"] = reopenWaitedMs
+        result["opened_windows"] = reopened.map(snapshot)
+        result["outcome"] = candidateOutcome(reopened.count)
+        return (result, slot, reopened.count == 1 ? reopened[0] : nil)
+    }
     result["outcome"] = candidateOutcome(opened.count)
     return (result, slot, opened.count == 1 ? opened[0] : nil)
 }
