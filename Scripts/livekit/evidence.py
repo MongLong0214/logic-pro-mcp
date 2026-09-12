@@ -183,7 +183,12 @@ def _running_harness_name():
 # so `shot` took its no-window branch and recorded `settled: false`, `region: null` and
 # `wholly_within: false` — and I read those three as a settling problem and blamed blinking level
 # meters. They were one missing translation, and the capture never happened at all.
-ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック"]
+# The arrange window's title SUFFIX, in every language measured. German joined on 2026-09-12 (#876)
+# and it is the same failure the Korean note below records, one attribute over: a de-DE window is
+# called `<project> - Spuren`, no candidate matched, `logic_window` returned None, and every capture
+# in the German run recorded `no Logic window on screen` while Logic was plainly on screen. The
+# checks passed and the visual assertion failed on empty pixels.
+ARRANGE_WINDOW_TITLES = ["Tracks", "트랙", "トラック", "Spuren"]
 
 
 def _is_logic_owned_window(window):
