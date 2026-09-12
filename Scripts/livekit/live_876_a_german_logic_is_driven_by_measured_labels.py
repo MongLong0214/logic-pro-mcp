@@ -35,10 +35,11 @@ WHAT IT DOES NOT CLAIM, SAID BEFORE THE RESULT
 ----------------------------------------------
 It does not claim the product WORKS in German. `tracks.record_sequence` does not: it imports a
 standard MIDI file and the import panel is localised too, so on a German Logic the operation refuses
-at `preflight_blocking_dialog` naming a dialog called `Importieren`. That refusal is recorded here
-as an observation rather than left out, because a run that quietly picked operations that pass would
-be measuring its own selection. The reachable German surface today is MENU-ROUTED navigation, and
-that is exactly what this asserts.
+at `preflight_blocking_dialog` naming a dialog called `Importieren`. That refusal is DRIVEN and
+recorded here rather than left out, because a run that quietly picked the operations that pass would
+be measuring its own selection. It is driven last, and the panel it leaves is dismissed and the
+dismissal confirmed — a reading taken behind a blocker is a reading of the blocker. The reachable
+German surface today is MENU-ROUTED navigation, and that is exactly what this asserts.
 
 THE COUNTEREXAMPLE
 ------------------
@@ -314,13 +315,6 @@ ev.visual("876/the-playhead-readout-moved-on-a-german-logic",
               "the playhead is — a route reporting success while the readout still says bar 1 would "
               "leave this band identical")
 
-# NOT a passing clause, and deliberately so. It is the next German gap, measured in the same run
-# that proves the menus work, so nobody has to take its size on trust.
-blocked = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"})
-ev.note("876/the-import-path-is-not-reachable-in-german",
-        {k: v for k, v in (blocked or {}).items()
-         if k in ("state", "error", "failure_stage", "dialog_title", "hint")})
-
 seek_body = seek if isinstance(seek, dict) else {}
 reading = {
     "menu_bar": bar_items,
@@ -334,7 +328,6 @@ reading = {
     "goto_state": seek_body.get("state"),
     "goto_succeeded": seek_body.get("success"),
     "goto_took_no_dialog_route": seek_body.get("dialog_route_outcome") is None,
-    "import_refused_naming_a_german_dialog": (blocked or {}).get("dialog_title"),
 }
 
 ev.falsifiable(
@@ -353,8 +346,7 @@ ev.falsifiable(
      "move_leaf_resolved": "", "to_playhead_leaf_resolved": "",
      "move_leaf_is_a_policy_label": False,
      "to_playhead_leaf_is_a_policy_label": False,
-     "goto_state": "B", "goto_succeeded": True, "goto_took_no_dialog_route": True,
-     "import_refused_naming_a_german_dialog": "Importieren"},
+     "goto_state": "B", "goto_succeeded": True, "goto_took_no_dialog_route": True},
     "on a Logic whose menu bar is German, Edit ▸ Move ▸ To Playhead resolves entirely out of labels "
     "`AXLocalePolicy` declares, and Navigate ▸ Go To ▸ Position… drives the playhead successfully. "
     "THE COUNTEREXAMPLE is the product succeeding on a German Logic without using German labels — "
@@ -366,6 +358,26 @@ ev.falsifiable(
             "green — which is why the resolved leaves are asserted separately from the outcome "
             "rather than folded into it",
 )
+
+# THE NEXT GERMAN GAP, measured in the same run that proves the menus work, so nobody has to take
+# its size on trust. It runs AFTER the assertion above and not before: `record_sequence` leaves
+# Logic's German import panel open, and a check recorded while a modal is up is retired by
+# `is_clean` — correctly, because a reading taken behind a blocker is a reading of the blocker.
+blocked = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"})
+ev.note("876/the-import-path-is-not-reachable-in-german",
+        {k: v for k, v in (blocked or {}).items()
+         if k in ("state", "error", "failure_stage", "dialog_title", "hint")})
+
+# ...and the panel it left has to go, or the next run on this machine starts behind it. Measured
+# earlier today: a `Zu Position` dialog left open by a failed attempt made the following run report
+# `menu_disabled`, which sent the diagnosis off in the wrong direction entirely.
+osa('tell application "Logic Pro" to activate')
+time.sleep(0.5)
+osa('tell application "System Events" to key code 53')
+time.sleep(1.5)
+ev.restored("876/the-german-import-panel-is-dismissed",
+            E.blocking_modal() is None,
+            f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}")
 
 # ---- put the machine back, and CONFIRM it from Logic rather than from the setting ---------------
 d.close()
