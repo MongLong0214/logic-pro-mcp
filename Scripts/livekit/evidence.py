@@ -947,41 +947,30 @@ AX_REGION_LABELS = {
     # row lists its own: the policy declares four and nothing here knows which one a given Logic
     # renders, so a spelling the product would match must be one the locator can try.
     "Tracks contents": ["트랙 콘텐츠", "トラックコンテンツ",
-                        "track content", "track contents", "tracks content"],
+                        "track content", "track contents", "tracks content",
+                        "Spuren enthält"],
     # Four ASCII spellings because the policy declares four and nothing here knows which one a
     # given Logic renders — measured `Tracks header` in English 12.x, `트랙 헤더` in Korean. The
     # alias guard found the other three unreachable: the policy claimed to know them and the
     # locator would never have tried them.
-    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers", "トラックヘッダ"],
-    "Tracks": ["트랙", "トラック"],
-    "Library": ["라이브러리", "ライブラリ"],
+    "Tracks header": ["트랙 헤더", "track headers", "track header", "tracks headers", "トラックヘッダ",
+                      "Spuren Titel"],
+    "Tracks": ["트랙", "トラック", "Spuren"],
+    "Library": ["라이브러리", "ライブラリ", "Bibliothek"],
     "Mixer": ["믹서", "ミキサー"],
-    "Inspector": ["인스펙터", "インスペクタ"],
+    "Inspector": ["인스펙터", "インスペクタ", "Informationen"],
+    # German, measured 2026-09-12 off `evidence/2026-09-12-de-DE-navigation-free.census.json`
+    # (#876). Each spelling was read from an element whose role can carry the band this locator
+    # looks for — AXGroups, not the control-bar AXCheckBoxes that share three of the words and are
+    # toggles rather than panes. `Mixer` needs no row: German keeps the English word, and the key
+    # already IS that word, so adding it would have looked like coverage and measured nothing.
+    #
     # No row at all until now, and two harnesses ask for it by this name — so on any Logic that is
     # not English they were locating nothing. The Korean form is the policy's; the Japanese one is
     # measured, and it is `再生ヘッドの位置` rather than the `再生ヘッド位置` the policy carried.
-    "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置"],
+    "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置", "Position der Abspielposition"],
 }
 
-# German, measured 2026-09-12 off `evidence/2026-09-12-de-DE-navigation-free.census.json` (#876) and
-# merged into the table above rather than written beside it — two tables would be two answers. Each
-# string was read from an element whose role can carry the band this locator looks for: `Spuren
-# enthält`, `Spuren Titel`, `Spuren` and `Position der Abspielposition` off AXGroups, `Mixer`,
-# `Bibliothek` and `Informationen` off AXGroups too (the same words also sit on control-bar
-# AXCheckBoxes, which are toggles and not panes — the locator asks for a region, so the checkbox
-# cannot satisfy it).
-#
-# `Mixer` needs no row: German keeps the English word, and the key already is that word. Adding it
-# anyway would have looked like coverage and measured nothing.
-for _key, _de in (
-    ("Tracks contents", "Spuren enthält"),
-    ("Tracks header", "Spuren Titel"),
-    ("Tracks", "Spuren"),
-    ("Library", "Bibliothek"),
-    ("Inspector", "Informationen"),
-    ("Playhead Position", "Position der Abspielposition"),
-):
-    AX_REGION_LABELS[_key].append(_de)
 
 
 # A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`

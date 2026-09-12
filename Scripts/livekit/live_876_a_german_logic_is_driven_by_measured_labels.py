@@ -243,11 +243,15 @@ bar_items = menu_bar_items()
 ev.note("876/launch", {"launched": launched, "windows": windows(), "menu_bar": bar_items})
 
 edit_labels = label_set("editMenuBar")
+# The English spelling is READ, never written in — `canonical` is the en-US form, and comparing
+# against it is how this run knows Logic did not silently come up in English. Writing "Edit" here
+# would put one language's spelling in a file whose whole subject is that spellings are measured.
+edit_english = edit_labels[0] if edit_labels else ""
 move_labels = label_set("moveMenuItem")
 playhead_labels = label_set("toPlayheadMenuItem")
 edit_live = next((b for b in bar_items if b in edit_labels), "")
 
-if not edit_live or edit_live == "Edit":
+if not edit_live or edit_live == edit_english:
     ev.check("876/precondition-logic-came-up-in-german", False,
              "Logic's own menu bar is not English, read from the application rather than from the "
              "setting that was written",
@@ -303,7 +307,7 @@ body = moved if isinstance(moved, dict) else {}
 reading = {
     "menu_bar": bar_items,
     "edit_menu_bar_live": edit_live,
-    "edit_menu_bar_is_not_english": edit_live != "Edit",
+    "edit_menu_bar_is_not_english": edit_live != edit_english,
     "edit_menu_bar_is_a_policy_label": edit_live in edit_labels,
     "move_leaf_resolved": move_live,
     "to_playhead_leaf_resolved": playhead_live,
@@ -350,8 +354,9 @@ set_language(original[0])
 restored_launch = launch_on_fixture()
 restored_bar = menu_bar_items()
 ev.check("876/the-original-language-was-restored-and-confirmed-from-logic",
-         restored_launch and any(b in label_set("editMenuBar") for b in restored_bar)
-         and ("Bearbeiten" not in restored_bar or original[0] == "de"),
+         restored_launch and any(b in edit_labels for b in restored_bar)
+         and (next((b for b in restored_bar if b in edit_labels), "") == edit_english
+              or original[0] == "de"),
          "Logic is back on the language this run found it in, read back off its own menu bar — "
          "checking the `defaults` value would only confirm that the write happened",
          f"original={original!r} menu bar now={restored_bar!r}", None)

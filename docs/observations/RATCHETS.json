@@ -284,11 +284,13 @@
    "tempoSliderLabel→テンポ",
    "tempoSliderLabel→템포",
    "toPlayheadMenuItem→재생헤드로",
+   "trackContentExplicit→Spuren enthält",
    "trackContentExplicit→track content",
    "trackContentExplicit→track contents",
    "trackContentExplicit→tracks content",
    "trackContentGeneric→content",
    "trackContentGeneric→contents",
+   "trackHeadersDescription→Spuren Titel",
    "trackHeadersDescription→track header",
    "trackHeadersDescription→tracks header",
    "trackHeadersDescription→tracks headers",
@@ -903,10 +905,12 @@
    "date": "2026-09-12",
    "members": [
     "markerListEditMenuButton→Bearbeiten",
+    "trackContentExplicit→Spuren enthält",
+    "trackHeadersDescription→Spuren Titel",
     "trackMuteButton→Ton aus",
     "trackRecordButton→Aufnahme"
    ],
-   "reason": "The same shape as the five Japanese forms raised 2026-09-07, and for the same reason. All three German strings were READ — off the 2026-09-12 de-DE navigation-free census, aligned against the en-US walk of the same day (#876) — and all three sit on census surface `arrange.window`, which no record covers, so `locale-propose.py --apply` will not cite one. The citation gap is in the pipeline, not in the reading: `apply` keys records by the census row's RAW surface field, and every window row carries `arrange.window` whatever it is classified as. Fixing that is a change to the campaign for every locale at once and is deliberately not made while adding one."
+   "reason": "The same shape as the five Japanese forms raised 2026-09-07, and for the same reason. All five German strings were READ — off the 2026-09-12 de-DE navigation-free census, aligned against the en-US walk of the same day (#876) — and all five sit on census surface `arrange.window`, which no record covers, so `locale-propose.py --apply` will not cite one. The citation gap is in the pipeline, not in the reading: `apply` keys records by the census row's RAW surface field, and every window row carries `arrange.window` whatever it is classified as. Fixing that is a change to the campaign for every locale at once and is deliberately not made while adding one."
   },
   "unmeasured_coverage.de-DE": {
    "date": "2026-09-12",

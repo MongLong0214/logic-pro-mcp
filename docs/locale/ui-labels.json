@@ -3044,9 +3044,10 @@
     "track contents",
     "tracks content",
     "tracks contents",
-    "トラックコンテンツ"
+    "トラックコンテンツ",
+    "Spuren enthält"
    ],
-   "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier.",
+   "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "provenance": {
     "tracks contents": {
      "attribute": "description",
@@ -3112,9 +3113,10 @@
     "track header",
     "tracks header",
     "tracks headers",
-    "트랙 헤더"
+    "트랙 헤더",
+    "Spuren Titel"
    ],
-   "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred).",
+   "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "match": "exact_strict",
    "coverage": {
     "en-US": "unmeasured",
