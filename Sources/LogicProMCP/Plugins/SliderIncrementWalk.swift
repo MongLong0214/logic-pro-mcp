@@ -177,7 +177,20 @@ enum SliderIncrementWalk {
             }
 
             if next.display == current.display {
-                return .noProgress(steps: steps, last: next)
+                // An unchanged RENDERING is not an unchanged control. Channel EQ's Q renders two
+                // decimals over a range whose increment is finer than that, so a real step reads
+                // back the same string — and treating that as terminal is why Q landed nothing on
+                // any band in either direction, dying at step 1 every time (#292, measured
+                // 2026-09-12). The raw value is the thing that says whether the control moved.
+                //
+                // When NEITHER moved, the walk is against a rail and stopping is right; that is the
+                // case this clause was written for and it still fires. The budget bounds the other
+                // case, so a display that never changes cannot spin.
+                if next.value == current.value {
+                    return .noProgress(steps: steps, last: next)
+                }
+                current = next
+                continue
             }
 
             guard let movedCloser = displayMovedCloser(
