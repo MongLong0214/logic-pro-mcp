@@ -48,7 +48,7 @@ extension AccessibilityChannel {
     static func defaultInsertPlugin(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
-        selectPlugin: (PluginInsertSpec, AXUIElement, AXHelpers.Runtime) async -> MenuSelectionOutcome = selectLivePluginFromOpenMenu,
+        selectPlugin: (PluginInsertSpec, AXUIElement, String?, AXHelpers.Runtime) async -> MenuSelectionOutcome = selectLivePluginFromOpenMenu,
         rollback: () -> Bool = undoLastLogicAction,
         readbackTimeoutMs: Int = 2_000
     ) async -> ChannelResult {
@@ -66,6 +66,12 @@ extension AccessibilityChannel {
                 hint: "insert_plugin requires explicit 'slot' (Int >= 0)"
             ))
         }
+        // #871 — the channel configuration, when the caller names one. Optional: a strip that
+        // offers exactly one, or offers the spec's preference, needs no choice made. It becomes
+        // REQUIRED in effect on a strip that offers several and none preferred — the case that was
+        // simply unreachable before, because the caller had no way to express it.
+        let configuration = (params["configuration"] ?? params["channel_configuration"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let pluginName = params["plugin_name"] ?? params["plugin"] ?? params["name"],
               let spec = pluginInsertSpec(named: pluginName) else {
             let requestedPluginName: Any
@@ -148,7 +154,7 @@ extension AccessibilityChannel {
 
         _ = AXHelpers.performAction(targetSlot.element, kAXPressAction, runtime: runtime.ax)
         try? await Task.sleep(for: .milliseconds(250))
-        let selection = await selectPlugin(spec, app, runtime.ax)
+        let selection = await selectPlugin(spec, app, configuration, runtime.ax)
         guard selection.succeeded else {
             dismissOpenMenu()
             // #855 — the failure names WHICH step failed and, for the one that actually bites, what
@@ -165,6 +171,7 @@ extension AccessibilityChannel {
                     "menu_failure": menuFailureLabel(selection),
                     "menu_paths_tried": spec.menuPaths.map { $0.joined(separator: " > ") },
                     "menu_leaf_offered": menuLeafOffered(selection),
+                    "requested_configuration": configuration ?? "",
                 ]
             ))
         }
@@ -190,7 +197,27 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(extras: extras))
         }
         extras["rollback_attempted"] = true
-        extras["rollback_succeeded"] = rollback()
+        // #872 — the rollback is CONFIRMED, not assumed. `undoLastLogicAction` posts a Cmd+Z and
+        // returns true unconditionally, so reporting its return value meant `rollback_succeeded`
+        // said "a key event was posted" rather than "the insert was undone". A rollback is what a
+        // caller trusts when a verified write fails its readback; one that cannot fail is worse
+        // than none, because the envelope says the project was put back when nobody looked.
+        //
+        // The slot is the readback this operation already has. After the undo it is re-read: the
+        // insert is undone when the slot no longer carries the plug-in that was just put there.
+        // That is an observation of the world, and it can say no.
+        let rollbackPosted = rollback()
+        let slotAfterRollback = await pollPluginSlotName(
+            track: track,
+            slot: slotIndex,
+            runtime: runtime,
+            timeoutMs: readbackTimeoutMs
+        )
+        let rolledBack = slotAfterRollback.map { !spec.matches($0) } ?? true
+        extras["rollback_action_posted"] = rollbackPosted
+        extras["rollback_observed_plugin_name"] = slotAfterRollback ?? NSNull()
+        extras["rollback_verify_source"] = "ax_plugin_slot"
+        extras["rollback_succeeded"] = rolledBack
         extras["requested_plugin_name"] = spec.canonicalName
         if observed == nil {
             return .success(HonestContract.encodeStateB(
@@ -272,9 +299,11 @@ extension AccessibilityChannel {
         case .noPathWalked:
             let offered = menuLeafOffered(outcome)
             if !offered.isEmpty {
-                return "\(spec.canonicalName) was found, but this strip offers only "
+                return "\(spec.canonicalName) was found, but this strip offers "
                     + "\(offered.joined(separator: ", ")) for it — the last segment of a menu path is "
-                    + "the CHANNEL CONFIGURATION, which belongs to the strip and not to the request"
+                    + "the CHANNEL CONFIGURATION, which belongs to the strip and not to the request. "
+                    + "Name one with 'configuration' to choose; this operation will not pick a "
+                    + "channel layout on your behalf"
             }
             return "no configured menu path matched: none of "
                 + spec.menuPaths.map { $0.joined(separator: " > ") }.joined(separator: " | ")
@@ -299,6 +328,7 @@ extension AccessibilityChannel {
     private static func selectLivePluginFromOpenMenu(
         spec: PluginInsertSpec,
         app: AXUIElement,
+        configuration: String?,
         runtime: AXHelpers.Runtime
     ) async -> MenuSelectionOutcome {
         guard let rootMenu = findAudioPluginRootMenu(in: app, runtime: runtime) else {
@@ -306,7 +336,9 @@ extension AccessibilityChannel {
         }
         var attempts: [MenuPathOutcome] = []
         for path in spec.menuPaths {
-            let outcome = await pressMenuPath(path, rootMenu: rootMenu, runtime: runtime)
+            let outcome = await pressMenuPath(
+                path, rootMenu: rootMenu, configuration: configuration, runtime: runtime
+            )
             attempts.append(outcome)
             if case .pressed = outcome { return .selected(outcome) }
         }
@@ -340,7 +372,14 @@ extension AccessibilityChannel {
     /// So the preference is honoured when the strip offers it, and a menu with exactly ONE item is
     /// taken because there is no choice to make. Anything else refuses: picking the first of several
     /// unrequested configurations would be choosing a channel layout on the operator's behalf.
-    static func leafChoice(preferred: String, offered: [String]) -> String? {
+    static func leafChoice(preferred: String, offered: [String], requested: String? = nil) -> String? {
+        // #871 — the CALLER's configuration outranks the spec's preference, and is honoured only
+        // when the strip actually offers it. A requested value the strip does not have is refused
+        // rather than falling back: the caller named a layout, and quietly giving them a different
+        // one is the failure this whole path exists to avoid.
+        if let requested, !requested.isEmpty {
+            return offered.contains(requested) ? requested : nil
+        }
         if offered.contains(preferred) { return preferred }
         return offered.count == 1 ? offered[0] : nil
     }
@@ -348,6 +387,7 @@ extension AccessibilityChannel {
     private static func pressMenuPath(
         _ path: [String],
         rootMenu: AXUIElement,
+        configuration: String?,
         runtime: AXHelpers.Runtime
     ) async -> MenuPathOutcome {
         guard !path.isEmpty else { return .segmentMissing("") }
@@ -373,7 +413,7 @@ extension AccessibilityChannel {
         let offered = AXHelpers.getChildren(menu, runtime: runtime)
             .filter { (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String) }
             .compactMap { AXHelpers.getTitle($0, runtime: runtime) }
-        guard let wanted = leafChoice(preferred: preferred, offered: offered),
+        guard let wanted = leafChoice(preferred: preferred, offered: offered, requested: configuration),
               let leaf = menuItem(named: wanted, in: menu, runtime: runtime) else {
             return .leafMissing(wanted: preferred, offered: offered)
         }

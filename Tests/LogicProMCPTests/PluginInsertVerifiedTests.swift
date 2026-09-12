@@ -671,7 +671,7 @@ private func insertParams(
     let result = await AccessibilityChannel.defaultInsertPlugin(
         params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
         runtime: runtime,
-        selectPlugin: { _, _, _ in
+        selectPlugin: { _, _, _, _ in
             Issue.record("a zero-slot strip must fail before menu selection")
             return .selected(.pressed(leaf: "Stereo"))
         }

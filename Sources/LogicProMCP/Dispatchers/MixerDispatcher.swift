@@ -10,7 +10,7 @@ struct MixerDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_mixer",
-        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
+        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true, configuration?: String } via AX mixer slot with readback. The last segment of Logic's plug-in menu is the CHANNEL CONFIGURATION (Stereo, Mono, Mono->Stereo, Dual Mono), which belongs to the strip and not to the request, so it is read off the menu this call opens: the spec's preference wins when the strip offers it, a menu with exactly one entry has no choice to make, and several entries with none preferred are REFUSED rather than picking a channel layout on the operator's behalf. Supply `configuration` to choose in that case — it is honoured only when the strip actually offers it, and a value the strip lacks fails closed instead of silently falling back. The refusal lists what the strip offered, so the legal values come back from the failure. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
         commandDescription: "Mixer command to execute"
     )
 
@@ -218,11 +218,21 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             let channelResult = await withWriteBoundaryArmed(traceID) {
-                await router.route(operation: "plugin.insert", params: [
+                var routed: [String: String] = [
                     "track": String(track),
                     "slot": String(slot),
                     "plugin_name": spec.canonicalName,
-                ])
+                ]
+                // #871 — forward the caller's channel configuration. This map is built EXPLICITLY
+                // rather than passed through, which is why the parameter reached the registry's
+                // allow-list and the channel's reader and still did nothing on the first live run:
+                // a param the dispatcher does not name is a param the channel never sees.
+                let configuration = stringParam(params, "configuration", "channel_configuration")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !configuration.isEmpty {
+                    routed["configuration"] = configuration
+                }
+                return await router.route(operation: "plugin.insert", params: routed)
             }
             if FeatureFlags.adr002TargetRef, channelResultIsVerified(channelResult) {
                 await targetRegistry?.bumpTopologyGeneration()
