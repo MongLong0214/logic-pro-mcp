@@ -9,32 +9,32 @@ import Testing
 /// pin both the debug seam contract and the release exclusion.
 ///
 /// The `swift test` build compiles the LogicProMCP module in debug (with
-/// `QUALIFICATION_FAULT_SEAM`), so `QualificationFaultInjection` is present here;
+/// `FAULT_TEST_SEAM`), so `FaultInjectionSeam` is present here;
 /// the release-binary probes drive the separately built `-c release` executable,
 /// which has it compiled out.
 @Suite("Qualification fault seam — release exclusion (#399)")
-struct QualificationFaultInjectionTests {
-    // #399 (CEO audit P0) — DEBUG-ONLY seam coverage. `QualificationFaultInjection`
+struct FaultInjectionSeamTests {
+    // #399 (CEO audit P0) — DEBUG-ONLY seam coverage. `FaultInjectionSeam`
     // and the transport fault modes are compiled solely under
-    // `QUALIFICATION_FAULT_SEAM` (see Package.swift). This block references those
+    // `FAULT_TEST_SEAM` (see Package.swift). This block references those
     // excluded symbols and/or drives the DEBUG executable (which HAS the seam), so
     // it compiles/runs only in the debug test build and is absent from a
     // `-c release` test build. It proves the qualification fault modes STILL WORK
     // in debug — the coverage the release-exclusion inversion would otherwise drop.
-    #if QUALIFICATION_FAULT_SEAM
-    /// TEST (C) — debug seam contract. `QualificationFaultInjection` returns
+    #if FAULT_TEST_SEAM
+    /// TEST (C) — debug seam contract. `FaultInjectionSeam` returns
     /// non-nil ONLY for the exact documented modes; every other value is nil.
     @Test func injectionResolvesOnlyDocumentedModes() throws {
-        #expect(QualificationFaultInjection(environment: [:]) == nil)
-        #expect(QualificationFaultInjection(environment: [
-            QualificationFaultInjection.environmentKey: "unknown",
+        #expect(FaultInjectionSeam(environment: [:]) == nil)
+        #expect(FaultInjectionSeam(environment: [
+            FaultInjectionSeam.environmentKey: "unknown",
         ]) == nil)
-        let timeout = try #require(QualificationFaultInjection(environment: [
-            QualificationFaultInjection.environmentKey: "timeout",
+        let timeout = try #require(FaultInjectionSeam(environment: [
+            FaultInjectionSeam.environmentKey: "timeout",
         ]))
         #expect(timeout.mode == .timeout)
-        let partial = try #require(QualificationFaultInjection(environment: [
-            QualificationFaultInjection.environmentKey: "partial_state",
+        let partial = try #require(FaultInjectionSeam(environment: [
+            FaultInjectionSeam.environmentKey: "partial_state",
         ]))
         #expect(partial.mode == .partialState)
     }
@@ -71,12 +71,12 @@ struct QualificationFaultInjectionTests {
     /// server with the fault mode armed and asserts the fault is observed from the
     /// real wire response — the exact contract of the retired real-server tests.
     private func assertDebugServerFault(
-        mode: QualificationFaultInjection.Mode,
+        mode: FaultInjectionSeam.Mode,
         expectedError: String
     ) throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
         var childEnvironment = ProcessInfo.processInfo.environment
-        childEnvironment[QualificationFaultInjection.environmentKey] = mode.rawValue
+        childEnvironment[FaultInjectionSeam.environmentKey] = mode.rawValue
         let result = try QualificationTransport(
             requestTimeout: 30,
             shutdownGrace: 1

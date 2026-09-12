@@ -22,7 +22,7 @@ import Testing
         ])
     }
 
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     @Test func regionDiffReportsAddedAndRemovedNotes() {
         let removedNote = makeNote(pitch: 60)
         let unchanged = makeNote(pitch: 62, start: 120)

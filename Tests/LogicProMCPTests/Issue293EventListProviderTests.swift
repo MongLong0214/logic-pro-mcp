@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 @Suite struct Issue293EventListProviderTests {
     private static let region = MIDIRegionReference(
         targetRef: TargetReference(rawValue: "trk_issue_293"),

@@ -24,9 +24,6 @@ enum MainEntrypoint {
         approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
         doctorRuntime: SetupDoctor.Runtime = .production,
         lifecycleRuntime: SetupLifecycle.Runtime = .production,
-        qualificationCommand: ([String]) async -> QualificationCommandResult = { arguments in
-            await QualificationRunner().run(arguments: arguments)
-        },
         // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
         isStdoutTTY: () -> Bool = { isatty(STDOUT_FILENO) != 0 },
         doctorEnvironment: [String: String] = ProcessInfo.processInfo.environment,
@@ -54,14 +51,6 @@ enum MainEntrypoint {
         if hasFlag("--help", or: "-h", in: arguments) {
             writeStdout(usageText + "\n")
             return 0
-        }
-
-        if let command = arguments.dropFirst().first,
-           command == "--qualify" || command == "--verify-promotion" {
-            let result = await qualificationCommand(arguments)
-            if !result.stdout.isEmpty { writeStdout(result.stdout) }
-            if !result.stderr.isEmpty { writeStderr(result.stderr) }
-            return result.exitCode
         }
 
         let approvalStore = approvalStoreFactory()

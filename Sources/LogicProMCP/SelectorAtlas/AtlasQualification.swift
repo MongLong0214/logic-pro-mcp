@@ -65,54 +65,11 @@ enum AtlasQualification {
         return .diffed(
             verdict: verdict, drifts: drifts, unmeasured: unmeasured, dropped: dropped)
     }
+    // `caseFor(_:axis:binarySHA256:traceID:)` lived here and turned an atlas outcome into a
+    // release-qualification case. The release-certification system it fed is gone; the atlas
+    // itself is a DIAGNOSTIC — `--probe-atlas-diff` still runs `outcome(armed:pairs:dropped:)`
+    // and prints what drifted. Only the adapter to the certificate went.
 
-    /// The case an outcome produces, or nil when the run is not armed.
-    ///
-    /// `.readOnlyOnly` fails too. The verdict's own vocabulary distinguishes "reuse everything"
-    /// from "reads only", and a qualification run is asking whether this release may be qualified
-    /// for the mutating operations the atlas guards — so anything short of full reuse is a no for
-    /// the question being asked here, whatever it may allow elsewhere.
-    /// - Parameter axis: the run's own axis, passed in rather than invented. The atlas result is
-    ///   about the variant and LOCALE this run measured — a case filed under a different axis would
-    ///   read as a claim about a Logic nobody looked at.
-    static func caseFor(
-        _ outcome: Outcome,
-        axis: QualificationAxis,
-        binarySHA256: String,
-        traceID: String
-    ) -> QualificationCase? {
-        let passed: Bool
-        let reason: String?
-        switch outcome {
-        case .notArmed:
-            return nil
-        case let .noBaselines(why):
-            passed = false
-            reason = why
-        case let .diffed(verdict, drifts, unmeasured, dropped):
-            passed = verdict == .reuseFull
-            reason = passed ? nil : describe(
-                verdict: verdict, drifts: drifts, unmeasured: unmeasured, dropped: dropped)
-        }
-        return QualificationCase(
-            id: "atlas.drift_diff",
-            status: passed ? .passed : .failed,
-            tool: "selector_atlas",
-            command: "drift_diff",
-            traceID: traceID,
-            verified: passed,
-            evidenceFiles: [],
-            reason: reason,
-            binarySHA256: binarySHA256,
-            axis: axis,
-            operationID: "atlas.drift_diff",
-            operationRequestID: nil,
-            verificationKind: .readResponse,
-            deferral: nil,
-            readback: nil,
-            availabilityReason: nil
-        )
-    }
 
     /// Why it failed, naming selectors rather than a count.
     ///

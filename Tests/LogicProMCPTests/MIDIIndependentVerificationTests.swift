@@ -3,11 +3,11 @@ import Testing
 @testable import LogicProMCP
 
 // E0 — independence-guard suite for ADR-014/#302 R1 (CI, no Logic).
-// The whole suite is `#if QUALIFICATION_FAULT_SEAM`: a release build has no
+// The whole suite is `#if FAULT_TEST_SEAM`: a release build has no
 // testFixture `IndependentExpectedProof` at all. R1 grants NO positive match in ANY
 // configuration (including this debug seam); the seam exercises only the rejection
 // guards (Decision-B). Under the seam we make a seam-only test fixture to drive them.
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 
 private let e0RegionA = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_A"), regionIndex: 0)
 private let e0RegionB = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_B"), regionIndex: 1)

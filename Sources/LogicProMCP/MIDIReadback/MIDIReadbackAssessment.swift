@@ -60,8 +60,8 @@ struct CompleteProof: Equatable, Sendable {
     let contentBinding: String
     fileprivate init(contentBinding: String) { self.contentBinding = contentBinding }
 
-    #if QUALIFICATION_FAULT_SEAM
-    /// Test-only mint. Compiled solely under `QUALIFICATION_FAULT_SEAM`; a
+    #if FAULT_TEST_SEAM
+    /// Test-only mint. Compiled solely under `FAULT_TEST_SEAM`; a
     /// release binary has no path to this. A test seam, not a security boundary.
     static func makeForTesting(contentBinding: String) -> CompleteProof {
         CompleteProof(contentBinding: contentBinding)

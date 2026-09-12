@@ -94,14 +94,14 @@ extension SagaLiveReadback {
 /// exists. It NEVER touches `readState`, so the before-state a rollback restores
 /// stays truthful.
 ///
-/// Mirrors `QualificationFaultInjection(environment:)`'s nil-unless-set contract
+/// Mirrors `FaultInjectionSeam(environment:)`'s nil-unless-set contract
 /// exactly: same env key, same `partial_state` mode. Only that mode engages the
 /// saga — `.timeout` belongs to the transport probe and leaves the saga inert.
 ///
-/// #399 (CEO audit P0) — compiled solely in debug via `QUALIFICATION_FAULT_SEAM`
+/// #399 (CEO audit P0) — compiled solely in debug via `FAULT_TEST_SEAM`
 /// (see Package.swift), so the release binary carries neither this seam nor its
 /// env-key strings.
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 final class SagaPartialStateFaultSeam: @unchecked Sendable {
     /// Optional operator override pinning WHICH forward step fails. Zero-based;
     /// an absent, unparseable, or out-of-range value falls back to the LAST
@@ -124,7 +124,7 @@ final class SagaPartialStateFaultSeam: @unchecked Sendable {
         stepCount: Int
     ) -> SagaPartialStateFaultSeam? {
         guard stepCount > 0,
-              let injection = QualificationFaultInjection(environment: environment),
+              let injection = FaultInjectionSeam(environment: environment),
               injection.mode == .partialState else {
             return nil
         }
@@ -200,8 +200,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     ///
     /// #399 (CEO audit P0) — the seam property, its init parameter, and the
     /// branch that consults it are compiled solely in debug via
-    /// `QUALIFICATION_FAULT_SEAM`. The release executor has no seam at all.
-    #if QUALIFICATION_FAULT_SEAM
+    /// `FAULT_TEST_SEAM`. The release executor has no seam at all.
+    #if FAULT_TEST_SEAM
     private let faultSeam: SagaPartialStateFaultSeam?
 
     init(
@@ -255,7 +255,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         // engaged for the injected step it returns State C BEFORE any dispatch —
         // no trace scope, no write, no mutation — so earlier steps' real
         // compensation can be exercised. Never a product code path.
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if let faultSeam, let injected = faultSeam.injectionResult(for: step) {
             return injected
         }

@@ -7,7 +7,7 @@ import Foundation
 // configuration (including the debug seam) — `verifyRegion` is rejection-only; a
 // positive grant is future R2 (live-ingestion) work, and the seam exercises only the
 // rejection guards. The `testFixture` `IndependentExpectedProof` case compiles ONLY
-// under `QUALIFICATION_FAULT_SEAM`, so a release build has only `.unproven`. The live
+// under `FAULT_TEST_SEAM`, so a release build has only `.unproven`. The live
 // ingestion that makes a fixture from a real independent source — write-oracle
 // (pre-authored write intent) or dual-observation (a distinct Logic→notes surface such
 // as a controlled export) — is R2. `SMFReader` is a decoder, not the root of trust:
@@ -36,7 +36,7 @@ enum RegionMatchVerdict: Equatable, Sendable {
 /// independent root + region identity + a content digest of the expected notes/PPQ.
 enum IndependentExpectedProof: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case testFixture(CallerTrustedFixture)
     #endif
 
@@ -47,7 +47,7 @@ enum IndependentExpectedProof: Sendable {
         root: IndependentExpectedRoot, rootID: String, region: MIDIRegionReference,
         notes: [MIDINoteEvent], ppq: Int, contentBinding: String
     )? {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case let .testFixture(s) = self {
             return (s.root, s.rootID, s.region, s.expectedNotes, s.expectedPPQ, s.contentBinding)
         }
@@ -56,7 +56,7 @@ enum IndependentExpectedProof: Sendable {
     }
 }
 
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 /// Opaque payload: the initializer is fileprivate to THIS file, so no other file
 /// (including a `@testable` importer, which does not open `fileprivate`) can construct
 /// one. The seam makers in `IndependentExpectedSeam` below are the only source; R2

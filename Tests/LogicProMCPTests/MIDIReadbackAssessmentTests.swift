@@ -3,12 +3,12 @@ import Testing
 @testable import LogicProMCP
 
 // Assessment tests. The whole suite depends on the debug-only
-// `QUALIFICATION_FAULT_SEAM` proven proofs + registry mint, because a release
+// `FAULT_TEST_SEAM` proven proofs + registry mint, because a release
 // build has NO way to construct a proven proof (that is precisely the absolute
 // guarantee: production cannot reach `complete:true`). Under the seam we can mint
 // proven proofs to exercise the happy path and, by removing exactly one gate at
 // a time, assert each fail-closed branch (RED-on-removal).
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 @Suite struct MIDIReadbackAssessmentTests {
     // MARK: fixture
 

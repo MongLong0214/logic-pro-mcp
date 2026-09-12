@@ -189,9 +189,9 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
         )
     }
 
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     /// Test-only note-complete snapshot. Compiled solely under
-    /// `QUALIFICATION_FAULT_SEAM` (debug); a release binary has no path to a
+    /// `FAULT_TEST_SEAM` (debug); a release binary has no path to a
     /// `.complete` verdict. A test seam, not a security boundary.
     static func makeCompleteForTesting(
         regionReference: MIDIRegionReference,

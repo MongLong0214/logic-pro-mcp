@@ -23,10 +23,10 @@ struct RegistryResolvedIdentityProof: Sendable {
     }
 }
 
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 enum RegionIdentityRegistrySeam {
     /// Test-only mint. This is a test seam, NOT a security boundary: it is
-    /// compiled solely under `QUALIFICATION_FAULT_SEAM` (debug), so a release
+    /// compiled solely under `FAULT_TEST_SEAM` (debug), so a release
     /// binary has no path to construct the proof.
     static func mint(
         boundRegion: MIDIRegionReference,

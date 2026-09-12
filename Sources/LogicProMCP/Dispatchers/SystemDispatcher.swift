@@ -863,10 +863,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                 }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
-                // via `QUALIFICATION_FAULT_SEAM`. The release executor is
+                // via `FAULT_TEST_SEAM`. The release executor is
                 // constructed with no seam, so `LOGIC_PRO_MCP_FAULT_INJECT` in the
                 // process environment cannot engage any fault here.
-                #if QUALIFICATION_FAULT_SEAM
+                #if FAULT_TEST_SEAM
                 let executor = ProductionSagaStepExecutor(
                     router: router,
                     cache: cache,

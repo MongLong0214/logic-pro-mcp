@@ -10,7 +10,7 @@ enum EventListReadbackCollector {
     /// What `readRow` sees on the live Event List, with no identity and no assessment (#616).
     ///
     /// `collect` requires a `RegistryResolvedIdentityProof`, and the only mint for one is compiled
-    /// solely under `QUALIFICATION_FAULT_SEAM` — a debug condition. So the RELEASE binary contains
+    /// solely under `FAULT_TEST_SEAM` — a debug condition. So the RELEASE binary contains
     /// this collector and cannot construct the argument it needs, which is why a live run driving the
     /// shipped artifact could never reach the code under test and every live check about it scored
     /// zero mutations.

@@ -9,7 +9,7 @@ import Foundation
 // observations or sealed proofs — no caller-asserted conclusion is trusted. The
 // proofs that require live observation ship with NO production-constructible
 // "proven" case: their proven variant exists only under the debug-only
-// `QUALIFICATION_FAULT_SEAM` compilation condition, so a release build cannot
+// `FAULT_TEST_SEAM` compilation condition, so a release build cannot
 // satisfy the completeness predicate at all (no complete snapshot is produced in
 // a release build).
 
@@ -62,12 +62,12 @@ enum ColumnRole: Hashable, Sendable {
 /// debug-seam-only, so a release build cannot bind columns.
 enum HeaderIdentityProof: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case proven([ColumnRole: AXColumnID])
     #endif
 
     var roles: [ColumnRole: AXColumnID]? {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case let .proven(map) = self { return map }
         #endif
         return nil
@@ -104,12 +104,12 @@ struct ResolvedRegionIdentity: Equatable, Sendable {
 /// debug-seam-only → region-match is unsatisfiable in a release build.
 enum ObservedRegionIdentityProof: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case proven(ResolvedRegionIdentity)
     #endif
 
     var identity: ResolvedRegionIdentity? {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case let .proven(value) = self { return value }
         #endif
         return nil
@@ -167,12 +167,12 @@ struct FilterEvidence: Sendable {
 /// as an all-events-in-region oracle in a release build.
 enum CountSemanticsProof: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case provenAllEventsInRegion
     #endif
 
     var isAllEventsInRegion: Bool {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case .provenAllEventsInRegion = self { return true }
         #endif
         return false
@@ -188,12 +188,12 @@ struct ItemCountEvidence: Sendable {
 /// debug-seam-only proven variant.
 enum HarvestExhaustionProof: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case proven
     #endif
 
     var isProven: Bool {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case .proven = self { return true }
         #endif
         return false
@@ -215,12 +215,12 @@ struct RowHarvest: Sendable {
 /// validated against independent ground truth → debug-seam-only for now.
 enum TimingEvidence: Sendable {
     case unproven
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
     case proven
     #endif
 
     var isProven: Bool {
-        #if QUALIFICATION_FAULT_SEAM
+        #if FAULT_TEST_SEAM
         if case .proven = self { return true }
         #endif
         return false

@@ -148,14 +148,14 @@ import Testing
 
 @Test func testAXLogicProElementsDeriveLogicUILocaleOnlyFromCompleteUnambiguousMenus() {
     // Compared against the enum's own raw values, not against copies of them. The detector's
-    // table holds these as literals because Japanese has no `QualificationLocale` case to name,
+    // table holds these as literals because Japanese has no `MeasuredLocale` case to name,
     // and this is what keeps the two spellings from drifting apart unnoticed.
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["Logic Pro", "File", "Edit", "Track", "Navigate"]
-    ) == QualificationLocale.enUS.rawValue)
+    ) == MeasuredLocale.enUS.rawValue)
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["Logic Pro", "파일", "편집", "트랙", "탐색"]
-    ) == QualificationLocale.koKR.rawValue)
+    ) == MeasuredLocale.koKR.rawValue)
     #expect(AXLogicProElements.logicUILocaleIdentifier(
         menuTitles: ["File", "Edit"]
     ) == nil)

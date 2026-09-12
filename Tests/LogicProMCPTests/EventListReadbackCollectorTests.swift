@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-#if QUALIFICATION_FAULT_SEAM
+#if FAULT_TEST_SEAM
 @Suite struct EventListReadbackCollectorTests {
     private static let headerTitles = [
         "L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info",

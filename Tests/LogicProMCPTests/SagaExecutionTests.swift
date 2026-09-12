@@ -706,12 +706,12 @@ struct SagaExecutionTests {
     // MARK: - ADR-004 / issue #287 qualification-only partial-state fault seam
     //
     // #399 (CEO audit P0) — the partial-state fault seam is a debug-only test
-    // affordance compiled solely under `QUALIFICATION_FAULT_SEAM` (see
+    // affordance compiled solely under `FAULT_TEST_SEAM` (see
     // Package.swift). Everything below references the excluded
     // `SagaPartialStateFaultSeam` and/or the `faultSeam:` executor initializer, so
     // it compiles/runs only in the debug test build and is absent from a
     // `-c release` test build.
-    #if QUALIFICATION_FAULT_SEAM
+    #if FAULT_TEST_SEAM
 
     private struct SeamFixture: Sendable {
         let executor: ProductionSagaStepExecutor

@@ -1931,8 +1931,8 @@ struct QualificationRunnerTests {
     /// really induces `readback_unavailable`, then re-asserts the original exact
     /// contract: the transport.play case is present and FAILED, and verification
     /// refuses to promote it (exit 1, promotable=false). Compiled solely under
-    /// `QUALIFICATION_FAULT_SEAM` (see Package.swift) — references excluded symbols.
-    #if QUALIFICATION_FAULT_SEAM
+    /// `FAULT_TEST_SEAM` (see Package.swift) — references excluded symbols.
+    #if FAULT_TEST_SEAM
     @Test(.enabled(
         if: FileManager.default.isExecutableFile(atPath: Self.debugExecutableURL.path),
         "Requires `swift build` (debug) before the Runner fault-seam probe."
@@ -1944,8 +1944,8 @@ struct QualificationRunnerTests {
             specs: [spec],
             executableData: executableData,
             environmentAdditions: [
-                QualificationFaultInjection.environmentKey:
-                    QualificationFaultInjection.Mode.partialState.rawValue,
+                FaultInjectionSeam.environmentKey:
+                    FaultInjectionSeam.Mode.partialState.rawValue,
             ],
             drive: { request in
                 let observed = try QualificationTransport(
@@ -3448,8 +3448,8 @@ struct QualificationRunnerTests {
 
     // #399 (CEO audit P0) — the DEBUG executable HAS the fault seam compiled in,
     // so it is what the debug-gated runner-rejection test drives. Only referenced
-    // under `QUALIFICATION_FAULT_SEAM`.
-    #if QUALIFICATION_FAULT_SEAM
+    // under `FAULT_TEST_SEAM`.
+    #if FAULT_TEST_SEAM
     private static let debugExecutableURL = URL(
         fileURLWithPath: FileManager.default.currentDirectoryPath,
         isDirectory: true

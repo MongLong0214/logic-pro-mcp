@@ -14,7 +14,7 @@ extension AXLogicProElements {
     /// bar reads `Apple, Logic Pro, ファイル, 編集, トラック, 移動, 録音, ミックス, 表示,
     /// ウインドウ, 1, ヘルプ`.
     ///
-    /// Recognising a locale is not the same as SUPPORTING it: `QualificationLocale` still has two
+    /// Recognising a locale is not the same as SUPPORTING it: `MeasuredLocale` still has two
     /// cases, so a Japanese Logic cannot bind a qualification artifact. It could not before either
     /// — `unknown` failed the same comparison — and saying `ja-JP` where `ja-JP` is true is what
     /// lets a caller tell an unsupported language from an unreadable menu bar.
