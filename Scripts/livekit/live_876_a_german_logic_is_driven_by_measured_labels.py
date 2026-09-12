@@ -59,6 +59,10 @@ import evidence as E  # noqa: E402
 
 COVERS = [
     "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+    # This run drives Navigate ▸ Go To ▸ Position… end to end, which is the route whose dialog
+    # matcher moved out of an AppleScript literal and onto the policy for #876. Nothing else in the
+    # tree claimed that file, so the change that made German work was covered by no live run.
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift",
 ]
 
 FIXTURE = os.path.expanduser("~/Music/Logic/lpm-locale-campaign.logicx")
