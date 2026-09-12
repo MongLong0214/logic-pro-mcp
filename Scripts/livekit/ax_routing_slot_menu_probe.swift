@@ -70,6 +70,18 @@ func outputSlot() -> AXUIElement? { sweep().first { text($0, kAXHelpAttribute as
 /// nothing about whether the rest behave alike.
 func allSlots() -> [AXUIElement] { sweep().filter { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) } }
 
+// `--dump-slots` lists EVERY slot carrying the prefix, with the three attributes that could name a
+// destination. A strip has one output and several sends, and after a send is assigned Logic opens a
+// further empty one — so reading `first` alone cannot tell an assignment that did not land from one
+// that landed on an element this probe was not looking at.
+if CommandLine.arguments.contains("--dump-slots") {
+    for (index, element) in allSlots().enumerated() {
+        print("slot[\(index)] desc=\(text(element, kAXDescriptionAttribute as String))"
+            + " | value=\((attribute(element, kAXValueAttribute as String) as? String) ?? "")"
+            + " | help=\(String(text(element, kAXHelpAttribute as String).prefix(40)))")
+    }
+}
+
 guard let slot = outputSlot() else { print("inconclusive: no \(slotPrefix) in the tree"); exit(2) }
 let originalDestination = text(slot, kAXDescriptionAttribute as String)
 print("slot destination: \(originalDestination)")
@@ -121,6 +133,13 @@ for menu in menus {
 print("enabled titled items: \(enabledTitles.count)")
 print("distinct titles: \(Set(enabledTitles).count)")
 print("titles appearing more than once: \(duplicated.count)")
+// `--print-titles N` dumps what the menu offers. Choosing a destination for `--select` by guessing
+// its spelling is how a probe ends up measuring its own test value; this prints what is there.
+if let titlesIndex = CommandLine.arguments.firstIndex(of: "--print-titles") {
+    let limit = titlesIndex + 1 < CommandLine.arguments.count
+        ? Int(CommandLine.arguments[titlesIndex + 1]) ?? 20 : 20
+    for title in enabledTitles.prefix(limit) { print("title: \(title)") }
+}
 
 let wantedIndex = CommandLine.arguments.firstIndex(of: "--select")
 guard let index = wantedIndex, index + 1 < CommandLine.arguments.count else {

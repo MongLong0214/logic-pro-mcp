@@ -1,0 +1,74 @@
+{
+ "id": "2026-09-12-a-send-can-be-assigned-by-name-and-is-not-named-back-at-the-source",
+ "date": "2026-09-12",
+ "schema": 2,
+ "subject": "Assigning a channel-strip send by menu title, and reading the assignment back",
+ "question": "Does selecting a send destination land, and can the assignment be read back?",
+ "verdict": "partial",
+ "issues": [
+  291
+ ],
+ "surface": "mixer.routing",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "swiftc -O Scripts/livekit/ax_routing_slot_menu_probe.swift -o /tmp/rprobe && /tmp/rprobe --slot-prefix 'Send slot' --print-titles 8 && /tmp/rprobe --slot-prefix 'Send slot' --select '<a title it printed>' ; then Edit > Undo in Logic",
+  "expected": "the assignment lands (Logic's Undo entry names it), every send slot still reads `send button`, and exactly one element — the destination aux strip's INPUT slot — names the bus",
+  "cost": "MUTATES: it assigns a send on a real strip. Undo it; the record's last reading is that undo."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/RoutingTable.swift"
+ ],
+ "evidence": [
+  "evidence/2026-09-12-send-assignment-and-its-readback.json"
+ ],
+ "method": "The send slot's menu was opened and `Bus 12` selected by title. Logic's own Edit-menu undo entry was read to establish whether the edit happened, because the slot's readback is the thing in question and cannot also be the witness. Every element in the window was then swept for the destination's name. Finally Edit > Undo, and the sweep again.",
+ "observations": [
+  {
+   "what": "send menu titles offered",
+   "enabled": 275,
+   "distinct": 275,
+   "duplicates": 0
+  },
+  {
+   "what": "Logic's undo entry after the selection",
+   "title": "Undo Change Send in Channel Strip"
+  },
+  {
+   "what": "send slots on the SOURCE strip naming the destination, after the assignment",
+   "slots_read": 12,
+   "naming_the_destination": 0,
+   "all_read": "send button"
+  },
+  {
+   "what": "elements anywhere in the window naming the destination",
+   "count": 1,
+   "role": "AXButton",
+   "help_prefix": "Input slot.",
+   "note": "the destination aux strip's input, not the source strip's send"
+  },
+  {
+   "what": "the product's own mixer resource for that strip",
+   "sends": null
+  },
+  {
+   "what": "after Edit > Undo",
+   "elements_naming_the_destination": 0,
+   "undo_entry": "Can’t Undo"
+  }
+ ],
+ "conclusion": "A send destination can be chosen BY NAME and the choice lands: the menu offers 275 enabled titles with no duplicate among them, and after the selection Logic's own undo stack reads `Undo Change Send in Channel Strip`. It cannot be read back at the source: all 12 send slots on the sending strip still read `send button` with an empty value, and the only element in the window naming `Bus 12` is the DESTINATION aux strip's input slot. The product's mixer resource reports `sends: null` for that strip. So the send edge is writable by name and unverifiable from the source, which is the same shape that withdrew `mixer.set_plugin_param_verified`.",
+ "limits": [
+  "One send, one strip, one project, en-US. The titles are localised strings and an implementation must go through AXLocalePolicy.",
+  "The aux strip's input slot names the BUS, not the sender. It establishes that something routes there; it does not say which strip does, so it is not on its own a readback of this edge.",
+  "Nothing here was tried on the send LEVEL control, which may exist only once a send is assigned and was not swept for.",
+  "`sends: null` is what the resource reports today; whether the reader could produce them from this surface is the open question, not a measured wall."
+ ],
+ "supersedes": null
+}

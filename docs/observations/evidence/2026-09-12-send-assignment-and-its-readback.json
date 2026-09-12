@@ -1,0 +1,45 @@
+{
+ "note": "Readings taken around one send assignment and its undo. Written in the census row shape so a claim about a string can be pointed at an element.",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "method": "ax_routing_slot_menu_probe --slot-prefix 'Send slot' --select 'Bus 12', then the Edit-menu census, then a full-window sweep for the destination name, then Edit > Undo and the same sweep again.",
+ "census": [
+  {
+   "role": "AXButton",
+   "help": "Send slot. Route the signal to an aux ch",
+   "description": "send button",
+   "surface": "mixer.routing",
+   "path": "AXWindow/…/AXButton[send button]",
+   "when": "after the assignment",
+   "note": "all 12 send slots read this"
+  },
+  {
+   "role": "AXButton",
+   "help": "Input slot. Choose the channel strip input source.",
+   "description": "Bus 12",
+   "surface": "mixer.routing",
+   "path": "AXWindow/…/AXButton[Bus 12]",
+   "when": "after the assignment",
+   "note": "the only element in the window naming the destination"
+  },
+  {
+   "role": "AXMenuItem",
+   "title": "Undo Change Send in Channel Strip",
+   "surface": "arrange.menus",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem",
+   "when": "after the assignment"
+  },
+  {
+   "role": "AXMenuItem",
+   "title": "Can’t Undo",
+   "surface": "arrange.menus",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem",
+   "when": "after the undo"
+  }
+ ]
+}
