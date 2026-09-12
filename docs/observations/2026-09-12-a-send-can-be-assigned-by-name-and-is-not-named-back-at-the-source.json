@@ -18,7 +18,7 @@
  },
  "reverify": {
   "kind": "script",
-  "command": "swiftc -O Scripts/livekit/ax_routing_slot_menu_probe.swift -o /tmp/rprobe && /tmp/rprobe --slot-prefix 'Send slot' --print-titles 8 && /tmp/rprobe --slot-prefix 'Send slot' --select '<a title it printed>' ; then Edit > Undo in Logic",
+  "command": "Scripts/observations/reverify-send-assignment-readback.sh",
   "expected": "the assignment lands (Logic's Undo entry names it), every send slot still reads `send button`, and exactly one element — the destination aux strip's INPUT slot — names the bus",
   "cost": "MUTATES: it assigns a send on a real strip. Undo it; the record's last reading is that undo."
  },
