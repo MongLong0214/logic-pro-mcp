@@ -32,9 +32,11 @@ What it refuses to let you record:
 - **A cached read presented as live.** `provenance()` records the source and age of any value that did
   not come from a fresh read, and marks it unusable as live evidence.
 
-The ship gate (`~/.claude/scripts/lpm-ship.sh` -> `lpm-live-gate.sh`) reads the document this writes and
-refuses the push if any of the above is violated. The gate is the enforcement; this module is what makes
-compliance the easy path.
+A run whose document violates any of the above exits non-zero, so the harness itself is the answer --
+read `is_clean(out)` at the bottom of any harness. There used to be a gate that read this document and
+refused a push; it was removed on 2026-09-12 along with the rest of the release-permission machinery.
+Nothing decides whether you may merge. What this module still does, and the reason it is worth its
+weight, is make a dishonest document hard to write by accident.
 
 Usage:
 

@@ -21,9 +21,10 @@ Requires Logic Pro running, a release binary at `<worktree>/.build/release/Logic
 with Accessibility + Automation permission. `Scripts/livekit/evidence.py` refuses to start if any of that
 is missing rather than producing a document that looks like evidence.
 
-`~/.claude/scripts/lpm-ship.sh` reads the document this writes and refuses to push without it. The evidence
-root must be outside every worktree of the repository: evidence living inside the tree can be rewritten by
-the thing it is judging.
+The evidence root must be outside every worktree of the repository: evidence living inside the tree can be
+rewritten by the thing it is judging. Run these when you change what they cover -- nothing forces you to,
+since the gate that used to refuse a push without them was removed on 2026-09-12. A harness that exits
+non-zero is still telling you the product broke.
 
 ## What `evidence.py` will not let you record
 
