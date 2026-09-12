@@ -281,10 +281,14 @@ ev.note("876/menu-path", {"edit": edit_live, "move": move_live, "to_playhead": p
                           "policy": {"edit": edit_labels, "move": move_labels,
                                      "to_playhead": playhead_labels}})
 
-band, band_subject = ev.located_band("Control Bar")
+# `--max-width 400` picks the LCD rather than the whole bar. Two AXGroups carry this description —
+# measured 1900x58 for the bar and 264x48 for the readout — and the wide one is full of indicators
+# that change on their own, so a capture of it never settles and a difference in it would prove
+# nothing about the playhead. The narrow one is where Logic writes the position.
+band, band_subject = ev.located_band("Control Bar", "--max-width", "400")
 ev.check("876/the-control-bar-was-located-through-its-german-description",
          band is not None and bool(band_subject),
-         "the control bar is found by the AXDescription it carries, which IS localised — the German "
+         "the control bar's position readout is found by the AXDescription it carries, which IS localised — the German "
          "spelling was read off the de-DE census of 2026-09-12, and without it no capture can be "
          "taken on the one run where the locale is the point",
          f"band={band!r} subject={band_subject!r}", None)
