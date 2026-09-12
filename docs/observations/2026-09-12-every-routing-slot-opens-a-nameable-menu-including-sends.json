@@ -1,0 +1,78 @@
+{
+ "id": "2026-09-12-every-routing-slot-opens-a-nameable-menu-including-sends",
+ "date": "2026-09-12",
+ "schema": 2,
+ "subject": "The channel-strip routing slots' destination menus",
+ "question": "Do the Send, Group and Input slots name destinations, or only the Output slot?",
+ "verdict": "works",
+ "issues": [
+  291
+ ],
+ "surface": "mixer.routing",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "Scripts/observations/reverify-routing-slot-menu.sh (read-only: run the probe with --slot-prefix and no --select)",
+  "expected": "each slot opens at least one AXMenu and reports distinct enabled titles; the Send slot reports zero duplicate titles",
+  "cost": "Logic open on a project with a mixer strip; ~2 min for all four slots, nothing is selected"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/RoutingTable.swift"
+ ],
+ "evidence": [
+  "evidence/2026-09-12-routing-slot-menus.json"
+ ],
+ "method": "The 2026-09-11 probe, aimed at each slot in turn by help-text prefix and run WITHOUT `--select`, so it opens menus and closes them with Escape and selects nothing. A track-header Mute is moved and restored first as the positive control; every run reported it moved, so a silent slot would have been the slot's silence and not the instrument's.",
+ "observations": [
+  {
+   "slot": "Output",
+   "own_description": "the destination",
+   "menus_opened": 11,
+   "enabled_titled": 274,
+   "distinct_titles": 273,
+   "duplicate_titles": 1
+  },
+  {
+   "slot": "Send",
+   "own_description": "send button",
+   "menus_opened": 13,
+   "enabled_titled": 275,
+   "distinct_titles": 275,
+   "duplicate_titles": 0
+  },
+  {
+   "slot": "Group",
+   "own_description": "group",
+   "menus_opened": 1,
+   "enabled_titled": 3,
+   "distinct_titles": 3,
+   "duplicate_titles": 0
+  },
+  {
+   "slot": "Input",
+   "own_description": "Input 1",
+   "menus_opened": 11,
+   "enabled_titled": 270,
+   "distinct_titles": 269,
+   "duplicate_titles": 1
+  },
+  {
+   "what": "the press that opens these menus still returns an error code",
+   "press_status": -25204
+  }
+ ],
+ "conclusion": "Every routing slot opens a menu whose enabled items are titled, and the SEND slot — the one this ADR records as naming no destination — offers 275 enabled titles with 275 distinct among them, zero duplicates. That is a better-conditioned menu than the Output slot's 273-of-274. The slot's own AXDescription does name no destination (`send button`), which is what the earlier reading saw; the destinations are in the menu the press opens, exactly as the 2026-09-11 record found for the Output slot. The press returns -25204 throughout and the menus open anyway.",
+ "limits": [
+  "Read-only. No send was assigned, so this says the destinations are ADDRESSABLE by name and nothing about whether selecting one lands — the Output slot needed a separate mutating run to establish that.",
+  "The Group slot offers three items because this project defines no groups; on a project with groups that number is different and this says nothing about it.",
+  "One strip, one project, one host, en-US. Every title here is a localised string and an implementation must go through AXLocalePolicy.",
+  "`Audio Effect` was measured in the same sweep (175 menus, 453 enabled, 164 distinct, 13 duplicates) and is NOT a routing slot; it is recorded here only because the same instrument reached it, and its duplicate count is a warning for whoever addresses plug-ins by title."
+ ],
+ "supersedes": null
+}

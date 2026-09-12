@@ -52,8 +52,23 @@ func escape() {
     CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
     usleep(700_000)
 }
-let slotPrefix = "Output slot"
+// Which slot to look at. The default is the Output slot this probe was written for; `--slot-prefix`
+// aims the same instrument at the Send and Group slots, which the 2026-09-11 record read but never
+// opened. The prefix is a HELP-text prefix and is supplied by the caller from `AXLocalePolicy`, the
+// same way the Mute spelling below is — a literal here would make the probe English-only, which is
+// the defect its own comment warns about two paragraphs down.
+let slotPrefix: String = {
+    guard let index = CommandLine.arguments.firstIndex(of: "--slot-prefix"),
+          index + 1 < CommandLine.arguments.count,
+          !CommandLine.arguments[index + 1].hasPrefix("--") else { return "Output slot" }
+    return CommandLine.arguments[index + 1]
+}()
 func outputSlot() -> AXUIElement? { sweep().first { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) } }
+
+/// Every slot whose help text carries the prefix, not only the first. A strip has ONE output and
+/// several sends, so a Send measurement that looked at `first` would report one send and say
+/// nothing about whether the rest behave alike.
+func allSlots() -> [AXUIElement] { sweep().filter { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) } }
 
 guard let slot = outputSlot() else { print("inconclusive: no \(slotPrefix) in the tree"); exit(2) }
 let originalDestination = text(slot, kAXDescriptionAttribute as String)

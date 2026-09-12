@@ -1,0 +1,70 @@
+{
+ "note": "Raw stdout of Scripts/livekit/ax_routing_slot_menu_probe.swift, run once per slot with --slot-prefix and WITHOUT --select, so nothing was chosen.",
+ "captured_at": "2026-09-12T15:58:47.343270+09:00",
+ "runs": [
+  {
+   "slot_prefix": "Output slot",
+   "returncode": 0,
+   "stdout": [
+    "frontmost: com.apple.logic10",
+    "slot destination: Stereo Output",
+    "control mute moved: 1",
+    "press rc: -25204",
+    "menus opened: 11",
+    "enabled titled items: 274",
+    "distinct titles: 273",
+    "titles appearing more than once: 1",
+    "menus after escape: 0",
+    "selected: skipped"
+   ]
+  },
+  {
+   "slot_prefix": "Send slot",
+   "returncode": 0,
+   "stdout": [
+    "frontmost: com.apple.logic10",
+    "slot destination: send button",
+    "control mute moved: 1",
+    "press rc: -25204",
+    "menus opened: 13",
+    "enabled titled items: 275",
+    "distinct titles: 275",
+    "titles appearing more than once: 0",
+    "menus after escape: 0",
+    "selected: skipped"
+   ]
+  },
+  {
+   "slot_prefix": "Group slot",
+   "returncode": 0,
+   "stdout": [
+    "frontmost: com.apple.logic10",
+    "slot destination: group",
+    "control mute moved: 1",
+    "press rc: -25204",
+    "menus opened: 1",
+    "enabled titled items: 3",
+    "distinct titles: 3",
+    "titles appearing more than once: 0",
+    "menus after escape: 0",
+    "selected: skipped"
+   ]
+  },
+  {
+   "slot_prefix": "Input slot",
+   "returncode": 0,
+   "stdout": [
+    "frontmost: com.apple.logic10",
+    "slot destination: Input 1",
+    "control mute moved: 1",
+    "press rc: -25204",
+    "menus opened: 11",
+    "enabled titled items: 270",
+    "distinct titles: 269",
+    "titles appearing more than once: 1",
+    "menus after escape: 0",
+    "selected: skipped"
+   ]
+  }
+ ]
+}
