@@ -17,10 +17,10 @@ LOCALE="${1:-}"; APPLY="${2:-}"
 # them. The operator supplies a DISPOSABLE project — the script relaunches Logic, and the only way
 # to do that without a save prompt over somebody's work is to never have their work open.
 FIXTURE="${LPM_LOCALE_FIXTURE:-$HOME/Music/Logic/lpm-locale-campaign.logicx}"
-[ -n "$LOCALE" ] || { echo "usage: $0 <en-US|ko-KR|ja-JP> [--apply]"; exit 2; }
+[ -n "$LOCALE" ] || { echo "usage: $0 <en-US|ko-KR|ja-JP|de-DE> [--apply]"; exit 2; }
 [ -d "$FIXTURE" ] || { echo "PRECONDITION: fixture $FIXTURE does not exist. Create a throwaway project there (File > New, empty, Save As), or point LPM_LOCALE_FIXTURE at one. It gets relaunched repeatedly and must be nobody's work."; exit 2; }
 case "$LOCALE" in
-  en-US) LANG_ID=en;; ko-KR) LANG_ID=ko;; ja-JP) LANG_ID=ja;;
+  en-US) LANG_ID=en;; ko-KR) LANG_ID=ko;; ja-JP) LANG_ID=ja;; de-DE) LANG_ID=de;;
   *) echo "unsupported locale $LOCALE"; exit 2;;
 esac
 

@@ -46,6 +46,9 @@ ASCII_ONLY = re.compile(r"^(?=[^A-Za-z]*[A-Za-z])[\x20-\x7e…]+$")
 def locale_of(text):
     """Which locale column a variant belongs to, by script. None when there is no signal.
 
+    RETAINED FOR THE NEAR-MISS REPORT ONLY — it no longer decides which census a variant is
+    checked against. See `locales_of`, and the measurement that retired it from that job.
+
     Crude on purpose. A Japanese label may carry Latin words and an English one may not — this
     asks only "does the string contain script that pins it", and skips what it cannot pin rather
     than guessing. A guess here would file a variant under a census that was never about it.
@@ -57,6 +60,23 @@ def locale_of(text):
     if ASCII_ONLY.match(text or ""):
         return "en-US"
     return None
+
+
+def locales_of(text, mode, seen):
+    """Every locale whose census carries this string — DERIVED from the evidence, not inferred.
+
+    `locale_of` reads the string's SCRIPT: Hangul is Korean, kana is Japanese, ASCII is English.
+    That rule holds exactly as long as every supported language has a script of its own, and it
+    breaks the moment a second Latin-script language is supported. Measured 2026-09-12 on the first
+    de-DE campaign: `Bearbeiten` is ASCII, so German would be filed under en-US and reported absent
+    from a census that was never about it, while `Löschen` matches nothing and would be skipped
+    entirely — a variant excused by the guard for having an umlaut.
+
+    So the question changes from "what language does this look like" to "where was it actually
+    read", which is the one the guard's own name asks. A string is evidence-backed when SOME
+    census carries it under the label's own match mode; the empty answer is the finding.
+    """
+    return {loc for loc, bag in seen.items() if any(_carries(s, text, mode) for s in bag)}
 
 
 # The removed chunk must be a whole word or two, not any substring. A ratio was the first attempt
@@ -225,25 +245,25 @@ def main():
         for text in [entry.get("canonical") or ""] + list(entry.get("variants") or []):
             if not text:
                 continue
-            loc = locale_of(text)
-            if loc is None or loc not in seen:
-                continue
             mode = entry.get("match") or "exact"
-            if (entry.get("coverage") or {}).get(loc) in ("measured", "identifier", "retired"):
-                # The ledger already knows this one was read in this locale. Two candidates were
-                # dismissed by hand before this rule existed — `eventListColumnPosition` addresses
-                # an Event List column header and `newTrackSheetDescription` a sheet, neither of
-                # which the navigation-free census walks — and both would keep reappearing.
-                continue
-            bag = seen[loc]
             # ABSENT under the label's OWN mode. Testing equality regardless of it called a
             # containment label absent when Logic plainly shows it inside a longer string —
             # `nonInsertButtonText` carries `send` and the census has `send button`, which is a
             # MATCH for that label and was being reported as a gap. Measured 2026-09-05: the
             # affix signal below surfaced fifty such rows before this was fixed, and they were
             # all the guard misreading its own subject.
-            if any(_carries(s, text, mode) for s in bag):
+            if locales_of(text, mode, seen):
                 continue
+            # Read in no census of any locale. The label's coverage decides whether that is worth
+            # reporting: a locale the ledger has already settled is not a gap, and a variant every
+            # locale has settled is not reported at all. Two candidates were dismissed by hand
+            # before this rule existed — `eventListColumnPosition` addresses an Event List column
+            # header and `newTrackSheetDescription` a sheet, neither of which the navigation-free
+            # census walks — and both would keep reappearing.
+            coverage = entry.get("coverage") or {}
+            if all(coverage.get(loc) in ("measured", "identifier", "retired") for loc in seen):
+                continue
+            bag = set().union(*seen.values())
             key = f"{name}→{text}"
             absent.append(key)
             hit = difflib.get_close_matches(text, list(bag), n=1, cutoff=NEAR)
@@ -262,7 +282,7 @@ def main():
                 if affix:
                     near.append((key, affix, "affix"))
 
-    print(f"{len(absent)} variant(s) absent from a census in their own locale; "
+    print(f"{len(absent)} variant(s) absent from every locale's census; "
           f"{len(near)} of them have a near miss")
     if "--list" in sys.argv:
         # The near-miss list is the useful half and the absent list is the honest one. A short

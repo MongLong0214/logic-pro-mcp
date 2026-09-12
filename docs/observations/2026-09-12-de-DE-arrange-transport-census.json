@@ -1,0 +1,118 @@
+{
+  "id": "2026-09-12-de-DE-arrange-transport-census",
+  "date": "2026-09-12",
+  "schema": 2,
+  "subject": "Every string the arrange.transport surface exposes to AX in de-DE",
+  "question": "What labels does Logic show on arrange.transport in de-DE, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "de-DE",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh de-DE",
+    "expected": "a census in de-DE whose arrange.transport rows carry the same 61 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-12-de-DE-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 32,
+      "distinct_strings": 61,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "Abspielposition (Takte), Anzeige „Position der Abspielposition“. Zeigt Abspielposition in Takten und Beats an. Durch vertikales Ziehen kannst du jedes Element bearbeiten, durch Doppelklicken einen neuen Wert eingeben. ",
+        "Anzeigemodus",
+        "Anzeigemodus, Einblendmenü „Anzeigemodus“. Wechsele die Linealansicht zwischen Takten und Beats oder Stunden, Minuten und Sekunden oder einer Kombination dieser beiden Ansichten. Du kannst auch die Großansichten öffnen. ",
+        "Aufnahme",
+        "Aufnahme   R, Taste „Aufnahme“. Hiermit erfolgt die Aufnahme auf der ausgewählten Spur oder auf mehreren für die Aufnahme aktivierten Spuren. ",
+        "Aufnahme mit freiem Tempo",
+        "Aufnahme mit freiem Tempo   ⌃⌥⌘R, Aufnahme mit freiem Tempo. Schaltet alle vorhandenen Inhalte während der Aufnahme stumm und führt eine Smart Tempo-Analyse durch. ",
+        "Beats & Projekt",
+        "Bibliothek",
+        "Bibliothek   Y, Taste „Bibliothek“. Lade und sichere Presets für den gewählten Channel-Strip oder Plug-in-Typ, um die Wiedergabe sofort zu starten. Das Laden eines Patches kann Auswirkungen auf mehrere Channel-Strips haben. ",
+        "C-Dur",
+        "Cycle",
+        "Cycle   C, Taste „Cycle“. Hiermit kannst du den Projektabschnitt innerhalb des gelben Cycle-Bereichs, der im Lineal angezeigt wird, wiederholt spielen oder aufzeichnen. ",
+        "Diese Steuerung ist nicht verfügbar, da es ist keine Audiospur ausgewählt., Taste „Stimmgerät“. Stimme die an dein System angeschlossenen Geräte. ",
+        "Dynamische Hilfe",
+        "Editoren",
+        "Editoren   E, Taste „Editoren“. Greife ausgehend vom gewählten Spurtyp auf Editoren (Audiospur-, Audiodatei-, Session Player-, Pianorollen-, Notations- oder Schritteditor) zu. ",
+        "Einzählen",
+        "Einzählen   ⇧K, Taste „Count-in“ (Einzählen). Spiele einen vordefinierten Vorzähler bevor die Aufnahme beginnt. Klicke bei gedrückter Control-Taste auf die Taste, um ein Menü zu öffnen, in dem du die Länge des Vorzählers auswählen kannst. ",
+        "Ersetzen",
+        "Ersetzen   /, Taste „Ersetzen“. Hiermit wird eine vorhandene Aufnahme (oder ein Teil einer vorhandenen Aufnahme) durch eine Neuaufnahme ersetzt. ",
+        "Flashback-Aufnahme",
+        "Flashback-Aufnahme   ⇧R, Flashback-Aufnahme. Erfasse eine aktuelle MIDI- oder Audio-Performance, auch wenn Logic Pro bei der Wiedergabe nichts aufgenommen hat. ",
+        "Informationen",
+        "Informationen   I, Taste „Informationsfenster“. Zeige Einstellungen für Regionen und Spuren abhängig von aktuellem Material und gewähltem Objekt an und bearbeite sie. Du kannst auch Pan und Lautstärke für Channel-Strips festlegen oder Effekte hinzufügen. ",
+        "Listeneditoren",
+        "Listeneditoren   D, Taste „Listeneditoren“. Zeige MIDI-Events, Marker, Tempoänderungen und Takt-/Tonart-Events an und bearbeite diese. ",
+        "Loop-Übersicht",
+        "Loop-Übersicht   O, Taste „Loop-Übersicht“. Füge vorgefertigte Loops zu deinem Projekt hinzu. ",
+        "Metronom-Klick",
+        "Metronom-Klick   ⌃⇧R, Taste „Metronom“. Während Wiedergabe und Aufnahme ist beim Projekttempo ein Klicken zu hören. Weitere Optionen erhältst du durch Klicken und Halten der Maustaste. ",
+        "Mixer",
+        "Mixer   X, Taste „Mixer“. Im Mixer werden Channel-Strips für jede Spur im Projekt angezeigt. Du kannst Channel-Strip-Steuerungen bearbeiten, Plug-ins hinzufügen und bearbeiten und Routing-Optionen anpassen. ",
+        "Notizblock",
+        "Notizblock   ⌃⇧P, Taste „Notizblock“. Hiermit kannst du ein Projekt erstellen, anzeigen und bearbeiten und Textnotizen verfolgen. ",
+        "Position der Abspielposition",
+        "Projekttempomenü, Einblendmenü „Projekttempo“. Wähle, ob das Projekttempo beibehalten oder an Aufnahmen und importierten Audiodateien angepasst werden soll oder ob Logic Pro das Verhalten des Tempos festlegen soll. ",
+        "Schlag",
+        "Smart Controls",
+        "Smart Controls   B, Taste „Smart Controls“. Modifiziere schnell den Klang des aktuellen Patches, ohne einzelne Channel-Strips oder Plug-ins zu bearbeiten. ",
+        "Solo",
+        "Solo, Taste „Solo“ (S). Höre dir nur ausgewählte Regionen bei der Wiedergabe an. ",
+        "Steuerungsleiste",
+        "Steuerungsleiste. Mit Tasten und Anzeigen für Schlüsselprojekt und App-Funktionen. Klicke zum Anpassen bei gedrückter Control-Taste auf die Leiste und wähle „Steuerungsleiste und Anzeige anpassen“. ",
+        "Stimmgerät",
+        "Stoppen",
+        "Stoppen   0, Taste „Stoppen“. Stoppt die Wiedergabe bzw. die Aufnahme. Klicke nach dem Stopp, um die Abspielposition an den aktuellen Startpunkt des Projekts zu bewegen bzw. im Cycle-Modus an den linken Locator-Punkt. ",
+        "Symbolleiste",
+        "Symbolleiste   ⌃⌥⌘T, Taste „Symbolleiste“. Symbolleiste mit Tasten für Tastenfunktionen anzeigen. ",
+        "Takt",
+        "Takt, Anzeige „Taktart“. Dies ist die Anzahl der Beats in einem Takt und der Notenwert für einen einzelnen Beat. Durch vertikales Ziehen kann der Wert bearbeitet werden. Nach Doppelklick kannst du einen neuen Wert eingeben. ",
+        "Taste „Dynamische Hilfe“. Zeigt die dynamische Hilfe an. Wenn das Informationsfenster geschlossen ist, wird die dynamische Hilfe in einem eigenen Fenster geöffnet. ",
+        "Tempo",
+        "Tempo, Anzeige „Tempo“. Dies ist das Tempo für Wiedergabe und Aufnahme. Durch vertikales Ziehen kann das Tempo beschleunigt oder verlangsamt werden. Per Doppelklick wird ein neuer Wert eingegeben. ",
+        "Tonart",
+        "Tonart, Anzeige „Tonart“. Dies ist die Tonart des Projekts. Wähle eine Dur- oder Molltonart aus dem Einblendmenü aus. ",
+        "Wiedergabe",
+        "Wiedergabe   ⌅, Taste „Play“. Hiermit wird die Wiedergabe ab der Abspielposition gestartet. Im Cycle-Modus wird die Wiedergabe an der Position des linken Locator-Punkts (angezeigt auf dem Lineal) gestartet. ",
+        "Übersichten",
+        "Übersichten   F, Taste „Übersichten“. Greife auf Audio- und andere Mediendateien zu. Es ist auch möglich, Daten und Einstellungen von anderen Projekten zu importieren. "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in de-DE, arrange.transport exposes 32 elements carrying 61 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "315 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

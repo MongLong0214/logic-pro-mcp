@@ -1,0 +1,94 @@
+{
+  "id": "2026-09-12-de-DE-library-patches-census",
+  "date": "2026-09-12",
+  "schema": 2,
+  "subject": "Every string the library.patches surface exposes to AX in de-DE",
+  "question": "What labels does Logic show on library.patches in de-DE, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "library.patches",
+  "host": {
+    "app": "Logic Pro",
+    "build": "6674",
+    "locale": "de-DE",
+    "os": "macOS 26.3 (25D125)",
+    "version": "12.3"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh de-DE",
+    "expected": "a census in de-DE whose library.patches rows carry the same 16 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-09-12-de-DE-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on library.patches",
+      "rows": 32,
+      "distinct_strings": 16,
+      "distinct_identifiers": 20
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "Aktionsmenü. Greife auf Befehle für Patch-Zusammenführungen und Benutzerstandards zu. ",
+        "Alle Sounds",
+        "Bibliothek",
+        "Bibliothek. Lade und sichere Patches, Plug-in-Presets oder Sampler-Instrumente, basierend auf dem ausgewählten Channel-Strip-Slot. Das Laden eines Patches kann Auswirkungen auf mehrere Channel-Strips haben. ",
+        "Deluxe Classic",
+        "Einblendmenü „Filter“. Zeige alle Patches oder die Patches für eines bestimmtes Sound-Pack. ",
+        "Löschen",
+        "Mediathek",
+        "Sichern …",
+        "Suchfeld. Suche Patches und Presets nach Namen. Klicke auf die Lupe, um die letzten Suchen anzuzeigen oder um den Suchverlauf zu löschen. ",
+        "Taste „Löschen“. Lösche das ausgewählte Patch- oder Plug-in-Preset. Diese Aktion kann nicht widerrufen werden. ",
+        "Taste „Sichern“. Sichere das Patch- oder Plug-in-Preset mit seinen aktuellen Einstellungen als neues Patch- oder Plug-in-Preset. ",
+        "Taste „Zurücksetzen“. Setze das Patch- oder Plug-in-Preset auf die gesicherten Einstellungen zurück. Da deine Änderungen hierdurch gelöscht werden, solltest du sie vorher unter einem anderen Namen sichern. ",
+        "Weitere Sounds laden",
+        "Werkzeuge",
+        "Zurücksetzen"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_NS:10",
+        "_NS:137",
+        "_NS:16",
+        "_NS:31",
+        "_NS:329",
+        "_NS:337",
+        "_NS:400",
+        "_NS:406",
+        "_NS:410",
+        "_NS:564",
+        "_NS:568",
+        "_NS:646",
+        "_NS:652",
+        "_NS:674",
+        "_NS:685",
+        "_NS:692",
+        "_NS:874",
+        "_NS:88",
+        "_NS:94",
+        "getMoreSounds"
+      ]
+    }
+  ],
+  "conclusion": "On this host in de-DE, library.patches exposes 32 elements carrying 16 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "315 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

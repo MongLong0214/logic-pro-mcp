@@ -49,7 +49,7 @@ case("an empty string pins to nothing", guard.locale_of("") is None)
 
 
 # --- the near-miss itself -------------------------------------------------------------------
-def ledger(rows, labels):
+def ledger(rows, labels, base=True):
     """A temp repo whose evidence directory holds one census and whose projection holds `labels`."""
     root = Path(tempfile.mkdtemp())
     (root / "docs" / "observations" / "evidence").mkdir(parents=True)
@@ -57,6 +57,19 @@ def ledger(rows, labels):
     (root / "docs" / "observations" / "evidence" / "x.census.json").write_text(
         json.dumps({"host": {"locale": "ja-JP"}, "census": rows}, ensure_ascii=False),
         encoding="utf-8")
+    # An en-US census carrying the English canonicals these cases use. The fixture held only a
+    # ja-JP census while the guard filed an ASCII string under en-US and then skipped it for
+    # belonging to a locale the fixture did not have — so the canonicals were never checked here,
+    # and the cases below were about their variants alone whether or not they said so. Deriving the
+    # locale from the evidence removes that skip, so the fixture now contains the English census it
+    # was always assuming. The assertions are unchanged; what changed is that they are now about
+    # the variant because the canonical is backed, rather than by accident.
+    if base:
+        (root / "docs" / "observations" / "evidence" / "base.census.json").write_text(
+            json.dumps({"host": {"locale": "en-US"},
+                        "census": [{"role": "AXGroup", "description": c}
+                                   for c in ("playhead position", "x")]}, ensure_ascii=False),
+            encoding="utf-8")
     (root / "docs" / "locale" / "ui-labels.json").write_text(
         json.dumps({"labels": labels}, ensure_ascii=False), encoding="utf-8")
     guard.OBS = str(root / "docs" / "observations")
@@ -68,8 +81,9 @@ SHOWN = [{"role": "AXGroup", "description": "再生ヘッドの位置"}]
 UNMEASURED = {"en-US": "unmeasured", "ko-KR": "unmeasured", "ja-JP": "unmeasured"}
 
 
-def run(labels, rows=SHOWN):
-    ledger(rows, labels)
+def run(labels, rows=SHOWN, base=True):
+    """`base=False` leaves out the en-US census, for the cases about an empty vocabulary."""
+    ledger(rows, labels, base=base)
     import io as _io
     import contextlib
     buf = _io.StringIO()
@@ -93,17 +107,29 @@ rc, out = run({"somethingElse": {
 case("a string with no near neighbour is absent but not NEAR", "NEAR" not in out, out)
 case("...and is still counted as absent", "1 variant(s) absent" in out, out)
 
+# THE SUPPRESSION RULE CHANGED WITH THE LOCALE RULE, and this case says so rather than being
+# quietly renumbered. It used to read "the ledger already measured this label in the variant's own
+# locale, so skip it" — which needs the variant's locale, and that is exactly what stopped being
+# knowable when a second Latin-script language arrived (`Bearbeiten` looks like English). With no
+# attribution to hang it on, the only attribution-free reading of the ledger is whether the label
+# is settled EVERYWHERE; settled in one locale and open in two leaves a real question open, and
+# suppressing on it would hide a German variant behind an English measurement.
 rc, out = run({"playheadPositionGroupLabel": {
     "canonical": "playhead position", "variants": ["再生ヘッド位置"],
     "coverage": dict(UNMEASURED, **{"ja-JP": "measured"})}})
-case("a label the ledger already measured in that locale is skipped", "NEAR" not in out, out)
+case("one locale settled is no longer a suppression", "NEAR" in out, out)
+
+rc, out = run({"playheadPositionGroupLabel": {
+    "canonical": "playhead position", "variants": ["再生ヘッド位置"],
+    "coverage": {loc: "measured" for loc in UNMEASURED}}})
+case("a label settled in every locale is skipped", "NEAR" not in out, out)
 
 # A file that is not a census must not count as one. Without row shape, any JSON with a
 # `host.locale` and a list called `census` was evidence — so a file holding one bare description
 # made a genuinely absent variant look present and silenced a real near miss.
 rc, out = run({"playheadPositionGroupLabel": {
     "canonical": "playhead position", "variants": ["再生ヘッド位置"], "coverage": dict(UNMEASURED)}},
-    rows=[{"description": "再生ヘッド位置"}])
+    rows=[{"description": "再生ヘッド位置"}], base=False)
 # A census of nothing but unshaped rows yields an EMPTY vocabulary, so the guard refuses outright
 # rather than reporting a clean run — which is stronger than counting the variant as absent.
 case("a row with no role is not a reading", rc == 1 and "refusing" in out, (rc, out))
@@ -218,7 +244,7 @@ case("...and an exact-label is not satisfied by the same thing",
      not guard._carries("send button", "send", "exact"), "")
 
 # An empty vocabulary must not read as clean: the guard refuses rather than reporting no drift.
-ledger([], {})
+ledger([], {}, base=False)
 import io as _io
 import contextlib
 buf = _io.StringIO()

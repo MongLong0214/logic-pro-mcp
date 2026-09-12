@@ -117,7 +117,15 @@ let lp = plist("/Applications/Logic Pro.app/Contents/Info.plist")
 let os = plist("/System/Library/CoreServices/SystemVersion.plist")
 // Collected directly in the bar loop: a path filter on "/AXMenu" also matched "AXMenuBarItem".
 let menuTitles = barTitles
-let locale: String = menuTitles.contains("편집") ? "ko-KR" : menuTitles.contains("編集") ? "ja-JP" : menuTitles.contains("Edit") ? "en-US" : "unknown"
+// The Edit menu's own spelling identifies the UI language, because it is the one menu that exists
+// in every locale and whose title nothing else in the bar shares. German is checked before English
+// for no reason other than order — `Bearbeiten` and `Edit` do not collide — but a future Latin-
+// script locale whose Edit menu IS a prefix of another bar title would need a stronger signal than
+// this, and this line is where that would be found out.
+let locale: String = menuTitles.contains("편집") ? "ko-KR"
+    : menuTitles.contains("編集") ? "ja-JP"
+    : menuTitles.contains("Bearbeiten") ? "de-DE"
+    : menuTitles.contains("Edit") ? "en-US" : "unknown"
 struct Out: Encodable {
     let host: [String: String]
     let menu_bar: [String]

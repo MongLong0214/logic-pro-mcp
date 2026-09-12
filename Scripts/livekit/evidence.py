@@ -963,6 +963,26 @@ AX_REGION_LABELS = {
     "Playhead Position": ["재생헤드 위치", "再生ヘッドの位置"],
 }
 
+# German, measured 2026-09-12 off `evidence/2026-09-12-de-DE-navigation-free.census.json` (#876) and
+# merged into the table above rather than written beside it — two tables would be two answers. Each
+# string was read from an element whose role can carry the band this locator looks for: `Spuren
+# enthält`, `Spuren Titel`, `Spuren` and `Position der Abspielposition` off AXGroups, `Mixer`,
+# `Bibliothek` and `Informationen` off AXGroups too (the same words also sit on control-bar
+# AXCheckBoxes, which are toggles and not panes — the locator asks for a region, so the checkbox
+# cannot satisfy it).
+#
+# `Mixer` needs no row: German keeps the English word, and the key already is that word. Adding it
+# anyway would have looked like coverage and measured nothing.
+for _key, _de in (
+    ("Tracks contents", "Spuren enthält"),
+    ("Tracks header", "Spuren Titel"),
+    ("Tracks", "Spuren"),
+    ("Library", "Bibliothek"),
+    ("Inspector", "Informationen"),
+    ("Playhead Position", "Position der Abspielposition"),
+):
+    AX_REGION_LABELS[_key].append(_de)
+
 
 # A screen recording smaller than this never contained a frame. `screencapture -v`/`avconvert`
 # write a container header even when they capture nothing, so "the file exists" is not enough and

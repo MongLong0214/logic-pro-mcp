@@ -161,7 +161,10 @@ case("a record with no locale at all is rejected",
 #     credits `host.locale` alone, so a record could declare a supported locale at the top and carry
 #     rows measured on one the axis does not know — the top-level rule passes and the per-locale
 #     accounting is still wrong. Records that exercise two supported locales stay valid.
-bad = problems(record(observations=[{"what": "a reading", "count": 3, "locale": "de-DE"}]))
+#     `zz-ZZ` is deliberately not a language anyone will ever add. This case used to use `de-DE`
+#     as its example of an unsupported locale, and adding German on 2026-09-12 turned the case
+#     green by making its fixture legal — a test defused by the change it was meant to outlive.
+bad = problems(record(observations=[{"what": "a reading", "count": 3, "locale": "zz-ZZ"}]))
 case("a locale named inside an observation is rejected",
      any("credited to nothing" in b for b in bad), f"{bad!r}")
 

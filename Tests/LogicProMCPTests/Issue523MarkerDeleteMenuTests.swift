@@ -1168,9 +1168,16 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // Locale policy itself stays with #519. An unseen locale must refuse honestly rather
     // than guess a destructive actuator. Mutation: return `.pickIssued` from the settled
     // `.menuAbsent` branch. write_attempted and the zero-AXPick count both fail.
+    //
+    // The strings are CROATIAN, and the choice is load-bearing. This case used to spell its
+    // "unseen locale" in German, and on 2026-09-12 German became a supported locale (#876) — so
+    // `Bearbeiten` resolved, the route reached `exact_delete_entry_missing_or_disabled` instead of
+    // `menu_absent`, and a case that exists to prove an UNKNOWN language is refused was testing a
+    // known one. Logic ships de, en, es, fr, it, ja, ko, pt, zh-Hans and zh-Hant; Croatian is not
+    // among them and cannot be added, so this fixture cannot be defused by supporting a language.
     let fixture = issue523MarkerDeleteFixture(
-        menuEntryTitle: "Löschen",
-        editControlTitle: "Bearbeiten"
+        menuEntryTitle: "Izbriši",
+        editControlTitle: "Uredi"
     )
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
