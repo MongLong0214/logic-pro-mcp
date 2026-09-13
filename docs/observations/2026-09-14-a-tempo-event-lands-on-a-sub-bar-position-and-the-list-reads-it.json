@@ -1,0 +1,109 @@
+{
+  "id": "2026-09-14-a-tempo-event-lands-on-a-sub-bar-position-and-the-list-reads-it",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "Creating a tempo event at a sub-bar playhead position, and reading it back from the Tempo list",
+  "question": "ADR-016 records sub-bar tempo events as untouched. Can a tempo event be placed at a position finer than a bar, does the Tempo list report that position, and can it be taken back?",
+  "verdict": "works",
+  "issues": [
+    "#304"
+  ],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual, and it mutates: (1) open the List Editors and press the Tempo radio button; (2) read the three-column table's rows; (3) drive `logic_transport.goto_position` to a sub-bar position such as `5.3.2.60`; (4) press the AXButton whose AXDescription is `새로운 템포 이벤트 생성` — by description, refusing anything but exactly one match; (5) re-read the table; (6) drive `logic_edit.undo` and re-read the table again.",
+    "expected": "The table gains one row whose first four cells are the four components of the requested position — 5, 3, 2, 60 — and the undo removes it, with the row count returning to what it was. The restore is confirmed by re-reading the table, not by trusting the undo's own answer."
+  },
+  "depends": [
+    "Sources/LogicProMCP/SmartTempo/TempoMap.swift",
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift"
+  ],
+  "evidence": [],
+  "method": "Driven against the release binary built with today's four-segment transport reader. The playhead was placed by the product's own `goto_position`, so the position the event should land at is one the product can state and verify rather than one set by hand. The creation control was located by AXDescription with an exactly-one-match rule — a second match would mean the press could land anywhere. The table was read before, after, and after the undo, so the restore is a reading rather than a claim. The control bar's display mode was set to `비트` for the transport half and restored afterwards, and the Tempo list was then read once more in the restored mode to see whether its own resolution depends on that setting.",
+  "observations": [
+    {
+      "step": "before",
+      "tempo_rows": 1,
+      "first_four_cells": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "tempo_cell": "120"
+    },
+    {
+      "step": "goto_position",
+      "requested": "5.3.2.60",
+      "state": "A",
+      "observed": "5.3.2.60",
+      "observed_position_components": [
+        "bar",
+        "beat",
+        "subdivision",
+        "tick"
+      ]
+    },
+    {
+      "step": "press 새로운 템포 이벤트 생성",
+      "matches_for_that_description": 1,
+      "enabled_before": true,
+      "ax_code": 0
+    },
+    {
+      "step": "after",
+      "tempo_rows": 2,
+      "new_row_first_four_cells": [
+        "5",
+        "3",
+        "2",
+        "60"
+      ],
+      "note": "the four cells are exactly the four components of the requested position"
+    },
+    {
+      "step": "after undo",
+      "tempo_rows": 1,
+      "first_four_cells": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "undo_state": "A",
+      "note": "confirmed by re-reading the table"
+    },
+    {
+      "step": "Tempo list re-read with the control bar back in 비트 및 프로젝트",
+      "tempo_rows": 1,
+      "first_four_cells": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "transport_position_group_segments": [
+        "마디",
+        "비트"
+      ],
+      "note": "the list still reports four components while the transport reports two, so the list's resolution does not depend on the display mode"
+    }
+  ],
+  "conclusion": "A tempo event CAN be placed at a sub-bar position and the Tempo list reports that position at tick resolution: the playhead was driven to `5.3.2.60` with a verified State A, the named `새로운 템포 이벤트 생성` button created a row, and that row's first four cells read 5, 3, 2, 60. An undo removes it and the table says so. Two independent surfaces agree on the same sub-bar position — the transport, which needs display mode `비트` to show four components, and the Tempo list, which shows four regardless. So ADR-016's 'sub-bar tempo events are untouched' is no longer the state: the placement, the readback and the restore each have a live reading.",
+  "limits": [
+    "This is a REACHABILITY measurement, not a product feature. No public operation creates a tempo event; the button was pressed by a probe. `TempoMapSnapshot` is still referenced only inside `Sources/LogicProMCP/SmartTempo/`, so nothing in the product constructs one from this table.",
+    "One event, at one position, at one tempo. The new row carried the SAME bpm as the existing one (120), so nothing here exercises a tempo CHANGE partway through a project, an ordering question, or what a second event does to positions after it.",
+    "The tempo value was not written. Whether a created event's bpm can be set, and verified, was not measured.",
+    "Undo was used as the restore. It worked and was confirmed by re-reading, but a delete path for a tempo event was not looked for, so nothing here says one exists.",
+    "Korean only. `새로운 템포 이벤트 생성` and the Tempo radio button's `템포` have no label set yet; anything built on this needs them, exactly as the Event List's headers did.",
+    "The three-column table was identified by its column count, which is a shape rather than a name. On a project with a different pane open that heuristic could pick the wrong table."
+  ],
+  "supersedes": null
+}
