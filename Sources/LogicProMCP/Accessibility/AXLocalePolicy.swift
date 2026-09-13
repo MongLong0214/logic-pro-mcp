@@ -97,6 +97,32 @@ enum AXLocalePolicy {
         /// original and risk misclassifying accented-Latin AX text in non-EN/KO
         /// locales. Omitting `.literal` keeps Hangul NFC/NFD canonical matching,
         /// matching `String.contains`.
+        /// Normalized-exact membership: trim, collapse internal whitespace runs,
+        /// and compare WITHOUT case.
+        ///
+        /// The three classifier call sites used to normalize inline and then ask
+        /// raw `labels.contains(_:)`, which is case-SENSITIVE while the
+        /// normalization lowercases. A variant Logic renders with capitals could
+        /// therefore never match. Measured live 2026-09-13: German region
+        /// readback failed with `Track Content group not found` while the
+        /// landmark list printed inside that very error contained
+        /// `Spuren enthält` — the label was in the policy and unreachable.
+        /// Every other matcher on this type is case-insensitive; this one is now
+        /// too, and it owns the normalization so no call site restates it.
+        func containsNormalized(_ text: String?) -> Bool {
+            guard let text else { return false }
+            let normalized = LabelSet.normalize(text)
+            guard !normalized.isEmpty else { return false }
+            return labels.contains { LabelSet.normalize($0) == normalized }
+        }
+
+        static func normalize(_ text: String) -> String {
+            text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .split { $0.isWhitespace }
+                .joined(separator: " ")
+        }
+
         func containsAny(in haystack: String) -> Bool {
             labels.contains { label in
                 haystack.range(of: label, options: [.caseInsensitive]) != nil
@@ -573,8 +599,37 @@ enum AXLocalePolicy {
     /// opens that panel on a German Logic and reads it.
     static let midiImportCommitButton = LabelSet(
         canonical: "Import",
-        variants: ["가져오기"],
-        rationale: "The commit button of Logic's MIDI-import open panel. EN/KO measured; German unmeasured on purpose — the panel title `Importieren` says nothing about what the button inside it is called."
+        variants: ["가져오기", "Importieren"],
+        rationale: "The commit button of Logic's MIDI-import open panel. German read 2026-09-13 by OPENING the panel on a de-DE Logic and enumerating its buttons: `Abbrechen` and `Importieren`, the latter disabled until a file is chosen. It does share the panel's title — which is why it was held back until somebody looked rather than inferred from the window name."
+    )
+
+    /// The button that DECLINES Logic's "import the tempo too?" alert after a MIDI import.
+    ///
+    /// Measured 2026-09-13 on a de-DE Logic by reading the alert (#876): it carries NO window name
+    /// at all, its text is `Auch Tempo-Informationen importieren?`, and its buttons are `Nein`,
+    /// `Tempo importieren` and `Abbrechen`. Declining is the only correct answer here — importing a
+    /// file's tempo would rewrite the project's tempo map, which is a mutation the caller did not
+    /// ask for and this operation cannot undo.
+    ///
+    /// `Abbrechen` is deliberately NOT a variant. Cancelling the alert is not the same as declining
+    /// it, and a set that held both would let the wrong one be pressed first.
+    static let midiImportDeclineTempoButton = LabelSet(
+        canonical: "No",
+        variants: ["아니요", "Nein"],
+        rationale: "Declines the post-import tempo alert so a MIDI import cannot rewrite the project's tempo map. German read 2026-09-13 off the live alert, whose buttons are `Nein` / `Tempo importieren` / `Abbrechen`."
+    )
+
+    /// The alert's own question text, which is how it can be identified POSITIVELY.
+    ///
+    /// The alert carries no window name, so the code that found it asked which AXDialog was *not*
+    /// the import panel. That is a negative identification: on a German Logic it matched the import
+    /// panel itself until the panel's title was measured, and it would match any other unnamed
+    /// dialog Logic happens to raise. The question text is the thing that says this IS the tempo
+    /// alert. Matched by containment because the rest of the alert is a paragraph of explanation.
+    static let midiImportTempoAlertText = LabelSet(
+        canonical: "tempo",
+        variants: ["템포", "Tempo-Informationen"],
+        rationale: "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it."
     )
 
     static let midiImportPanelTitle = LabelSet(

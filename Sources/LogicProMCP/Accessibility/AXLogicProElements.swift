@@ -923,13 +923,7 @@ enum AXLogicProElements {
     /// both `Track Headers` and `Tracks header`. This stays as an explicit
     /// compatibility path, but structural detection above is preferred.
     private static func isTrackHeadersDescription(_ description: String?) -> Bool {
-        guard let description else { return false }
-        let normalized = description
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split { $0.isWhitespace }
-            .joined(separator: " ")
-        return AXLocalePolicy.trackHeadersDescription.labels.contains(normalized)
+        AXLocalePolicy.trackHeadersDescription.containsNormalized(description)
     }
 
     // MARK: - Arrangement

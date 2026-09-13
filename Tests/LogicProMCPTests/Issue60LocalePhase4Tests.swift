@@ -162,22 +162,42 @@ struct Issue60LocalePhase4Tests {
         #expect(Set(AXLocalePolicy.trackContentExplicit.labels).isDisjoint(with: Set(AXLocalePolicy.trackContentGeneric.labels)))
     }
 
-    /// The strings Logic actually shows, put through the normalization
-    /// `AccessibilityChannel+Regions.normalizeRegionGroupDescription` applies
-    /// before the lookup. Asserting membership of the stored form only would
-    /// pass while the product still failed: the stored English form is
-    /// lowercase and Logic shows `Tracks contents`, and it is the normalization
-    /// that closes that gap. Both strings are verbatim from
-    /// `docs/observations/2026-09-05-{en-US,ja-JP}-arrange-regions-census.json`.
+    /// The strings Logic actually shows, put through the SAME predicate the
+    /// classifier calls. Asserting membership of the stored form only would pass
+    /// while the product still failed: the stored English form is lowercase and
+    /// Logic shows `Tracks contents`.
+    ///
+    /// This test used to restate the normalization inline, which made it a
+    /// second authority — and it hid a real defect for a day. `Spuren enthält`
+    /// was in the policy with the capital Logic renders, the classifier
+    /// lowercased the observed description and then compared case-SENSITIVELY,
+    /// and German region readback failed live with `Track Content group not
+    /// found` while the landmark list in that error printed the group. A test
+    /// carrying its own copy of the normalizer would have matched the copy, not
+    /// the product. The strings are verbatim from
+    /// `docs/observations/2026-09-05-{en-US,ja-JP}-arrange-regions-census.json`
+    /// and the de-DE census of 2026-09-12.
     @Test("the canvas description Logic shows classifies as explicit track content",
-          arguments: ["Tracks contents", "トラックコンテンツ"])
+          arguments: ["Tracks contents", "トラックコンテンツ", "Spuren enthält"])
     func shownCanvasDescriptionIsExplicit(shown: String) {
-        let normalized = shown
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .split { $0.isWhitespace }
-            .joined(separator: " ")
-        #expect(AXLocalePolicy.trackContentExplicit.labels.contains(normalized))
+        #expect(AXLocalePolicy.trackContentExplicit.containsNormalized(shown))
+    }
+
+    /// The track-header rail carries the same shape of defect, and the same
+    /// German spelling risk. `Spuren Titel` is read off the de-DE census.
+    @Test("the track-header description Logic shows classifies as the header rail",
+          arguments: ["Track Headers", "Tracks header", "트랙 헤더", "Spuren Titel"])
+    func shownTrackHeaderDescriptionIsTheRail(shown: String) {
+        #expect(AXLocalePolicy.trackHeadersDescription.containsNormalized(shown))
+    }
+
+    /// The normalized matcher must still be exact about CONTENT. A case-blind
+    /// comparison that also went substring-blind would classify the whole
+    /// arrange window as the canvas.
+    @Test("normalized membership stays exact about content, not just case",
+          arguments: ["tracks contents area", "content", "", "   "])
+    func normalizedMembershipIsStillExact(shown: String) {
+        #expect(!AXLocalePolicy.trackContentExplicit.containsNormalized(shown))
     }
 
     /// The generic fallback carries no Japanese form on purpose. The ja-JP

@@ -19,10 +19,30 @@ struct Issue778RegionBarsLocaleTests {
         + "サイズ変更するには下端を、ループするには右端上部をドラッグします。その他の編集にはツールを使います。 "
     static let korean = "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다."
     static let english = "Region starts at 128 bars and ends at 129 bars, MIDI region."
+    /// Verbatim from a de-DE Logic on 2026-09-13, read off the region `tracks.record_sequence` had
+    /// just imported. The double space after `Takt` and the space before the comma are Logic's.
+    /// The unit is inflected by the number — `1 Takt` singular, `2 Takte` plural — which is why the
+    /// pattern anchors on `beginnt bei` / `endet bei` instead.
+    static let german = "Region beginnt bei 1 Takt  und endet bei 2 Takte , MIDI-Region. "
+        + "Enthält MIDI-Noten- und Controller-Events. Durch Bewegen der Mitte werden Regionen "
+        + "verschoben, mit den unteren Rändern skaliert und mit dem oberen rechten Rand als Loop "
+        + "gespielt. Verwende für andere Bearbeitungen die entsprechenden Werkzeuge. "
 
     @Test("the Japanese help string yields its bars")
     func japaneseParses() {
         let (start, end) = AccessibilityChannel.parseRegionBars(from: Self.japanese)
+        #expect(start == 1)
+        #expect(end == 2)
+    }
+
+    /// German was at `(-1, -1)` until 2026-09-13. The live run that exposed it had already got
+    /// past the localized import panel and the localized tempo alert and found the region — the
+    /// envelope carried `region_kind: midi`, `note_count: 1` and the help above, and still returned
+    /// `unreadable_readback` with `start_bar: -1`. Recognising a region and being unable to read
+    /// its bars is half a fix; that is the same sentence #778 wrote about Japanese.
+    @Test("the German help string yields its bars")
+    func germanParses() {
+        let (start, end) = AccessibilityChannel.parseRegionBars(from: Self.german)
         #expect(start == 1)
         #expect(end == 2)
     }
@@ -41,6 +61,10 @@ struct Issue778RegionBarsLocaleTests {
     /// a pattern loose enough to match anything would replace an honest refusal with a wrong number.
     @Test("a string in no known locale is refused rather than guessed")
     func unknownIsRefused() {
+        // `Regionen beginnen bei …` is an INVENTED plural: Logic renders the singular `Region
+        // beginnt bei 1 Takt`. It is kept here as the negative control for the German row — a
+        // pattern loosened to `Region\w*\s+beginn\w+` to be tolerant would start reading numbers
+        // out of a sentence Logic does not emit.
         for help in ["", "Region", "リージョン", "some unrelated help text",
                      "Regionen beginnen bei 3 Takten und enden bei 4 Takten"] {
             let (start, end) = AccessibilityChannel.parseRegionBars(from: help)
@@ -57,5 +81,8 @@ struct Issue778RegionBarsLocaleTests {
         // `리전은`, so if the Japanese row were removed the result would be the refusal.
         #expect(!Self.japanese.lowercased().contains("region starts at"))
         #expect(!Self.japanese.contains("리전은"))
+        #expect(!Self.german.lowercased().contains("region starts at"))
+        #expect(!Self.german.contains("리전은"))
+        #expect(!Self.german.contains("リージョン"))
     }
 }

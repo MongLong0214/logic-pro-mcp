@@ -1611,9 +1611,25 @@
   "midiImportCommitButton": {
    "canonical": "Import",
    "variants": [
-    "가져오기"
+    "가져오기",
+    "Importieren"
    ],
-   "rationale": "The commit button of Logic's MIDI-import open panel. EN/KO measured; German unmeasured on purpose — the panel title `Importieren` says nothing about what the button inside it is called.",
+   "rationale": "The commit button of Logic's MIDI-import open panel. German read 2026-09-13 by OPENING the panel on a de-DE Logic and enumerating its buttons: `Abbrechen` and `Importieren`, the latter disabled until a file is chosen. It does share the panel's title — which is why it was held back until somebody looked rather than inferred from the window name.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "midiImportDeclineTempoButton": {
+   "canonical": "No",
+   "variants": [
+    "아니요",
+    "Nein"
+   ],
+   "rationale": "Declines the post-import tempo alert so a MIDI import cannot rewrite the project's tempo map. German read 2026-09-13 off the live alert, whose buttons are `Nein` / `Tempo importieren` / `Abbrechen`.",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -1629,6 +1645,21 @@
     "Importieren"
    ],
    "rationale": "Distinguishes Logic's MIDI-import open panel from the tempo alert that may follow it; both carry subrole AXDialog, so the title is the only separator available. German read 2026-09-12 from the product's own refusal envelope (#876), which named the blocking dialog `Importieren`.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "midiImportTempoAlertText": {
+   "canonical": "tempo",
+   "variants": [
+    "템포",
+    "Tempo-Informationen"
+   ],
+   "rationale": "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it.",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",

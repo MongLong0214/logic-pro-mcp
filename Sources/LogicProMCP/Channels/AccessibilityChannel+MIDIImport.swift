@@ -233,15 +233,30 @@ extension AccessibilityChannel {
         // Logic — whose panel is `Importieren` — that test is true of the panel itself, so the still-
         // open import panel was taken for the tempo alert and dismissed as one (#876).
         // `exists a window with one of the panel's measured titles`, rendered the same way.
+        // The tempo alert, identified POSITIVELY by its own question text rather than by not being
+        // the import panel. It exposes no window name at all — measured on a German Logic, where the
+        // negative rule matched the import panel itself until that panel's title was measured.
+        let tempoAlertPhrases = AXLocalePolicy.midiImportTempoAlertText.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
+        let tempoDeclineButtonNames = AXLocalePolicy.midiImportDeclineTempoButton.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
+
         let importPanelTitleExists = AXLocalePolicy.midiImportPanelTitle.labels
             .filter { !$0.contains("\"") && !$0.contains("\\") }
             .map { "(exists (first window whose name is \"\($0)\"))" }
             .joined(separator: " or ")
         // The panel itself, for the branch that reaches inside it.
+        // `name is in {…}` rather than a chain of `name is … or name is …`: AppleScript's `whose`
+        // filter does not bracket a bare `or` chain the way the reading suggests, and the chained
+        // form found nothing on a German Logic while the list form finds the same window.
         let importPanelWindowPredicate = AXLocalePolicy.midiImportPanelTitle.labels
             .filter { !$0.contains("\"") && !$0.contains("\\") }
-            .map { "name is \"\($0)\"" }
-            .joined(separator: " or ")
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
         // The commit button is a SEPARATE label set: its German spelling is unmeasured, so on a
         // German Logic this resolves to nothing and the import reports that rather than pressing
         // whatever happens to be there.
@@ -381,9 +396,32 @@ extension AccessibilityChannel {
                 repeat 60 times
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            set importDlg to first window whose \(importPanelWindowPredicate)
+                            -- Walk the window list by hand rather than filtering with `whose`. The
+                            -- filter forms were both tried on a German Logic within one run and each
+                            -- missed the panel at a different moment; an explicit loop reads the same
+                            -- titles without depending on how `whose` brackets them.
+                            set importDlg to missing value
+                            repeat with candidateWindow in windows
+                                if (name of candidateWindow) is in {\(importPanelWindowPredicate)} then
+                                    set importDlg to candidateWindow
+                                    exit repeat
+                                end if
+                            end repeat
+                            if importDlg is missing value then error "NO_IMPORT_PANEL"
                             set sawPanel to true
-                            set ib to (first button of UI element 1 of importDlg whose name is in {\(importCommitButtonNames)})
+                            -- Same treatment as the window above: walk the buttons and compare the
+                            -- name, rather than asking `whose` to filter them. Measured on a German
+                            -- Logic where the panel is `Importieren` and its buttons are
+                            -- `Abbrechen` and `Importieren`: the filter form found the panel and
+                            -- then reported no button, while reading the same list by hand finds it.
+                            set ib to missing value
+                            repeat with candidateButton in (every button of UI element 1 of importDlg)
+                                if (name of candidateButton) is in {\(importCommitButtonNames)} then
+                                    set ib to candidateButton
+                                    exit repeat
+                                end if
+                            end repeat
+                            if ib is missing value then error "NO_IMPORT_BUTTON"
                             set sawButton to true
                             if (enabled of ib) then
                                 click ib
@@ -438,9 +476,15 @@ extension AccessibilityChannel {
                 repeat 15 times
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            if (exists (first window whose subrole is "AXDialog" and \(importPanelTitleExclusion))) then
-                                set tempoSeen to true
-                            end if
+                            repeat with candidateDialog in (every window whose subrole is "AXDialog")
+                                repeat with phrase in {\(tempoAlertPhrases)}
+                                    repeat with alertText in (every static text of candidateDialog)
+                                        if (value of alertText) contains (phrase as string) then
+                                            set tempoSeen to true
+                                        end if
+                                    end repeat
+                                end repeat
+                            end repeat
                         end try
                     end tell
                     if tempoSeen then exit repeat
@@ -449,14 +493,24 @@ extension AccessibilityChannel {
                 if tempoSeen then
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            set tempoDlg to first window whose subrole is "AXDialog" and \(importPanelTitleExclusion)
-                            try
-                                click button "아니요" of tempoDlg
-                            on error
-                                try
-                                    click button "No" of tempoDlg
-                                end try
-                            end try
+                            set tempoDlg to missing value
+                            repeat with candidateDialog in (every window whose subrole is "AXDialog")
+                                repeat with phrase in {\(tempoAlertPhrases)}
+                                    repeat with alertText in (every static text of candidateDialog)
+                                        if (value of alertText) contains (phrase as string) then
+                                            set tempoDlg to candidateDialog
+                                        end if
+                                    end repeat
+                                end repeat
+                            end repeat
+                            if tempoDlg is not missing value then
+                                repeat with candidateButton in (every button of tempoDlg)
+                                    if (name of candidateButton) is in {\(tempoDeclineButtonNames)} then
+                                        click candidateButton
+                                        exit repeat
+                                    end if
+                                end repeat
+                            end if
                         end try
                     end tell
                 end if
