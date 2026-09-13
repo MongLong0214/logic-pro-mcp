@@ -1,0 +1,90 @@
+{
+  "id": "2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "What actually stands between a release build and a positive region-identity match, shared by ADR-010, ADR-014 R2 and ADR-015",
+  "question": "Three roadmap rows name the same blocker: the identity proof's only mint is debug-only, so a release build cannot construct one. Is the seam the blocker, or is the seam debug-only BECAUSE nothing can produce what the proof needs?",
+  "verdict": "wall",
+  "issues": [
+    "#293",
+    "#302",
+    "#303"
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual. Call `logic_transport.goto_position` with a four-component position such as `4.1.1.1` and read the response's `observed` and `observed_position_components`. Separately, drive `--probe-event-list` (or the #293 harness) over a region and read the Position column of any note row.",
+    "expected": "goto_position answers State B with observed \"4.1\" and observed_position_components [\"bar\", \"beat\"] — two components, not four — and reason readback_unavailable. The Event List's Position column answers four components including ticks, e.g. \"1 1 4 203\"."
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/RegionIdentityRegistry.swift",
+    "Sources/LogicProMCP/MIDIReadback/EventListReadbackEvidence.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Regions.swift"
+  ],
+  "evidence": [],
+  "method": "The three rows were taken at their word and then checked. `RegistryResolvedIdentityProof`'s initializer is fileprivate with no Decodable conformance, and the only mint is `RegionIdentityRegistrySeam.mint` under `#if FAULT_TEST_SEAM`, which `Package.swift` scopes to debug — so the rows are right about the seam. The question this record asks is what a production mint would have to READ. `ResolvedRegionIdentity` is (name, ordinal, startTick), so each of the three was chased to a live surface: the arrange's region help, the transport LCD, and the Event List. The transport was driven live rather than read out of the source, because `currentPlayheadBar`'s own comment says the position is \"Bar.Beat.Division.Tick\" and that is a claim about Logic, not about the code.",
+  "observations": [
+    {
+      "field": "name",
+      "surface": "arrange region AXHelp via parseRegionBars",
+      "readable": true,
+      "note": "the region enumeration already returns it"
+    },
+    {
+      "field": "ordinal",
+      "surface": "arrange region enumeration order",
+      "readable": true,
+      "note": "derivable from the same enumeration"
+    },
+    {
+      "field": "startTick",
+      "surface": "arrange region AXHelp",
+      "readable": false,
+      "resolution": "bars",
+      "note": "parseRegionBars returns (startBar, endBar); the help names bars and nothing finer"
+    },
+    {
+      "field": "startTick",
+      "surface": "transport bar / playhead display, driven live",
+      "readable": false,
+      "resolution": "bar.beat",
+      "requested": "4.1.1.1",
+      "observed": "4.1",
+      "observed_position_components": [
+        "bar",
+        "beat"
+      ],
+      "state": "B",
+      "reason": "readback_unavailable",
+      "note": "two components, not the four currentPlayheadBar's comment describes"
+    },
+    {
+      "field": "event position (NOT a region start)",
+      "surface": "Event List Position column",
+      "readable": true,
+      "resolution": "bar beat division tick",
+      "example": [
+        "1 1 1 1",
+        "1 1 4 203",
+        "1 2 4 165"
+      ],
+      "note": "measured 2026-09-13; ticks matched the expected values within 0.8 tick"
+    }
+  ],
+  "conclusion": "The seam is debug-only for a reason the three rows do not state: two of the three fields `ResolvedRegionIdentity` requires are readable and the third is not. A region's start is available at BAR resolution from the arrange help and at BAR.BEAT from the transport — driven live, `goto_position` asked for 4.1.1.1 and Logic answered 4.1 with the components named as bar and beat. Tick resolution does exist, but in the Event List and about EVENTS, which is a different quantity from a region's start. So a production mint cannot be written today without first deciding what the tick field is for: keep it and find a region-start reading, or replace it with something the surface actually reports and name it for what it is. That is a design decision, and it is the one the three rows are actually waiting on.",
+  "limits": [
+    "The transport reading is of THIS Logic's LCD in its current display mode. Logic's transport display is configurable; whether a mode exists that shows ticks, and whether the product could select it coordinate-free, was NOT measured. That is a live route this record does not close.",
+    "The Event List positions were measured on 2026-09-13, not re-driven here. This record reuses that reading rather than re-taking it.",
+    "Whether the Event List's Position column is absolute or region-relative was not re-measured. MIDIReadbackAssessment converts it to region-relative, which implies absolute, but implication is not measurement.",
+    "`ObservedRegionIdentityProof.proven` is debug-only for the same shape of reason and was NOT chased field by field here. Only the registry side was.",
+    "One project, one locale, one build. No claim about a region whose start is not on a bar line."
+  ],
+  "supersedes": null
+}
