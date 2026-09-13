@@ -4789,6 +4789,48 @@ private func makeTempoFixtureWithAlert(
     #expect((obj["safe_to_retry"] as? Bool)!)
 }
 
+@Test func testSetTempoDirectWriteReportsAConfirmRefusalToo() async {
+    // The other leg of the same gate, which a review noted was implemented by the `||` but not
+    // separately pinned: AX accepts the VALUE and refuses the CONFIRM. An unconfirmed value is not
+    // a landed tempo, and a test that only covered the write leg would stay green if the gate were
+    // narrowed to `!wrote`.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7500)
+    let window = builder.element(7501)
+    let controlBar = builder.element(7502)
+    let slider = builder.element(7503)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [slider])
+    builder.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(slider, kAXDescriptionAttribute as String, "Tempo")
+    builder.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 120.0))
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: { _, _, _ in true },
+            performActionHandler: { _, _ in false }
+        )
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "144"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect((obj["ax_value_write_accepted"] as? Bool)!)
+    #expect(!((obj["ax_confirm_accepted"] as? Bool)!))
+}
+
 @Test func testSetTempoDirectWriteDoesNotClaimSuccessWhileABlockerIsUp() async {
     // The third refusal site, which a review found still asserting success. A tempo slider with no
     // AX geometry takes the direct-write path, which writes and then returns State B — and State B
