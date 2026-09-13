@@ -797,7 +797,16 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
     var description: String {
         switch self {
         case .mainWindowUnavailable: return "Logic Pro main window is unavailable."
-        case .eventTabNotFound: return "Event List tab (AXDescription Event) was not found."
+        case .eventTabNotFound:
+            // The labels the lookup ACTUALLY used, not a literal it stopped using. The message said
+            // `AXDescription Event`, which on a Korean Logic names a description that does not
+            // exist — the tab there describes itself `이벤트`, and the lookup has gone through
+            // `AXLocalePolicy.eventListTab` since 2026-08-29. A reader following the old text would
+            // hunt for the wrong string, and the likeliest real cause is not a missing tab at all
+            // but a List Editors pane that is closed.
+            return "Event List tab was not found (looked for an AXRadioButton described "
+                + AXLocalePolicy.eventListTab.labels.map { "`\($0)`" }.joined(separator: " or ")
+                + "). The List Editors pane may be closed."
         case let .eventTabAmbiguous(count): return "Event List tab is ambiguous (\(count) matches)."
         case .eventTabStateUnavailable: return "Event List tab selection state is unavailable."
         case .eventTabActivationFailed: return "Could not activate the Event List tab."

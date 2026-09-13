@@ -147,11 +147,72 @@
       "probe_result": "ok: false",
       "probe_error": "Event List row 0, column Position has 0 cell children; expected 1.",
       "reading": "the failing row moved from 32 to 0 — the rows materialised before are empty now and the ones now on screen are filled"
+    },
+    {
+      "what": "the same three-note region read again with Logic relaunched in KOREAN",
+      "locale": "ko-KR",
+      "live_columns": [
+        "L",
+        "M",
+        "위치",
+        "상태",
+        "채널",
+        "번호",
+        "값",
+        "길이/정보"
+      ],
+      "canonical_keys_returned": [
+        "L",
+        "M",
+        "Position",
+        "Status",
+        "Ch",
+        "Num",
+        "Val",
+        "Length/Info"
+      ],
+      "rows": 3,
+      "num": [
+        60,
+        64,
+        67
+      ],
+      "val": [
+        "100",
+        "100",
+        "100"
+      ],
+      "ch": [
+        1,
+        1,
+        1
+      ],
+      "position": [
+        "1 1 1 1",
+        "1 1 4 203",
+        "1 2 4 165"
+      ],
+      "length_info": [
+        "0 0 3 202",
+        "0 0 3 202",
+        "0 0 3 202"
+      ],
+      "status": [
+        "노트",
+        "노트",
+        "노트"
+      ],
+      "reading": "the HEADERS are localised and the collector maps them onto canonical English keys; every value matches the en-US run exactly, except `Status`, whose VALUE is localised"
+    },
+    {
+      "what": "the Event List tab on a Korean Logic, before a region was selected",
+      "error": "Event List is at region level; event-level rows are unavailable.",
+      "reading": "the TAB resolved — the failure is about what is selected, not about finding the tab"
     }
   ],
-  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in the small regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.\n\nAND THERE IS A HARD LIMIT, measured in the same run. The table is VIEWPORT-MATERIALISED: a forty-note region fails at row 32 with `0 cell children`, and after scrolling six pages the failure moves to row 0. Only the rows on screen carry cells. No single read can see a region larger than the visible table, so a note manifest has to scroll and stitch — and the stitching is what the provider's `contiguous harvest with stable cell content` proof is about.",
+  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in the small regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.\n\nAND THERE IS A HARD LIMIT, measured in the same run. The table is VIEWPORT-MATERIALISED: a forty-note region fails at row 32 with `0 cell children`, and after scrolling six pages the failure moves to row 0. Only the rows on screen carry cells. No single read can see a region larger than the visible table, so a note manifest has to scroll and stitch — and the stitching is what the provider's `contiguous harvest with stable cell content` proof is about.\n\nAnd it is not English-only. Relaunched in Korean, the same region reads back through LOCALISED headers — `위치`, `상태`, `채널`, `번호`, `값`, `길이/정보` — which the collector maps onto the same canonical keys, and every value is identical to the en-US run. One thing IS localised in the data rather than the header: `Status` reads `노트`, so a consumer matching on status text has to go through the policy.",
   "limits": [
-    "Four proofs of eleven, and one of the remaining seven is now known to be HARD rather than merely unmeasured: contiguous harvest across a viewport-materialised table. Still unmeasured: filter-checkbox completeness, first/last row plus count/end completeness, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
+    "Five proofs of eleven, and one of the remaining six is now known to be HARD rather than merely unmeasured: contiguous harvest across a viewport-materialised table. Still unmeasured: filter-checkbox completeness, first/last row plus count/end completeness, mid-scan project stability, Desktop variant coverage, and Logic version drift detection.",
     "The length/position agreement is arithmetic on ONE tempo (120 BPM) and one time signature, and the conversion assumes Logic's 960-ticks-per-beat display. It was not re-measured at another tempo, and a tempo change mid-region was not tried.",
     "Only regions this run created were read. A region with chords, overlapping notes, non-note events, or more rows than fit the visible table was not tried, and the count semantics proof is about all events in a region rather than the few written here.",
     "One locale (ko-KR), one host, one build. The probe is observation-only: it mints no identity proof and adds no MCP surface, so nothing here says the provider is safe to publish.",
