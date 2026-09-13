@@ -985,18 +985,49 @@ enum StockPluginCatalog {
                 readbackMethod: "ax_slider_axvalue",
                 tolerance: 0,
                 axDescription: parameter.axDescription,
+                // Split by what was MEASURED, not by band shape. On 2026-09-13 all twenty-four
+                // parameters were driven through `set_eq_band_verified` on one live Channel EQ:
+                // eighteen returned State A with `verified: true` and a rendering matching the
+                // request — Frequency `800 Hz`, Gain `+2.5 dB`, Q `1.40 ` — and six returned
+                // `increment_walk_no_progress`. The six are exactly the two CUT bands, on all
+                // three of their parameters.
+                //
+                // All twenty-four stay `.observed`, and the eighteen are NOT promoted to
+                // `.verified`, because `.verified` in this catalog means more than "a round trip
+                // succeeded once". `hasVerifiedParameterWriteObservation` requires a measured
+                // transition AND its reverse, and it requires the evidence to name the operation
+                // `logic_plugins.set_param_verified`. Today's sweep drove each parameter in one
+                // direction only, through `set_eq_band_verified`. Promoting on this evidence would
+                // have made the catalog claim bidirectional actuation nobody measured — the split
+                // below records what the sweep actually saw and leaves the promotion to a sweep
+                // that writes each parameter away from and back to its starting value.
                 availabilityState: .observed,
-                provenance: .observed(
-                    method: "ax_slider_range_and_increment_measurement",
-                    observedAt: "2026-08-30T00:00:00Z",
-                    logicVersion: nil,
-                    locale: nil,
-                    evidence: [
-                        "raw_axvalue_range_measured_live_2026-08-30",
-                        "axvalue_increment_walk_measured_live_2026-08-30",
-                        "no_write_round_trip_claimed",
-                    ]
-                )
+                provenance: parameter.bandName.hasSuffix("Cut")
+                    ? .observed(
+                        method: "ax_slider_range_and_increment_measurement",
+                        observedAt: "2026-08-30T00:00:00Z",
+                        logicVersion: nil,
+                        locale: nil,
+                        evidence: [
+                            "raw_axvalue_range_measured_live_2026-08-30",
+                            "axvalue_increment_walk_measured_live_2026-08-30",
+                            "no_write_round_trip_claimed",
+                            "write_round_trip_refused_live_2026-09-13_increment_walk_no_progress",
+                        ]
+                    )
+                    : .observed(
+                        method: "set_eq_band_verified_write_readback_round_trip",
+                        observedAt: "2026-09-13T00:00:00Z",
+                        logicVersion: "12.3",
+                        locale: nil,
+                        evidence: [
+                            "raw_axvalue_range_measured_live_2026-08-30",
+                            "axvalue_increment_walk_measured_live_2026-08-30",
+                            "one_way_write_round_trip_state_a_live_2026-09-13",
+                            "observed_rendering_matched_request_live_2026-09-13",
+                            "no_reciprocal_transition_measured",
+                        ]
+                    )
             )
         }
 

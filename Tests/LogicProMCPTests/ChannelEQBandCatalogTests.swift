@@ -58,16 +58,37 @@ struct ChannelEQBandCatalogTests {
         #expect(ChannelEQBandCatalog.parameter(bandName: "Low Cut", parameterName: "Order")?.declaredUnits == ["raw_ax_value"])
     }
 
-    @Test func stockCatalogRecordsMeasuredIncrementWalkCapabilityAndNoRoundTripEvidence() throws {
+    @Test func stockCatalogSplitsChannelEQEvidenceByWhatTheLiveSweepMeasured() throws {
         let channelEQ = try #require(StockPluginCatalog.entry(id: "logic.stock.effect.channel_eq"))
         #expect(channelEQ.safeWriteCapabilities == .parameterWriteReadback)
         #expect(channelEQ.parameters.count == 24)
+
+        // The 2026-09-13 sweep drove all twenty-four through `set_eq_band_verified`. Eighteen
+        // returned State A; six refused with `increment_walk_no_progress`, and those six are
+        // exactly the two Cut bands on all three of their parameters. Counting both sides pins
+        // the split: an evidence string copied onto the wrong parameters moves one of these
+        // counts, which asserting only "some parameter carries the round-trip record" would not.
+        let roundTripped = channelEQ.parameters.filter {
+            $0.provenance.evidence.contains("one_way_write_round_trip_state_a_live_2026-09-13")
+        }
+        let refused = channelEQ.parameters.filter {
+            $0.provenance.evidence.contains("write_round_trip_refused_live_2026-09-13_increment_walk_no_progress")
+        }
+        #expect(roundTripped.count == 18)
+        #expect(refused.count == 6)
+        #expect(Set(roundTripped.map(\.id)).isDisjoint(with: Set(refused.map(\.id))))
+        #expect(refused.allSatisfy { $0.id.contains("cut") })
+
         for parameter in channelEQ.parameters {
             #expect(parameter.writeMethod == "ax_slider_increment_walk")
-            #expect(parameter.provenance.observedAt == "2026-08-30T00:00:00Z")
             #expect(parameter.provenance.evidence.contains("raw_axvalue_range_measured_live_2026-08-30"))
             #expect(parameter.provenance.evidence.contains("axvalue_increment_walk_measured_live_2026-08-30"))
+            // A one-way State A is not the bidirectional actuation `.verified` asserts here.
+            // `hasVerifiedParameterWriteObservation` would reject these anyway; this says the
+            // catalog does not try, so a later loosening of that gate cannot silently promote them.
+            #expect(parameter.availabilityState == .observed)
             #expect(!parameter.provenance.evidence.contains("parameter_write_readback"))
+            #expect(!parameter.provenance.evidence.contains { $0.hasPrefix("observed_transition=") })
         }
     }
 }
