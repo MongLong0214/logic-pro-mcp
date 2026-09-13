@@ -209,6 +209,55 @@ extension AccessibilityChannel {
 
         let baseExtras: [String: Any] = ["requested": tempoValue]
 
+        // WHY THIS READS A MODAL BEFORE AND AFTER. Every success branch below verifies by reading
+        // the SAME tempo field it just typed into, and a field holding the typed text is not the
+        // same fact as Logic having applied it. Measured live 2026-09-14 on Logic 12.3: with TWO
+        // tempo events in the project, typing 144 left the field reading 144, the tempo map
+        // unchanged at 120 on both rows, and a modal `경고` alert on screen saying
+        // "여러 개의 템포 이벤트가 발견되었습니다! 템포를 더 편집하려면 템포 목록 편집기를
+        // 사용하십시오." — Logic refused the edit and said so, and this operation answered
+        // State A `verified: true`. With ONE tempo event the same call moves the map and raises no
+        // alert, so the refusal is specific and observable.
+        //
+        // The before-reading matters as much as the after: an alert that was ALREADY up is not
+        // evidence about this write, and attributing it here would turn someone else's stuck
+        // dialog into this operation's failure.
+        let modalBeforeWrite = ModalReconciliation.classify(
+            readModalSignalsAndAlertTarget(runtime: runtime).signals
+        )
+        /// A blocking modal that was NOT there before the write. Its presence means Logic answered
+        /// the write with a dialog, so nothing this function can read from the tempo field is a
+        /// statement about the project's tempo.
+        func modalRaisedByThisWrite() -> ModalReconciliation.BlockingModalKind? {
+            let after = ModalReconciliation.classify(
+                readModalSignalsAndAlertTarget(runtime: runtime).signals
+            )
+            guard after != .none, after != modalBeforeWrite else { return nil }
+            return after
+        }
+        /// State A, unless Logic put a dialog in front of it. This funnels every success branch
+        /// through one place so a new branch cannot be added that skips the check — the previous
+        /// shape had three independent `encodeStateA` sites.
+        func tempoSuccess(observed: Double, via: String) -> ChannelResult {
+            if let blocker = modalRaisedByThisWrite() {
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "Logic answered the tempo write with a modal dialog, so the tempo field's value is not evidence the tempo changed. A project with more than one tempo event refuses this edit and directs the caller to the Tempo List editor.",
+                    extras: baseExtras.merging([
+                        "observed_field_value": observed,
+                        "via": via,
+                        "write_attempted": true,
+                        "blocking_modal": AccessibilityChannel.reconcileKindLabel(blocker),
+                        "modal_raised_by_this_write": true,
+                        "safe_to_retry": false,
+                    ]) { _, new in new }
+                ))
+            }
+            return .success(HonestContract.encodeStateA(
+                extras: baseExtras.merging(["observed": observed, "via": via]) { _, new in new }
+            ))
+        }
+
         if let slider = AXLogicProElements.findTempoSlider(runtime: runtime) {
             guard let position = AXHelpers.getPosition(slider, runtime: runtime.ax),
                   let size = AXHelpers.getSize(slider, runtime: runtime.ax) else {
@@ -232,9 +281,7 @@ extension AccessibilityChannel {
 
             if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
                abs(finalValue - tempoValue) < 1.0 {
-                return .success(HonestContract.encodeStateA(
-                    extras: baseExtras.merging(["observed": finalValue, "via": "slider"]) { _, new in new }
-                ))
+                return tempoSuccess(observed: finalValue, via: "slider")
             }
 
             AXMouseHelper.pressEscape(runtime: mouseRuntime)
@@ -250,12 +297,7 @@ extension AccessibilityChannel {
             }
             if let afterIncrement = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double {
                 if abs(afterIncrement - tempoValue) < 1.0 {
-                    return .success(HonestContract.encodeStateA(
-                        extras: baseExtras.merging([
-                            "observed": afterIncrement,
-                            "via": "slider-increment"
-                        ]) { _, new in new }
-                    ))
+                    return tempoSuccess(observed: afterIncrement, via: "slider-increment")
                 }
 
                 // Logic treats a numeric AXValue write as a one-BPM nudge. The
@@ -273,12 +315,7 @@ extension AccessibilityChannel {
                     guard let next = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double else { break }
                     observed = next
                     if abs(observed - tempoValue) < 1.0 {
-                        return .success(HonestContract.encodeStateA(
-                            extras: baseExtras.merging([
-                                "observed": observed,
-                                "via": "slider-value-nudge"
-                            ]) { _, new in new }
-                        ))
+                        return tempoSuccess(observed: observed, via: "slider-value-nudge")
                     }
                     if observed == previous { break }
                 }

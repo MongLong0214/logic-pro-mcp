@@ -4626,3 +4626,101 @@ func issue604DismissalSummaryReportsTheObservation() {
     #expect(issued >= required - 1,
             "issued \(issued) of about \(required) detents — the loop gave up early")
 }
+
+// MARK: - #304 set_tempo must not read its own typed text as the project's tempo
+
+/// The tempo fixture, plus a one-button top-level `AXDialog` alert that is either already present
+/// or is raised by the write. Logic raises exactly this shape when a project holds more than one
+/// tempo event: measured live 2026-09-14, the field kept the typed 144, the tempo map stayed at
+/// 120 on both rows, and `경고` said to use the Tempo List editor instead.
+private func makeTempoFixtureWithAlert(
+    builder: FakeAXRuntimeBuilder,
+    tempoValue: Double,
+    alertPresent: Bool
+) -> (app: AXUIElement, slider: AXUIElement, alert: AXUIElement) {
+    let fixture = makeTempoSliderFixture(builder: builder, tempoValue: tempoValue)
+    let alert = builder.element(7190)
+    let alertButton = builder.element(7191)
+    builder.setAttribute(alert, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(alert, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(alert, kAXModalAttribute as String, true)
+    builder.setChildren(alert, [alertButton])
+    builder.setAttribute(alertButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(alertButton, kAXTitleAttribute as String, "확인")
+
+    // The arrange window must answer AXModal EXPLICITLY. A window that returns no value for it
+    // retires the whole poll as unreadable, and an unreadable poll finds no alert — the fixture
+    // would then pass for the wrong reason.
+    let window = builder.element(7101)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setAttribute(
+        fixture.app,
+        kAXWindowsAttribute as String,
+        alertPresent ? [alert, window] : [window]
+    )
+    return (fixture.app, fixture.slider, alert)
+}
+
+@Test func testSetTempoRefusesWhenLogicAnswersTheWriteWithAnAlert() async {
+    // The defect this pins: every success branch verified by reading the SAME field it had just
+    // typed into. A field holding "144" is not the project holding 144 — and when Logic refuses,
+    // it says so with a modal rather than by changing the field back. Reported State A with
+    // verified:true while the tempo map did not move.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoFixtureWithAlert(builder: builder, tempoValue: 120.0, alertPresent: false)
+    let alert = fixture.alert
+    let window = builder.element(7101)
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                // The write "lands" in the field, and raises the alert — Logic's actual answer.
+                guard element == fixture.slider, attribute == kAXValueAttribute as String else { return false }
+                builder.setAttribute(fixture.slider, kAXValueAttribute as String, value)
+                builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [alert, window])
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "144"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(!((obj["success"] as? Bool)!))
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect((obj["modal_raised_by_this_write"] as? Bool)!)
+    #expect(obj["blocking_modal"] as? String == "informational_alert")
+    #expect((obj["write_attempted"] as? Bool)!)
+    // The field's reading is REPORTED, under a name that says it is the field's and not the
+    // project's. Dropping it would hide what the operation actually saw.
+    #expect((obj["observed_field_value"] as? Double) == 144)
+    #expect(obj["observed"] == nil)
+    #expect(obj["verified"] == nil)
+}
+
+@Test func testSetTempoDoesNotBlameAnAlertThatWasAlreadyThere() async {
+    // The other half, and the one that keeps this from becoming a new false negative: a dialog
+    // someone else left up is not evidence about THIS write. Without the before-reading, any
+    // operation run while a stray alert sits on screen would report its own write as refused.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoFixtureWithAlert(builder: builder, tempoValue: 120.0, alertPresent: true)
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: nudgeResponsiveLogicRuntime(builder, app: fixture.app)
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "130"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(result.isSuccess)
+    #expect((obj["verified"] as? Bool)!)
+    #expect((obj["observed"] as? Double) == 130)
+    #expect(obj["modal_raised_by_this_write"] == nil)
+    #expect(obj["blocking_modal"] == nil)
+}

@@ -1,0 +1,126 @@
+{
+  "id": "2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "transport.set_tempo on a project holding more than one tempo event",
+  "question": "set_tempo verifies by reading the tempo field it just typed into. Is a field holding the typed value the same fact as Logic having applied it?",
+  "verdict": "wall",
+  "issues": [
+    "#304"
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual, and it mutates: with ONE tempo event, drive `logic_transport.set_tempo` and read the Tempo list. Then place the playhead somewhere sub-bar, press `새로운 템포 이벤트 생성` so the project holds TWO, drive `set_tempo` again, and read the Tempo list AND Logic's window list. Dismiss the alert, raise the arrange window by title, and undo.",
+    "expected": "With one event the call answers State A and the Tempo list moves. With two it answers State C `ax_write_failed` carrying `blocking_modal: informational_alert` and `modal_raised_by_this_write: true`, the Tempo list does NOT move, and a modal `경고` window is present. Before the fix the second case answered State A with `verified: true`."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift",
+    "Sources/LogicProMCP/Accessibility/ModalReconciliation.swift"
+  ],
+  "evidence": [],
+  "method": "Driven against a release binary talking to live Logic. The two conditions differ in ONE thing — how many tempo events the project holds — and the same call is made in both, so the reading separates the operation from the project state. The effect was read from the Tempo list, a surface independent of the field the operation writes and verifies against, and Logic's window list was read in the same pass so the alert is an observation rather than an inference. The project was returned to one event at 120 and re-read to confirm.",
+  "observations": [
+    {
+      "condition": "ONE tempo event",
+      "requested": 126,
+      "state": "A",
+      "observed": 126,
+      "tempo_list_after": [
+        [
+          "1 1 1 1",
+          "126"
+        ]
+      ],
+      "modal_windows": 0
+    },
+    {
+      "condition": "TWO tempo events, BEFORE the fix",
+      "requested": 144,
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "observed": 144,
+      "tempo_list_after": [
+        [
+          "1 1 1 1",
+          "120"
+        ],
+        [
+          "5 3 2 60",
+          "120"
+        ]
+      ],
+      "modal_windows": 1,
+      "alert_text": "여러 개의 템포 이벤트가 발견되었습니다! 템포를 더 편집하려면 템포 목록 편집기를 사용하십시오.",
+      "alert_buttons": [
+        "확인"
+      ],
+      "note": "a verified:true answer for a write Logic refused and said so about"
+    },
+    {
+      "condition": "TWO tempo events, AFTER the fix",
+      "requested": 144,
+      "state": "C",
+      "success": false,
+      "error": "ax_write_failed",
+      "observed_field_value": 144,
+      "observed": null,
+      "verified": null,
+      "blocking_modal": "informational_alert",
+      "modal_raised_by_this_write": true,
+      "write_attempted": true,
+      "safe_to_retry": false,
+      "tempo_list_after": [
+        [
+          "1 1 1 1",
+          "120"
+        ],
+        [
+          "5 3 2 60",
+          "120"
+        ]
+      ]
+    },
+    {
+      "condition": "ONE tempo event, AFTER the fix",
+      "requested": 126,
+      "state": "A",
+      "observed": 126,
+      "tempo_list_after": [
+        [
+          "1 1 1 1",
+          "126"
+        ]
+      ],
+      "note": "the refusal is specific; the working case still works"
+    },
+    {
+      "what": "what the alert did to everything after it",
+      "logic_edit_undo": "State C element_not_found, 6 attempts, no effect",
+      "file_import_audio_panel": "menu click returned, no panel in 78 s of polling",
+      "tempo_row_delete_paths_tried": [
+        "the pane's own 삭제 button (AX code 0, no effect)",
+        "편집 > 삭제",
+        "a real Delete keypress with the row AX-selected"
+      ],
+      "all_recovered_after": "clicking the alert's 확인 button"
+    }
+  ],
+  "conclusion": "A tempo field holding the typed value is NOT the project holding that tempo. On a project with more than one tempo event, Logic refuses the control-bar tempo edit and says so with a single-button modal alert directing the caller to the Tempo List editor — and `set_tempo` answered State A with `verified: true` and `observed: 144` while both tempo rows stayed at 120. Every success branch verified against the same field it had written, which cannot tell a refusal from a success. The fix reads Logic's modal state before and after the write and refuses when a blocking modal appeared that was not there before; the before-reading is what keeps someone else's stuck dialog from being blamed on this write. The alert also wedged everything that followed it — undo, the audio-import panel, and three separate delete paths — which is why several earlier readings in this session were taken against a blocked Logic.",
+  "limits": [
+    "The fix makes the operation HONEST, not capable. A project with two tempo events still cannot have its tempo written through this operation; it now says so instead of claiming success. Whether the Tempo List editor offers a writable path was not measured.",
+    "It does not DISMISS the alert. The refusal reports the blocker, and clearing it is the preflight reconciler's job on the next operation; whether that actually happens on this path was not driven.",
+    "`transport.set_tempo` is the only operation measured. Any other operation whose readback is of the control it wrote has the same exposure and was NOT swept — this record is about one site, not a census.",
+    "One locale. The alert was identified by its shape — a top-level AXDialog with exactly one button — and never by its Korean text, so the fix is locale-independent, but that was reasoned rather than measured on a second locale.",
+    "Two tempo events, both at 120 bpm. Nothing here says what happens with three, or with events at different tempos."
+  ],
+  "supersedes": null
+}
