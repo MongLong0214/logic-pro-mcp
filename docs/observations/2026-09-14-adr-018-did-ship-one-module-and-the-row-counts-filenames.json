@@ -1,0 +1,85 @@
+{
+  "id": "2026-09-14-adr-018-did-ship-one-module-and-the-row-counts-filenames",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "The five files under Sources/LogicProMCP/HostParameters and their references outside that directory",
+  "question": "The roadmap says ADR-018's four modules each count zero references outside their own directory, which reads as an ADR that shipped nothing. Is that what the tree says?",
+  "verdict": "works",
+  "issues": [
+    "#306",
+    "#299"
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "ls Sources/LogicProMCP/HostParameters/ ; then for each TOP-LEVEL SYMBOL declared in those files (not each filename), grep -rl it under Sources/ and subtract the files inside that directory.",
+    "expected": "Five files. `HostParameterGate.swift` declares `HostWriteRejection` and `HostParameterPlane.swift` declares `PluginParameterProvider`, so a grep for either FILENAME finds zero symbols anywhere. Four of the five symbols have zero external references; `ControlsViewBooleanParameterWriter` has one file — and `locate`, `prepareView` and `pressAndVerify` each have an external caller."
+  },
+  "depends": [
+    "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift"
+  ],
+  "evidence": [],
+  "method": "Counted by SYMBOL rather than by filename, because the roadmap's list turned out to be a list of filenames. For each top-level declaration in the directory, every file under `Sources/` containing it was listed and the ones inside the directory subtracted. The three entry points of the one module with an external reference were then counted individually, so 'referenced' could be told apart from 'called to do work'.",
+  "observations": [
+    {
+      "what": "files in Sources/LogicProMCP/HostParameters",
+      "count": 5,
+      "files": [
+        "ControlsViewBooleanParameterWriter.swift",
+        "ControlsViewParameterEnumerator.swift",
+        "HostParameterGate.swift",
+        "HostParameterPlane.swift",
+        "PluginCapabilityManifest.swift"
+      ]
+    },
+    {
+      "what": "two of the roadmap's four names are filenames whose symbol does not exist",
+      "HostParameterGate.swift": "declares `enum HostWriteRejection`",
+      "HostParameterPlane.swift": "declares `enum PluginParameterProvider`",
+      "grep_for_either_filename_as_a_symbol": 0
+    },
+    {
+      "symbol": "HostWriteRejection",
+      "external_reference_files": 0
+    },
+    {
+      "symbol": "PluginParameterProvider",
+      "external_reference_files": 0
+    },
+    {
+      "symbol": "PluginCapabilityManifest",
+      "external_reference_files": 0
+    },
+    {
+      "symbol": "ControlsViewParameterEnumerator",
+      "external_reference_files": 0
+    },
+    {
+      "symbol": "ControlsViewBooleanParameterWriter",
+      "external_reference_files": 1,
+      "referencing_file": "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift",
+      "externally_called_entry_points": {
+        "locate": 1,
+        "prepareView": 1,
+        "pressAndVerify": 1
+      },
+      "also_referenced_for": "its `LocatorFailure.sliderNotActuable` and `.popupNotAddressableByName` observation strings, which the refusal envelopes quote"
+    }
+  ],
+  "conclusion": "ADR-018 did NOT ship nothing. Four of the five symbols under `HostParameters` have zero references outside that directory, but the fifth — `ControlsViewBooleanParameterWriter` — is on the live write path: `locate`, `prepareView` and `pressAndVerify` each have an external caller in `AccessibilityChannel+VerifiedPlugins.swift`. That is the Controls-view checkbox writer the roadmap elsewhere calls 'the path that works', and it is what makes `set_param_verified` reach Compressor threshold at all. The row reads as it does because it counts FILENAMES: two of its four names declare no symbol of that name, so grepping for them finds zero everywhere and looks like deadness.",
+  "limits": [
+    "A reference count is not a behaviour measurement. This says the code is reached, not that it works; what it does live is measured elsewhere (Compressor threshold reaching State A).",
+    "`Sources/` only. Test references were excluded deliberately — a module reachable only from tests is the deadness the row was describing, and counting them would hide it.",
+    "Top-level declarations only. A nested type used externally under a different spelling would not be counted here.",
+    "This does not say the other four are dead code that should go. It says they have no caller today, which is what the row meant and what remains true for them."
+  ],
+  "supersedes": null
+}
