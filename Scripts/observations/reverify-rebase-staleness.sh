@@ -13,7 +13,9 @@ swift build -c release >/dev/null 2>&1 || { echo "REVERIFY FAIL: release build f
 BEFORE=$(stat -f %m "$B")
 
 # A rebase moves the mtime of a file whose content it reapplies unchanged.
-SRC=Sources/LogicProMCP/Qualification/ProductionReadinessContracts.swift
+# Any tracked Swift source compiled into the binary works here — the fixture is a file to touch,
+# not a subject. The previous pick went with the qualification subsystem on 2026-09-13.
+SRC=Sources/LogicProMCP/Server/ServerConfig.swift
 touch "$SRC"
 swift build -c release >/dev/null 2>&1
 AFTER=$(stat -f %m "$B")
