@@ -248,9 +248,42 @@
       "pitches": "exactly 40...79, forty distinct",
       "strict_probe": "ok: true, rows: 40",
       "reading": "the whole table materialised; the strict collector, which had thrown at row 32, then read every row in one pass. The action reported an error code and worked anyway."
+    },
+    {
+      "what": "a TWO HUNDRED note region, written to exceed the table at any single scroll position",
+      "notes_written": 200,
+      "record_sequence_verified": true,
+      "before_any_scroll": {
+        "total_rows": 200,
+        "readable_rows": 32,
+        "window": [
+          0,
+          31
+        ]
+      },
+      "after_scroll_to_last_row": {
+        "total_rows": 200,
+        "readable_rows": 33,
+        "window": [
+          167,
+          199
+        ]
+      },
+      "reading": "the whole table did NOT materialise, unlike the forty-note case — forty nearly fits, two hundred does not"
+    },
+    {
+      "what": "the same two hundred rows after the list had been scrolled to the end and then back to row 0",
+      "readable_rows": 200,
+      "total_rows": 200,
+      "window": [
+        0,
+        199
+      ],
+      "conflicts_between_overlapping_reads": 0,
+      "values_match_what_was_written": true
     }
   ],
-  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in the small regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.\n\nTHE TABLE IS VIEWPORT-MATERIALISED, AND THAT IS NOT A WALL. A forty-note region first reads rows 0...31 and reports the other eight as `0 cell children`; scrolling moves the readable window, and two windows that overlap by 27 rows carry IDENTICAL values there. Performing `AXScrollToVisible` on the LAST row then materialised the whole table: forty of forty rows readable in one pass, pitches exactly 40...79 with no duplicates, and the strict collector — which had thrown at row 32 — read every row. So a note manifest does not need to stitch; it needs to ask for the last row first.\n\nAnd it is not English-only. Relaunched in Korean, the same region reads back through LOCALISED headers — `위치`, `상태`, `채널`, `번호`, `값`, `길이/정보` — which the collector maps onto the same canonical keys, and every value is identical to the en-US run. One thing IS localised in the data rather than the header: `Status` reads `노트`, so a consumer matching on status text has to go through the policy.",
+  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in the small regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.\n\nTHE TABLE IS VIEWPORT-MATERIALISED, AND THAT IS NOT A WALL. A forty-note region first reads rows 0...31 and reports the other eight as `0 cell children`; scrolling moves the readable window, and two windows that overlap by 27 rows carry IDENTICAL values there. Performing `AXScrollToVisible` on the LAST row then materialised the whole table: forty of forty rows readable in one pass, pitches exactly 40...79 with no duplicates, and the strict collector — which had thrown at row 32 — read every row. That held for forty rows because forty nearly fit. TWO HUNDRED does not: the same scroll left only 33 readable, at rows 167...199. What DID work was walking the table — after scrolling to the end and back to the start, all two hundred rows read in one pass, with values exactly matching what was written and no disagreement anywhere the reads overlapped. So a note manifest must traverse the table once; it cannot simply ask for the last row.\n\nAnd it is not English-only. Relaunched in Korean, the same region reads back through LOCALISED headers — `위치`, `상태`, `채널`, `번호`, `값`, `길이/정보` — which the collector maps onto the same canonical keys, and every value is identical to the en-US run. One thing IS localised in the data rather than the header: `Status` reads `노트`, so a consumer matching on status text has to go through the policy.",
   "limits": [
     "Seven proofs of eleven. Still unmeasured: filter-checkbox completeness, mid-scan project stability, Desktop variant coverage, and Logic version drift detection.",
     "The length/position agreement is arithmetic on ONE tempo (120 BPM) and one time signature, and the conversion assumes Logic's 960-ticks-per-beat display. It was not re-measured at another tempo, and a tempo change mid-region was not tried.",
@@ -259,7 +292,7 @@
     "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works.",
     "The 32-row boundary is this window's size, not a constant. It was not re-measured at another window height, and whether Logic materialises a margin above and below the visible rows was not established.",
     "The host block first said `ko-KR`, copied from a block generated earlier in the day when Logic WAS Korean. Every reading here was taken with Logic in English. `Scripts/observation_host.py` produced the wrong value because it read the system locale rather than Logic's UI language; that is fixed, and this record is the one that caught it.",
-    "`AXScrollToVisible` returned -25206 and scrolled anyway. Nothing here establishes WHY the whole table then materialised — whether Logic renders every row once asked to reach the last, or whether forty rows simply fit after the scroll. A region large enough to exceed the table at any scroll position was not tried, and that is the case a manifest would actually have to survive."
+    "`AXScrollToVisible` returned -25206 and scrolled anyway. WHY the table then becomes fully materialised is not established: the readings show that scrolling to the end and back is sufficient for two hundred rows, not that it is sufficient for any size, and not which of the two scrolls does the work. A region larger than two hundred was not tried."
   ],
   "supersedes": null
 }
