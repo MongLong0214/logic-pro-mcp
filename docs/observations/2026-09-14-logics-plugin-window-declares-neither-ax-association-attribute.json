@@ -1,0 +1,65 @@
+{
+  "id": "2026-09-14-logics-plugin-window-declares-neither-ax-association-attribute",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "AXLinkedUIElement and AXServesAsTitleForUIElements across a live Logic plug-in editor window",
+  "question": "ADR-011 records these two attributes as NOT swept, after AXTitleUIElement was measured absent on every Compressor slider. Does either one pair a value-bearing control with the text that names it?",
+  "verdict": "partial",
+  "issues": [
+    "#299",
+    "#292"
+  ],
+  "surface": "plugin.native_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual. With a plug-in editor open, walk every descendant of that window and call AXUIElementCopyAttributeNames on each, counting how many declare `AXLinkedUIElement` and how many declare `AXServesAsTitleForUIElements`. Count the sliders separately from the whole tree so a zero among sliders can be told apart from a zero everywhere.",
+    "expected": "Zero, on both attributes, among the sliders AND among every other element in the window."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/ChannelEQBandCatalog.swift"
+  ],
+  "evidence": [],
+  "method": "A probe walked the open plug-in window to depth 12 and asked each element for its attribute NAME list, rather than reading the attributes and treating a failure as absence — a read that fails and an attribute that is not declared are different answers, and only the name list separates them. Slider counts are reported beside whole-tree counts so a zero among sliders cannot be mistaken for a blind probe.",
+  "observations": [
+    {
+      "window": "Absolute Zero (Channel EQ editor)",
+      "elements_walked": 70,
+      "elements_declaring_AXLinkedUIElement": 0,
+      "elements_declaring_AXServesAsTitleForUIElements": 0,
+      "sliders_declaring_either": 0
+    },
+    {
+      "what": "why Channel EQ does not need the pairing anyway",
+      "slider_descriptions": [
+        "Low Cut Frequency",
+        "Low Cut Order",
+        "Low Cut Q",
+        "Low Shelf Frequency"
+      ],
+      "reading": "its sliders carry their parameter name in AXDescription, which is why set_eq_band_verified can address them by name at all"
+    },
+    {
+      "what": "the Compressor was NOT reached, and why",
+      "attempt_1": "the #306 harness refuses with `ambiguous` — the Absolute Zero track holds TWO Compressors, at inserts 0 and 2, and the probe will not choose between two matching slots",
+      "attempt_2": "the four tracks that hold exactly one Compressor are ALL named `Studio Grand`, so a strip lookup by track name is ambiguous too",
+      "attempt_3": "`logic_plugins.set_param_verified` against the Compressor's own `plugin_insert_ref` refuses with `plugin_window_plugin_mismatch` because the Channel EQ editor is already open",
+      "attempt_4": "that editor's close button is not a direct child of its window and could not be pressed by title"
+    }
+  ],
+  "conclusion": "Logic's plug-in editor window declares NEITHER association attribute anywhere — 0 of 70 elements, sliders included. That is a reading about this window, and it is consistent with the 2026-09-10 finding that no Compressor slider declares `AXTitleUIElement`: the platform's control-to-label association mechanisms appear simply absent from Logic's plug-in views. It is NOT the measurement ADR-011 asks for, because the window measured was the Channel EQ's, whose sliders carry their names in AXDescription and never needed pairing. The Compressor was not reached; four separate routes to it refused, each for a reason worth writing down.",
+  "limits": [
+    "THE COMPRESSOR WAS NOT MEASURED. This record must not be read as closing ADR-011's open sweep. What it establishes is that one Logic plug-in window declares neither attribute anywhere, which makes the Compressor answering differently unlikely — and unlikely is not measured.",
+    "One window, one plug-in, one host, one locale. Depth 12.",
+    "Attribute NAME lists only. An attribute declared but empty, or one that appears only after some interaction, would read the same as absent here — though a zero in the name list is a stronger absence than a failed read.",
+    "The four refusals are reported as operational facts, not as defects. Each is a component refusing to choose between ambiguous targets, which is the behaviour this repository wants.",
+    "`AXServesAsTitleForUIElements` was also checked on static text and text fields, not only sliders, and found on none — but the Compressor's parameter NAMES live in text fields, so that half of the question is precisely the one still unmeasured."
+  ],
+  "supersedes": null
+}
