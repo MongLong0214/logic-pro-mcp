@@ -4692,7 +4692,7 @@ private func makeTempoFixtureWithAlert(
     let obj = decodeAccessibilityJSON(result.message)
     #expect(!result.isSuccess)
     #expect(!((obj["success"] as? Bool)!))
-    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["error"] as? String == "readback_lost_after_write")
     #expect(obj["blocking_modal"] as? String == "informational_alert")
     // An annotation, not a causal claim. This says only that the same blocker was not already
     // there — the refusal itself rests on the blocker being present NOW, whoever raised it.
@@ -4725,12 +4725,53 @@ private func makeTempoFixtureWithAlert(
 
     let obj = decodeAccessibilityJSON(result.message)
     #expect(!result.isSuccess)
-    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["error"] as? String == "readback_lost_after_write")
     #expect(obj["blocking_modal"] as? String == "informational_alert")
     // The annotation earns its place here: the caller can tell this blocker predates the call, so
     // the thing to do is clear it rather than hunt for what this write broke.
     #expect((obj["blocker_present_before_write"] as? Bool)!)
+    #expect(obj["blocker_scan_before_write"] as? String == "complete")
     #expect(obj["verified"] == nil)
+}
+
+@Test func testSetTempoRefusesBeforeEscapeCanClearTheEvidence() async {
+    // A review found this hole and no test covered it: when the typed entry does not commit, the
+    // old order pressed Escape FIRST and scanned for a modal afterwards. Escape can clear the very
+    // alert that is the evidence, and every later scan then sees a clean Logic and licenses State A
+    // on a write Logic refused. This fixture makes the alert vanish the moment Escape is pressed,
+    // so only an observation taken BEFORE it can see anything.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoFixtureWithAlert(builder: builder, tempoValue: 120.0, alertPresent: true)
+    let window = builder.element(7101)
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { _, _, _ in false },
+            performActionHandler: { _, _ in true }
+        ),
+        controlBarMouseRuntime: AXMouseHelper.Runtime(
+            postMouseEvent: { _, _, _ in true },
+            // Escape (key code 53) clears the alert, exactly as it can live. Anything that reads
+            // the modal state after this point sees a clean Logic.
+            postKeyEvent: { code in
+                if code == 53 {
+                    builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [window])
+                }
+                return true
+            },
+            postUnicodeScalar: { _ in true },
+            sleepMicros: { _ in }
+        )
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "144"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(obj["error"] as? String == "readback_lost_after_write")
+    #expect(obj["blocking_modal"] as? String == "informational_alert")
 }
 
 @Test func testSetTempoRefusesWhenTheModalScanCannotComplete() async {
@@ -4756,7 +4797,11 @@ private func makeTempoFixtureWithAlert(
 
     let obj = decodeAccessibilityJSON(result.message)
     #expect(!result.isSuccess)
-    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["error"] as? String == "readback_lost_after_write")
     #expect(obj["blocking_modal"] as? String == "unreadable_modal_scan")
+    // An unreadable scan SAW nothing. Reporting it as a blocker sighting would put an observation
+    // in the response that nobody made, which is the shape of the defect this whole change is about.
+    #expect(!((obj["blocker_present_before_write"] as? Bool)!))
+    #expect(obj["blocker_scan_before_write"] as? String == "unreadable")
     #expect(obj["verified"] == nil)
 }

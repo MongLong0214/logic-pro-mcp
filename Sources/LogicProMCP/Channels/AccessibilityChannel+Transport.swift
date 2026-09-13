@@ -198,6 +198,13 @@ extension AccessibilityChannel {
         let kind: ModalReconciliation.BlockingModalKind
         let complete: Bool
 
+        /// True only when a blocker was actually SEEN. An incomplete scan saw nothing, and
+        /// reporting it as a blocker would put a sighting in the response that nobody made.
+        var observedBlocker: Bool { complete && kind != .none }
+
+        /// What the scan itself did, separate from what it found: `complete` or `unreadable`.
+        var scanLabel: String { complete ? "complete" : "unreadable" }
+
         /// Non-nil when this observation cannot license a verified success: either a blocker is
         /// present, or the scan did not complete and we do not know.
         var refusalLabel: String? {
@@ -269,17 +276,27 @@ extension AccessibilityChannel {
         func tempoSuccess(observed: Double, via: String) -> ChannelResult {
             let after = observeTempoModal(runtime: runtime)
             if let refusal = after.refusalLabel {
+                // `readback_lost_after_write`, NOT `ax_write_failed`. A review put it exactly: the
+                // stronger code asserts the write itself did not succeed, and that is not what was
+                // observed. What was observed is that the write was attempted and the outcome
+                // cannot be read — Logic may or may not have applied it. State C keeps the
+                // fail-closed posture (`success: false`), which matters more than the distinction
+                // between "failed" and "unverified" when a caller might otherwise carry on as
+                // though the tempo changed; the error code carries the distinction instead.
                 return .error(HonestContract.encodeStateC(
-                    error: .axWriteFailed,
-                    hint: "The tempo field's value is not evidence the tempo changed while Logic's modal state is blocked or unreadable. A project with more than one tempo event refuses this edit with an alert and directs the caller to the Tempo List editor.",
+                    error: .readbackLostAfterWrite,
+                    hint: "The tempo field's value is not evidence the tempo changed while Logic's modal state is blocked or unreadable, so the outcome of this write is unknown rather than known to have failed. A project with more than one tempo event refuses this edit with an alert and directs the caller to the Tempo List editor.",
                     extras: baseExtras.merging([
                         "observed_field_value": observed,
                         "via": via,
                         "write_attempted": true,
                         "blocking_modal": refusal,
-                        // Annotation, not a causal claim: this says whether the same blocker label
-                        // was already there, and nothing about what raised it.
-                        "blocker_present_before_write": modalBeforeWrite.refusalLabel != nil,
+                        // Annotation, not a causal claim: this says whether a blocker was already
+                        // OBSERVED before the write, and nothing about what raised it. It must not
+                        // be `refusalLabel != nil`, which is also true when the BEFORE scan merely
+                        // failed to read — that would report a blocker nobody saw.
+                        "blocker_present_before_write": modalBeforeWrite.observedBlocker,
+                        "blocker_scan_before_write": modalBeforeWrite.scanLabel,
                         "safe_to_retry": false,
                     ]) { _, new in new }
                 ))
@@ -331,13 +348,14 @@ extension AccessibilityChannel {
             // destroyed, and do not push further writes into a blocked Logic.
             if let blocker = observeTempoModal(runtime: runtime).refusalLabel {
                 return .error(HonestContract.encodeStateC(
-                    error: .axWriteFailed,
-                    hint: "The typed tempo entry did not commit and Logic's modal state is blocked or unreadable, so no further write was attempted and the field cannot be read as the project's tempo.",
+                    error: .readbackLostAfterWrite,
+                    hint: "The typed tempo entry did not commit and Logic's modal state is blocked or unreadable, so no further write was attempted and the outcome of the one already made is unknown rather than known to have failed.",
                     extras: baseExtras.merging([
                         "via": "slider",
                         "write_attempted": true,
                         "blocking_modal": blocker,
-                        "blocker_present_before_write": modalBeforeWrite.refusalLabel != nil,
+                        "blocker_present_before_write": modalBeforeWrite.observedBlocker,
+                        "blocker_scan_before_write": modalBeforeWrite.scanLabel,
                         "safe_to_retry": false,
                     ]) { _, new in new }
                 ))

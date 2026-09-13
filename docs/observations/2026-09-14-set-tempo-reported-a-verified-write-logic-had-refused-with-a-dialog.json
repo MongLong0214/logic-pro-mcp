@@ -144,6 +144,17 @@
         "disable the completeness check": "the unreadable-scan test goes red with State A verified:true observed 130",
         "disable the presence check": "the alert test goes red with State A verified:true observed 144",
         "restored": "10 of 10 green"
+      },
+      "round_2": {
+        "all_three_round_1_findings": "CLOSED",
+        "new_blocker_found": "State C `ax_write_failed` asserts the write itself did not succeed, and that is not what was observed — what was observed is that the write was attempted and the outcome cannot be read",
+        "fixed_to": "State C `readback_lost_after_write`. State C is kept because fail-closed matters more here than the failed/unverified distinction — a caller must not carry on as though the tempo changed — and the error code carries the distinction instead",
+        "also_found": "`blocker_present_before_write` was computed as `refusalLabel != nil`, which is also true when the BEFORE scan merely failed to read: it reported a blocker sighting nobody made. It is now `complete && kind != .none`, with a separate `blocker_scan_before_write` of `complete`/`unreadable`",
+        "test_gap_found": "none of the three tests protected the pre-Escape refusal — removing it left all three green. A fourth test now makes Escape clear the alert in the fixture, so only an observation taken before it can see anything",
+        "mutation_checks": {
+          "remove the pre-Escape refusal": "the new test goes red, error falls back to readback_mismatch with no blocker label",
+          "revert blocker_present_before_write to refusalLabel != nil": "the unreadable-scan test goes red"
+        }
       }
     }
   ],
@@ -154,7 +165,8 @@
     "Two tempo events, both at 120 bpm. Nothing here says what happens with three, or with events at different tempos.",
     "The exposure SHAPE was counted, the exposure was not. 21 of the 40 State A sites under `Sources/LogicProMCP/Channels` sit in the 10 files that never read Logic's modal state, and `mixer.set_volume` declares `verify_source: \"ax_slider\"` — it reads the fader it wrote, exactly the shape that made this defect. But a shape is not a defect: the REFUSAL here is specific (Logic objects to a control-bar tempo edit when the project holds more than one tempo event), and no other operation was driven to find out whether Logic ever answers it with a dialog. Nothing here says those 21 sites are wrong; it says a refusal of this kind could not be detected at them.",
     "It does not DISMISS the blocker. The refusal reports it and stops; clearing it is the preflight reconciler's job on the next operation, and whether that actually runs on this path was not driven.",
-    "The gate now refuses while ANY blocker is up, including one this call did not cause. That is a deliberate false-negative: a stuck dialog makes every tempo write report `ax_write_failed` with `blocker_present_before_write: true` until it is cleared. Refusing to verify through a blocked Logic is the honest half of the trade, and the annotation tells the caller which problem to fix."
+    "The gate refuses while ANY blocker is up, including one this call did not cause, and answers State C `readback_lost_after_write` — `success: false` with the outcome named unknown rather than failed. That is a deliberate false-negative in the fail-closed direction: a stuck dialog makes every tempo write refuse until it is cleared, and `blocker_present_before_write` tells the caller which problem to fix. A reviewer argued State B would carry the 'unverified' distinction more structurally; State B asserts `success: true`, which would be the more dangerous overclaim here.",
+    "One post-write scan, taken once. A modal published after that scan, or one that disappears during it, is not seen — the reviewer named both and neither was measured. The direct-write branch scans immediately after confirm with no wait, so an asynchronously raised alert can arrive too late for its label."
   ],
   "supersedes": null
 }
