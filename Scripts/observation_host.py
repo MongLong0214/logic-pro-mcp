@@ -47,7 +47,45 @@ def measured_os():
     return f"macOS {version} ({build})" if build else f"macOS {version}"
 
 
+# Logic's UI language, mapped onto the spellings the locale axis uses. The axis is the list in
+# `docs/locale/ui-labels.json`, and `check-observation-records.py` compares `host.locale` against it
+# EXACTLY, so a value outside it is credited to no locale at all.
+_LOGIC_LANGUAGE_TO_AXIS = {"en": "en-US", "ko": "ko-KR", "ja": "ja-JP", "de": "de-DE"}
+
+
+def _logic_ui_language():
+    """The language LOGIC is running in, or None if it has no explicit preference."""
+    try:
+        out = subprocess.run(["defaults", "read", "com.apple.logic10", "AppleLanguages"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    codes = re.findall(r"[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?", out.stdout)
+    return codes[0] if codes else None
+
+
 def measured_locale():
+    """The locale these records are ABOUT: the one Logic's interface is in.
+
+    This used to read the SYSTEM locale (`defaults read -g AppleLocale`), and the two are not the
+    same thing. Measured 2026-09-13 on this machine, `AppleLocale` was `ko_KR` while Logic had been
+    switched to English — so every record generated that day would have declared `ko-KR` for
+    readings taken off an English interface, and the per-locale coverage would have credited a gap
+    that was never closed. The whole point of the axis is which language the UI was in;
+    `check-observation-records.py` says so where it explains `known_locales`.
+
+    Falls back to the system locale only when Logic states no preference of its own, because then
+    Logic follows the system — and the fallback is the honest answer rather than a guess.
+    """
+    language = _logic_ui_language()
+    if language:
+        mapped = _LOGIC_LANGUAGE_TO_AXIS.get(language.split("-")[0].lower())
+        # An unmapped language is returned verbatim rather than forced onto the axis: the guard
+        # then refuses the record, which is what should happen when Logic is in a language the
+        # label sets do not carry.
+        return mapped or language
     try:
         out = subprocess.run(["defaults", "read", "-g", "AppleLocale"],
                              capture_output=True, text=True, timeout=5)

@@ -14,7 +14,7 @@
     "app": "Logic Pro",
     "version": "12.3",
     "build": "6674",
-    "locale": "ko-KR",
+    "locale": "en-US",
     "os": "macOS 26.3 (25D125)"
   },
   "reverify": {
@@ -156,7 +156,8 @@
     "Only regions this run created were read. A region with chords, overlapping notes, non-note events, or more rows than fit the visible table was not tried, and the count semantics proof is about all events in a region rather than the few written here.",
     "One locale (ko-KR), one host, one build. The probe is observation-only: it mints no identity proof and adds no MCP surface, so nothing here says the provider is safe to publish.",
     "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works.",
-    "The 32-row boundary is this window's size, not a constant. It was not re-measured at another window height, and whether Logic materialises a margin above and below the visible rows was not established."
+    "The 32-row boundary is this window's size, not a constant. It was not re-measured at another window height, and whether Logic materialises a margin above and below the visible rows was not established.",
+    "The host block first said `ko-KR`, copied from a block generated earlier in the day when Logic WAS Korean. Every reading here was taken with Logic in English. `Scripts/observation_host.py` produced the wrong value because it read the system locale rather than Logic's UI language; that is fixed, and this record is the one that caught it."
   ],
   "supersedes": null
 }
