@@ -1,13 +1,23 @@
 import Foundation
 
-/// The atlas diff as a qualification step.
+/// The atlas diff, and what a run should conclude from it.
 ///
 /// ADR-007 asks that a new Logic version's qualification include an atlas diff. `AtlasDiff` scores
-/// baselines; this decides what a qualification run should DO with the answer, and it deliberately
-/// adds no field to the attestation: the result is a `QualificationCase` like any other, so it
-/// lands in `total`/`passed`/`failed` and in the case manifest without a schema change. A new field
-/// would have needed a schema version, and a step whose whole claim is "this refuses" should not
-/// arrive by changing what every consumer must parse.
+/// baselines; this decides what to DO with the answer.
+///
+/// THE QUALIFICATION RUN THIS WAS BUILT TO FEED NO LONGER EXISTS. It was written to emit a
+/// `QualificationCase` that would land in an attestation's `total`/`passed`/`failed` and in a case
+/// manifest, deliberately without adding a field so no schema version was needed. That whole
+/// subsystem was removed on 2026-09-13 with ADR-001: `QualificationCase`,
+/// `QualificationAttestation`, `PromotionGate` and `QualificationTransport` are gone from the tree
+/// — measured, not assumed, by grepping `Sources/` for each (the only surviving mention of
+/// `QualificationCase` anywhere was this comment).
+///
+/// What survives is the decision itself, which is the part worth keeping: `outcome(armed:pairs:
+/// dropped:)` is pure, and `--probe-atlas-diff` in `MainEntrypoint` drives it against real captured
+/// pairs. So the logic is reachable and testable; what it has no consumer for is a case to emit
+/// into. When a qualification run exists again, that is the seam to wire, and the
+/// no-new-schema-field reasoning above is still the right reasoning for it.
 ///
 /// WHAT DECIDES WHETHER IT RUNS
 /// ----------------------------
