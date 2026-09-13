@@ -178,15 +178,36 @@ final class LogicMutationGate: @unchecked Sendable {
         self.timedOutReclaimGrace = timedOutReclaimGrace
     }
 
-    /// Whether a mutating operation currently holds the gate.
+    /// Whether a mutating operation holds the gate AND is still entitled to it.
     ///
-    /// Read-only and advisory: it is used to keep the background AX poller OUT of Logic's
-    /// accessibility surface while a foreground operation is driving it. Deliberately NOT a
-    /// synchronisation primitive — a caller that needs exclusion still calls `tryAcquire`.
-    var isHeld: Bool {
+    /// Read-only and advisory: it keeps the background AX poller OUT of Logic's accessibility
+    /// surface while a foreground operation is driving it. Deliberately NOT a synchronisation
+    /// primitive — a caller that needs exclusion still calls `tryAcquire`, and a mutation can
+    /// acquire the moment after this returns false.
+    ///
+    /// "Still entitled" is the half that matters, and the first version of this did not have it.
+    /// `activeOperation != nil` stays true for a holder the command deadline already ABANDONED —
+    /// a state this product reaches routinely, since a timed-out operation's envelope says
+    /// `mutation_gate: reclaimable_after_grace`. Reclamation happens inside `tryAcquire`, so if no
+    /// later mutation ever asks, nothing clears it: the poller would then skip every scheduled
+    /// cycle indefinitely and the cache would go stale with no error anywhere. Reusing the same
+    /// reclaimability rule means the poller resumes exactly when a successor would be allowed in.
+    func isHeldByEntitledHolder(now: Date = Date()) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return activeOperation != nil
+        guard activeOperation != nil, acquiredAt != nil else { return false }
+        return !isReclaimableLocked(now: now)
+    }
+
+    /// Whether the current holder could be taken from. Callers must hold `lock`.
+    ///
+    /// One rule, read by `tryAcquire` and by `isHeldByEntitledHolder`, so the poller cannot resume
+    /// on a different definition of "abandoned" than the one that actually lets a successor in.
+    private func isReclaimableLocked(now: Date) -> Bool {
+        guard activeOperation != nil, let since = acquiredAt else { return true }
+        if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace { return true }
+        if activeReclaimPolicy == .releaseOnly { return false }
+        return now.timeIntervalSince(since) >= staleHolderTTL
     }
 
     func tryAcquire(
@@ -403,7 +424,7 @@ actor LogicProServer {
         // asking for a refresh is not the background loop.
         var runtimeWithGate = pollerRuntime
         let pollerMutationGate = self.mutationGate
-        runtimeWithGate.mutationInFlight = { pollerMutationGate.isHeld }
+        runtimeWithGate.mutationInFlight = { pollerMutationGate.isHeldByEntitledHolder() }
         self.poller = StatePoller(
             axChannel: axChannel,
             cache: cache,
@@ -1255,17 +1276,33 @@ actor LogicProServer {
     ) -> Bool {
         let due = interval ?? orphanSweepInterval
         let manager = FileManager.default
-        if let attributes = try? manager.attributesOfItem(atPath: markerURL.path),
-           let sweptAt = attributes[.modificationDate] as? Date,
-           now.timeIntervalSince(sweptAt) < due {
-            return false
+
+        // What is at that path is not automatically ours. It sits at a predictable, uid-derived
+        // name in a directory this process does not own, so anything there is INPUT: a directory,
+        // a symlink, or a file belonging to somebody else. Take it only if it is a regular file
+        // this uid owns; otherwise replace it, and if it cannot be replaced, do not sweep.
+        var info = stat()
+        if lstat(markerURL.path, &info) == 0 {
+            let isOurRegularFile = (info.st_mode & S_IFMT) == S_IFREG && info.st_uid == getuid()
+            if isOurRegularFile {
+                let sweptAt = Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec))
+                let elapsed = now.timeIntervalSince(sweptAt)
+                // `elapsed < due` alone is not "recently swept": a marker stamped in the FUTURE
+                // gives a NEGATIVE elapsed, which satisfies that comparison forever and silences
+                // the sweep for good. A timestamp ahead of now is not a reading about the past.
+                if elapsed >= 0, elapsed < due { return false }
+            } else if (try? manager.removeItem(at: markerURL)) == nil {
+                return false
+            }
         }
+
         // Claim it BEFORE sweeping. A sweep that stamped the marker on completion would let every
-        // server started during a slow sweep start its own.
-        if manager.fileExists(atPath: markerURL.path) {
-            try? manager.setAttributes([.modificationDate: now], ofItemAtPath: markerURL.path)
-        } else {
-            manager.createFile(atPath: markerURL.path, contents: Data())
+        // server started during a slow sweep start its own. A claim that FAILS means the throttle
+        // is not in force, so the sweep is skipped rather than run by everyone — this is
+        // housekeeping, and the honest failure direction is to do less of it, not more.
+        guard manager.createFile(atPath: markerURL.path, contents: Data(),
+                                 attributes: [.posixPermissions: 0o600]) else {
+            return false
         }
         return true
     }
