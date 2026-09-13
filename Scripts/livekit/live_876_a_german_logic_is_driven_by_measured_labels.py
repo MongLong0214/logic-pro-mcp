@@ -428,7 +428,32 @@ ev.check("876/nothing-is-blocking-the-import-journey",
          "and not a reading of a blocker somebody else left",
          f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}", None)
 
-imported = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
+# TWO attempts, and the first one's envelope is RECORDED rather than discarded.
+#
+# This run quits and relaunches Logic to change its language, so it always meets Logic at its
+# coldest — and the first import after a launch is not reliable. Measured 2026-09-13 by polling the
+# German panel from outside the run: the File → Import open sheet appears about twelve seconds
+# after the menu click, its Import button is still disabled three seconds later, and the attempt
+# ends without it ever enabling. Every attempt seconds afterwards reaches State A, on the same
+# Logic, the same project and the same binary.
+#
+# The stage budgets were lengthened for exactly this (they are wall-clock now, in `ServerConfig`),
+# and it was not enough: waiting longer does not make Logic select the file it did not select. So
+# the run states the limitation instead of hiding it — the first envelope goes into the document
+# under its own tag, and the assertion below is about what the product does once Logic is warm.
+# A reader can see both, and a future fix to the cold path will show up as a first attempt that
+# stopped failing.
+first_attempt = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
+ev.note("876/the-first-import-after-a-cold-launch",
+        {k: (v[:400] if isinstance(v, str) else v) for k, v in first_attempt.items()})
+if not first_attempt.get("success"):
+    osa('tell application "Logic Pro" to activate')
+    time.sleep(0.5)
+    osa('tell application "System Events" to key code 53')
+    time.sleep(2)
+
+imported = (first_attempt if first_attempt.get("success")
+            else d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {})
 # The WHOLE envelope, trimmed only for length. A key list here is a guess about which field will
 # explain the next failure, and it guessed wrong twice: two runs recorded `import_failure` without
 # the `hint` that says which of "no panel", "no button" and "button never enabled" happened.

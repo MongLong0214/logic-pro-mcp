@@ -33,15 +33,36 @@ struct ServerConfig: Sendable {
     // button wait went to 30s under a 30s script bound and the envelope changed from "the Import
     // button stayed disabled" to "AppleScript error: timedOut". `record_sequence` carries a 300s
     // server deadline, so this sits well inside it.
-    static let midiImportAppleScriptTimeout: TimeInterval = 60.0
+    static let midiImportAppleScriptTimeout: TimeInterval = 90.0
 
-    /// How long `midi.import_file` waits for the Import button to become enabled.
-    ///
-    /// MUST stay below `midiImportAppleScriptTimeout`: this is one stage of the script, and a
-    /// stage that outlasts the script it runs in cannot report what it saw — the child is killed
-    /// and the caller is told the script timed out instead of which stage stalled.
-    /// `midiImportButtonEnableBudgetIsInsideTheScriptBound` pins the ordering.
+    // The script's stages, each a WALL-CLOCK budget rather than a count of polling turns. A turn's
+    // cost is Logic's, not ours — every one of these loops walks a window list — so a fixed count
+    // buys a different amount of waiting on a busy machine than on an idle one, which is the
+    // property that made all three of these too short on a freshly launched Logic.
+    //
+    // Each was measured on 2026-09-13 against a cold German Logic, one stage at a time, because
+    // every raise revealed the next stage behind it: the button wait first, then the file-open
+    // sheet. The panel itself did not appear until roughly twelve seconds after the menu click.
+    //
+    // Their SUM has to stay inside `midiImportAppleScriptTimeout` with room for the script's fixed
+    // delays, or a stage that stalls is killed with the script and the caller is told "the script
+    // timed out" instead of WHICH stage stalled. `midiImportStageBudgetsFitInsideTheScriptBound`
+    // pins that, and it is the check the first attempt at this raise would have failed.
+
+    /// Waiting for the File → Import → MIDI File open sheet to exist.
+    static let midiImportFileOpenSheetBudget: TimeInterval = 20.0
+    /// Waiting for the go-to-folder field to read our path back.
+    static let midiImportPathAcceptBudget: TimeInterval = 15.0
+    /// Waiting for the Import button to become enabled.
     static let midiImportButtonEnableBudget: TimeInterval = 25.0
+    /// Probing for the post-import tempo alert. Short ON PURPOSE and unlike the others: this one
+    /// asks whether a dialog is there, so its budget is paid by every successful import that has
+    /// no tempo alert to dismiss, not only by a stalled one.
+    static let midiImportTempoProbeBudget: TimeInterval = 3.0
+
+    /// The script's fixed `delay` statements outside the polling loops, summed. Stated so the
+    /// budget check below is about the whole script rather than only its loops.
+    static let midiImportFixedDelayAllowance: TimeInterval = 5.0
 
     // MARK: - Logic Pro
     /// Resolved bundle ID for the active Logic Pro variant (desktop or Creator Studio).

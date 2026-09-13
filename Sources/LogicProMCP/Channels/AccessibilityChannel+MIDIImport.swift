@@ -292,12 +292,17 @@ extension AccessibilityChannel {
                         return "MENU_ERROR: " & errMsg
                     end try
                 end tell
-                -- Poll for the file-open sheet to actually exist before typing
-                -- the path. Up to ~5s (20 x 250ms). The Open panel attaches as a
-                -- sheet (AXSheet) on the front window; some builds expose it as a
-                -- standalone window with a chooser-style name instead.
+                -- Poll for the file-open sheet to actually exist before typing the path. The Open
+                -- panel attaches as a sheet (AXSheet) on the front window; some builds expose it
+                -- as a standalone window with a chooser-style name instead.
+                --
+                -- A wall-clock budget from `ServerConfig`, not 20 turns of 250ms. On a freshly
+                -- launched Logic the sheet did not appear inside that ~5s and the import returned
+                -- `DIALOG_NOT_FOUND: file-open sheet did not appear` — accurate, and a failure at
+                -- first contact, which is the move an agent opens with.
+                set fileOpenDeadline to (current date) + \(Int(ServerConfig.midiImportFileOpenSheetBudget))
                 set fileOpenSeen to false
-                repeat 20 times
+                repeat while (current date) < fileOpenDeadline
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
                             if (exists sheet 1 of window 1) then
@@ -330,8 +335,11 @@ extension AccessibilityChannel {
                 delay 0.15
                 keystroke "/"
                 delay 0.4
+                -- Same reasoning as the sheet above: a wall-clock budget, because the cost of one
+                -- turn here is a window walk whose price Logic sets.
+                set goToDeadline to (current date) + \(Int(ServerConfig.midiImportPathAcceptBudget))
                 set goToSet to false
-                repeat 20 times
+                repeat while (current date) < goToDeadline
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         -- Only accept the assignment once the field actually
                         -- READS BACK our path, so a race that targets the wrong
@@ -477,12 +485,13 @@ extension AccessibilityChannel {
                         return "IMPORT_BTN_ERROR: the Import button stayed disabled for the whole wait after the path was accepted"
                     end if
                 end if
-                -- Poll for the tempo dialog (subrole AXDialog) before dismissing
-                -- rather than a fixed delay. ~3s (15 x 200ms).
-                -- A lingering Import open-panel also has subrole AXDialog, so
-                -- exclude it by name; only a genuine tempo alert counts.
+                -- Probe for the tempo alert before dismissing, rather than a fixed delay. This
+                -- budget is deliberately the short one: unlike the stages above it is paid by
+                -- every successful import that has NO tempo alert, so lengthening it would slow
+                -- the common path to make a rare one more patient.
+                set tempoDeadline to (current date) + \(Int(ServerConfig.midiImportTempoProbeBudget))
                 set tempoSeen to false
-                repeat 15 times
+                repeat while (current date) < tempoDeadline
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
                             repeat with candidateDialog in (every window whose subrole is "AXDialog")

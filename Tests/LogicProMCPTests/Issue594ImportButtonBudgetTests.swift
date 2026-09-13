@@ -16,14 +16,29 @@ struct Issue594ImportButtonBudgetTests {
         #expect(ServerConfig.midiImportButtonEnableBudget < ServerConfig.midiImportAppleScriptTimeout)
     }
 
-    /// The script bound must also leave room for the stages BESIDE the button wait — the sheet,
-    /// the path entry and the tempo prompt, whose summed per-iteration delays #449 measured at a
-    /// 17.2s floor. This is the half of that floor the button wait does not own.
-    @Test("the script bound leaves room for the stages beside the button wait")
-    func theScriptBoundLeavesRoomForTheOtherStages() {
-        let remaining = ServerConfig.midiImportAppleScriptTimeout
-            - ServerConfig.midiImportButtonEnableBudget
-        #expect(remaining >= 17.2)
+    /// The real invariant is not about one stage. Every stage can stall, and the script bound has
+    /// to outlast the WORST CASE — all of them plus the fixed delays between them — or a raise to
+    /// any single stage silently converts a precise failure into `AppleScript error: timedOut`.
+    /// Asserting only the button budget would have passed the version that did exactly that.
+    @Test("every stage budget plus the fixed delays fits inside the script bound")
+    func midiImportStageBudgetsFitInsideTheScriptBound() {
+        let worstCase = ServerConfig.midiImportFileOpenSheetBudget
+            + ServerConfig.midiImportPathAcceptBudget
+            + ServerConfig.midiImportButtonEnableBudget
+            + ServerConfig.midiImportTempoProbeBudget
+            + ServerConfig.midiImportFixedDelayAllowance
+        #expect(worstCase <= ServerConfig.midiImportAppleScriptTimeout,
+                "worst case \(worstCase)s exceeds the \(ServerConfig.midiImportAppleScriptTimeout)s script bound")
     }
 
+    /// #449's floor, restated against the stages that own it: the sheet, the path entry and the
+    /// tempo prompt are the loops that timeout measured at 17.2s, and the bound must outlast them
+    /// even if the button never stalls at all.
+    @Test("the stages beside the button still clear the measured floor")
+    func theStagesBesideTheButtonClearTheMeasuredFloor() {
+        let beside = ServerConfig.midiImportFileOpenSheetBudget
+            + ServerConfig.midiImportPathAcceptBudget
+            + ServerConfig.midiImportTempoProbeBudget
+        #expect(beside >= 17.2)
+    }
 }
