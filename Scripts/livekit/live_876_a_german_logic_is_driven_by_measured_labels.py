@@ -367,6 +367,14 @@ ev.note("876/goto", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]}
 # fixtures — running on the main thread before `start()` returned. That is fixed at the source.
 # `goto_position` now completes in 3.5s, and in 3.6s with this run's screen recorder going.
 
+after = ev.shot("876/after-the-playhead-moved", settle_region=band)
+ev.visual("876/the-playhead-readout-moved-on-a-german-logic",
+          before["file"], after["file"], band, subject=band_subject, expect_change=True,
+          why=f"the playhead was driven to bar {TARGET_BAR} through Logic's GERMAN Navigate \u25b8 Go To "
+              "\u25b8 Position\u2026 chain, and the control bar's position readout is where Logic shows "
+              "where the playhead is \u2014 a route reporting success while the readout still says bar 1 "
+              "would leave this band identical")
+
 seek_body = seek if isinstance(seek, dict) else {}
 reading = {
     "menu_bar": bar_items,
