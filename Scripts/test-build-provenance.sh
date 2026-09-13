@@ -14,7 +14,11 @@ ok() { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 no() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
 
 [ -x "$BIN" ] || { echo "CANNOT-TEST(2): no release binary — run swift build -c release"; exit 2; }
-SRC="Sources/LogicProMCP/Qualification/ProductionReadinessContracts.swift"
+# Any tracked Swift source in the binary works as the fixture — the test is about whether
+# build-provenance.sh binds by CONTENT, not about this file. The previous pick was deleted
+# with the qualification subsystem on 2026-09-13, which turned a real test into a permanent
+# CANNOT-TEST(2): a check that can no longer run reads exactly like one that passes.
+SRC="Sources/LogicProMCP/Server/ServerConfig.swift"
 [ -f "$SRC" ] || { echo "CANNOT-TEST(2): fixture source missing"; exit 2; }
 
 SAVED=$(mktemp) || exit 2

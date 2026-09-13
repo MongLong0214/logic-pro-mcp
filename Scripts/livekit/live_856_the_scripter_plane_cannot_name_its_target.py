@@ -70,11 +70,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evidence as E  # noqa: E402
 
 
-# The exclusion reason this run substantiates lives in the oracle table; the behaviour it describes
-# lives in the Scripter channel. Both are claimed because the reworded reason is only as good as the
-# reading below.
+# The behaviour this run reads lives in the Scripter channel, and that is what it claims.
+#
+# It used to also claim `Qualification/SemanticOracleTable.swift`, where the exclusion reason this
+# run substantiates was written. That file was removed on 2026-09-13 with the rest of the
+# qualification subsystem. The READING is untouched — it is of the live Scripter plane, not of the
+# table — so the harness keeps running and stops claiming a file that is not there.
 COVERS = [
-    "Sources/LogicProMCP/Qualification/SemanticOracleTable.swift",
     "Sources/LogicProMCP/Channels/ScripterChannel.swift",
 ]
 

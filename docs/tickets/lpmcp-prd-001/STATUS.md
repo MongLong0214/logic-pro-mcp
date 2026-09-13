@@ -142,3 +142,9 @@ but the static production-readiness contract still reads the `if:` deferral in t
 workflow text, so re-closing all four happens at #284 / T5 — which removes the
 deferral conditions (restoring the unconditional gate) and provisions the
 QUALIFICATION_* evidence/secrets.
+
+## 2026-09-13 — the contracts' subject was removed
+
+Nothing above is edited: it is a dated ledger and it was true on its dates. What changed is that the thing those contracts govern is gone. The qualification CLI, the attestation/waiver types, the managed fixtures under `Fixtures/qualification/`, `.github/qualification/waivers.json`, the `live-qualification-runner.py` skeleton and the release-workflow gates were all removed, and the `trusted-verifier` product with them.
+
+So R-REL / R-MATRIX / R-MUT / R-PROV / R-PUB / R-SEM are not OPEN debts any more; they have no subject. A future release gate would be new work with its own contracts, not a continuation of these. The paths cited in the entries above no longer resolve.
