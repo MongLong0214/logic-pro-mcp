@@ -1,7 +1,7 @@
 // A NAMED region of the arrange window, in window coordinates, emitted as JSON with the name it
 // matched — so a caller can state what the band IS, not only where it is.
 //
-//   ./ax_control_bar_band "<AXDescription>" [--role R]
+//   ./ax_control_bar_band "<AXDescription>" [--role R] [--include-dialogs]
 //                           [--min-width N] [--min-height N] [--max-width N] [--max-height N]
 //
 // An AXDescription is NOT unique. Measured on this window: "Control Bar" matches two elements,
@@ -104,9 +104,19 @@ let ax = AXUIElementCreateApplication(app.processIdentifier)
 // The loop only retries EMPTINESS. A window list that comes back populated but without the wanted
 // element is a real answer and is reported as one; retrying that would only make a genuine
 // refusal slow.
+// OPT-IN, and only opt-in. Logic's plug-in windows are AXDialog, not AXStandardWindow, so a band
+// inside one is unreachable by default — measured 2026-09-13 asking for the Channel EQ area, which
+// answered `no element with that exact AXDescription` while naming the window it had searched, the
+// arrange window. Widening the default set would change what every existing caller resolves
+// against; a caller that means a dialog says so.
+let includeDialogs = argv.contains("--include-dialogs")
+let wantedSubroles: Set<String> = includeDialogs
+    ? [kAXStandardWindowSubrole as String, kAXDialogSubrole as String, kAXFloatingWindowSubrole as String]
+    : [kAXStandardWindowSubrole as String]
+
 func standardWindowsNow() -> [AXUIElement] {
     ((attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []).filter {
-        str($0, kAXSubroleAttribute as String) == (kAXStandardWindowSubrole as String)
+        wantedSubroles.contains(str($0, kAXSubroleAttribute as String))
     }
 }
 var standardWindows = standardWindowsNow()

@@ -1289,19 +1289,26 @@ class Evidence:
 
     # -- capture ------------------------------------------------------------
 
-    def shot(self, tag, settle_region=None, window_title=None):
+    def shot(self, tag, settle_region=None, window_title=None, window=None):
         """Capture the Logic window, waiting until the pixels stop moving.
 
         `settle_region` is an (x, y, w, h) rectangle in window coordinates. Settling is judged on that
         region alone: Logic repaints level meters and clocks continuously, so a whole-window settle
         never converges and would silently record `settled: false` on a perfectly good run.
+
+        `window` is an already-resolved window dict, for the windows `window_title` CANNOT reach:
+        Logic's plug-in windows carry an EMPTY `kCGWindowName`, measured 2026-09-13 — the arrange
+        window answers `lpm-locale-campaign - Tracks` and the Channel EQ beside it answers `''`,
+        so a title lookup finds nothing while the window is plainly on screen. A caller that has
+        identified such a window some other way passes it here; how it identified it is the
+        caller's claim to make and to record.
         """
         # Keyed by harness as well as tag (#612 follow-up). Tags collide across harnesses —
         # `575/before` is used by three different files, `before-create` by two — so a document
         # rotated aside for later comparison used to name PNGs a later run had already replaced.
         # Archiving a document whose pixels are gone is the opposite of keeping a flake visible.
         path = os.path.join(self.dir, f"{self.name}__{tag.replace('/', '_')}.png")
-        win = logic_window(window_title)
+        win = window if window else logic_window(window_title)
         if not win:
             self.records.append({"kind": "capture", "tag": tag, "file": path,
                                  "window": None, "display": {"wholly_within": False},
