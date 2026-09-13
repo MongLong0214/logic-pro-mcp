@@ -311,7 +311,20 @@ enum SliderIncrementWalk {
         if rendered == requested { return true }
         guard let left = leadingNumber(in: rendered),
               let right = leadingNumber(in: requested) else { return false }
-        return left.number == right.number && trimmed(left.suffix) == trimmed(right.suffix)
+        guard left.number == right.number else { return false }
+        // An EMPTY rendered suffix matches whatever unit the caller asked in. Measured 2026-09-13
+        // (#292): Channel EQ renders Q as `0.88 ` — two decimals, a trailing space, and NO unit —
+        // while a request for `unit: "Q"` builds `0.88 Q`. Comparing the suffixes as equals made Q
+        // unreachable on every band in both directions, which is the failure this was written to
+        // end and instead reproduced one layer down.
+        //
+        // Two NON-EMPTY suffixes must still agree, and that is the clause that matters: `400 Hz`
+        // and `400 dB` stay different readings. When LOGIC renders no unit there is nothing to
+        // disagree with — the control does not express one, and the caller's `Q` is their label for
+        // the parameter rather than a rendering Logic ever produces.
+        let renderedUnit = trimmed(left.suffix)
+        if renderedUnit.isEmpty { return true }
+        return renderedUnit == trimmed(right.suffix)
     }
 
     /// Stdlib-only, because this file deliberately imports nothing.

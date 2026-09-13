@@ -589,4 +589,26 @@ struct SliderIncrementWalkTests {
         #expect(final.display == "-5.0 dB")
         #expect(steps == 127)
     }
+
+    @Test func aRenderingWithNoUnitMatchesTheUnitTheCallerAskedIn() {
+        // #292, measured 2026-09-13: Channel EQ renders Q as `0.88 ` — two decimals, a trailing
+        // space, no unit — while a request for `unit: "Q"` builds `0.88 Q`. Holding the suffixes to
+        // equality made Q unreachable on every band in both directions.
+        let reading = Reading(value: 40, display: "0.88 ")
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("0.88 Q"), read: { reading }, nudge: { _ in true }, budget: 4
+        )
+        #expect(outcome == .arrived(steps: 0, final: reading))
+    }
+
+    @Test func twoRenderedUnitsMustStillAgree() {
+        // The clause this narrows must keep its teeth. When LOGIC renders a unit, that unit is part
+        // of the reading: `400 Hz` and `400 dB` are different controls' answers and accepting one
+        // for the other would be the wrong-slider outcome this comparison exists to refuse.
+        let reading = Reading(value: 10, display: "400 Hz")
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("400 dB"), read: { reading }, nudge: { _ in true }, budget: 0
+        )
+        #expect(outcome == .budgetExhausted(steps: 0, last: reading))
+    }
 }
