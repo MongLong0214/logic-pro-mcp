@@ -1,0 +1,85 @@
+{
+  "id": "2026-09-13-the-send-slot-menu-does-not-mark-its-assignment-but-an-assigned-send-grows-a-level-knob",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "Channel-strip send slots: whether the slot's own menu mark reports the assignment, and what appears once a send is assigned",
+  "question": "Does anything at the SOURCE report which destination a send slot holds?",
+  "verdict": "partial",
+  "issues": [
+    "#291"
+  ],
+  "surface": "mixer.routing",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "swift Scripts/livekit/ax_routing_slot_menu_probe.swift --slot-prefix 'Send slot.' --assigned --marks",
+    "expected": "With a send assigned, the slot that owns it still marks the no-send entry: `marked items: 1` and the marked title is the no-send one."
+  },
+  "depends": [
+    "Scripts/livekit/ax_routing_slot_menu_probe.swift"
+  ],
+  "evidence": [],
+  "method": "The probe gained `--marks`, which reads `AXMenuItemMarkChar` on every item of the opened slot menu, and `--slot-index`, because a strip shows more than one send slot once one is assigned and `first` then answers about whichever the tree orders first. Readings were taken with no send assigned, then after selecting `Bus 12` by title, then after Edit > Undo. The assignment was confirmed from Logic's own undo entry, not from the slot, because the slot's readback is the thing in question.",
+  "observations": [
+    {
+      "what": "menu marks with no send assigned",
+      "marked": 1,
+      "title": "No Send",
+      "mark": "✓"
+    },
+    {
+      "what": "Logic's undo entry after selecting Bus 12",
+      "title": "Undo Change Send in Channel Strip"
+    },
+    {
+      "what": "a Send Level control in the tree, before the assignment",
+      "count": 0
+    },
+    {
+      "what": "a Send Level control in the tree, after the assignment",
+      "count": 1,
+      "role": "AXSlider",
+      "description": "send knob",
+      "help_prefix": "Send Level knob."
+    },
+    {
+      "what": "the right inspector strip after the assignment",
+      "description": "Aux 4",
+      "note": "the DESTINATION aux, not the sending strip"
+    },
+    {
+      "what": "send slots carrying the `Send slot.` help prefix, after the assignment",
+      "count": 3,
+      "naming_the_destination": 0,
+      "all_read": "send button"
+    },
+    {
+      "what": "menu marks read after the assignment, on the slot the probe opens",
+      "marked": 1,
+      "title": "No Send",
+      "mark": "✓"
+    },
+    {
+      "what": "menu marks read on the slot that OWNS the assignment — the `send button` immediately preceding the `send knob` — while the send existed",
+      "marked": 1,
+      "title": "No Send",
+      "mark": "✓",
+      "corroboration": "at the same instant the tree read `send button send knob` and Logic's undo entry read `Undo Change Send in Channel Strip`"
+    }
+  ],
+  "conclusion": "The send slot's menu marks its choice, and that mark does NOT report an assignment: with a send to `Bus 12` in place — corroborated at the same instant by the Send Level knob being present and by Logic's undo entry — the slot that owns it still marks the no-send entry. The checkmark is therefore CLOSED as a source-side readback for this ADR.\n\nWhat did come back positive is smaller and real: a Send Level slider exists only once a send is assigned. Its presence reports that a slot holds a send — not which destination — so it answers the earlier record's open question about that control and gives the graph one source-side fact it did not have.",
+  "limits": [
+    "The negative is about the MARK, not about the menu. The menu still offers 275 distinct destination titles and a selection still lands; nothing here weakens the write path.",
+    "`No Send` is this host's spelling. An implementation reading marks at all must go through AXLocalePolicy; the finding that the mark does not move is independent of the spelling.",
+    "One send, one strip, one project, one locale. The slot that owns the assignment was identified as the `send button` immediately preceding the `send knob`; that ordering was read from the tree in the same runs and is not an independently established rule.",
+    "Submenus were not opened. If Logic ever nested destinations, an unopened submenu's items are absent from the tree and a mark inside one would not have been seen — measured here, the 275 titles including `Bus 12` are top-level, so this does not affect the reading.",
+    "The probe moves the strip's Mute control as part of its protocol, so back-to-back invocations are not reading an unchanged strip."
+  ],
+  "supersedes": null
+}

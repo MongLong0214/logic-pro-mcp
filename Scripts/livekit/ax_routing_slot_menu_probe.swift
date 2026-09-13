@@ -74,7 +74,29 @@ let slotIndex: Int = {
     return value
 }()
 
+/// `--assigned` aims at the send slot that actually HOLDS the assignment.
+///
+/// Which one that is cannot be answered by the slots alone: every send slot reads `send button`
+/// with an empty value, and once one is assigned the strip opens further empty ones. What DOES
+/// distinguish it is the Send Level control, which exists only while a send is assigned — so the
+/// assigned slot is the `send button` immediately preceding the `send knob` in tree order.
+///
+/// This mattered: reading `first` after an assignment reported the no-send entry still marked, and
+/// the strip had grown from one slot to three, so that reading was about an EMPTY slot.
+let wantAssignedSlot = CommandLine.arguments.contains("--assigned")
+
+func assignedSendSlot() -> AXUIElement? {
+    var previousSlot: AXUIElement?
+    for element in sweep() {
+        let description = text(element, kAXDescriptionAttribute as String)
+        if description == "send knob" { return previousSlot }
+        if text(element, kAXHelpAttribute as String).hasPrefix(slotPrefix) { previousSlot = element }
+    }
+    return nil
+}
+
 func outputSlot() -> AXUIElement? {
+    if wantAssignedSlot { return assignedSendSlot() }
     let matching = sweep().filter { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) }
     guard slotIndex >= 0, slotIndex < matching.count else { return nil }
     return matching[slotIndex]
