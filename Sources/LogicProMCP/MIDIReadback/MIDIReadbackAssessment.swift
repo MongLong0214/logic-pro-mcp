@@ -33,6 +33,14 @@ enum PartialReason: Equatable, Sendable {
     case rowParseFailed(RowKey)
     case timingUnproven
     case epochChanged
+    /// The reading could not say which Logic build produced it.
+    ///
+    /// `MIDIProviderGate` lists "Logic version drift detection" among this provider's required
+    /// proofs, and until 2026-09-13 the assessment had no case for it — every other listed proof
+    /// was here and this one was not. Refusing on an unreadable build is the half that can be
+    /// enforced from inside a single reading: whether the build MOVED is a comparison across
+    /// readings, and a reading that cannot name its own build cannot take part in it.
+    case logicBuildUnreadable
     case emptyNotProven
     case mapsUnpopulated
     case decodedNotReassessed
@@ -153,6 +161,13 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
     }
     guard e.projectEpochBefore == e.projectEpochAfter else {
         return .incomplete(.epochChanged)
+    }
+    // Before the harvest is judged: a reading that cannot name its build cannot be compared with
+    // the reading that established this AX shape, so nothing downstream can be trusted to still
+    // apply. Placed beside the epoch guard because both ask the same kind of question — is this
+    // reading about the thing the proof was taken on.
+    guard e.logicBuild.isObserved else {
+        return .incomplete(.logicBuildUnreadable)
     }
     guard harvestKeysContiguous(e.harvest) else {
         return .incomplete(.harvestNotContiguous)

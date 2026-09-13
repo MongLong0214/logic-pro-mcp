@@ -229,6 +229,32 @@ enum TimingEvidence: Sendable {
 
 // MARK: - Evidence package
 
+/// Which Logic BUILD a reading came from.
+///
+/// The same argument the `variant` field carries, applied to the axis that moves far more often.
+/// This provider's required proofs list "Logic version drift detection", and the assessment had no
+/// case for it at all — measured 2026-09-13, every other listed proof existed as a `PartialReason`
+/// and this one did not. A reading whose AX shape was established on one build is not established
+/// on the next.
+///
+/// Version AND build, because the marketing version does not move on every update — this
+/// repository already says so where it explains the observation records' host block: "Logic ships
+/// updates that keep the marketing version and move the build, so version alone cannot detect
+/// drift".
+///
+/// `.unreadable` is carried rather than guessed, for the same reason `variant` carries `.unknown`:
+/// a reading taken when the bundle could not be interrogated is still a reading, and saying so is
+/// what stops it being filed under a build it may not have come from.
+enum LogicBuildIdentity: Equatable, Sendable {
+    case observed(version: String, build: String)
+    case unreadable
+
+    var isObserved: Bool {
+        if case .observed = self { return true }
+        return false
+    }
+}
+
 struct EventListReadbackEvidence: Sendable {
     /// Which Logic product this reading came from.
     ///
@@ -240,6 +266,8 @@ struct EventListReadbackEvidence: Sendable {
     /// still a reading, and saying so is what stops it from being filed under a product it did not
     /// come from.
     let variant: LogicProVariant
+    /// The build this reading came from. See `LogicBuildIdentity`.
+    let logicBuild: LogicBuildIdentity
     let requestedRegion: MIDIRegionReference
     let resolvedIdentity: RegistryResolvedIdentityProof
     let observedRegion: ObservedRegionIdentityProof

@@ -48,6 +48,7 @@ struct Issue293DesktopVariantTests {
         let identity = ResolvedRegionIdentity(name: "r", ordinal: 0, startTick: 0)
         return EventListReadbackEvidence(
             variant: variant,
+            logicBuild: .observed(version: "12.3", build: "6674"),
             requestedRegion: region,
             resolvedIdentity: RegionIdentityRegistrySeam.mint(boundRegion: region, identity: identity),
             observedRegion: .proven(identity),

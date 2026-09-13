@@ -238,6 +238,25 @@ enum ProcessUtils {
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     }
 
+    /// Logic's BUILD, beside its marketing version.
+    ///
+    /// Version alone cannot detect drift, and this repository already wrote that down where it
+    /// explains the observation records' host block: "Logic ships updates that keep the marketing
+    /// version and move the build, so version alone cannot detect drift"
+    /// (`Scripts/check-observation-records.py`). A readback whose AX shape was established on one
+    /// build is not established on the next, and 12.3 has covered more than one.
+    static func logicProBuild() -> String? {
+        logicProBuild(runtime: .production)
+    }
+
+    static func logicProBuild(runtime: Runtime) -> String? {
+        let bundleURL = runtime.logicProBundleURL()
+        guard let bundleURL, let bundle = Bundle(url: bundleURL) else {
+            return nil
+        }
+        return bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    }
+
     private static func logicProPIDViaSystemEvents() -> pid_t? {
         let script = """
         tell application "System Events"

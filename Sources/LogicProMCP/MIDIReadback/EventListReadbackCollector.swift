@@ -237,6 +237,12 @@ enum EventListReadbackCollector {
             // unrecognised bundle identifier this is `.unknown`, which is the honest answer and keeps
             // the reading off a coverage axis it did not earn.
             variant: LogicProTarget.current.variant,
+            // Read from the bundle actually running, beside the variant and for the same reason.
+            logicBuild: {
+                guard let version = ProcessUtils.logicProVersion(),
+                      let build = ProcessUtils.logicProBuild() else { return .unreadable }
+                return .observed(version: version, build: build)
+            }(),
             requestedRegion: requestedRegion,
             resolvedIdentity: resolvedIdentity,
             observedRegion: .unproven,

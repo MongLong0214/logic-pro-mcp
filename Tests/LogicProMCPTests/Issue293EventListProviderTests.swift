@@ -62,6 +62,7 @@ import Testing
         })
         return EventListReadbackEvidence(
             variant: .desktop,
+            logicBuild: .observed(version: "12.3", build: "6674"),
             requestedRegion: region,
             resolvedIdentity: RegionIdentityRegistrySeam.mint(
                 boundRegion: region,

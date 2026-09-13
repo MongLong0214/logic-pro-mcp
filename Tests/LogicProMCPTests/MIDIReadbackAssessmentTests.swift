@@ -86,10 +86,12 @@ import Testing
         passB: [RowKey: RawEventRow]? = nil,
         exhaustion: HarvestExhaustionProof = .proven,
         timing: TimingEvidence = .proven,
-        calibration: CalibrationTriple? = CalibrationTriple(pitch: 60, velocity: 100, startTickValue: 1)
+        calibration: CalibrationTriple? = CalibrationTriple(pitch: 60, velocity: 100, startTickValue: 1),
+        logicBuild: LogicBuildIdentity = .observed(version: "12.3", build: "6674")
     ) -> EventListReadbackEvidence {
         EventListReadbackEvidence(
             variant: .desktop,
+            logicBuild: logicBuild,
             requestedRegion: requestedRegion,
             resolvedIdentity: resolved ?? RegionIdentityRegistrySeam.mint(boundRegion: region, identity: identity),
             observedRegion: observed,
@@ -339,6 +341,22 @@ import Testing
     @Test func countMismatchRejected() {
         let snap = assessReadback(Self.evidence(countText: "2 Events"))
         #expect(snap.noteCompleteness.partialReason == .countMismatch)
+    }
+
+    /// The provider's required proofs list "Logic version drift detection", and until 2026-09-13
+    /// the assessment had no case for it — every other listed proof was a `PartialReason` and this
+    /// one was not. A reading that cannot name the build it came from cannot be compared with the
+    /// reading that established the AX shape it relies on.
+    @Test func aReadingThatCannotNameItsLogicBuildIsRejected() {
+        let snap = assessReadback(Self.evidence(logicBuild: .unreadable))
+        #expect(snap.noteCompleteness.partialReason == .logicBuildUnreadable)
+    }
+
+    /// The control the case above needs. Without it a guard that rejected EVERYTHING would look
+    /// identical to one that works, and the surrounding suite would still be green.
+    @Test func aReadingThatNamesItsLogicBuildIsNotRejectedForThat() {
+        let snap = assessReadback(Self.evidence())
+        #expect(snap.noteCompleteness.partialReason != .logicBuildUnreadable)
     }
 
     @Test func epochChangeRejected() {
