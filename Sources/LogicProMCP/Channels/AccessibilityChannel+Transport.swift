@@ -8,30 +8,49 @@ extension AccessibilityChannel {
     // MARK: - Transport
 
     static func defaultGetTransportState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        guard let transport = AXLogicProElements.getControlBar(runtime: runtime)
+        // ONE resolution of the bar, and ONE collection of its checkboxes, for all four reads.
+        //
+        // Each `readControlBarCheckboxValue` used to re-resolve the control bar itself, and
+        // `getControlBar` walks the whole arrange window eight levels deep over Mach IPC. Four
+        // reads therefore paid for four window walks plus four bar walks, on top of the one this
+        // function already did — nine recursive AX traversals to read four booleans, and the
+        // window grows with the project.
+        //
+        // Measured 2026-09-13 on a 23-header project: `logic_transport.goto_position` blew its 25s
+        // server deadline, and `sample` put 50 of 87 stacks inside `readControlBarCheckboxValue`,
+        // under `finalizeGotoPositionResult` — the VERIFY read after the move, not the dialog the
+        // operation drives. The route had already been diagnosed as a German locale failure twice;
+        // it reproduced identically in English and on the pre-branch binary.
+        let controlBar = AXLogicProElements.getControlBar(runtime: runtime)
+        guard let transport = controlBar
                 ?? AXLogicProElements.getTransportBar(runtime: runtime) else {
             return .error("Cannot locate transport bar")
         }
         var state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime.ax)
-        if let isPlaying = AXLogicProElements.readControlBarCheckboxValue(
-            named: "재생", englishName: "Play", runtime: runtime
-        ) {
-            state.isPlaying = isPlaying
-        }
-        if let isRecording = AXLogicProElements.readControlBarCheckboxValue(
-            named: "녹음", englishName: "Record", runtime: runtime
-        ) {
-            state.isRecording = isRecording
-        }
-        if let isCycleEnabled = AXLogicProElements.readControlBarCheckboxValue(
-            named: "사이클", englishName: "Cycle", runtime: runtime
-        ) {
-            state.isCycleEnabled = isCycleEnabled
-        }
-        if let isMetronomeEnabled = AXLogicProElements.readControlBarCheckboxValue(
-            named: "메트로놈 클릭", englishName: "Metronome", runtime: runtime
-        ) {
-            state.isMetronomeEnabled = isMetronomeEnabled
+        // No control bar means every one of these reads resolved to nil before, so skipping them
+        // leaves the same state — an unreadable bar is not a bar whose controls read false.
+        if let controlBar {
+            let checkboxes = AXLogicProElements.controlBarCheckboxes(in: controlBar, runtime: runtime)
+            if let isPlaying = AXLogicProElements.readControlBarCheckboxValue(
+                among: checkboxes, named: "재생", englishName: "Play", runtime: runtime
+            ) {
+                state.isPlaying = isPlaying
+            }
+            if let isRecording = AXLogicProElements.readControlBarCheckboxValue(
+                among: checkboxes, named: "녹음", englishName: "Record", runtime: runtime
+            ) {
+                state.isRecording = isRecording
+            }
+            if let isCycleEnabled = AXLogicProElements.readControlBarCheckboxValue(
+                among: checkboxes, named: "사이클", englishName: "Cycle", runtime: runtime
+            ) {
+                state.isCycleEnabled = isCycleEnabled
+            }
+            if let isMetronomeEnabled = AXLogicProElements.readControlBarCheckboxValue(
+                among: checkboxes, named: "메트로놈 클릭", englishName: "Metronome", runtime: runtime
+            ) {
+                state.isMetronomeEnabled = isMetronomeEnabled
+            }
         }
         return encodeResult(state)
     }

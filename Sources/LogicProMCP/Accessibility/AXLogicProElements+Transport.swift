@@ -299,6 +299,38 @@ extension AXLogicProElements {
         runtime: Runtime = .production
     ) -> AXUIElement? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }
+        return findControlBarCheckbox(
+            among: controlBarCheckboxes(in: controlBar, runtime: runtime),
+            named: koreanName, englishName: englishName, runtime: runtime
+        )
+    }
+
+    /// The control bar's checkboxes, collected once.
+    ///
+    /// Separated because the collection, not the matching, is what costs: every
+    /// `findAllDescendants` is a recursive walk over Mach IPC, and a caller reading FOUR
+    /// checkboxes used to pay for four walks of the bar plus four walks of the whole window
+    /// to re-find the bar. Measured 2026-09-13 with `sample`: `logic_transport.goto_position`
+    /// exceeded its 25s server deadline with 50 of 87 samples inside
+    /// `readControlBarCheckboxValue` — all of it in `getControlBar`'s
+    /// `AXHelpers.collectDescendants`, none of it in the dialog the operation exists to drive.
+    /// The route was diagnosed as a German locale failure twice before the stack said otherwise.
+    static func controlBarCheckboxes(
+        in controlBar: AXUIElement,
+        runtime: Runtime = .production
+    ) -> [AXUIElement] {
+        AXHelpers.findAllDescendants(
+            of: controlBar, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax
+        )
+    }
+
+    /// Match one already-collected checkbox set by name. Pure matching: no walk.
+    static func findControlBarCheckbox(
+        among checkboxes: [AXUIElement],
+        named koreanName: String,
+        englishName: String? = nil,
+        runtime: Runtime = .production
+    ) -> AXUIElement? {
         let localeLabels: AXLocalePolicy.LabelSet? = switch englishName {
         case "Play": AXLocalePolicy.transportPlayControl
         case "Record": AXLocalePolicy.transportRecordControl
@@ -306,9 +338,6 @@ extension AXLogicProElements {
         case "Metronome": AXLocalePolicy.transportMetronomeControl
         default: nil
         }
-        let checkboxes = AXHelpers.findAllDescendants(
-            of: controlBar, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax
-        )
         // Prefer title match (AXTitle) — which is what `name of` returns in AS
         for cb in checkboxes {
             let title = AXHelpers.getTitle(cb, runtime: runtime.ax) ?? ""
@@ -438,8 +467,27 @@ extension AXLogicProElements {
         englishName: String? = nil,
         runtime: Runtime = .production
     ) -> Bool? {
-        guard let cb = findControlBarCheckbox(
+        guard let controlBar = getControlBar(runtime: runtime) else { return nil }
+        return readControlBarCheckboxValue(
+            among: controlBarCheckboxes(in: controlBar, runtime: runtime),
             named: koreanName, englishName: englishName, runtime: runtime
+        )
+    }
+
+    /// The same read against an already-collected checkbox set.
+    ///
+    /// A caller reading several controls of one bar takes the walk once. It returns `nil` for the
+    /// same two reasons as the resolving form — no matching checkbox, or an unreadable value — so
+    /// a bar that could not be located stays indistinguishable from a control that is not there,
+    /// which is what every caller already handles.
+    static func readControlBarCheckboxValue(
+        among checkboxes: [AXUIElement],
+        named koreanName: String,
+        englishName: String? = nil,
+        runtime: Runtime = .production
+    ) -> Bool? {
+        guard let cb = findControlBarCheckbox(
+            among: checkboxes, named: koreanName, englishName: englishName, runtime: runtime
         ) else { return nil }
         if let n: NSNumber = AXHelpers.getAttribute(cb, kAXValueAttribute, runtime: runtime.ax) {
             return n.boolValue
