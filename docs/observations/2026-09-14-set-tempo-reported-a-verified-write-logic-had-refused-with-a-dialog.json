@@ -112,15 +112,29 @@
         "a real Delete keypress with the row AX-selected"
       ],
       "all_recovered_after": "clicking the alert's 확인 button"
+    },
+    {
+      "what": "how far the exposure SHAPE reaches, counted rather than guessed",
+      "state_A_sites_in_Sources/LogicProMCP/Channels": 40,
+      "files_containing_them": 13,
+      "files_that_ever_read_Logic's_modal_state": 3,
+      "files_that_never_do": 10,
+      "state_A_sites_in_files_that_never_do": 21,
+      "spot_checks": {
+        "mixer": "declares `verify_source: \"ax_slider\"` and reads the fader it wrote — the SAME shape as the tempo field",
+        "markers": "reads the marker LIST back and matches by name — a different surface from the control written",
+        "editing": "re-reads an observable window state, not the control written"
+      },
+      "note": "a count of where the shape COULD occur, not a list of defects: no other operation was driven to see whether Logic ever refuses it with a dialog"
     }
   ],
   "conclusion": "A tempo field holding the typed value is NOT the project holding that tempo. On a project with more than one tempo event, Logic refuses the control-bar tempo edit and says so with a single-button modal alert directing the caller to the Tempo List editor — and `set_tempo` answered State A with `verified: true` and `observed: 144` while both tempo rows stayed at 120. Every success branch verified against the same field it had written, which cannot tell a refusal from a success. The fix reads Logic's modal state before and after the write and refuses when a blocking modal appeared that was not there before; the before-reading is what keeps someone else's stuck dialog from being blamed on this write. The alert also wedged everything that followed it — undo, the audio-import panel, and three separate delete paths — which is why several earlier readings in this session were taken against a blocked Logic.",
   "limits": [
     "The fix makes the operation HONEST, not capable. A project with two tempo events still cannot have its tempo written through this operation; it now says so instead of claiming success. Whether the Tempo List editor offers a writable path was not measured.",
     "It does not DISMISS the alert. The refusal reports the blocker, and clearing it is the preflight reconciler's job on the next operation; whether that actually happens on this path was not driven.",
-    "`transport.set_tempo` is the only operation measured. Any other operation whose readback is of the control it wrote has the same exposure and was NOT swept — this record is about one site, not a census.",
     "One locale. The alert was identified by its shape — a top-level AXDialog with exactly one button — and never by its Korean text, so the fix is locale-independent, but that was reasoned rather than measured on a second locale.",
-    "Two tempo events, both at 120 bpm. Nothing here says what happens with three, or with events at different tempos."
+    "Two tempo events, both at 120 bpm. Nothing here says what happens with three, or with events at different tempos.",
+    "The exposure SHAPE was counted, the exposure was not. 21 of the 40 State A sites under `Sources/LogicProMCP/Channels` sit in the 10 files that never read Logic's modal state, and `mixer.set_volume` declares `verify_source: \"ax_slider\"` — it reads the fader it wrote, exactly the shape that made this defect. But a shape is not a defect: the REFUSAL here is specific (Logic objects to a control-bar tempo edit when the project holds more than one tempo event), and no other operation was driven to find out whether Logic ever answers it with a dialog. Nothing here says those 21 sites are wrong; it says a refusal of this kind could not be detected at them."
   ],
   "supersedes": null
 }
