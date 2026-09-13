@@ -66,10 +66,33 @@ extension SMFWriter {
             at: root,
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
-        )) != nil else {
+        )) != nil, isPrivateOwnedDirectory(root) else {
             return manager.temporaryDirectory
         }
         return root
+    }
+
+    /// Whether a path is a REAL directory this uid owns and only this uid can write.
+    ///
+    /// `createDirectory(withIntermediateDirectories: true)` SUCCEEDS on a path that already
+    /// exists — including a symlink pointing somewhere else entirely — and it applies the
+    /// requested permissions only to what it creates. So the old code could have accepted a root
+    /// somebody else prepared, and the staged file would have been written through it.
+    ///
+    /// `$TMPDIR` never needed this: macOS hands each user a per-boot 0700 directory, so the root
+    /// was trustworthy by construction. Moving out of it (the open panel could not enumerate a
+    /// directory shared with the whole machine) gave up that guarantee, and this is the part of it
+    /// that has to be re-established rather than assumed.
+    ///
+    /// `lstat`, not `stat`: the question is what the NAME is, and `stat` would follow the symlink
+    /// and answer about its target. A path that fails any clause falls back to `$TMPDIR`, which is
+    /// slow for the import panel and safe.
+    static func isPrivateOwnedDirectory(_ url: URL) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return false }
+        guard (info.st_mode & S_IFMT) == S_IFDIR else { return false }
+        guard info.st_uid == getuid() else { return false }
+        return (info.st_mode & (S_IWGRP | S_IWOTH)) == 0
     }
 
     static func temporaryMIDIFile(

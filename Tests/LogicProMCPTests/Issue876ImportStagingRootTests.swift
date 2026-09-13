@@ -41,8 +41,62 @@ struct Issue876ImportStagingRootTests {
         }
     }
 
-    /// A staged file lands under the root the prefix advertises, so the import path allowlist in
-    /// `AccessibilityChannel.managedMIDIImportDirectoryPrefixes()` keeps matching what is written.
+    /// A staged file lands under the root the prefix advertises.
+    ///
+    /// Said exactly, because the first version of this comment said more than the code does: the
+    /// import path check in `AccessibilityChannel.validatedMIDIImportPath` gates on
+    /// `SMFWriter.isManagedTemporaryMIDIFile`, an in-memory registry of the files THIS PROCESS
+    /// created — an identity, not a string prefix. Moving the staging root therefore cannot widen
+    /// that boundary, and this test does not claim it guards one.
+    /// `managedMIDIImportDirectoryPrefixes()` has no production caller today; what this pins is
+    /// that the advertised prefix and the written path do not drift apart.
+    /// The root must be a REAL directory this uid owns, not merely a path `createDirectory`
+    /// returned without error. `withIntermediateDirectories: true` succeeds on a path that already
+    /// exists — a symlink to somewhere else included — and applies the requested permissions only
+    /// to what it actually creates. `$TMPDIR` never needed this check because macOS hands each
+    /// user a per-boot 0700 directory; moving out of it gave that guarantee up.
+    @Test("a symlink, a file, and a world-writable directory are all refused as a staging root",
+          arguments: ["symlink", "file", "group-writable", "other-writable"])
+    func aRootThatIsNotAPrivateOwnedDirectoryIsRefused(kind: String) throws {
+        let manager = FileManager.default
+        let scratch = manager.temporaryDirectory
+            .appendingPathComponent("lpm-staging-root-probe-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: scratch) }
+
+        let candidate = scratch.appendingPathComponent("candidate")
+        switch kind {
+        case "symlink":
+            let elsewhere = scratch.appendingPathComponent("elsewhere", isDirectory: true)
+            try manager.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+            try manager.createSymbolicLink(at: candidate, withDestinationURL: elsewhere)
+        case "file":
+            manager.createFile(atPath: candidate.path, contents: Data())
+        case "group-writable":
+            try manager.createDirectory(at: candidate, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o770])
+        default:
+            try manager.createDirectory(at: candidate, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o707])
+        }
+
+        #expect(!SMFWriter.isPrivateOwnedDirectory(candidate),
+                "\(kind) was accepted as a staging root")
+    }
+
+    /// The control the three cases above need: the predicate must be able to say YES, or a
+    /// refusal that refuses everything would look identical to a working check.
+    @Test("a private directory this uid owns is accepted")
+    func aPrivateOwnedDirectoryIsAccepted() throws {
+        let manager = FileManager.default
+        let candidate = manager.temporaryDirectory
+            .appendingPathComponent("lpm-staging-root-ok-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: candidate, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        defer { try? manager.removeItem(at: candidate) }
+        #expect(SMFWriter.isPrivateOwnedDirectory(candidate))
+    }
+
     @Test("a staged file sits under the advertised prefix")
     func aStagedFileSitsUnderTheAdvertisedPrefix() throws {
         let file = try SMFWriter.temporaryMIDIFile()
