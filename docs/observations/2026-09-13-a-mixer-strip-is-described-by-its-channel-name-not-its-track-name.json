@@ -1,0 +1,60 @@
+{
+  "id": "2026-09-13-a-mixer-strip-is-described-by-its-channel-name-not-its-track-name",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "The AXDescription of a mixer channel strip, against a verified track rename",
+  "question": "Does renaming a track change the name a mixer strip answers to in the AX tree?",
+  "verdict": "wall",
+  "issues": [
+    "#306"
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it changes and then restores a project: (1) `logic_tracks.rename` a track that shares its name with others to a unique one; (2) read `logic://tracks` and confirm the new name appears once; (3) walk the arrange window's AX tree for `AXLayoutItem` descriptions under the Mixer group; (4) rename it back and save.",
+    "expected": "logic://tracks reports the new name; the mixer's AXLayoutItem descriptions do not."
+  },
+  "depends": [
+    "Scripts/livekit/live_306_controls_view_labels_the_row_not_the_slider.py"
+  ],
+  "evidence": [],
+  "method": "One of eight tracks named `Studio Grand` was renamed to `Compressor Probe` through the product's verified rename, which returned State A with verified true. The product's own track resource and the window's AX tree were then read and compared. The rename was reverted and the project saved.",
+  "observations": [
+    {
+      "what": "the rename envelope",
+      "state": "A",
+      "verified": true
+    },
+    {
+      "what": "logic://tracks after the rename",
+      "Compressor Probe": 1,
+      "Studio Grand": 7
+    },
+    {
+      "what": "mixer AXLayoutItem descriptions after the rename",
+      "Compressor Probe": 0,
+      "Studio Grand": 8,
+      "total_strips": 21
+    },
+    {
+      "what": "logic://tracks after reverting",
+      "Studio Grand": 8,
+      "Compressor Probe": 0
+    }
+  ],
+  "conclusion": "A mixer strip's `AXDescription` is the CHANNEL name, and a verified track rename does not change it. The product reported the rename honestly and the tree simply does not carry that name: after the rename `logic://tracks` answered one `Compressor Probe` while all 21 mixer strips still answered their old names.",
+  "limits": [
+    "It does not establish what DOES change the strip's description — renaming the channel was not attempted, and neither was any other route.",
+    "Only the arrange window's Mixer pane was walked. Whether a separate Mixer window describes its strips differently was not measured.",
+    "One project, one locale, one rename. The tracks involved are software-instrument tracks; a rename on an audio or aux track was not tried.",
+    "The fixture was restored and saved, so a re-run starts from eight `Studio Grand` again."
+  ],
+  "supersedes": null
+}

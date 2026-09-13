@@ -67,30 +67,28 @@ SLOT = "Compressor"
 # detecting it — so the search is scoped to a named strip and refuses if that strip does not hold
 # exactly one.
 #
-# The named strip has to satisfy TWO things at once, and on 2026-08-30 no strip did.
+# The named strip has to satisfy TWO things at once, and no strip on this fixture does.
 #
-# It must hold exactly one Compressor — two inserts on one strip cannot be told apart by name, and
-# choosing between them is what this scoping exists to prevent. On that date `Absolute Zero` carried
-# two and the harness refused, which was the refusal working.
+# It must hold exactly ONE Compressor — two inserts on one strip cannot be told apart by name, and
+# choosing between them is what this scoping exists to prevent. And the name must resolve to one
+# strip; the product refuses a duplicated name for the same reason, with `ambiguous_target_name`.
 #
-# And its NAME must resolve to one strip. `Studio Grand` does not: measured 2026-09-13 on this
-# fixture it names EIGHT strips and `Deluxe Classic` nine, so the harness refused at
-# `one-named-channel-strip-matches-the-track-label` and had become unrunnable here. The product
-# refuses the same shape for the same reason — a `target_ref` on a duplicated name comes back
-# `ambiguous_target_name`.
+# Measured 2026-09-13, neither candidate is both:
 #
-# Re-measured 2026-09-13: `Absolute Zero` names one strip and carries one Compressor (insert 0,
-# from `logic_plugins.get_inventory`), so it now satisfies both. The 2026-08-30 reading is not wrong
-# about its date; the fixture moved.
+#   `Absolute Zero`  one strip, TWO Compressors (inserts 0 and 2 from `get_inventory`; the AX
+#                    witness agrees — `scoped_slot_count: 2`, two distinct element ids, two frames
+#                    differing only in y). The 2026-08-30 note was right about this.
+#   `Studio Grand`   one Compressor each, and EIGHT strips carry the name (`Deluxe Classic` nine).
 #
-# WHERE THIS STILL STOPS, said rather than left for the next reader to rediscover. With the name
-# resolved, the run now refuses one check later, at
-# `one-compressor-insert-slot-resolves-by-description`: the window carries TWELVE AXGroups
-# described `Compressor` (the refusal text's "five" is the 2026-08-30 count), and the scoped search
-# inside the named strip does not come back with exactly one. That is the scoping refusing rather
-# than guessing, and what it needs next is a measurement of which subtree the named strip actually
-# resolves to — the Inspector also presents a channel strip as an AXLayoutArea carrying the mixer
-# label, which this file's own header warns about.
+# A rename was tried and did NOT work, which is the part worth keeping. One `Studio Grand` track
+# was renamed through the product's own verified rename — State A, `logic://tracks` then showed one
+# `Compressor Probe` and seven `Studio Grand` — and the MIXER still described every strip by its
+# old name. The strip's `AXDescription` is the CHANNEL name, and renaming the track does not change
+# it. The fixture was put back and saved.
+#
+# So closing this needs the CHANNEL renamed, not the track — or a different way to name a strip
+# that does not go through `AXDescription` at all. Neither has been measured, and the constant
+# below therefore still names a strip the harness will refuse, honestly, at the Compressor count.
 TRACK = "Absolute Zero"
 # `mixerNamedElement` is the existing policy-owned, measured mixer label family. Passing it through
 # avoids a second Korean literal: a locale outside that measured family resolves no mixer and refuses
