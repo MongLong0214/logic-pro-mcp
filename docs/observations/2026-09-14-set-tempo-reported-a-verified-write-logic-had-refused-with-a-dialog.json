@@ -155,6 +155,13 @@
           "remove the pre-Escape refusal": "the new test goes red, error falls back to readback_mismatch with no blocker label",
           "revert blocker_present_before_write to refusalLabel != nil": "the unreadable-scan test goes red"
         }
+      },
+      "round_3": {
+        "R2-02_and_R2-03": "CLOSED",
+        "R2-01_partially_closed": "the error code is right everywhere in the function, but the HINT argued that the outcome was 'unknown rather than known to have failed' while riding a State C envelope whose contract says the write did not land. The hint no longer argues with the state; it describes what was observed and says the write is NOT confirmed.",
+        "third_site_found": "the geometry-free direct write still returned State B, and State B asserts `success: true` — 'the write landed but read-back could not confirm'. Nothing on that path establishes it landed, and with a blocker up the readback cannot either. It refuses on the same terms now; State B stays only for an absent readback on an otherwise clean Logic.",
+        "mutation_check": "restoring the State B claim turns the new test red with exactly the defect's signature, `state: B, success: true`",
+        "terminal_code_note": "`readback_lost_after_write` is in `terminalErrorCodes`, whose comment said those codes were exclusive to `logic_plugins.*`. That is no longer literally true. The conclusion holds — `transport.set_tempo` routes to `[.accessibility]` alone and a single-channel State C envelope is returned verbatim — and the comment now says so instead of asserting the old exclusivity."
       }
     }
   ],
@@ -166,7 +173,8 @@
     "The exposure SHAPE was counted, the exposure was not. 21 of the 40 State A sites under `Sources/LogicProMCP/Channels` sit in the 10 files that never read Logic's modal state, and `mixer.set_volume` declares `verify_source: \"ax_slider\"` — it reads the fader it wrote, exactly the shape that made this defect. But a shape is not a defect: the REFUSAL here is specific (Logic objects to a control-bar tempo edit when the project holds more than one tempo event), and no other operation was driven to find out whether Logic ever answers it with a dialog. Nothing here says those 21 sites are wrong; it says a refusal of this kind could not be detected at them.",
     "It does not DISMISS the blocker. The refusal reports it and stops; clearing it is the preflight reconciler's job on the next operation, and whether that actually runs on this path was not driven.",
     "The gate refuses while ANY blocker is up, including one this call did not cause, and answers State C `readback_lost_after_write` — `success: false` with the outcome named unknown rather than failed. That is a deliberate false-negative in the fail-closed direction: a stuck dialog makes every tempo write refuse until it is cleared, and `blocker_present_before_write` tells the caller which problem to fix. A reviewer argued State B would carry the 'unverified' distinction more structurally; State B asserts `success: true`, which would be the more dangerous overclaim here.",
-    "One post-write scan, taken once. A modal published after that scan, or one that disappears during it, is not seen — the reviewer named both and neither was measured. The direct-write branch scans immediately after confirm with no wait, so an asynchronously raised alert can arrive too late for its label."
+    "One post-write scan, taken once. A modal published after that scan, or one that disappears during it, is not seen — the reviewer named both and neither was measured. The direct-write branch scans immediately after confirm with no wait, so an asynchronously raised alert can arrive too late for its label.",
+    "The contract has three states and this situation fits none cleanly. State A needs confirmation, State B asserts the write landed, State C says it did not. An attempted write whose outcome cannot be read is reported as State C `readback_lost_after_write`: fail-closed, because a caller carrying on as though the tempo changed is the worse error. A reviewer's objection stands on the record — State C's own definition is stronger than the evidence — and resolving it properly would mean changing the contract, which is not this fix's to do."
   ],
   "supersedes": null
 }

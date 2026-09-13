@@ -285,7 +285,7 @@ extension AccessibilityChannel {
                 // though the tempo changed; the error code carries the distinction instead.
                 return .error(HonestContract.encodeStateC(
                     error: .readbackLostAfterWrite,
-                    hint: "The tempo field's value is not evidence the tempo changed while Logic's modal state is blocked or unreadable, so the outcome of this write is unknown rather than known to have failed. A project with more than one tempo event refuses this edit with an alert and directs the caller to the Tempo List editor.",
+                    hint: "Logic's modal state blocked or defeated the readback, so the tempo field's value is not evidence the tempo changed and this write is NOT confirmed. A project with more than one tempo event refuses this edit with an alert and directs the caller to the Tempo List editor.",
                     extras: baseExtras.merging([
                         "observed_field_value": observed,
                         "via": via,
@@ -315,14 +315,30 @@ extension AccessibilityChannel {
                 // success gate — `readback_unavailable` is already the honest answer. It does carry
                 // the blocker label, because a caller reading "no readback" while Logic is holding
                 // an alert is owed the difference between "we could not look" and "Logic refused".
-                var directExtras = baseExtras.merging(["via": "slider-direct"]) { _, new in new }
-                if let blocker = observeTempoModal(runtime: runtime).refusalLabel {
-                    directExtras["blocking_modal"] = blocker
-                    directExtras["write_attempted"] = true
+                // State B asserts `success: true` — "the write landed but read-back couldn't
+                // confirm". With a blocker observed, that is the same overclaim this whole change
+                // exists to remove, one branch over: nothing here establishes the write landed. A
+                // review found this site still saying it. Refuse on the same terms as the other
+                // two; State B stays only for the case where the readback is simply absent and
+                // Logic is otherwise clean.
+                let directBlocker = observeTempoModal(runtime: runtime)
+                if let blocker = directBlocker.refusalLabel {
+                    return .error(HonestContract.encodeStateC(
+                        error: .readbackLostAfterWrite,
+                        hint: "This slider exposes no geometry, so the value was written directly and confirmed by nothing; Logic's modal state then blocked or defeated the readback, so the write is NOT confirmed.",
+                        extras: baseExtras.merging([
+                            "via": "slider-direct",
+                            "write_attempted": true,
+                            "blocking_modal": blocker,
+                            "blocker_present_before_write": modalBeforeWrite.observedBlocker,
+                            "blocker_scan_before_write": modalBeforeWrite.scanLabel,
+                            "safe_to_retry": false,
+                        ]) { _, new in new }
+                    ))
                 }
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: directExtras
+                    extras: baseExtras.merging(["via": "slider-direct"]) { _, new in new }
                 ))
             }
             let center = CGPoint(
@@ -349,7 +365,7 @@ extension AccessibilityChannel {
             if let blocker = observeTempoModal(runtime: runtime).refusalLabel {
                 return .error(HonestContract.encodeStateC(
                     error: .readbackLostAfterWrite,
-                    hint: "The typed tempo entry did not commit and Logic's modal state is blocked or unreadable, so no further write was attempted and the outcome of the one already made is unknown rather than known to have failed.",
+                    hint: "The typed tempo entry did not commit and Logic's modal state blocked or defeated the readback, so no further write was attempted and the one already made is NOT confirmed.",
                     extras: baseExtras.merging([
                         "via": "slider",
                         "write_attempted": true,

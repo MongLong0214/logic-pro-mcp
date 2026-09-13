@@ -448,8 +448,16 @@ enum HonestContract {
         // surface routes through `[.accessibility]` alone (no fallback chain),
         // and falling back to Scripter/MCU would fabricate a false verified
         // result — so the router must never continue past any of these. These
-        // codes are exclusive to `logic_plugins.*`; existing ops never emit
-        // them, so this does not change any prior fallback behaviour.
+        // codes were exclusive to `logic_plugins.*` when this set was written, and
+        // that is no longer literally true: `transport.set_tempo` emits
+        // `readbackLostAfterWrite` when Logic's modal state blocks or defeats the
+        // readback (2026-09-14, #304). The CONCLUSION still holds and the reason is
+        // worth stating rather than re-deriving — `transport.set_tempo` routes to
+        // `[.accessibility]` alone, and `ChannelRouter` returns a single-channel
+        // chain's State C envelope verbatim, so no fallback exists for this
+        // classification to suppress. A MULTI-channel op adopting one of these codes
+        // WOULD change its fallback behaviour, and that is the thing to check before
+        // reusing them.
         // `readbackMismatch` is deliberately NOT added here — it predates v2
         // and is shared with channels where fallback is still legitimate.
         FailureError.unsupportedMode.rawValue,

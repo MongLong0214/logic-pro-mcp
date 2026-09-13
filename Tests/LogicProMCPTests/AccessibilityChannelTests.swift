@@ -4694,9 +4694,18 @@ private func makeTempoFixtureWithAlert(
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "readback_lost_after_write")
     #expect(obj["blocking_modal"] as? String == "informational_alert")
-    // An annotation, not a causal claim. This says only that the same blocker was not already
-    // there — the refusal itself rests on the blocker being present NOW, whoever raised it.
+    // An annotation, not a causal claim. This says only that no blocker was OBSERVED before —
+    // the refusal itself rests on the blocker being present NOW, whoever raised it.
     #expect(!((obj["blocker_present_before_write"] as? Bool)!))
+    #expect(obj["blocker_scan_before_write"] as? String == "complete")
+    // `readback_lost_after_write` is in `terminalErrorCodes`, a set whose own comment said these
+    // codes were exclusive to `logic_plugins.*`. This operation now emits one, so the reason that
+    // is still safe gets asserted rather than re-argued: `transport.set_tempo` routes to
+    // `[.accessibility]` alone, and a single-channel chain's State C envelope is returned verbatim,
+    // so the caller receives THIS envelope rather than a `channels_exhausted` wrapper.
+    #expect(HonestContract.terminalErrorCodes.contains("readback_lost_after_write"))
+    #expect(ChannelRouter.v2RoutingTable["transport.set_tempo"]?.count == 1)
+    #expect(obj["state"] as? String == "C")
     #expect((obj["write_attempted"] as? Bool)!)
     // The field's reading is REPORTED, under a name that says it is the field's and not the
     // project's. Dropping it would hide what the operation actually saw.
@@ -4732,6 +4741,62 @@ private func makeTempoFixtureWithAlert(
     #expect((obj["blocker_present_before_write"] as? Bool)!)
     #expect(obj["blocker_scan_before_write"] as? String == "complete")
     #expect(obj["verified"] == nil)
+}
+
+@Test func testSetTempoDirectWriteDoesNotClaimSuccessWhileABlockerIsUp() async {
+    // The third refusal site, which a review found still asserting success. A tempo slider with no
+    // AX geometry takes the direct-write path, which writes and then returns State B — and State B
+    // means `success: true`, "the write landed but read-back couldn't confirm". Nothing on this
+    // path establishes that it landed, and with a blocker up the readback cannot establish it
+    // either. Same overclaim as the original defect, one branch over.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7300)
+    let window = builder.element(7301)
+    let controlBar = builder.element(7302)
+    let slider = builder.element(7303)
+    let alert = builder.element(7304)
+    let alertButton = builder.element(7305)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [slider])
+    builder.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(slider, kAXDescriptionAttribute as String, "Tempo")
+    builder.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 120.0))
+    // No AXPosition / AXSize: this is what sends the operation down the direct-write path.
+    builder.setAttribute(alert, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(alert, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(alert, kAXModalAttribute as String, true)
+    builder.setChildren(alert, [alertButton])
+    builder.setAttribute(alertButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(alertButton, kAXTitleAttribute as String, "확인")
+    builder.setAttribute(app, kAXWindowsAttribute as String, [alert, window])
+
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: { _, _, _ in true },
+            performActionHandler: { _, _ in true }
+        )
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "144"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "readback_lost_after_write")
+    #expect(obj["via"] as? String == "slider-direct")
+    #expect(obj["blocking_modal"] as? String == "informational_alert")
+    // The defect's signature was `success: true`. Assert it is gone rather than only asserting the
+    // new fields, which a branch that still claimed success could also carry.
+    #expect(obj["success"] as? Bool == false)
 }
 
 @Test func testSetTempoRefusesBeforeEscapeCanClearTheEvidence() async {
