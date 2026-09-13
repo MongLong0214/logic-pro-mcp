@@ -1,0 +1,48 @@
+{
+  "id": "2026-09-13-the-mcu-lcd-upper-row-names-the-visible-strips",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "Logic's Mackie Control LCD upper row, read through logic://mcu/state",
+  "question": "Is there a readback that binds an MCU strip index to a channel, so a strip-relative operation can name the channel it is about to write to?",
+  "verdict": "partial",
+  "issues": [
+    "#862"
+  ],
+  "surface": "system.midi",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because the virtual MIDI port only exists while a server process is alive, so Logic's binding and the reading must happen inside one process's lifetime: (1) start one MCP server and leave it running; (2) in Logic, Control Surfaces > Setup > New > Install, add Mackie Designs / Mackie Control, and answer the auto-detect prompt; (3) read logic://mcu/state from THAT server and confirm connection.isConnected is true; (4) drive logic_tracks.select for indices 0, 8 and 16, reading display.upperRow after each.",
+    "expected": "display.upperRow carries eight six-character names, and the eight change when the selection moves Logic to another bank."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/MCUChannel.swift",
+    "Sources/LogicProMCP/Resources/ResourceHandlers.swift"
+  ],
+  "evidence": [],
+  "method": "One MCP server held open for the whole measurement. Logic was bound to its LogicProMCP-MCU-Internal port through Control Surfaces > Setup; `logic_tracks.select` was driven for indices 0, 8, 16 and back to 0, and `logic://mcu/state` was read from the same server after each, with a 3s settle. The project carried 19 tracks, of which 9 are named `Deluxe Classic` and 8 `Studio Grand`.",
+  "observations": [
+    "connection.isConnected became true within 5s of the device being installed while the server was running; registeredAsDevice became true at the same time.",
+    "display.upperRow at bank 0: 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls '",
+    "after select index=8: 'DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn '",
+    "after select index=16: 'StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master '",
+    "after select index=0 again: the bank-0 row returned unchanged.",
+    "Names are truncated to SIX characters: 'Absolute Zero' reads 'AbsZer', 'Deluxe Classic' reads 'DelCls', 'Studio Grand' reads 'StdGrn'.",
+    "The last bank ends with 'St Out' and 'Master' — Logic's MCU strips include the output and master strips, so MCU strip numbering is not arrange-track numbering."
+  ],
+  "conclusion": "A readback that binds an MCU strip index to a channel DOES exist, on the LCD's upper row, and it follows Logic's banking: the eight names are the eight channels currently under the strips. A strip index can therefore be bound to a channel by the name Logic shows at that strip, without a bank-offset readback. `partial` rather than `works` because six characters is not an identity — see the limits.",
+  "limits": [
+    "Six characters is not an identity. On this project nine channels truncate to 'DelCls' and eight to 'StdGrn', so the row names a strip's channel only when its truncation is unique among the visible eight. Anything built on this must REFUSE an ambiguous truncation rather than pick one.",
+    "This measures the upper row only. #862 records that the LOWER row is a delta surface that keeps residue, and nothing here contradicts or re-measures that.",
+    "One host, one build, one project, one locale. The truncation width was read off three names that happen to be longer than six characters; it was not driven against a name of exactly six or seven.",
+    "The virtual MIDI port exists only while a server runs, so Logic's binding is to a port that disappears between sessions. Every reading here came from a single server process; whether the binding survives a server restart was not measured.",
+    "The device was installed for this measurement and REMOVED afterwards, so a re-run must install it again."
+  ],
+  "supersedes": null
+}
