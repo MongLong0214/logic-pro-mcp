@@ -78,7 +78,7 @@ import sys
 # The rule now requires the count to GUARD the reduction. 54 is what the tightened detector sees, and
 # it is still one below the 55 this started at, because two sites really are count-guarded. The bar
 # falls by what was actually gained and not by what a loose regex hid.
-BLIND_SITE_BUDGET = 54
+BLIND_SITE_BUDGET = 53
 
 SEARCH_ROOTS = ("Sources", "Scripts")
 

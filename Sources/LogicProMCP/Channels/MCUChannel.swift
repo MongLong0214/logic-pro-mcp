@@ -986,6 +986,15 @@ actor MCUChannel: Channel {
 
     // MARK: - Banking (Proper Queue)
 
+    /// How long Logic is given to finish banking before a strip-relative message is sent.
+    ///
+    /// 250 ms is the value that fixed the measured miss (#862, 2026-09-11); it is a SETTLE, not a
+    /// readback, and this file cannot tell whether Logic actually banked — nothing in the MCU
+    /// protocol reports the bank offset, which is the blocker #862 records. What this removes is
+    /// the case where the message provably could not have landed right, not the case where it
+    /// silently did not.
+    static let bankSettleMilliseconds = 250
+
     private func withBanking(targetTrack: Int, operation: @escaping (Int) async -> ChannelResult) async -> ChannelResult {
         // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
         // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
@@ -1025,6 +1034,13 @@ actor MCUChannel: Channel {
             try? await Task.sleep(for: .milliseconds(1))
         }
         currentBank = targetBank
+        // Logic has not banked yet. The presses above go out 1 ms apart and the strip-relative
+        // message right behind them addresses a bank that has not moved: measured 2026-09-11
+        // (#862), asking for arrange track 11 — targetBank 1, strip 3 — selected CHANNEL 3, and
+        // Logic answered `Deluxe Classic` where `Studio Grand` was requested. A strip index that
+        // names the wrong channel is not a slow operation, it is a write to a target the caller
+        // did not name, and every strip-relative MCU operation goes through here.
+        try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
 
         // Execute on target bank
         let result = await operation(strip)
@@ -1037,6 +1053,10 @@ actor MCUChannel: Channel {
             try? await Task.sleep(for: .milliseconds(1))
         }
         currentBank = originalBank
+        // The restore loop has the same shape and the same problem. Without this the NEXT caller
+        // inherits a bank Logic has not finished moving to, which is the same defect one call
+        // later and harder to attribute.
+        try? await Task.sleep(for: .milliseconds(Self.bankSettleMilliseconds))
 
         // defer handles: isBanking = false + queue wake
         return result
