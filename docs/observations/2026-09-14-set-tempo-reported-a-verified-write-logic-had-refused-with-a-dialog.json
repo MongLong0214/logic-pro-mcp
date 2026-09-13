@@ -104,7 +104,7 @@
     },
     {
       "what": "what the alert did to everything after it",
-      "logic_edit_undo": "State C element_not_found, 6 attempts, no effect",
+      "logic_edit_undo": "State C element_not_found, 6 attempts, no effect — and this was first written up as an arrange-window precondition. Re-measured with no modal: undo works with the PLUG-IN window frontmost. The precondition claim is retracted; the alert was the cause.",
       "file_import_audio_panel": "menu click returned, no panel in 78 s of polling",
       "tempo_row_delete_paths_tried": [
         "the pane's own 삭제 button (AX code 0, no effect)",

@@ -125,18 +125,16 @@
         "note": "conditions differed: the arrange window was frontmost and the create press did not land, so there was only one event"
       },
       "undo_window_dependence": {
-        "arrange_window_NOT_frontmost": {
-          "state": "C",
-          "error": "element_not_found",
-          "attempts": 6,
-          "rows_changed": 0
+        "RETRACTED": "measured while a modal alert was up; the dependence is on the ALERT, not the window",
+        "re-measured with no modal, plugin window frontmost": {
+          "state": "B",
+          "tempo": "118 -> 120",
+          "worked": true
         },
-        "arrange_window_raised_by_name_first": {
-          "state": "A",
-          "attempts": 1,
-          "rows": 1
-        },
-        "note": "reproducible in both directions; the raise was by window title, not by position"
+        "re-measured with no modal, arrange window frontmost": {
+          "state": "B",
+          "worked": true
+        }
       }
     }
   ],
@@ -149,7 +147,7 @@
     "Korean only. `새로운 템포 이벤트 생성` and the Tempo radio button's `템포` have no label set yet; anything built on this needs them, exactly as the Event List's headers did.",
     "The three-column table was identified by its column count, which is a shape rather than a name. On a project with a different pane open that heuristic could pick the wrong table.",
     "A `set_tempo` answering State A with `observed: 144` while neither tempo row moved was seen once here and not reproduced in the next run. It REPRODUCED under control later the same day, and the cause is recorded in `2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog`: with more than one tempo event Logic refuses the control-bar edit and raises a single-button modal, and every success branch was verifying against the field it had just typed into. The second run answered State C only because a stuck alert had already blocked the create press, so there was one event and not two. Fixed and live-verified in both directions.",
-    "`logic_edit.undo` answers State C `element_not_found` while the arrange window is not frontmost, and State A once it is raised by title — reproducible in both directions, six failing attempts and then one that worked. The deeper cause was the same alert: with it dismissed, undo works from the arrange window on the first try. A caller still has no way to learn the precondition from the error. This is how the tempo event stayed in the project through the pane's own `삭제` button (AX code 0, no effect), `편집 > 삭제`, and a real Delete keypress with the row AX-selected and Logic frontmost — none of which removed it. Whether a tempo event has ANY delete path other than undo is therefore still unestablished, and a created event should not be assumed reversible."
+    "`logic_edit.undo` answered State C `element_not_found` six times in a row and then State A once the arrange window was raised, and this record first read that as a WINDOW precondition. **That reading was wrong and is retracted.** Re-measured with no modal present: undo works with the PLUG-IN window frontmost (State B, tempo 118 -> 120). The six failures were the stuck `경고` alert, not the window order, and raising the arrange window happened to coincide with the alert being cleared. The cause is recorded in `2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog`. What stands unchanged: while that alert was up, the pane's own `삭제` button (AX code 0, no effect), `편집 > 삭제`, and a real Delete keypress all failed, so whether a tempo event has any delete path other than undo is still unestablished."
   ],
   "supersedes": null
 }
