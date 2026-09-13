@@ -187,6 +187,36 @@ extension AccessibilityChannel {
         return labels
     }
 
+    /// One modal reading, carrying BOTH what was classified and whether the scan was complete.
+    ///
+    /// `ModalReconciliation.classify` answers `.none` for an unreadable read — every signal it
+    /// takes defaults to false — so a consumer that asks only for the kind cannot tell "nothing is
+    /// blocking" from "the scan failed". `ModalSignalRead.modalObservationIsComplete` is the
+    /// discriminator the reader provides for exactly this, and its own comment says consumers
+    /// needing a clean observation must use it alongside the kind.
+    struct ModalObservation: Sendable {
+        let kind: ModalReconciliation.BlockingModalKind
+        let complete: Bool
+
+        /// Non-nil when this observation cannot license a verified success: either a blocker is
+        /// present, or the scan did not complete and we do not know.
+        var refusalLabel: String? {
+            if !complete { return "unreadable_modal_scan" }
+            guard kind != .none else { return nil }
+            return AccessibilityChannel.reconcileKindLabel(kind)
+        }
+    }
+
+    static func observeTempoModal(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ModalObservation {
+        let read = readModalSignalsAndAlertTarget(runtime: runtime)
+        return ModalObservation(
+            kind: ModalReconciliation.classify(read.signals),
+            complete: read.modalObservationIsComplete
+        )
+    }
+
     static func defaultSetTempo(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
@@ -209,7 +239,7 @@ extension AccessibilityChannel {
 
         let baseExtras: [String: Any] = ["requested": tempoValue]
 
-        // WHY THIS READS A MODAL BEFORE AND AFTER. Every success branch below verifies by reading
+        // WHY A MODAL READ GATES EVERY SUCCESS HERE. Each success branch below verifies by reading
         // the SAME tempo field it just typed into, and a field holding the typed text is not the
         // same fact as Logic having applied it. Measured live 2026-09-14 on Logic 12.3: with TWO
         // tempo events in the project, typing 144 left the field reading 144, the tempo map
@@ -219,36 +249,37 @@ extension AccessibilityChannel {
         // State A `verified: true`. With ONE tempo event the same call moves the map and raises no
         // alert, so the refusal is specific and observable.
         //
-        // The before-reading matters as much as the after: an alert that was ALREADY up is not
-        // evidence about this write, and attributing it here would turn someone else's stuck
-        // dialog into this operation's failure.
-        let modalBeforeWrite = ModalReconciliation.classify(
-            readModalSignalsAndAlertTarget(runtime: runtime).signals
-        )
-        /// A blocking modal that was NOT there before the write. Its presence means Logic answered
-        /// the write with a dialog, so nothing this function can read from the tempo field is a
-        /// statement about the project's tempo.
-        func modalRaisedByThisWrite() -> ModalReconciliation.BlockingModalKind? {
-            let after = ModalReconciliation.classify(
-                readModalSignalsAndAlertTarget(runtime: runtime).signals
-            )
-            guard after != .none, after != modalBeforeWrite else { return nil }
-            return after
-        }
-        /// State A, unless Logic put a dialog in front of it. This funnels every success branch
-        /// through one place so a new branch cannot be added that skips the check — the previous
-        /// shape had three independent `encodeStateA` sites.
+        // THE RULE IS NOT "A MODAL APPEARED BECAUSE OF ME". A first attempt at this gate compared
+        // the classified kind before and after the write and refused on a difference, which a
+        // review took apart in three places and each one was right: an UNREADABLE scan classifies
+        // as `.none` — every signal defaults false — so the original false State A survived
+        // whenever the after-read failed; a kind CHANGE (`strayMenu` -> `informationalAlert`) is not
+        // evidence that this write caused anything; and one informational alert REPLACED by another
+        // compares equal and slips through. Inferring causation from a kind delta cannot be made
+        // sound.
+        //
+        // So the claim is narrowed to one this function can actually support: **State A requires a
+        // COMPLETE modal read that is clean.** A blocker present at all — whoever raised it — means
+        // the field cannot be read as the project's tempo, and an INCOMPLETE read means we do not
+        // know. Both refuse. The before-reading survives only to annotate the response with whether
+        // the blocker predates this call, which is useful to a caller and is not load-bearing.
+        let modalBeforeWrite: ModalObservation = observeTempoModal(runtime: runtime)
+
+        /// A complete, clean read is the only thing that licenses State A here.
         func tempoSuccess(observed: Double, via: String) -> ChannelResult {
-            if let blocker = modalRaisedByThisWrite() {
+            let after = observeTempoModal(runtime: runtime)
+            if let refusal = after.refusalLabel {
                 return .error(HonestContract.encodeStateC(
                     error: .axWriteFailed,
-                    hint: "Logic answered the tempo write with a modal dialog, so the tempo field's value is not evidence the tempo changed. A project with more than one tempo event refuses this edit and directs the caller to the Tempo List editor.",
+                    hint: "The tempo field's value is not evidence the tempo changed while Logic's modal state is blocked or unreadable. A project with more than one tempo event refuses this edit with an alert and directs the caller to the Tempo List editor.",
                     extras: baseExtras.merging([
                         "observed_field_value": observed,
                         "via": via,
                         "write_attempted": true,
-                        "blocking_modal": AccessibilityChannel.reconcileKindLabel(blocker),
-                        "modal_raised_by_this_write": true,
+                        "blocking_modal": refusal,
+                        // Annotation, not a causal claim: this says whether the same blocker label
+                        // was already there, and nothing about what raised it.
+                        "blocker_present_before_write": modalBeforeWrite.refusalLabel != nil,
                         "safe_to_retry": false,
                     ]) { _, new in new }
                 ))
@@ -263,9 +294,18 @@ extension AccessibilityChannel {
                   let size = AXHelpers.getSize(slider, runtime: runtime.ax) else {
                 AXHelpers.setAttribute(slider, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
                 _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
+                // This branch WRITES and then claims nothing about the tempo, so it needs no
+                // success gate — `readback_unavailable` is already the honest answer. It does carry
+                // the blocker label, because a caller reading "no readback" while Logic is holding
+                // an alert is owed the difference between "we could not look" and "Logic refused".
+                var directExtras = baseExtras.merging(["via": "slider-direct"]) { _, new in new }
+                if let blocker = observeTempoModal(runtime: runtime).refusalLabel {
+                    directExtras["blocking_modal"] = blocker
+                    directExtras["write_attempted"] = true
+                }
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: baseExtras.merging(["via": "slider-direct"]) { _, new in new }
+                    extras: directExtras
                 ))
             }
             let center = CGPoint(
@@ -282,6 +322,25 @@ extension AccessibilityChannel {
             if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
                abs(finalValue - tempoValue) < 1.0 {
                 return tempoSuccess(observed: finalValue, via: "slider")
+            }
+
+            // OBSERVE BEFORE ESCAPE. The typed entry did not land, and one reason it does not land
+            // is that Logic answered with an alert. Escape is about to clear the edit field and may
+            // clear that alert with it, and every later scan would then see a clean Logic and
+            // license a State A on a write Logic refused. Refuse here, before the evidence is
+            // destroyed, and do not push further writes into a blocked Logic.
+            if let blocker = observeTempoModal(runtime: runtime).refusalLabel {
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "The typed tempo entry did not commit and Logic's modal state is blocked or unreadable, so no further write was attempted and the field cannot be read as the project's tempo.",
+                    extras: baseExtras.merging([
+                        "via": "slider",
+                        "write_attempted": true,
+                        "blocking_modal": blocker,
+                        "blocker_present_before_write": modalBeforeWrite.refusalLabel != nil,
+                        "safe_to_retry": false,
+                    ]) { _, new in new }
+                ))
             }
 
             AXMouseHelper.pressEscape(runtime: mouseRuntime)

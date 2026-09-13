@@ -126,15 +126,35 @@
         "editing": "re-reads an observable window state, not the control written"
       },
       "note": "a count of where the shape COULD occur, not a list of defects: no other operation was driven to see whether Logic ever refuses it with a dialog"
+    },
+    {
+      "what": "what a blind review found in the FIRST version of the fix, and what replaced it",
+      "first_rule": "refuse when the classified modal KIND differs before and after the write",
+      "three_ways_that_was_wrong": [
+        "ModalReconciliation.classify answers .none for an UNREADABLE read — every signal it takes defaults to false — so the original false State A survived every failed after-read",
+        "a kind CHANGE (strayMenu -> informationalAlert) is not evidence this write caused anything",
+        "one informational alert REPLACED by another compares equal and slips through"
+      ],
+      "also_found": [
+        "the geometry-free direct AX write returned State B with no modal reading at all",
+        "Escape was pressed before any modal scan, and Escape can clear the very alert that is the evidence"
+      ],
+      "rule_now": "State A requires a COMPLETE modal read that is clean. A blocker present at all — whoever raised it — means the field cannot be read as the project's tempo, and an incomplete read means we do not know. Both refuse. The before-reading survives only as an annotation (`blocker_present_before_write`) and is not load-bearing.",
+      "mutation_checks": {
+        "disable the completeness check": "the unreadable-scan test goes red with State A verified:true observed 130",
+        "disable the presence check": "the alert test goes red with State A verified:true observed 144",
+        "restored": "10 of 10 green"
+      }
     }
   ],
-  "conclusion": "A tempo field holding the typed value is NOT the project holding that tempo. On a project with more than one tempo event, Logic refuses the control-bar tempo edit and says so with a single-button modal alert directing the caller to the Tempo List editor — and `set_tempo` answered State A with `verified: true` and `observed: 144` while both tempo rows stayed at 120. Every success branch verified against the same field it had written, which cannot tell a refusal from a success. The fix reads Logic's modal state before and after the write and refuses when a blocking modal appeared that was not there before; the before-reading is what keeps someone else's stuck dialog from being blamed on this write. The alert also wedged everything that followed it — undo, the audio-import panel, and three separate delete paths — which is why several earlier readings in this session were taken against a blocked Logic.",
+  "conclusion": "A tempo field holding the typed value is NOT the project holding that tempo. On a project with more than one tempo event, Logic refuses the control-bar tempo edit and says so with a single-button modal alert directing the caller to the Tempo List editor — and `set_tempo` answered State A with `verified: true` and `observed: 144` while both tempo rows stayed at 120. Every success branch verified against the same field it had written, which cannot tell a refusal from a success. The fix requires a COMPLETE, clean modal read before it will answer State A. A first version compared the classified kind before and after and refused on a difference; a blind review showed that inference cannot be made sound — an unreadable read classifies as `.none` and let the original false State A through, a kind change is not causation, and a replaced alert of the same kind compares equal — so the claim was narrowed to one this function can support. The alert also wedged everything that followed it — undo, the audio-import panel, and three separate delete paths — which is why several earlier readings in this session were taken against a blocked Logic.",
   "limits": [
     "The fix makes the operation HONEST, not capable. A project with two tempo events still cannot have its tempo written through this operation; it now says so instead of claiming success. Whether the Tempo List editor offers a writable path was not measured.",
-    "It does not DISMISS the alert. The refusal reports the blocker, and clearing it is the preflight reconciler's job on the next operation; whether that actually happens on this path was not driven.",
     "One locale. The alert was identified by its shape — a top-level AXDialog with exactly one button — and never by its Korean text, so the fix is locale-independent, but that was reasoned rather than measured on a second locale.",
     "Two tempo events, both at 120 bpm. Nothing here says what happens with three, or with events at different tempos.",
-    "The exposure SHAPE was counted, the exposure was not. 21 of the 40 State A sites under `Sources/LogicProMCP/Channels` sit in the 10 files that never read Logic's modal state, and `mixer.set_volume` declares `verify_source: \"ax_slider\"` — it reads the fader it wrote, exactly the shape that made this defect. But a shape is not a defect: the REFUSAL here is specific (Logic objects to a control-bar tempo edit when the project holds more than one tempo event), and no other operation was driven to find out whether Logic ever answers it with a dialog. Nothing here says those 21 sites are wrong; it says a refusal of this kind could not be detected at them."
+    "The exposure SHAPE was counted, the exposure was not. 21 of the 40 State A sites under `Sources/LogicProMCP/Channels` sit in the 10 files that never read Logic's modal state, and `mixer.set_volume` declares `verify_source: \"ax_slider\"` — it reads the fader it wrote, exactly the shape that made this defect. But a shape is not a defect: the REFUSAL here is specific (Logic objects to a control-bar tempo edit when the project holds more than one tempo event), and no other operation was driven to find out whether Logic ever answers it with a dialog. Nothing here says those 21 sites are wrong; it says a refusal of this kind could not be detected at them.",
+    "It does not DISMISS the blocker. The refusal reports it and stops; clearing it is the preflight reconciler's job on the next operation, and whether that actually runs on this path was not driven.",
+    "The gate now refuses while ANY blocker is up, including one this call did not cause. That is a deliberate false-negative: a stuck dialog makes every tempo write report `ax_write_failed` with `blocker_present_before_write: true` until it is cleared. Refusing to verify through a blocked Logic is the honest half of the trade, and the annotation tells the caller which problem to fix."
   ],
   "supersedes": null
 }

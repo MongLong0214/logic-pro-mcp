@@ -4693,8 +4693,10 @@ private func makeTempoFixtureWithAlert(
     #expect(!result.isSuccess)
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "ax_write_failed")
-    #expect((obj["modal_raised_by_this_write"] as? Bool)!)
     #expect(obj["blocking_modal"] as? String == "informational_alert")
+    // An annotation, not a causal claim. This says only that the same blocker was not already
+    // there — the refusal itself rests on the blocker being present NOW, whoever raised it.
+    #expect(!((obj["blocker_present_before_write"] as? Bool)!))
     #expect((obj["write_attempted"] as? Bool)!)
     // The field's reading is REPORTED, under a name that says it is the field's and not the
     // project's. Dropping it would hide what the operation actually saw.
@@ -4703,10 +4705,14 @@ private func makeTempoFixtureWithAlert(
     #expect(obj["verified"] == nil)
 }
 
-@Test func testSetTempoDoesNotBlameAnAlertThatWasAlreadyThere() async {
-    // The other half, and the one that keeps this from becoming a new false negative: a dialog
-    // someone else left up is not evidence about THIS write. Without the before-reading, any
-    // operation run while a stray alert sits on screen would report its own write as refused.
+@Test func testSetTempoRefusesWhileAnyBlockerIsUpAndSaysItWasAlreadyThere() async {
+    // A first version of this gate compared the classified modal kind before and after the write
+    // and refused on a difference. A review took that apart and each objection held: an UNREADABLE
+    // scan classifies as `.none`, so the original false State A survived whenever the after-read
+    // failed; a kind CHANGE is not evidence this write caused anything; and one informational
+    // alert replaced by another compares equal and slips through. Causation cannot be inferred
+    // from a kind delta, so it is not claimed. What IS claimed: while a blocker is up, the tempo
+    // field cannot be read as the project's tempo — whoever raised it.
     let builder = FakeAXRuntimeBuilder()
     let fixture = makeTempoFixtureWithAlert(builder: builder, tempoValue: 120.0, alertPresent: true)
     let channel = makeAXBackedAccessibilityChannel(
@@ -4718,9 +4724,39 @@ private func makeTempoFixtureWithAlert(
     let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "130"])
 
     let obj = decodeAccessibilityJSON(result.message)
-    #expect(result.isSuccess)
-    #expect((obj["verified"] as? Bool)!)
-    #expect((obj["observed"] as? Double) == 130)
-    #expect(obj["modal_raised_by_this_write"] == nil)
-    #expect(obj["blocking_modal"] == nil)
+    #expect(!result.isSuccess)
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["blocking_modal"] as? String == "informational_alert")
+    // The annotation earns its place here: the caller can tell this blocker predates the call, so
+    // the thing to do is clear it rather than hunt for what this write broke.
+    #expect((obj["blocker_present_before_write"] as? Bool)!)
+    #expect(obj["verified"] == nil)
+}
+
+@Test func testSetTempoRefusesWhenTheModalScanCannotComplete() async {
+    // The blocker a review found in the first version, pinned. `ModalReconciliation.classify`
+    // answers `.none` for an UNREADABLE read — every signal it takes defaults to false — so a gate
+    // that asks only for the kind cannot tell "nothing is blocking" from "the scan failed", and the
+    // original false State A survives every failed after-read. A window that refuses to answer
+    // AXModal is exactly that case.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoSliderFixture(builder: builder, tempoValue: 120.0)
+    let unreadable = builder.element(7195)
+    builder.setAttribute(unreadable, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(unreadable, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    // No AXModal value at all: the read fails rather than answering false.
+    builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [unreadable])
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: nudgeResponsiveLogicRuntime(builder, app: fixture.app)
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "130"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["blocking_modal"] as? String == "unreadable_modal_scan")
+    #expect(obj["verified"] == nil)
 }
