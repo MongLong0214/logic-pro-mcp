@@ -275,7 +275,9 @@ struct SliderIncrementWalkTests {
 
         // Mutation caught: making an unchanged rendering terminal again returns noProgress at step
         // 1 and Q becomes unreachable; making a rail non-terminal walks into the end stop forever.
-        #expect(outcome == .budgetExhausted(steps: 8, last: Reading(value: 96, display: "100 Hz")))
+        // 108, not 96: the target renders `101 Hz` against a current `100 Hz`, so the walk reads the
+        // target as ABOVE and steps up. The raw value is what moves; the rendering never does.
+        #expect(outcome == .budgetExhausted(steps: 8, last: Reading(value: 108, display: "100 Hz")))
         #expect(nudgeCalls == 8)
     }
 
