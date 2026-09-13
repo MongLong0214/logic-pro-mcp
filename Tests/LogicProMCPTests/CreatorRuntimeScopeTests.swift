@@ -3,7 +3,7 @@ import Testing
 
 /// The runtime must not select a variant the release matrix does not cover.
 ///
-/// `QualificationAxis.shipVariants` is `[.desktop]` and the ADR records Creator Studio as
+/// Creator Studio left product scope on 2026-07-17, and the ADR records it as
 /// permanently out of scope. #631 corrected the README's claim of supporting both; this is the
 /// other half — the code path that could still hand back Creator as the app to drive.
 @Suite struct CreatorRuntimeScopeTests {
@@ -52,9 +52,4 @@ import Testing
         #expect(!SetupDoctor.unshippedVariantOnly([]))
     }
 
-    @Test("the ship scope this rests on is desktop only")
-    func shipScopeIsDesktopOnly() {
-        // If this ever changes, the checks above are the ones to revisit rather than delete.
-        #expect(QualificationAxis.shipVariants == [.desktop])
-    }
 }

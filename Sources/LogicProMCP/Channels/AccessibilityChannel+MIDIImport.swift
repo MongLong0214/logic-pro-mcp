@@ -228,6 +228,33 @@ extension AccessibilityChannel {
             variableName: "midiFileItemName",
             notFoundError: "MIDI_FILE_MENU_ITEM_NOT_FOUND"
         )
+        // The import panel's own title, rendered from `AXLocalePolicy.midiImportPanelTitle` rather
+        // than written in. It was `name is not "Import" and name is not "가져오기"`, and on a German
+        // Logic — whose panel is `Importieren` — that test is true of the panel itself, so the still-
+        // open import panel was taken for the tempo alert and dismissed as one (#876).
+        // `exists a window with one of the panel's measured titles`, rendered the same way.
+        let importPanelTitleExists = AXLocalePolicy.midiImportPanelTitle.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "(exists (first window whose name is \"\($0)\"))" }
+            .joined(separator: " or ")
+        // The panel itself, for the branch that reaches inside it.
+        let importPanelWindowPredicate = AXLocalePolicy.midiImportPanelTitle.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "name is \"\($0)\"" }
+            .joined(separator: " or ")
+        // The commit button is a SEPARATE label set: its German spelling is unmeasured, so on a
+        // German Logic this resolves to nothing and the import reports that rather than pressing
+        // whatever happens to be there.
+        let importCommitButtonNames = AXLocalePolicy.midiImportCommitButton.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "\"\($0)\"" }
+            .joined(separator: ", ")
+
+        let importPanelTitleExclusion = AXLocalePolicy.midiImportPanelTitle.labels
+            .filter { !$0.contains("\"") && !$0.contains("\\") }
+            .map { "name is not \"\($0)\"" }
+            .joined(separator: " and ")
+
         let script = """
         on importMIDI()
             \(logicProAppleScript.activateByBundleID)
@@ -237,7 +264,7 @@ extension AccessibilityChannel {
                 -- failed run so repeated imports never stack file-open dialogs.
                 tell \(logicProAppleScript.systemEventsProcessTarget)
                     repeat 4 times
-                        if (exists (first window whose name is "Import")) or (exists (first window whose name is "가져오기")) then
+                        if \(importPanelTitleExists) then
                             key code 53
                             delay 0.25
                         else
@@ -354,9 +381,9 @@ extension AccessibilityChannel {
                 repeat 60 times
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            set importDlg to first window whose name is "가져오기"
+                            set importDlg to first window whose \(importPanelWindowPredicate)
                             set sawPanel to true
-                            set ib to button "가져오기" of UI element 1 of importDlg
+                            set ib to (first button of UI element 1 of importDlg whose name is in {\(importCommitButtonNames)})
                             set sawButton to true
                             if (enabled of ib) then
                                 click ib
@@ -382,7 +409,7 @@ extension AccessibilityChannel {
                 if importClicked is false then
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         repeat 3 times
-                            if (exists (first window whose name is "Import")) or (exists (first window whose name is "가져오기")) then
+                            if \(importPanelTitleExists) then
                                 key code 53
                                 delay 0.2
                             else
@@ -411,7 +438,7 @@ extension AccessibilityChannel {
                 repeat 15 times
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            if (exists (first window whose subrole is "AXDialog" and name is not "Import" and name is not "가져오기")) then
+                            if (exists (first window whose subrole is "AXDialog" and \(importPanelTitleExclusion))) then
                                 set tempoSeen to true
                             end if
                         end try
@@ -422,7 +449,7 @@ extension AccessibilityChannel {
                 if tempoSeen then
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
-                            set tempoDlg to first window whose subrole is "AXDialog" and name is not "Import" and name is not "가져오기"
+                            set tempoDlg to first window whose subrole is "AXDialog" and \(importPanelTitleExclusion)
                             try
                                 click button "아니요" of tempoDlg
                             on error
@@ -437,7 +464,7 @@ extension AccessibilityChannel {
                 -- (failed mid-flow), dismiss it so the next call starts clean.
                 tell \(logicProAppleScript.systemEventsProcessTarget)
                     repeat 3 times
-                        if (exists (first window whose name is "Import")) or (exists (first window whose name is "가져오기")) then
+                        if \(importPanelTitleExists) then
                             key code 53
                             delay 0.2
                         else

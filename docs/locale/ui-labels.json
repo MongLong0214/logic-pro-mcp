@@ -1608,6 +1608,35 @@
     "en-US": "title"
    }
   },
+  "midiImportCommitButton": {
+   "canonical": "Import",
+   "variants": [
+    "가져오기"
+   ],
+   "rationale": "The commit button of Logic's MIDI-import open panel. EN/KO measured; German unmeasured on purpose — the panel title `Importieren` says nothing about what the button inside it is called.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "midiImportPanelTitle": {
+   "canonical": "Import",
+   "variants": [
+    "가져오기",
+    "Importieren"
+   ],
+   "rationale": "Distinguishes Logic's MIDI-import open panel from the tempo alert that may follow it; both carry subrole AXDialog, so the title is the only separator available. German read 2026-09-12 from the product's own refusal envelope (#876), which named the blocking dialog `Importieren`.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "mixerInspectorContext": {
    "canonical": "inspector",
    "variants": [

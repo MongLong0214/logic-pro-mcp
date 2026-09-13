@@ -83,13 +83,15 @@ struct Issue544OutputSchemaContractTests {
         #expect(try #require(result.isError))
     }
 
-    @Test("the two reported commands keep the exact text their semantic oracle grades")
-    func structuredAnswersDoNotDisturbTheGradedText() async throws {
-        // The first attempt at #544 encoded the new objects AS the text. Every unit test stayed green and
-        // the live gate passed, because `SemanticOracleTable` grades these operations against fixtures
-        // rather than the live handler — so a correct answer would only have turned RED later, in
-        // qualification. The text and the structure are now separate halves on purpose, and this test is
-        // the thing that notices if they are ever merged again.
+    @Test("the two reported commands keep their exact text beside the structured half")
+    func structuredAnswersDoNotDisturbTheText() async throws {
+        // The first attempt at #544 encoded the new objects AS the text, and every unit test stayed
+        // green. The text and the structure are separate halves on purpose, and this test is what
+        // notices if they are ever merged again.
+        //
+        // It used to also assert that a semantic oracle graded the same strings. That oracle was part
+        // of the release-certification system removed on 2026-09-12; the strings it graded are still
+        // asserted here directly, which is the half that was ever about the product.
         let refresh = await SystemDispatcher.handle(
             command: "refresh_cache", params: [:],
             router: ChannelRouter(), cache: StateCache()
@@ -98,10 +100,6 @@ struct Issue544OutputSchemaContractTests {
             Issue.record("expected text content"); return
         }
         #expect(refreshText == "State refresh triggered. Cache will be updated on next poll cycle.")
-        #expect(try #require(SemanticOracleTable.systemRefreshCache.evaluate(
-            responseData: Data(refreshText.utf8), readbackData: Data("{}".utf8)
-        )))
-
         // ...and the structured half is still there, which is the whole point of the change.
         guard case .object(let refreshFields) = try #require(refresh.structuredContent) else {
             Issue.record("expected an object"); return
@@ -116,9 +114,6 @@ struct Issue544OutputSchemaContractTests {
             Issue.record("expected text content"); return
         }
         #expect(permText.hasPrefix("Accessibility: "))
-        #expect(try #require(SemanticOracleTable.systemPermissions.evaluate(
-            responseData: Data(permText.utf8), readbackData: Data("{}".utf8)
-        )))
         guard case .object(let permFields) = try #require(perms.structuredContent) else {
             Issue.record("expected an object"); return
         }

@@ -551,6 +551,38 @@ enum AXLocalePolicy {
     )
 
     /// #519: File > Import > MIDI File….
+    /// The title of Logic's MIDI-import open panel, used to tell that panel APART from the tempo
+    /// alert that can follow an import.
+    ///
+    /// It was two literals in the AppleScript — `name is not "Import" and name is not "가져오기"` —
+    /// and on a German Logic that test is TRUE of the import panel itself, so the still-open panel
+    /// was taken for the tempo dialog and dismissed as one. `Importieren` was read off the product's
+    /// own refusal on 2026-09-12 (#876), which reported `dialog_title: "Importieren"` while refusing
+    /// `record_sequence` for a blocking dialog.
+    ///
+    /// This is still a NEGATIVE identification and that is the weaker half: it says which window is
+    /// not the tempo alert rather than which one is. Positively identifying the tempo alert needs
+    /// that alert measured on each locale, which has not been done.
+    /// The button that commits Logic's MIDI-import open panel.
+    ///
+    /// German is DELIBERATELY ABSENT. The panel's own title was read off the product's refusal
+    /// envelope; the button inside it was not, and a button label is not derivable from a window
+    /// title — English spells both `Import`, and that coincidence is exactly what would make a
+    /// guess look right until it silently clicked the wrong control. With no German variant the
+    /// import fails to find its button and says so, which is the honest outcome until somebody
+    /// opens that panel on a German Logic and reads it.
+    static let midiImportCommitButton = LabelSet(
+        canonical: "Import",
+        variants: ["가져오기"],
+        rationale: "The commit button of Logic's MIDI-import open panel. EN/KO measured; German unmeasured on purpose — the panel title `Importieren` says nothing about what the button inside it is called."
+    )
+
+    static let midiImportPanelTitle = LabelSet(
+        canonical: "Import",
+        variants: ["가져오기", "Importieren"],
+        rationale: "Distinguishes Logic's MIDI-import open panel from the tempo alert that may follow it; both carry subrole AXDialog, so the title is the only separator available. German read 2026-09-12 from the product's own refusal envelope (#876), which named the blocking dialog `Importieren`."
+    )
+
     static let midiFileMenuItem = LabelSet(
         canonical: "MIDI File…",
         variants: ["MIDI 파일…", "MIDIファイル…", "MIDI-Datei …"],
