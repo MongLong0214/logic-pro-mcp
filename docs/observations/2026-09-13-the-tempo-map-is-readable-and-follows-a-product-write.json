@@ -1,0 +1,77 @@
+{
+  "id": "2026-09-13-the-tempo-map-is-readable-and-follows-a-product-write",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "The Tempo tab of Logic's List Editors, as a tempo-map readback",
+  "question": "Is there a readable tempo map, and does it follow what the product writes?",
+  "verdict": "works",
+  "issues": [
+    "#304"
+  ],
+  "surface": "editor.event_list",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it switches a UI tab: (1) open the List Editors; (2) press the Tempo tab; (3) read the table's header titles and rows; (4) drive `logic_transport.set_tempo` and read the table again; (5) restore the tempo.",
+    "expected": "The table's headers are Position / Tempo / SMPTE Position, and the tempo cell changes to the value just written."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TransportDispatcher.swift"
+  ],
+  "evidence": [],
+  "method": "The List Editors' Tempo tab was pressed through AX and the pane's tables were dumped. `logic_transport.set_tempo` was then driven to 132 and the table re-read, then the tempo was restored to 120.",
+  "observations": [
+    {
+      "what": "the tabs the List Editors pane exposes",
+      "tabs": [
+        "이벤트",
+        "마커",
+        "템포",
+        "조표 및 박자표"
+      ],
+      "note": "localised descriptions; the Event tab is the one the note readback already uses"
+    },
+    {
+      "what": "the Tempo tab's table at 120 BPM",
+      "headers": [
+        "위치",
+        "템포",
+        "SMPTE 위치"
+      ],
+      "rows": 1,
+      "row_0": [
+        "1 1 1 1",
+        "120.0000",
+        "01:00:00:00.00"
+      ]
+    },
+    {
+      "what": "after logic_transport.set_tempo 132",
+      "envelope": {
+        "state": "A",
+        "verified": true,
+        "observed": 132
+      },
+      "row_0": [
+        "1 1 1 1",
+        "132.0000",
+        "01:00:00:00.00"
+      ]
+    }
+  ],
+  "conclusion": "The tempo map IS readable, through the same List Editors pane the note readback already uses. Its table names its columns — Position, Tempo, SMPTE Position — and the tempo cell FOLLOWS a product write: `set_tempo` to 132 returned State A and the row read `132.0000` immediately after. ADR-016's first public step is read-only Smart Tempo state and tempo-map inspection, and the inspection half has a working surface today.",
+  "limits": [
+    "One tempo event. This project has a single entry at bar 1, so nothing here exercises a VARIABLE tempo map — several rows, ordering, or a tempo change partway through a project — which is what the word `map` in this ADR is mostly about.",
+    "Reading is not Smart Tempo. Project tempo mode, per-region Flex & Follow, analysis jobs, beat and downbeat markers and locked ranges were not looked at, and none of them appears in this table.",
+    "The second table in the same pane reports sixteen rows whose cells read empty. What it is was not established, and it is not the tempo map.",
+    "Column titles are localised (`위치`, `템포`, `SMPTE 위치`). Anything built on this needs a label set, exactly as the Event List's headers do.",
+    "The write used here is the ordinary transport tempo. This record says nothing about whether a tempo-map MUTATION — inserting or moving a tempo event — is possible or verifiable."
+  ],
+  "supersedes": null
+}
