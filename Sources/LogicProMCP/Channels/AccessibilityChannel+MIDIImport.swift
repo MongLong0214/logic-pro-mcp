@@ -382,13 +382,24 @@ extension AccessibilityChannel {
                 -- the operation was failing at first contact and succeeding for anyone who ignored
                 -- its error.
                 --
-                -- 60 x 200ms, and the loop now records WHAT IT SAW rather than only whether it
-                -- clicked, so a timeout can say which of "no panel", "panel but no button" and
-                -- "button never enabled" actually happened.
+                -- The loop records WHAT IT SAW rather than only whether it clicked, so a timeout
+                -- can say which of "no panel", "panel but no button" and "button never enabled"
+                -- actually happened.
+                --
+                -- A WALL-CLOCK budget, not a count of turns. `repeat 60 times` was really "60
+                -- delays plus 60 walks of the window list", and the walk's cost is Logic's, not
+                -- ours: on a freshly launched Logic the panel itself did not appear until roughly
+                -- twelve seconds in (measured 2026-09-13 by polling the German panel from outside
+                -- the run), which left almost no margin before the turns ran out. The first import
+                -- after a cold launch failed with "the Import button stayed disabled" and every
+                -- retry seconds later reached State A — the same shape #594 measured after
+                -- `project.new`, at a different first contact. Thirty seconds is measured margin
+                -- over that twelve, and a panel that is ready immediately still exits at once.
                 set importClicked to false
                 set sawPanel to false
                 set sawButton to false
-                repeat 60 times
+                set importButtonDeadline to (current date) + 30
+                repeat while (current date) < importButtonDeadline
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try
                             -- Walk the window list by hand rather than filtering with `whose`. The

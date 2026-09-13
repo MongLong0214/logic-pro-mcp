@@ -415,6 +415,19 @@ ev.falsifiable(
 # `record_sequence` opens Logic's German import panel, and a check recorded while a modal is up is
 # retired by `is_clean` — correctly, because a reading taken behind a blocker is a reading of the
 # blocker. The panel this leaves is dismissed below and the dismissal confirmed.
+# Anything a previous step left up is dismissed FIRST, and the dismissal is confirmed. The import
+# refuses fail-closed on a blocking dialog — correctly — so a stray window from the navigation
+# above would be recorded here as an import failure that never happened.
+osa('tell application "Logic Pro" to activate')
+time.sleep(0.5)
+osa('tell application "System Events" to key code 53')
+time.sleep(1.5)
+ev.check("876/nothing-is-blocking-the-import-journey",
+         E.blocking_modal() is None,
+         "no modal is up before the import is driven, so what follows is a reading of the import "
+         "and not a reading of a blocker somebody else left",
+         f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}", None)
+
 imported = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
 ev.note("876/the-import-journey",
         {k: v for k, v in imported.items()
