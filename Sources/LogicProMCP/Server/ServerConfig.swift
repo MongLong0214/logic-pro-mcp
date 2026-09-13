@@ -26,13 +26,17 @@ struct ServerConfig: Sendable {
     // was still importing — the region landed but the caller saw a timeout
     // (#449). This bound must stay above that floor; the polling loops in
     // AccessibilityChannel+MIDIImport are the thing it has to outlast.
-    // 60, raised from 30 on 2026-09-13. On a freshly launched Logic the import panel itself did
-    // not appear until roughly twelve seconds in — measured by polling the German panel from
-    // outside the run — so the button-enable wait had to grow, and the script's own bound has to
-    // outlast it or the raise converts one failure into another. It did exactly that once: the
-    // button wait went to 30s under a 30s script bound and the envelope changed from "the Import
-    // button stayed disabled" to "AppleScript error: timedOut". `record_sequence` carries a 300s
-    // server deadline, so this sits well inside it.
+    // 90, raised from 30 on 2026-09-13 while chasing a failure whose cause turned out to be
+    // elsewhere: the staged .mid file lived in the shared user temporary directory, and Logic's
+    // open panel is a column view that must enumerate the file's parent — 114,000 entries — so it
+    // never finished. That is fixed at the source in `SMFWriter.importStagingRoot()`, and these
+    // budgets are no longer load-bearing for it.
+    //
+    // They are kept because the raise taught something the old shape could not express: a stage
+    // budget that outlasts the script bound converts a precise failure into a vague one. Under a
+    // 30s bound a 30s button wait turned "the Import button stayed disabled" — which names the
+    // stage Logic stalled in — into "AppleScript error: timedOut", which names nothing.
+    // `record_sequence` carries a 300s server deadline, so this sits well inside it.
     static let midiImportAppleScriptTimeout: TimeInterval = 90.0
 
     // The script's stages, each a WALL-CLOCK budget rather than a count of polling turns. A turn's
@@ -40,9 +44,9 @@ struct ServerConfig: Sendable {
     // buys a different amount of waiting on a busy machine than on an idle one, which is the
     // property that made all three of these too short on a freshly launched Logic.
     //
-    // Each was measured on 2026-09-13 against a cold German Logic, one stage at a time, because
-    // every raise revealed the next stage behind it: the button wait first, then the file-open
-    // sheet. The panel itself did not appear until roughly twelve seconds after the menu click.
+    // Raising them one at a time on 2026-09-13 moved the failure from stage to stage and never
+    // removed it, which was the evidence that the cause was not a budget at all. Keep them
+    // generous and wall-clock; do not read them as a measurement of how long Logic needs.
     //
     // Their SUM has to stay inside `midiImportAppleScriptTimeout` with room for the script's fixed
     // delays, or a stage that stalls is killed with the script and the caller is told "the script

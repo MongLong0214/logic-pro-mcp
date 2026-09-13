@@ -436,40 +436,23 @@ ev.check("876/nothing-is-blocking-the-import-journey",
          "and not a reading of a blocker somebody else left",
          f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}", None)
 
-# UP TO SIX attempts, and EVERY envelope is recorded — including the ones that failed.
+# ONE attempt, asserted on the FIRST call — and the count is still part of the reading.
 #
-# This run quits and relaunches Logic to change its language, so it always meets Logic at its
-# coldest, and the first imports after a launch are not reliable. Measured 2026-09-13 by polling
-# the German panel from outside the run: the File → Import open sheet appears about twelve seconds
-# after the menu click and its Import button can still be disabled several seconds later, after
-# which the attempt ends without it ever enabling. A second attempt seconds afterwards usually
-# lands, on the same Logic, the same project and the same binary — but not always. Counted on
-# 2026-09-13 against one cold launch: three attempts failed with a screen recorder running, a
-# fourth failed without it, and the fifth reached State A. Six is that measurement plus one.
+# This used to loop up to six times, because after a Logic relaunch the first imports failed and a
+# later one landed. That was not flakiness and not a budget: the staged .mid file lived in the
+# shared user temporary directory, and Logic's open panel is a column view that must enumerate the
+# file's parent — 114,000 entries — so it sat on `Loading…` with Import disabled. The file now
+# stages under a root whose ancestors are all small (`SMFWriter.importStagingRoot()`), and a cold
+# Logic imported four times out of four, first attempt included.
 #
-# The stage budgets were lengthened for this and are wall-clock now (`ServerConfig`), which moved
-# the failure from one stage to another without removing it — waiting longer does not make Logic
-# select a file it did not select. Two failure stages were seen: `file_open_sheet` never appearing,
-# and the Import button never enabling after the path was accepted.
-#
-# So the run states the cost instead of hiding it. Every attempt goes into the document under its
-# own index and the attempt COUNT is part of the asserted reading, so "it took three" is visible
-# rather than smoothed away — and a future fix to the cold path shows up here as the count falling
-# to one.
+# The loop is gone rather than kept "just in case", because a retry that is not needed hides the
+# regression it was written to tolerate: if the staging root ever moves back, this run must go red
+# on the first call instead of quietly taking five.
 attempts = []
-imported = {}
-for attempt in range(6):
-    if attempt:
-        osa('tell application "Logic Pro" to activate')
-        time.sleep(0.5)
-        osa('tell application "System Events" to key code 53')
-        time.sleep(3)
-    imported = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
-    attempts.append(imported)
-    ev.note(f"876/import-attempt-{attempt + 1}",
-            {k: (v[:400] if isinstance(v, str) else v) for k, v in imported.items()})
-    if imported.get("success"):
-        break
+imported = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
+attempts.append(imported)
+ev.note("876/import-attempt-1",
+        {k: (v[:400] if isinstance(v, str) else v) for k, v in imported.items()})
 
 ev.note("876/the-import-journey",
         {k: (v[:600] if isinstance(v, str) else v) for k, v in imported.items()})
@@ -491,9 +474,9 @@ import_reading = {
                       and "beginnt bei" in imported.get("raw_help", ""),
     "help_is_not_english": isinstance(imported.get("raw_help"), str)
                            and "starts at" not in imported.get("raw_help", "").lower(),
-    # Part of the READING, not a footnote. A run that needed three goes at a cold Logic and a run
-    # that landed first time are different facts about the product, and both pass — the predicate
-    # bounds the count rather than requiring one, because three is what was measured today.
+    # Part of the READING, not a footnote, and now pinned at ONE. A run that needs a second go is
+    # a different fact about the product than a run that lands first time, and the caller's first
+    # call is the one that matters — it is the move an agent opens with.
     "attempts": len(attempts),
 }
 
@@ -504,7 +487,7 @@ ev.falsifiable(
                and o["start_bar"] == o["expected_start_bar"]
                and o["end_bar"] == o["expected_end_bar"]
                and isinstance(o["start_bar"], int) and o["start_bar"] > 0
-               and 1 <= o["attempts"] <= 6),
+               and o["attempts"] == 1),
     import_reading,
     {"success": True, "verified": False, "error": "unreadable_readback", "failure_stage": None,
      "start_bar": -1, "end_bar": -1, "expected_start_bar": 1, "expected_end_bar": 2,

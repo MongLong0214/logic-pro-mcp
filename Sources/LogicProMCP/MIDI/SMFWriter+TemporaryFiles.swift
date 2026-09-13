@@ -33,8 +33,47 @@ extension SMFWriter {
 
     private static let managedMIDIFiles = ManagedMIDIFileRegistry()
 
+    /// Where a staged MIDI file goes: a root THIS PROCESS OWNS, never the shared user temporary
+    /// directory.
+    ///
+    /// The reason is not tidiness. `record_sequence` hands the staged path to Logic's
+    /// File ▸ Import ▸ MIDI File open panel, and that panel is a COLUMN VIEW: to show the file it
+    /// must enumerate the file's parent directory. Under `$TMPDIR` the parent is shared with every
+    /// other process on the machine — measured 2026-09-13 at 114,000 entries, most of them other
+    /// projects' fixtures — and the panel simply never finishes.
+    ///
+    /// Measured in one panel, seconds apart, by reading the panel's own state: a path under
+    /// `$TMPDIR` left `Import=false`, an `AXBusyIndicator` present and a `Loading…` label in the
+    /// browser, still there after thirty seconds; a path whose ancestors are all small came back
+    /// `Import=true`, no busy indicator, no label, at once. That is the whole of the "the first
+    /// imports after a Logic relaunch fail and then it works forever" behaviour: once the
+    /// directory listing is warm in the filesystem cache the panel can finish, which is why a
+    /// second attempt usually lands and why the failure looked like flakiness for a day.
+    ///
+    /// The fallback to `$TMPDIR` keeps the operation working if the Caches root cannot be made;
+    /// the import is slow there, not broken.
+    static func importStagingRoot() -> URL {
+        let manager = FileManager.default
+        guard let caches = try? manager.url(
+            for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else {
+            return manager.temporaryDirectory
+        }
+        let root = caches
+            .appendingPathComponent("LogicProMCP", isDirectory: true)
+            .appendingPathComponent("smf", isDirectory: true)
+        guard (try? manager.createDirectory(
+            at: root,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )) != nil else {
+            return manager.temporaryDirectory
+        }
+        return root
+    }
+
     static func temporaryMIDIFile(
-        baseDirectory: URL = FileManager.default.temporaryDirectory
+        baseDirectory: URL = SMFWriter.importStagingRoot()
     ) throws -> TemporaryMIDIFile {
         let directoryURL = try makePrivateTemporaryDirectory(baseDirectory: baseDirectory)
         let file = TemporaryMIDIFile(
@@ -55,7 +94,7 @@ extension SMFWriter {
     }
 
     static func temporaryDirectoryPrefix(
-        baseDirectory: URL = FileManager.default.temporaryDirectory
+        baseDirectory: URL = SMFWriter.importStagingRoot()
     ) -> String {
         let basePath = baseDirectory
             .resolvingSymlinksInPath()
@@ -133,11 +172,19 @@ extension SMFWriter {
     }
 
     static func cleanupStartupOrphanFiles(
-        baseDirectory: URL = FileManager.default.temporaryDirectory,
+        baseDirectory: URL = SMFWriter.importStagingRoot(),
         olderThan: TimeInterval = 300,
         legacyManagedDirectories: Set<String>? = nil
     ) {
         cleanupOrphanFiles(in: baseDirectory.path, olderThan: olderThan)
+        // Sweep the OLD home too, or every staging directory written before this moved is left
+        // behind forever. It is skipped when the staging root already IS the temporary directory,
+        // which is the fallback path — sweeping it twice would be harmless but says something
+        // untrue about what this call is for.
+        let systemTemporary = FileManager.default.temporaryDirectory
+        if canonicalPath(systemTemporary) != canonicalPath(baseDirectory) {
+            cleanupOrphanFiles(in: systemTemporary.path, olderThan: olderThan)
+        }
         cleanupLegacyOrphanFiles(
             olderThan: olderThan,
             legacyManagedDirectories: legacyManagedDirectories

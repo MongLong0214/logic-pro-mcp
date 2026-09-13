@@ -296,10 +296,9 @@ extension AccessibilityChannel {
                 -- panel attaches as a sheet (AXSheet) on the front window; some builds expose it
                 -- as a standalone window with a chooser-style name instead.
                 --
-                -- A wall-clock budget from `ServerConfig`, not 20 turns of 250ms. On a freshly
-                -- launched Logic the sheet did not appear inside that ~5s and the import returned
-                -- `DIALOG_NOT_FOUND: file-open sheet did not appear` — accurate, and a failure at
-                -- first contact, which is the move an agent opens with.
+                -- A wall-clock budget from `ServerConfig`, not 20 turns of 250ms: the cost of one
+                -- turn is a window walk, and Logic sets that price, so a turn count buys a
+                -- different amount of waiting on a busy machine than on an idle one.
                 set fileOpenDeadline to (current date) + \(Int(ServerConfig.midiImportFileOpenSheetBudget))
                 set fileOpenSeen to false
                 repeat while (current date) < fileOpenDeadline
@@ -395,17 +394,14 @@ extension AccessibilityChannel {
                 -- actually happened.
                 --
                 -- A WALL-CLOCK budget, not a count of turns. `repeat 60 times` was really "60
-                -- delays plus 60 walks of the window list", and the walk's cost is Logic's, not
-                -- ours: on a freshly launched Logic the panel itself did not appear until roughly
-                -- twelve seconds in (measured 2026-09-13 by polling the German panel from outside
-                -- the run), which left almost no margin before the turns ran out. The first import
-                -- after a cold launch failed with "the Import button stayed disabled" and every
-                -- retry seconds later reached State A — the same shape #594 measured after
-                -- `project.new`, at a different first contact. The budget is measured margin over
-                -- that twelve, and a panel that is ready immediately still exits at once. It comes
-                -- from `ServerConfig` beside the script bound it has to stay under, because the
-                -- first attempt at this raise put a 30s stage inside a 30s script and turned
-                -- "the Import button stayed disabled" into "AppleScript error: timedOut".
+                -- delays plus 60 walks of the window list", and the walk's cost is Logic's.
+                --
+                -- This wait is NOT what made the cold-launch imports fail; raising it only moved
+                -- the failure to the stage in front of it. The cause was the staged file's home —
+                -- see `SMFWriter.importStagingRoot()`. What this wait must still survive is an
+                -- open panel that is legitimately slow, and it comes from `ServerConfig` beside
+                -- the script bound it has to stay under, because a stage that outlasts its script
+                -- is killed with the script and reports nothing about where Logic stalled.
                 set importClicked to false
                 set sawPanel to false
                 set sawButton to false
