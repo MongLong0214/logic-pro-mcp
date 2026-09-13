@@ -428,14 +428,16 @@ ev.check("876/nothing-is-blocking-the-import-journey",
          "and not a reading of a blocker somebody else left",
          f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}", None)
 
-# UP TO THREE attempts, and EVERY envelope is recorded — including the ones that failed.
+# UP TO SIX attempts, and EVERY envelope is recorded — including the ones that failed.
 #
 # This run quits and relaunches Logic to change its language, so it always meets Logic at its
 # coldest, and the first imports after a launch are not reliable. Measured 2026-09-13 by polling
 # the German panel from outside the run: the File → Import open sheet appears about twelve seconds
 # after the menu click and its Import button can still be disabled several seconds later, after
 # which the attempt ends without it ever enabling. A second attempt seconds afterwards usually
-# lands, on the same Logic, the same project and the same binary; twice it took a third.
+# lands, on the same Logic, the same project and the same binary — but not always. Counted on
+# 2026-09-13 against one cold launch: three attempts failed with a screen recorder running, a
+# fourth failed without it, and the fifth reached State A. Six is that measurement plus one.
 #
 # The stage budgets were lengthened for this and are wall-clock now (`ServerConfig`), which moved
 # the failure from one stage to another without removing it — waiting longer does not make Logic
@@ -448,7 +450,7 @@ ev.check("876/nothing-is-blocking-the-import-journey",
 # to one.
 attempts = []
 imported = {}
-for attempt in range(3):
+for attempt in range(6):
     if attempt:
         osa('tell application "Logic Pro" to activate')
         time.sleep(0.5)
@@ -494,7 +496,7 @@ ev.falsifiable(
                and o["start_bar"] == o["expected_start_bar"]
                and o["end_bar"] == o["expected_end_bar"]
                and isinstance(o["start_bar"], int) and o["start_bar"] > 0
-               and 1 <= o["attempts"] <= 3),
+               and 1 <= o["attempts"] <= 6),
     import_reading,
     {"success": True, "verified": False, "error": "unreadable_readback", "failure_stage": None,
      "start_bar": -1, "end_bar": -1, "expected_start_bar": 1, "expected_end_bar": 2,
