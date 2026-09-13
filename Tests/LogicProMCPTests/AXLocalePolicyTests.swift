@@ -587,6 +587,49 @@ struct AXLocalePolicyTests {
         #expect(!AXLocalePolicy.barSliderLabel.matches("beat", mode: .exactStrict))
     }
 
+    /// The four Playhead Position component labels must stay mutually exclusive UNDER THE MODE
+    /// PRODUCTION USES.
+    ///
+    /// `extractTransportState` walks the Playhead Position group's sliders and assigns each to the
+    /// first label set that `containsAny` accepts — a lowercased SUBSTRING test, not the
+    /// `.exactStrict` equality the test above pins. Those are different questions: a variant that
+    /// is a substring of another variant would collide under `containsAny` while passing every
+    /// `.exactStrict` assertion in this file. The position reader then takes the longest observed
+    /// PREFIX of (bar, beat, subdivision, tick), so a collision does not merely mislabel one
+    /// slider — it can truncate the whole reading at the wrong component and hand a caller a
+    /// position that is short by one.
+    ///
+    /// Two of these sets ship with a measured Korean variant and an English canonical that was NOT
+    /// read off an English Logic (2026-09-14, #304). The check that matters is therefore not "are
+    /// today's four distinct" but "can a variant added later collide", which is what asserting the
+    /// property rather than the instances buys.
+    @Test("Playhead Position component labels do not match one another under containsAny")
+    func positionComponentLabelsAreMutuallyExclusiveUnderContainsAny() {
+        let sets: [(name: String, set: AXLocalePolicy.LabelSet)] = [
+            ("bar", AXLocalePolicy.barSliderLabel),
+            ("beat", AXLocalePolicy.beatSliderLabel),
+            ("subdivision", AXLocalePolicy.subdivisionSliderLabel),
+            ("tick", AXLocalePolicy.tickSliderLabel),
+        ]
+        for owner in sets {
+            for other in sets where other.name != owner.name {
+                for variant in other.set.variants + [other.set.canonical] {
+                    #expect(
+                        !owner.set.containsAny(in: variant.lowercased()),
+                        "\(owner.name) matches \(other.name)'s rendering \(variant) under containsAny"
+                    )
+                }
+            }
+        }
+
+        // Each still matches its OWN renderings, so the loop above cannot pass by matching nothing.
+        for entry in sets {
+            for variant in entry.set.variants + [entry.set.canonical] {
+                #expect(entry.set.containsAny(in: variant.lowercased()), "\(entry.name) lost \(variant)")
+            }
+        }
+    }
+
     /// Transport control identification label sets (read-only) resolve EN+KO and
     /// reject unrelated descriptions. `containsAny` mirrors the original
     /// lowercased-substring control flow.
