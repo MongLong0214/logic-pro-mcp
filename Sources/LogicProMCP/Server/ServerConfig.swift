@@ -26,7 +26,22 @@ struct ServerConfig: Sendable {
     // was still importing — the region landed but the caller saw a timeout
     // (#449). This bound must stay above that floor; the polling loops in
     // AccessibilityChannel+MIDIImport are the thing it has to outlast.
-    static let midiImportAppleScriptTimeout: TimeInterval = 30.0
+    // 60, raised from 30 on 2026-09-13. On a freshly launched Logic the import panel itself did
+    // not appear until roughly twelve seconds in — measured by polling the German panel from
+    // outside the run — so the button-enable wait had to grow, and the script's own bound has to
+    // outlast it or the raise converts one failure into another. It did exactly that once: the
+    // button wait went to 30s under a 30s script bound and the envelope changed from "the Import
+    // button stayed disabled" to "AppleScript error: timedOut". `record_sequence` carries a 300s
+    // server deadline, so this sits well inside it.
+    static let midiImportAppleScriptTimeout: TimeInterval = 60.0
+
+    /// How long `midi.import_file` waits for the Import button to become enabled.
+    ///
+    /// MUST stay below `midiImportAppleScriptTimeout`: this is one stage of the script, and a
+    /// stage that outlasts the script it runs in cannot report what it saw — the child is killed
+    /// and the caller is told the script timed out instead of which stage stalled.
+    /// `midiImportButtonEnableBudgetIsInsideTheScriptBound` pins the ordering.
+    static let midiImportButtonEnableBudget: TimeInterval = 25.0
 
     // MARK: - Logic Pro
     /// Resolved bundle ID for the active Logic Pro variant (desktop or Creator Studio).

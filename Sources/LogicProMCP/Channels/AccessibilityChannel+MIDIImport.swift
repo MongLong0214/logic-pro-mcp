@@ -393,12 +393,15 @@ extension AccessibilityChannel {
                 -- the run), which left almost no margin before the turns ran out. The first import
                 -- after a cold launch failed with "the Import button stayed disabled" and every
                 -- retry seconds later reached State A — the same shape #594 measured after
-                -- `project.new`, at a different first contact. Thirty seconds is measured margin
-                -- over that twelve, and a panel that is ready immediately still exits at once.
+                -- `project.new`, at a different first contact. The budget is measured margin over
+                -- that twelve, and a panel that is ready immediately still exits at once. It comes
+                -- from `ServerConfig` beside the script bound it has to stay under, because the
+                -- first attempt at this raise put a 30s stage inside a 30s script and turned
+                -- "the Import button stayed disabled" into "AppleScript error: timedOut".
                 set importClicked to false
                 set sawPanel to false
                 set sawButton to false
-                set importButtonDeadline to (current date) + 30
+                set importButtonDeadline to (current date) + \(Int(ServerConfig.midiImportButtonEnableBudget))
                 repeat while (current date) < importButtonDeadline
                     tell \(logicProAppleScript.systemEventsProcessTarget)
                         try

@@ -429,11 +429,11 @@ ev.check("876/nothing-is-blocking-the-import-journey",
          f"blocking_modal={json.dumps(E.blocking_modal(), ensure_ascii=False)}", None)
 
 imported = d.tool("logic_tracks", "record_sequence", {"notes": "60,0,480"}) or {}
+# The WHOLE envelope, trimmed only for length. A key list here is a guess about which field will
+# explain the next failure, and it guessed wrong twice: two runs recorded `import_failure` without
+# the `hint` that says which of "no panel", "no button" and "button never enabled" happened.
 ev.note("876/the-import-journey",
-        {k: v for k, v in imported.items()
-         if k in ("state", "success", "verified", "error", "failure_stage", "dialog_title",
-                  "method", "verify_source", "region_kind", "region_name", "note_count",
-                  "start_bar", "end_bar", "expected_start_bar", "expected_end_bar", "raw_help")})
+        {k: (v[:600] if isinstance(v, str) else v) for k, v in imported.items()})
 
 import_reading = {
     "success": imported.get("success"),
