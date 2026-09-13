@@ -601,6 +601,8 @@ enum AXValueExtractors {
             ?? []
         var barValue: Int?
         var beatValue: Int?
+        var subdivisionValue: Int?
+        var tickValue: Int?
         for slider in sliders {
             let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
             if AXLocalePolicy.tempoSliderContainsLabel.containsAny(in: desc), let tempo = extractSliderValue(slider, runtime: runtime) {
@@ -615,25 +617,48 @@ enum AXValueExtractors {
             } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc),
                       let value = extractSliderValue(slider, runtime: runtime) {
                 beatValue = Int(value)
+            } else if AXLocalePolicy.subdivisionSliderLabel.containsAny(in: desc),
+                      let value = extractSliderValue(slider, runtime: runtime) {
+                subdivisionValue = Int(value)
+            } else if AXLocalePolicy.tickSliderLabel.containsAny(in: desc),
+                      let value = extractSliderValue(slider, runtime: runtime) {
+                tickValue = Int(value)
             }
         }
-        // The Control Bar exposes bar and beat independently. They are observations, but they
-        // say nothing about subdivision or tick; preserve that boundary instead of fabricating
-        // `.1.1` and letting a four-component request verify against it.
-        if let barValue, let beatValue,
-           (state.positionReadback?.observedComponents.count ?? 0) < 2 {
-            let value = "\(barValue).\(beatValue)"
+        // HOW MANY components the Playhead Position group exposes is a property of the control
+        // bar's DISPLAY MODE, not of Logic. An earlier version of this code said "the Control Bar
+        // exposes bar and beat independently" and read exactly two sliders — true of the default
+        // `비트 및 프로젝트` / Beats & Project mode and false of the surface. Measured live
+        // 2026-09-14 on Logic 12.3 (6674): selecting the display-mode popup's `비트` / Beats item
+        // BY TITLE moved the same group from two named sliders to FOUR — `마디`, `비트`, `디비전`,
+        // `틱` — and its own AXValueDescription from `4 마디 1 비트 ` to
+        // `4 마디 1 비트 1 디비전 1 틱 `. The two extra segments were being read and discarded.
+        //
+        // The boundary the old code was protecting is kept exactly: take the longest PREFIX of
+        // (bar, beat, subdivision, tick) that was actually observed and stop at the first gap, so a
+        // mode that shows two still reports two and a four-component request still fails to verify
+        // against it. What changes is that four observed segments are now reported as four instead
+        // of being truncated to a claim weaker than the reading.
+        let observedSegments: [(TransportPositionComponent, Int)] = {
+            var segments: [(TransportPositionComponent, Int)] = []
+            for (component, value) in [
+                (TransportPositionComponent.bar, barValue),
+                (.beat, beatValue),
+                (.subdivision, subdivisionValue),
+                (.tick, tickValue),
+            ] {
+                guard let value else { break }
+                segments.append((component, value))
+            }
+            return segments
+        }()
+        if !observedSegments.isEmpty,
+           observedSegments.count > (state.positionReadback?.observedComponents.count ?? 0) {
+            let value = observedSegments.map { String($0.1) }.joined(separator: ".")
             state.position = value
             state.positionReadback = TransportPositionReadback(
                 value: value,
-                observedComponents: [.bar, .beat]
-            )
-        } else if let barValue, (state.positionReadback?.observedComponents.count ?? 0) < 1 {
-            let value = "\(barValue)"
-            state.position = value
-            state.positionReadback = TransportPositionReadback(
-                value: value,
-                observedComponents: [.bar]
+                observedComponents: observedSegments.map { $0.0 }
             )
         }
 

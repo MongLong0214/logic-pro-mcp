@@ -924,6 +924,32 @@ enum AXLocalePolicy {
         rationale: "Identifies the beat slider in the control bar; verbatim description match; read-only."
     )
 
+    static let subdivisionSliderLabel = LabelSet(
+        canonical: "division",
+        variants: ["디비전"],
+        rationale: "Identifies the subdivision slider in the Playhead Position group; verbatim description match; read-only. Korean read live 2026-09-14 on Logic 12.3 (6674): the group exposes this slider ONLY while the control bar's display mode is `비트` / Beats — in the default `비트 및 프로젝트` it has two children, bar and beat."
+    )
+
+    static let tickSliderLabel = LabelSet(
+        canonical: "tick",
+        variants: ["틱"],
+        rationale: "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats."
+    )
+
+    /// The control bar's display-mode popup, and the mode whose Playhead Position group exposes all
+    /// four position components. Read-only locator plus the item title a caller would pick.
+    static let displayModePopupLabel = LabelSet(
+        canonical: "display mode",
+        variants: ["표시 모드"],
+        rationale: "Identifies the control bar's display-mode AXPopUpButton by description. Read live 2026-09-14 on a Korean Logic 12.3; it is the control that decides how many position components the Playhead Position group exposes."
+    )
+
+    static let beatsDisplayModeItem = LabelSet(
+        canonical: "beats",
+        variants: ["비트"],
+        rationale: "The display-mode menu item whose Playhead Position group exposes bar, beat, division and tick. Read live 2026-09-14: selecting it by title moved the group from two named sliders to four, and its own AXValueDescription from `4 마디 1 비트 ` to `4 마디 1 비트 1 디비전 1 틱 `."
+    )
+
     /// Tempo slider description for `findTempoSlider` (verbatim `.exactStrict`).
     /// Includes `bpm` because that locator explicitly accepts `desc == "bpm"`.
     static let tempoSliderLabel = LabelSet(
@@ -1890,6 +1916,10 @@ enum AXLocalePolicy {
         controlBarGroupLabel,
         barSliderLabel,
         beatSliderLabel,
+        subdivisionSliderLabel,
+        tickSliderLabel,
+        displayModePopupLabel,
+        beatsDisplayModeItem,
         tempoSliderLabel,
         tempoSliderContainsLabel,
         horizontalZoomSlider,

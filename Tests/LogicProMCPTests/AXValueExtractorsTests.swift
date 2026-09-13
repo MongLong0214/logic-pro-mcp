@@ -424,3 +424,76 @@ private func colourIsUnread(_ track: TrackState) -> Bool {
     #expect(state.timePosition == "01:02:03:04")
     #expect(state.tempo == 120.0)
 }
+
+/// Build a Playhead Position group holding one slider per supplied (description, value) pair.
+/// The descriptions are the strings Logic renders, so a test can express "this mode shows two"
+/// and "this mode shows four" as the only difference between two runs.
+private func makePlayheadTransport(
+    _ segments: [(String, Int)]
+) -> (AXUIElement, AXHelpers.Runtime) {
+    let builder = FakeAXRuntimeBuilder()
+    let transport = builder.element(60)
+    let group = builder.element(61)
+    builder.setChildren(transport, [group])
+    builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(group, kAXDescriptionAttribute as String, "Playhead Position")
+
+    var sliders: [AXUIElement] = []
+    for (index, segment) in segments.enumerated() {
+        let slider = builder.element(70 + index)
+        builder.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+        builder.setAttribute(slider, kAXDescriptionAttribute as String, segment.0)
+        builder.setAttribute(slider, kAXValueAttribute as String, segment.1)
+        sliders.append(slider)
+    }
+    builder.setChildren(group, sliders)
+    return (transport, builder.makeAXRuntime())
+}
+
+@Test func testTransportPositionReportsEverySegmentTheDisplayModeExposes() {
+    // Measured live 2026-09-14 on Logic 12.3: the control bar's display-mode popup decides how many
+    // sliders the Playhead Position group holds. `Beats` exposes four. The reader used to take two
+    // and discard the rest, so a four-component request could never verify against a display that
+    // was showing all four.
+    let (transport, runtime) = makePlayheadTransport([
+        ("Bar", 6), ("Beat", 2), ("Division", 3), ("Tick", 120),
+    ])
+
+    let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime)
+
+    #expect(state.position == "6.2.3.120")
+    #expect(state.positionReadback?.observedComponents == [.bar, .beat, .subdivision, .tick])
+}
+
+@Test func testTransportPositionStillReportsTwoWhenTheModeShowsTwo() {
+    // The other half of the same live measurement: restoring `Beats & Project` put the group back
+    // to two sliders and the four-component request back to State B. Reading four when two are
+    // shown would be the fabrication the previous code was written to prevent.
+    let (transport, runtime) = makePlayheadTransport([("Bar", 6), ("Beat", 2)])
+
+    let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime)
+
+    #expect(state.position == "6.2")
+    #expect(state.positionReadback?.observedComponents == [.bar, .beat])
+}
+
+@Test func testTransportPositionStopsAtTheFirstMissingSegment() {
+    // A tick with no beat is not a three-component reading with a hole in it. Taking the longest
+    // PREFIX is what keeps "6.120" from being assembled out of bar and tick and then compared,
+    // component by component, against a request that meant something else entirely.
+    let (transport, runtime) = makePlayheadTransport([("Bar", 6), ("Division", 3), ("Tick", 120)])
+
+    let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime)
+
+    #expect(state.position == "6")
+    #expect(state.positionReadback?.observedComponents == [.bar])
+}
+
+@Test func testTransportPositionReportsNothingWhenNoSegmentIsNamed() {
+    // An unnamed slider is not a bar. The group being present is not a reading.
+    let (transport, runtime) = makePlayheadTransport([("", 6), ("", 2)])
+
+    let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime)
+
+    #expect(state.positionReadback == nil)
+}

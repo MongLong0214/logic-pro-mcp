@@ -280,6 +280,20 @@
     "de-DE": "unmeasured"
    }
   },
+  "beatsDisplayModeItem": {
+   "canonical": "beats",
+   "variants": [
+    "비트"
+   ],
+   "rationale": "The display-mode menu item whose Playhead Position group exposes bar, beat, division and tick. Read live 2026-09-14: selecting it by title moved the group from two named sliders to four, and its own AXValueDescription from `4 마디 1 비트 ` to `4 마디 1 비트 1 디비전 1 틱 `.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "bounceMenuItem": {
    "canonical": "Bounce",
    "variants": [
@@ -454,6 +468,20 @@
     "削除"
    ],
    "rationale": "Primary destructive button on a track-delete confirm sheet; the reconciler presses only the classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a button label: \"Delete Tracks and Content\" on the channel-strip sheet, and a bare \"Delete\" on \"Delete Track and Regions?\" (track carries regions) and \"Delete Track and Cells?\" (Live Loops cells) — both measured live on 12.3. The bare label is why #545 happened: the structural fallback tested `hasPrefix(\"Delete \")`, with a trailing space, which \"Delete\" does not satisfy, so those sheets classified as unknown and were left on screen. Accepting the bare label is safe because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts on `.deleteConfirm` at all.\n\n        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "displayModePopupLabel": {
+   "canonical": "display mode",
+   "variants": [
+    "표시 모드"
+   ],
+   "rationale": "Identifies the control bar's display-mode AXPopUpButton by description. Read live 2026-09-14 on a Korean Logic 12.3; it is the control that decides how many position components the Playhead Position group exposes.",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -2986,6 +3014,20 @@
     "de-DE": "unmeasured"
    }
   },
+  "subdivisionSliderLabel": {
+   "canonical": "division",
+   "variants": [
+    "디비전"
+   ],
+   "rationale": "Identifies the subdivision slider in the Playhead Position group; verbatim description match; read-only. Korean read live 2026-09-14 on Logic 12.3 (6674): the group exposes this slider ONLY while the control bar's display mode is `비트` / Beats — in the default `비트 및 프로젝트` it has two children, bar and beat.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "tempoFieldLabel": {
    "canonical": "tempo",
    "variants": [
@@ -3082,6 +3124,20 @@
    },
    "coverage_attributes": {
     "de-DE": "title"
+   }
+  },
+  "tickSliderLabel": {
+   "canonical": "tick",
+   "variants": [
+    "틱"
+   ],
+   "rationale": "Identifies the tick slider in the Playhead Position group; verbatim description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
    }
   },
   "toPlayheadMenuItem": {

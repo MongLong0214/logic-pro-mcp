@@ -1,0 +1,131 @@
+{
+  "id": "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "The control bar's Playhead Position group, across display modes",
+  "question": "A reading three hours earlier found the transport answering bar.beat and called a region start tick unreadable, while naming the display mode as an open route. Does a mode exist that shows ticks, and can the product select it without coordinates?",
+  "verdict": "works",
+  "issues": [
+    "#293",
+    "#302",
+    "#303"
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual. Find the control bar's AXPopUpButton whose AXDescription matches `AXLocalePolicy.displayModePopupLabel`, open it with AXShowMenu, and press the item whose AXTitle matches `beatsDisplayModeItem` — by title, never by position. Then read the AXGroup matching `playheadPositionGroupLabel` and list its slider children. Restore the mode you found.",
+    "expected": "In `비트 및 프로젝트` / Beats & Project the group holds TWO named sliders, bar and beat, and `logic_transport.goto_position` with a four-component request answers State B readback_unavailable observing two components. In `비트` / Beats the same group holds FOUR — bar, beat, division, tick — and the same request answers State A observing four."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXValueExtractors.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [],
+  "method": "A probe read every descendant of the control bar, then the named Playhead Position group and the display-mode popup's menu items. The mode was switched by matching the item's AXTitle, never by index or coordinate, and switched back at the end. `goto_position` was driven through the release binary in BOTH modes, before and after changing the reader, so the four readings separate what Logic does from what the product does.",
+  "observations": [
+    {
+      "mode": "비트 및 프로젝트 (Beats & Project, the mode found)",
+      "position_group_children": 2,
+      "slider_descriptions": [
+        "마디",
+        "비트"
+      ],
+      "group_value_description": "4 마디 1 비트 ",
+      "goto_position_request": "6.2.3.120",
+      "state": "B",
+      "observed": "6.2",
+      "observed_position_components": [
+        "bar",
+        "beat"
+      ],
+      "reason": "readback_unavailable"
+    },
+    {
+      "mode": "비트 (Beats), selected by menu-item title",
+      "position_group_children": 4,
+      "slider_descriptions": [
+        "마디",
+        "비트",
+        "디비전",
+        "틱"
+      ],
+      "group_value_description": "4 마디 1 비트 1 디비전 1 틱 ",
+      "goto_position_request": "6.2.3.120",
+      "state_with_the_old_reader": "B",
+      "observed_with_the_old_reader": "6.2",
+      "observed_position_components_with_the_old_reader": [
+        "bar",
+        "beat"
+      ]
+    },
+    {
+      "what": "the same mode after the reader was taught the other two labels",
+      "goto_position_requests": [
+        "4.1.1.1",
+        "6.2.3.120",
+        "2.4.1.1"
+      ],
+      "state": "A",
+      "observed": [
+        "4.1.1.1",
+        "6.2.3.120",
+        "2.4.1.1"
+      ],
+      "observed_position_components": [
+        "bar",
+        "beat",
+        "subdivision",
+        "tick"
+      ],
+      "reason": null
+    },
+    {
+      "what": "restoring the mode that was found",
+      "mode_after": "비트 및 프로젝트",
+      "position_group_children": 2,
+      "goto_position_requests": [
+        "4.1.1.1",
+        "6.2.3.120",
+        "2.4.1.1"
+      ],
+      "state": "B",
+      "observed": [
+        "4.1",
+        "6.2",
+        "2.4"
+      ],
+      "observed_position_components": [
+        "bar",
+        "beat"
+      ]
+    },
+    {
+      "what": "display-mode menu items, read by title",
+      "items": [
+        "비트 및 프로젝트",
+        "비트 및 프로젝트(크게)",
+        "비트 및 시간",
+        "비트 및 시간(크게)",
+        "비트",
+        "박자",
+        "사용자 설정"
+      ]
+    }
+  ],
+  "conclusion": "How many position components the transport exposes is a property of the control bar's DISPLAY MODE, not of Logic. In `비트` / Beats the Playhead Position group holds four named sliders — bar, beat, division, tick — and the mode is selectable by menu-item title, with no coordinate anywhere. The product was reading two of the four and discarding the rest, so a four-component request could not verify even while the display was showing all four; taught the other two labels, `goto_position` answers State A observing four, and restoring the original mode returns it to two and State B. Sub-bar transport positions are therefore verifiable, and the tick resolution that `2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable` could not find on this surface is here after all.",
+  "limits": [
+    "Korean only. The division and tick label sets carry `디비전` and `틱` as measured variants and English canonicals that were NOT read off an English Logic; ja-JP and de-DE have no variant at all, so this reader gains nothing on those hosts until someone measures them.",
+    "This measures the PLAYHEAD position. Whether a REGION's start can be read at tick resolution is still open: it would need the playhead moved to the region start and that move verified, which was not done here. So the blocker under ADR-010 / ADR-014 R2 / ADR-015 is narrowed, not closed.",
+    "The product does not SELECT the display mode. Everything above was measured with the mode switched by a probe; the shipped reader reports whatever the mode happens to expose and says so in observed_position_components. Making the product choose the mode is a separate change with its own restore obligation.",
+    "One host, one build, one project. `사용자 설정` / Custom was not opened, so whether a custom format can expose something finer or differently named is unmeasured.",
+    "The four-segment reading was taken with the playhead parked by goto_position itself. It was not checked against a playhead moved by Logic's own transport during playback."
+  ],
+  "supersedes": null
+}
