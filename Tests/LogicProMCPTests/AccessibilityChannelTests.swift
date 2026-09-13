@@ -4796,7 +4796,7 @@ private func makeTempoFixtureWithAlert(
     #expect(obj["blocking_modal"] as? String == "informational_alert")
     // The defect's signature was `success: true`. Assert it is gone rather than only asserting the
     // new fields, which a branch that still claimed success could also carry.
-    #expect(obj["success"] as? Bool == false)
+    #expect(!((obj["success"] as? Bool)!))
 }
 
 @Test func testSetTempoRefusesBeforeEscapeCanClearTheEvidence() async {
