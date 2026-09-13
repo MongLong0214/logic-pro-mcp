@@ -257,18 +257,13 @@ extension AccessibilityChannel {
             .filter { !$0.contains("\"") && !$0.contains("\\") }
             .map { "\"\($0)\"" }
             .joined(separator: ", ")
-        // The commit button is a SEPARATE label set: its German spelling is unmeasured, so on a
-        // German Logic this resolves to nothing and the import reports that rather than pressing
-        // whatever happens to be there.
+        // The commit button is a SEPARATE label set from the panel title, because Logic does not
+        // spell them the same way in every locale — a button rendered from the title's labels
+        // would press whatever happened to be there.
         let importCommitButtonNames = AXLocalePolicy.midiImportCommitButton.labels
             .filter { !$0.contains("\"") && !$0.contains("\\") }
             .map { "\"\($0)\"" }
             .joined(separator: ", ")
-
-        let importPanelTitleExclusion = AXLocalePolicy.midiImportPanelTitle.labels
-            .filter { !$0.contains("\"") && !$0.contains("\\") }
-            .map { "name is not \"\($0)\"" }
-            .joined(separator: " and ")
 
         let script = """
         on importMIDI()

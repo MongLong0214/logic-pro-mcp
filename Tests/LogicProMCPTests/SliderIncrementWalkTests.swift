@@ -312,14 +312,119 @@ struct SliderIncrementWalkTests {
         // NOR the raw value moves, the control is against its end stop and continuing would be a
         // walk into a wall. This is the case that proves the fix narrowed the rule instead of
         // deleting it.
+        //
+        // EIGHT steps, not one, since the coarse-step walk landed: one unchanged readback can no
+        // longer tell a rail from a request below the control's minimum step, so the walk doubles
+        // the request 1, 2, 4 … 128 before concluding. The conclusion is unchanged — this is still
+        // `noProgress`, and it is still bounded well inside the budget.
+        let stuck = Reading(value: 480, display: "+24.0 dB")
+        var requests: [Double] = []
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("+30.0 dB"),
+            read: { stuck },
+            nudge: { requested in requests.append(requested); return true },
+            budget: 16
+        )
+        #expect(outcome == .noProgress(steps: 8, last: stuck))
+        #expect(requests == [481, 482, 484, 488, 496, 512, 544, 608])
+    }
+
+    @Test func aRailExhaustsASmallerBudgetBeforeItFinishesCalibrating() {
+        // The retry window is bounded by the budget as well as by its own limit. With seven steps
+        // the walk never reaches its eighth unchanged write, so the caller is told the budget ran
+        // out rather than being given a `noProgress` the walk did not actually establish.
         let stuck = Reading(value: 480, display: "+24.0 dB")
         let outcome = SliderIncrementWalk.walk(
             to: .display("+30.0 dB"),
             read: { stuck },
             nudge: { _ in true },
-            budget: 16
+            budget: 7
         )
-        #expect(outcome == .noProgress(steps: 1, last: stuck))
+        #expect(outcome == .budgetExhausted(steps: 7, last: stuck))
+    }
+
+    @Test func aControlWhoseStepIsFourRawUnitsPaysCalibrationOnceAndKeepsTheDistance() {
+        // Channel EQ's Q, in the shape measured on 2026-09-12: `nudge(current + 1)` lands back on
+        // the same raw value, while the `.rawValue` path reached every target. The readings are
+        // synthetic; the SHAPE is the measured one — a control whose minimum step is larger than
+        // one raw unit, rendered with no unit at all, requested with the caller's `Q` label.
+        let readings = [
+            Reading(value: 40, display: "0.88 "),
+            Reading(value: 44, display: "1.10 "),
+            Reading(value: 48, display: "1.40 "),
+            Reading(value: 52, display: "1.80 "),
+        ]
+        var index = 0
+        var requests: [Double] = []
+
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("1.80 Q"),
+            read: { readings[index] },
+            nudge: { requested in
+                requests.append(requested)
+                if requested - readings[index].value >= 4, index + 1 < readings.count {
+                    index += 1
+                }
+                return true
+            },
+            budget: 5
+        )
+
+        // Two calibration writes are paid ONCE, and the distance that worked is retained: the
+        // fourth and fifth requests are +4 again rather than starting over at +1. A strategy that
+        // re-calibrated every step would need nine writes for this walk.
+        #expect(outcome == .arrived(steps: 5, final: readings[3]))
+        #expect(requests == [41, 42, 44, 48, 52])
+    }
+
+    @Test func aCoarseStepThatSailsPastTheTargetSaysSoEvenWhenItLandsCloser() {
+        // The counterexample the crossing check exists for: rendered 0 → 4 against a target of 3
+        // is NUMERICALLY CLOSER and has passed the target. Checking distance first would call that
+        // progress and keep walking away.
+        var reading = Reading(value: 10, display: "0 Hz")
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("3 Hz"),
+            read: { reading },
+            nudge: { _ in reading = Reading(value: 14, display: "4 Hz"); return true },
+            budget: 8
+        )
+        #expect(outcome == .overshot(steps: 1, last: Reading(value: 14, display: "4 Hz")))
+    }
+
+    @Test func aDisplayPlateauDoesNotEnlargeTheRequest() {
+        // The raw value moves while the rendering does not. That is progress, and it must NOT be
+        // read as "the request was too small" — doubling here would overshoot a control that was
+        // moving perfectly well.
+        var value = 100.0
+        var requests: [Double] = []
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("2.00 "),
+            read: { Reading(value: value, display: value >= 104 ? "2.00 " : "1.00 ") },
+            nudge: { requested in
+                requests.append(requested)
+                value = requested
+                return true
+            },
+            budget: 8
+        )
+        #expect(outcome == .arrived(steps: 4, final: Reading(value: 104, display: "2.00 ")))
+        #expect(requests == [101, 102, 103, 104])
+    }
+
+    @Test func aMovingUnitlessControlIsSteeredAgainstAUnitedRequest() {
+        // Arrival already accepted a unitless Logic rendering against a `Q`-labelled request; the
+        // STEERING predicate rejected the same pair, so a Q walk could recognise its destination
+        // and never be aimed at it. This is that asymmetry, pinned.
+        var value = 40.0
+        let outcome = SliderIncrementWalk.walk(
+            to: .display("1.80 Q"),
+            read: {
+                Reading(value: value, display: value >= 52 ? "1.80 " : (value >= 44 ? "1.10 " : "0.88 "))
+            },
+            nudge: { requested in value = requested; return true },
+            budget: 20
+        )
+        #expect(outcome == .arrived(steps: 12, final: Reading(value: 52, display: "1.80 ")))
     }
 
     @Test func displayTargetBelowStartReversesAndArrivesNearRawDistance() {
@@ -429,9 +534,11 @@ struct SliderIncrementWalkTests {
         )
 
         // Mutation caught: a probe blocked by a real control rail must not
-        // consume the caller's entire budget.
-        #expect(outcome == .noProgress(steps: 1, last: rail))
-        #expect(nudgeCalls == 1)
+        // consume the caller's entire budget. Eight now rather than one — the walk has to rule out
+        // "the request was smaller than this control's step" before it may call a rail a rail —
+        // but the budget is what this test is about and eight is still inside it.
+        #expect(outcome == .noProgress(steps: 8, last: rail))
+        #expect(nudgeCalls == 8)
     }
 
     @Test func displayBudgetIsAnExactNudgeLimit() {

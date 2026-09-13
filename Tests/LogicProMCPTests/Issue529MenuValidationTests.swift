@@ -29,6 +29,20 @@ private func issue529LedgerPath(from script: String, stage: String) throws -> St
     return String(tail[..<end])
 }
 
+/// The snapshot path READ OUT OF THE SCRIPT, not derived from the ledger path.
+///
+/// This test file used to build it as `ledgerPath + ".preleaf-windows"`, which was a second copy
+/// of the product's layout — and it broke the moment the ledger moved into a directory of its own
+/// (it now costs one recursive delete instead of enumerating the user temporary directory). The
+/// script carries both paths; taking the one it carries is the only version that cannot drift.
+private func issue529SnapshotPath(from script: String) throws -> String {
+    let prefix = "recordPreLeafGoToPositionWindowSnapshot(preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount, \""
+    let start = try #require(script.range(of: prefix))
+    let tail = script[start.upperBound...]
+    let end = try #require(tail.firstIndex(of: "\""))
+    return String(tail[..<end])
+}
+
 private final class Issue529Counter: @unchecked Sendable {
     private(set) var value = 0
 
@@ -1019,8 +1033,7 @@ struct Issue529MenuValidationTests {
             executeDialogScript: { script in
                 let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
                 try! "LEAF_ARMED".write(toFile: ledgerPath, atomically: true, encoding: .utf8)
-                let snapshotPath = URL(fileURLWithPath: ledgerPath)
-                    .appendingPathExtension("preleaf-windows").path
+                let snapshotPath = try! issue529SnapshotPath(from: script)
                 try! "READY\n0\n1".write(toFile: snapshotPath, atomically: true, encoding: .utf8)
                 return .error("osascript timed out after leaf click")
             }

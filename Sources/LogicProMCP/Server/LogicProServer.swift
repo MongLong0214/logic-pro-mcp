@@ -178,6 +178,17 @@ final class LogicMutationGate: @unchecked Sendable {
         self.timedOutReclaimGrace = timedOutReclaimGrace
     }
 
+    /// Whether a mutating operation currently holds the gate.
+    ///
+    /// Read-only and advisory: it is used to keep the background AX poller OUT of Logic's
+    /// accessibility surface while a foreground operation is driving it. Deliberately NOT a
+    /// synchronisation primitive — a caller that needs exclusion still calls `tryAcquire`.
+    var isHeld: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeOperation != nil
+    }
+
     func tryAcquire(
         operation: String,
         now: Date = Date(),
@@ -379,10 +390,24 @@ actor LogicProServer {
             approvalStore: manualValidationStore
         )
 
+        // The poller stays OUT of the AX surface while a mutation is driving it. Measured
+        // 2026-09-13 with `sample`: `logic_transport.goto_position` sat in `BoundedProcessRunner`
+        // waiting on its `osascript` child while, on another thread, the poller ran
+        // `allTrackHeaders` — a recursive `findDescendant` over the arrange window. Both go to
+        // Logic's accessibility server, which answers them one at a time, so the poller's walk
+        // starves the operation's. On a freshly launched project that was the difference between
+        // 3.5s and the 25s deadline.
+        //
+        // Skipping a tick costs nothing: the cache is invalidated after a mutation anyway, and the
+        // next tick is three seconds later. An explicit `refreshNow` is NOT affected — a caller
+        // asking for a refresh is not the background loop.
+        var runtimeWithGate = pollerRuntime
+        let pollerMutationGate = self.mutationGate
+        runtimeWithGate.mutationInFlight = { pollerMutationGate.isHeld }
         self.poller = StatePoller(
             axChannel: axChannel,
             cache: cache,
-            runtime: pollerRuntime,
+            runtime: runtimeWithGate,
             postPoll: { cacheKeys in
                 await resourceNotifier.publishChangedResources(
                     cacheKeys: cacheKeys,
@@ -1198,7 +1223,51 @@ actor LogicProServer {
     /// recovery beside it stays synchronous, because THAT one is a precondition: a stuck modifier
     /// must be released before this process sends any key.
     static func scheduleBackgroundOrphanCleanup(_ cleanup: @escaping @Sendable () -> Void) {
+        guard orphanSweepIsDue() else { return }
         DispatchQueue.global(qos: .utility).async(execute: cleanup)
+    }
+
+    /// How often the orphan sweep may run, across every server process this user starts.
+    static let orphanSweepInterval: TimeInterval = 3600
+
+    /// Whether the sweep is due, and claim it if so.
+    ///
+    /// Moving the sweep off the startup thread was not enough on its own, and the second
+    /// measurement said why: while it enumerated, `DialogIssuanceLedger.create()` sat in `open(2)`
+    /// and `goto_position` still hit its deadline — `sample` put 4,431 of 4,440 stacks on the
+    /// sweeping thread in `getattrlistbulk` and 476 on the operation's blocked `open`. Taking a
+    /// cost off the critical path is not the same as not paying it.
+    ///
+    /// What makes the cost avoidable is that nothing about it is per-process. The sweep removes
+    /// temporary directories older than five minutes; whether it runs at THIS start or the next
+    /// one changes nothing a caller can observe. A live session starts many servers — every live
+    /// harness run starts one — so once per process meant paying an unbounded directory
+    /// enumeration over and over for the same handful of files.
+    ///
+    /// The marker is advisory and deliberately not locked: two servers racing at the same second
+    /// may both sweep, which costs a duplicate enumeration and corrupts nothing. It is named so
+    /// the sweep itself does not match and delete it.
+    static func orphanSweepIsDue(
+        now: Date = Date(),
+        markerURL: URL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logic-pro-mcp-orphan-sweep-\(getuid()).marker"),
+        interval: TimeInterval? = nil
+    ) -> Bool {
+        let due = interval ?? orphanSweepInterval
+        let manager = FileManager.default
+        if let attributes = try? manager.attributesOfItem(atPath: markerURL.path),
+           let sweptAt = attributes[.modificationDate] as? Date,
+           now.timeIntervalSince(sweptAt) < due {
+            return false
+        }
+        // Claim it BEFORE sweeping. A sweep that stamped the marker on completion would let every
+        // server started during a slow sweep start its own.
+        if manager.fileExists(atPath: markerURL.path) {
+            try? manager.setAttributes([.modificationDate: now], ofItemAtPath: markerURL.path)
+        } else {
+            manager.createFile(atPath: markerURL.path, contents: Data())
+        }
+        return true
     }
 
     func start() async throws {

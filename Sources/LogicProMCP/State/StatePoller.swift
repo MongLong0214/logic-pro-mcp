@@ -39,6 +39,13 @@ actor StatePoller {
         /// ~2000 seconds to run.
         let sleep: @Sendable (UInt64) async throws -> Void
 
+        /// True while a mutating operation holds the server's mutation gate.
+        ///
+        /// `var` rather than `let` so the server can attach the live gate to whichever runtime it
+        /// was handed, without every test that builds a runtime having to know the gate exists.
+        /// Defaults to "no mutation in flight", which is the pre-existing behaviour.
+        var mutationInFlight: @Sendable () -> Bool = { false }
+
         /// Source-compatible init: if `sleep` isn't supplied, use
         /// `Task.sleep(nanoseconds:)` so existing callers (mostly tests that
         /// only override `hasVisibleWindow`) keep compiling without change.
@@ -300,7 +307,12 @@ actor StatePoller {
             //
             // No suspension separates this check from `runCoalescedCycle`'s own, so the loop
             // always takes the initiator path and can never become a waiter.
-            if !cycleInProgress {
+            // A foreground mutation is driving Logic's accessibility surface right now. That
+            // surface answers one request at a time, so a poll cycle here does not merely delay
+            // itself — it starves the operation the user is waiting on, and the operations carry
+            // deadlines. Skip the tick; the next one is `intervalNs` away and the cache is
+            // invalidated after the mutation regardless.
+            if !cycleInProgress, !runtime.mutationInFlight() {
                 _ = await runCoalescedCycle()
             }
 
