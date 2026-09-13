@@ -96,12 +96,50 @@
       "what": "cells the rows leave empty",
       "L": null,
       "M": null
+    },
+    {
+      "what": "a third region written with THREE DIFFERENT lengths and offsets, to test whether the displayed values track what was written",
+      "written_ms": {
+        "note_60": {
+          "offset": 0,
+          "duration": 120
+        },
+        "note_62": {
+          "offset": 1000,
+          "duration": 240
+        },
+        "note_64": {
+          "offset": 2000,
+          "duration": 960
+        }
+      },
+      "read_length_info": [
+        "0 0 0 230",
+        "0 0 1 220",
+        "0 1 3 164"
+      ],
+      "read_position": [
+        "1 1 1 1",
+        "1 3 1 1",
+        "2 1 1 1"
+      ],
+      "ticks_from_display": [
+        230,
+        460,
+        1844
+      ],
+      "ticks_expected_at_120bpm_960ppq": [
+        230.4,
+        460.8,
+        1843.2
+      ],
+      "worst_difference_ticks": 0.8
     }
   ],
-  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in both regions. The readback also FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three. That is three of the eventListAX provider's listed required proofs observed live — selected region identity, column identity binding, and count semantics.",
+  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in all three regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.",
   "limits": [
-    "Three proofs of eleven. Not measured here: filter-checkbox completeness, contiguous harvest with stable cell content, first/last row plus count/end completeness, position and length raw-tick versus SMF display-format invariance, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
-    "`Length/Info` reads `0 0 3 202` for notes written as 480 ticks. Whether that is Logic's display of the same duration or a different duration was NOT established — the raw-tick versus display-format invariance proof is exactly the one still open.",
+    "Four proofs of eleven. Not measured here: filter-checkbox completeness, contiguous harvest with stable cell content, first/last row plus count/end completeness, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
+    "The length/position agreement is arithmetic on ONE tempo (120 BPM) and one time signature, and the conversion assumes Logic's 960-ticks-per-beat display. It was not re-measured at another tempo, and a tempo change mid-region was not tried.",
     "Only regions this run created were read. A region with chords, overlapping notes, non-note events, or more rows than fit the visible table was not tried, and the count semantics proof is about all events in a region rather than the few written here.",
     "One locale (ko-KR), one host, one build. The probe is observation-only: it mints no identity proof and adds no MCP surface, so nothing here says the provider is safe to publish.",
     "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works."
