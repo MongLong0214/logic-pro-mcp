@@ -63,7 +63,22 @@ let slotPrefix: String = {
           !CommandLine.arguments[index + 1].hasPrefix("--") else { return "Output slot" }
     return CommandLine.arguments[index + 1]
 }()
-func outputSlot() -> AXUIElement? { sweep().first { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) } }
+/// Which slot carrying the prefix to act on. `first` is the default and was fine while a strip
+/// showed ONE send slot; once a send is assigned Logic opens further empty ones, and `first` then
+/// answers about whichever the tree happens to order first. `--slot-index N` aims at a named one,
+/// so "which slot holds the assignment" is a question this probe can ask instead of assume.
+let slotIndex: Int = {
+    guard let index = CommandLine.arguments.firstIndex(of: "--slot-index"),
+          index + 1 < CommandLine.arguments.count,
+          let value = Int(CommandLine.arguments[index + 1]) else { return 0 }
+    return value
+}()
+
+func outputSlot() -> AXUIElement? {
+    let matching = sweep().filter { text($0, kAXHelpAttribute as String).hasPrefix(slotPrefix) }
+    guard slotIndex >= 0, slotIndex < matching.count else { return nil }
+    return matching[slotIndex]
+}
 
 /// Every slot whose help text carries the prefix, not only the first. A strip has ONE output and
 /// several sends, so a Send measurement that looked at `first` would report one send and say
@@ -133,6 +148,30 @@ for menu in menus {
 print("enabled titled items: \(enabledTitles.count)")
 print("distinct titles: \(Set(enabledTitles).count)")
 print("titles appearing more than once: \(duplicated.count)")
+// `--marks` reports which items the MENU ITSELF marks as chosen.
+//
+// The 2026-09-12 record established that a send assignment lands and is not named back at the
+// source: every slot still reads `send button` with an empty value, and the only element naming the
+// destination is the receiving strip's input. That record listed the menu's own mark as untried.
+// It is the one candidate that sidesteps the identity problem this ADR is blocked on — the checked
+// entry is read from the SAME menu the write used, so it needs no mapping between `Bus 1` on the
+// strip and `Sum 1` in the menu.
+//
+// Printed for every item, enabled or not, because an item Logic disables can still be the one it
+// marks, and a filter that assumed otherwise would report the absence of a mark that is there.
+if CommandLine.arguments.contains("--marks") {
+    var marked = 0
+    for menu in menus {
+        for item in children(menu) where text(item, kAXRoleAttribute as String) == "AXMenuItem" {
+            let mark = text(item, kAXMenuItemMarkCharAttribute as String)
+            guard !mark.isEmpty else { continue }
+            marked += 1
+            print("marked: \(text(item, kAXTitleAttribute as String)) mark=\(mark)")
+        }
+    }
+    print("marked items: \(marked)")
+}
+
 // `--print-titles N` dumps what the menu offers. Choosing a destination for `--select` by guessing
 // its spelling is how a probe ends up measuring its own test value; this prints what is there.
 if let titlesIndex = CommandLine.arguments.firstIndex(of: "--print-titles") {
