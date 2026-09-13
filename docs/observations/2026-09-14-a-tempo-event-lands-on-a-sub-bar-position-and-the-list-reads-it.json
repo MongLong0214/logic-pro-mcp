@@ -94,16 +94,62 @@
         "비트"
       ],
       "note": "the list still reports four components while the transport reports two, so the list's resolution does not depend on the display mode"
+    },
+    {
+      "step": "attempting a DIFFERENT bpm on the created event, and what the undo did",
+      "set_tempo_144_with_two_events_present": "seen TWICE with different answers",
+      "run_1": {
+        "state": "A",
+        "observed": 144,
+        "tempo_list_after": [
+          [
+            "1 1 1 1",
+            "120"
+          ],
+          [
+            "5 3 2 60",
+            "120"
+          ]
+        ],
+        "note": "State A while NEITHER row moved — a State A this record does NOT assert, because it was not reproduced"
+      },
+      "run_2": {
+        "state": "C",
+        "error": "unsupported_state",
+        "tempo_list_after": [
+          [
+            "1 1 1 1",
+            "120"
+          ]
+        ],
+        "note": "conditions differed: the arrange window was frontmost and the create press did not land, so there was only one event"
+      },
+      "undo_window_dependence": {
+        "arrange_window_NOT_frontmost": {
+          "state": "C",
+          "error": "element_not_found",
+          "attempts": 6,
+          "rows_changed": 0
+        },
+        "arrange_window_raised_by_name_first": {
+          "state": "A",
+          "attempts": 1,
+          "rows": 1
+        },
+        "note": "reproducible in both directions; the raise was by window title, not by position"
+      }
     }
   ],
-  "conclusion": "A tempo event CAN be placed at a sub-bar position and the Tempo list reports that position at tick resolution: the playhead was driven to `5.3.2.60` with a verified State A, the named `새로운 템포 이벤트 생성` button created a row, and that row's first four cells read 5, 3, 2, 60. An undo removes it and the table says so. Two independent surfaces agree on the same sub-bar position — the transport, which needs display mode `비트` to show four components, and the Tempo list, which shows four regardless. So ADR-016's 'sub-bar tempo events are untouched' is no longer the state: the placement, the readback and the restore each have a live reading.",
+  "conclusion": "A tempo event CAN be placed at a sub-bar position and the Tempo list reports that position at tick resolution: the playhead was driven to `5.3.2.60` with a verified State A, the named `새로운 템포 이벤트 생성` button created a row, and that row's first four cells read 5, 3, 2, 60. An undo removes it and the table says so. Two independent surfaces agree on the same sub-bar position — the transport, which needs display mode `비트` to show four components, and the Tempo list, which shows four regardless. So ADR-016's 'sub-bar tempo events are untouched' is no longer the state: the placement, the readback and the restore each have a live reading. The project was left as it was found: the tempo map is back to its single row at `1 1 1 1` @ 120, confirmed by re-reading.",
   "limits": [
     "This is a REACHABILITY measurement, not a product feature. No public operation creates a tempo event; the button was pressed by a probe. `TempoMapSnapshot` is still referenced only inside `Sources/LogicProMCP/SmartTempo/`, so nothing in the product constructs one from this table.",
     "One event, at one position, at one tempo. The new row carried the SAME bpm as the existing one (120), so nothing here exercises a tempo CHANGE partway through a project, an ordering question, or what a second event does to positions after it.",
     "The tempo value was not written. Whether a created event's bpm can be set, and verified, was not measured.",
     "Undo was used as the restore. It worked and was confirmed by re-reading, but a delete path for a tempo event was not looked for, so nothing here says one exists.",
     "Korean only. `새로운 템포 이벤트 생성` and the Tempo radio button's `템포` have no label set yet; anything built on this needs them, exactly as the Event List's headers did.",
-    "The three-column table was identified by its column count, which is a shape rather than a name. On a project with a different pane open that heuristic could pick the wrong table."
+    "The three-column table was identified by its column count, which is a shape rather than a name. On a project with a different pane open that heuristic could pick the wrong table.",
+    "A `set_tempo` answering State A with `observed: 144` while NEITHER tempo row moved was seen ONCE and could NOT be reproduced. The second run answered State C `unsupported_state` under different conditions — a different frontmost window, and only one tempo event present because the create press did not land. A false State A is the worst defect class this repository has, so it is recorded here as an unreproduced sighting needing a controlled re-measurement, and it is NOT asserted as a defect.",
+    "`logic_edit.undo` answers State C `element_not_found` while the arrange window is not frontmost, and State A once it is raised by title — reproducible in both directions, six failing attempts and then one that worked. A caller has no way to learn that precondition from the error. This is how the tempo event stayed in the project through the pane's own `삭제` button (AX code 0, no effect), `편집 > 삭제`, and a real Delete keypress with the row AX-selected and Logic frontmost — none of which removed it. Whether a tempo event has ANY delete path other than undo is therefore still unestablished, and a created event should not be assumed reversible."
   ],
   "supersedes": null
 }
