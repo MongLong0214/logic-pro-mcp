@@ -1,0 +1,110 @@
+{
+  "id": "2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "Logic's Event List note table, read by the release binary's --probe-event-list",
+  "question": "Does the Event List readback still fail to resolve its columns, as #302 records?",
+  "verdict": "works",
+  "issues": [
+    "#302",
+    "#293"
+  ],
+  "surface": "system.midi",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it needs a region and an open editor: (1) `logic_tracks.record_sequence` with known pitches; (2) View > Show List Editors; (3) run the release binary with `--probe-event-list`; (4) create a second region with DIFFERENT pitches and run it again.",
+    "expected": "Both runs return ok:true with one row per note written and the pitches just written; the second run returns the second region's notes, not the first's."
+  },
+  "depends": [
+    "Sources/LogicProMCP/MIDIReadback/MIDIProviderGate.swift"
+  ],
+  "evidence": [],
+  "method": "Two MIDI regions were created through the product's own verified `record_sequence`, each with pitches chosen so the two cannot be confused. The release binary's observation-only `--probe-event-list` was run after each. Nothing was written through the Event List.",
+  "observations": [
+    {
+      "what": "columns the probe resolved",
+      "live_columns": [
+        "L",
+        "M",
+        "Position",
+        "Status",
+        "Ch",
+        "Num",
+        "Val",
+        "Length/Info"
+      ],
+      "ok": true
+    },
+    {
+      "what": "first region — written 60, 64, 67 at equal lengths",
+      "rows": 3,
+      "num": [
+        60,
+        64,
+        67
+      ],
+      "val": [
+        "100",
+        "100",
+        "100"
+      ],
+      "ch": [
+        1,
+        1,
+        1
+      ],
+      "position": [
+        "1 1 1 1",
+        "1 1 4 203",
+        "1 2 4 165"
+      ],
+      "length_info": [
+        "0 0 3 202",
+        "0 0 3 202",
+        "0 0 3 202"
+      ],
+      "status": [
+        "Note",
+        "Note",
+        "Note"
+      ]
+    },
+    {
+      "what": "second region — written 72, 74",
+      "rows": 2,
+      "num": [
+        72,
+        74
+      ],
+      "val": [
+        "100",
+        "100"
+      ],
+      "position": [
+        "1 1 1 1",
+        "1 1 2 221"
+      ]
+    },
+    {
+      "what": "cells the rows leave empty",
+      "L": null,
+      "M": null
+    }
+  ],
+  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in both regions. The readback also FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three. That is three of the eventListAX provider's listed required proofs observed live — selected region identity, column identity binding, and count semantics.",
+  "limits": [
+    "Three proofs of eleven. Not measured here: filter-checkbox completeness, contiguous harvest with stable cell content, first/last row plus count/end completeness, position and length raw-tick versus SMF display-format invariance, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
+    "`Length/Info` reads `0 0 3 202` for notes written as 480 ticks. Whether that is Logic's display of the same duration or a different duration was NOT established — the raw-tick versus display-format invariance proof is exactly the one still open.",
+    "Only regions this run created were read. A region with chords, overlapping notes, non-note events, or more rows than fit the visible table was not tried, and the count semantics proof is about all events in a region rather than the few written here.",
+    "One locale (ko-KR), one host, one build. The probe is observation-only: it mints no identity proof and adds no MCP surface, so nothing here says the provider is safe to publish.",
+    "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works."
+  ],
+  "supersedes": null
+}
