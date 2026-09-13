@@ -1,0 +1,115 @@
+{
+  "id": "2026-09-14-the-other-three-adr-009-criteria-measured-against-the-eq-path",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "ADR-009's acceptance criteria 2, 3 and 4, measured against logic_plugins.set_eq_band_verified",
+  "question": "Criterion 1 is now met by eighteen Channel EQ parameters. Are the other three met, or was the parameter count the only thing standing between this ADR and done?",
+  "verdict": "partial",
+  "issues": [
+    "#292"
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it needs a Channel EQ on a uniquely named track. Call `logic_plugins.set_eq_band_verified` five times with a deliberately wrong selector — an insert with no Channel EQ, a target_ref that resolves to nothing, another track's ref, a project_expected_path that is not the open project, and a bare `track` index with no ref — then read the parameter back. Then call it once with the plug-in window closed and once with it already open.",
+    "expected": "The first four answer State C with write_attempted false and a typed error, and the parameter is unchanged. The fifth WRITES: a bare index is accepted by this operation. The closed-window call opens the editor, writes and closes it (editor_close_observed true); the open-window call writes and leaves it open (plugin_view_restore_observed true). Both reach State A."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/PluginsDispatcher.swift",
+    "Sources/LogicProMCP/Plugins/StockPluginCatalog.swift"
+  ],
+  "evidence": [],
+  "method": "Driven against the release binary talking to a live Logic, on the Channel EQ at insert 1 of the track named `Absolute Zero`. Criterion 3 was probed by five wrong-selector calls, each asking for a value far from the one held (900 against a held 500) so that a write which happened would be visible in the readback rather than hidden by coincidence. The parameter was read before and after. The wrong-insert case was then repeated three times, each followed by a correct call, to see whether a refusal leaves the surface unusable. Criterion 4 was probed by reading Logic's window list around each call rather than trusting the response's own lifecycle fields. Criterion 2 was read off the shipped catalog through `logic://stock-plugins`.",
+  "observations": [
+    {
+      "criterion": 3,
+      "case": "insert with no Channel EQ",
+      "state": "C",
+      "error": "incomplete_inventory",
+      "write_attempted": false
+    },
+    {
+      "criterion": 3,
+      "case": "target_ref resolving to nothing",
+      "state": "C",
+      "error": "stale_target_reference",
+      "write_attempted": false
+    },
+    {
+      "criterion": 3,
+      "case": "another track's target_ref",
+      "state": "C",
+      "error": "incomplete_inventory",
+      "write_attempted": false
+    },
+    {
+      "criterion": 3,
+      "case": "project_expected_path that is not the open project",
+      "state": "C",
+      "error": "project_identity_mismatch",
+      "write_attempted": false
+    },
+    {
+      "criterion": 3,
+      "case": "bare track index, no target_ref",
+      "state": "A",
+      "verified": true,
+      "wrote": true,
+      "note": "NOT a refusal. This operation accepts a bare index and writes, while insert_verified refuses one with index_binding_corroboration_required"
+    },
+    {
+      "criterion": 3,
+      "case": "wrong-insert refusal repeated, each followed by a correct call",
+      "repeats": 3,
+      "refusals": 3,
+      "following_calls_state_A": 3,
+      "observed_after_each": 500
+    },
+    {
+      "criterion": 4,
+      "case": "start with the plug-in window closed",
+      "state": "A",
+      "verified": true,
+      "editor_close_observed": true,
+      "writes_in_the_2026_09_14_sweep_that_started_this_way": 72
+    },
+    {
+      "criterion": 4,
+      "case": "start with the plug-in window already open",
+      "state": "A",
+      "verified": true,
+      "plugin_view_restore_observed": true,
+      "windows_before": [
+        "Absolute Zero",
+        "lpm-locale-campaign - 트랙"
+      ],
+      "windows_after": [
+        "Absolute Zero",
+        "lpm-locale-campaign - 트랙"
+      ]
+    },
+    {
+      "criterion": 2,
+      "read_from": "logic://stock-plugins on the release binary",
+      "parameters_with_availability_verified_or_observed": 29,
+      "of_those_lacking_a_readback_method": 0
+    }
+  ],
+  "conclusion": "Criterion 2 holds: 0 of the 29 catalog parameters that claim verified or observed lack a readback method. Criterion 4 holds in both directions: a closed-window start opens the editor, writes and closes it, and an open-window start writes and leaves the window as it found it — both reach State A, and Logic's own window list agrees rather than only the response's lifecycle fields. Criterion 3 holds for every WRONG selector: four kinds of wrong target refuse pre-write with a typed error and write_attempted false, the parameter is unchanged, and a refusal does not leave the surface unusable. It does NOT hold for a bare index, because a bare index is not refused at all — this operation accepts one and writes, while insert_verified refuses the same shape.",
+  "limits": [
+    "The bare-index asymmetry is REPORTED, not fixed. It is a policy difference between two operations in the same tool and changing it changes a public contract, which is not this measurement's to decide.",
+    "Four kinds of wrong selector, not an enumeration of every way a selector can be wrong. A correct track with the right plug-in at the wrong BAND was not probed.",
+    "One Channel EQ instance, one project, one Korean Logic 12.3. Criterion 3's refusals were not measured through set_param_verified, only through set_eq_band_verified.",
+    "The closed-window reading leans on the 2026-09-14 A/B sweep for its count: that sweep's calls each reported editor_close_observed true, so the call after each one started closed. A single isolated closed start was NOT staged here, because closing the plug-in window needs a button this window exposes with no name and no subrole, and a coordinate click is not available.",
+    "Criterion 2 was read off the binary built before today's promotion, so it counts 2 verified rather than 20. The property measured — that no public parameter lacks a readback method — is unaffected, since the promotion only adds parameters that already declared one.",
+    "ADR-009's 'Public surface' section is NOT measured here. list_verified_capabilities, get_param_verified, apply_snapshot_verified, diff_snapshot and the per-plugin verified-capabilities resource do not exist; the acceptance criteria do not name them, and this record does not claim them."
+  ],
+  "supersedes": null
+}

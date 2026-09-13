@@ -63,32 +63,59 @@ struct ChannelEQBandCatalogTests {
         #expect(channelEQ.safeWriteCapabilities == .parameterWriteReadback)
         #expect(channelEQ.parameters.count == 24)
 
-        // The 2026-09-13 sweep drove all twenty-four through `set_eq_band_verified`. Eighteen
-        // returned State A; six refused with `increment_walk_no_progress`, and those six are
-        // exactly the two Cut bands on all three of their parameters. Counting both sides pins
-        // the split: an evidence string copied onto the wrong parameters moves one of these
-        // counts, which asserting only "some parameter carries the round-trip record" would not.
-        let roundTripped = channelEQ.parameters.filter {
-            $0.provenance.evidence.contains("one_way_write_round_trip_state_a_live_2026-09-13")
-        }
+        // The sweep drove all twenty-four through `set_eq_band_verified`. Eighteen reached State A
+        // in both directions; six refused with `increment_walk_no_progress`, and those six are
+        // exactly the two Cut bands on all three of their parameters. Counting BOTH sides pins the
+        // split — an evidence string copied onto the wrong parameters moves one of these counts,
+        // which asserting only "some parameter is verified" would not.
+        let verified = channelEQ.parameters.filter { $0.availabilityState == .verified }
         let refused = channelEQ.parameters.filter {
             $0.provenance.evidence.contains("write_round_trip_refused_live_2026-09-13_increment_walk_no_progress")
         }
-        #expect(roundTripped.count == 18)
+        #expect(verified.count == 18)
         #expect(refused.count == 6)
-        #expect(Set(roundTripped.map(\.id)).isDisjoint(with: Set(refused.map(\.id))))
+        #expect(Set(verified.map(\.id)).isDisjoint(with: Set(refused.map(\.id))))
         #expect(refused.allSatisfy { $0.id.contains("cut") })
+        #expect(refused.allSatisfy { $0.availabilityState == .observed })
 
         for parameter in channelEQ.parameters {
             #expect(parameter.writeMethod == "ax_slider_increment_walk")
             #expect(parameter.provenance.evidence.contains("raw_axvalue_range_measured_live_2026-08-30"))
             #expect(parameter.provenance.evidence.contains("axvalue_increment_walk_measured_live_2026-08-30"))
-            // A one-way State A is not the bidirectional actuation `.verified` asserts here.
-            // `hasVerifiedParameterWriteObservation` would reject these anyway; this says the
-            // catalog does not try, so a later loosening of that gate cannot silently promote them.
-            #expect(parameter.availabilityState == .observed)
-            #expect(!parameter.provenance.evidence.contains("parameter_write_readback"))
-            #expect(!parameter.provenance.evidence.contains { $0.hasPrefix("observed_transition=") })
         }
+
+        // Each verified parameter's evidence must name a transition AND its reverse, and they must
+        // be the pair that parameter was actually driven between. Reading the two apart — rather
+        // than checking that two `observed_transition=` records exist — is what stops one pair being
+        // pasted across parameters whose ranges cannot hold it.
+        for parameter in verified {
+            let band = try #require(ChannelEQBandCatalog.parameters.first { $0.id == parameter.id })
+            let expected: (Int, Int)
+            switch band.parameterName {
+            case "Frequency": expected = (500, 560)
+            case "Gain": expected = (200, 240)
+            default: expected = band.range.upperBound == 52 ? (20, 26) : (50, 63)
+            }
+            #expect(parameter.provenance.evidence.contains("observed_transition=\(expected.0)->\(expected.1)"))
+            #expect(parameter.provenance.evidence.contains("observed_transition=\(expected.1)->\(expected.0)"))
+            #expect(Double(expected.1) <= band.range.upperBound)
+            #expect(parameter.provenance.evidence.contains("operation=logic_plugins.set_eq_band_verified"))
+            #expect(parameter.provenance.evidence.contains("write_method=ax_slider_increment_walk"))
+        }
+    }
+
+    @Test func verifiedWriteOperationsAreDerivedFromTheRegistryRatherThanListed() {
+        // The gate used to name `logic_plugins.set_param_verified` alone, and refused eighteen
+        // Channel EQ parameters that had the evidence but named the operation ADR-013 shipped. The
+        // set is derived now, so a third verified parameter write cannot be forgotten here. This
+        // test is the other half: it pins the MEMBERSHIP, so widening the derivation to admit an
+        // operation that writes no parameter — `insert_verified` is `readbackRequired` too — fails
+        // rather than quietly enlarging what `.verified` can rest on.
+        let operations = StockPluginCatalogValidator.verifiedParameterWriteOperations
+        #expect(operations == [
+            "logic_plugins.set_param_verified",
+            "logic_plugins.set_eq_band_verified",
+        ])
+        #expect(!operations.contains("logic_plugins.insert_verified"))
     }
 }

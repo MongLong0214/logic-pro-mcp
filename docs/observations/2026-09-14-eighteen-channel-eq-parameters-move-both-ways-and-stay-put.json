@@ -1,0 +1,143 @@
+{
+  "id": "2026-09-14-eighteen-channel-eq-parameters-move-both-ways-and-stay-put",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "The eighteen Channel EQ band parameters that reached State A, driven A -> B -> A with a fourth write of the same value",
+  "question": "A one-way State A says a write landed once. Does the same parameter come BACK, and does rewriting the value it already holds still verify?",
+  "verdict": "works",
+  "issues": [
+    "#292"
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it needs a Channel EQ on a uniquely named track. For each of the six non-Cut bands crossed with Frequency, Gain and Q, call `logic_plugins.set_eq_band_verified` with unit `raw_ax_value` four times: A, then B, then A, then A again. A/B are 500/560 for Frequency, 200/240 for Gain, 20/26 for a shelf Q and 50/63 for a peak Q.",
+    "expected": "All four writes return State A with verified true and observed_normalized equal to the request. The fourth reports walk_steps 0 — the value is already there and the readback still confirms it."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/ChannelEQBandCatalog.swift",
+    "Sources/LogicProMCP/Plugins/StockPluginCatalog.swift"
+  ],
+  "evidence": [],
+  "method": "Driven against the release binary talking to a live Logic, on the Channel EQ at insert 1 of the track named `Absolute Zero` in `lpm-locale-campaign.logicx`, resolved by `target_ref` from `logic://tracks` rather than by index. Requests used `raw_ax_value`, so the number written and the number read back are the same quantity and no engineering conversion sits between them. The pairs were chosen inside each parameter's declared raw range: far enough apart that arriving is distinguishable from not moving, close enough that the increment walk finishes. Four writes per parameter: settle at A, A->B, B->A, then A again. The third and fourth are the point — the third asks whether the control comes back, the fourth whether a write of the value already held still verifies rather than being reported as a no-op success.",
+  "observations": [
+    {
+      "what": "every write in the sweep",
+      "writes": 72,
+      "state_A_with_verified_true": 72,
+      "observed_normalized_equal_to_request": 72
+    },
+    {
+      "what": "parameters that came back",
+      "reciprocal": 18,
+      "of": 18
+    },
+    {
+      "what": "parameters that verified a rewrite of the value already held",
+      "idempotent": 18,
+      "of": 18,
+      "note": "the fourth write reported walk_steps 0 and still returned state A with verified true"
+    },
+    {
+      "what": "Frequency, all six non-Cut bands",
+      "pair": [
+        500,
+        560
+      ],
+      "sequence": [
+        500,
+        560,
+        500,
+        500
+      ],
+      "walk_steps": [
+        60,
+        60,
+        60,
+        0
+      ]
+    },
+    {
+      "what": "Gain, all six non-Cut bands",
+      "pair": [
+        200,
+        240
+      ],
+      "sequence": [
+        200,
+        240,
+        200,
+        200
+      ],
+      "walk_steps": [
+        65,
+        40,
+        40,
+        0
+      ]
+    },
+    {
+      "what": "Q on Low Shelf and High Shelf",
+      "pair": [
+        20,
+        26
+      ],
+      "sequence": [
+        20,
+        26,
+        20,
+        20
+      ],
+      "walk_steps": [
+        26,
+        6,
+        6,
+        0
+      ]
+    },
+    {
+      "what": "Q on Peak 1 through Peak 4",
+      "pair": [
+        50,
+        63
+      ],
+      "sequence": [
+        50,
+        63,
+        50,
+        50
+      ],
+      "walk_steps": [
+        50,
+        13,
+        13,
+        0
+      ]
+    },
+    {
+      "what": "bands not driven in this sweep",
+      "bands": [
+        "Low Cut",
+        "High Cut"
+      ],
+      "count": 6,
+      "why": "they refused one-way on 2026-09-13 and were not re-driven here"
+    }
+  ],
+  "conclusion": "All 18 Channel EQ parameters that reach State A move in BOTH directions and stay put when rewritten. That is what this catalog means by a verified parameter and what ADR-009 asks for under 'A/B write proof, idempotency': the 18 were held at `observed` on 2026-09-13 precisely because only one direction had been measured, and they are `verified` now because the other direction was.",
+  "limits": [
+    "One Channel EQ instance, on one track, in one project, on a Korean Logic 12.3. Nothing here speaks for a second instance, another host locale, or Logic on another machine.",
+    "One pair of values per parameter kind, chosen mid-range. The extremes of each declared raw range were NOT driven, so nothing here says the parameter reaches its own min or max — which ADR-009's evidence list asks for separately and this sweep does not supply.",
+    "The two Cut bands were not re-driven. They refused one-way on 2026-09-13 and are assumed to refuse reciprocally; that assumption was not tested, and WHY they refuse is still unestablished.",
+    "Idempotency was measured as one immediate rewrite. Nothing here says the value survives a window close, a project reload, or any other Logic-side event.",
+    "`raw_ax_value` only. The engineering-unit path (Hz, dB, Q) compares against Logic's rendered AXValueDescription and is a different comparison; it was exercised on 2026-09-13 one-way and not in this sweep."
+  ],
+  "supersedes": null
+}

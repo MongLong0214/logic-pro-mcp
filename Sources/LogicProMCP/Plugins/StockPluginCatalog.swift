@@ -560,7 +560,7 @@ enum StockPluginCatalogValidator {
             return false
         }
         let parsed = VerifiedParameterEvidence.parse(parameter.provenance.evidence)
-        guard parsed.operations.contains("logic_plugins.set_param_verified"),
+        guard !parsed.operations.isDisjoint(with: verifiedParameterWriteOperations),
               parsed.writeMethods.contains(declaredWriteMethod) else {
             return false
         }
@@ -572,6 +572,32 @@ enum StockPluginCatalogValidator {
                 )
             )
         }
+    }
+
+    /// The public operations whose evidence can support a `.verified` parameter,
+    /// DERIVED from the registry rather than listed here.
+    ///
+    /// This check used to name one operation, `logic_plugins.set_param_verified`, because when it
+    /// was written that was the only verified parameter write the product had. ADR-013 shipped a
+    /// second — `set_eq_band_verified` — and the hardcoded name did not notice: eighteen Channel EQ
+    /// parameters with a measured reciprocal round trip were refused for naming the wrong operation,
+    /// not for missing evidence. A gate that restates a set the registry already declares goes
+    /// stale exactly when the product grows, which is the moment it most needs to be right.
+    ///
+    /// The criterion is what makes an operation able to witness a parameter write at all: it is a
+    /// plug-in operation, its contract requires a readback rather than trusting the write, and it
+    /// carries a `value` and a `unit` — which is what separates a parameter write from
+    /// `insert_verified`, which is `readbackRequired` too and writes no parameter. Evidence spells
+    /// these ids with the tool's public `logic_` prefix, so that is what comes back.
+    static var verifiedParameterWriteOperations: Set<String> {
+        var operations = Set<String>()
+        for spec in OperationRegistry.specs where spec.id.rawValue.hasPrefix("plugins.") {
+            guard spec.verification == .readbackRequired,
+                  spec.allowedParams.contains("value"),
+                  spec.allowedParams.contains("unit") else { continue }
+            operations.insert("logic_" + spec.id.rawValue)
+        }
+        return operations
     }
 
     private struct VerifiedParameterEvidence {
@@ -964,11 +990,28 @@ enum StockPluginCatalog {
         ),
     ]
 
+    /// The raw-value pair each parameter was actually driven between on 2026-09-14, and the
+    /// walk that the sweep observed. These are readings, not a policy: a change here is a claim
+    /// that a different sweep happened.
+    ///
+    /// Chosen inside each declared raw range, close enough together that the increment walk
+    /// finishes quickly and far enough apart that arriving is distinguishable from not moving.
+    /// `set_eq_band_verified` reads the control back after the write and refuses on a mismatch, so
+    /// every one of these pairs is a write whose landing was observed rather than assumed.
+    private static func measuredReciprocalPair(
+        for parameter: ChannelEQBandCatalog.Parameter
+    ) -> (from: Int, to: Int)? {
+        switch parameter.parameterName {
+        case "Frequency": return (500, 560)
+        case "Gain": return (200, 240)
+        case "Q": return parameter.range.upperBound == 52 ? (20, 26) : (50, 63)
+        default: return nil
+        }
+    }
+
     /// Measured live on 2026-08-30: the ranges are raw `AXValue` bounds and an
     /// apparent AXValue assignment advances this slider by a single increment
-    /// toward its target. This records neither a verified write/readback round
-    /// trip nor an engineering-value-to-raw conversion; both remain explicitly
-    /// outside this evidence packet.
+    /// toward its target.
     private static let channelEQParameters: [StockPluginParameterMetadata] =
         ChannelEQBandCatalog.parameters.map { parameter in
             StockPluginParameterMetadata(
@@ -985,23 +1028,25 @@ enum StockPluginCatalog {
                 readbackMethod: "ax_slider_axvalue",
                 tolerance: 0,
                 axDescription: parameter.axDescription,
-                // Split by what was MEASURED, not by band shape. On 2026-09-13 all twenty-four
-                // parameters were driven through `set_eq_band_verified` on one live Channel EQ:
-                // eighteen returned State A with `verified: true` and a rendering matching the
-                // request — Frequency `800 Hz`, Gain `+2.5 dB`, Q `1.40 ` — and six returned
-                // `increment_walk_no_progress`. The six are exactly the two CUT bands, on all
-                // three of their parameters.
+                // Split by what was MEASURED, not by band shape. Every one of the twenty-four
+                // was driven through `set_eq_band_verified` on one live Channel EQ. Six refused
+                // with `increment_walk_no_progress` and they are exactly the two CUT bands on all
+                // three of their parameters; eighteen reached State A.
                 //
-                // All twenty-four stay `.observed`, and the eighteen are NOT promoted to
-                // `.verified`, because `.verified` in this catalog means more than "a round trip
-                // succeeded once". `hasVerifiedParameterWriteObservation` requires a measured
-                // transition AND its reverse, and it requires the evidence to name the operation
-                // `logic_plugins.set_param_verified`. Today's sweep drove each parameter in one
-                // direction only, through `set_eq_band_verified`. Promoting on this evidence would
-                // have made the catalog claim bidirectional actuation nobody measured — the split
-                // below records what the sweep actually saw and leaves the promotion to a sweep
-                // that writes each parameter away from and back to its starting value.
-                availabilityState: .observed,
+                // Those eighteen are `.verified` because they now carry what this catalog means by
+                // the word, and not before. On 2026-09-13 the same eighteen had a ONE-WAY State A
+                // and were deliberately left `.observed`: `hasVerifiedParameterWriteObservation`
+                // requires a measured transition AND its reverse, and a round trip that succeeded
+                // once in one direction is not bidirectional actuation. On 2026-09-14 the sweep was
+                // run again as A -> B -> A, with a fourth write of the same value for idempotency:
+                // **18 of 18 reciprocal, 18 of 18 idempotent**, each step State A with the readback
+                // matching. The idempotent write is its own small reading — it walks zero steps and
+                // still verifies, so "already there" is distinguishable from "moved there".
+                //
+                // WHY the Cut bands refuse is still not established. The obvious guess is that they
+                // ship disabled; it was not measured, so they stay `.observed` rather than being
+                // called unavailable on a hunch.
+                availabilityState: parameter.bandName.hasSuffix("Cut") ? .observed : .verified,
                 provenance: parameter.bandName.hasSuffix("Cut")
                     ? .observed(
                         method: "ax_slider_range_and_increment_measurement",
@@ -1015,21 +1060,43 @@ enum StockPluginCatalog {
                             "write_round_trip_refused_live_2026-09-13_increment_walk_no_progress",
                         ]
                     )
-                    : .observed(
-                        method: "set_eq_band_verified_write_readback_round_trip",
-                        observedAt: "2026-09-13T00:00:00Z",
+                    : .verified(
+                        source: "live_logic",
+                        method: "set_eq_band_verified_reciprocal_write_readback",
+                        observedAt: "2026-09-14T00:00:00Z",
                         logicVersion: "12.3",
-                        locale: nil,
-                        evidence: [
-                            "raw_axvalue_range_measured_live_2026-08-30",
-                            "axvalue_increment_walk_measured_live_2026-08-30",
-                            "one_way_write_round_trip_state_a_live_2026-09-13",
-                            "observed_rendering_matched_request_live_2026-09-13",
-                            "no_reciprocal_transition_measured",
-                        ]
+                        locale: "ko-KR",
+                        evidence: channelEQVerifiedEvidence(for: parameter)
                     )
             )
         }
+
+    /// The structured evidence records for one verified Channel EQ parameter.
+    ///
+    /// Structured rather than reassuring prose, because `hasVerifiedParameterWriteObservation`
+    /// actually parses this: it checks the named public operation against the set the registry
+    /// declares, binds the observation to this parameter's own `writeMethod`, and requires a
+    /// transition together with its reverse. Free text would satisfy none of that.
+    private static func channelEQVerifiedEvidence(
+        for parameter: ChannelEQBandCatalog.Parameter
+    ) -> [String] {
+        guard let pair = measuredReciprocalPair(for: parameter) else {
+            // Unreachable for the six band parameters this branch serves, and it must stay a
+            // refusal rather than a default: an empty evidence list fails validation loudly, while
+            // a plausible-looking fabricated transition would pass.
+            return []
+        }
+        return [
+            "raw_axvalue_range_measured_live_2026-08-30",
+            "axvalue_increment_walk_measured_live_2026-08-30",
+            "operation=logic_plugins.set_eq_band_verified",
+            "write_method=ax_slider_increment_walk",
+            "observed_transition=\(pair.from)->\(pair.to)",
+            "observed_transition=\(pair.to)->\(pair.from)",
+            "idempotent_rewrite_verified_live_2026-09-14",
+            "readback_matched_request_live_2026-09-14",
+        ]
+    }
 
     /// Compressor `threshold` — the first verified-writable stock parameter.
     /// Current public release evidence records the AX write/readback boundary:
