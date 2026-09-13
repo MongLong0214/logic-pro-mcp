@@ -1181,6 +1181,26 @@ actor LogicProServer {
         recoverModifier()
     }
 
+    /// Startup housekeeping that must not gate serving.
+    ///
+    /// `SMFWriter.cleanupStartupOrphanFiles` enumerates the user temporary directory, and the size
+    /// of that directory is not this process's to bound. Measured 2026-09-13 it held 141,673
+    /// entries — most of them fixture directories left behind by this project's own test suite —
+    /// and `sample` caught the server still inside `start()` EIGHT SECONDS after launch, with
+    /// 4,369 of 4,369 main-thread stacks in `getattrlistbulk` under `contentsOfDirectory`. The
+    /// first operation of the session was already waiting on it. With a screen recording running
+    /// beside it, that delay was the difference between a 3.5s `goto_position` and a 25s deadline
+    /// abandonment, which is how a live harness came to report its own instrument as a product
+    /// failure in German.
+    ///
+    /// Nothing depends on the sweep having finished — it removes directories older than five
+    /// minutes, so a later sweep removes exactly what an earlier one would have. The modifier
+    /// recovery beside it stays synchronous, because THAT one is a precondition: a stuck modifier
+    /// must be released before this process sends any key.
+    static func scheduleBackgroundOrphanCleanup(_ cleanup: @escaping @Sendable () -> Void) {
+        DispatchQueue.global(qos: .utility).async(execute: cleanup)
+    }
+
     func start() async throws {
         await sagaJournal.clear()
         OperationHandlerRegistry.validate()
@@ -1191,7 +1211,9 @@ actor LogicProServer {
             )
         } else {
             Self.performStartupMaintenance(
-                cleanupOrphans: { SMFWriter.cleanupStartupOrphanFiles() },
+                cleanupOrphans: {
+                    Self.scheduleBackgroundOrphanCleanup { SMFWriter.cleanupStartupOrphanFiles() }
+                },
                 recoverModifier: { StuckModifierRecovery.recoverIfNeeded() }
             )
         }

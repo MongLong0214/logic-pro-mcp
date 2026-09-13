@@ -356,26 +356,16 @@ seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
 time.sleep(2)
 ev.note("876/goto", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
 
-# The product declares its own retry contract when it abandons an operation at the deadline:
-# `mutation_gate: reclaimable_after_grace` with `gate_reclaim_after_sec`. Waiting that grace and
-# going once more is USING that contract, not hiding the timeout — the first envelope is recorded
-# above and the second is recorded here, so a reader sees both. Anything other than a timeout is
-# left exactly as it came back.
-if isinstance(seek, dict) and seek.get("error") == "operation_timeout":
-    grace = seek.get("gate_reclaim_after_sec")
-    time.sleep((grace if isinstance(grace, (int, float)) else 15) + 3)
-    seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
-    time.sleep(2)
-    ev.note("876/goto-retried-after-the-declared-gate-grace",
-            seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
-
-after = ev.shot("876/after-the-playhead-moved", settle_region=band)
-ev.visual("876/the-playhead-readout-moved-on-a-german-logic",
-          before["file"], after["file"], band, subject=band_subject, expect_change=True,
-          why=f"the playhead was driven to bar {TARGET_BAR} through Logic's GERMAN Navigate ▸ Go To "
-              "▸ Position… chain, and the control bar's position readout is where Logic shows where "
-              "the playhead is — a route reporting success while the readout still says bar 1 would "
-              "leave this band identical")
+# NO RETRY HERE, and that is a correction of something this file tried yesterday. When
+# `goto_position` is abandoned at its deadline the child script may still be mid-protocol, and a
+# second call finds the FIRST call's `Zu Position` dialog still up: measured 2026-09-13, the retry
+# came back `mutating_operation_in_progress`, and the dialog it left made the run after that one
+# report `menu_disabled`. One timeout became three failures in a row, none of them the product's.
+#
+# The timeout that prompted the retry was not the product either. It was the server's startup
+# sweep of the user temporary directory — 141,673 entries, most of them this project's own test
+# fixtures — running on the main thread before `start()` returned. That is fixed at the source.
+# `goto_position` now completes in 3.5s, and in 3.6s with this run's screen recorder going.
 
 seek_body = seek if isinstance(seek, dict) else {}
 reading = {
