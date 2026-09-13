@@ -1,0 +1,62 @@
+{
+  "id": "2026-09-13-what-stands-between-this-fixture-and-a-flex-pitch-measurement",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "The preconditions for walking the Audio Track Editor over a Flex-Pitch-analysed region",
+  "question": "Can the measurement this issue asks for be taken on the campaign fixture as it stands?",
+  "verdict": "wall",
+  "issues": [
+    "#305"
+  ],
+  "surface": "system.midi",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual: (1) read `logic://tracks` and look for an audio region; (2) list the commands `logic_audio` answers; (3) drive Logic's own File ▸ Import ▸ Audio File menu item through AX and watch the window list.",
+    "expected": "No audio region exists, `logic_audio` offers analysis only, and the import menu item presses without a panel appearing."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/AudioDispatcher.swift"
+  ],
+  "evidence": [],
+  "method": "Three readings, each cheap and each a precondition of the walk this issue asks for. No audio was imported and no Flex Pitch analysis was run.",
+  "observations": [
+    {
+      "what": "audio regions in the campaign fixture",
+      "count": 0,
+      "note": "the project's tracks are software instruments plus one empty audio track"
+    },
+    {
+      "what": "commands logic_audio answers",
+      "commands": [
+        "analyze_file",
+        "analyze_spectrum",
+        "recommend_eq"
+      ],
+      "import_command": null,
+      "reading": "the product can ANALYSE an audio file on disk and cannot bring one into a project"
+    },
+    {
+      "what": "driving Logic's own File ▸ Import ▸ Audio File through AX",
+      "menu_item_resolved": "오디오 파일…",
+      "press_reported": "the action named the element and returned",
+      "window_appeared": false,
+      "attempts": 2,
+      "note": "the same shape measured today for the MIDI import panel, which appears about twelve seconds after the menu click and not always"
+    }
+  ],
+  "conclusion": "The walk this issue asks for cannot be taken here yet, and the reason is a chain of three preconditions rather than an AX wall in the editor itself. There is no audio region in the fixture; the product exposes no way to create one — `logic_audio` analyses files on disk and imports nothing; and Logic's own audio-import menu item presses without a panel appearing, twice. The Audio Track Editor's tree has still not been looked at, which is what this issue records, and this record says why rather than leaving the next reader to find out.",
+  "limits": [
+    "This measures the PRECONDITIONS, not the surface. Nothing here says anything about whether the Audio Track Editor exposes Flex Pitch notes, or whether their identity is stable, which is the actual question.",
+    "The import panel not appearing was seen twice on a Logic that had been running a while. It was not retried after a relaunch, and the MIDI panel measured today is slow and intermittent in the same way, so `does not appear` may well be `did not appear yet`.",
+    "A generated WAV was written to disk for this attempt and never imported; it is not part of any project.",
+    "One locale (ko-KR). The menu item was resolved by its Korean title."
+  ],
+  "supersedes": null
+}
