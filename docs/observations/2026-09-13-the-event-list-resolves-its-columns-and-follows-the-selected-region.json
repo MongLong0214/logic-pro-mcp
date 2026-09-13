@@ -4,7 +4,7 @@
   "schema": 1,
   "subject": "Logic's Event List note table, read by the release binary's --probe-event-list",
   "question": "Does the Event List readback still fail to resolve its columns, as #302 records?",
-  "verdict": "works",
+  "verdict": "partial",
   "issues": [
     "#302",
     "#293"
@@ -134,15 +134,29 @@
         1843.2
       ],
       "worst_difference_ticks": 0.8
+    },
+    {
+      "what": "a fourth region written with FORTY notes, more than the table shows at once",
+      "notes_written": 40,
+      "record_sequence_verified": true,
+      "probe_result": "ok: false",
+      "probe_error": "Event List row 32, column Position has 0 cell children; expected 1."
+    },
+    {
+      "what": "the same forty-note region after scrolling the Event List down six pages",
+      "probe_result": "ok: false",
+      "probe_error": "Event List row 0, column Position has 0 cell children; expected 1.",
+      "reading": "the failing row moved from 32 to 0 — the rows materialised before are empty now and the ones now on screen are filled"
     }
   ],
-  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in all three regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.",
+  "conclusion": "The blocker this issue records — `columnResolveFailed`, `kAXColumns` absent — is not the state today. All eight columns resolve BY NAME, every note written comes back with its pitch, velocity, channel, position and length, and the row count equals the note count in the small regions. The readback FOLLOWS THE SELECTION: after the second region was created the probe returned its two notes, not the first region's three.\n\nLength and position are not merely present, they are CORRECT. Three notes written at 0/1000/2000 ms with durations 120/240/960 ms read back as positions `1 1 1 1`, `1 3 1 1`, `2 1 1 1` — bar 1 beat 1, bar 1 beat 3, bar 2 beat 1, which is 0, 2 and 4 beats at 120 BPM — and as lengths `0 0 0 230`, `0 0 1 220`, `0 1 3 164`. Converted at Logic's 960 ticks per beat those are 230, 460 and 1844 ticks against 230.4, 460.8 and 1843.2 expected: every one within a single tick.\n\nAND THERE IS A HARD LIMIT, measured in the same run. The table is VIEWPORT-MATERIALISED: a forty-note region fails at row 32 with `0 cell children`, and after scrolling six pages the failure moves to row 0. Only the rows on screen carry cells. No single read can see a region larger than the visible table, so a note manifest has to scroll and stitch — and the stitching is what the provider's `contiguous harvest with stable cell content` proof is about.",
   "limits": [
-    "Four proofs of eleven. Not measured here: filter-checkbox completeness, contiguous harvest with stable cell content, first/last row plus count/end completeness, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
+    "Four proofs of eleven, and one of the remaining seven is now known to be HARD rather than merely unmeasured: contiguous harvest across a viewport-materialised table. Still unmeasured: filter-checkbox completeness, first/last row plus count/end completeness, mid-scan project stability, Korean AND English coverage in one run, Desktop variant coverage, and Logic version drift detection.",
     "The length/position agreement is arithmetic on ONE tempo (120 BPM) and one time signature, and the conversion assumes Logic's 960-ticks-per-beat display. It was not re-measured at another tempo, and a tempo change mid-region was not tried.",
     "Only regions this run created were read. A region with chords, overlapping notes, non-note events, or more rows than fit the visible table was not tried, and the count semantics proof is about all events in a region rather than the few written here.",
     "One locale (ko-KR), one host, one build. The probe is observation-only: it mints no identity proof and adds no MCP surface, so nothing here says the provider is safe to publish.",
-    "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works."
+    "`QualifiedProviderRegistry` hardcodes `qualified: false` for every provider, so no measurement can flip it as written; that is a separate decision from whether the readback works.",
+    "The 32-row boundary is this window's size, not a constant. It was not re-measured at another window height, and whether Logic materialises a margin above and below the visible rows was not established."
   ],
   "supersedes": null
 }
