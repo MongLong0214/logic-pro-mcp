@@ -1,0 +1,78 @@
+{
+  "id": "2026-09-13-eighteen-of-twenty-four-channel-eq-parameters-land-verified",
+  "date": "2026-09-13",
+  "schema": 1,
+  "subject": "Channel EQ's twenty-four named band parameters, driven through set_eq_band_verified",
+  "question": "How many of the catalog's Channel EQ parameters actually reach State A on a live plug-in, now that a control coarser than one raw unit can be walked?",
+  "verdict": "partial",
+  "issues": [
+    "#292"
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Manual because it needs a Channel EQ on a uniquely named track: insert one, then drive `logic_plugins.set_eq_band_verified` for each of the eight bands crossed with Frequency, the band's level parameter (Gain, or Order on the two Cut bands) and Q.",
+    "expected": "The six bands that are not Low Cut or High Cut return State A with verified true for all three of their parameters."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/ChannelEQBandCatalog.swift",
+    "Sources/LogicProMCP/Plugins/SliderIncrementWalk.swift"
+  ],
+  "evidence": [],
+  "method": "One Channel EQ insert on a uniquely named track. Every band in the catalog was driven for Frequency (800 Hz), its level parameter (2.5 dB, or Order 2 raw on the Cut bands) and Q (1.40) through the product's verified operation. Nothing was read through AX directly; the verdict is the operation's own envelope.",
+  "observations": [
+    {
+      "what": "bands whose three parameters all reached State A",
+      "bands": [
+        "Low Shelf",
+        "Peak 1",
+        "Peak 2",
+        "Peak 3",
+        "Peak 4",
+        "High Shelf"
+      ],
+      "count": 18,
+      "example_walk_steps": {
+        "Low Shelf Frequency": 360,
+        "Peak 2 Q": 3,
+        "Peak 4 Q": 35,
+        "any Gain": 25
+      },
+      "observed_displays": {
+        "Frequency": "800 Hz",
+        "Gain": "+2.5 dB",
+        "Q": "1.40 "
+      }
+    },
+    {
+      "what": "bands where every parameter refused",
+      "bands": [
+        "Low Cut",
+        "High Cut"
+      ],
+      "count": 6,
+      "error": "increment_walk_no_progress",
+      "walk_steps": {
+        "Frequency": 8,
+        "Order": 1,
+        "Q": 8
+      },
+      "observed_display": null
+    }
+  ],
+  "conclusion": "Eighteen of the catalog's twenty-four Channel EQ parameters reach State A with a verified readback, including every Q — the control class that landed nothing at all before the walk learned to request a distance larger than one raw unit. The six that refuse are not scattered: they are exactly the two CUT bands, and they refuse on all three of their parameters with `increment_walk_no_progress`.",
+  "limits": [
+    "WHY the two Cut bands refuse is NOT established. The obvious hypothesis is that those bands are switched off in this EQ instance and an off band's controls do not move — Logic's Channel EQ ships with Low Cut and High Cut disabled — but the band's enabled state was not read and the bands were not turned on and retried. `Order` refusing at step 1 while Frequency and Q refuse after the full eight-step retry window is consistent with that and does not establish it either.",
+    "One value per parameter, one instance, one project. A parameter that lands at 800 Hz may fail at the ends of its range, and nothing here exercises the ranges.",
+    "The verdict is the operation's own envelope. This run took no independent AX reading, so it measures what the product claims about itself — which is the right unit for counting capability coverage, and is not an independent confirmation of each value.",
+    "The Cut bands' Order parameter was driven in raw units because it has no display unit. That is a different code path from the engineering-unit walk the other twenty-two use."
+  ],
+  "supersedes": null
+}
