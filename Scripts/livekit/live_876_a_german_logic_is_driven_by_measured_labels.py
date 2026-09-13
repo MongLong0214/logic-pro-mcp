@@ -304,6 +304,29 @@ recording = ev.record_screen(seconds=300)
 d = E.Driver()
 d.tool("logic_system", "refresh_cache")
 
+# A window that exists is not an application that answers. Logic was relaunched seconds ago and is
+# still opening the project; the first run of this harness after the import journey landed drove
+# `goto_position` straight into its own 25s server deadline, and because the abandoned operation
+# left the mutation gate held, `record_sequence` behind it returned `mutating_operation_in_progress`
+# — one slow launch reported as two failures, neither of them the product's.
+#
+# So wait for Logic to ANSWER, not merely to exist: `logic_system.health` is read-only and touches
+# the same AX surface the operations do. The wait is bounded and its cost is recorded, because a
+# settle that silently took two minutes is a fact about this machine that the next reader needs.
+settle_started = time.time()
+settle_rounds = 0
+while time.time() - settle_started < 120:
+    settle_rounds += 1
+    probe_started = time.time()
+    probe = d.tool("logic_system", "health")
+    probe_took = time.time() - probe_started
+    if isinstance(probe, dict) and probe.get("error") is None and probe_took < 5:
+        break
+    time.sleep(5)
+ev.note("876/logic-answered-before-anything-was-driven",
+        {"rounds": settle_rounds, "waited_sec": round(time.time() - settle_started, 1),
+         "last_probe_sec": round(probe_took, 1)})
+
 edit_item_list = menu_items(edit_live)
 move_live = next((i for i in edit_item_list if i in move_labels), "")
 playhead_live = next((i for i in submenu_items(edit_live, move_live) if i in playhead_labels), "") \
@@ -332,6 +355,19 @@ before = ev.shot("876/before-the-playhead-moved", settle_region=band)
 seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
 time.sleep(2)
 ev.note("876/goto", seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
+
+# The product declares its own retry contract when it abandons an operation at the deadline:
+# `mutation_gate: reclaimable_after_grace` with `gate_reclaim_after_sec`. Waiting that grace and
+# going once more is USING that contract, not hiding the timeout — the first envelope is recorded
+# above and the second is recorded here, so a reader sees both. Anything other than a timeout is
+# left exactly as it came back.
+if isinstance(seek, dict) and seek.get("error") == "operation_timeout":
+    grace = seek.get("gate_reclaim_after_sec")
+    time.sleep((grace if isinstance(grace, (int, float)) else 15) + 3)
+    seek = d.tool("logic_transport", "goto_position", {"bar": str(TARGET_BAR)})
+    time.sleep(2)
+    ev.note("876/goto-retried-after-the-declared-gate-grace",
+            seek if isinstance(seek, dict) else {"raw": str(seek)[:200]})
 
 after = ev.shot("876/after-the-playhead-moved", settle_region=band)
 ev.visual("876/the-playhead-readout-moved-on-a-german-logic",
