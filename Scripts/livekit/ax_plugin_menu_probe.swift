@@ -887,6 +887,13 @@ func runChannelEQ() {
     // selected track. They are the same plug-in seen twice, and refusing on `slot_count == 2` is
     // correct but unusable. Optional so the unscoped behaviour is unchanged for callers that do not
     // pass a track.
+    //
+    // A scoped count of two does NOT always mean that, and 2026-09-13 is the day that mattered: on
+    // a strip carrying two Compressor INSERTS, the scope resolves to one mixer strip and still
+    // answers two, with two distinct element ids and two frames differing only in y. Those are two
+    // slots, not one seen twice. So a caller reading `scoped_slot_count: 2` cannot tell the two
+    // cases apart from the count alone — it has to ask the insert chain, and refusing is right
+    // either way.
     let trackLabelRaw = configuredString("track_label")
     let trackLabel: String? = trackLabelRaw.isEmpty ? nil : trackLabelRaw
     let mixerLabels = configuredStringFamily("mixer_label")
