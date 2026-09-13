@@ -27,7 +27,7 @@ private final class ProcessRuntimeHarness: @unchecked Sendable {
     }
 }
 
-private func makeBundleURL(version: String) throws -> URL {
+private func makeBundleURL(version: String, build: String? = nil) throws -> URL {
     let bundleURL = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("app")
@@ -35,12 +35,13 @@ private func makeBundleURL(version: String) throws -> URL {
     try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
 
     let plistURL = contentsURL.appendingPathComponent("Info.plist")
-    let plist: [String: Any] = [
+    var plist: [String: Any] = [
         "CFBundleIdentifier": "com.apple.logic10",
         "CFBundleName": "Logic Pro",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": version,
     ]
+    if let build { plist["CFBundleVersion"] = build }
     let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     try data.write(to: plistURL)
     return bundleURL
@@ -271,6 +272,34 @@ func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
     let version = ProcessUtils.logicProVersion(runtime: harness.runtime())
 
     #expect(version == "10.9.1")
+}
+
+@Test func testProcessUtilsLogicProBuildReadsCFBundleVersionNotTheMarketingVersion() throws {
+    // The two keys are different facts and the reason this accessor exists is that they drift
+    // apart: Logic ships updates that keep 12.3 and move the build. A test that only checked "some
+    // string comes back" would pass on an accessor that read CFBundleShortVersionString, which is
+    // exactly the mistake worth catching — so the fixture makes the two values distinguishable.
+    let harness = ProcessRuntimeHarness()
+    harness.bundleURL = try makeBundleURL(version: "12.3", build: "6674")
+
+    #expect(ProcessUtils.logicProBuild(runtime: harness.runtime()) == "6674")
+    #expect(ProcessUtils.logicProVersion(runtime: harness.runtime()) == "12.3")
+}
+
+@Test func testProcessUtilsLogicProBuildReturnsNilWhenTheKeyIsAbsent() throws {
+    // A bundle with no CFBundleVersion must answer nil rather than falling back to the version.
+    // `EventListReadbackCollector` turns that nil into `.unreadable`, and a fallback here would
+    // hand it a build it never read.
+    let harness = ProcessRuntimeHarness()
+    harness.bundleURL = try makeBundleURL(version: "12.3")
+
+    #expect(ProcessUtils.logicProBuild(runtime: harness.runtime()) == nil)
+}
+
+@Test func testProcessUtilsLogicProBuildReturnsNilWithoutBundleURL() {
+    let harness = ProcessRuntimeHarness()
+
+    #expect(ProcessUtils.logicProBuild(runtime: harness.runtime()) == nil)
 }
 
 @Test func testProcessUtilsLogicProVersionReturnsNilWithoutBundleURL() {

@@ -98,6 +98,13 @@ struct ChannelEQBandCatalogTests {
             }
             #expect(parameter.provenance.evidence.contains("observed_transition=\(expected.0)->\(expected.1)"))
             #expect(parameter.provenance.evidence.contains("observed_transition=\(expected.1)->\(expected.0)"))
+            // Both endpoints must sit inside THIS parameter's own declared raw range. That catches a
+            // peak Q's pair pasted onto a shelf Q — 63 is outside 0...52 — and it is the limit of
+            // what this assertion can do: the six Frequencies genuinely share 500/560, the six Gains
+            // share 200/240, and a swap WITHIN a class is invisible here because the sweep drove the
+            // same pair on every member of the class. Binding a pair to one band would mean driving
+            // a different pair per band, which was not measured.
+            #expect(Double(expected.0) >= band.range.lowerBound)
             #expect(Double(expected.1) <= band.range.upperBound)
             #expect(parameter.provenance.evidence.contains("operation=logic_plugins.set_eq_band_verified"))
             #expect(parameter.provenance.evidence.contains("write_method=ax_slider_increment_walk"))

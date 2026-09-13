@@ -532,7 +532,7 @@ enum StockPluginCatalogValidator {
                         issues.append(issue(
                             "verified_parameter_missing_write_observation",
                             "\(base).parameters[\(paramIndex)]",
-                            "verified parameter evidence must parse operation=logic_plugins.set_param_verified, write_method=<declared method>, and reciprocal observed_transition=<from>-><to> records"
+                            "verified parameter evidence must parse operation=<one of the registry's verified parameter writes>, write_method=<declared method>, and reciprocal observed_transition=<from>-><to> records"
                         ))
                     }
                 }
@@ -1293,7 +1293,8 @@ enum StockPluginCatalog {
             parameters: channelEQParameters,
             notes: [
                 "Channel EQ ranges and increment-walk behavior were measured live on 2026-08-30.",
-                "No Channel EQ write/readback round trip is claimed by this catalog evidence."
+                "18 of the 24 named band parameters carry a reciprocal write/readback round trip measured live on 2026-09-14: the six bands that are not Low Cut or High Cut.",
+                "The 6 parameters of Low Cut and High Cut carry no round trip. Every write to them refused with increment_walk_no_progress, and why is not established."
             ]
         ),
         fx("linear_phase_eq", "Linear Phase EQ", "EQ"),

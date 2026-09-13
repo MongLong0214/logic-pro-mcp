@@ -239,8 +239,14 @@ enum EventListReadbackCollector {
             variant: LogicProTarget.current.variant,
             // Read from the bundle actually running, beside the variant and for the same reason.
             logicBuild: {
-                guard let version = ProcessUtils.logicProVersion(),
-                      let build = ProcessUtils.logicProBuild() else { return .unreadable }
+                // An EMPTY string is not a reading. `Info.plist` keys can be present and blank, and
+                // `isObserved` only asks whether the case is `.observed` — so a blank version would
+                // otherwise satisfy the identity guard while naming no build at all, which is the
+                // absence-as-success shape this guard exists to refuse.
+                guard let version = ProcessUtils.logicProVersion(), !version.isEmpty,
+                      let build = ProcessUtils.logicProBuild(), !build.isEmpty else {
+                    return .unreadable
+                }
                 return .observed(version: version, build: build)
             }(),
             requestedRegion: requestedRegion,
