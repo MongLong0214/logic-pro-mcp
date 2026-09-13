@@ -4704,7 +4704,7 @@ private func makeTempoFixtureWithAlert(
     // `[.accessibility]` alone, and a single-channel chain's State C envelope is returned verbatim,
     // so the caller receives THIS envelope rather than a `channels_exhausted` wrapper.
     #expect(HonestContract.terminalErrorCodes.contains("readback_lost_after_write"))
-    #expect(ChannelRouter.v2RoutingTable["transport.set_tempo"]?.count == 1)
+    #expect(ChannelRouter.v2RoutingTable["transport.set_tempo"] == [ChannelID.accessibility])
     #expect(obj["state"] as? String == "C")
     #expect((obj["write_attempted"] as? Bool)!)
     // The field's reading is REPORTED, under a name that says it is the field's and not the
@@ -4741,6 +4741,52 @@ private func makeTempoFixtureWithAlert(
     #expect((obj["blocker_present_before_write"] as? Bool)!)
     #expect(obj["blocker_scan_before_write"] as? String == "complete")
     #expect(obj["verified"] == nil)
+}
+
+@Test func testSetTempoDirectWriteReportsAnAXRefusalAsAWriteFailure() async {
+    // A review found the geometry-free branch discarding both AX results and then answering State B
+    // — `success: true`, "the write landed". When AX itself refuses the write, that is a failure the
+    // code CAN establish, so it is reported as one, and as `ax_write_failed` rather than
+    // `readback_lost_after_write`: nothing was lost to read, the write was refused outright.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7400)
+    let window = builder.element(7401)
+    let controlBar = builder.element(7402)
+    let slider = builder.element(7403)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [slider])
+    builder.setAttribute(slider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(slider, kAXDescriptionAttribute as String, "Tempo")
+    builder.setAttribute(slider, kAXValueAttribute as String, NSNumber(value: 120.0))
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: builder.makeLogicRuntime(
+            appElement: app,
+            // AX refuses the write. Logic is otherwise clean, so nothing else can explain a refusal.
+            setAttributeHandler: { _, _, _ in false },
+            performActionHandler: { _, _ in true }
+        )
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "144"])
+
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["via"] as? String == "slider-direct")
+    #expect(!((obj["ax_value_write_accepted"] as? Bool)!))
+    // Retryable, unlike the blocked-readback refusal: the caller can simply ask again.
+    #expect((obj["safe_to_retry"] as? Bool)!)
 }
 
 @Test func testSetTempoDirectWriteDoesNotClaimSuccessWhileABlockerIsUp() async {

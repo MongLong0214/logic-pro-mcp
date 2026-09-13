@@ -309,18 +309,39 @@ extension AccessibilityChannel {
         if let slider = AXLogicProElements.findTempoSlider(runtime: runtime) {
             guard let position = AXHelpers.getPosition(slider, runtime: runtime.ax),
                   let size = AXHelpers.getSize(slider, runtime: runtime.ax) else {
-                AXHelpers.setAttribute(slider, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
-                _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
-                // This branch WRITES and then claims nothing about the tempo, so it needs no
-                // success gate — `readback_unavailable` is already the honest answer. It does carry
-                // the blocker label, because a caller reading "no readback" while Logic is holding
-                // an alert is owed the difference between "we could not look" and "Logic refused".
-                // State B asserts `success: true` — "the write landed but read-back couldn't
-                // confirm". With a blocker observed, that is the same overclaim this whole change
-                // exists to remove, one branch over: nothing here establishes the write landed. A
-                // review found this site still saying it. Refuse on the same terms as the other
-                // two; State B stays only for the case where the readback is simply absent and
-                // Logic is otherwise clean.
+                // This slider exposes no geometry, so the value is written directly and there is no
+                // readback. State B is the answer for that — `readback_unavailable` — but State B
+                // also asserts `success: true`, "the write landed but read-back couldn't confirm",
+                // and TWO things had to be checked before that assertion was earned.
+                //
+                // First, the AX calls' own results. They used to be discarded: `setAttribute`
+                // returns whether the write was accepted and `performAction` whether the confirm
+                // was, and ignoring both meant answering "the write landed" after AX had said it
+                // did not. That failure IS establishable here, so it is reported as one —
+                // `ax_write_failed`, not `readback_lost_after_write`, because nothing was lost:
+                // the write was refused outright.
+                //
+                // Second, Logic's modal state. With a blocker up, nothing establishes the write
+                // landed and the readback cannot establish it either — the same overclaim this
+                // change exists to remove, one branch over. State B survives only when the write
+                // was accepted AND Logic is otherwise clean.
+                let wrote = AXHelpers.setAttribute(
+                    slider, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax
+                )
+                let confirmed = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
+                if !wrote || !confirmed {
+                    return .error(HonestContract.encodeStateC(
+                        error: .axWriteFailed,
+                        hint: "This slider exposes no geometry, so the value is written directly — and AX refused that write, so nothing landed. This is distinct from a write whose outcome could not be read.",
+                        extras: baseExtras.merging([
+                            "via": "slider-direct",
+                            "write_attempted": true,
+                            "ax_value_write_accepted": wrote,
+                            "ax_confirm_accepted": confirmed,
+                            "safe_to_retry": true,
+                        ]) { _, new in new }
+                    ))
+                }
                 let directBlocker = observeTempoModal(runtime: runtime)
                 if let blocker = directBlocker.refusalLabel {
                     return .error(HonestContract.encodeStateC(
