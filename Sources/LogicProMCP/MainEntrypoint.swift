@@ -197,6 +197,52 @@ enum MainEntrypoint {
         // path the collector runs, against live Logic, from the artifact the gate hashes — so a
         // harness can watch that path change when the product changes, which is what the gate has
         // always asked for and what no route I tried before could give it.
+        // The sibling of `--probe-event-list`, for the one question that flag cannot answer.
+        //
+        // That flag is strict: it throws on the first row it cannot read, which is right for a
+        // manifest and useless for measuring where the readable window ENDS. A forty-note region
+        // throws at row 32 and says nothing about rows 33 onward, so whether the table can be
+        // harvested by scrolling and stitching — the `contiguous harvest` question this readback is
+        // blocked on — could not be measured at all.
+        //
+        // Same footing as its sibling: observation only, no identity mint, no assessment, no MCP
+        // surface, `publicProvider()` still nil.
+        if arguments.contains("--probe-event-list-window") {
+            do {
+                let seen = try EventListReadbackCollector.observeVisibleWindow()
+                func cells(_ row: RawEventRow) -> [String: Any] {
+                    row.reduce(into: [String: Any]()) { out, pair in
+                        out[pair.key.id] = [
+                            "sliderValue": pair.value.sliderValue as Any,
+                            "valueDescription": pair.value.valueDescription as Any,
+                        ]
+                    }
+                }
+                let payload: [String: Any] = [
+                    "ok": true,
+                    "total_rows": seen.totalRows,
+                    "readable_rows": seen.readable.count,
+                    "readable_indices": seen.readable,
+                    "unreadable": seen.unreadable.reduce(into: [String: String]()) { out, pair in
+                        out["\(pair.key)"] = pair.value
+                    },
+                    "live_columns": seen.liveHeaderTitles,
+                    "rows": seen.readable.reduce(into: [String: Any]()) { out, index in
+                        if let row = seen.rows[index] { out["\(index)"] = cells(row) }
+                    },
+                ]
+                let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+                writeStdout(String(data: data, encoding: .utf8)! + "\n")
+                return 0
+            } catch {
+                let data = try? JSONSerialization.data(
+                    withJSONObject: ["ok": false, "error": "\(error)"], options: [.sortedKeys]
+                )
+                writeStdout((String(data: data ?? Data(), encoding: .utf8) ?? "{\"ok\":false}") + "\n")
+                return 1
+            }
+        }
+
         if arguments.contains("--probe-event-list") {
             do {
                 let seen = try EventListReadbackCollector.observeNoteTable()

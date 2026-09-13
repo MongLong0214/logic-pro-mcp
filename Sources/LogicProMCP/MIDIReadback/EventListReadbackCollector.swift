@@ -70,6 +70,71 @@ enum EventListReadbackCollector {
         )
     }
 
+    /// What a SINGLE read can see, row by row, without failing on the first row it cannot read.
+    ///
+    /// `observeNoteTable` is strict on purpose — a manifest that silently skipped a row it could
+    /// not read would be a manifest of the rows that happened to be on screen. That strictness is
+    /// also what stops anyone MEASURING the boundary: a forty-note region throws at row 32 and the
+    /// caller learns nothing about rows 33 onward.
+    ///
+    /// This reports each row as readable or not, with the reason. It is observation only, on the
+    /// same footing as `observeNoteTable`: no identity, no assessment, no MCP surface. Its purpose
+    /// is to answer whether the table can be harvested by scrolling and stitching, which is the
+    /// `contiguous harvest with stable cell content` question this readback is blocked on.
+    ///
+    /// Measured 2026-09-13: the table is VIEWPORT-MATERIALISED. A forty-note region reads rows
+    /// 0...31 and fails from 32; after scrolling, the readable window moves and the earlier rows
+    /// report zero cell children. So "how many rows are there" and "how many can I read right now"
+    /// are different numbers, and only a function shaped like this one can say both.
+    struct WindowObservation: Sendable {
+        let totalRows: Int
+        let readable: [Int]
+        let rows: [Int: RawEventRow]
+        let unreadable: [Int: String]
+        let liveHeaderTitles: [String]
+    }
+
+    static func observeVisibleWindow(
+        runtime: AXLogicProElements.Runtime = .production
+    ) throws -> WindowObservation {
+        guard let mainWindow = AXLogicProElements.mainWindow(runtime: runtime) else {
+            throw EventListReadbackCollectorError.mainWindowUnavailable
+        }
+        let eventTab = try findEventTab(in: mainWindow, runtime: runtime.ax)
+        guard try checkedState(of: eventTab, runtime: runtime.ax) else {
+            throw EventListProbeRefusal.eventTabNotSelected
+        }
+        let paneAndTable = try findEventPaneAndTable(
+            for: eventTab, in: mainWindow, runtime: runtime.ax
+        )
+        let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
+        let rowElements: [AXUIElement] = AXHelpers.getAttribute(
+            paneAndTable.table, "AXRows", runtime: runtime.ax
+        ) ?? []
+
+        var readable: [Int] = []
+        var rows: [Int: RawEventRow] = [:]
+        var unreadable: [Int: String] = [:]
+        for (index, element) in rowElements.enumerated() {
+            do {
+                rows[index] = try readRow(element, index: index, headers: headers, runtime: runtime.ax)
+                readable.append(index)
+            } catch {
+                // The reason is kept per row rather than collapsed to a count: "this row is off
+                // screen" and "this row is on screen and malformed" are different findings, and a
+                // bare count cannot tell them apart.
+                unreadable[index] = "\(error)"
+            }
+        }
+        return WindowObservation(
+            totalRows: rowElements.count,
+            readable: readable,
+            rows: rows,
+            unreadable: unreadable,
+            liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax)
+        )
+    }
+
     /// The header's sort-button titles, verbatim. A separate read from `readHeaders`, on purpose:
     /// that function CONSUMES the titles to decide whether they match and then reports canonical
     /// names either way, so it cannot witness what was rendered.
