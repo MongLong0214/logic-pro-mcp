@@ -1,0 +1,117 @@
+{
+ "id": "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "tracks.arm's accessibility refusals, and what the router does with them",
+ "question": "tracks.arm falls back to MCU and answers State B with its flag unmoved. What is the accessibility channel actually refusing on, and why does the caller never learn it?",
+ "verdict": "works",
+ "issues": [
+  "#373"
+ ],
+ "surface": "arrange.track_headers",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Register two channels for an operation whose chain prefers the first, make the first answer a typed State C and the second a State B envelope, and read the returned body. Live: run logic_tracks.arm with LOG_LEVEL=debug and compare the router's DEBUG line with the returned envelope.",
+  "expected": "The returned envelope keeps state B and gains fallback_from_channel, fallback_from_error and fallback_from_hint carrying the accessibility channel's refusal — the same text the DEBUG line shows."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift",
+  "Sources/LogicProMCP/Channels/RoutingTable.swift"
+ ],
+ "evidence": [],
+ "method": "The two behaviours were reproduced against the same binary and the same project, then separated by a control: the copy-in-a-temp-directory hypothesis was tested by re-running the ORIGINAL binary in the same state. The chord itself was tested outside the product entirely, posted by a process that never activates Logic in-process.",
+ "observations": [
+  {
+   "probe": "AX census of the arrange `트랙 헤더` group with the collapsed stack selected",
+   "headers": 34,
+   "selected": 13,
+   "note": "all 13 carry the same description, `25개의 ‘Absolute Zero’ 트랙` — selecting a collapsed stack makes every child header read AXSelected true"
+  },
+  {
+   "code": "AccessibilityChannel+Tracks trackToggleLadder",
+   "gate": "guard selectionIsExclusive(index:) else { return .refused(selectionNotExclusiveRefusal(index:)) }",
+   "note": "selectionIsExclusive requires the target header selected AND every other header unselected, re-checked atomically immediately before the key post"
+  },
+  {
+   "operation": "tracks.arm {index: 0}",
+   "state": "B",
+   "verified": false,
+   "write_source": "mcu",
+   "verification_source": "mcu_led_echo",
+   "isArmed": "unmoved"
+  },
+  {
+   "control": "the SAME binary at its original path, run again in the same state",
+   "result": "also fell back to mcu",
+   "note": "this kills the earlier hypothesis that a binary copied into a temp directory was the variable — it was not, and that conclusion would have been recorded as fact without this control"
+  },
+  {
+   "probe": "⌃⇧E posted by an external process, with track 1 (not a stack) selected",
+   "result": "track 1 armed immediately",
+   "note": "the assignment and the chord both work; nothing in the key path is broken"
+  },
+  {
+   "operation": "tracks.arm {index: 1, enabled: false} right after that",
+   "state": "C",
+   "error": "channels_exhausted",
+   "last_error": "No keyboard shortcut mapped for: track.set_arm",
+   "note": "the AX rung refused again, MCU errored, and the cgEvent channel — which has no shortcut row for this operation — produced the message the caller finally saw"
+  },
+  {
+   "correction_to": "this record's own first conclusion, that a collapsed stack made the selection non-exclusive",
+   "probe": "the same project after Revert to Last Saved",
+   "headers": 19,
+   "selected": 1,
+   "operation": "tracks.arm {index: 0} with track 0 exclusively selected",
+   "result": "still fell through to MCU",
+   "note": "exclusivity was NOT the operative cause; the first conclusion was drawn from a state my own session had created by expanding the stack"
+  },
+  {
+   "probe": "the same call with LOG_LEVEL=debug",
+   "router_line": "track.set_arm failed via Accessibility",
+   "refusal": {
+    "error": "logic_not_frontmost",
+    "hint": "track 0 is exclusively selected, but Logic could not be confirmed frontmost. Bring Logic frontmost and retry — the key was NOT posted.",
+    "state": "C"
+   },
+   "note": "the refusal names the precondition exactly, says exclusivity PASSED, and confirms no key was posted"
+  },
+  {
+   "probe": "activation settle time, five trials, focus taken away between each",
+   "results_seconds": [
+    0.58,
+    0.61,
+    0.62,
+    0.62,
+    0.63
+   ],
+   "budget_seconds": 2.0,
+   "note": "so the frontmost budget is not too tight either — another hypothesis measured and dropped"
+  },
+  {
+   "change": "the router now carries the first typed refusal it walked past onto the answering channel's envelope",
+   "live_result": {
+    "state": "B",
+    "write_source": "mcu",
+    "fallback_from_error": "ax_write_failed",
+    "fallback_from_hint": "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+   },
+   "note": "and the sentence that arrived named a THIRD precondition, different again from the two chased above — which is the whole argument for surfacing it"
+  }
+ ],
+ "conclusion": "`tracks.arm` names its own precondition every time and the caller never saw it. The accessibility channel answers a typed State C — `logic_not_frontmost` with \"the key was NOT posted\" on one run, an unassigned-key-command hint on another — the router walks past it to MCU, and MCU's `readback_unavailable` is what reaches the caller. The precise sentence went only to a DEBUG log. That gap is the defect, and it is now closed: the first typed refusal the router walks past rides along on the answering envelope as `fallback_from_channel` / `fallback_from_error` / `fallback_from_hint`. The change is additive — state, verified and every field the answering channel wrote are untouched, and `addExtras` declines to decorate a State C envelope at all — and three properties are mutation-tested: that the refusal is carried, that the FIRST one is kept rather than the last, and that an untyped failure carries nothing. TWO OF MY OWN CONCLUSIONS DIED ON THE WAY HERE. A collapsed track stack making the selection non-exclusive was measured at 13 of 34 headers — but in a state my own session had created by expanding that stack; after a revert it reads 1 of 19 and arm still fell through. A too-tight frontmost budget was measured away as well: activation settles in 0.58-0.63 s against a 2.0 s budget. The first refusal to reach the caller after the fix named a precondition different from both.",
+ "limits": [
+  "The evidence rides on a HonestContract ENVELOPE. A channel that answers with a plain string gets nothing attached, because `addExtras` returns a non-JSON body unchanged — so this helps exactly the operations whose answering channel speaks the contract, which is not all of them.",
+  "Only the FIRST walked-past refusal is carried. A chain where the second channel knows something the first did not will still lose it, and widening that was deliberately not done in the same change.",
+  "This does not make `tracks.arm` qualify. It makes the reason legible. Whether the key-command assignment this host carries is actually seen by the arm path is a separate measurement that this record does not make.",
+  "One host, one project."
+ ],
+ "supersedes": null
+}
