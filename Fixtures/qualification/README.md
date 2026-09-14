@@ -37,6 +37,40 @@ managed inputs for broader reproducible coverage.
 | desktop | en-US  | yes   | yes    | yes   |
 | desktop | ko-KR  | yes   | yes    | yes   |
 
+## Host preconditions a live run needs
+
+The descriptors above pin the PROJECT. They say nothing about the host, and a
+qualification run's result moves by several operations depending on host state that
+nothing in the artifacts records. Every line below was measured on 2026-09-14
+against Logic 12.3 (6674) on macOS 26.3, and each one was found by a run changing
+its answer with no code change between the two.
+
+| precondition | what it costs when unmet | measured |
+| --- | --- | --- |
+| A Latin keyboard input source is active | `tracks.mute`, `tracks.solo`, `tracks.arm`, `transport.set_tempo` stop qualifying | 36 pass under `com.apple.inputmethod.Korean.2SetKorean`, 38 under `com.apple.keylayout.ABC`, same binary and project |
+| The arrange window is wide enough for the control bar's Cycle and Metronome buttons | `transport.toggle_cycle`, `transport.toggle_metronome` stop qualifying | at 1024x746 the `사이클` / `메트로놈 클릭` checkboxes are absent from the AX tree; at 1900x1040 both are present, enabled, and move under `AXPress` |
+| The Mixer panel is visible | `mixer.set_volume`, `mixer.set_pan` stop qualifying | `logic://mixer` answers `data_source: mixer_not_visible` and the freshness gate refuses the readback |
+| Logic's Library panel is open | `tracks.list_library` REFUSES instead of answering, which reads as a fixed defect | the live gate test reports the pinned entry as one that "stopped failing"; the panel was shut after a restart |
+| The record-arm key command is assigned, under the SAME input source the run will post from | `tracks.arm` stops qualifying | a chord learned under 2-set Korean is stored by Logic as `⌃⇧ㄷ` and does not answer a `⌃⇧E` posted under ABC |
+
+Two of these are worth stating as principles rather than rows.
+
+**A composing input source rewrites the character a synthetic key carries.** The
+keystroke is still delivered — a bare spacebar toggles play under the Korean source
+— so only keys carrying letters are affected, and only they break. Logic's own
+Learn records the composed character, which is why an assignment can look correct
+in the Key Commands window and do nothing.
+
+**Logic hides control-bar buttons that do not fit.** A narrower window is not a
+cosmetic difference to an accessibility-driven actuator; the control it needs is
+not in the tree at all.
+
+None of this is visible in the qualification artifacts. A run that reports 36 and a
+run that reports 41 differ in host state, and the attestation says nothing about
+which host state produced it. Closing that is `R-MATRIX` work this README does not
+claim to have done: what it does is stop the preconditions being rediscovered one
+at a time.
+
 ## Scope and limitation
 
 These descriptors satisfy the repository `R-MATRIX` contract: the closer
