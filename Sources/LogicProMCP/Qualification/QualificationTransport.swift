@@ -1073,6 +1073,19 @@ struct QualificationTransport: Sendable {
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
                         // deferral, which is what "no evidence" should look like.
+                        if spec.id == .transportSetTempo {
+                            do {
+                                let cycle = try tempoRestoreCycle(
+                                    session, startingAt: nextID, spec: spec)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 14
+                            }
+                        }
                         if spec.id == .navigateGotoBar {
                             do {
                                 let cycle = try playheadRestoreCycle(
@@ -1901,6 +1914,91 @@ struct QualificationTransport: Sendable {
             if expecting == nil || rows.count == expecting { break }
         }
         return (last.0, last.1, spent)
+    }
+
+    /// #373 Phase B for the project tempo.
+    ///
+    /// `transport.set_tempo` refuses when the project holds more than one tempo event — Logic
+    /// answers that edit with a modal alert and the operation reports
+    /// `readback_lost_after_write` (#304). That refusal arrives here as a State C mutation and the
+    /// cycle declines, which is the right outcome: a fixture with a tempo map cannot qualify this
+    /// operation through the control bar, and pretending otherwise would be the grader looking
+    /// away.
+    private func tempoRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        func tempo(of raw: String, phase: String) throws -> Double {
+            guard let data = raw.data(using: .utf8),
+                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let payload = object["data"] as? [String: Any],
+                  let state = payload["state"] as? [String: Any],
+                  let value = state["tempo"] as? Double else {
+                throw QualificationTransportError.protocolViolation(
+                    "\(phase): logic://transport/state did not report tempo")
+            }
+            return value
+        }
+
+        let pre = try observedTransportPosition(session, id: readStep(), phase: "phase_b.pre_state")
+        let preTempo = try tempo(of: pre.raw, phase: "phase_b.pre_state")
+        // A few BPM away, inside the operation's own 5...990 range and far enough that the
+        // readback cannot agree by rounding.
+        let target = preTempo > 100 ? preTempo - 6 : preTempo + 6
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["bpm": target], phase: "phase_b.mutation")
+        guard !Self.mutationSaysItFailed(mutation.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                    + mutation.text.prefix(220))
+        }
+        var needsRestore = true
+        defer {
+            if needsRestore {
+                _ = try? invoke(
+                    session, id: nextID + 900, tool: spec.tool.rawValue, command: spec.command,
+                    params: ["bpm": preTempo], phase: "phase_b.cleanup")
+            }
+        }
+        let after = try observedTransportPosition(session, id: readStep(), phase: "phase_b.readback")
+        let afterTempo = try tempo(of: after.raw, phase: "phase_b.readback")
+        guard afterTempo != preTempo else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: tempo did not move from \(preTempo)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["bpm": preTempo], phase: "phase_b.restore")
+        guard !Self.mutationSaysItFailed(restore.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(spec.id.rawValue) refused the restore: "
+                    + restore.text.prefix(220))
+        }
+        let restored = try observedTransportPosition(
+            session, id: readStep(), phase: "phase_b.restore_readback")
+        let restoredTempo = try tempo(of: restored.raw, phase: "phase_b.restore_readback")
+        guard restoredTempo == preTempo else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: tempo is \(restoredTempo), expected \(preTempo)")
+        }
+        needsRestore = false
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
     }
 
     /// #373 Phase B for the playhead — `navigate.goto_bar` today.
