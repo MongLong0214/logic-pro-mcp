@@ -1056,6 +1056,19 @@ struct QualificationTransport: Sendable {
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
                         // deferral, which is what "no evidence" should look like.
+                        if let field = Self.parameterlessToggleField[spec.id] {
+                            do {
+                                let cycle = try parameterlessToggleRestoreCycle(
+                                    session, startingAt: nextID, spec: spec, readbackField: field)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 12
+                            }
+                        }
                         if spec.id == .navigateCreateMarker {
                             do {
                                 let cycle = try markerCreateRestoreCycle(
@@ -1815,6 +1828,92 @@ struct QualificationTransport: Sendable {
         return (last.0, last.1, spent)
     }
 
+    /// #373 Phase B for a PARAMETERLESS toggle, where the same call is both the mutation and the
+    /// restore.
+    ///
+    /// `transport.toggle_cycle` takes nothing and flips a flag, so unlike `tracks.mute` there is no
+    /// value to ask for — the second call is what puts it back. That makes the restore assertion
+    /// carry more weight here, not less: if the operation is not idempotent in the way its name
+    /// claims, the flag ends up somewhere other than where it started and the cycle refuses.
+    private func parameterlessToggleRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        readbackField: String
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let pre = try observedTransportFlag(
+            session, id: readStep(), field: readbackField, phase: "phase_b.pre_state")
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: [:], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let after = try observedTransportFlag(
+            session, id: readStep(), field: readbackField, phase: "phase_b.readback")
+        guard after.value == !pre.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: \(readbackField) is \(after.value), expected \(!pre.value)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: [:], phase: "phase_b.restore")
+        guard restore.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(spec.id.rawValue) refused the second call")
+        }
+        let restored = try observedTransportFlag(
+            session, id: readStep(), field: readbackField, phase: "phase_b.restore_readback")
+        guard restored.value == pre.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: \(readbackField) is \(restored.value), expected "
+                    + "\(pre.value) — the second call did not put it back")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    private func observedTransportFlag(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        field: String,
+        phase: String
+    ) throws -> (value: Bool, raw: String) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(
+            session, id: id + 1, uri: "logic://transport/state", phase: phase)
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let payload = object["data"] as? [String: Any],
+              let state = payload["state"] as? [String: Any],
+              let value = state[field] as? Bool else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://transport/state did not report \(field)")
+        }
+        return (value, raw)
+    }
+
+    /// Parameterless transport toggles and the transport-state flag each one flips.
+    static let parameterlessToggleField: [OperationID: String] = [
+        .transportToggleCycle: "isCycleEnabled",
+    ]
+
     /// #373 Phase B for a CREATE, whose restore is a delete.
     ///
     /// The other machines move something that already exists and put it back. This one brings
@@ -1838,6 +1937,20 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request")
         }
+        // FROM HERE ON A MARKER EXISTS, so every exit has to remove it. Measured 2026-09-14: a run
+        // whose cycle refused after the create left `qualification_phase_b_probe` in the project,
+        // and the NEXT run's `create_marker` then refused because of it — one failure became a
+        // permanent one, and the fixture needed manual cleaning. A create-shaped recipe that can
+        // throw between the create and the delete is a recipe that edits the project on failure.
+        var createdMarkerNeedsRemoval = true
+        defer {
+            if createdMarkerNeedsRemoval {
+                _ = try? invoke(
+                    session, id: nextID + 900, tool: spec.tool.rawValue, command: "delete_marker",
+                    params: ["index": pre.count], phase: "phase_b.cleanup")
+            }
+        }
+
         let after = try observedMarkerCount(
             session, id: nextID, expecting: pre.count + 1, phase: "phase_b.readback")
         nextID += after.spent
@@ -1862,6 +1975,10 @@ struct QualificationTransport: Sendable {
                 "phase_b.restore_readback: marker count is \(restored.count), expected "
                     + "\(pre.count) — the probe marker was left behind")
         }
+        // The restore is confirmed, so the cleanup above has nothing left to do. Clearing the flag
+        // here rather than earlier keeps the window it covers exactly the window where a marker
+        // exists and has not been proven gone.
+        createdMarkerNeedsRemoval = false
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
