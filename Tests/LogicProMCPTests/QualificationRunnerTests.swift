@@ -1645,7 +1645,14 @@ struct QualificationRunnerTests {
             executableURL: Self.releaseExecutableURL,
             environment: ProcessInfo.processInfo.environment,
             expectedOperationCount: OperationRegistry.specs.count,
-            operations: OperationRegistry.specs
+            // THE SAME ORDER THE RUNNER DRIVES. `QualificationRunner.qualify` sorts by id before
+            // driving; this test passed the registry's DECLARATION order, so it exercised a
+            // sequence the shipped path never runs. Measured 2026-09-15: sequence changes outcomes
+            // here — a marker operation opens Logic's Marker List and disarms the track-menu
+            // operations after it — so a test driving a different sequence is not testing the
+            // runner, and it was the difference behind a leak that reproduced under this test and
+            // not under the CLI.
+            operations: OperationRegistry.specs.sorted { $0.id.rawValue < $1.id.rawValue }
         ))
 
         #expect(result.handshakeOK)
