@@ -1950,6 +1950,24 @@ extension AccessibilityChannel {
             }
         }
 
+        // RAISE THE WINDOW THIS OPERATION ALREADY RESOLVED, before driving the menu.
+        //
+        // Logic's Track menu acts on the front window, and this code resolved the arrange window
+        // for its READS while clicking the menu without raising it. Measured 2026-09-15 on a
+        // disposable project: with only the arrange window open, `create_audio` answers State A and
+        // the count rises; after `navigate.create_marker` opens the Marker List the same call
+        // answers State B and the count does not move AT ALL; raising the arrange window by name
+        // makes it land again. The qualification sweep drives operations sorted by id, so every
+        // `navigate.*` runs before every `tracks.*` — which is why a track create that works when
+        // driven alone fails inside a sweep, and why seventy read-only operations beforehand change
+        // nothing. Traffic was never the cause; a window in front was.
+        //
+        // This raises a window the operation has already identified as its target, not an arbitrary
+        // one, and only on the path that is about to act on that window.
+        if case .found(let window) = arrangeWindow {
+            _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
+        }
+
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
         let menuClickedTitle: String
