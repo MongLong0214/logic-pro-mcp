@@ -3401,6 +3401,31 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// The name a Phase C cycle gives the track it just made, so it owns the handle.
+    ///
+    /// The cycle cannot rely on the create to name what it created: measured 2026-09-15, a create
+    /// that LANDED reported no `observed_track_name` because its own modal reconciliation came back
+    /// incomplete, and the cleanup then had nothing it could safely delete. Logic selects a newly
+    /// created track and it is the only selected one — measured the same day, twice — so the cycle
+    /// takes that as its handle ONCE, immediately, and renames the track to this. From then on the
+    /// identity is the cycle's own and does not depend on another operation's readback.
+    static let phaseCProbeTrackName = "qualification_phase_c_probe"
+
+    /// The index of the sole selected row whose reference is new, or nil when that is not exactly
+    /// one row. The index is read from an OBSERVED property at that instant and used immediately;
+    /// it is never carried across a mutation, which is the rule that kept the marker cycles honest.
+    static func soleNewlySelectedTrackIndex(
+        in rows: [[String: Any]],
+        excluding preStateRefs: [String]
+    ) -> Int? {
+        let known = Set(preStateRefs)
+        let matches = rows.enumerated().filter { _, row in
+            (row["isSelected"] as? Bool) == true
+                && (row["track_ref"] as? String).map { !known.contains($0) } == true
+        }
+        return matches.count == 1 ? matches[0].offset : nil
+    }
+
     /// What a Phase C cleanup actually did, written as it happens so a refusal can carry it.
     ///
     /// The cleanup runs in a `defer`, after the error that triggered it was already built, so its

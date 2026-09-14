@@ -937,3 +937,41 @@ private func trackRow(_ name: String, _ ref: String) -> [String: Any] {
             named: "오디오 1", in: rows, excluding: preState) == nil
     )
 }
+
+// MARK: - #373 Phase C: the cycle's own handle on what it created
+
+/// Logic selects a newly created track and it is the only selected one — measured twice on
+/// 2026-09-15. That is the handle the cycle takes, ONCE and immediately, because it cannot rely on
+/// the create to name what it made: a create that landed reported no `observed_track_name` when its
+/// own modal reconciliation came back incomplete, and the cleanup then had nothing safe to delete.
+@Test func phaseCTakesTheNewlySelectedRowAsItsHandle() {
+    let pre = ["trk_existing"]
+    let rows: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": false],
+        ["name": "오디오 1", "track_ref": "trk_new", "isSelected": true],
+    ]
+    #expect(
+        QualificationTransport.soleNewlySelectedTrackIndex(in: rows, excluding: pre) == 1
+    )
+}
+
+/// A row that was already there is never the handle, even when it is the selected one — that is the
+/// operator's track. And a selection that is not exactly one new row is a refusal, not a guess.
+@Test func phaseCRefusesAHandleItCannotIsolate() {
+    let pre = ["trk_existing"]
+    let selectedButOld: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": true],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: selectedButOld, excluding: pre) == nil)
+
+    let twoNewSelected: [[String: Any]] = [
+        ["name": "a", "track_ref": "trk_x", "isSelected": true],
+        ["name": "b", "track_ref": "trk_y", "isSelected": true],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: twoNewSelected, excluding: pre) == nil)
+
+    let noneSelected: [[String: Any]] = [
+        ["name": "a", "track_ref": "trk_x", "isSelected": false],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: noneSelected, excluding: pre) == nil)
+}
