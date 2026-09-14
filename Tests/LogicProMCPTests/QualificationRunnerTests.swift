@@ -46,6 +46,13 @@ struct QualificationRunnerTests {
         // for is lying about what it read. So it is pinned again, with the reason it
         // actually fails with, and it leaves this list when the operation stops
         // reporting categories it cannot enumerate.
+        //
+        // RUNNING THIS TEST NEEDS LOGIC'S LIBRARY PANEL OPEN. Hit again 2026-09-14: with the panel
+        // closed the operation REFUSES instead of answering, the refusal is bucketed as an
+        // environmental prerequisite, and the test then reports this entry as a failure that
+        // "stopped failing" — which reads exactly like the defect was fixed. It was not; the panel
+        // was shut after a Logic restart. Read the control bar's `라이브러리` checkbox (value 1 =
+        // open) before believing this entry can be removed.
         .init(
             operationID: OperationID.tracksListLibrary.rawValue,
             failureReason: "semantic readback mismatch: response did not match its independent readback",

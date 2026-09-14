@@ -1,5 +1,9 @@
 import ApplicationServices
 import AppKit
+// Carbon, only for the Text Input Source services: there is no modern replacement for reading
+// which keyboard input source is active, and that reading is what explains a synthetic key
+// arriving as a different character than it was posted as.
+import Carbon
 import Foundation
 
 /// Track surface: enumerate/select tracks, mute/solo/arm/rename toggles, track creation via menu, and deletion.
@@ -1562,10 +1566,56 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// The active macOS keyboard input source, or nil when it cannot be read.
+    ///
+    /// Load-bearing for every rung that posts a synthetic key. Measured 2026-09-14: with
+    /// `com.apple.inputmethod.Korean.2SetKorean` active, a chord posted as virtual key 14 with
+    /// control+shift arrives at Logic as `⌃⇧ㄷ` — the Hangul character on that physical key — and
+    /// matches no key command. Logic's own Learn records it the same way, writing `⌃⇧ㄷ` into the
+    /// key field. The keystroke is DELIVERED (a bare spacebar toggles play under the same source);
+    /// it is the character it carries that changes. Four operations moved from refusing to
+    /// qualifying between two sweeps that differed in nothing else.
+    static func activeInputSourceID() -> String? {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else {
+            return nil
+        }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+    }
+
+    /// Whether `id` is a plain Latin keyboard LAYOUT rather than an input METHOD.
+    ///
+    /// Deliberately narrow: `com.apple.keylayout.*` is a layout that delivers the character its key
+    /// carries, and anything else — every `inputmethod` — composes. A Latin layout that REMAPS
+    /// letters (Dvorak, AZERTY) is still `keylayout` and is not flagged here, because it was not
+    /// measured and guessing at it would put a wrong sentence in a hint.
+    static func inputSourceDeliversLatinKeys(_ id: String?) -> Bool {
+        guard let id else { return true }
+        return id.hasPrefix("com.apple.keylayout.")
+    }
+
+    /// The sentence appended to a synthetic-key failure when the input source can explain it.
+    /// Empty when the source is a Latin layout or could not be read — an unread source is not
+    /// evidence of anything and must not be blamed.
+    static func inputSourceHintSuffix(_ id: String? = activeInputSourceID()) -> String {
+        guard let id, !inputSourceDeliversLatinKeys(id) else { return "" }
+        return " The active macOS input source is '\(id)', which composes characters: a synthetic "
+            + "key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives "
+            + "as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard "
+            + "layout and retry."
+    }
+
     /// Fail-closed hint (read-back never flipped). Arm points the operator at
     /// the required "Toggle Track Record Enable" key-command assignment — the
     /// only coordinate-free arm path on Logic 12.x.
     static func trackToggleFailHint(buttonName: String, index: Int, desired: Bool) -> String {
+        trackToggleFailHintBody(buttonName: buttonName, index: index, desired: desired)
+            + inputSourceHintSuffix()
+    }
+
+    private static func trackToggleFailHintBody(
+        buttonName: String, index: Int, desired: Bool
+    ) -> String {
         switch buttonName {
         case "Record":
             return "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "

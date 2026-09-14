@@ -849,3 +849,32 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     #expect(object["fallback_from_channel"] == nil)
     #expect(object["state"] as? String == "A")
 }
+
+// MARK: - #373: a composing input source explains a synthetic-key failure
+
+/// Measured 2026-09-14: with `com.apple.inputmethod.Korean.2SetKorean` active, a chord posted as
+/// virtual key 14 with control+shift reaches Logic as `⌃⇧ㄷ` and matches no key command. Four
+/// operations moved from refusing to qualifying between two sweeps that differed in nothing else.
+/// The hint has to be able to say so.
+@Test func inputSourceHintNamesAComposingSource() {
+    let suffix = AccessibilityChannel.inputSourceHintSuffix("com.apple.inputmethod.Korean.2SetKorean")
+    #expect(suffix.contains("com.apple.inputmethod.Korean.2SetKorean"))
+    #expect(suffix.contains("⌃⇧ㄷ"))
+}
+
+/// A Latin LAYOUT delivers the character its key carries, so there is nothing to explain and
+/// nothing to append. An unreadable source is not evidence either, and must not be blamed.
+@Test func inputSourceHintStaysSilentWhenItCannotExplainAnything() {
+    #expect(AccessibilityChannel.inputSourceHintSuffix("com.apple.keylayout.ABC").isEmpty)
+    #expect(AccessibilityChannel.inputSourceHintSuffix("com.apple.keylayout.US").isEmpty)
+    #expect(AccessibilityChannel.inputSourceHintSuffix(nil).isEmpty)
+}
+
+/// The classification is narrow on purpose: `keylayout` delivers keys, every `inputmethod`
+/// composes. A remapping Latin layout (Dvorak) was NOT measured, so it is not flagged.
+@Test func onlyInputMethodsAreTreatedAsComposing() {
+    #expect(AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.keylayout.Dvorak"))
+    #expect(AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.keylayout.ABC"))
+    #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Korean.2SetKorean"))
+    #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese"))
+}

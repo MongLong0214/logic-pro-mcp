@@ -1,0 +1,84 @@
+{
+ "id": "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "macOS input source versus Logic key commands driven by synthetic CGEvent posts",
+ "question": "Six operations that had qualified stopped qualifying, with no code change between the runs. What changed?",
+ "verdict": "wall",
+ "issues": [
+  "#373"
+ ],
+ "surface": "system.preferences",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Read the active input source (TISCopyCurrentKeyboardInputSource). With com.apple.inputmethod.Korean.2SetKorean active, run the qualification sweep; select com.apple.keylayout.ABC and run it again. Also assign a Logic key command with Learn and read the key field back.",
+  "expected": "Under the Korean source, tracks.mute, tracks.solo, tracks.arm, transport.set_tempo, transport.toggle_cycle and transport.toggle_metronome do not qualify; under ABC the first four do. A chord posted as virtual key 14 with control+shift records in Logic's Key Commands as ⌃⇧ㄷ, not ⌃⇧E."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift",
+  "Sources/LogicProMCP/Accessibility/ArmKeyCommandSetup.swift"
+ ],
+ "evidence": [],
+ "method": "Two qualification sweeps on one binary and one project, differing only in the active macOS input source, with the source read and set through TIS rather than through the menu bar. The key-command assignment was read directly off Logic's own Key Commands window.",
+ "observations": [
+  {
+   "active_input_source": "com.apple.inputmethod.Korean.2SetKorean",
+   "sweep_passed": 36,
+   "not_qualified": [
+    "tracks.mute",
+    "tracks.solo",
+    "tracks.arm",
+    "transport.set_tempo",
+    "transport.toggle_cycle",
+    "transport.toggle_metronome"
+   ]
+  },
+  {
+   "active_input_source": "com.apple.keylayout.ABC",
+   "sweep_passed": 38,
+   "now_passing": [
+    "tracks.mute",
+    "tracks.solo",
+    "tracks.arm",
+    "transport.set_tempo"
+   ],
+   "still_refusing": [
+    "transport.toggle_cycle",
+    "transport.toggle_metronome"
+   ]
+  },
+  {
+   "probe": "assign the record-arm chord through Logic's Key Commands window with Learn, posting virtual key 14 with control+shift, under the Korean source",
+   "key_field_reads": "⌃⇧ㄷ",
+   "expected": "⌃⇧E",
+   "note": "ㄷ is the Hangul character on the physical E key in the 2-set layout"
+  },
+  {
+   "probe": "logic_tracks.mute and .solo driven directly, Korean source",
+   "result": "fell through to a non-AX channel and the flag did not move"
+  },
+  {
+   "probe": "the same two, ABC source",
+   "result": "State A verified, observed true"
+  },
+  {
+   "control": "a bare spacebar posted to Logic under the Korean source",
+   "result": "play toggled — so synthetic keys DO reach Logic; it is the CHARACTER they carry that changes"
+  }
+ ],
+ "conclusion": "A non-Latin macOS input source silently disables every Logic operation that works by posting a synthetic key. The keystroke still reaches Logic — a bare spacebar toggles play under the Korean source — but a key that carries a CHARACTER is delivered as the character that source produces, so `⌃⇧E` arrives as `⌃⇧ㄷ` and matches no key command. Logic's own Learn records it that way too: assigning the record-arm chord under the Korean source writes `⌃⇧ㄷ` into the key field. Nothing in the product notices. The operations answer State B or fall through to another channel, and the qualification sweep moves by six operations between two runs of the same binary on the same project with nothing but the input source changed — 36 under Korean, 38 under ABC with four of the six recovering. This is the single largest environmental variable found for this product so far, and it is invisible in every artifact the product emits.",
+ "limits": [
+  "Two sources on one host: 2-set Korean and ABC. Other non-Latin sources are untested, and so is a Latin source that remaps letters (Dvorak, AZERTY), which would presumably break a POSITION-learned binding rather than a label-learned one.",
+  "`transport.toggle_cycle` and `transport.toggle_metronome` did NOT recover under ABC; their flags stayed false. So the input source explains four of the six, and those two have some other precondition this record does not identify.",
+  "No fix is implemented here. Whether the product should switch the input source around a post and restore it, or refuse with a hint naming the source, is a design decision — the first mutates a system-wide user setting as a side effect of an MCP call.",
+  "The 38 versus 36 comparison is not a clean before/after of the input source alone: `mixer.set_volume` and `mixer.set_pan` were passing earlier in the day and are absent from both runs, because the Mixer panel is not visible after a Logic restart and their readback needs it."
+ ],
+ "supersedes": null
+}
