@@ -3226,10 +3226,21 @@ struct QualificationTransport: Sendable {
     }
 
     /// #373 Phase C: the track creations whose restore is a delete of what they made.
-    static let trackCreateRestoreOperations: Set<OperationID> = [
-        .tracksCreateAudio,
-        .tracksCreateInstrument,
-    ]
+    ///
+    /// **EMPTY ON PURPOSE — the cycle is written, measured and NOT enabled.** It completes when
+    /// driven on its own (create State A, delete State A, count back where it started), and a
+    /// sweep driven from the CLI left the project at the count it found. A sweep driven from the
+    /// live-gate test then left a track behind anyway, a second time, and the difference between
+    /// those two runs is not understood.
+    ///
+    /// A recipe that can add a track to the operator's project and not remove it does not belong
+    /// in a run that touches the operator's project, whatever its evidence would be worth. It
+    /// re-enters this set when a run that leaks is understood and a run that does not is
+    /// reproducible — not before, and not on the strength of one clean measurement.
+    ///
+    /// Membership here is what a sweep executes; the cycle below stays so the next attempt starts
+    /// from measured code rather than from a description of it.
+    static let trackCreateRestoreOperations: Set<OperationID> = []
 
     /// Which staged-marker shape a `markerStagedRestoreCycle` run is exercising.
     enum MarkerStagedMode: Sendable {
