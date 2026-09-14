@@ -1,0 +1,65 @@
+{
+  "id": "2026-09-14-the-marker-list-settles-in-seconds-and-a-poll-that-does-not-wait-reads-a-stale-answer",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "logic://markers settle time after create_marker and delete_marker",
+  "question": "A delete that answered State A left the marker visible in the list. Is that a false State A, or is the list slow?",
+  "verdict": "works",
+  "issues": [
+    "#373"
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Create a named marker, read `logic://markers` after a `refresh_cache`, delete it at the index the NAME resolves to, then read the list at ~1.8 s and again at ~3 s.",
+    "expected": "The delete answers State A. The marker is still listed at 1.8 s and gone by 3 s. A second delete issued in between is not needed and risks removing a different marker."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Qualification/QualificationTransport.swift"
+  ],
+  "evidence": [],
+  "method": "Found by a guard refusing rather than by looking. A qualification recipe's restore readback reported the marker still present and refused; the first reading of that was a suspected false State A, which is the worst defect class this repository has. Re-reading at intervals instead of concluding is what separated the two.",
+  "observations": [
+    {
+      "step": "delete_marker at the index the name resolved to",
+      "state": "A",
+      "verified": true
+    },
+    {
+      "step": "read after 1.8 s",
+      "marker_present": true
+    },
+    {
+      "step": "read after 3 s",
+      "marker_present": false
+    },
+    {
+      "what": "a poll with no delay",
+      "attempts": 6,
+      "elapsed": "under 1 s",
+      "note": "six reads of the same stale answer, then reported as the truth"
+    },
+    {
+      "what": "the sweep's own no-write probe for navigate.create_marker",
+      "state": "C",
+      "error": "invalid_params",
+      "hint": "Unknown parameters: __adr001b_no_write_probe",
+      "note": "checked because accumulating markers looked like the probe writing; it is not"
+    }
+  ],
+  "conclusion": "`delete_marker` is not answering falsely — `logic://markers` simply settles over seconds. The marker is still listed 1.8 s after a State A delete and gone by 3 s. Any check on this resource must WAIT between reads: a poll that spins reads the same stale answer as many times as it loops and then reports it, which looks exactly like an operation that did nothing. The accumulating markers that prompted this were slow reads plus one genuine leftover from an early failed cycle, not the zero-write probe writing — that probe is properly refused.",
+  "limits": [
+    "Two timing points, 1.8 s and 3 s, so the settle time is bounded rather than measured. The true figure is somewhere between them and may differ with project size or marker count.",
+    "One host, one project, one locale. Whether the delay is Logic's Marker List window, the poller, or the resource's own cache was NOT separated — only the observable delay is recorded.",
+    "Create was not timed the same way. It was observed to appear within roughly 1.5-2 s, which is an impression from the cleanup loops rather than a measurement.",
+    "A single create was once followed by TWO rows, one auto-named. Whether the create made both or the second was a previous marker still settling was NOT established, so nothing here claims `create_marker` makes more than one marker."
+  ],
+  "supersedes": null
+}
