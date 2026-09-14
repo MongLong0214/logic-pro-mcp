@@ -3152,14 +3152,9 @@ struct QualificationTransport: Sendable {
                     // that is new, with exactly one match. A cleanup allowed to delete "anything
                     // new" is the hazard, not the safety net — under a stack expansion every newly
                     // visible child looks new.
-                    guard let createdName = Self.createdTrackName(from: mutation.text) else { break }
-                    let matches = seen.rows.filter {
-                        ($0["name"] as? String) == createdName
-                            && ($0["track_ref"] as? String).map { !pre.refs.contains($0) } == true
-                    }
-                    guard matches.count == 1, let extra = matches[0]["track_ref"] as? String else {
-                        break
-                    }
+                    guard let extra = Self.soleCreatedTrack(
+                        named: Self.createdTrackName(from: mutation.text),
+                        in: seen.rows, excluding: pre.refs) else { break }
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
@@ -3205,16 +3200,11 @@ struct QualificationTransport: Sendable {
                     + "(no observed_track_name), so the cycle cannot name what to remove and will "
                     + "not delete by guess")
         }
-        let candidates = after.rows.filter {
-            ($0["name"] as? String) == createdName
-                && ($0["track_ref"] as? String).map { !pre.refs.contains($0) } == true
-        }
-        guard candidates.count == 1,
-              let createdRef = candidates[0]["track_ref"] as? String else {
+        guard let createdRef = Self.soleCreatedTrack(
+            named: createdName, in: after.rows, excluding: pre.refs) else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.readback: \(candidates.count) tracks match the created name "
-                    + "'\(createdName)' with a reference that is new, and the cycle deletes only "
-                    + "when exactly one does")
+                "phase_c.readback: the created name '\(createdName)' does not identify exactly one "
+                    + "track with a reference that is new, and the cycle deletes only when it does")
         }
         let restore = try invoke(
             session, id: nextID, tool: "logic_tracks", command: "delete",
@@ -3294,13 +3284,9 @@ struct QualificationTransport: Sendable {
                         session, id: cleanupID, awaitingCount: original.count + 1,
                         phase: "phase_c.cleanup_readback") else { break }
                     cleanupID += seen.spent
-                    guard let stagedName = Self.createdTrackName(from: staged.text) else { break }
-                    let matches = seen.rows.filter {
-                        ($0["name"] as? String) == stagedName
-                            && ($0["track_ref"] as? String).map { !original.refs.contains($0) } == true
-                    }
-                    guard matches.count == 1, let extra = matches[0]["track_ref"] as? String
-                    else { break }
+                    guard let extra = Self.soleCreatedTrack(
+                        named: Self.createdTrackName(from: staged.text),
+                        in: seen.rows, excluding: original.refs) else { break }
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
@@ -3322,16 +3308,11 @@ struct QualificationTransport: Sendable {
                 "phase_c.pre_state: create_audio did not report which track it made, so the cycle "
                     + "has no target it can name and will not delete by guess")
         }
-        let stagedMatches = pre.rows.filter {
-            ($0["name"] as? String) == stagedName
-                && ($0["track_ref"] as? String).map { !original.refs.contains($0) } == true
-        }
-        guard stagedMatches.count == 1,
-              let stagedRef = stagedMatches[0]["track_ref"] as? String else {
+        guard let stagedRef = Self.soleCreatedTrack(
+            named: stagedName, in: pre.rows, excluding: original.refs) else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.pre_state: \(stagedMatches.count) tracks match the staged name "
-                    + "'\(stagedName)' with a new reference, and the cycle deletes only when "
-                    + "exactly one does")
+                "phase_c.pre_state: the staged name '\(stagedName)' does not identify exactly one "
+                    + "track with a reference that is new, and the cycle deletes only when it does")
         }
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
@@ -3396,6 +3377,35 @@ struct QualificationTransport: Sendable {
             ),
             nextID
         )
+    }
+
+    /// The single track a Phase C cycle is allowed to delete, or nil when that is not exactly one.
+    ///
+    /// Both conditions, never one: the row carries the name the create REPORTED, and its reference
+    /// was not in the pre-state. "A reference that is new" alone is unsafe — if the track stack
+    /// expands mid-run every newly visible child is new, and the rule would then be free to name
+    /// one of the operator's tracks.
+    ///
+    /// nil means REFUSE. Zero matches and several matches are both answers the caller must not
+    /// paper over with a guess, and they are deliberately not distinguished here: neither one
+    /// licenses a delete.
+    static func soleCreatedTrack(
+        named createdName: String?,
+        in rows: [[String: Any]],
+        excluding preStateRefs: [String]
+    ) -> String? {
+        guard let createdName,
+              !createdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let known = Set(preStateRefs)
+        let matches = rows.compactMap { row -> String? in
+            guard (row["name"] as? String) == createdName,
+                  let ref = row["track_ref"] as? String,
+                  !known.contains(ref) else { return nil }
+            return ref
+        }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     /// The name the create operation says it made, or nil when it could not read one.

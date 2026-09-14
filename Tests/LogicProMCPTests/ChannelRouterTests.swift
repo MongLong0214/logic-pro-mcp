@@ -878,3 +878,62 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Korean.2SetKorean"))
     #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese"))
 }
+
+// MARK: - #373 Phase C: what a cycle is allowed to delete
+
+private func trackRow(_ name: String, _ ref: String) -> [String: Any] {
+    ["name": name, "track_ref": ref]
+}
+
+/// The situation this rule exists for, as a test input rather than a hope. When Logic's track stack
+/// EXPANDS mid-run, every newly visible child carries a reference that was not in the pre-state —
+/// so a rule of "delete the reference that is new" would be free to name one of the operator's
+/// tracks. Measured 2026-09-15 on a real project: 19 rows before, 19 after, `complete` false then
+/// true, and the first row was no longer the operator's.
+@Test func phaseCDeletesOnlyTheTrackTheCreateNamed() {
+    let preState = ["trk_stackhdr"]
+    // After: the stack expanded, so eight children are new references, and one row is the track
+    // the create reported making.
+    let rows = (1...8).map { trackRow("Deluxe Classic", "trk_child\($0)") }
+        + [trackRow("오디오 1", "trk_created")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: rows, excluding: preState) == "trk_created"
+    )
+}
+
+/// Zero matches and several matches are both refusals. Neither licenses a delete, and the rule
+/// deliberately does not distinguish them: a cycle that cannot name what it made must not guess.
+@Test func phaseCRefusesWhenTheNameDoesNotIdentifyExactlyOneTrack() {
+    let preState = ["trk_a"]
+    let twoMatches = [trackRow("오디오 1", "trk_x"), trackRow("오디오 1", "trk_y")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: twoMatches, excluding: preState) == nil
+    )
+    let noMatch = [trackRow("Deluxe Classic", "trk_x")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: noMatch, excluding: preState) == nil
+    )
+    // No name reported at all, and an empty one, are the same refusal.
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: nil, in: twoMatches, excluding: preState) == nil
+    )
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "  ", in: twoMatches, excluding: preState) == nil
+    )
+}
+
+/// A row already in the pre-state is never a candidate, even when its name matches — that is the
+/// operator's track, not one this cycle made.
+@Test func phaseCNeverNamesATrackThatWasAlreadyThere() {
+    let preState = ["trk_existing"]
+    let rows = [trackRow("오디오 1", "trk_existing")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: rows, excluding: preState) == nil
+    )
+}
