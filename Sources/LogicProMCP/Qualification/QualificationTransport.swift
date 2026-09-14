@@ -1134,15 +1134,17 @@ struct QualificationTransport: Sendable {
                         }
                         if Self.phaseCTrackCyclesEnabled,
                            Self.trackCreateRestoreOperations.contains(spec.id) {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try trackCreateRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_c recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 40
                             }
                         }
@@ -3114,7 +3116,8 @@ struct QualificationTransport: Sendable {
     private func trackCreateRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
 
@@ -3136,7 +3139,9 @@ struct QualificationTransport: Sendable {
         defer {
             if createdNeedsRemoval {
                 var cleanupID = nextID + 900
-                for _ in 0..<3 {
+                cleanup.note("entered")
+                for attempt in 0..<3 {
+                    cleanup.note("attempt \(attempt)")
                     // WAIT for the extra track before concluding there is none. The first version
                     // read ONCE with no settle and `break`ed when it saw nothing extra — so a
                     // create that landed AFTER the readback budget was never cleaned up. Measured
@@ -3146,15 +3151,25 @@ struct QualificationTransport: Sendable {
                     // track create is slower than a marker create.
                     guard let seen = try? observedTrackInventory(
                         session, id: cleanupID, awaitingCount: pre.count + 1,
-                        phase: "phase_c.cleanup_readback") else { break }
+                        phase: "phase_c.cleanup_readback") else {
+                        cleanup.note("inventory read FAILED")
+                        break
+                    }
                     cleanupID += seen.spent
+                    cleanup.note("saw \(seen.count) rows complete=\(String(describing: seen.complete))")
                     // The SAME narrow rule the readback uses: the created name AND a reference
                     // that is new, with exactly one match. A cleanup allowed to delete "anything
                     // new" is the hazard, not the safety net — under a stack expansion every newly
                     // visible child looks new.
                     guard let extra = Self.soleCreatedTrack(
                         named: Self.createdTrackName(from: mutation.text),
-                        in: seen.rows, excluding: pre.refs) else { break }
+                        in: seen.rows, excluding: pre.refs) else {
+                        cleanup.note("no sole match for name "
+                            + (Self.createdTrackName(from: mutation.text) ?? "<none reported>")
+                            + " — nothing deleted")
+                        break
+                    }
+                    cleanup.note("deleting \(extra)")
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
@@ -3163,9 +3178,16 @@ struct QualificationTransport: Sendable {
                     // sentence the marker cycle already carries, applied to a costlier object.
                     guard let after = try? observedTrackInventory(
                         session, id: cleanupID, awaitingCount: pre.count,
-                        phase: "phase_c.cleanup_verify") else { break }
+                        phase: "phase_c.cleanup_verify") else {
+                        cleanup.note("verify read FAILED — removal unconfirmed")
+                        break
+                    }
                     cleanupID += after.spent
-                    if !after.refs.contains(extra) { break }
+                    if !after.refs.contains(extra) {
+                        cleanup.note("confirmed gone")
+                        break
+                    }
+                    cleanup.note("still present after delete")
                 }
             }
         }
@@ -3377,6 +3399,26 @@ struct QualificationTransport: Sendable {
             ),
             nextID
         )
+    }
+
+    /// What a Phase C cleanup actually did, written as it happens so a refusal can carry it.
+    ///
+    /// The cleanup runs in a `defer`, after the error that triggered it was already built, so its
+    /// story cannot go into that message directly. Without a witness the only thing a leak leaves
+    /// behind is the leak — which is how four of them in a row got diagnosed by guesswork.
+    final class PhaseCCleanupWitness: @unchecked Sendable {
+        private let lock = NSLock()
+        private var steps: [String] = []
+
+        func note(_ step: String) {
+            lock.lock(); defer { lock.unlock() }
+            steps.append(step)
+        }
+
+        var summary: String {
+            lock.lock(); defer { lock.unlock() }
+            return steps.isEmpty ? "cleanup did not run" : steps.joined(separator: " -> ")
+        }
     }
 
     /// The single track a Phase C cycle is allowed to delete, or nil when that is not exactly one.
