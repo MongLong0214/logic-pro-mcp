@@ -1910,8 +1910,15 @@ struct QualificationTransport: Sendable {
     }
 
     /// Parameterless transport toggles and the transport-state flag each one flips.
+    ///
+    /// `transport.record` is deliberately ABSENT. It reaches State A and moves `isRecording`, so it
+    /// would qualify — and it also records into the project, which makes its restore an undo of a
+    /// region rather than a second toggle. That belongs to the destructive phase with a disposable
+    /// fixture, not here, and adding it would have bought a passing count at the price of editing
+    /// the project this recipe is supposed to leave alone.
     static let parameterlessToggleField: [OperationID: String] = [
         .transportToggleCycle: "isCycleEnabled",
+        .transportToggleMetronome: "isMetronomeEnabled",
     ]
 
     /// #373 Phase B for a CREATE, whose restore is a delete.
@@ -1945,9 +1952,24 @@ struct QualificationTransport: Sendable {
         var createdMarkerNeedsRemoval = true
         defer {
             if createdMarkerNeedsRemoval {
-                _ = try? invoke(
-                    session, id: nextID + 900, tool: spec.tool.rawValue, command: "delete_marker",
-                    params: ["index": pre.count], phase: "phase_b.cleanup")
+                // THE CLEANUP VERIFIES. A first version issued one best-effort delete and moved on,
+                // and a live run still left `qualification_phase_b_probe` in the project —
+                // the marker list settles slowly enough that a single unchecked delete is not a
+                // removal, it is a request. An unverified cleanup is the same shape as the
+                // unverified success claims this whole change exists to remove, so it retries until
+                // the count is back where it started or its budget runs out.
+                var cleanupID = nextID + 900
+                for _ in 0..<4 {
+                    _ = try? invoke(
+                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
+                        params: ["index": pre.count], phase: "phase_b.cleanup")
+                    cleanupID += 1
+                    guard let observed = try? observedMarkerCount(
+                        session, id: cleanupID, expecting: pre.count, phase: "phase_b.cleanup_readback"
+                    ) else { break }
+                    cleanupID += observed.spent
+                    if observed.count == pre.count { break }
+                }
             }
         }
 
