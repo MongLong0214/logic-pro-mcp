@@ -157,6 +157,11 @@ struct QualificationOperationResult: Equatable, Sendable {
     let verification: VerificationPolicy
     let deadline: DeadlineClass
     let failureReason: String?
+    /// ADR-001-c / #373 Phase B evidence: the verified write-and-restore cycle for a MUTATING
+    /// operation, or nil when no recipe ran. Non-nil means every step of that cycle held — see
+    /// `muteRestoreCycle`, which is the only constructor and refuses rather than returning a
+    /// record for a cycle that did not verify.
+    let mutationRestore: QualificationMutationRestoreRecord?
 
     init(
         operationID: String,
@@ -175,7 +180,8 @@ struct QualificationOperationResult: Equatable, Sendable {
         readbackData: Data?,
         verification: VerificationPolicy = .none,
         deadline: DeadlineClass = .short,
-        failureReason: String?
+        failureReason: String?,
+        mutationRestore: QualificationMutationRestoreRecord? = nil
     ) {
         self.operationID = operationID
         self.tool = tool
@@ -194,6 +200,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         self.verification = verification
         self.deadline = deadline
         self.failureReason = failureReason
+        self.mutationRestore = mutationRestore
     }
 
     var responseArtifactData: Data? {
@@ -258,9 +265,22 @@ struct QualificationOperationResult: Equatable, Sendable {
             case .none: return .protocolSmoke
             }
         case .mutating:
+            // ADR-001-c / #373 Phase B. A verified write-and-restore cycle is the ONLY thing that
+            // promotes a mutating operation here, and `mutationRestore` is non-nil only when every
+            // step of that cycle held: the mutation moved the independently observed state, and the
+            // restore returned it exactly, both read back from `logic://tracks` rather than from
+            // the write's own answer. The record type has no failure case, so a cycle that did not
+            // verify produces nothing for this branch to see.
+            // No `record.operationID == operationID` check here, deliberately. It was written and
+            // then removed: a mutation that dropped it left every test green, because a foreign
+            // record cannot be attached in the first place — `phaseBRecord` is declared inside one
+            // sweep iteration and written only by that iteration's own recipe. A guard nothing can
+            // trip is not a guard, and defending it in a comment is worse than the structure that
+            // actually holds. If records ever arrive from somewhere other than the sweep, this is
+            // the line to add back WITH a seam that can exercise it.
+            if mutationRestore != nil { return .passed }
             // A successful write that carries an inadmissible live readback has not been
-            // confirmed. Keep the existing no-write deferrals untouched, but make a future
-            // Phase-B success path refuse this observation instead of accepting equal stale data.
+            // confirmed. Keep the existing no-write deferrals untouched.
             if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
             return expectedZeroWriteRefusalObserved ? .notQualified : .failed
         }
@@ -946,11 +966,16 @@ struct QualificationTransport: Sendable {
             // The trace id the next `system.get_trace` probe should ask for. It starts as the one
             // the round-trip above proved, and is replaced whenever a reader re-seeds.
             var seededTraceID = traceSummary.traceID
+            // #373 Phase B: the verified write-and-restore cycles this run produced. Empty until a
+            // recipe exists for an operation, which is the honest shape — the artifact has always
+            // been emitted and has always been empty.
+            var mutationRestoreRecords: [QualificationMutationRestoreRecord] = []
             var operationResults: [String: QualificationOperationResult] = [:]
             for spec in request.operations {
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String?
+                var phaseBRecord: QualificationMutationRestoreRecord?
                 do {
                     if spec.id == .systemSagaExecute {
                         responseRequestID = "5"
@@ -990,6 +1015,17 @@ struct QualificationTransport: Sendable {
                         // dispositions are to give the operation a readback the product actually
                         // emits, or to waive it with a reason — NOT to seed it, and the seeding
                         // attempt is removed rather than left looking like it helps.
+                        // #373 Phase B: operations with a write-and-restore recipe run it here.
+                        // A refusal inside the cycle is NOT swallowed into a pass — the record is
+                        // simply absent and the operation falls through to the existing zero-write
+                        // deferral, which is what "no evidence" should look like.
+                        if spec.id == .tracksMute {
+                            if let cycle = try? muteRestoreCycle(session, startingAt: nextID, spec: spec) {
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            }
+                        }
                         if spec.id == .systemGetTrace || spec.id == .systemListRecentTraces {
                             let seedID = nextID
                             nextID += 1
@@ -1069,7 +1105,8 @@ struct QualificationTransport: Sendable {
                     readbackData: readbackData,
                     verification: spec.verification,
                     deadline: spec.deadline,
-                    failureReason: responseFailure ?? readbackFailure
+                    failureReason: responseFailure ?? readbackFailure,
+                    mutationRestore: phaseBRecord
                 )
             }
             let healthAfter = try health(session, id: nextID, phase: "health_after")
@@ -1106,6 +1143,7 @@ struct QualificationTransport: Sendable {
                 observedLocale: healthBefore.value.logicProUILocale,
                 operationResults: operationResults,
                 wireFrames: session.transcriptFrames,
+                mutationRestoreRecords: mutationRestoreRecords,
                 failureReason: nil
             )
         } catch {
@@ -1308,6 +1346,134 @@ struct QualificationTransport: Sendable {
         return (
             try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
             result.isError == true
+        )
+    }
+
+    /// One tool call with CALLER-SUPPLIED params.
+    ///
+    /// `operation(…)` above always sends `probeParams`, which for a mutating operation is the
+    /// deliberate no-write probe. A Phase-B recipe has to send a real request, so it needs this.
+    /// Kept separate rather than adding a parameter to `operation` so the no-write probe stays the
+    /// only thing the sweep itself can send.
+    private func invoke(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        tool: String,
+        command: String,
+        params: [String: Any],
+        phase: String
+    ) throws -> (text: String, isError: Bool) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: ["name": tool, "arguments": ["command": command, "params": params]],
+            phase: phase
+        )
+        return (try result.text(phase: phase), result.isError == true)
+    }
+
+    /// Read one track's mute state from the independent `logic://tracks` resource.
+    ///
+    /// The recipe below needs the SAME reading three times — before, after the write, and after the
+    /// restore — and it must come from a source other than the write's own answer, or the cycle
+    /// proves nothing. `logic://tracks` is that source.
+    private func observedMuteState(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        trackIndex: Int,
+        phase: String
+    ) throws -> (muted: Bool, raw: String) {
+        // REFRESH FIRST. `logic://tracks` is served from a poller-backed cache, and without this
+        // the read after the write returns the pre-write value — measured 2026-09-14: mute moved
+        // `true -> false` in Logic and three consecutive reads still answered `true`, while the
+        // same sequence with a refresh between them reported `true -> false -> true`. A cycle built
+        // on the unrefreshed read would have compared a write against its own stale precondition
+        // and called it a failure; the guard below caught exactly that and refused, which is how
+        // this was found.
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["data"] as? [[String: Any]],
+              trackIndex < rows.count,
+              let muted = rows[trackIndex]["isMuted"] as? Bool else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report isMuted for track \(trackIndex)"
+            )
+        }
+        return (muted, raw)
+    }
+
+    /// ADR-001-c / #373 Phase B: the write-and-readback cycle, on one operation.
+    ///
+    /// The issue's own status line said Phase B "needs a write-and-read-back qualification mode,
+    /// which does not exist" — and the record type for it DID exist, with exactly these five
+    /// fields, while nothing in the tree constructed one. This is that constructor.
+    ///
+    /// `tracks.set_mute` is the first operation to get a recipe because it is the safest shape the
+    /// registry has: `Mutability.mutating`, reversible by definition, and with an independent
+    /// readback (`logic://tracks`) that is not the write's own answer. The cycle is
+    /// pre-state → mutation → readback → restore → restore-readback, and EVERY step is checked:
+    ///
+    ///   * the mutation must actually flip the observed state, or an operation that did nothing
+    ///     would pass by agreeing with a stale reading;
+    ///   * the restore must return it to the pre-state EXACTLY, read back rather than assumed.
+    ///
+    /// A record is returned ONLY when all of that held. There is no failure case in the record
+    /// type, and that absence is the guard: a cycle that did not verify produces no evidence, so
+    /// `status` cannot see one.
+    private func muteRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        let trackIndex = 0
+        var nextID = id
+        // Each observation spends TWO ids — a refresh and the resource read — so the step counter
+        // advances by two for reads and one for writes.
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let pre = try observedMuteState(
+            session, id: readStep(), trackIndex: trackIndex, phase: "phase_b.pre_state")
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": trackIndex, "enabled": !pre.muted], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let after = try observedMuteState(
+            session, id: readStep(), trackIndex: trackIndex, phase: "phase_b.readback")
+        guard after.muted == !pre.muted else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: mute did not move — observed \(after.muted), expected \(!pre.muted)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": trackIndex, "enabled": pre.muted], phase: "phase_b.restore")
+        guard restore.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(spec.id.rawValue) refused the restore")
+        }
+        let restored = try observedMuteState(
+            session, id: readStep(), trackIndex: trackIndex, phase: "phase_b.restore_readback")
+        guard restored.muted == pre.muted else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: not restored — observed \(restored.muted), expected \(pre.muted)")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
         )
     }
 

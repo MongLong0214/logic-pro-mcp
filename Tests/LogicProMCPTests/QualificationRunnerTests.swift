@@ -1707,7 +1707,30 @@ struct QualificationRunnerTests {
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
-        #expect(mutating.allSatisfy {
+        // #373 Phase B. This used to assert that EVERY mutating operation is `.notQualified` —
+        // a universal that was true only while no write-and-readback recipe existed, and that
+        // would have to be deleted the moment one did. Deleting it would take the guard with it,
+        // so it is split by the thing that actually decides: whether a VERIFIED
+        // mutation-restore record exists for that operation.
+        //
+        // The guard that matters is the first branch below: without a record, a mutating
+        // operation still cannot reach anything but the typed zero-write deferral. An operation
+        // that starts passing without producing evidence fails here.
+        let (withEvidence, withoutEvidence) = mutating.reduce(
+            into: ([QualificationOperationResult](), [QualificationOperationResult]())
+        ) { split, result in
+            if result.mutationRestore == nil { split.1.append(result) } else { split.0.append(result) }
+        }
+        #expect(withEvidence.allSatisfy {
+            $0.status == .passed
+                && $0.mutationRestore?.operationID == $0.operationID
+                // Every step is present. The record type has no failure case, so the fields being
+                // populated is what "the cycle verified" looks like from here.
+                && !($0.mutationRestore?.preState.isEmpty ?? true)
+                && !($0.mutationRestore?.readback.isEmpty ?? true)
+                && !($0.mutationRestore?.restoreReadback.isEmpty ?? true)
+        })
+        #expect(withoutEvidence.allSatisfy {
             $0.status == .notQualified
                 && $0.isError == true
                 && $0.state == "C"
