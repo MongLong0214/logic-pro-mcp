@@ -3107,15 +3107,34 @@ struct QualificationTransport: Sendable {
         defer {
             if createdNeedsRemoval {
                 var cleanupID = nextID + 900
-                for _ in 0..<4 {
+                for _ in 0..<3 {
+                    // WAIT for the extra track before concluding there is none. The first version
+                    // read ONCE with no settle and `break`ed when it saw nothing extra — so a
+                    // create that landed AFTER the readback budget was never cleaned up. Measured
+                    // 2026-09-15: two sweeps later the operator's project carried a leaked
+                    // `오디오 2` and a pre-state of 22 tracks where the live project has 19. This
+                    // is the same class the marker cycle paid for, and it bit again because a
+                    // track create is slower than a marker create.
                     guard let seen = try? observedTrackInventory(
-                        session, id: cleanupID, phase: "phase_c.cleanup_readback") else { break }
+                        session, id: cleanupID, awaitingCount: pre.count + 1,
+                        phase: "phase_c.cleanup_readback") else { break }
                     cleanupID += seen.spent
-                    guard let extra = seen.refs.first(where: { !pre.refs.contains($0) }) else { break }
+                    guard let extra = seen.refs.first(where: { !pre.refs.contains($0) }) else {
+                        // Nothing extra after a full settle budget: either nothing was created or
+                        // it is already gone. There is nothing left to remove.
+                        break
+                    }
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
                     cleanupID += 1
+                    // AND VERIFY IT WENT. An unverified delete is a request, not a removal — the
+                    // sentence the marker cycle already carries, applied to a costlier object.
+                    guard let after = try? observedTrackInventory(
+                        session, id: cleanupID, awaitingCount: pre.count,
+                        phase: "phase_c.cleanup_verify") else { break }
+                    cleanupID += after.spent
+                    if !after.refs.contains(extra) { break }
                 }
             }
         }
