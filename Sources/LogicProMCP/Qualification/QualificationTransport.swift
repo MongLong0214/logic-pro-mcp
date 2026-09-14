@@ -1031,6 +1031,19 @@ struct QualificationTransport: Sendable {
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
                         // deferral, which is what "no evidence" should look like.
+                        if let field = Self.valueRestoreReadbackField[spec.id] {
+                            do {
+                                let cycle = try valueRestoreCycle(
+                                    session, startingAt: nextID, spec: spec, readbackField: field)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 12
+                            }
+                        }
                         if let field = Self.booleanToggleReadbackField[spec.id] {
                             do {
                                 let cycle = try booleanToggleRestoreCycle(
@@ -1443,6 +1456,110 @@ struct QualificationTransport: Sendable {
             )
         }
         return (value, raw)
+    }
+
+    /// #373 Phase B: the mutating operations whose recipe restores a VALUE rather than flipping a
+    /// flag, and the `logic://tracks` field that independently reports each one.
+    static let valueRestoreReadbackField: [OperationID: String] = [
+        .mixerSetVolume: "volume",
+        .mixerSetPan: "pan",
+    ]
+
+    private func observedTrackValue(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        trackIndex: Int,
+        field: String,
+        phase: String
+    ) throws -> (value: Double, raw: String) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["data"] as? [[String: Any]],
+              trackIndex < rows.count,
+              let value = rows[trackIndex][field] as? Double else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report \(field) for track \(trackIndex)"
+            )
+        }
+        return (value, raw)
+    }
+
+    /// #373 Phase B for a continuous control: pre-state → move → readback → restore → readback.
+    ///
+    /// WHAT THIS DOES NOT ASSERT, and why. The observed value is NOT required to equal the
+    /// requested one. Measured 2026-09-14: asking for volume `0.8579` lands `0.8636`, and pan
+    /// `0.1079` lands `0.1654` — Logic exposes these faders in detents, and the operation reports
+    /// `verified: true` against its own observation. Demanding equality here would fail a control
+    /// that behaved correctly, which is a grader asserting something the surface never promised.
+    ///
+    /// What IS asserted is the pair that actually carries the claim:
+    ///
+    ///   * the value MOVED — an operation that did nothing cannot pass by agreeing with a stale
+    ///     reading, which is the failure mode the boolean cycle found in the poller cache;
+    ///   * the restore returns the pre-state EXACTLY, read back rather than assumed. Both measured
+    ///     operations restore to the original bit pattern, so exactness is a real bar here and not
+    ///     a hopeful one.
+    private func valueRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        readbackField: String
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        let trackIndex = 0
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let pre = try observedTrackValue(
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+            phase: "phase_b.pre_state")
+        // Move toward the middle of the range, so a control already at an extreme still has
+        // somewhere to go. 0.1 is far enough to clear any detent the measurements showed.
+        let target = pre.value > 0.5 ? max(0.1, pre.value - 0.1) : min(0.9, pre.value + 0.1)
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": trackIndex, readbackField: target], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let after = try observedTrackValue(
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+            phase: "phase_b.readback")
+        guard after.value != pre.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: \(readbackField) did not move from \(pre.value)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": trackIndex, readbackField: pre.value], phase: "phase_b.restore")
+        guard restore.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(spec.id.rawValue) refused the restore")
+        }
+        let restored = try observedTrackValue(
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+            phase: "phase_b.restore_readback")
+        guard restored.value == pre.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: \(readbackField) not restored — observed "
+                    + "\(restored.value), expected \(pre.value)")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
     }
 
     /// ADR-001-c / #373 Phase B: the write-and-readback cycle, on one operation.
