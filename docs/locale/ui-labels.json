@@ -80,9 +80,10 @@
    "canonical": "Tracks",
    "variants": [
     "트랙",
-    "トラック"
+    "トラック",
+    "Spuren"
    ],
-   "rationale": "Witnesses that an arrange window exists after project.new; read-only classification.",
+   "rationale": "Witnesses that an arrange window exists after project.new; read-only classification. German read 2026-09-15 on a de-DE Logic 12.3 (#883): File > New skipped the chooser and created the project directly, whose window titled itself `Ohne Titel - Spuren` — and without this variant project.new spent its whole 40-iteration wait beside a project it had just made, then reported that neither a chooser nor a created window ever appeared.",
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
@@ -389,9 +390,10 @@
    "canonical": "Create",
    "variants": [
     "생성",
-    "作成"
+    "作成",
+    "Erzeugen"
    ],
-   "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`).",
+   "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`). German read 2026-09-15 by opening the sheet on a de-DE Logic 12.3 and enumerating `group 1 of sheet 1`: `Erzeugen`, `Abbrechen`, both enabled (#883).",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -1906,9 +1908,10 @@
    "canonical": "New Track",
    "variants": [
     "새로운 트랙",
-    "新規トラック"
+    "新規トラック",
+    "Neue Spur"
    ],
-   "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled).",
+   "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled). German read 2026-09-15 on a de-DE Logic 12.3: the AXSheet answers `Neue Spur`, while `Neue Spur erzeugen` is an AXStaticText heading inside it and is deliberately not a variant (#883).",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",

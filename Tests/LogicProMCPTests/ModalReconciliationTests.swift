@@ -61,6 +61,40 @@ private func makeSignals(
     #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
 }
 
+/// #883: a German Logic blocked in this sheet and no operation could proceed past it. All three
+/// signals the classifier reads were English/KO/JA-only, so the sheet fell through to `.unknownSheet`
+/// and the reconciler correctly refused to press a control it could not name — the failure reads as
+/// "the dialog did not respond" and is really "nobody ever read this dialog".
+///
+/// Measured 2026-09-15 on a de-DE Logic 12.3: the AXSheet answers `Neue Spur`, and its buttons are
+/// `Erzeugen` and `Abbrechen` with BOTH enabled. The enabled Cancel is why the description is the
+/// load-bearing signal here and not the disabled-Cancel conjunct — German behaves like Korean, where
+/// the same conjunct has never fired either.
+@Test func testClassifyMandatoryNewTrackViaGermanDescription() {
+    let signals = makeSignals(
+        sheetPresent: true,
+        sheetDescription: "Neue Spur",
+        cancelButtonPresent: true,
+        cancelButtonEnabled: true
+    )
+    #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
+}
+
+/// The heading a PERSON sees on that sheet is `Neue Spur erzeugen`, which is what #883's reporter
+/// quoted. It is an AXStaticText inside the sheet and never the AXDescription, so accepting it would
+/// put real text from the real sheet into the set and still never match. It stays out, and this
+/// records that the exclusion is deliberate rather than an oversight.
+@Test func testGermanNewTrackHeadingIsNotTheSheetDescription() {
+    #expect(AXLocalePolicy.newTrackSheetDescription.matches("Neue Spur", mode: .exact))
+    #expect(!AXLocalePolicy.newTrackSheetDescription.matches("Neue Spur erzeugen", mode: .exact))
+}
+
+/// The classifier finding the sheet is only half of it: the reconciler then has to press the only
+/// exit, and on German that button is `Erzeugen`.
+@Test func testGermanCreateButtonIsMatchable() {
+    #expect(AXLocalePolicy.createButton.matches("Erzeugen", mode: .exact))
+}
+
 @Test func testClassifyDeleteConfirm() {
     let signals = makeSignals(
         sheetPresent: true,

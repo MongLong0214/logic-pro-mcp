@@ -793,8 +793,8 @@ enum AXLocalePolicy {
     /// (Logic 12.3: `생성`); JA live-confirmed (Logic 12.3: `作成`).
     static let createButton = LabelSet(
         canonical: "Create",
-        variants: ["생성", "作成"],
-        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
+        variants: ["생성", "作成", "Erzeugen"],
+        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`). German read 2026-09-15 by opening the sheet on a de-DE Logic 12.3 and enumerating `group 1 of sheet 1`: `Erzeugen`, `Abbrechen`, both enabled (#883)."
     )
 
     /// #346/#350: `AXDescription` that identifies the mandatory New Track sheet.
@@ -802,10 +802,14 @@ enum AXLocalePolicy {
     /// Japanese Logic 12.3 the Cancel button is enabled. Read-only classifier;
     /// KO live-confirmed (Logic 12.3: `새로운 트랙`); JA live-confirmed (Logic 12.3:
     /// `新規トラック`).
+    /// German is `Neue Spur` and NOT `Neue Spur erzeugen`. The sheet shows the longer string as a
+    /// heading — it is what #883's reporter quoted, because it is what a person sees — but the
+    /// AXDescription this classifier reads is the short one. Taking the visible heading would have
+    /// produced a variant that is real text on the real sheet and still never matches.
     static let newTrackSheetDescription = LabelSet(
         canonical: "New Track",
-        variants: ["새로운 트랙", "新規トラック"],
-        rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
+        variants: ["새로운 트랙", "新規トラック", "Neue Spur"],
+        rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled). German read 2026-09-15 on a de-DE Logic 12.3: the AXSheet answers `Neue Spur`, while `Neue Spur erzeugen` is an AXStaticText heading inside it and is deliberately not a variant (#883)."
     )
 
     /// #346/#350/#545: primary destructive button on the track-delete confirm sheets.
@@ -1015,8 +1019,8 @@ enum AXLocalePolicy {
     /// the #516 regression, still live for anyone not running Logic in English.
     static let arrangeWindowTitleSuffix = LabelSet(
         canonical: "Tracks",
-        variants: ["트랙", "トラック"],
-        rationale: "Witnesses that an arrange window exists after project.new; read-only classification."
+        variants: ["트랙", "トラック", "Spuren"],
+        rationale: "Witnesses that an arrange window exists after project.new; read-only classification. German read 2026-09-15 on a de-DE Logic 12.3 (#883): File > New skipped the chooser and created the project directly, whose window titled itself `Ohne Titel - Spuren` — and without this variant project.new spent its whole 40-iteration wait beside a project it had just made, then reported that neither a chooser nor a created window ever appeared."
     )
 
     /// The Key Commands window's title, for `ArmKeyCommandSetup.keyCommandsWindow`.
