@@ -1910,7 +1910,11 @@ extension AccessibilityChannel {
         // 0 to stay fast; production keeps a real gap so a delayed AX publish
         // has time to land.
         dialogPollAttempts: Int = 5,
-        dialogPollDelayNanoseconds: UInt64 = 200_000_000
+        dialogPollDelayNanoseconds: UInt64 = 200_000_000,
+        // The pre-write rail read gets its own budget, because it answers a different question
+        // than the New Track sheet poll does and failing it costs the whole verdict. Tests set it
+        // to 1 to keep a single attempt.
+        railReadAttempts: Int = 5
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
             return .error("No document open for track creation")
@@ -1929,8 +1933,22 @@ extension AccessibilityChannel {
         // delete path. The historic flattening enumerator turns a failed
         // pre-write read into `[]`, which makes tracks that were already there
         // look like the result of this menu click.
-        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
-        let beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+        // A rail read that failed ONCE is not evidence about the rail. Measured 2026-09-15 on a
+        // just-created project: this read came back nil, and because `beforeTracks == nil` forces
+        // State B `retry_exhausted` no matter what happens afterwards, `create_audio`,
+        // `create_instrument` and `delete` all reported an unverified write for a track that had
+        // demonstrably appeared or gone. The window and its header rail need a moment to publish
+        // after a document opens; one attempt catches that moment only by luck.
+        var arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        var beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+        if beforeTracks == nil {
+            for _ in 1..<max(railReadAttempts, 1) {
+                try? await Task.sleep(nanoseconds: dialogPollDelayNanoseconds)
+                arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+                beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+                if beforeTracks != nil { break }
+            }
+        }
 
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)

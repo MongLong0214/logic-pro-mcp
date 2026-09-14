@@ -111,14 +111,61 @@
     "target_ref + expected_name -> invalid_params, cannot be combined"
    ],
    "note": "each refusal names the allowed set, so the contract is discoverable from the operation itself"
+  },
+  {
+   "cause": "the pre-write rail read, not the post-write poll",
+   "code": "createTrackViaMenu read the arrange window's header rail ONCE; observedTrackStates returns nil when the window or the rail is not readable, and `guard beforeTracks != nil` then forces State B retry_exhausted whatever happens afterwards",
+   "note": "the comment at that guard says it plainly: without a successful pre-write read a later count cannot tell whether the tracks existed before the menu action"
+  },
+  {
+   "change": "the pre-write rail read retries on its own budget instead of accepting the first nil",
+   "operation": "tracks.create_audio",
+   "before": {
+    "state": "B",
+    "reason": "retry_exhausted"
+   },
+   "after": {
+    "state": "A",
+    "verified": true,
+    "observed_delta": 1,
+    "track_count_after": 2
+   },
+   "on": "a just-created project"
+  },
+  {
+   "change": "the same, second operation",
+   "operation": "tracks.create_instrument",
+   "before": {
+    "state": "B",
+    "reason": "retry_exhausted"
+   },
+   "after": {
+    "state": "A",
+    "verified": true,
+    "observed_delta": 1,
+    "track_count_after": 3
+   }
+  },
+  {
+   "operation": "tracks.delete after the same change",
+   "state": "B",
+   "reason": "retry_exhausted",
+   "observed_delta": -1,
+   "track_count_after": 2,
+   "tracks_after": [
+    "Absolute Zero",
+    "Deluxe Classic"
+   ],
+   "note": "it OBSERVES the right delta and still refuses State A, so its verdict is decided somewhere other than the rail read this change fixed"
   }
  ],
- "conclusion": "Phase C-live works. Given a Logic with no open document, `project.new` creates the disposable fixture the destructive operations need, and four of them were driven against it and judged by `logic://tracks` rather than by their own answers: `project.new`, `tracks.create_audio`, `tracks.create_instrument` and `tracks.delete` all CHANGED the track list. Every one of them answered **State B** — `retry_exhausted` or `readback_unavailable` — for a write that had landed. That is the same shape the Phase-B harness hit and had to fix in itself: a verification poll that gives up before Logic's track list settles. The operations are not lying, they are giving up early, and an independent readback taken a few seconds later confirms every one of them. `tracks.duplicate` is the exception and the one real defect here: it answers State B and the track list does not change, held across 3, 5 and 8 second polls. The binding contract is discoverable from the refusals themselves — exactly one of `target_ref` or `expected_name`, never both, never neither.",
+ "conclusion": "Phase C-live works. Given a Logic with no open document, `project.new` creates the disposable fixture the destructive operations need, and four of them were driven against it and judged by `logic://tracks` rather than by their own answers: `project.new`, `tracks.create_audio`, `tracks.create_instrument` and `tracks.delete` all CHANGED the track list. Every one of them answered **State B** — `retry_exhausted` or `readback_unavailable` — for a write that had landed. That is the same shape the Phase-B harness hit and had to fix in itself: a verification poll that gives up before Logic's track list settles. The operations are not lying, they are giving up early, and an independent readback taken a few seconds later confirms every one of them. `tracks.duplicate` is the exception and the one real defect here: it answers State B and the track list does not change, held across 3, 5 and 8 second polls. The binding contract is discoverable from the refusals themselves — exactly one of `target_ref` or `expected_name`, never both, never neither. FOLLOWED TO A FIX: the State B on the creates was not an early post-write poll at all. `createTrackViaMenu` read the arrange window's header rail ONCE before writing, and a nil there forces `retry_exhausted` no matter what the write does — on a just-created project that read comes back nil because the window and its rail have not published yet. Giving that read its own retry budget moves `tracks.create_audio` and `tracks.create_instrument` to State A verified with `observed_delta: 1`, live. `tracks.delete` does NOT move: it observes `observed_delta: -1` and still answers `retry_exhausted`, so its verdict is decided elsewhere and that site is not identified here.",
  "limits": [
   "Five operations of the thirty-two. `project.save_as`, `project.close`, `edit.cut` / `paste` / `split` / `quantize`, `midi.import_file`, `plugins.insert_verified` and the rest were not driven.",
   "No restore cycle was built. These were driven as one-way writes on a disposable project and judged by readback; a Phase C-live RECIPE — stage, drive, verify, discard the fixture — does not exist yet.",
   "WHY the four give up early is not established. `retry_exhausted` and `readback_unavailable` are different reasons and were not separated; the poll budgets in the dispatchers were not read.",
-  "One host, one Logic launch, one disposable project. Whether `tracks.duplicate` fails this way on another host is unmeasured."
+  "One host, one Logic launch, one disposable project. Whether `tracks.duplicate` fails this way on another host is unmeasured.",
+  "The delete verdict was not chased to its site. It observes the correct delta and refuses State A anyway, which is a different defect from the one fixed here and is reported rather than resolved."
  ],
  "supersedes": null
 }
