@@ -1587,6 +1587,18 @@ struct QualificationTransport: Sendable {
     /// A table rather than a switch because the addition it invites is a ROW — an operation, plus
     /// the field a reader can check it against. An operation with no honest independent field does
     /// not belong here and must not be given one that merely correlates.
+    /// #373 Phase B: the toggles whose actuator refuses unless the TARGET TRACK is the only
+    /// selected one, so the recipe has to arrange that before it writes.
+    ///
+    /// `tracks.arm` posts a key chord, and Logic's record-arm acts on the selection — so the rung
+    /// re-checks `selectionIsExclusive(index:)` immediately before every post and refuses
+    /// otherwise. Measured 2026-09-14: driven on its own after a `select`, `tracks.arm` answers
+    /// State A verified on the same track the sweep failed on; inside the sweep nothing had
+    /// selected it, the rung refused, and the answer that reached the recipe was the next channel's.
+    /// `mute` and `solo` write an AX value and need no selection, which is why they are not here —
+    /// staging one for them would move a selection the cycle has no reason to touch.
+    static let requiresExclusiveSelection: Set<OperationID> = [.tracksArm]
+
     static let booleanToggleReadbackField: [OperationID: String] = [
         .tracksMute: "isMuted",
         .tracksSolo: "isSoloed",
@@ -1707,6 +1719,28 @@ struct QualificationTransport: Sendable {
                 "\(phase): logic://tracks was never read for \(field)")
         }
         return (last.0, last.1, spent)
+    }
+
+    /// The index of the single selected track, or nil when none or more than one is selected.
+    ///
+    /// nil is the honest answer for "more than one", because a caller staging an EXCLUSIVE
+    /// selection cannot restore a multi-selection it never captured.
+    private func observedSelectedTrackIndex(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (index: Int?, spent: Int) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["data"] as? [[String: Any]] else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report any rows")
+        }
+        let selected = rows.enumerated().filter { ($0.element["isSelected"] as? Bool) == true }
+        return (selected.count == 1 ? selected[0].offset : nil, 2)
     }
 
     /// #373 Phase B: the mutating operations whose recipe restores a VALUE rather than flipping a
@@ -3062,6 +3096,39 @@ struct QualificationTransport: Sendable {
         // advances by two for reads and one for writes.
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        // STAGE THE PRECONDITION the actuator documents, and put the selection back afterwards.
+        // The prior selection is read first so the restore returns the operator's own row rather
+        // than one this recipe manufactured.
+        var priorSelection: Int?
+        if Self.requiresExclusiveSelection.contains(spec.id) {
+            let before = try observedSelectedTrackIndex(
+                session, id: nextID, phase: "phase_b.selection_precondition")
+            nextID += before.spent
+            priorSelection = before.index
+            if before.index != trackIndex {
+                _ = try invoke(
+                    session, id: step(), tool: spec.tool.rawValue, command: "select",
+                    params: ["index": trackIndex], phase: "phase_b.selection_precondition",
+                    timeout: spec.deadline.seconds + 5)
+                let staged = try observedSelectedTrackIndex(
+                    session, id: nextID, phase: "phase_b.selection_precondition_readback")
+                nextID += staged.spent
+                guard staged.index == trackIndex else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.selection_precondition: track \(trackIndex) is not the selected "
+                            + "row (\(staged.index.map(String.init) ?? "none")), and "
+                            + "\(spec.id.rawValue) refuses to write onto a selection it does not own")
+                }
+            }
+        }
+        defer {
+            if let priorSelection, priorSelection != trackIndex {
+                _ = try? invoke(
+                    session, id: nextID + 800, tool: spec.tool.rawValue, command: "select",
+                    params: ["index": priorSelection], phase: "phase_b.selection_restore")
+            }
+        }
 
         // A POLLED read spends more than two ids, so each one advances `nextID` by what it
         // actually spent. Keeping `readStep()`'s fixed two here would hand a later step an id this

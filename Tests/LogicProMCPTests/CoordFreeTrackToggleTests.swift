@@ -428,16 +428,17 @@ struct CoordFreeTrackToggleTests {
         // assertion until 2026-09-14, when a suffix naming a composing macOS input source was
         // appended to synthetic-key failures — and equality then made this test pass or fail by the
         // input source of the machine running it, which is not a property of the product. The body
-        // is still pinned verbatim; what may follow it is pinned by its own tests.
+        // is pinned verbatim here; what may follow it is pinned by its own tests.
+        let body = "arm requires the Logic key command 'Toggle Track Record Enable' assigned to "
+            + "the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or "
+            + "set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
         let hint = try #require(obj?["hint"] as? String)
-        #expect(hint.hasPrefix("arm requires the Logic key command 'Toggle Track Record "
-            + "Enable' assigned to the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key "
-            + "Commands, or set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."))
-        // Whatever follows is the input-source explanation or nothing at all — never other text.
-        let suffix = String(hint.dropFirst(
-            "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "
-            .count))
-        #expect(suffix.isEmpty || hint.contains("macOS input source"))
+        #expect(hint.hasPrefix(body))
+        // Whatever follows the body is the input-source explanation or nothing at all — never
+        // other text. Computed by dropping the body itself, not a lookalike literal: an earlier
+        // version of this assertion dropped a different string's length and compared garbage.
+        let suffix = String(hint.dropFirst(body.count))
+        #expect(suffix.isEmpty || suffix.contains("macOS input source"))
         #expect(key.mouseEvents.isEmpty)
     }
 
