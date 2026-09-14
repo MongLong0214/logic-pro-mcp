@@ -1013,6 +1013,23 @@ struct QualificationTransport: Sendable {
                 var responseFailure: String?
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
+                // `tracks.rename` reuses the negative probe's response below and never reaches the
+                // normal dispatch, so its recipe runs HERE rather than inside that branch. Putting
+                // it with the others cost a run to find out: the recipe was written, compiled, and
+                // silently never fired.
+                if spec.id == .tracksRename {
+                    do {
+                        let cycle = try trackStringRestoreCycle(
+                            session, startingAt: nextID, spec: spec, readbackField: "name")
+                        mutationRestoreRecords.append(cycle.record)
+                        phaseBRecord = cycle.record
+                        nextID = cycle.nextID
+                    } catch {
+                        phaseBRefusal = Self.observedFailureReason(
+                            from: error, during: "phase_b recipe")
+                        nextID += 20
+                    }
+                }
                 do {
                     if spec.id == .systemSagaExecute {
                         responseRequestID = "5"
@@ -1793,6 +1810,18 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// The index of the marker carrying `name`, or nil. Marker indices are NOT append order: the
+    /// list is sorted by POSITION and `create_marker` places its marker at the playhead, so a new
+    /// marker lands wherever its bar sorts to. Assuming it arrives last is what made an earlier
+    /// version of this recipe delete SOMEBODY ELSE'S marker while its count check still balanced —
+    /// the cycle passed and the project lost a marker it was supposed to leave alone.
+    private func markerIndex(named name: String, in raw: String) -> Int? {
+        guard let data = raw.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let rows = object["data"] as? [[String: Any]] else { return nil }
+        return rows.firstIndex { ($0["name"] as? String) == name }
+    }
+
     private func observedMarkerCount(
         _ session: QualificationSubprocessSession,
         id: Int,
@@ -1826,6 +1855,113 @@ struct QualificationTransport: Sendable {
             if expecting == nil || rows.count == expecting { break }
         }
         return (last.0, last.1, spent)
+    }
+
+    /// #373 Phase B for a STRING field on a track — `tracks.rename` today.
+    ///
+    /// The probe name is deliberately unlikely and the restore writes the original back verbatim,
+    /// so a failure between the two leaves a track called `qualification_phase_b_probe` rather
+    /// than a plausible-looking wrong name. A cycle that renames and cannot put it back should be
+    /// obvious in the project, not camouflaged.
+    private func trackStringRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        readbackField: String
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+        let probeValue = "qualification_phase_b_probe"
+
+        let pre = try observedTrackString(
+            session, id: readStep(), trackIndex: 0, field: readbackField,
+            phase: "phase_b.pre_state")
+        guard pre.value != probeValue else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the track already carries the probe value — an earlier run "
+                    + "left it behind and this cycle cannot tell a move from a no-op")
+        }
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": 0, readbackField: probeValue], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        var needsRestore = true
+        defer {
+            if needsRestore {
+                var cleanupID = nextID + 900
+                for _ in 0..<4 {
+                    _ = try? invoke(
+                        session, id: cleanupID, tool: spec.tool.rawValue, command: spec.command,
+                        params: ["index": 0, readbackField: pre.value], phase: "phase_b.cleanup")
+                    cleanupID += 1
+                    guard let seen = try? observedTrackString(
+                        session, id: cleanupID, trackIndex: 0, field: readbackField,
+                        phase: "phase_b.cleanup_readback") else { break }
+                    cleanupID += 2
+                    if seen.value == pre.value { break }
+                }
+            }
+        }
+        let after = try observedTrackString(
+            session, id: readStep(), trackIndex: 0, field: readbackField,
+            phase: "phase_b.readback")
+        guard after.value == probeValue else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: \(readbackField) is \(after.value), expected the probe value")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": 0, readbackField: pre.value], phase: "phase_b.restore")
+        guard restore.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(spec.id.rawValue) refused the restore")
+        }
+        let restored = try observedTrackString(
+            session, id: readStep(), trackIndex: 0, field: readbackField,
+            phase: "phase_b.restore_readback")
+        guard restored.value == pre.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: \(readbackField) is \(restored.value), expected "
+                    + "\(pre.value)")
+        }
+        needsRestore = false
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    private func observedTrackString(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        trackIndex: Int,
+        field: String,
+        phase: String
+    ) throws -> (value: String, raw: String) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["data"] as? [[String: Any]],
+              trackIndex < rows.count,
+              let value = rows[trackIndex][field] as? String else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report \(field) for track \(trackIndex)")
+        }
+        return (value, raw)
     }
 
     /// #373 Phase B for a PARAMETERLESS toggle, where the same call is both the mutation and the
@@ -1933,12 +2069,18 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
+        let probeName = "qualification_phase_b_probe"
         let pre = try observedMarkerCount(
             session, id: nextID, expecting: nil, phase: "phase_b.pre_state")
+        guard markerIndex(named: probeName, in: pre.raw) == nil else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: a marker named \(probeName) is already in the project — an "
+                    + "earlier run left it, and this cycle cannot tell its own marker from that one")
+        }
         nextID += pre.spent
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
-            params: ["name": "qualification_phase_b_probe"], phase: "phase_b.mutation")
+            params: ["name": probeName], phase: "phase_b.mutation")
         nextID += 1
         guard mutation.isError == false else {
             throw QualificationTransportError.protocolViolation(
@@ -1960,15 +2102,15 @@ struct QualificationTransport: Sendable {
                 // the count is back where it started or its budget runs out.
                 var cleanupID = nextID + 900
                 for _ in 0..<4 {
+                    guard let seen = try? observedMarkerCount(
+                        session, id: cleanupID, expecting: nil, phase: "phase_b.cleanup_readback"
+                    ) else { break }
+                    cleanupID += seen.spent
+                    guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
                     _ = try? invoke(
                         session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                        params: ["index": pre.count], phase: "phase_b.cleanup")
+                        params: ["index": index], phase: "phase_b.cleanup")
                     cleanupID += 1
-                    guard let observed = try? observedMarkerCount(
-                        session, id: cleanupID, expecting: pre.count, phase: "phase_b.cleanup_readback"
-                    ) else { break }
-                    cleanupID += observed.spent
-                    if observed.count == pre.count { break }
                 }
             }
         }
@@ -1980,10 +2122,15 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.readback: marker count is \(after.count), expected \(pre.count + 1)")
         }
-        // Delete the one just added. Its index is the end of the list the create appended to.
+        // Delete the one just added, found BY NAME. See `markerIndex(named:in:)`.
+        guard let createdIndex = markerIndex(named: probeName, in: after.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: the marker count rose but no row carries \(probeName) — the "
+                    + "cycle cannot identify what it created and will not delete by guess")
+        }
         let restore = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: "delete_marker",
-            params: ["index": pre.count], phase: "phase_b.restore")
+            params: ["index": createdIndex], phase: "phase_b.restore")
         nextID += 1
         guard restore.isError == false else {
             throw QualificationTransportError.protocolViolation(
@@ -1992,10 +2139,11 @@ struct QualificationTransport: Sendable {
         let restored = try observedMarkerCount(
             session, id: nextID, expecting: pre.count, phase: "phase_b.restore_readback")
         nextID += restored.spent
-        guard restored.count == pre.count else {
+        guard restored.count == pre.count, markerIndex(named: probeName, in: restored.raw) == nil else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: marker count is \(restored.count), expected "
-                    + "\(pre.count) — the probe marker was left behind")
+                    + "\(pre.count), and \(probeName) must be absent — a balanced count is not "
+                    + "proof the right marker went")
         }
         // The restore is confirmed, so the cleanup above has nothing left to do. Clearing the flag
         // here rather than earlier keeps the window it covers exactly the window where a marker
