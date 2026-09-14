@@ -1056,6 +1056,19 @@ struct QualificationTransport: Sendable {
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
                         // deferral, which is what "no evidence" should look like.
+                        if spec.id == .navigateCreateMarker {
+                            do {
+                                let cycle = try markerCreateRestoreCycle(
+                                    session, startingAt: nextID, spec: spec)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 40
+                            }
+                        }
                         if let expected = Self.transportExpectedPlaying[spec.id] {
                             do {
                                 let cycle = try transportRestoreCycle(
@@ -1760,6 +1773,101 @@ struct QualificationTransport: Sendable {
                 preState: pre.raw,
                 mutation: mutation.text,
                 readback: gained.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    private func observedMarkerCount(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        expecting: Int?,
+        phase: String
+    ) throws -> (count: Int, raw: String, spent: Int) {
+        // POLLS rather than reads once. The marker list settles more slowly than the other
+        // resources this file reads: measured 2026-09-14, a delete that had actually taken effect
+        // still read as present immediately after `refresh_cache`, and answered correctly a couple
+        // of seconds later. Reading once would make this recipe flaky and — worse — would report a
+        // working operation as one that did nothing.
+        //
+        // `expecting` is what the caller is waiting FOR, and nil means "just read". Waiting is not
+        // relaxing the assertion: the loop exits early only on the value the caller already
+        // decided is correct, and a wrong value simply runs out the budget and is returned as it
+        // is, to be judged by the guard that asked.
+        var spent = 0
+        var last: (Int, String) = (-1, "")
+        for _ in 0..<6 {
+            _ = try? invoke(
+                session, id: id + spent, tool: "logic_system", command: "refresh_cache",
+                params: [:], phase: "\(phase).refresh")
+            spent += 1
+            let data = try resourceReadback(
+                session, id: id + spent, uri: "logic://markers", phase: phase)
+            spent += 1
+            let raw = String(decoding: data, as: UTF8.self)
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let rows = (object?["data"] as? [[String: Any]]) ?? []
+            last = (rows.count, raw)
+            if expecting == nil || rows.count == expecting { break }
+        }
+        return (last.0, last.1, spent)
+    }
+
+    /// #373 Phase B for a CREATE, whose restore is a delete.
+    ///
+    /// The other machines move something that already exists and put it back. This one brings
+    /// something into being and must remove it, which makes the restore the part that matters: a
+    /// cycle that created a marker and left it behind would have changed the project while
+    /// reporting success.
+    private func markerCreateRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        let pre = try observedMarkerCount(
+            session, id: nextID, expecting: nil, phase: "phase_b.pre_state")
+        nextID += pre.spent
+        let mutation = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
+            params: ["name": "qualification_phase_b_probe"], phase: "phase_b.mutation")
+        nextID += 1
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let after = try observedMarkerCount(
+            session, id: nextID, expecting: pre.count + 1, phase: "phase_b.readback")
+        nextID += after.spent
+        guard after.count == pre.count + 1 else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: marker count is \(after.count), expected \(pre.count + 1)")
+        }
+        // Delete the one just added. Its index is the end of the list the create appended to.
+        let restore = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: "delete_marker",
+            params: ["index": pre.count], phase: "phase_b.restore")
+        nextID += 1
+        guard restore.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: delete_marker refused — the probe marker is still in the project")
+        }
+        let restored = try observedMarkerCount(
+            session, id: nextID, expecting: pre.count, phase: "phase_b.restore_readback")
+        nextID += restored.spent
+        guard restored.count == pre.count else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: marker count is \(restored.count), expected "
+                    + "\(pre.count) — the probe marker was left behind")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
                 restore: restore.text,
                 restoreReadback: restored.raw
             ),
