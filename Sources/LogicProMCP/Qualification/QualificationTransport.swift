@@ -943,6 +943,9 @@ struct QualificationTransport: Sendable {
             // `saga_status` reads. A zero-write seed.
             _ = try? sagaSeed(session, id: 9)
             var nextID = 10
+            // The trace id the next `system.get_trace` probe should ask for. It starts as the one
+            // the round-trip above proved, and is replaced whenever a reader re-seeds.
+            var seededTraceID = traceSummary.traceID
             var operationResults: [String: QualificationOperationResult] = [:]
             for spec in request.operations {
                 var response: (text: String, isError: Bool)?
@@ -956,6 +959,55 @@ struct QualificationTransport: Sendable {
                         responseRequestID = "8"
                         response = (negativeBody.text, negativeBody.toolIsError)
                     } else {
+                        // #373 Phase A: RE-SEED the trace store immediately before the two
+                        // operations that read it.
+                        //
+                        // The sweep does not run in registry-declaration order — measured
+                        // 2026-09-14, it probed `system.clear_traces` (readback-145) BEFORE
+                        // `system.get_trace` (149) and `system.list_recent_traces` (155), so the
+                        // clear wiped the store and both readers then read an empty one:
+                        // `{"traces":[]}` and `element_not_found: No operation trace exists for the
+                        // requested trace_id`. Both came back `not_qualified`, and the cause was
+                        // the recipe's ordering rather than anything about the operations.
+                        //
+                        // Fixing the ORDER would work until the order changes again. Seeding here
+                        // makes each reader arrange the state it needs, which is the pattern the
+                        // trace seed above already establishes and is indifferent to sweep order.
+                        // The seed is a REFUSED `saga_execute` — a typed zero-write refusal — so it
+                        // records a trace without mutating anything.
+                        // NOT SEEDED, and the reason is worth keeping: `tracks.list_library`'s
+                        // independent readback is `logic://library/inventory`, which on a fresh
+                        // server answers `{"cached":false,"note":"Run logic_library scan to
+                        // populate…"}`. Seeding it with `tracks.scan_library` was tried on
+                        // 2026-09-14 and does nothing — that resource reads a cache FILE
+                        // (`Resources/library-inventory.json` or the Application Support copy) and
+                        // `scan_library` returns its presets in the response without ever writing
+                        // that file. So the readback source is a file the product does not produce,
+                        // and no arrangement this transport can make will satisfy it.
+                        //
+                        // That is why the operation sits in `knownLiveGateFailures`. It is not a
+                        // disagreement between two readings; it is a missing second reading. The
+                        // dispositions are to give the operation a readback the product actually
+                        // emits, or to waive it with a reason — NOT to seed it, and the seeding
+                        // attempt is removed rather than left looking like it helps.
+                        if spec.id == .systemGetTrace || spec.id == .systemListRecentTraces {
+                            let seedID = nextID
+                            nextID += 1
+                            _ = try? traceSeed(session, id: seedID)
+                            // Read the id back rather than take it from the seed's own envelope.
+                            // The refusal `saga_execute` emits carries no `trace_id`, so trusting
+                            // its body left `seededTraceID` holding the pre-sweep value that
+                            // `clear_traces` had already wiped — `get_trace` then asked for a trace
+                            // that no longer existed and was refused, which is the same failure
+                            // wearing a different cause. The listing is the authority on what the
+                            // store currently holds.
+                            let listID = nextID
+                            nextID += 1
+                            if let listed = try? traces(session, id: listID),
+                               let newest = listed.traces.first {
+                                seededTraceID = newest.traceID
+                            }
+                        }
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
@@ -966,7 +1018,7 @@ struct QualificationTransport: Sendable {
                             session,
                             id: responseID,
                             spec: spec,
-                            traceID: traceSummary.traceID,
+                            traceID: seededTraceID,
                             timeout: probeTimeout
                         )
                     }
