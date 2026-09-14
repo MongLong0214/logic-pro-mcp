@@ -556,6 +556,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         guard let readbackData else { return .cacheAgeUnknown }
         return QualificationReadbackFreshness.verdict(
             for: readbackData,
+            uri: readbackSource,
             verification: verification,
             deadline: deadline
         )
@@ -1086,7 +1087,13 @@ struct QualificationTransport: Sendable {
                                 nextID += 14
                             }
                         }
-                        if spec.id == .navigateGotoBar {
+                        // Two operations move the playhead by bar number and read it back out of
+                        // the same transport resource: `navigate.goto_bar` and
+                        // `transport.goto_position`. `goto_position` also accepts a `position`
+                        // string, and the cycle deliberately drives the `bar` form — that is the
+                        // shape both share, so one machine covers both without the recipe having to
+                        // know which dispatcher it landed in.
+                        if Self.playheadRestoreOperations.contains(spec.id) {
                             do {
                                 let cycle = try playheadRestoreCycle(
                                     session, startingAt: nextID, spec: spec)
@@ -1110,6 +1117,32 @@ struct QualificationTransport: Sendable {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
                                 nextID += 12
+                            }
+                        }
+                        if spec.id == .navigateGotoMarker {
+                            do {
+                                let cycle = try markerNavigationRestoreCycle(
+                                    session, startingAt: nextID, spec: spec)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 60
+                            }
+                        }
+                        if let mode = Self.markerStagedRestoreMode[spec.id] {
+                            do {
+                                let cycle = try markerStagedRestoreCycle(
+                                    session, startingAt: nextID, spec: spec, mode: mode)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 60
                             }
                         }
                         if spec.id == .navigateCreateMarker {
@@ -1509,6 +1542,26 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// #373 Phase B: the marker operations that need a marker to exist before they can run, and
+    /// the staged shape each one takes. See `markerStagedRestoreCycle`.
+    static let markerStagedRestoreMode: [OperationID: MarkerStagedMode] = [
+        .navigateRenameMarker: .rename,
+        .navigateDeleteMarker: .delete,
+    ]
+
+    /// #373 Phase B: the mutating operations that move the playhead to a bar and are read back
+    /// out of `logic://transport/state`.
+    ///
+    /// `navigate.goto_bar` and `transport.goto_position` are two dispatchers over one observable.
+    /// Membership here is the claim that the operation takes a `bar` number and that the transport
+    /// resource reports where the playhead ended up — not that the two commands are interchangeable
+    /// for callers, which they are not: `goto_position` also accepts a `position` string and a
+    /// SMPTE form that this cycle does not exercise.
+    static let playheadRestoreOperations: Set<OperationID> = [
+        .navigateGotoBar,
+        .transportGotoPosition,
+    ]
+
     /// #373 Phase B: the mutating operations whose recipe is a reversible boolean toggle, and the
     /// `logic://tracks` field that independently reports each one.
     ///
@@ -1713,6 +1766,13 @@ struct QualificationTransport: Sendable {
     static let transportExpectedPlaying: [OperationID: Bool] = [
         .transportPlay: true,
         .transportStop: false,
+        // `pause` targets the same observable as `stop` — Logic's pause halts the running
+        // transport, and the dispatcher verifies `isPlaying == false` for both. It is here rather
+        // than folded into `stop` because it is a distinct operation whose own evidence was
+        // missing; what it shares is the field, not the identity. `record` is deliberately NOT
+        // here: its readback would be the same flag, and running it would write audio into the
+        // fixture, which belongs to Phase C-live with a disposable project.
+        .transportPause: false,
     ]
 
     private func observedPlaying(
@@ -1875,10 +1935,26 @@ struct QualificationTransport: Sendable {
         return rows.firstIndex { ($0["name"] as? String) == name }
     }
 
+    /// What a marker-list read is waiting FOR, and therefore when it may stop polling early.
+    ///
+    /// A count was the only condition this poll knew, and that is wrong for a rename: the list
+    /// length does not move, so the first — stale — read satisfies it and the recipe judges the
+    /// operation against a list taken before the write settled. Measured 2026-09-14:
+    /// `rename_marker` was refused by its own cycle for a name change that Logic had in fact made.
+    /// The settle condition has to name the thing the mutation actually changed.
+    enum MarkerSettle: Sendable {
+        /// Read once; the caller is not waiting for anything.
+        case read
+        /// Wait until the list holds exactly this many rows.
+        case count(Int)
+        /// Wait until every `present` name is in the list and no `absent` name is.
+        case names(present: [String], absent: [String])
+    }
+
     private func observedMarkerCount(
         _ session: QualificationSubprocessSession,
         id: Int,
-        expecting: Int?,
+        settling: MarkerSettle,
         phase: String
     ) throws -> (count: Int, raw: String, spent: Int) {
         // POLLS rather than reads once. The marker list settles more slowly than the other
@@ -1887,9 +1963,9 @@ struct QualificationTransport: Sendable {
         // of seconds later. Reading once would make this recipe flaky and — worse — would report a
         // working operation as one that did nothing.
         //
-        // `expecting` is what the caller is waiting FOR, and nil means "just read". Waiting is not
-        // relaxing the assertion: the loop exits early only on the value the caller already
-        // decided is correct, and a wrong value simply runs out the budget and is returned as it
+        // `settling` is what the caller is waiting FOR, and `.read` means "just read". Waiting is
+        // not relaxing the assertion: the loop exits early only on the state the caller already
+        // decided is correct, and a wrong state simply runs out the budget and is returned as it
         // is, to be judged by the guard that asked.
         var spent = 0
         var last: (Int, String) = (-1, "")
@@ -1911,7 +1987,14 @@ struct QualificationTransport: Sendable {
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let rows = (object?["data"] as? [[String: Any]]) ?? []
             last = (rows.count, raw)
-            if expecting == nil || rows.count == expecting { break }
+            let names = Set(rows.compactMap { $0["name"] as? String })
+            let settled: Bool = switch settling {
+            case .read: true
+            case .count(let expected): rows.count == expected
+            case .names(let present, let absent):
+                present.allSatisfy(names.contains) && !absent.contains(where: names.contains)
+            }
+            if settled { break }
         }
         return (last.0, last.1, spent)
     }
@@ -2008,6 +2091,149 @@ struct QualificationTransport: Sendable {
     /// string carries depends on the control bar's display mode (#304), so only the leading BAR is
     /// parsed and compared — the finer components are whatever the mode happens to expose and
     /// comparing them would make this recipe fail on a display setting rather than on the operation.
+    /// The bar number the transport reports, out of a `logic://transport/state` body.
+    private func observedBar(of raw: String, phase: String) throws -> Int {
+        guard let data = raw.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let payload = object["data"] as? [String: Any],
+              let state = payload["state"] as? [String: Any],
+              let position = state["position"] as? String,
+              let leading = position.split(separator: ".").first,
+              let value = Int(leading) else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): could not read a bar out of the transport position")
+        }
+        return value
+    }
+
+    /// #373 Phase B for `navigate.goto_marker`.
+    ///
+    /// The operation needs a marker to go TO, and it must be somewhere the playhead is not, or the
+    /// readback would agree without the operation having moved anything. So the cycle stages both:
+    /// it parks the playhead at a bar of its own choosing, drops a marker there, brings the
+    /// playhead back, and only then asks `goto_marker` to find it.
+    ///
+    /// The marker is identified BY NAME in the request as well as in the cleanup — `goto_marker`
+    /// accepts an index, and using one would make the cycle depend on the position-sorted order
+    /// that has already caused one destructive defect in this file.
+    private func markerNavigationRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        let probeName = "qualification_phase_b_probe"
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let origin = try observedTransportPosition(
+            session, id: readStep(), phase: "phase_b.stage_precondition")
+        let originBar = try observedBar(of: origin.raw, phase: "phase_b.stage_precondition")
+        let markerBar = originBar > 4 ? originBar - 3 : originBar + 3
+
+        let existing = try observedMarkerCount(
+            session, id: nextID, settling: .read, phase: "phase_b.stage_precondition")
+        nextID += existing.spent
+        guard markerIndex(named: probeName, in: existing.raw) == nil else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_precondition: a marker named \(probeName) is already in the "
+                    + "project — an earlier run left it, and this cycle cannot tell its own marker "
+                    + "from that one")
+        }
+        _ = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: "goto_bar",
+            params: ["bar": markerBar], phase: "phase_b.stage")
+        let parked = try observedTransportPosition(session, id: readStep(), phase: "phase_b.stage")
+        guard try observedBar(of: parked.raw, phase: "phase_b.stage") == markerBar else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage: could not park the playhead at bar \(markerBar), so a marker "
+                    + "dropped here would not be where this cycle thinks it is")
+        }
+        let staged = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: "create_marker",
+            params: ["name": probeName], phase: "phase_b.stage")
+        guard !Self.mutationSaysItFailed(staged.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage: create_marker refused, so there is nothing for "
+                    + "\(spec.id.rawValue) to navigate to: " + staged.text.prefix(220))
+        }
+        // A MARKER NOW EXISTS. Every exit removes it, and the removal is verified — see
+        // `markerCreateRestoreCycle` for why an unchecked delete is not a removal.
+        defer {
+            var cleanupID = nextID + 900
+            for _ in 0..<6 {
+                guard let seen = try? observedMarkerCount(
+                    session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
+                ) else { break }
+                cleanupID += seen.spent
+                guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
+                _ = try? invoke(
+                    session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
+                    params: ["index": index], phase: "phase_b.cleanup")
+                cleanupID += 1
+            }
+        }
+        let listed = try observedMarkerCount(
+            session, id: nextID, settling: .names(present: [probeName], absent: []),
+            phase: "phase_b.stage_readback")
+        nextID += listed.spent
+        guard markerIndex(named: probeName, in: listed.raw) != nil else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_readback: \(probeName) never appeared in the marker list")
+        }
+        _ = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: "goto_bar",
+            params: ["bar": originBar], phase: "phase_b.stage_return")
+        let pre = try observedTransportPosition(session, id: readStep(), phase: "phase_b.pre_state")
+        let preBar = try observedBar(of: pre.raw, phase: "phase_b.pre_state")
+        guard preBar != markerBar else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the playhead is already at the marker's bar \(markerBar), so "
+                    + "arriving there would prove nothing")
+        }
+
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["name": probeName], phase: "phase_b.mutation")
+        guard !Self.mutationSaysItFailed(mutation.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                    + mutation.text.prefix(220))
+        }
+        let after = try observedTransportPosition(session, id: readStep(), phase: "phase_b.readback")
+        let afterBar = try observedBar(of: after.raw, phase: "phase_b.readback")
+        guard afterBar == markerBar else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: playhead is at bar \(afterBar), expected the marker's bar "
+                    + "\(markerBar)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: "goto_bar",
+            params: ["bar": preBar], phase: "phase_b.restore")
+        guard !Self.mutationSaysItFailed(restore.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: goto_bar refused the restore: " + restore.text.prefix(220))
+        }
+        let restored = try observedTransportPosition(
+            session, id: readStep(), phase: "phase_b.restore_readback")
+        let restoredBar = try observedBar(of: restored.raw, phase: "phase_b.restore_readback")
+        guard restoredBar == preBar else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
     private func playheadRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
@@ -2017,22 +2243,8 @@ struct QualificationTransport: Sendable {
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
 
-        func bar(of raw: String, phase: String) throws -> Int {
-            guard let data = raw.data(using: .utf8),
-                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let payload = object["data"] as? [String: Any],
-                  let state = payload["state"] as? [String: Any],
-                  let position = state["position"] as? String,
-                  let leading = position.split(separator: ".").first,
-                  let value = Int(leading) else {
-                throw QualificationTransportError.protocolViolation(
-                    "\(phase): could not read a bar out of the transport position")
-            }
-            return value
-        }
-
         let pre = try observedTransportPosition(session, id: readStep(), phase: "phase_b.pre_state")
-        let preBar = try bar(of: pre.raw, phase: "phase_b.pre_state")
+        let preBar = try observedBar(of: pre.raw, phase: "phase_b.pre_state")
         // Somewhere else in the arrangement, and never bar 0 — `goto_bar` counts from 1.
         let target = preBar > 4 ? preBar - 3 : preBar + 3
         let mutation = try invoke(
@@ -2044,7 +2256,7 @@ struct QualificationTransport: Sendable {
                     + mutation.text.prefix(220))
         }
         let after = try observedTransportPosition(session, id: readStep(), phase: "phase_b.readback")
-        let afterBar = try bar(of: after.raw, phase: "phase_b.readback")
+        let afterBar = try observedBar(of: after.raw, phase: "phase_b.readback")
         guard afterBar == target else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.readback: playhead is at bar \(afterBar), expected \(target)")
@@ -2059,7 +2271,7 @@ struct QualificationTransport: Sendable {
         }
         let restored = try observedTransportPosition(
             session, id: readStep(), phase: "phase_b.restore_readback")
-        let restoredBar = try bar(of: restored.raw, phase: "phase_b.restore_readback")
+        let restoredBar = try observedBar(of: restored.raw, phase: "phase_b.restore_readback")
         guard restoredBar == preBar else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
@@ -2307,7 +2519,7 @@ struct QualificationTransport: Sendable {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
         let pre = try observedMarkerCount(
-            session, id: nextID, expecting: nil, phase: "phase_b.pre_state")
+            session, id: nextID, settling: .read, phase: "phase_b.pre_state")
         guard markerIndex(named: probeName, in: pre.raw) == nil else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.pre_state: a marker named \(probeName) is already in the project — an "
@@ -2340,7 +2552,7 @@ struct QualificationTransport: Sendable {
                 var cleanupID = nextID + 900
                 for _ in 0..<4 {
                     guard let seen = try? observedMarkerCount(
-                        session, id: cleanupID, expecting: nil, phase: "phase_b.cleanup_readback"
+                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
                     ) else { break }
                     cleanupID += seen.spent
                     guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
@@ -2353,7 +2565,8 @@ struct QualificationTransport: Sendable {
         }
 
         let after = try observedMarkerCount(
-            session, id: nextID, expecting: pre.count + 1, phase: "phase_b.readback")
+            session, id: nextID, settling: .names(present: [probeName], absent: []),
+            phase: "phase_b.readback")
         nextID += after.spent
         guard after.count == pre.count + 1 else {
             throw QualificationTransportError.protocolViolation(
@@ -2374,7 +2587,8 @@ struct QualificationTransport: Sendable {
                 "phase_b.restore: delete_marker refused — the probe marker is still in the project")
         }
         let restored = try observedMarkerCount(
-            session, id: nextID, expecting: pre.count, phase: "phase_b.restore_readback")
+            session, id: nextID, settling: .names(present: [], absent: [probeName]),
+            phase: "phase_b.restore_readback")
         nextID += restored.spent
         guard restored.count == pre.count, markerIndex(named: probeName, in: restored.raw) == nil else {
             throw QualificationTransportError.protocolViolation(
@@ -2397,6 +2611,191 @@ struct QualificationTransport: Sendable {
             ),
             nextID
         )
+    }
+
+    /// #373 Phase B for the two marker operations that need a marker to already be there:
+    /// `navigate.rename_marker` and `navigate.delete_marker`.
+    ///
+    /// Both are run against a marker this cycle STAGES, never against one the project came with.
+    /// That is the difference between qualifying an operation and editing the user's arrangement to
+    /// do it: a rename cycle that borrowed an existing marker would be correct on paper — it puts
+    /// the name back — and would still have written to something it did not own, with a window
+    /// where a crash leaves that marker called `qualification_phase_b_probe`.
+    ///
+    /// The staged marker means the record's `preState` is the list AFTER staging, which is the
+    /// honest pre-state OF THE MUTATION rather than of the run. The staging create and the final
+    /// removal both sit outside the record, and the removal is verified on every exit for the
+    /// reason `markerCreateRestoreCycle` records: an unverified cleanup is a request.
+    private func markerStagedRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        mode: MarkerStagedMode
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        let probeName = "qualification_phase_b_probe"
+        let renamedName = "qualification_phase_b_renamed"
+
+        let original = try observedMarkerCount(
+            session, id: nextID, settling: .read, phase: "phase_b.stage_precondition")
+        nextID += original.spent
+        for leftover in [probeName, renamedName] where markerIndex(named: leftover, in: original.raw) != nil {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_precondition: a marker named \(leftover) is already in the project "
+                    + "— an earlier run left it, and this cycle cannot tell its own marker from "
+                    + "that one")
+        }
+        let staged = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: "create_marker",
+            params: ["name": probeName], phase: "phase_b.stage")
+        nextID += 1
+        guard !Self.mutationSaysItFailed(staged.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage: create_marker refused, so there is nothing to exercise "
+                    + "\(spec.id.rawValue) against: " + staged.text.prefix(220))
+        }
+        // A MARKER NOW EXISTS under one of two names, and every exit from here has to remove it.
+        var stagedMarkerNeedsRemoval = true
+        defer {
+            if stagedMarkerNeedsRemoval {
+                var cleanupID = nextID + 900
+                for _ in 0..<6 {
+                    guard let seen = try? observedMarkerCount(
+                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
+                    ) else { break }
+                    cleanupID += seen.spent
+                    // The mutation under test may have renamed it, so the cleanup looks for BOTH
+                    // names. A cleanup that only knew the name it staged would leave the marker
+                    // behind exactly when the rename half-succeeded.
+                    let index = markerIndex(named: probeName, in: seen.raw)
+                        ?? markerIndex(named: renamedName, in: seen.raw)
+                    guard let index else { break }
+                    _ = try? invoke(
+                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
+                        params: ["index": index], phase: "phase_b.cleanup")
+                    cleanupID += 1
+                }
+            }
+        }
+
+        let pre = try observedMarkerCount(
+            session, id: nextID, settling: .names(present: [probeName], absent: []),
+            phase: "phase_b.pre_state")
+        nextID += pre.spent
+        guard let stagedIndex = markerIndex(named: probeName, in: pre.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the staged marker \(probeName) is not in the list, so the "
+                    + "cycle has no target it can name")
+        }
+
+        let mutationParams: [String: Any] = switch mode {
+        case .rename: ["index": stagedIndex, "name": renamedName]
+        case .delete: ["index": stagedIndex]
+        }
+        let mutation = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
+            params: mutationParams, phase: "phase_b.mutation")
+        nextID += 1
+        guard !Self.mutationSaysItFailed(mutation.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                    + mutation.text.prefix(220))
+        }
+
+        // WAIT ON THE NAME, not the length. A rename leaves the count where it was, so a
+        // count-settled read is satisfied by the list as it stood BEFORE the write and the cycle
+        // then refuses a rename Logic actually performed — measured 2026-09-14, on this recipe's
+        // first live run.
+        let afterSettle: MarkerSettle = switch mode {
+        case .rename: .names(present: [renamedName], absent: [probeName])
+        case .delete: .names(present: [], absent: [probeName])
+        }
+        let after = try observedMarkerCount(
+            session, id: nextID, settling: afterSettle, phase: "phase_b.readback")
+        nextID += after.spent
+        switch mode {
+        case .rename:
+            guard after.count == pre.count,
+                  markerIndex(named: probeName, in: after.raw) == nil,
+                  markerIndex(named: renamedName, in: after.raw) != nil else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: after rename_marker the list must carry \(renamedName) and "
+                        + "not \(probeName), at an unchanged count of \(pre.count); it reports "
+                        + "\(after.count)")
+            }
+        case .delete:
+            guard after.count == pre.count - 1,
+                  markerIndex(named: probeName, in: after.raw) == nil else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: after delete_marker \(probeName) must be absent at a count "
+                        + "of \(pre.count - 1); the list reports \(after.count)")
+            }
+        }
+
+        // The restore's target is resolved AGAIN from the readback rather than reused from the
+        // pre-state. A delete shifts every later row down, so an index captured before the mutation
+        // names a different marker afterwards — the mistake that made an earlier version of the
+        // create cycle delete other people's markers while the count balanced.
+        let restoreCommand: String
+        let resolvedRestoreParams: [String: Any]
+        switch mode {
+        case .rename:
+            guard let renamedIndex = markerIndex(named: renamedName, in: after.raw) else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: \(renamedName) is not in the list, so the restore has no "
+                        + "target it can name")
+            }
+            restoreCommand = spec.command
+            resolvedRestoreParams = ["index": renamedIndex, "name": probeName]
+        case .delete:
+            restoreCommand = "create_marker"
+            resolvedRestoreParams = ["name": probeName]
+        }
+        let restore = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: restoreCommand,
+            params: resolvedRestoreParams, phase: "phase_b.restore")
+        nextID += 1
+        guard !Self.mutationSaysItFailed(restore.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(restoreCommand) refused the restore: "
+                    + restore.text.prefix(220))
+        }
+        let restored = try observedMarkerCount(
+            session, id: nextID,
+            settling: .names(present: [probeName], absent: [renamedName]),
+            phase: "phase_b.restore_readback")
+        nextID += restored.spent
+        guard restored.count == pre.count,
+              markerIndex(named: probeName, in: restored.raw) != nil,
+              markerIndex(named: renamedName, in: restored.raw) == nil else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: the list must be back to \(pre.count) rows carrying "
+                    + "\(probeName) and not \(renamedName); it reports \(restored.count)")
+        }
+
+        // The staged marker is still there — it is what "restored" means for these two — so the
+        // cleanup above is still owed, and the flag stays set. The record closes here; removing the
+        // staging is not part of what the operation is being qualified for.
+        _ = stagedMarkerNeedsRemoval
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    /// Which staged-marker shape a `markerStagedRestoreCycle` run is exercising.
+    enum MarkerStagedMode: Sendable {
+        /// `navigate.rename_marker`: write a new name, read it back, write the old one.
+        case rename
+        /// `navigate.delete_marker`: remove the staged marker, read its absence, re-create it.
+        case delete
     }
 
     /// ADR-001-c / #373 Phase B: the write-and-readback cycle, on one operation.

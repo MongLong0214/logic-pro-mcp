@@ -72,18 +72,58 @@ enum QualificationReadbackFreshness {
     /// The sole resource provenance that means this answer came from the AX surface.
     static let liveSourceToken = "ax_live"
 
+    /// WHERE a resource publishes its provenance and WHICH token there means "read live off the AX
+    /// surface". These are not interchangeable across resources, and the gate used to assume they
+    /// were.
+    ///
+    /// Measured 2026-09-14: `logic://mixer` publishes `data_source`, whose live value is `ax_poll`
+    /// (with `cache_stale` and `mixer_not_visible` beside it), while `logic://tracks` publishes
+    /// `source` with `ax_live`. Asking the mixer envelope for `source` gets nil, so a reading taken
+    /// off a visible Mixer was refused as not-live — the gate was asking the wrong question of that
+    /// resource rather than getting a wrong answer.
+    ///
+    /// A dialect is a FACT about a resource, not a relaxation: an entry here still has to produce
+    /// its live token, and every other admissibility check runs unchanged. Adding one for a
+    /// resource whose provenance vocabulary is not actually different would be the widening this
+    /// avoids.
+    struct ProvenanceDialect: Equatable, Sendable {
+        let key: String
+        let liveToken: String
+    }
+
+    static let defaultDialect = ProvenanceDialect(key: "source", liveToken: liveSourceToken)
+
+    /// Keyed by URI PREFIX, because `logic://mixer` and `logic://mixer/{strip}` are one resource
+    /// family emitted by one writer and share its vocabulary.
+    static let provenanceDialects: [(prefix: String, dialect: ProvenanceDialect)] = [
+        ("logic://mixer", ProvenanceDialect(key: "data_source", liveToken: "ax_poll")),
+    ]
+
+    static func dialect(for uri: String?) -> ProvenanceDialect {
+        guard let uri else { return defaultDialect }
+        return provenanceDialects.first { uri.hasPrefix($0.prefix) }?.dialect ?? defaultDialect
+    }
+
     static func verdict(
         for readbackData: Data,
+        uri: String? = nil,
         verification: VerificationPolicy,
         deadline: DeadlineClass
     ) -> Verdict {
-        verdict(for: envelope(from: readbackData), verification: verification, deadline: deadline)
+        let dialect = dialect(for: uri)
+        return verdict(
+            for: envelope(from: readbackData, dialect: dialect),
+            verification: verification,
+            deadline: deadline,
+            liveToken: dialect.liveToken
+        )
     }
 
     static func verdict(
         for envelope: Envelope,
         verification: VerificationPolicy,
-        deadline: DeadlineClass
+        deadline: DeadlineClass,
+        liveToken: String = liveSourceToken
     ) -> Verdict {
         // `readbackRequired` is the registry's live-verification contract. Read-only and
         // best-effort operations may retain their existing independent-readback semantics without
@@ -93,7 +133,7 @@ enum QualificationReadbackFreshness {
         if envelope.readable == false { return .unreadable }
         if envelope.axOccluded == true { return .axOccluded }
         if envelope.dataIsEmpty && envelope.verifiedEmpty != true { return .emptyUnverified }
-        guard envelope.source == liveSourceToken else {
+        guard envelope.source == liveToken else {
             return .notLive(source: envelope.source)
         }
 
@@ -114,7 +154,10 @@ enum QualificationReadbackFreshness {
         return .admissible
     }
 
-    private static func envelope(from readbackData: Data) -> Envelope {
+    static func envelope(
+        from readbackData: Data,
+        dialect: ProvenanceDialect = defaultDialect
+    ) -> Envelope {
         guard let object = try? JSONSerialization.jsonObject(with: readbackData) as? [String: Any]
         else {
             return Envelope(
@@ -127,7 +170,7 @@ enum QualificationReadbackFreshness {
             )
         }
         return Envelope(
-            source: object["source"] as? String,
+            source: object[dialect.key] as? String,
             readable: object["readable"] as? Bool,
             axOccluded: object["ax_occluded"] as? Bool,
             verifiedEmpty: object["verified_empty"] as? Bool,

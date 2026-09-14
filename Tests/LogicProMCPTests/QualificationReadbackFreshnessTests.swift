@@ -26,6 +26,105 @@ struct QualificationReadbackFreshnessTests {
         return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 
+    /// A `logic://mixer` body, which publishes its provenance under a different key with a
+    /// different live token than `logic://tracks` does.
+    private static func mixerReadback(
+        dataSource: String = "ax_poll",
+        cacheAge: Double = 0.02
+    ) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: [
+                "cache_age_sec": cacheAge,
+                "data_source": dataSource,
+                "ax_occluded": false,
+                "strips": [["index": 0, "volume": 0.8]],
+            ] as [String: Any],
+            options: [.sortedKeys]
+        )
+    }
+
+    @Test("a live Mixer poll is admissible when the reader names the mixer resource")
+    func mixerProvenanceIsReadUnderItsOwnKey() throws {
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.mixerReadback(),
+                uri: "logic://mixer",
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .admissible
+        )
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.mixerReadback(),
+                uri: "logic://mixer/0",
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .admissible
+        )
+    }
+
+    @Test("a Mixer that is stale or not visible is still refused")
+    func mixerNonLiveProvenanceIsRefused() throws {
+        for token in ["cache_stale", "mixer_not_visible"] {
+            #expect(
+                QualificationReadbackFreshness.verdict(
+                    for: try Self.mixerReadback(dataSource: token),
+                    uri: "logic://mixer",
+                    verification: .readbackRequired,
+                    deadline: .short
+                ) == .notLive(source: token)
+            )
+        }
+    }
+
+    /// The dialect is a fact about ONE resource family. If it leaked to every reader, a tracks body
+    /// carrying `data_source` would start passing, and the gate would have been widened rather than
+    /// corrected.
+    @Test("the mixer dialect does not travel to other resources")
+    func mixerDialectIsScopedToTheMixerResource() throws {
+        let trackShapedMixerBody = try JSONSerialization.data(
+            withJSONObject: [
+                "cache_age_sec": 0.02,
+                "data_source": "ax_poll",
+                "readable": true,
+                "ax_occluded": false,
+                "verified_empty": false,
+                "data": [["id": 1]],
+            ] as [String: Any],
+            options: [.sortedKeys]
+        )
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: trackShapedMixerBody,
+                uri: "logic://tracks",
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .notLive(source: nil)
+        )
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.mixerReadback(),
+                uri: nil,
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .notLive(source: nil)
+        )
+    }
+
+    /// `ax_live` is not the mixer's word for live, and reading the mixer with the default dialect
+    /// must not accidentally accept it either.
+    @Test("the tracks live token is not accepted on the mixer resource")
+    func tracksLiveTokenIsNotAMixerLiveToken() throws {
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.mixerReadback(dataSource: "ax_live"),
+                uri: "logic://mixer",
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .notLive(source: "ax_live")
+        )
+    }
+
     private static func verdict(
         _ readback: Data,
         verification: VerificationPolicy = .readbackRequired,
