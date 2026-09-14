@@ -585,7 +585,7 @@ enum SemanticOracleTable {
     ///
     /// So the cap is replaced by something stricter than "≤5": an explicit
     /// allowlist. A new `.custom` oracle cannot appear without editing this set,
-    /// which is the review gate the budget was reaching for.
+    /// which is the scrutiny the budget was reaching for.
     ///
     /// Phase B recommendation: add `.crossCheck` and `.implies` constraint cases;
     /// midi.list_ports, tracks.list_library, tracks.resolve_path and

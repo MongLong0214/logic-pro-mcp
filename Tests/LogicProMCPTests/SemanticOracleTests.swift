@@ -359,7 +359,7 @@ struct SemanticOracleEngineTests {
             constraints: [.valueEquals(key: "read_only", expected: .bool(true))]
         )
         // Verdicts are reduced to a plain Bool OUTSIDE the macro: this repo has
-        // a history of `#expect(optionalBool == true)` expanding to a dead
+        // a history of comparing an optional Bool against a literal, which expands to a dead
         // assertion that always passes (issue #92).
         let verdict: Bool = oracle.evaluate(
             responseData: Data("not json".utf8),

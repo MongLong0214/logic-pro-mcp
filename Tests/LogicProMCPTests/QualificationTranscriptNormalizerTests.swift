@@ -13,7 +13,8 @@ import Testing
 //
 // SPELLING IS LOAD-BEARING: every Bool assertion below is a BARE `#expect(x)` /
 // `#expect(!x)`, and every optional is unwrapped with `#require`. Under this
-// toolchain `#expect(<Bool> == true/false)`, `?? false` and `== .some(true)` are
+// toolchain, comparing a Bool against a literal — or defaulting an optional, or matching
+// `.some(...)` — inside an expectation is
 // DEAD and pass unconditionally. Value equality between non-Bool types
 // (`#expect(a == b)` over String/Data/[QualificationWireFrame]) is live and used
 // deliberately.
