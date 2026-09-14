@@ -1,0 +1,79 @@
+{
+ "id": "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "logic://mixer routing_graph, and the reference registry it resolves endpoints against",
+ "question": "ADR-008 Phase 1 is filed as BLOCKED on node identity. Is the graph unable to resolve ANY endpoint, or only some — and does its answer depend on what the client read first?",
+ "verdict": "partial",
+ "issues": [
+  "#291"
+ ],
+ "surface": "mixer.routing",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "From a FRESHLY STARTED server, call logic_system.refresh_cache and read logic://mixer, and record routing_graph.nodes/edges/complete. Then, in the same session, read logic://tracks and read logic://mixer again, and record the same three.",
+  "expected": "The first read answers nodes 0, edges 0, complete false, with partialReason naming an unresolved source endpoint for every strip. The second answers nodes 23, edges 0, complete false, with the source-endpoint reasons gone and only the output-destination ones left."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Routing/RoutingGraphPublication.swift",
+  "Sources/LogicProMCP/Resources/ResourceHandlers+StateReaders.swift",
+  "Sources/LogicProMCP/Dispatchers/TargetRefResolution.swift"
+ ],
+ "evidence": [],
+ "method": "Both reads were taken from one release binary over stdio, with a refresh_cache before each so the difference cannot be cache age. The only thing done between them was a read of logic://tracks.",
+ "observations": [
+  {
+   "read": "logic://mixer, before any logic://tracks read",
+   "nodes": 0,
+   "edges": 0,
+   "complete": false,
+   "partial_reason_classes": [
+    "unresolved source endpoint for mixer strip track_index=N: no issued trk_ reference (every strip)",
+    "unresolved output destination endpoint \"Stereo Output\" / \"출력\" for source track_index=N: no unique issued trk_ reference",
+    "unreadable output destination endpoint for source track_index=23 and 24",
+    "sends are not covered: an empty send slot exposes no AXValue, AXValueDescription, or AXTitle",
+    "project reference is unavailable"
+   ]
+  },
+  {
+   "read": "logic://tracks",
+   "effect": "binds a trk_ reference per live-identity-backed track; row 0 carries track_ref trk_E08C3842-…"
+  },
+  {
+   "read": "logic://mixer, immediately after",
+   "nodes": 23,
+   "edges": 0,
+   "complete": false,
+   "partial_reason_classes": [
+    "unresolved output destination endpoint … (unchanged)",
+    "unreadable output destination endpoint …",
+    "sends are not covered",
+    "project reference is unavailable"
+   ],
+   "note": "every source-endpoint reason is gone"
+  },
+  {
+   "code": "RoutingGraphPublication resolves endpoints with TargetRefResolver.issuedTrackReference, which LOOKS UP an already-issued reference and never binds one",
+   "note": "logic://tracks binds .track; logic://mixer binds .mixerStrip only"
+  },
+  {
+   "code": "a destination resolves only when exactly one TRACK carries the observed output label",
+   "note": "no track is called Stereo Output, so a main-output destination can never resolve through this path — that is the node-identity blocker the issue names, and the code refuses to invent an id rather than guessing"
+  }
+ ],
+ "conclusion": "The read-only routing phase of ADR-008 is not uniformly blocked: SOURCE endpoints resolve as soon as track references exist, and the graph then publishes 23 nodes with a precise account of what is still missing. The blocker is narrower than the issue's status line — it is DESTINATION identity: outputs and busses are not tracks, the registry issues no reference kind for them, and a label is correctly refused as an id. What this reading adds is a second, separable fact: the same resource answers 0 nodes or 23 for the same project depending on whether the client happened to read logic://tracks first, because the graph consumes references another reader has to have minted. That is a read-order dependency in a published resource, and a consumer polling only logic://mixer sees a permanently empty graph with a reason that points at identity rather than at ordering.",
+ "limits": [
+  "NO FIX IS PROPOSED HERE. Making logic://mixer mint the track references it needs would change a stated policy — RoutingGraphPublication's own comment says the registry is the sole source of identities and a label may select only an ALREADY-ISSUED reference — and that is an ADR-002/ADR-008 decision, not a reader's call.",
+  "Edges stayed at 0 in both reads, so nothing here establishes that edge construction works once destinations resolve. Only the source half was exercised.",
+  "Sends were never covered in either read: an empty send slot exposes no AXValue, AXValueDescription or AXTitle, which the graph reports and this reading did not probe further.",
+  "One project, 25 strips, 23 of them live-identity-backed. Two strips answered unreadable output destination and were not investigated."
+ ],
+ "supersedes": null
+}
