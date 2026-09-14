@@ -1119,6 +1119,19 @@ struct QualificationTransport: Sendable {
                                 nextID += 12
                             }
                         }
+                        if let direction = Self.historyRestoreDirection[spec.id] {
+                            do {
+                                let cycle = try historyRestoreCycle(
+                                    session, startingAt: nextID, spec: spec, direction: direction)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 40
+                            }
+                        }
                         if spec.id == .navigateGotoMarker {
                             do {
                                 let cycle = try markerNavigationRestoreCycle(
@@ -1541,6 +1554,12 @@ struct QualificationTransport: Sendable {
             result.isError == true
         )
     }
+
+    /// #373 Phase B: the two history operations, and which way each one moves the stack.
+    static let historyRestoreDirection: [OperationID: HistoryDirection] = [
+        .editUndo: .undo,
+        .editRedo: .redo,
+    ]
 
     /// #373 Phase B: the marker operations that need a marker to exist before they can run, and
     /// the staged shape each one takes. See `markerStagedRestoreCycle`.
@@ -2409,6 +2428,157 @@ struct QualificationTransport: Sendable {
                 "\(phase): logic://tracks did not report \(field) for track \(trackIndex)")
         }
         return (value, raw)
+    }
+
+    /// Which half of the undo stack a `historyRestoreCycle` run is exercising.
+    enum HistoryDirection: Sendable {
+        case undo
+        case redo
+    }
+
+    /// #373 Phase B for `edit.undo` and `edit.redo`.
+    ///
+    /// These are the clearest case the whole mode exists for. Measured 2026-09-14: `edit.undo`
+    /// reverses a track rename and reports **State B** for it —
+    /// `reason: noop_unobservable`, `verify_source: ax_edit_menu_entry`, with the detail that "the
+    /// Edit menu names the same entry before and after, so this surface cannot separate a stack
+    /// that moved from one that did not". The operation is right to refuse: the menu entry genuinely
+    /// cannot tell it. `logic://tracks` can, and supplying the confirmation the operation could not
+    /// obtain is precisely what a Phase B recipe is.
+    ///
+    /// The cycle manufactures its own undoable edit rather than undoing whatever the operator did
+    /// last. Pressing undo against an unknown stack top is not a qualification; it is an edit to
+    /// somebody else's project whose effect this recipe could not even name.
+    private func historyRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        direction: HistoryDirection
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        let trackIndex = 0
+        let probeName = "qualification_phase_b_probe"
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let original = try observedTrackString(
+            session, id: readStep(), trackIndex: trackIndex, field: "name",
+            phase: "phase_b.stage_precondition")
+        guard original.value != probeName else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_precondition: track \(trackIndex) is already called \(probeName) "
+                    + "— an earlier run left it, and this cycle cannot tell its own edit from that "
+                    + "one")
+        }
+        let staged = try invoke(
+            session, id: step(), tool: "logic_tracks", command: "rename",
+            params: ["index": trackIndex, "name": probeName], phase: "phase_b.stage")
+        guard !Self.mutationSaysItFailed(staged.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage: rename refused, so there is no edit for \(spec.id.rawValue) to "
+                    + "move over: " + staged.text.prefix(220))
+        }
+        // THE TRACK IS NOW RENAMED and every exit has to put the original back. The cleanup
+        // WRITES the name rather than pressing undo again: undo is the operation under test, and a
+        // cleanup that depends on it cannot be trusted to run when the thing it depends on is what
+        // just failed.
+        var nameNeedsRestoring = true
+        defer {
+            if nameNeedsRestoring {
+                var cleanupID = nextID + 900
+                for _ in 0..<4 {
+                    guard let seen = try? observedTrackString(
+                        session, id: cleanupID, trackIndex: trackIndex, field: "name",
+                        phase: "phase_b.cleanup_readback") else { break }
+                    cleanupID += 2
+                    if seen.value == original.value { break }
+                    _ = try? invoke(
+                        session, id: cleanupID, tool: "logic_tracks", command: "rename",
+                        params: ["index": trackIndex, "name": original.value],
+                        phase: "phase_b.cleanup")
+                    cleanupID += 1
+                }
+            }
+        }
+        let renamed = try observedTrackString(
+            session, id: readStep(), trackIndex: trackIndex, field: "name",
+            phase: "phase_b.stage_readback")
+        guard renamed.value == probeName else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_readback: track \(trackIndex) reads \(renamed.value), so the edit "
+                    + "this cycle meant to stage is not on the stack")
+        }
+        if direction == .redo {
+            // `redo` needs something to redo, so the staged edit is undone FIRST. That undo is
+            // arrangement, not evidence: it is not what the record reports on, and if it fails the
+            // cycle refuses rather than reporting a redo that had nothing to move.
+            _ = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: "undo", params: [:],
+                phase: "phase_b.stage_undo")
+            let reverted = try observedTrackString(
+                session, id: readStep(), trackIndex: trackIndex, field: "name",
+                phase: "phase_b.stage_undo_readback")
+            guard reverted.value == original.value else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.stage_undo_readback: track \(trackIndex) reads \(reverted.value), "
+                        + "so there is nothing for redo to move forward to")
+            }
+        }
+
+        let expectedAfter = direction == .undo ? original.value : probeName
+        let expectedRestored = direction == .undo ? probeName : original.value
+        let restoreCommand = direction == .undo ? "redo" : "undo"
+
+        let pre = try observedTrackString(
+            session, id: readStep(), trackIndex: trackIndex, field: "name",
+            phase: "phase_b.pre_state")
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command, params: [:],
+            phase: "phase_b.mutation")
+        guard !Self.mutationSaysItFailed(mutation.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                    + mutation.text.prefix(220))
+        }
+        let after = try observedTrackString(
+            session, id: readStep(), trackIndex: trackIndex, field: "name",
+            phase: "phase_b.readback")
+        guard after.value == expectedAfter else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: track \(trackIndex) reads \(after.value), expected "
+                    + "\(expectedAfter)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: restoreCommand, params: [:],
+            phase: "phase_b.restore")
+        guard !Self.mutationSaysItFailed(restore.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore: \(restoreCommand) refused the restore: "
+                    + restore.text.prefix(220))
+        }
+        let restored = try observedTrackString(
+            session, id: readStep(), trackIndex: trackIndex, field: "name",
+            phase: "phase_b.restore_readback")
+        guard restored.value == expectedRestored else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: track \(trackIndex) reads \(restored.value), expected "
+                    + "\(expectedRestored)")
+        }
+        // The cycle is closed and the track may still be called `probeName` — for `undo` the
+        // restore is a redo, which puts the staged name back. The cleanup below is what returns the
+        // fixture, and the flag stays set so it runs.
+        _ = nameNeedsRestoring
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
     }
 
     /// #373 Phase B for a PARAMETERLESS toggle, where the same call is both the mutation and the
