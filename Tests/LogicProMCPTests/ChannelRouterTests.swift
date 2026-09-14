@@ -951,7 +951,7 @@ private func trackRow(_ name: String, _ ref: String) -> [String: Any] {
         ["name": "오디오 1", "track_ref": "trk_new", "isSelected": true],
     ]
     #expect(
-        QualificationTransport.soleNewlySelectedTrackIndex(in: rows, excluding: pre) == 1
+        QualificationTransport.soleNewlySelectedTrack(in: rows, excluding: pre) == "trk_new"
     )
 }
 
@@ -962,16 +962,49 @@ private func trackRow(_ name: String, _ ref: String) -> [String: Any] {
     let selectedButOld: [[String: Any]] = [
         ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": true],
     ]
-    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: selectedButOld, excluding: pre) == nil)
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: selectedButOld, excluding: pre) == nil)
 
     let twoNewSelected: [[String: Any]] = [
         ["name": "a", "track_ref": "trk_x", "isSelected": true],
         ["name": "b", "track_ref": "trk_y", "isSelected": true],
     ]
-    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: twoNewSelected, excluding: pre) == nil)
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: twoNewSelected, excluding: pre) == nil)
 
     let noneSelected: [[String: Any]] = [
         ["name": "a", "track_ref": "trk_x", "isSelected": false],
     ]
-    #expect(QualificationTransport.soleNewlySelectedTrackIndex(in: noneSelected, excluding: pre) == nil)
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: noneSelected, excluding: pre) == nil)
+}
+
+/// The handle is a REFERENCE, never a row position. `tracks.rename` is driven by a bare `index`
+/// (`AccessibilityChannel+Tracks.swift:1714`), so the second identity that a rename would give the
+/// cycle would cost it the property the project is removing everywhere else. The reference the
+/// selection yields is already an identity the cycle controls, and it survives a row order that
+/// does not match the pre-state's.
+@Test func phaseCHandleIsAReferenceAndNotARowPosition() {
+    let pre = ["trk_a", "trk_b"]
+    let reordered: [[String: Any]] = [
+        ["name": "new", "track_ref": "trk_new", "isSelected": true],
+        ["name": "b", "track_ref": "trk_b", "isSelected": false],
+        ["name": "a", "track_ref": "trk_a", "isSelected": false],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: reordered, excluding: pre) == "trk_new")
+}
+
+/// Two sources that answer with DIFFERENT tracks is not a tie to break — one of them is wrong and
+/// the cycle does not know which. This is the shape both cycles refuse on, stated over the helpers
+/// the refusal is built from.
+@Test func phaseCsTwoSourcesCanDisagreeAndThatIsARefusal() {
+    let pre = ["trk_existing"]
+    let rows: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": false],
+        ["name": "오디오 1", "track_ref": "trk_named", "isSelected": false],
+        ["name": "오디오 2", "track_ref": "trk_selected", "isSelected": true],
+    ]
+    let named = QualificationTransport.soleCreatedTrack(
+        named: "오디오 1", in: rows, excluding: pre)
+    let selected = QualificationTransport.soleNewlySelectedTrack(in: rows, excluding: pre)
+    #expect(named == "trk_named")
+    #expect(selected == "trk_selected")
+    #expect(named != selected)
 }

@@ -3136,6 +3136,11 @@ struct QualificationTransport: Sendable {
         // the create and the delete is a cycle that edits the project on failure — the lesson the
         // marker cycle paid for, and a track costs more than a marker.
         var createdNeedsRemoval = true
+        // THE HANDLE THE CYCLE OWNS. Set once, at the instant the new track is unambiguous, and
+        // read by the cleanup below. Asking again later is what failed: by the time the cleanup
+        // runs, the only question it could ask was "what did the create say it made", and a create
+        // whose modal reconciliation came back incomplete says nothing at all.
+        var createdHandle: String?
         defer {
             if createdNeedsRemoval {
                 var cleanupID = nextID + 900
@@ -3161,15 +3166,28 @@ struct QualificationTransport: Sendable {
                     // that is new, with exactly one match. A cleanup allowed to delete "anything
                     // new" is the hazard, not the safety net — under a stack expansion every newly
                     // visible child looks new.
-                    guard let extra = Self.soleCreatedTrack(
+                    // THREE WAYS TO NAME IT, in order of how much the cycle controls them, and a
+                    // refusal when none answers. The carried handle is the cycle's own and needs no
+                    // one else's readback; the create's reported name is what the first version
+                    // relied on ALONE, and a run that landed carried none of it; the selection is
+                    // re-derived here for the case where the handle was never set because the
+                    // readback itself threw.
+                    let byHandle = createdHandle.flatMap { seen.refs.contains($0) ? $0 : nil }
+                    let byName = Self.soleCreatedTrack(
                         named: Self.createdTrackName(from: mutation.text),
-                        in: seen.rows, excluding: pre.refs) else {
-                        cleanup.note("no sole match for name "
-                            + (Self.createdTrackName(from: mutation.text) ?? "<none reported>")
-                            + " — nothing deleted")
+                        in: seen.rows, excluding: pre.refs)
+                    let bySelection = Self.soleNewlySelectedTrack(
+                        in: seen.rows, excluding: pre.refs)
+                    guard let extra = byHandle ?? byName ?? bySelection else {
+                        cleanup.note("no handle: carried="
+                            + (createdHandle ?? "<none>")
+                            + " name=" + (Self.createdTrackName(from: mutation.text) ?? "<none reported>")
+                            + " selection=<none sole> — nothing deleted")
                         break
                     }
-                    cleanup.note("deleting \(extra)")
+                    cleanup.note("deleting \(extra) via "
+                        + (byHandle != nil ? "carried handle"
+                            : byName != nil ? "reported name" : "selection"))
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
@@ -3216,18 +3234,31 @@ struct QualificationTransport: Sendable {
         // The created track must match BOTH what the operation says it made and a reference that
         // was not in the pre-state, and there must be exactly one such track. "Any new reference"
         // is not safe: under a stack expansion every newly visible child is new.
-        guard let createdName = Self.createdTrackName(from: mutation.text) else {
+        // The created track must be identified by something OBSERVED, and the first version of this
+        // accepted exactly one source: the name the create reported. Measured 2026-09-15, a create
+        // that landed reported no name at all, so the cycle had nothing to remove and left the
+        // track in the operator's project. Logic SELECTS a newly created track and it is the only
+        // selected one, so the selection answers where the report does not — and neither source is
+        // allowed to point at a reference that was already there.
+        let createdName = Self.createdTrackName(from: mutation.text)
+        let named = Self.soleCreatedTrack(named: createdName, in: after.rows, excluding: pre.refs)
+        let selected = Self.soleNewlySelectedTrack(in: after.rows, excluding: pre.refs)
+        guard let createdRef = named ?? selected else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.readback: \(spec.id.rawValue) did not report which track it created "
-                    + "(no observed_track_name), so the cycle cannot name what to remove and will "
-                    + "not delete by guess")
+                "phase_c.readback: \(spec.id.rawValue) left exactly one new track but the cycle "
+                    + "cannot say which: the reported name is "
+                    + (createdName.map { "'\($0)'" } ?? "absent")
+                    + " and no single new row is selected — it will not delete by guess")
         }
-        guard let createdRef = Self.soleCreatedTrack(
-            named: createdName, in: after.rows, excluding: pre.refs) else {
+        // Two sources that answer with DIFFERENT tracks is not a tie to break. One of them is wrong
+        // and the cycle does not know which, so it removes nothing.
+        if let named, let selected, named != selected {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.readback: the created name '\(createdName)' does not identify exactly one "
-                    + "track with a reference that is new, and the cycle deletes only when it does")
+                "phase_c.readback: the reported name points at \(named) and the selection at "
+                    + "\(selected); the cycle deletes only what both agree on or what only one "
+                    + "of them can see")
         }
+        createdHandle = createdRef
         let restore = try invoke(
             session, id: nextID, tool: "logic_tracks", command: "delete",
             params: ["target_ref": createdRef], phase: "phase_c.restore",
@@ -3298,6 +3329,10 @@ struct QualificationTransport: Sendable {
         // A TRACK NOW EXISTS. Every exit removes it, waiting for it to appear first and verifying
         // that it went — the shape the create cycle had to learn after it leaked one.
         var stagedNeedsRemoval = true
+        // The handle the cycle owns, set the moment the staged track is unambiguous. It is
+        // reassigned after the restore, because by then the track this cleanup must remove is the
+        // REPLACEMENT and not the one that was staged.
+        var stagedHandle: String?
         defer {
             if stagedNeedsRemoval {
                 var cleanupID = nextID + 900
@@ -3306,9 +3341,13 @@ struct QualificationTransport: Sendable {
                         session, id: cleanupID, awaitingCount: original.count + 1,
                         phase: "phase_c.cleanup_readback") else { break }
                     cleanupID += seen.spent
-                    guard let extra = Self.soleCreatedTrack(
-                        named: Self.createdTrackName(from: staged.text),
-                        in: seen.rows, excluding: original.refs) else { break }
+                    let byHandle = stagedHandle.flatMap { seen.refs.contains($0) ? $0 : nil }
+                    guard let extra = byHandle
+                        ?? Self.soleCreatedTrack(
+                            named: Self.createdTrackName(from: staged.text),
+                            in: seen.rows, excluding: original.refs)
+                        ?? Self.soleNewlySelectedTrack(in: seen.rows, excluding: original.refs)
+                    else { break }
                     _ = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "delete",
                         params: ["target_ref": extra], phase: "phase_c.cleanup")
@@ -3325,17 +3364,25 @@ struct QualificationTransport: Sendable {
         let pre = try observedTrackInventory(
             session, id: nextID, awaitingCount: original.count + 1, phase: "phase_c.pre_state")
         nextID += pre.spent
-        guard let stagedName = Self.createdTrackName(from: staged.text) else {
+        let stagedName = Self.createdTrackName(from: staged.text)
+        let stagedByName = Self.soleCreatedTrack(
+            named: stagedName, in: pre.rows, excluding: original.refs)
+        let stagedBySelection = Self.soleNewlySelectedTrack(
+            in: pre.rows, excluding: original.refs)
+        guard let stagedRef = stagedByName ?? stagedBySelection else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.pre_state: create_audio did not report which track it made, so the cycle "
-                    + "has no target it can name and will not delete by guess")
+                "phase_c.pre_state: create_audio left exactly one new track but the cycle cannot "
+                    + "say which: the reported name is "
+                    + (stagedName.map { "'\($0)'" } ?? "absent")
+                    + " and no single new row is selected — it will not delete by guess")
         }
-        guard let stagedRef = Self.soleCreatedTrack(
-            named: stagedName, in: pre.rows, excluding: original.refs) else {
+        if let stagedByName, let stagedBySelection, stagedByName != stagedBySelection {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.pre_state: the staged name '\(stagedName)' does not identify exactly one "
-                    + "track with a reference that is new, and the cycle deletes only when it does")
+                "phase_c.pre_state: the reported name points at \(stagedByName) and the selection "
+                    + "at \(stagedBySelection); the cycle deletes only what both agree on or what "
+                    + "only one of them can see")
         }
+        stagedHandle = stagedRef
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
             params: ["target_ref": stagedRef], phase: "phase_c.mutation",
@@ -3370,6 +3417,10 @@ struct QualificationTransport: Sendable {
                 "phase_c.restore: create_audio refused the restore: " + restore.text.prefix(220))
         }
         stagedNeedsRemoval = true
+        // THE STAGED REFERENCE IS DEAD HERE — the readback above proved it is gone. Leaving it in
+        // the handle would point the cleanup at a track that no longer exists and, worse, make it
+        // look like the cleanup had an answer. Clear it before the restore's own track appears.
+        stagedHandle = nil
         let restored = try observedTrackInventory(
             session, id: nextID, awaitingCount: original.count + 1,
             phase: "phase_c.restore_readback")
@@ -3388,6 +3439,18 @@ struct QualificationTransport: Sendable {
                     + "exactly one replacement added; count is \(restored.count), expected "
                     + "\(original.count + 1)")
         }
+        // The replacement is what the cleanup must now remove. Same two sources, same refusal when
+        // they disagree — and when neither answers the cleanup re-derives, which is why clearing
+        // the dead handle above matters more than setting this one.
+        let replacementByName = Self.soleCreatedTrack(
+            named: Self.createdTrackName(from: restore.text),
+            in: restored.rows, excluding: original.refs)
+        let replacementBySelection = Self.soleNewlySelectedTrack(
+            in: restored.rows, excluding: original.refs)
+        if replacementByName == nil || replacementBySelection == nil
+            || replacementByName == replacementBySelection {
+            stagedHandle = replacementByName ?? replacementBySelection
+        }
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
@@ -3401,29 +3464,33 @@ struct QualificationTransport: Sendable {
         )
     }
 
-    /// The name a Phase C cycle gives the track it just made, so it owns the handle.
+    /// The reference of the sole SELECTED row whose reference is new, or nil when that is not
+    /// exactly one row.
     ///
     /// The cycle cannot rely on the create to name what it created: measured 2026-09-15, a create
     /// that LANDED reported no `observed_track_name` because its own modal reconciliation came back
     /// incomplete, and the cleanup then had nothing it could safely delete. Logic selects a newly
     /// created track and it is the only selected one — measured the same day, twice — so the cycle
-    /// takes that as its handle ONCE, immediately, and renames the track to this. From then on the
-    /// identity is the cycle's own and does not depend on another operation's readback.
-    static let phaseCProbeTrackName = "qualification_phase_c_probe"
-
-    /// The index of the sole selected row whose reference is new, or nil when that is not exactly
-    /// one row. The index is read from an OBSERVED property at that instant and used immediately;
-    /// it is never carried across a mutation, which is the rule that kept the marker cycles honest.
-    static func soleNewlySelectedTrackIndex(
+    /// takes THAT as its handle, once and immediately, and carries the reference rather than asking
+    /// again later.
+    ///
+    /// The handle is a reference, never a row position. Renaming the track to a name the cycle owns
+    /// would be a second identity, but `tracks.rename` is driven by a bare `index`
+    /// (`AccessibilityChannel+Tracks.swift:1714`), so taking that route would put positional
+    /// targeting back inside the harness to remove a dependency on a readback. The reference is
+    /// already an identity the cycle controls; a second one is not worth that.
+    static func soleNewlySelectedTrack(
         in rows: [[String: Any]],
         excluding preStateRefs: [String]
-    ) -> Int? {
+    ) -> String? {
         let known = Set(preStateRefs)
-        let matches = rows.enumerated().filter { _, row in
-            (row["isSelected"] as? Bool) == true
-                && (row["track_ref"] as? String).map { !known.contains($0) } == true
+        let matches = rows.compactMap { row -> String? in
+            guard (row["isSelected"] as? Bool) == true,
+                  let ref = row["track_ref"] as? String,
+                  !known.contains(ref) else { return nil }
+            return ref
         }
-        return matches.count == 1 ? matches[0].offset : nil
+        return matches.count == 1 ? matches[0] : nil
     }
 
     /// What a Phase C cleanup actually did, written as it happens so a refusal can carry it.
