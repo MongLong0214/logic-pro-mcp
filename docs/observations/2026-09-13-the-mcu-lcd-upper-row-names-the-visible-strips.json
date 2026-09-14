@@ -6,7 +6,7 @@
   "question": "Is there a readback that binds an MCU strip index to a channel, so a strip-relative operation can name the channel it is about to write to?",
   "verdict": "partial",
   "issues": [
-    "#862"
+    862
   ],
   "surface": "system.midi",
   "host": {

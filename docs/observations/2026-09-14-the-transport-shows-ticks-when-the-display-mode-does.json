@@ -6,9 +6,9 @@
   "question": "A reading three hours earlier found the transport answering bar.beat and called a region start tick unreadable, while naming the display mode as an open route. Does a mode exist that shows ticks, and can the product select it without coordinates?",
   "verdict": "works",
   "issues": [
-    "#293",
-    "#302",
-    "#303"
+    293,
+    302,
+    303
   ],
   "surface": "arrange.transport",
   "host": {

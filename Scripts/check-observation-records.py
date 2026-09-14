@@ -125,6 +125,20 @@ def check(path):
         bad.append(f"{stem}: verdict {doc['verdict']!r} is not one of {VERDICTS}")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(doc["date"])):
         bad.append(f"{stem}: date {doc['date']!r} is not YYYY-MM-DD")
+
+    # `issues` is consumed as a NUMBER: check-observations-cover-live-walls.py builds a set of ints
+    # from it and matches roadmap rows against that set. A string like "#306" is not the same key as
+    # 306, so a record written that way covers nothing and reads as if it covers something. It also
+    # raised a ValueError in that guard rather than being reported here, which is the wrong file to
+    # find out in. Every record written before 2026-09-13 used plain integers; 14 written after the
+    # guard stopped running used "#NNN", which is exactly what an unwatched convention does.
+    if not isinstance(doc["issues"], list):
+        bad.append(f"{stem}: issues must be a list of integers, not {type(doc['issues']).__name__}")
+    else:
+        for n in doc["issues"]:
+            if not isinstance(n, int) or isinstance(n, bool):
+                bad.append(f"{stem}: issues entry {n!r} must be an integer issue number, not a string "
+                           f"— write 306, not \"#306\"")
     if not stem.startswith(str(doc["date"])):
         bad.append(f"{stem}: filename must start with the measurement date {doc['date']}")
 

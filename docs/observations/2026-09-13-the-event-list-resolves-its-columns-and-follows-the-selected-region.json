@@ -6,8 +6,8 @@
   "question": "Does the Event List readback still fail to resolve its columns, as #302 records?",
   "verdict": "partial",
   "issues": [
-    "#302",
-    "#293"
+    302,
+    293
   ],
   "surface": "system.midi",
   "host": {

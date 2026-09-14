@@ -6,8 +6,8 @@
   "question": "ADR-011 records these two attributes as NOT swept, after AXTitleUIElement was measured absent on every Compressor slider. Does either one pair a value-bearing control with the text that names it?",
   "verdict": "partial",
   "issues": [
-    "#299",
-    "#292"
+    299,
+    292
   ],
   "surface": "plugin.native_view",
   "host": {

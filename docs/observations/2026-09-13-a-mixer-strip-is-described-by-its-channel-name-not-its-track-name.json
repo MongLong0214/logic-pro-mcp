@@ -6,7 +6,7 @@
   "question": "Does renaming a track change the name a mixer strip answers to in the AX tree?",
   "verdict": "wall",
   "issues": [
-    "#306"
+    306
   ],
   "surface": "mixer.channel_strips",
   "host": {

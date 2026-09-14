@@ -6,7 +6,7 @@
   "question": "How many of the catalog's Channel EQ parameters actually reach State A on a live plug-in, now that a control coarser than one raw unit can be walked?",
   "verdict": "partial",
   "issues": [
-    "#292"
+    292
   ],
   "surface": "plugin.controls_view",
   "host": {
