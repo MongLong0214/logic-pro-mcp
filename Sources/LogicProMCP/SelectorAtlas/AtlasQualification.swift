@@ -1,23 +1,21 @@
 import Foundation
 
-/// The atlas diff, and what a run should conclude from it.
+/// The atlas diff as a qualification step.
 ///
 /// ADR-007 asks that a new Logic version's qualification include an atlas diff. `AtlasDiff` scores
-/// baselines; this decides what to DO with the answer.
+/// baselines; this decides what a qualification run should DO with the answer, and it deliberately
+/// adds no field to the attestation: the result is a `QualificationCase` like any other, so it
+/// lands in `total`/`passed`/`failed` and in the case manifest without a schema change. A new field
+/// would have needed a schema version, and a step whose whole claim is "this refuses" should not
+/// arrive by changing what every consumer must parse.
 ///
-/// THE QUALIFICATION RUN THIS WAS BUILT TO FEED NO LONGER EXISTS. It was written to emit a
-/// `QualificationCase` that would land in an attestation's `total`/`passed`/`failed` and in a case
-/// manifest, deliberately without adding a field so no schema version was needed. That whole
-/// subsystem was removed on 2026-09-13 with ADR-001: `QualificationCase`,
-/// `QualificationAttestation`, `PromotionGate` and `QualificationTransport` are gone from the tree
-/// — measured, not assumed, by grepping `Sources/` for each (the only surviving mention of
-/// `QualificationCase` anywhere was this comment).
-///
-/// What survives is the decision itself, which is the part worth keeping: `outcome(armed:pairs:
-/// dropped:)` is pure, and `--probe-atlas-diff` in `MainEntrypoint` drives it against real captured
-/// pairs. So the logic is reachable and testable; what it has no consumer for is a case to emit
-/// into. When a qualification run exists again, that is the seam to wire, and the
-/// no-new-schema-field reasoning above is still the right reasoning for it.
+/// HISTORY WORTH KEEPING, because this file has now said both things. The qualification subsystem
+/// was removed on 2026-09-13 with ADR-001, and for a day this comment correctly said the run it
+/// feeds did not exist — `caseFor` was deleted with it and `QualificationCase` survived nowhere but
+/// in prose. The owner reversed that on 2026-09-14 and the subsystem is restored, so the paragraph
+/// above is true again. The reason to record the round trip rather than quietly revert: a reader
+/// who finds a comment describing a destination should be able to tell a stale claim from a
+/// restored one, and this file was both within two days.
 ///
 /// WHAT DECIDES WHETHER IT RUNS
 /// ----------------------------
@@ -85,6 +83,54 @@ enum AtlasQualification {
     ///
     /// A count tells a reader that something moved; the names tell them which operations are at
     /// risk, which is the whole reason `SelectorDrift` carries `affectedOperations`.
+    /// The case an outcome produces, or nil when the run is not armed.
+    ///
+    /// `.readOnlyOnly` fails too. The verdict's own vocabulary distinguishes "reuse everything"
+    /// from "reads only", and a qualification run is asking whether this release may be qualified
+    /// for the mutating operations the atlas guards — so anything short of full reuse is a no for
+    /// the question being asked here, whatever it may allow elsewhere.
+    /// - Parameter axis: the run's own axis, passed in rather than invented. The atlas result is
+    ///   about the variant and LOCALE this run measured — a case filed under a different axis would
+    ///   read as a claim about a Logic nobody looked at.
+    static func caseFor(
+        _ outcome: Outcome,
+        axis: QualificationAxis,
+        binarySHA256: String,
+        traceID: String
+    ) -> QualificationCase? {
+        let passed: Bool
+        let reason: String?
+        switch outcome {
+        case .notArmed:
+            return nil
+        case let .noBaselines(why):
+            passed = false
+            reason = why
+        case let .diffed(verdict, drifts, unmeasured, dropped):
+            passed = verdict == .reuseFull
+            reason = passed ? nil : describe(
+                verdict: verdict, drifts: drifts, unmeasured: unmeasured, dropped: dropped)
+        }
+        return QualificationCase(
+            id: "atlas.drift_diff",
+            status: passed ? .passed : .failed,
+            tool: "selector_atlas",
+            command: "drift_diff",
+            traceID: traceID,
+            verified: passed,
+            evidenceFiles: [],
+            reason: reason,
+            binarySHA256: binarySHA256,
+            axis: axis,
+            operationID: "atlas.drift_diff",
+            operationRequestID: nil,
+            verificationKind: .readResponse,
+            deferral: nil,
+            readback: nil,
+            availabilityReason: nil
+        )
+    }
+
     static func describe(
         verdict: QualificationReuse,
         drifts: [SelectorDrift],
