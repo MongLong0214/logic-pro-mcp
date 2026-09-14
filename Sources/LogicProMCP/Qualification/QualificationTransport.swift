@@ -1119,7 +1119,7 @@ struct QualificationTransport: Sendable {
                                 nextID += 12
                             }
                         }
-                        if spec.id == .tracksDelete {
+                        if Self.phaseCTrackCyclesEnabled, spec.id == .tracksDelete {
                             do {
                                 let cycle = try trackStagedDeleteCycle(
                                     session, startingAt: nextID, spec: spec)
@@ -1132,7 +1132,8 @@ struct QualificationTransport: Sendable {
                                 nextID += 60
                             }
                         }
-                        if Self.trackCreateRestoreOperations.contains(spec.id) {
+                        if Self.phaseCTrackCyclesEnabled,
+                           Self.trackCreateRestoreOperations.contains(spec.id) {
                             do {
                                 let cycle = try trackCreateRestoreCycle(
                                     session, startingAt: nextID, spec: spec)
@@ -3170,9 +3171,22 @@ struct QualificationTransport: Sendable {
         let after = try observedTrackInventory(
             session, id: nextID, awaitingCount: pre.count + 1, phase: "phase_c.readback")
         nextID += after.spent
-        guard after.count == pre.count + 1 else {
+        // A COUNT IS NOT A STABLE QUANTITY HERE. `logic://tracks` reports the rows the arrange rail
+        // is SHOWING, so expanding a track stack changes what the number counts without changing
+        // the project. Measured 2026-09-15: a run this check called clean had swapped the
+        // operator's first track for one of its own — 19 rows before and 19 after, `complete`
+        // false then true. Two readings taken at different completeness are not readings of the
+        // same thing, and the cycle refuses rather than comparing them.
+        guard after.complete == pre.complete else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.readback: track count is \(after.count), expected \(pre.count + 1); "
+                "phase_c.readback: the track rail's completeness changed between readings "
+                    + "(\(String(describing: pre.complete)) -> \(String(describing: after.complete))), "
+                    + "so the before and after are not readings of the same thing")
+        }
+        guard Set(after.refs).isSuperset(of: pre.refs), after.count == pre.count + 1 else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.readback: the pre-state references must all still be present and exactly "
+                    + "one must be added; count is \(after.count), expected \(pre.count + 1); "
                     + "the operation answered: " + mutation.text.prefix(220))
         }
         // The created track is the one whose reference was NOT there before. Identity, not position.
@@ -3194,11 +3208,20 @@ struct QualificationTransport: Sendable {
         let restored = try observedTrackInventory(
             session, id: nextID, awaitingCount: pre.count, phase: "phase_c.restore_readback")
         nextID += restored.spent
-        guard restored.count == pre.count, !restored.refs.contains(createdRef) else {
+        guard restored.complete == pre.complete else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.restore_readback: track count is \(restored.count), expected "
-                    + "\(pre.count), and the created reference must be gone — a balanced count is "
-                    + "not proof the right track went")
+                "phase_c.restore_readback: the track rail's completeness changed "
+                    + "(\(String(describing: pre.complete)) -> \(String(describing: restored.complete))), "
+                    + "so this reading cannot be compared with the pre-state")
+        }
+        // THE SET, not its size. A balanced count is not proof the right track went — and on a
+        // project with a track stack it is not even proof the same rows are being counted.
+        guard Set(restored.refs) == Set(pre.refs) else {
+            let lost = Set(pre.refs).subtracting(restored.refs)
+            let extra = Set(restored.refs).subtracting(pre.refs)
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.restore_readback: the project did not come back — "
+                    + "\(lost.count) reference(s) missing, \(extra.count) left behind")
         }
         createdNeedsRemoval = false
         return (
@@ -3286,7 +3309,12 @@ struct QualificationTransport: Sendable {
         let after = try observedTrackInventory(
             session, id: nextID, awaitingCount: original.count, phase: "phase_c.readback")
         nextID += after.spent
-        guard after.count == original.count, !after.refs.contains(stagedRef) else {
+        guard after.complete == original.complete else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.readback: the track rail's completeness changed between readings, so the "
+                    + "before and after are not readings of the same thing")
+        }
+        guard Set(after.refs) == Set(original.refs), !after.refs.contains(stagedRef) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_c.readback: the staged track must be gone at a count of \(original.count); "
                     + "the list reports \(after.count) and the reference is "
@@ -3306,9 +3334,18 @@ struct QualificationTransport: Sendable {
             session, id: nextID, awaitingCount: original.count + 1,
             phase: "phase_c.restore_readback")
         nextID += restored.spent
-        guard restored.count == original.count + 1 else {
+        guard restored.complete == original.complete else {
             throw QualificationTransportError.protocolViolation(
-                "phase_c.restore_readback: track count is \(restored.count), expected "
+                "phase_c.restore_readback: the track rail's completeness changed, so this reading "
+                    + "cannot be compared with the pre-state")
+        }
+        // Every reference that was there before must still be there, plus exactly one new one —
+        // the replacement. The restore returns the COUNT and the KIND, never the identity.
+        guard Set(restored.refs).isSuperset(of: original.refs),
+              restored.count == original.count + 1 else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.restore_readback: the pre-state references must all still be present with "
+                    + "exactly one replacement added; count is \(restored.count), expected "
                     + "\(original.count + 1)")
         }
         return (
@@ -3334,9 +3371,9 @@ struct QualificationTransport: Sendable {
         id: Int,
         awaitingCount: Int? = nil,
         phase: String
-    ) throws -> (count: Int, refs: [String], raw: String, spent: Int) {
+    ) throws -> (count: Int, refs: [String], complete: Bool?, raw: String, spent: Int) {
         var spent = 0
-        var last: (Int, [String], String)?
+        var last: (Int, [String], Bool?, String)?
         for attempt in 0..<6 {
             if attempt > 0 { Thread.sleep(forTimeInterval: 0.8) }
             _ = try? invoke(
@@ -3353,14 +3390,14 @@ struct QualificationTransport: Sendable {
                     "\(phase): logic://tracks did not report any rows")
             }
             let refs = rows.compactMap { $0["track_ref"] as? String }
-            last = (rows.count, refs, raw)
+            last = (rows.count, refs, object["complete"] as? Bool, raw)
             if awaitingCount == nil || rows.count == awaitingCount { break }
         }
         guard let last else {
             throw QualificationTransportError.protocolViolation(
                 "\(phase): logic://tracks was never read")
         }
-        return (last.0, last.1, last.2, spent)
+        return (last.0, last.1, last.2, last.3, spent)
     }
 
     /// #373 Phase C: the track creations whose restore is a delete of what they made.
@@ -3378,10 +3415,20 @@ struct QualificationTransport: Sendable {
     ///
     /// Membership here is what a sweep executes; the cycle below stays so the next attempt starts
     /// from measured code rather than from a description of it.
-    /// **EMPTY ON PURPOSE.** See `trackCreateRestoreCycle` — the count these cycles compare is not
-    /// a stable quantity on a project with a track stack, and a run that looked clean by count had
-    /// in fact swapped the operator's first track for one of its own.
-    static let trackCreateRestoreOperations: Set<OperationID> = []
+    /// ONE switch for every Phase C track cycle, because two switches is how the last leak got
+    /// out: the create cycle was disabled and the staged-DELETE cycle — which stages by creating a
+    /// track — was not, so it kept running and kept leaking. A kill switch that does not cover
+    /// every path that writes is not a kill switch.
+    ///
+    /// **false** until a leaking run is explained AND a clean one is reproducible. The reference-set
+    /// verification and the completeness refusal below are necessary and are not, on their own,
+    /// that proof.
+    static let phaseCTrackCyclesEnabled = false
+
+    static let trackCreateRestoreOperations: Set<OperationID> = [
+        .tracksCreateAudio,
+        .tracksCreateInstrument,
+    ]
 
     /// Which staged-marker shape a `markerStagedRestoreCycle` run is exercising.
     enum MarkerStagedMode: Sendable {
