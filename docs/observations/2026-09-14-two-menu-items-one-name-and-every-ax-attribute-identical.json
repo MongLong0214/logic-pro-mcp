@@ -1,0 +1,91 @@
+{
+ "id": "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "Logic Pro -> 컨트롤 서피스 (Control Surfaces) submenu, and whether its Setup item can be addressed by name",
+ "question": "Seven operations fail because no MCU control surface is registered. SETUP.md registers one through Logic Pro -> Control Surfaces -> Setup. Can that menu item be reached without positional addressing?",
+ "verdict": "wall",
+ "issues": [
+  "#373"
+ ],
+ "surface": "system.preferences",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "With System Events, read the menu items of menu 1 of menu item \"컨트롤 서피스\" of menu 1 of menu bar item 2 of the Logic Pro menu bar, then dump every attribute of each item whose name is \"설정…\".",
+  "expected": "The submenu holds five items and TWO of them are named 설정…. Every attribute of the two is identical, AXIdentifier included: nothing but the ordinal separates them."
+ },
+ "depends": [
+  "docs/SETUP.md"
+ ],
+ "evidence": [],
+ "method": "The menu tree was read WITHOUT opening any menu — no AXShowMenu, no click, no coordinate. Titles were listed first, then every attribute name and value of both same-named items was dumped and compared field by field.",
+ "observations": [
+  {
+   "submenu": "컨트롤 서피스",
+   "items": [
+    "컨트롤러 할당…",
+    "설정…",
+    "설정…",
+    "기본값 재형성",
+    "모든 컨트롤 서피스 바이패스"
+   ],
+   "note": "two items share the name 설정…"
+  },
+  {
+   "item_ordinal": 4,
+   "AXTitle": "설정…",
+   "AXRole": "AXMenuItem",
+   "AXIdentifier": "globalMenuItemCall:",
+   "AXEnabled": true,
+   "AXMenuItemCmdModifiers": 8,
+   "AXMenuItemCmdChar": null,
+   "AXMenuItemCmdVirtualKey": null,
+   "AXMenuItemCmdGlyph": null,
+   "AXMenuItemMarkChar": null,
+   "AXSubrole": null,
+   "AXHelp": null,
+   "AXDescription": null,
+   "AXChildren": [],
+   "submenu_count": 0
+  },
+  {
+   "item_ordinal": 5,
+   "AXTitle": "설정…",
+   "AXRole": "AXMenuItem",
+   "AXIdentifier": "globalMenuItemCall:",
+   "AXEnabled": true,
+   "AXMenuItemCmdModifiers": 8,
+   "AXMenuItemCmdChar": null,
+   "AXMenuItemCmdVirtualKey": null,
+   "AXMenuItemCmdGlyph": null,
+   "AXMenuItemMarkChar": null,
+   "AXSubrole": null,
+   "AXHelp": null,
+   "AXDescription": null,
+   "AXChildren": [],
+   "submenu_count": 0
+  },
+  {
+   "comparison": "field-by-field",
+   "result": "every attribute the accessibility API exposes is identical, AXIdentifier included"
+  },
+  {
+   "related": "the Logic Pro -> 설정 submenu also carries an item named 컨트롤 서피스…",
+   "note": "that one is unambiguous, but it opens the preferences pane rather than the Setup window that New -> Install lives in, so it is not a substitute"
+  }
+ ],
+ "conclusion": "The Control Surfaces Setup item cannot be addressed by name on this host. Two items in the same submenu carry the same title and differ in NOTHING the accessibility API publishes — not AXIdentifier, not a command key, not help, not description, not a subrole. Only the ordinal separates them, and an ordinal is the one thing this project does not allow a control path to rest on, because it silently addresses a different item the moment Logic reorders the menu. So the MCU registration that would unblock seven operations stays a MANUAL step, which is what docs/SETUP.md already asks of the user, and this record is the reason that document cannot be replaced by automation. Note what this does NOT say: nothing here was clicked, so which of the two is the Setup window is not established either — that question cannot even be asked without the ordinal.",
+ "limits": [
+  "ko-KR only. An English Logic may well name these two items differently — Setup… and Preferences… are distinct strings — in which case the wall is a LOCALISATION collision rather than a property of the menu, and the same automation would work there. That is untested and must not be assumed in either direction.",
+  "Read without opening the menu. AXFrame and AXPosition were degenerate for both items because the menu was closed, so those two fields are not evidence of anything; every other field is. Opening the menu might publish a distinguishing frame, but a frame IS a coordinate and would not give a name-addressable identity anyway.",
+  "No attempt was made to find a Key Command that opens the Setup window. If Logic exposes one, the KeyCmd channel could reach it without touching this menu, and that route is unexplored."
+ ],
+ "supersedes": null
+}

@@ -1622,19 +1622,27 @@ struct QualificationTransport: Sendable {
     /// deliberate no-write probe. A Phase-B recipe has to send a real request, so it needs this.
     /// Kept separate rather than adding a parameter to `operation` so the no-write probe stays the
     /// only thing the sweep itself can send.
+    /// `timeout` nil uses the transport's generic 10 s request bound, which is right for a resource
+    /// read and WRONG for the operation a Phase-B cycle is exercising: the registry already says
+    /// how long each operation may take, and a harness that gives up inside that window reports a
+    /// timeout of its own making. Measured 2026-09-14 — with `tracks.arm`'s write path finally
+    /// working, its cycle failed as `qualification_transport_timeout:phase_b.mutation` while the
+    /// operation was still inside its own `.short` deadline, having done nothing wrong.
     private func invoke(
         _ session: QualificationSubprocessSession,
         id: Int,
         tool: String,
         command: String,
         params: [String: Any],
-        phase: String
+        phase: String,
+        timeout: TimeInterval? = nil
     ) throws -> (text: String, isError: Bool) {
         let result: ToolCallResult = try session.request(
             id: id,
             method: "tools/call",
             params: ["name": tool, "arguments": ["command": command, "params": params]],
-            phase: phase
+            phase: phase,
+            timeout: timeout
         )
         return (try result.text(phase: phase), result.isError == true)
     }
@@ -1644,13 +1652,26 @@ struct QualificationTransport: Sendable {
     /// The recipe below needs the SAME reading three times — before, after the write, and after the
     /// restore — and it must come from a source other than the write's own answer, or the cycle
     /// proves nothing. `logic://tracks` is that source.
+    /// `awaiting` is the value the caller is WAITING FOR, and nil means "just read".
+    ///
+    /// A single refreshed read is enough for `mute` and `solo`, whose write and whose poller update
+    /// land together. It is not enough for `arm`: measured 2026-09-14, once its write path finally
+    /// worked, the cycle still refused with `isArmed did not move — observed false, expected true`
+    /// while a manual drive of the same call moved the flag and read it back two seconds later.
+    /// The write was fine and the reading was early.
+    ///
+    /// Waiting does not relax the assertion. The loop exits early ONLY on the value the caller has
+    /// already decided is correct; a wrong value spends the whole budget and is returned as it is,
+    /// to be judged by the guard that asked for it. Each attempt costs two ids, and the spent count
+    /// is returned so the caller advances past them instead of reusing a later step's id.
     private func observedTrackFlag(
         _ session: QualificationSubprocessSession,
         id: Int,
         trackIndex: Int,
         field: String,
-        phase: String
-    ) throws -> (value: Bool, raw: String) {
+        phase: String,
+        awaiting: Bool? = nil
+    ) throws -> (value: Bool, raw: String, spent: Int) {
         // REFRESH FIRST. `logic://tracks` is served from a poller-backed cache, and without this
         // the read after the write returns the pre-write value — measured 2026-09-14: mute moved
         // `true -> false` in Logic and three consecutive reads still answered `true`, while the
@@ -1658,20 +1679,34 @@ struct QualificationTransport: Sendable {
         // on the unrefreshed read would have compared a write against its own stale precondition
         // and called it a failure; the guard below caught exactly that and refused, which is how
         // this was found.
-        _ = try? invoke(
-            session, id: id, tool: "logic_system", command: "refresh_cache",
-            params: [:], phase: "\(phase).refresh")
-        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
-        let raw = String(decoding: data, as: UTF8.self)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rows = object["data"] as? [[String: Any]],
-              trackIndex < rows.count,
-              let value = rows[trackIndex][field] as? Bool else {
-            throw QualificationTransportError.protocolViolation(
-                "\(phase): logic://tracks did not report \(field) for track \(trackIndex)"
-            )
+        var spent = 0
+        var last: (Bool, String)?
+        for attempt in 0..<6 {
+            if attempt > 0 { Thread.sleep(forTimeInterval: 0.8) }
+            _ = try? invoke(
+                session, id: id + spent, tool: "logic_system", command: "refresh_cache",
+                params: [:], phase: "\(phase).refresh")
+            spent += 1
+            let data = try resourceReadback(
+                session, id: id + spent, uri: "logic://tracks", phase: phase)
+            spent += 1
+            let raw = String(decoding: data, as: UTF8.self)
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let rows = object["data"] as? [[String: Any]],
+                  trackIndex < rows.count,
+                  let value = rows[trackIndex][field] as? Bool else {
+                throw QualificationTransportError.protocolViolation(
+                    "\(phase): logic://tracks did not report \(field) for track \(trackIndex)"
+                )
+            }
+            last = (value, raw)
+            if awaiting == nil || value == awaiting { break }
         }
-        return (value, raw)
+        guard let last else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks was never read for \(field)")
+        }
+        return (last.0, last.1, spent)
     }
 
     /// #373 Phase B: the mutating operations whose recipe restores a VALUE rather than flipping a
@@ -1738,7 +1773,8 @@ struct QualificationTransport: Sendable {
         let target = pre.value > 0.5 ? max(0.1, pre.value - 0.1) : min(0.9, pre.value + 0.1)
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, readbackField: target], phase: "phase_b.mutation")
+            params: ["index": trackIndex, readbackField: target], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -1753,7 +1789,8 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, readbackField: pre.value], phase: "phase_b.restore")
+            params: ["index": trackIndex, readbackField: pre.value], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(restore.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the restore: "
@@ -1765,7 +1802,8 @@ struct QualificationTransport: Sendable {
         guard restored.value == pre.value else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: \(readbackField) not restored — observed "
-                    + "\(restored.value), expected \(pre.value)")
+                    + "\(restored.value), expected \(pre.value); the restore answered: "
+                    + restore.text.prefix(300))
         }
         return (
             QualificationMutationRestoreRecord(
@@ -1849,7 +1887,8 @@ struct QualificationTransport: Sendable {
         }
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: [:], phase: "phase_b.mutation")
+            params: [:], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -1894,26 +1933,31 @@ struct QualificationTransport: Sendable {
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
 
+        // Each read advances `nextID` by what it SPENT — a polled read costs more than two ids.
         let pre = try observedTrackFlag(
-            session, id: readStep(), trackIndex: 0, field: "isSelected",
+            session, id: nextID, trackIndex: 0, field: "isSelected",
             phase: "phase_b.pre_state")
+        nextID += pre.spent
         // Select row 1 when row 0 holds the selection, and row 0 otherwise — always a real move.
         let target = pre.value ? 1 : 0
         let original = pre.value ? 0 : 1
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": target], phase: "phase_b.mutation")
+            params: ["index": target], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
                     + mutation.text.prefix(220))
         }
         let gained = try observedTrackFlag(
-            session, id: readStep(), trackIndex: target, field: "isSelected",
-            phase: "phase_b.readback")
+            session, id: nextID, trackIndex: target, field: "isSelected",
+            phase: "phase_b.readback", awaiting: true)
+        nextID += gained.spent
         let lost = try observedTrackFlag(
-            session, id: readStep(), trackIndex: original, field: "isSelected",
-            phase: "phase_b.readback_other")
+            session, id: nextID, trackIndex: original, field: "isSelected",
+            phase: "phase_b.readback_other", awaiting: false)
+        nextID += lost.spent
         guard gained.value, !lost.value else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.readback: selection did not MOVE — target \(gained.value), "
@@ -1921,10 +1965,12 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": original], phase: "phase_b.restore")
+            params: ["index": original], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         let restored = try observedTrackFlag(
-            session, id: readStep(), trackIndex: original, field: "isSelected",
-            phase: "phase_b.restore_readback")
+            session, id: nextID, trackIndex: original, field: "isSelected",
+            phase: "phase_b.restore_readback", awaiting: true)
+        nextID += restored.spent
         guard restored.value else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: original row did not regain the selection")
@@ -2054,7 +2100,8 @@ struct QualificationTransport: Sendable {
         let target = preTempo > 100 ? preTempo - 6 : preTempo + 6
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["bpm": target], phase: "phase_b.mutation")
+            params: ["bpm": target], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2065,7 +2112,8 @@ struct QualificationTransport: Sendable {
             if needsRestore {
                 _ = try? invoke(
                     session, id: nextID + 900, tool: spec.tool.rawValue, command: spec.command,
-                    params: ["bpm": preTempo], phase: "phase_b.cleanup")
+                    params: ["bpm": preTempo], phase: "phase_b.cleanup",
+            timeout: spec.deadline.seconds + 5)
             }
         }
         let after = try observedTransportPosition(session, id: readStep(), phase: "phase_b.readback")
@@ -2076,7 +2124,8 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["bpm": preTempo], phase: "phase_b.restore")
+            params: ["bpm": preTempo], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(restore.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the restore: "
@@ -2213,7 +2262,8 @@ struct QualificationTransport: Sendable {
 
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["name": probeName], phase: "phase_b.mutation")
+            params: ["name": probeName], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2268,7 +2318,8 @@ struct QualificationTransport: Sendable {
         let target = preBar > 4 ? preBar - 3 : preBar + 3
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["bar": target], phase: "phase_b.mutation")
+            params: ["bar": target], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2282,7 +2333,8 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["bar": preBar], phase: "phase_b.restore")
+            params: ["bar": preBar], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(restore.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the restore: "
@@ -2348,7 +2400,8 @@ struct QualificationTransport: Sendable {
         }
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": 0, readbackField: probeValue], phase: "phase_b.mutation")
+            params: ["index": 0, readbackField: probeValue], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2361,7 +2414,8 @@ struct QualificationTransport: Sendable {
                 for _ in 0..<4 {
                     _ = try? invoke(
                         session, id: cleanupID, tool: spec.tool.rawValue, command: spec.command,
-                        params: ["index": 0, readbackField: pre.value], phase: "phase_b.cleanup")
+                        params: ["index": 0, readbackField: pre.value], phase: "phase_b.cleanup",
+            timeout: spec.deadline.seconds + 5)
                     cleanupID += 1
                     guard let seen = try? observedTrackString(
                         session, id: cleanupID, trackIndex: 0, field: readbackField,
@@ -2380,7 +2434,8 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": 0, readbackField: pre.value], phase: "phase_b.restore")
+            params: ["index": 0, readbackField: pre.value], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(restore.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the restore: "
@@ -2482,7 +2537,10 @@ struct QualificationTransport: Sendable {
         // WRITES the name rather than pressing undo again: undo is the operation under test, and a
         // cleanup that depends on it cannot be trusted to run when the thing it depends on is what
         // just failed.
-        var nameNeedsRestoring = true
+        // `let`, not `var`: for these two shapes the staged edit is ALWAYS owed a cleanup — the
+        // restore puts the probe name back rather than the original — so there is no exit that
+        // clears it, and saying so in the type is more honest than a flag that never moves.
+        let nameNeedsRestoring = true
         defer {
             if nameNeedsRestoring {
                 var cleanupID = nextID + 900
@@ -2534,7 +2592,7 @@ struct QualificationTransport: Sendable {
             phase: "phase_b.pre_state")
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command, params: [:],
-            phase: "phase_b.mutation")
+            phase: "phase_b.mutation", timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2602,7 +2660,8 @@ struct QualificationTransport: Sendable {
             session, id: readStep(), field: readbackField, phase: "phase_b.pre_state")
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: [:], phase: "phase_b.mutation")
+            params: [:], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
@@ -2616,7 +2675,8 @@ struct QualificationTransport: Sendable {
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: [:], phase: "phase_b.restore")
+            params: [:], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard restore.isError == false else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the second call")
@@ -2698,7 +2758,8 @@ struct QualificationTransport: Sendable {
         nextID += pre.spent
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
-            params: ["name": probeName], phase: "phase_b.mutation")
+            params: ["name": probeName], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         nextID += 1
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
@@ -2825,7 +2886,9 @@ struct QualificationTransport: Sendable {
                     + "\(spec.id.rawValue) against: " + staged.text.prefix(220))
         }
         // A MARKER NOW EXISTS under one of two names, and every exit from here has to remove it.
-        var stagedMarkerNeedsRemoval = true
+        // `let` for the same reason as the history cycle: the staged marker is still there when the
+        // record closes, because that is what "restored" means for a rename or a delete.
+        let stagedMarkerNeedsRemoval = true
         defer {
             if stagedMarkerNeedsRemoval {
                 var cleanupID = nextID + 900
@@ -2864,7 +2927,8 @@ struct QualificationTransport: Sendable {
         }
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
-            params: mutationParams, phase: "phase_b.mutation")
+            params: mutationParams, phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         nextID += 1
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
@@ -2999,40 +3063,54 @@ struct QualificationTransport: Sendable {
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
 
+        // A POLLED read spends more than two ids, so each one advances `nextID` by what it
+        // actually spent. Keeping `readStep()`'s fixed two here would hand a later step an id this
+        // read had already used, and the transport matches responses by id.
         let pre = try observedTrackFlag(
-            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+            session, id: nextID, trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.pre_state")
+        nextID += pre.spent
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, "enabled": !pre.value], phase: "phase_b.mutation")
+            params: ["index": trackIndex, "enabled": !pre.value], phase: "phase_b.mutation",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(mutation.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
                     + mutation.text.prefix(220))
         }
         let after = try observedTrackFlag(
-            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
-            phase: "phase_b.readback")
+            session, id: nextID, trackIndex: trackIndex, field: readbackField,
+            phase: "phase_b.readback", awaiting: !pre.value)
+        nextID += after.spent
         guard after.value == !pre.value else {
+            // CARRY THE OPERATION'S OWN ANSWER. Without it this refusal says only that a field did
+            // not move and discards the one thing that says WHY — measured 2026-09-14, when
+            // `tracks.arm` failed here inside the sweep while the identical call moved the flag in
+            // a standalone drive, and the envelope that would have separated the two was gone.
             throw QualificationTransportError.protocolViolation(
                 "phase_b.readback: \(readbackField) did not move — observed \(after.value), "
-                    + "expected \(!pre.value)")
+                    + "expected \(!pre.value); the operation answered: "
+                    + mutation.text.prefix(300))
         }
         let restore = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, "enabled": pre.value], phase: "phase_b.restore")
+            params: ["index": trackIndex, "enabled": pre.value], phase: "phase_b.restore",
+            timeout: spec.deadline.seconds + 5)
         guard !Self.mutationSaysItFailed(restore.text) else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore: \(spec.id.rawValue) refused the restore: "
                     + restore.text.prefix(220))
         }
         let restored = try observedTrackFlag(
-            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
-            phase: "phase_b.restore_readback")
+            session, id: nextID, trackIndex: trackIndex, field: readbackField,
+            phase: "phase_b.restore_readback", awaiting: pre.value)
+        nextID += restored.spent
         guard restored.value == pre.value else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: \(readbackField) not restored — observed "
-                    + "\(restored.value), expected \(pre.value)")
+                    + "\(restored.value), expected \(pre.value); the restore answered: "
+                    + restore.text.prefix(300))
         }
         return (
             QualificationMutationRestoreRecord(

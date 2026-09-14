@@ -68,6 +68,13 @@ import Testing
         // Whether the KC window is already open at run() start. When false the engine
         // must post Option+K and poll for it to appear.
         windowInitiallyOpen: Bool = true,
+        // The Key Commands window's TITLE. Logic localizes it, and the matcher used to hold an
+        // English literal, so a test that only ever builds an English title cannot see that bug.
+        windowTitle: String = "Key Commands",
+        // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
+        learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
+        // What Logic reports its UI language as. nil models a reading that failed.
+        uiLocale: String? = nil,
         // Whether the Option+K post to open the KC window succeeds. When false the
         // engine must fail closed at open_key_commands, carrying the post result.
         optionKPostSucceeds: Bool = true,
@@ -134,7 +141,7 @@ import Testing
         // The KC window owns focus by default; kcFocusedBeforeChord:false points the
         // app's focused window elsewhere so the pre-chord focus-ownership gate trips.
         builder.setAttribute(app, kAXFocusedWindowAttribute as String, kcFocusedBeforeChord ? window : close)
-        builder.setAttribute(window, kAXTitleAttribute as String, "Key Commands")
+        builder.setAttribute(window, kAXTitleAttribute as String, windowTitle)
         builder.setAttribute(window, "AXCloseButton", close)
         builder.setAttribute(scrollArea, kAXRoleAttribute as String, kAXScrollAreaRole as String)
         // Empty table shell (ZERO AXRows) — matches the live flat surface.
@@ -152,7 +159,7 @@ import Testing
         // typing, so a refused set (focusSetSucceeds == false) leaves focus nil and
         // fails closed with zero keystrokes.
         builder.setAttribute(learn, kAXRoleAttribute as String, kAXCheckBoxRole as String)
-        builder.setAttribute(learn, kAXTitleAttribute as String, ArmKeyCommandSetup.learnCheckboxTitle)
+        builder.setAttribute(learn, kAXTitleAttribute as String, learnTitle)
         // An unreadable Learn value is a non-numeric string (checkboxState → nil).
         if learnValueUnreadable {
             builder.setAttribute(learn, kAXValueAttribute as String, "unavailable")
@@ -314,6 +321,7 @@ import Testing
             sleep: { _ in },
             isCancelled: { probe.cancelled },
             ownsGate: { probe.ownsGate },
+            uiLocale: { uiLocale },
             ax: ax,
             elements: elements,
             verifyArmFlip: { _, _ in
@@ -1153,4 +1161,93 @@ import Testing
         let data = try #require(raw.data(using: .utf8))
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
+
+    /// Measured 2026-09-14 on a Korean Logic 12.3: `setup_arm_key` posted Option+K, Logic opened
+    /// `키 명령 할당 – U.S. – 편집됨`, and setup answered State C `ax_write_failed` at stage
+    /// `open_key_commands` saying the window did not open. It had. The matcher held the English
+    /// literal `Key Command`, which that title does not contain, so the operation was unreachable
+    /// on every non-English Logic — and with it `tracks.arm`'s only coordinate-free setup path.
+    @Test("the Key Commands window is found by its localized title")
+    func keyCommandsWindowIsFoundWhenLogicLocalizesItsTitle() {
+        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Commands"] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "a window titled \(title) is the Key Commands window"
+            )
+        }
+    }
+
+    /// The matcher must not answer for any window that happens to be open. A title carrying neither
+    /// the English nor the Korean label is not this window, and treating it as one would drive the
+    /// assignment GUI against something else entirely.
+    @Test("an unrelated window title is not mistaken for the Key Commands window")
+    func unrelatedWindowTitleIsNotTheKeyCommandsWindow() {
+        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록", ""] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil,
+                "a window titled \(title) is not the Key Commands window"
+            )
+        }
+    }
+
+
+    /// The whole point of the locale work: a Korean Logic must be able to COMPLETE the setup, not
+    /// merely fail one stage later. Every string this drive touches is the measured Korean one —
+    /// the window title, the command cell, the Learn checkbox — and the host reports ko-KR.
+    @Test("a Korean Logic completes the arm-key setup end to end")
+    func koreanLogicCompletesTheSetup() throws {
+        let fixture = Self.fixture(
+            commandValues: ["트랙 녹음 활성화 토글"],
+            windowTitle: "키 명령 할당 – U.S. – 편집됨",
+            learnTitle: "키 레이블로 학습",
+            uiLocale: "ko-KR",
+            verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        guard case .configuredAndVerified = outcome else {
+            Issue.record("expected a completed assignment, got \(outcome)")
+            return
+        }
+        // It typed the KOREAN name. Typing the English canonical would filter Logic's live list to
+        // nothing, which is exactly how this failed before it was measured.
+        #expect(fixture.probe.typed == ["트랙 녹음 활성화 토글"])
+    }
+
+    /// Logic's own search returns two sibling commands for the same query —
+    /// `채널 스트립 녹음 활성화 토글` and `퍼포먼스 녹음 활성화 켬/끔` were both measured beside the
+    /// real one. Learning a chord onto either would arm the wrong thing, so the match must stay
+    /// exact rather than substring.
+    @Test("a sibling Korean command is not accepted as the record-arm command")
+    func koreanSiblingCommandsAreNotAccepted() throws {
+        for sibling in ["채널 스트립 녹음 활성화 토글", "퍼포먼스 녹음 활성화 켬/끔"] {
+            let fixture = Self.fixture(
+                commandValues: [sibling],
+                windowTitle: "키 명령 할당",
+                learnTitle: "키 레이블로 학습",
+                uiLocale: "ko-KR"
+            )
+            let failure = try #require(Self.failure(Self.run(fixture)))
+            #expect(failure.stage == "command_not_found", "\(sibling) must not match")
+            #expect(fixture.probe.chords.isEmpty, "nothing may be learned onto \(sibling)")
+        }
+    }
+
+    /// What gets TYPED is chosen by the host's language; what gets MATCHED is the whole label set.
+    /// An unreadable locale falls back to the English canonical, which is the behaviour that
+    /// existed before and fails closed the same way.
+    @Test("the typed query follows the host language and falls back to English")
+    func searchQueryFollowsTheHostLanguage() {
+        #expect(ArmKeyCommandSetup.searchQuery(locale: "ko-KR") == "트랙 녹음 활성화 토글")
+        #expect(ArmKeyCommandSetup.searchQuery(locale: "ko") == "트랙 녹음 활성화 토글")
+        for unmeasured in ["en-US", "ja-JP", "de-DE", "", nil] {
+            #expect(
+                ArmKeyCommandSetup.searchQuery(locale: unmeasured)
+                    == ArmKeyCommandSetup.commandName,
+                "\(unmeasured ?? "nil") has no measured label and must type the canonical"
+            )
+        }
+    }
+
 }

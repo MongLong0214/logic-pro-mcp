@@ -60,11 +60,28 @@ import Foundation
 /// action's return code. On any step whose effect does not materialise the run
 /// fails closed with an actionable manual-fallback hint. Prior art: PR #408.
 enum ArmKeyCommandSetup {
-    /// EN command name / checkbox title. Locale-dependent: non-EN Logic shows
-    /// localised strings, so a non-EN run fails closed (the command is not
-    /// matched, or the arm-flip never lands) rather than mis-assigning.
+    /// The command name and checkbox title, as the ENGLISH Logic spells them.
+    ///
+    /// These stay because dozens of manual-fallback hints quote them and because they are the
+    /// canonical member of the label sets below. What changed on 2026-09-14 is that the setup no
+    /// longer MATCHES on them directly: the old comment here said a non-EN run "fails closed
+    /// rather than mis-assigning", which was true and was also the whole story — the operation
+    /// could not succeed on any localized Logic at all. Both strings are now measured labels in
+    /// `AXLocalePolicy`, so a host whose language has been read can complete the setup.
     static let commandName = "Toggle Track Record Enable"
     static let learnCheckboxTitle = "Learn by Key Label"
+
+    /// The command-name string to TYPE into the Key Commands search field on this host.
+    ///
+    /// Typing is not matching: the filter collapses the list, and a query in the wrong language
+    /// collapses it to nothing, so this has to commit to ONE string. It asks Logic what language
+    /// its menus are in and takes the label for that language; with no reading, it types the
+    /// English canonical, which is the behaviour that existed before and fails closed the same way.
+    /// Matching afterwards accepts ANY label in the set, so a host that types the canonical and
+    /// still shows a known localized cell is not refused for it.
+    static func searchQuery(locale: String?) -> String {
+        AXLocalePolicy.recordArmKeyCommandName.label(forLocale: locale) ?? commandName
+    }
 
     /// How a State-A record-arm mapping was reached.
     enum WriteSource: String, Equatable {
@@ -227,6 +244,11 @@ enum ArmKeyCommandSetup {
         /// before every forward key/AX mutation — a timed-out predecessor can never
         /// resume mutating after a successor acquired the gate (#413).
         var ownsGate: @Sendable () -> Bool = { true }
+        /// OBSERVED: the language Logic's own menus are in (`ko-KR`, `en-US`, …), or nil when it
+        /// could not be read. Only ever used to DECIDE WHICH STRING TO TYPE into the Key Commands
+        /// filter; nothing is matched on it, so a nil reading costs the English canonical and the
+        /// same fail-closed refusal that existed before this was here.
+        var uiLocale: @Sendable () -> String? = { nil }
         var ax: AXHelpers.Runtime
         var elements: AXLogicProElements.Runtime
         /// Ground-truth verification: drive a real record-arm with the given chord
@@ -251,6 +273,7 @@ enum ArmKeyCommandSetup {
                 sleep: { Thread.sleep(forTimeInterval: $0) },
                 isCancelled: { Task.isCancelled },
                 ownsGate: ownsGate,
+                uiLocale: { AXLogicProElements.logicUILocaleIdentifier() },
                 ax: .production,
                 elements: .production,
                 verifyArmFlip: verifyArmFlip
@@ -502,7 +525,11 @@ enum ArmKeyCommandSetup {
         if mutationBlocked() { return timedOut() }
         // typeText checks cancellation before EACH code unit; a false return means
         // the deadline fired mid-string, so fail closed (no more keys posted).
-        guard runtime.typeText(commandName) else { return timedOut() }
+        // TYPE THE STRING THIS HOST'S LOGIC USES. The filter is a live search: an English name
+        // typed into a Korean Logic collapses the list to nothing, and the setup then reported
+        // "could not find the command — Logic may be non-English" having never had a chance.
+        let typedQuery = searchQuery(locale: runtime.uiLocale())
+        guard runtime.typeText(typedQuery) else { return timedOut() }
         evidence.searchTyped = true
         runtime.sleep(1.0)  // let the filter collapse the list
 
@@ -516,7 +543,7 @@ enum ArmKeyCommandSetup {
             recordWindowOnlyCleanup()
             return fail(
                 stage: "command_not_found",
-                hint: "Could not find the \"\(commandName)\" command — Logic may be non-English. "
+                hint: "Could not find the \"\(typedQuery)\" command in Logic's Key Commands list. "
                     + "Assign the record-arm command to \(chordLabel(keyCode: keyCode, modifiers: modifiers)) manually."
             )
         }
@@ -526,7 +553,7 @@ enum ArmKeyCommandSetup {
             recordWindowOnlyCleanup()
             return fail(
                 stage: "command_ambiguous",
-                hint: "The Key Commands filter for \"\(commandName)\" resolved to \(matches.count) commands, "
+                hint: "The Key Commands filter for \"\(typedQuery)\" resolved to \(matches.count) commands, "
                     + "not exactly one; refused to Learn onto an ambiguous match. Assign \"\(commandName)\" manually."
             )
         }
@@ -564,7 +591,8 @@ enum ArmKeyCommandSetup {
         // 4. Drive "Learn by Key Label" (an AXCheckBox) to ON, then send the chord.
         guard let learn = firstDescendant(in: kcWindow, runtime: runtime, where: { el in
             AXHelpers.getRole(el, runtime: runtime.ax) == (kAXCheckBoxRole as String)
-                && (AXHelpers.getTitle(el, runtime: runtime.ax) ?? "") == learnCheckboxTitle
+                && AXLocalePolicy.learnByKeyLabelCheckbox.matches(
+                    AXHelpers.getTitle(el, runtime: runtime.ax), mode: .exact)
         }) else {
             recordWindowOnlyCleanup()
             return fail(
@@ -810,8 +838,21 @@ enum ArmKeyCommandSetup {
     static func keyCommandsWindow(runtime: Runtime) -> AXUIElement? {
         guard let app = AXLogicProElements.appRoot(runtime: runtime.elements) else { return nil }
         let windows: [AXUIElement] = AXHelpers.getAttribute(app, kAXWindowsAttribute, runtime: runtime.ax) ?? []
+        // The title is matched THROUGH THE LOCALE POLICY, not against an English literal. The
+        // literal was `contains("Key Command")`, and a Korean Logic titles this window
+        // `키 명령 할당 – U.S. – 편집됨`, so setup reported "the Key Commands window did not open"
+        // about a window that was open in front of it — measured 2026-09-14.
+        //
+        // Not a silent equivalence: the policy's `.contains` is CASE-INSENSITIVE where the literal
+        // was case-sensitive, so an English title of `key command` now matches and did not before.
+        // That widening is stated rather than hidden, and it is one Logic does not exercise — its
+        // window is titled `Key Commands`. Hangul canonical (NFC/NFD) matching comes along with it,
+        // which this label needs.
         return windows.first { win in
-            (AXHelpers.getTitle(win, runtime: runtime.ax) ?? "").contains("Key Command")
+            AXLocalePolicy.keyCommandsWindowTitle.matches(
+                AXHelpers.getTitle(win, runtime: runtime.ax),
+                mode: .contains
+            )
         }
     }
 
@@ -832,7 +873,11 @@ enum ArmKeyCommandSetup {
     /// a trailing " *" (Logic suffixes an edited/assigned command's cell).
     private static func commandMatchesName(_ el: AXUIElement, runtime: Runtime) -> Bool {
         guard let text = commandIdentity(el, runtime: runtime) else { return false }
-        return text == commandName
+        // Matched against the LABEL SET, not the English literal. `.exact` keeps the historical
+        // strictness that `text == commandName` had — the sibling commands
+        // `채널 스트립 녹음 활성화 토글` and `퍼포먼스 녹음 활성화 켬/끔` are returned by the same
+        // search, and learning a chord onto either would arm the wrong thing.
+        return AXLocalePolicy.recordArmKeyCommandName.matches(text, mode: .exact)
     }
 
     /// The normalized command text of `el` (value preferred, else title), trimmed

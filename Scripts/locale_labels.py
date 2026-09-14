@@ -31,10 +31,19 @@ SWIFT = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocaleP
 JSON_PATH = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
 # canonical / variants / rationale, in the named `static let X = LabelSet(...)` shape.
+# `locales:` is OPTIONAL and sits between `variants:` and `rationale:`. It carries strings that are
+# variants for matching AND are additionally tagged with the UI language they were read in, for the
+# one caller that has to PRODUCE a label rather than recognise one. The projection folds them in
+# with the plain variants: as far as coverage and provenance are concerned they are labels that were
+# measured in a locale, which is exactly what a variant is. Added 2026-09-14 with
+# `recordArmKeyCommandName`; before that this parser refused the file rather than export it short,
+# which is the behaviour that made the new shape visible immediately.
+LOCALES = r'(?:locales:\s*\[(?P<locales>[^\]]*)\],\s*)?'
 DECL = re.compile(
     r'static let (\w+) = LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
     r'variants:\s*\[([^\]]*)\],\s*'
+    + LOCALES +
     r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
     re.S,
 )
@@ -48,6 +57,7 @@ INLINE = re.compile(
     r'(?<!= )LabelSet\(\s*'
     r'canonical:\s*"((?:[^"\\]|\\.)*)",\s*'
     r'variants:\s*\[([^\]]*)\],\s*'
+    + LOCALES +
     r'rationale:\s*(?P<rationale>""".*?"""|"(?:[^"\\]|\\.)*")',
     re.S,
 )
@@ -80,6 +90,21 @@ def _rationale(raw):
     return _unescape(raw[1:-1])
 
 
+def _variants(variants, locales):
+    """The label's variants, with any locale-tagged strings folded in.
+
+    A locale-tagged entry is written `"ko": "트랙 녹음 활성화 토글"`, so the STRING scan sees the
+    language code too; the values are every SECOND string. Keeping them in `variants` is not a
+    convenience — coverage and provenance ask which locale saw which string, and a locale-tagged
+    label is the clearest possible case of exactly that.
+    """
+    found = [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))]
+    if locales:
+        tagged = [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", locales))]
+        found += tagged[1::2]
+    return found
+
+
 def from_swift(path=SWIFT):
     """Every LabelSet the policy declares, as {name: {canonical, variants, rationale}}.
 
@@ -93,7 +118,7 @@ def from_swift(path=SWIFT):
         name, canonical, variants = match.group(1), match.group(2), match.group(3)
         out[name] = {
             "canonical": _unescape(canonical),
-            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
+            "variants": _variants(variants, match.groupdict().get("locales")),
             "rationale": _rationale(match.group("rationale")),
         }
     named_canonicals = {e["canonical"] for e in out.values()}
@@ -106,7 +131,7 @@ def from_swift(path=SWIFT):
             continue
         out[key] = {
             "canonical": canonical,
-            "variants": [_unescape(v) for v in STRING.findall(LINE_COMMENT.sub("", variants))],
+            "variants": _variants(variants, match.groupdict().get("locales")),
             "rationale": _rationale(rationale),
         }
     if len(out) != declared:

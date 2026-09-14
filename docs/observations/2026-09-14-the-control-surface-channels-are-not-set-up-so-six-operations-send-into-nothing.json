@@ -2,7 +2,7 @@
  "id": "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
  "date": "2026-09-14",
  "schema": 1,
- "subject": "The send-only control-surface operations (MMC and MCU) and tracks.set_automation, against their own independent readbacks",
+ "subject": "The MCU-routed operations and the MMC send-only family, against their own independent readbacks",
  "question": "The qualification sweep files these as measured walls. Is the wall the readback — a write that lands and cannot be confirmed — or does the write not land at all, and do they share a cause?",
  "verdict": "wall",
  "issues": [
@@ -19,7 +19,7 @@
  "reverify": {
   "kind": "manual",
   "command": "With Logic frontmost, park the playhead with logic_navigate.goto_bar {bar: 9}, read logic://transport/state, then call logic_transport.rewind and read it again; repeat for fast_forward. Then read logic://tracks[0].automationMode, call logic_tracks.set_automation {index: 0, mode: \"touch\"}, and read it again. Then read logic://mcu/state, call logic_tracks.arm {index: 0, enabled: true}, and read logic://tracks[0].isArmed. Finally call logic_midi.mmc_play and read logic://transport/state.isPlaying.",
-  "expected": "All three answer State B with success true and verified false, and all three leave their independent field exactly where it was: position 9.1 before and after each transport call, automationMode \"off\" before and after. logic://mcu/state reports isConnected false; arm answers State B with verification_source mcu_led_echo and isArmed stays false; mmc_play answers State B send_only_no_readback and isPlaying stays false."
+  "expected": "All three answer State B with success true and verified false, and all three leave their independent field exactly where it was: position 9.1 before and after each transport call, automationMode \"off\" before and after. logic://mcu/state reports isConnected false; arm answers State B with verification_source mcu_led_echo and isArmed stays false; mmc_play answers State B send_only_no_readback and isPlaying stays false. set_automation asked for track 1 answers State B readback_mismatch with observed_selected_track 0 and automation_write_attempted false."
  },
  "depends": [
   "Sources/LogicProMCP/Channels/MCUChannel.swift",
@@ -181,13 +181,31 @@
     }
    },
    "note": "the channel these operations verify through is not connected on this host"
+  },
+  {
+   "correction_to": "this record's own earlier conclusion that tracks.set_automation stands apart",
+   "code": "RoutingTable maps track.set_automation to [.mcu] only — it never takes an AX path",
+   "operation": "tracks.set_automation on track 1 and track 2 (neither is a stack header)",
+   "answer": {
+    "state": "B",
+    "reason": "readback_mismatch",
+    "observed_selected_track": 0,
+    "write_attempted": true,
+    "automation_write_attempted": false,
+    "observed_mode": null
+   },
+   "note": "MCUChannel.executeAutomation sends an MCU select first and REFUSES to send the automation button unless AX confirms the selection moved. Asking for track 1 or 2 leaves observed_selected_track at 0, so the automation button is never sent at all"
+  },
+  {
+   "operation": "tracks.set_automation on track 0, re-read",
+   "note": "track 0 was ALREADY selected, so the select guard passed for a reason that had nothing to do with the MCU write. The automation button was then sent and readAutomationMode never returned the requested mode. The earlier reading of this as an AX-path failure was wrong: there is no AX path"
   }
  ],
- "conclusion": "For all of these the wall is the WRITE, not the readback, and most of them share one cause: the control-surface channels are not set up on this host. `transport.rewind`, `transport.fast_forward`, `midi.mmc_play` and `midi.mmc_stop` each leave as the same six-byte MMC message with `send_only_no_readback`, and the playhead stays at 9.1 across rewind twice and fast_forward while `isPlaying` stays false across mmc_play. `tracks.arm` verifies through `mcu_led_echo`, and `logic://mcu/state` reports `isConnected: false`, `registeredAsDevice: false` — so it is asking for confirmation from a surface that is not there, and `isArmed` does not move. That is not six walls; it is two unconfigured channels seen six times. `tracks.set_automation` is the one that stands apart: it takes the AX path, reports `automation_write_attempted: true`, and `automationMode` stays \"off\" — that one is unexplained. A control operation moves the transport field on the same fixture in the same session, so the instrument is not blind. The disposition for the six is a FIXTURE precondition rather than a recipe: a Phase-B cycle would stage, drive, read an unchanged field and refuse, which is already what they answer. Separately, the readback `logic://midi/ports` — declared for every `logic_midi` operation — carries no freshness envelope at all: no `source`, no `cache_age_sec`, no `data`. A previous note of mine said that resource answers null; it does not, it answers a port list, and the reason it cannot serve as evidence is the missing envelope rather than a missing answer.",
+ "conclusion": "For all of these the wall is the WRITE, not the readback, and they share ONE cause: Logic on this host has no registered MCU control surface — `logic://mcu/state` reports `isConnected: false`, `registeredAsDevice: false`. `transport.rewind`, `transport.fast_forward`, `midi.mmc_play` and `midi.mmc_stop` each leave as a six-byte MMC message with `send_only_no_readback`, and the playhead stays at 9.1 across rewind twice and fast_forward while `isPlaying` stays false across mmc_play. `tracks.arm` verifies through `mcu_led_echo` and `isArmed` does not move. And `tracks.set_automation` — which an earlier draft of THIS record called the one that stands apart and is unexplained — is the same thing: `RoutingTable` maps it to `[.mcu]` only, it has no AX path at all, and its own handler refuses to send the automation button unless an MCU select first moves Logic's selection. Asked for track 1 or track 2 it reports `observed_selected_track: 0` and `automation_write_attempted: false`, so nothing is ever sent. It looked like an AX write that would not land only because track 0 was already selected, which let the select guard pass for a reason that had nothing to do with the MCU. That is one unregistered control surface seen SEVEN times, not six walls plus a mystery. A control operation moves the transport field on the same fixture in the same run, so the instrument is not blind. None of these needs a Phase-B recipe: a cycle would stage, drive, read an unchanged field and refuse, which is already what they answer. The disposition is to register the control surface in Logic and re-measure. Separately, the readback `logic://midi/ports` — declared for every `logic_midi` operation — carries no freshness envelope at all: no `source`, no `cache_age_sec`, no `data`. A previous note of mine said that resource answers null; it does not, it answers a port list, and the reason it cannot serve as evidence is the missing envelope rather than a missing answer.",
  "limits": [
   "One fixture, one host, and the MMC finding is ABOUT THIS HOST: a Logic configured to obey MMC could see all four move. What is established here is that State B on these is not a readback gap, and that the four share a channel rather than four separate causes.",
   "`set_automation` was driven with mode touch on track 0 only. Other modes and other tracks were not tried, so this does not establish that no mode ever lands — only that this one did not, while the operation reported the write attempted.",
-  "No attempt was made to find out WHY the AX automation write does not land. The record stops at the measurement; the cause is unmeasured and should not be guessed from it.",
+  "The cause is named but NOT proven by repair: nothing here registers the control surface and re-measures. Until that is done, 'these would work if the surface were registered' is a hypothesis the readings support and do not establish. What IS established is that no write reaches Logic today and that all seven share one channel.",
   "The product ships a consented one-time setup for the arm path (`system.setup_arm_key`), and this fixture has not run it. So `tracks.arm` is measured HERE as sending into an unconnected MCU channel; whether it lands after that setup is not measured and must not be inferred from this record either way."
  ],
  "supersedes": null

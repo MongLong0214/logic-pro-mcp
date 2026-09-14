@@ -1,0 +1,75 @@
+{
+ "id": "2026-09-14-arm-refuses-because-a-collapsed-stack-makes-selection-non-exclusive",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "tracks.arm's accessibility rung, its exclusive-selection gate, and what the router does with the refusal",
+ "question": "With the arm key command assigned, tracks.arm works when driven on its own and falls back to MCU inside the qualification sweep. Why?",
+ "verdict": "wall",
+ "issues": [
+  "#373"
+ ],
+ "surface": "arrange.track_headers",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Read every AXLayoutItem under the arrange window's `트랙 헤더` group and count those whose AXSelected is true, with a collapsed track stack selected. Then call logic_tracks.arm {index: 0, enabled: true} and read its envelope.",
+  "expected": "More than one header reads AXSelected true — 13 of 34 on this project — and arm answers State B with write_source mcu, because the accessibility rung refused before posting and the router fell through."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift",
+  "Sources/LogicProMCP/Channels/RoutingTable.swift"
+ ],
+ "evidence": [],
+ "method": "The two behaviours were reproduced against the same binary and the same project, then separated by a control: the copy-in-a-temp-directory hypothesis was tested by re-running the ORIGINAL binary in the same state. The chord itself was tested outside the product entirely, posted by a process that never activates Logic in-process.",
+ "observations": [
+  {
+   "probe": "AX census of the arrange `트랙 헤더` group with the collapsed stack selected",
+   "headers": 34,
+   "selected": 13,
+   "note": "all 13 carry the same description, `25개의 ‘Absolute Zero’ 트랙` — selecting a collapsed stack makes every child header read AXSelected true"
+  },
+  {
+   "code": "AccessibilityChannel+Tracks trackToggleLadder",
+   "gate": "guard selectionIsExclusive(index:) else { return .refused(selectionNotExclusiveRefusal(index:)) }",
+   "note": "selectionIsExclusive requires the target header selected AND every other header unselected, re-checked atomically immediately before the key post"
+  },
+  {
+   "operation": "tracks.arm {index: 0}",
+   "state": "B",
+   "verified": false,
+   "write_source": "mcu",
+   "verification_source": "mcu_led_echo",
+   "isArmed": "unmoved"
+  },
+  {
+   "control": "the SAME binary at its original path, run again in the same state",
+   "result": "also fell back to mcu",
+   "note": "this kills the earlier hypothesis that a binary copied into a temp directory was the variable — it was not, and that conclusion would have been recorded as fact without this control"
+  },
+  {
+   "probe": "⌃⇧E posted by an external process, with track 1 (not a stack) selected",
+   "result": "track 1 armed immediately",
+   "note": "the assignment and the chord both work; nothing in the key path is broken"
+  },
+  {
+   "operation": "tracks.arm {index: 1, enabled: false} right after that",
+   "state": "C",
+   "error": "channels_exhausted",
+   "last_error": "No keyboard shortcut mapped for: track.set_arm",
+   "note": "the AX rung refused again, MCU errored, and the cgEvent channel — which has no shortcut row for this operation — produced the message the caller finally saw"
+  }
+ ],
+ "conclusion": "`tracks.arm` is refused by a deliberate safety gate, not by a broken write path. The rung will not post a record-arm chord unless EXACTLY ONE track header reads as selected, because posting onto a multi-selection would arm tracks the caller never named. On this project the first track is a COLLAPSED TRACK STACK, and selecting it makes every child header read AXSelected true — 13 of 34 measured. The gate can therefore never be satisfied for that track, the accessibility channel returns an error, and the router falls through to MCU, which is unregistered on this host and answers State B with the flag unmoved. Driven on its own the operation appeared to work only because the selection happened to be exclusive at that moment. THE ACTIONABLE DEFECT IS THE ROUTER, not the gate: the accessibility channel produces a precise refusal — selection is not exclusive, and it can say how many headers are selected — and the caller receives MCU's `readback_unavailable` instead. A refusal that names its cause was computed and then discarded, and recovering it took hours that the message would have saved.",
+ "limits": [
+  "One project. Whether a track stack is the only way to make the selection non-exclusive is not established; folder tracks and multi-select from the UI are untested and would presumably do the same.",
+  "No fix is applied here. Surfacing the accessibility channel's refusal through the router changes what every multi-channel operation reports on partial failure, which is a routing-policy decision rather than a reader's call.",
+  "The qualification recipe's own choice of track index 0 is not addressed either. A Phase-B cycle that picked a track it can actually arm would qualify the operation on this fixture, and that is a separate change."
+ ],
+ "supersedes": null
+}

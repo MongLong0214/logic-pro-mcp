@@ -1,0 +1,112 @@
+{
+ "id": "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "system.setup_arm_key on a Korean Logic, and the three English literals in its path",
+ "question": "tracks.arm is unqualifiable because no MCU control surface is registered. The product ships a consented, coordinate-free alternative — system.setup_arm_key, which assigns a key command through Logic's own GUI. Does it work on this host?",
+ "verdict": "works",
+ "issues": [
+  "#373"
+ ],
+ "surface": "system.preferences",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Call logic_system.setup_arm_key with consent:\"true\" on a Korean Logic, then call logic_tracks.arm {index: 0, enabled: true}, read logic://tracks[0].isArmed, and disarm again.",
+  "expected": "Setup answers State A with arm_flip_observed true, match_identity 트랙 녹음 활성화 토글 and match_count 1; the window it opened is closed and Learn is restored. tracks.arm then answers State A verified with verification_source ax_value, and isArmed moves true then back to false."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/ArmKeyCommandSetup.swift",
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+ ],
+ "evidence": [],
+ "method": "Setup was driven through the release binary over stdio. Between runs the Key Commands window was inspected directly with the accessibility API — titles, roles and every attribute of the controls — and the strings it actually publishes were read off it rather than translated or guessed. The window this session opened was closed again by pressing its own AXCloseButton, addressed through the window's title.",
+ "observations": [
+  {
+   "run": "before any change",
+   "stage": "open_key_commands",
+   "state": "C",
+   "error": "ax_write_failed",
+   "window_opened": false,
+   "hint": "The Key Commands window did not open (Option+K).",
+   "contradiction": "a window titled 키 명령 할당 – U.S. – 편집됨 was open in Logic at that moment, and the AX window list showed it"
+  },
+  {
+   "code": "ArmKeyCommandSetup.keyCommandsWindow matched title.contains(\"Key Command\")",
+   "note": "an English literal; the Korean title contains no such substring, so the matcher could never answer on a localized host"
+  },
+  {
+   "run": "after the window matcher went through AXLocalePolicy",
+   "stage": "command_not_found",
+   "state": "C",
+   "window_opened": true,
+   "search_typed": true,
+   "window_closed": true,
+   "close_confirmed": true,
+   "hint": "Could not find the \"Toggle Track Record Enable\" command — Logic may be non-English."
+  },
+  {
+   "measured": "the Key Commands list, searched live",
+   "record_arm_command": "트랙 녹음 활성화 토글",
+   "siblings_returned_by_the_same_search": [
+    "채널 스트립 녹음 활성화 토글",
+    "퍼포먼스 녹음 활성화 켬/끔"
+   ]
+  },
+  {
+   "measured": "the Key Commands window's checkboxes",
+   "learn_by_key_label": "키 레이블로 학습",
+   "siblings": [
+    "키 위치로 학습",
+    "새로운 할당 학습",
+    "Touch Bar 학습"
+   ]
+  },
+  {
+   "run": "after all three literals went through the policy",
+   "state": "A",
+   "success": true,
+   "verified": true,
+   "arm_flip_observed": true,
+   "match_identity": "트랙 녹음 활성화 토글",
+   "match_count": 1,
+   "learn_before": false,
+   "learn_after": true,
+   "learn_restored": true,
+   "window_closed": true,
+   "verify_restored": true,
+   "detail": "Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip."
+  },
+  {
+   "operation": "tracks.arm after setup, driven standalone",
+   "state": "A",
+   "verified": true,
+   "verification_source": "ax_value",
+   "isArmed": "false -> true -> false",
+   "note": "it had answered State B with isArmed unmoved before the setup"
+  },
+  {
+   "operation": "tracks.arm inside the qualification sweep, same binary, same fixture",
+   "state": "B",
+   "verified": false,
+   "reason": "readback_unavailable",
+   "write_source": "mcu",
+   "verification_source": "mcu_led_echo",
+   "isArmed": "unmoved",
+   "note": "UNEXPLAINED — see limits"
+  }
+ ],
+ "conclusion": "`system.setup_arm_key` could not complete on any non-English Logic, and the first of its three blockers was not a documented limitation but a plain defect: the window matcher held the English literal `Key Command`, so setup reported that the Key Commands window had not opened while that window stood open in front of it, with the AX window list naming it. The hint it printed sent the reader to check Option+K, which had worked. The other two literals — the command name and the Learn checkbox title — were documented as a known locale limitation, and they are now measured rather than merely acknowledged. With all three routed through AXLocalePolicy the setup reaches State A on a Korean Logic, assigns the chord, confirms it with a live record-arm flip, restores Learn and closes the window — and `tracks.arm`, which had answered State B with its flag unmoved, answers State A verified through the AX path. Exactness in the two new labels is load-bearing rather than stylistic: Logic's own search returns `채널 스트립 녹음 활성화 토글` beside the real command, and learning the chord onto that would arm the wrong thing.",
+ "limits": [
+  "ko-KR only. ja-JP and de-DE carry no variant for any of the three labels, so the setup still cannot complete there; what changed for them is nothing, and the canonical English is still what gets typed.",
+  "The sweep-versus-standalone difference named here as unexplained WAS explained later the same day, and this line is kept only to point at where: the accessibility rung refuses unless exactly one track header reads as selected, and this project's first track is a collapsed stack whose children all read selected. See [2026-09-14-arm-refuses-because-a-collapsed-stack-makes-selection-non-exclusive]. Nothing about the locale work below depends on that answer.",
+  "Nothing here measures whether the assignment SURVIVES a Logic restart, or what happens if the user had already bound ⌃⇧E to something else. The setup reports conflict_observed false for this host and that is all this says."
+ ],
+ "supersedes": null
+}

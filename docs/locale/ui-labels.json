@@ -1483,6 +1483,34 @@
     "de-DE": "unmeasured"
    }
   },
+  "keyCommandsWindowTitle": {
+   "canonical": "Key Command",
+   "variants": [
+    "키 명령"
+   ],
+   "rationale": "Identifies the Key Commands window by title substring; read-only classification. Korean read live 2026-09-14 off the window Logic opened in response to Option+K, whose full title was `키 명령 할당 – U.S. – 편집됨`; only the head is matched because the preset name and the edited marker vary. ja-JP and de-DE are NOT measured and carry no variant, so this reader gains nothing on those hosts until someone reads them.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "learnByKeyLabelCheckbox": {
+   "canonical": "Learn by Key Label",
+   "variants": [
+    "키 레이블로 학습"
+   ],
+   "rationale": "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord. Korean read live 2026-09-14 off the AXCheckBox title in the open window, distinguished there from `키 위치로 학습` and `새로운 할당 학습`. ja-JP and de-DE are NOT measured and carry no variant.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "libraryPanelLabel": {
    "canonical": "library",
    "variants": [
@@ -2319,6 +2347,20 @@
    ],
    "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
    "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "recordArmKeyCommandName": {
+   "canonical": "Toggle Track Record Enable",
+   "variants": [
+    "트랙 녹음 활성화 토글"
+   ],
+   "rationale": "The Key Commands entry `system.setup_arm_key` assigns a chord to. Korean read live 2026-09-14 out of the open Key Commands window, alongside the two sibling commands it must not be confused with. ja-JP and de-DE are NOT measured and carry no variant.",
+   "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",
