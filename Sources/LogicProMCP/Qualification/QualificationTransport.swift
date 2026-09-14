@@ -1119,6 +1119,19 @@ struct QualificationTransport: Sendable {
                                 nextID += 12
                             }
                         }
+                        if spec.id == .tracksDelete {
+                            do {
+                                let cycle = try trackStagedDeleteCycle(
+                                    session, startingAt: nextID, spec: spec)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_c recipe")
+                                nextID += 60
+                            }
+                        }
                         if Self.trackCreateRestoreOperations.contains(spec.id) {
                             do {
                                 let cycle = try trackCreateRestoreCycle(
@@ -3073,6 +3086,21 @@ struct QualificationTransport: Sendable {
 
     /// #373 Phase C: the track operations that are each other's restore.
     ///
+    /// **NOT ENABLED, and the reason is a defect in this cycle's own verification.** It compares
+    /// TRACK COUNTS, and a count is not a stable quantity here: `logic://tracks` reports the rows
+    /// the arrange rail is showing, so expanding a track stack changes what the number counts
+    /// without changing the project. Measured 2026-09-15 on the operator's project — before a
+    /// sweep, 19 rows, `complete: false`, `collapsed_track_stack`, first row `Absolute Zero`;
+    /// after, 19 rows, `complete: true`, first row `오디오 1`. The count matched and the content
+    /// did not: the stack had expanded and a track this cycle created was still there. The
+    /// count-based leak check passed a run that had left a track behind.
+    ///
+    /// The cycle's own reference checks are right — it deletes the `track_ref` that was not there
+    /// before, and verifies that reference is gone. What is wrong is the SURROUNDING claim that a
+    /// matching count means nothing was left. Fixing that means verifying against the reference SET
+    /// rather than its size, and refusing outright when `complete` changes between the two reads,
+    /// because then the two readings are not of the same thing.
+    ///
     /// `create_audio` and `create_instrument` add a track; `delete` removes one. That makes a
     /// create-then-delete a COMPLETE cycle on the operator's own project — the same shape
     /// `markerCreateRestoreCycle` already proved — and it means these three do not have to wait for
@@ -3186,6 +3214,116 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// #373 Phase C for `tracks.delete`, against a track the cycle STAGES.
+    ///
+    /// Deleting one of the operator's tracks to prove a delete works would be the worst trade in
+    /// this file. So the cycle creates its own, deletes that, and puts a track of the same kind
+    /// back — and the restore is honest about what it restores: the COUNT and the KIND, not the
+    /// identity. A created track has no prior identity to return to, and saying otherwise in a
+    /// record that exists to be trusted would be worse than the gap it papers over.
+    private func trackStagedDeleteCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        let original = try observedTrackInventory(session, id: nextID, phase: "phase_c.stage_precondition")
+        nextID += original.spent
+
+        let staged = try invoke(
+            session, id: nextID, tool: "logic_tracks", command: "create_audio", params: [:],
+            phase: "phase_c.stage", timeout: spec.deadline.seconds + 5)
+        nextID += 1
+        guard !Self.mutationSaysItFailed(staged.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.stage: create_audio refused, so there is nothing for \(spec.id.rawValue) "
+                    + "to delete: " + staged.text.prefix(220))
+        }
+        // A TRACK NOW EXISTS. Every exit removes it, waiting for it to appear first and verifying
+        // that it went — the shape the create cycle had to learn after it leaked one.
+        var stagedNeedsRemoval = true
+        defer {
+            if stagedNeedsRemoval {
+                var cleanupID = nextID + 900
+                for _ in 0..<3 {
+                    guard let seen = try? observedTrackInventory(
+                        session, id: cleanupID, awaitingCount: original.count + 1,
+                        phase: "phase_c.cleanup_readback") else { break }
+                    cleanupID += seen.spent
+                    guard let extra = seen.refs.first(where: { !original.refs.contains($0) })
+                    else { break }
+                    _ = try? invoke(
+                        session, id: cleanupID, tool: "logic_tracks", command: "delete",
+                        params: ["target_ref": extra], phase: "phase_c.cleanup")
+                    cleanupID += 1
+                    guard let after = try? observedTrackInventory(
+                        session, id: cleanupID, awaitingCount: original.count,
+                        phase: "phase_c.cleanup_verify") else { break }
+                    cleanupID += after.spent
+                    if !after.refs.contains(extra) { break }
+                }
+            }
+        }
+
+        let pre = try observedTrackInventory(
+            session, id: nextID, awaitingCount: original.count + 1, phase: "phase_c.pre_state")
+        nextID += pre.spent
+        guard let stagedRef = pre.refs.first(where: { !original.refs.contains($0) }) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.pre_state: the staged track never appeared, so the cycle has no target it "
+                    + "can name")
+        }
+        let mutation = try invoke(
+            session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
+            params: ["target_ref": stagedRef], phase: "phase_c.mutation",
+            timeout: spec.deadline.seconds + 5)
+        nextID += 1
+        guard !Self.mutationSaysItFailed(mutation.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.mutation: \(spec.id.rawValue) refused the real request: "
+                    + mutation.text.prefix(220))
+        }
+        let after = try observedTrackInventory(
+            session, id: nextID, awaitingCount: original.count, phase: "phase_c.readback")
+        nextID += after.spent
+        guard after.count == original.count, !after.refs.contains(stagedRef) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.readback: the staged track must be gone at a count of \(original.count); "
+                    + "the list reports \(after.count) and the reference is "
+                    + (after.refs.contains(stagedRef) ? "still there" : "absent"))
+        }
+        stagedNeedsRemoval = false
+        let restore = try invoke(
+            session, id: nextID, tool: "logic_tracks", command: "create_audio", params: [:],
+            phase: "phase_c.restore", timeout: spec.deadline.seconds + 5)
+        nextID += 1
+        guard !Self.mutationSaysItFailed(restore.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.restore: create_audio refused the restore: " + restore.text.prefix(220))
+        }
+        stagedNeedsRemoval = true
+        let restored = try observedTrackInventory(
+            session, id: nextID, awaitingCount: original.count + 1,
+            phase: "phase_c.restore_readback")
+        nextID += restored.spent
+        guard restored.count == original.count + 1 else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_c.restore_readback: track count is \(restored.count), expected "
+                    + "\(original.count + 1)")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
     /// The track references currently in the project, with the raw body they were read from.
     ///
     /// `awaitingCount` is what the caller is waiting FOR; nil means "just read". Same discipline as
@@ -3240,6 +3378,9 @@ struct QualificationTransport: Sendable {
     ///
     /// Membership here is what a sweep executes; the cycle below stays so the next attempt starts
     /// from measured code rather than from a description of it.
+    /// **EMPTY ON PURPOSE.** See `trackCreateRestoreCycle` — the count these cycles compare is not
+    /// a stable quantity on a project with a track stack, and a run that looked clean by count had
+    /// in fact swapped the operator's first track for one of its own.
     static let trackCreateRestoreOperations: Set<OperationID> = []
 
     /// Which staged-marker shape a `markerStagedRestoreCycle` run is exercising.
