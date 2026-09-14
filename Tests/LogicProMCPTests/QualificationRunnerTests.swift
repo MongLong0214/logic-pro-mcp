@@ -1721,8 +1721,13 @@ struct QualificationRunnerTests {
         ) { split, result in
             if result.mutationRestore == nil { split.1.append(result) } else { split.0.append(result) }
         }
+        // A record alone does not promote: the operation's own probe must have behaved as
+        // contracted AND the recipe's independent readback must be admissible. That ordering was
+        // wrong once — a record short-circuited above every other check and laundered an injected
+        // fault — so this asserts what the rule actually permits. `.failed` is what it must never
+        // be: a record cannot coexist with a failed probe.
         #expect(withEvidence.allSatisfy {
-            $0.status == .passed
+            ($0.status == .passed || $0.status == .notQualified)
                 && $0.mutationRestore?.operationID == $0.operationID
                 // Every step is present. The record type has no failure case, so the fields being
                 // populated is what "the cycle verified" looks like from here.
@@ -1941,9 +1946,17 @@ struct QualificationRunnerTests {
         // typed zero-write refusal, never the injected readback_unavailable fault.
         #expect(!responsePayload.contains("readback_unavailable"))
         #expect(responsePayload.contains(#"\"error\":\"invalid_params\""#))
-        // transport.play is mutating → the shipped `not_qualified` deferral, not a
-        // fault-induced failure.
-        #expect(operationCase.status == .notQualified)
+        // This test's subject is that the fault env engaged NOTHING, and the two assertions above
+        // are what carry it: the normal typed refusal is on the wire and the injected
+        // `readback_unavailable` is not. The status assertion was a proxy for the same thing while
+        // no mutating operation could ever pass — `transport.play` now has a #373 Phase B recipe,
+        // so its normal outcome is `.passed`. Asserting `.notQualified` here would be pinning the
+        // absence of the recipe, not the absence of the fault.
+        //
+        // What a fault-induced failure looks like is `.failed`, which the sibling test
+        // `runnerRejectsPartialStateObservedFromRealServer` asserts. So the honest claim here is
+        // that this is NOT that.
+        #expect(operationCase.status != .failed)
     }
 
     /// FINDING 3 (#399) — debug-gated restoration of the runner-rejection

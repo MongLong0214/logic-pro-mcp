@@ -283,11 +283,23 @@ struct QualificationOperationResult: Equatable, Sendable {
             // trip is not a guard, and defending it in a comment is worse than the structure that
             // actually holds. If records ever arrive from somewhere other than the sweep, this is
             // the line to add back WITH a seam that can exercise it.
-            if mutationRestore != nil { return .passed }
+            //
+            // THE OPERATION'S OWN PROBE IS CHECKED FIRST, and getting this order wrong was the
+            // defect. A Phase-B record used to promote the operation before anything looked at the
+            // probe, so an injected fault — a timeout, a partial state — was LAUNDERED by a recipe
+            // that happened to succeed beside it: the recipe's own play/stop calls are unaffected
+            // by a fault armed for the no-write probe, so the record existed and the operation read
+            // `.passed` while its own answer was State C. Four fault-injection tests caught it.
+            //
+            // A recipe can supply evidence the probe never had. It cannot vouch for the probe.
+            guard expectedZeroWriteRefusalObserved else { return .failed }
             // A successful write that carries an inadmissible live readback has not been
             // confirmed. Keep the existing no-write deferrals untouched.
             if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
-            return expectedZeroWriteRefusalObserved ? .notQualified : .failed
+            // Freshness is required of the recipe's readback too: a cycle read through a stale or
+            // partial resource is the same unverified claim with more steps.
+            if mutationRestore != nil, readbackFreshness.isAdmissible { return .passed }
+            return .notQualified
         }
     }
 
@@ -444,6 +456,19 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
         switch status {
         case .notQualified where mutability == .mutating:
+            // A record EXISTS and the operation still did not qualify: the cycle verified but its
+            // independent readback was not admissible. Saying "requires an operation-specific
+            // recipe" here would be false — one ran, and succeeded. Measured 2026-09-14: this is
+            // what `mixer.set_volume` / `mixer.set_pan` hit, because `logic://mixer` reports its
+            // provenance under `data_source` while the freshness gate reads `source` (which
+            // `logic://tracks` does emit), so the envelope reads as not-live.
+            if mutationRestore != nil, let reason = readbackFreshness.refusalReason {
+                return QualificationDeferral(
+                    code: .semanticMismatch,
+                    detail: "a Phase-B write-and-restore cycle VERIFIED, but its independent "
+                        + "readback was not admissible: \(reason)"
+                )
+            }
             if let refusal = mutationRestoreRefusal {
                 return QualificationDeferral(
                     code: .liveMutationNotRun,
@@ -1031,6 +1056,33 @@ struct QualificationTransport: Sendable {
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
                         // deferral, which is what "no evidence" should look like.
+                        if let expected = Self.transportExpectedPlaying[spec.id] {
+                            do {
+                                let cycle = try transportRestoreCycle(
+                                    session, startingAt: nextID, spec: spec,
+                                    expectedPlaying: expected)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 16
+                            }
+                        }
+                        if spec.id == .tracksSelect {
+                            do {
+                                let cycle = try selectionRestoreCycle(
+                                    session, startingAt: nextID, spec: spec)
+                                mutationRestoreRecords.append(cycle.record)
+                                phaseBRecord = cycle.record
+                                nextID = cycle.nextID
+                            } catch {
+                                phaseBRefusal = Self.observedFailureReason(
+                                    from: error, during: "phase_b recipe")
+                                nextID += 14
+                            }
+                        }
                         if let field = Self.valueRestoreReadbackField[spec.id] {
                             do {
                                 let cycle = try valueRestoreCycle(
@@ -1555,6 +1607,159 @@ struct QualificationTransport: Sendable {
                 preState: pre.raw,
                 mutation: mutation.text,
                 readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    /// #373 Phase B: transport operations whose effect is a boolean the transport resource reports,
+    /// mapped to the state each one is supposed to leave behind.
+    static let transportExpectedPlaying: [OperationID: Bool] = [
+        .transportPlay: true,
+        .transportStop: false,
+    ]
+
+    private func observedPlaying(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (playing: Bool, raw: String) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(
+            session, id: id + 1, uri: "logic://transport/state", phase: phase)
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let payload = object["data"] as? [String: Any],
+              let state = payload["state"] as? [String: Any],
+              let playing = state["isPlaying"] as? Bool else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://transport/state did not report isPlaying")
+        }
+        return (playing, raw)
+    }
+
+    /// #373 Phase B for transport. Same five steps, with one extra obligation the others do not
+    /// have: the operation must have somewhere to GO.
+    ///
+    /// `transport.play` proves nothing if the transport is already playing, and `stop` proves
+    /// nothing if it is already stopped — the readback would agree without the operation doing
+    /// anything, which is the exact shape the poller cache produced for mute. So the precondition
+    /// is forced with the INVERSE operation first, and the session's real pre-state is recorded
+    /// before any of that so the restore returns to where the operator actually was, not to the
+    /// state this recipe manufactured.
+    private func transportRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec,
+        expectedPlaying: Bool
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+        let inverse = expectedPlaying ? "stop" : "play"
+
+        let pre = try observedPlaying(session, id: readStep(), phase: "phase_b.pre_state")
+        if pre.playing == expectedPlaying {
+            _ = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: inverse,
+                params: [:], phase: "phase_b.precondition")
+            let staged = try observedPlaying(
+                session, id: readStep(), phase: "phase_b.precondition_readback")
+            guard staged.playing != expectedPlaying else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.precondition: could not stage isPlaying != \(expectedPlaying)")
+            }
+        }
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: [:], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let after = try observedPlaying(session, id: readStep(), phase: "phase_b.readback")
+        guard after.playing == expectedPlaying else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: isPlaying is \(after.playing), expected \(expectedPlaying)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue,
+            command: pre.playing ? "play" : "stop", params: [:], phase: "phase_b.restore")
+        let restored = try observedPlaying(
+            session, id: readStep(), phase: "phase_b.restore_readback")
+        guard restored.playing == pre.playing else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: isPlaying is \(restored.playing), expected \(pre.playing)")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: after.raw,
+                restore: restore.text,
+                restoreReadback: restored.raw
+            ),
+            nextID
+        )
+    }
+
+    /// #373 Phase B for `tracks.select`. The moved thing is WHICH row carries `isSelected`, so the
+    /// cycle checks both ends: the new row gained it and the old row lost it. Checking only the new
+    /// row would pass a selection that added rather than moved.
+    private func selectionRestoreCycle(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        spec: OperationSpec
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        var nextID = id
+        func readStep() -> Int { defer { nextID += 2 }; return nextID }
+        func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        let pre = try observedTrackFlag(
+            session, id: readStep(), trackIndex: 0, field: "isSelected",
+            phase: "phase_b.pre_state")
+        // Select row 1 when row 0 holds the selection, and row 0 otherwise — always a real move.
+        let target = pre.value ? 1 : 0
+        let original = pre.value ? 0 : 1
+        let mutation = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": target], phase: "phase_b.mutation")
+        guard mutation.isError == false else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.mutation: \(spec.id.rawValue) refused the real request")
+        }
+        let gained = try observedTrackFlag(
+            session, id: readStep(), trackIndex: target, field: "isSelected",
+            phase: "phase_b.readback")
+        let lost = try observedTrackFlag(
+            session, id: readStep(), trackIndex: original, field: "isSelected",
+            phase: "phase_b.readback_other")
+        guard gained.value, !lost.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.readback: selection did not MOVE — target \(gained.value), "
+                    + "original \(lost.value)")
+        }
+        let restore = try invoke(
+            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+            params: ["index": original], phase: "phase_b.restore")
+        let restored = try observedTrackFlag(
+            session, id: readStep(), trackIndex: original, field: "isSelected",
+            phase: "phase_b.restore_readback")
+        guard restored.value else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.restore_readback: original row did not regain the selection")
+        }
+        return (
+            QualificationMutationRestoreRecord(
+                operationID: spec.id.rawValue,
+                preState: pre.raw,
+                mutation: mutation.text,
+                readback: gained.raw,
                 restore: restore.text,
                 restoreReadback: restored.raw
             ),
