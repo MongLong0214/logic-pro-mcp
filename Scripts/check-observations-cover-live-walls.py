@@ -70,7 +70,9 @@ GRANDFATHERED = {
 
 
 def recorded_issues():
+    """(issues, malformed). Malformed entries are named rather than raised on — see below."""
     out = set()
+    malformed = []
     # A record is a date-prefixed file (the schema requires it); RATCHETS.json beside them is not one.
     for p in glob.glob(os.path.join(OBS, "*.json")):
         if not re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(p)):
@@ -80,12 +82,18 @@ def recorded_issues():
         except ValueError:
             continue          # the schema guard reports malformed records; not this one's job
         for n in doc.get("issues") or []:
-            # `int(n)` deliberately, not a lenient parse. check-observation-records.py enforces that
-            # every `issues` entry IS an integer, so a record this raises on is one that guard has
-            # already reported. Accepting "#306" here instead would make this reader disagree with
-            # the schema about what a record may contain, and the drift would have nowhere to show.
-            out.add(int(n))
-    return out
+            # Not a lenient parse — accepting "#306" here would make this reader disagree with
+            # check-observation-records.py about what a record may contain, and the drift would have
+            # nowhere to show. But not a raise either: "the schema guard already reports it" was the
+            # rationale for letting `int(n)` throw, and it does not survive contact with
+            # run-repo-guards.py, which runs every guard independently after a failure. The
+            # traceback still happened, in a guard that is not about record syntax, and a traceback
+            # says less than a sentence naming the file. So: refuse, name it, fail on its own terms.
+            if not isinstance(n, int) or isinstance(n, bool):
+                malformed.append(f"{os.path.basename(p)}: issues entry {n!r} is not an integer")
+                continue
+            out.add(n)
+    return out, malformed
 
 
 def own_issue(line):
@@ -107,7 +115,15 @@ def main():
     if not os.path.exists(ROADMAP):
         print("no roadmap; nothing to check")
         return 0
-    have = recorded_issues()
+    have, malformed = recorded_issues()
+    if malformed:
+        print(f"{len(malformed)} record(s) carry an issue entry this check cannot read, so its "
+              f"coverage answer would be missing them:")
+        for line in malformed:
+            print(f"  {line}")
+        print("  Fix the record (check-observation-records.py names the rule). Reporting a partial "
+              "coverage answer as if it were whole is what this file exists to prevent.")
+        return 1
     missing = []
     for line in open(ROADMAP, encoding="utf-8"):
         if not line.startswith("|"):

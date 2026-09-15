@@ -146,8 +146,31 @@ def base_allowed(repo):
         return None, f"git merge-base HEAD {ref}: {err or 'not available'} (a shallow clone has no base)"
     blob, err = git("show", f"{merge_base}:docs/observations/RATCHETS.json")
     if blob is None:
-        return None, (f"bootstrap: the merge base {merge_base[:8]} has no RATCHETS.json, so this is "
-                      f"the commit that introduces the ledger and there is no prior ceiling")
+        # The merge base not HAVING the ledger does not make this the commit that introduces it.
+        # A delete-then-restore pair reaches this branch too, and treating that as a bootstrap is a
+        # laundering cycle: delete the ledger in one commit, restore it in the next with every gap
+        # that opened in between written into `allowed`, and the ratchet adopts them as the
+        # permanent base. Found by review 2026-09-15 on exactly that shape -- 88 gaps across eight
+        # keys would have become the ceiling, and the ledger they were measured against was sitting
+        # in an ancestor the whole time.
+        #
+        # So look for it. The newest ancestor of the merge base that CARRIES the file is the real
+        # prior ceiling; only when no ancestor ever carried it is this a first bootstrap.
+        history, _ = git("rev-list", "--max-count=200", merge_base, "--",
+                         "docs/observations/RATCHETS.json")
+        for sha in (history or "").split():
+            prior, _ = git("show", f"{sha}:docs/observations/RATCHETS.json")
+            if prior is None:
+                continue          # the deletion commit itself; keep walking back
+            try:
+                return (dict(_flatten(json.loads(prior).get("allowed") or {})),
+                        f"last ancestor carrying the ledger {sha[:8]} (the merge base "
+                        f"{merge_base[:8]} does not carry it)")
+            except ValueError as exc:
+                return None, f"{sha[:8]}: {exc}"
+        return None, (f"bootstrap: neither the merge base {merge_base[:8]} nor any of its "
+                      f"ancestors carries RATCHETS.json, so this is the commit that introduces "
+                      f"the ledger and there is no prior ceiling")
     try:
         return dict(_flatten(json.loads(blob).get("allowed") or {})), f"merge-base {merge_base[:8]}"
     except ValueError as exc:

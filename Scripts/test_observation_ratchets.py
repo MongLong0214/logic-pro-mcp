@@ -296,16 +296,42 @@ def main():
     # 13b. A merge base that RESOLVES but predates the ledger is not a shallow clone: it is the
     #      commit introducing the file. Refusing it would make that commit unmergeable, so it is
     #      allowed and named — and the branch can never take this path again once it lands.
-    root = _tree(labels, records, exact, git_init=True)
-    subprocess.run(["git", "-C", str(root), "rm", "-q", "--cached",
-                    "docs/observations/RATCHETS.json"], capture_output=True)
-    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "before the ledger"], capture_output=True)
+    #
+    #      This case used to build its fixture by committing the ledger and then `git rm --cached`
+    #      -ing it, which is NOT an introducing commit: it is a delete-then-restore, and an ancestor
+    #      still carried the file. The guard could not tell the two apart, so the test could not
+    #      either, and the shape it actually exercised was the laundering cycle in 13c below. A true
+    #      bootstrap has to have no ancestor carrying the ledger at all.
+    root = _tree(labels, records, exact)
+    (root / "docs" / "observations" / "RATCHETS.json").unlink()
+    for cmd in (["init", "-q", "-b", "base"], ["add", "-A"],
+                ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "before the ledger"]):
+        subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
     env3 = _branch(root, labels, exact)
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
                           env=dict(env3, CI="true"))
     check("the introducing commit is not treated as a shallow clone",
           proc.returncode == 0 and "bootstrap" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
+
+    # 13c. Delete the ledger, then restore it with new gaps written straight into `allowed`. If that
+    #      reads as a bootstrap the ratchet is launderable: one commit removes the ceiling, the next
+    #      adopts whatever accumulated while nothing was counting. The prior ceiling is still in an
+    #      ancestor, so the guard must find it and refuse. Found by review 2026-09-15 on a real
+    #      branch doing exactly this with 88 members across eight keys.
+    root = _tree(labels, records, exact, git_init=True)
+    subprocess.run(["git", "-C", str(root), "rm", "-q", "docs/observations/RATCHETS.json"],
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "retire the ledger"], capture_output=True)
+    widened = {k: (sorted(set(v) | {"laundered"}) if isinstance(v, list)
+                   else {loc: sorted(set(m) | {"laundered"}) for loc, m in v.items()})
+               for k, v in exact.items()}
+    env3c = _branch(root, labels, widened)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
+                          env=dict(env3c, CI="true"))
+    check("a deleted-then-restored ledger is not a bootstrap",
+          proc.returncode == 1 and "bootstrap" not in proc.stdout,
           f"exit {proc.returncode}: {proc.stdout[:300]}")
 
     # 14. RATCHETS.json beside the records is not itself counted as one.

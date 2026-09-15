@@ -15,6 +15,9 @@ rather than by a test:
 `claim_in` and `own_issue` are pure functions of one line, so the cases drive them directly and
 neither read nor disturb the real roadmap.
 """
+import json
+import shutil
+import tempfile
 import importlib.util
 import os
 import sys
@@ -84,10 +87,25 @@ case("the grandfather list is a dict of issue -> reason",
      f"{len(G.GRANDFATHERED)} entries")
 
 # 7. And the repository is in the state the rule describes: every claim covered or grandfathered.
-recorded = G.recorded_issues()
+recorded, malformed = G.recorded_issues()
 case("records exist and are read as a set of issue numbers",
      isinstance(recorded, set) and recorded and all(isinstance(i, int) for i in recorded),
      f"{len(recorded)} issue(s) covered by a record")
+# The reader now NAMES an entry it cannot read instead of raising on it. `int(n)` used to throw,
+# which took down a guard that is not about record syntax and said less than a sentence would.
+case("the tree has no unreadable issue entry", malformed == [], malformed[:3])
+_bad = tempfile.mkdtemp()
+os.makedirs(os.path.join(_bad, "docs", "observations"))
+with open(os.path.join(_bad, "docs", "observations", "2026-09-15-bad.json"), "w") as _h:
+    json.dump({"id": "2026-09-15-bad", "issues": ["#306"]}, _h)
+_saved, G.OBS = G.OBS, os.path.join(_bad, "docs", "observations")
+try:
+    _got, _mal = G.recorded_issues()
+    case("a string issue entry is reported, not raised on",
+         _got == set() and len(_mal) == 1 and "#306" in _mal[0], (_got, _mal))
+finally:
+    G.OBS = _saved
+    shutil.rmtree(_bad, ignore_errors=True)
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")

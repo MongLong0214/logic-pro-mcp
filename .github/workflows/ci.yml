@@ -357,12 +357,18 @@ jobs:
   # `needs` and assert their result below; do not add them to the ruleset.
   build:
     runs-on: ubuntu-latest
-    needs: [compile, test]
+    # `roadmap` joins this list in the same change that restores the job. The instruction three
+    # lines above says to, and skipping it is how a restored gate becomes decoration: the job runs,
+    # it can fail, and the only required context does not look at it. A stale roadmap, a drifted ADR
+    # index or a wrong Formula sha256 would have turned `roadmap` red while `build` stayed green and
+    # the ruleset permitted the merge. Found by review 2026-09-15.
+    needs: [compile, test, roadmap]
     if: always()
     timeout-minutes: 5
     steps:
       - name: Every gate must have passed
         run: |
-          echo "compile=${{ needs.compile.result }} test=${{ needs.test.result }}"
+          echo "compile=${{ needs.compile.result }} test=${{ needs.test.result }} roadmap=${{ needs.roadmap.result }}"
           [ "${{ needs.compile.result }}" = "success" ] || { echo "::error::compile did not succeed"; exit 1; }
           [ "${{ needs.test.result }}" = "success" ] || { echo "::error::test did not succeed"; exit 1; }
+          [ "${{ needs.roadmap.result }}" = "success" ] || { echo "::error::roadmap did not succeed"; exit 1; }
