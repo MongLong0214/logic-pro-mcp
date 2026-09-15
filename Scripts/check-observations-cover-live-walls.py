@@ -81,7 +81,23 @@ def recorded_issues():
             doc = json.load(open(p, encoding="utf-8"))
         except ValueError:
             continue          # the schema guard reports malformed records; not this one's job
-        for n in doc.get("issues") or []:
+        if not isinstance(doc, dict):
+            malformed.append(
+                f"{os.path.basename(p)}: top level is {type(doc).__name__}, not an object")
+            continue
+        issues = doc.get("issues")
+        # The CONTAINER, not only its entries. The first cut of this guarded each element and left
+        # `for n in <whatever>` unguarded, so `"issues": 306` raised TypeError and a top-level array
+        # raised AttributeError -- the same traceback in the same runner that this rule was written
+        # to remove, one level out. check-observation-records.py already refuses a non-list here;
+        # this reader has to survive one reaching it anyway.
+        if issues is None:
+            continue
+        if not isinstance(issues, list):
+            malformed.append(
+                f"{os.path.basename(p)}: issues is {type(issues).__name__}, not a list")
+            continue
+        for n in issues:
             # Not a lenient parse — accepting "#306" here would make this reader disagree with
             # check-observation-records.py about what a record may contain, and the drift would have
             # nowhere to show. But not a raise either: "the schema guard already reports it" was the
