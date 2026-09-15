@@ -1,0 +1,56 @@
+{
+  "what": "Two probes taken 2026-09-15 on ko-KR Logic 12.3 (6674): the track automation lane, and Logic's Control Surface Setup",
+  "automation_lane": {
+    "how": "Mix > 오토메이션 보기 toggled on, arrange window censused, then each automation element probed for attributes, actions and settability",
+    "arrange_control_count": {"view_off": 871, "view_on": 985},
+    "automation_named_elements_by_role": {"AXCheckBox": 23, "AXButton": 77, "AXPopUpButton": 38},
+    "elements": [
+      {"role": "AXPopUpButton", "description": "오토메이션 모드", "value": "Read", "settable_value": false, "actions": ["AXPress", "AXShowMenu"]},
+      {"role": "AXPopUpButton", "description": "오토메이션 파라미터", "value": "볼륨", "settable_value": false, "actions": ["AXPress", "AXShowMenu"]},
+      {"role": "AXButton", "description": "오토메이션 값", "value": null, "settable_value": false, "actions": ["AXPress"]},
+      {"role": "AXCheckBox", "description": "오토메이션 보기/가리기", "enabled": true},
+      {"role": "AXCheckBox", "description": "오토메이션", "enabled": false}
+    ],
+    "actuation_attempts": [
+      {"target": "오토메이션 값", "action": "AXPress", "returned": "success", "app_menus_before": 65, "app_menus_after": 65, "children_before": 0, "children_after": 0},
+      {"target": "오토메이션 모드", "action": "AXShowMenu", "returned": "success", "app_menus_before": 66, "app_menus_after": 66},
+      {"target": "오토메이션 파라미터", "action": "AXShowMenu", "returned": "success", "app_menus_before": 66, "app_menus_after": 66, "note": "positive control in the same run; it did not open either, so the zero is not about one element"}
+    ],
+    "menu_attempt": {
+      "item": "Mix > 트랙 오토메이션 생성",
+      "enabled": true,
+      "click_returned": "menu item 트랙 오토메이션 생성 of menu Mix of menu bar item Mix",
+      "arrange_controls_before": 985,
+      "arrange_controls_after": 985,
+      "logic_undo_stack_after": "실행 취소할 수 없음",
+      "note": "the undo stack is what separates 'it worked and AX cannot see it' from 'it did not work'"
+    },
+    "product_route": {
+      "call": "logic_tracks.set_automation {index: 0, mode: touch}",
+      "response": "state C, error channels_exhausted, 'MCU feedback not detected: no feedback has been received on LogicProMCP-MCU-Internal (2 endpoint(s) visible, all owned by this server). Check the Logic Pro > Control Surfaces > Setup binding.'"
+    }
+  },
+  "control_surface_setup": {
+    "how": "Logic Pro menu > 컨트롤 서피스 > 설정… (menu item 4), then censused",
+    "window": {"role": "AXWindow", "subrole": "AXStandardWindow", "title": "컨트롤 서피스 설정", "controls": 63},
+    "device_field": {"label": "기기:", "value": "기기 없음"},
+    "other_readable_fields": [
+      {"label": "플립 모드:", "value": "끔"},
+      {"label": "표시 모드:", "value": "이름"},
+      {"label": "클락 디스플레이:", "value": "비트"},
+      {"label": "채널 스트립 보기 모드:", "value": "편곡"},
+      {"label": "채널 스트립 파라미터:", "value": "볼륨"},
+      {"label": "EQ 파라미터:", "value": "주파수"}
+    ],
+    "menu_path_notes": {
+      "menu_bar_item_by_name": "menu bar item \"Logic Pro\" -> AppleScript error -1728, cannot be got",
+      "menu_bar_item_by_index": "menu bar item 2 works; its name reads back as 'Logic Pro'",
+      "submenu_items": ["'오토메이션 보기/가리기' 할당 학습", "컨트롤러 할당…", "설정…", "설정…", "기본값 재형성", "모든 컨트롤 서피스 바이패스"],
+      "note": "TWO items named 설정… ; index 4 is the Control Surface Setup window"
+    },
+    "existing_script_result": {
+      "result": "REVERIFY INCONCLUSIVE: the census could not read the Setup window",
+      "why": "it drives the ENGLISH menu path Control Surfaces > Setup…, which does not exist on a ko-KR Logic"
+    }
+  }
+}

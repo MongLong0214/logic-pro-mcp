@@ -122,7 +122,11 @@ def dismiss_single_button_alert():
     return {"dismissed": False}
 
 
-DISCARD_LABELS = ("Don’t Save", "Don't Save", "저장 안 함")
+# Logic uses TWO Korean labels for this button, measured 2026-09-15 (record
+# `2026-09-15-the-korean-project-chooser-names-itself`): a never-saved untitled document
+# offers `저장 안 함`, and a SAVED project with unsaved changes offers `저장하지 않음`.
+# Carrying only the first means the discard silently fails on the commoner of the two.
+DISCARD_LABELS = ("Don’t Save", "Don't Save", "저장 안 함", "저장하지 않음")
 
 
 def quit_logic():

@@ -62,6 +62,33 @@ def live_state(repo=REPO):
             if (entry.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured":
                 unmeasured[loc].add(name)
 
+    # WHICH LOGIC EVERY READING DESCRIBES. Records carry a `host` block and label provenance names
+    # its own host, and until now nothing compared either to anything — CI has no Logic installed,
+    # so there was no build to compare AGAINST. `LOGIC-BUILD.json` is that build, declared rather
+    # than detected. Bumping it turns every reading taken on the old one into a counted gap, and
+    # because these are sets that may only shrink, the bump forces a decision about each reading
+    # instead of letting the whole corpus quietly describe a build nobody runs.
+    declared = {}
+    try:
+        with open(os.path.join(repo, "docs", "observations", "LOGIC-BUILD.json"),
+                  encoding="utf-8") as handle:
+            declared = json.load(handle)
+    except (OSError, ValueError):
+        declared = {}
+    target = (str(declared.get("version") or ""), str(declared.get("build") or ""))
+
+    superseded_labels = set()
+    if target != ("", ""):
+        for name, entry in entries.items():
+            for variant, prov in (entry.get("provenance") or {}).items():
+                host = (prov or {}).get("host") if isinstance(prov, dict) else None
+                # `Logic Pro 12.3 (6674) on macOS 26.3 (25D125)` — free text, so it is matched
+                # strictly. A reading whose host is absent or unparseable is counted too: it cannot
+                # be shown to describe the declared build, and "cannot be shown" is the gap.
+                seen = re.match(r"^\s*Logic Pro\s+([0-9][0-9.]*)\s+\(([^)]+)\)", str(host or ""))
+                if not seen or (seen.group(1), seen.group(2)) != target:
+                    superseded_labels.add(f"{name}\u2192{variant}")
+
     obs_dir = os.path.join(repo, "docs", "observations")
     records = [json.load(open(path, encoding="utf-8"))
                for path in sorted(glob.glob(os.path.join(obs_dir, "*.json")))
@@ -81,6 +108,12 @@ def live_state(repo=REPO):
     # the conclusion says is a different and much heavier rule. This closes the cheap gap — a record
     # that cites nothing — and leaves the expensive one named rather than pretended away.
     uncited = {r.get("id") for r in records if not (r.get("evidence") or [])}
+    superseded_records = set()
+    if target != ("", ""):
+        for r in records:
+            host = r.get("host") or {}
+            if (str(host.get("version") or ""), str(host.get("build") or "")) != target:
+                superseded_records.add(r.get("id"))
 
     surfaces = re.findall(r"\|\s*`([a-z_]+\.[a-z_]+)`",
                           open(os.path.join(obs_dir, "SURFACES.md"), encoding="utf-8").read())
@@ -96,6 +129,8 @@ def live_state(repo=REPO):
         "schema_v1_records": schema_v1,
         "manual_reverify": manual,
         "records_without_evidence": uncited,
+        "records_from_a_superseded_build": superseded_records,
+        "label_readings_from_a_superseded_build": superseded_labels,
         "surfaces_without_records": bare,
     }
 

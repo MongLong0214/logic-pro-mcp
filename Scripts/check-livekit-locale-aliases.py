@@ -17,11 +17,28 @@ A copy with a check is a copy that cannot go stale. This is that check.
 
 WHAT IT DOES NOT DO: it does not require the two lists to be EQUAL. The policy is normalised and
 matched leniently by the product; the live kit compares exactly, so it legitimately carries the
-cased spellings Logic actually emits (`Tracks header`) beside the lower-cased policy variants. The
-rule is one-directional and that is the direction that matters — every policy variant must be
-reachable from the live kit, so a locale the product learned is a locale a harness can find.
+cased spellings Logic actually emits (`Tracks header`) beside the lower-cased policy variants.
+
+BUT THE OTHER DIRECTION IS NOT NOTHING, and "one-directional and that is the direction that matters"
+hid a real gap for as long as the sentence stood. Measured 2026-09-15: the region table carries five
+spellings that appear in an observation record — so they were READ off a live Logic — and that
+`AXLocalePolicy` does not carry at all:
+
+    トラックヘッダ                    ja-JP, Tracks header
+    Position der Abspielposition    de-DE, Playhead Position
+    ライブラリ / Bibliothek           ja-JP / de-DE, Library
+    ミキサー                          ja-JP, Mixer
+
+A harness can find those regions and the PRODUCT cannot. That is the opposite failure from the one
+this file was written for, and it is worse: the first makes a harness fail loudly at a precondition,
+the second makes the product quietly not work in a language somebody has already measured.
+
+So the reverse direction is counted too. It is a WARNING rather than a failure, because closing it
+means adding variants to the policy — a change to what the product matches, which belongs in a
+change that can be live-verified rather than in a guard run. The count is what stops it growing.
 """
 import ast
+import glob
 import os
 import re
 import sys
@@ -42,6 +59,14 @@ PAIRS = [
 REGION_PAIRS = [
     ("Control Bar", "controlBarGroupLabel"),
     ("Tracks header", "trackHeadersDescription"),
+    # Four rows had no pair and so were checked in NEITHER direction -- `Tracks`, `Library`, `Mixer`
+    # and `Inspector`, eleven spellings between them. Their absence read as "the product never looks
+    # for these", which is what the note below says about the tab lists, but it was never true of
+    # `Tracks`: `arrangeWindowTitleSuffix` has carried it all along. Paired now.
+    ("Tracks", "arrangeWindowTitleSuffix"),
+    ("Library", "libraryPanelLabel"),
+    ("Mixer", "mixerNamedElement"),
+    ("Inspector", "mixerInspectorContext"),
     # Both of these are names harnesses actually pass to `located_band` and both had a policy
     # counterpart the guard was not reading, so the drift this file exists to catch went on
     # uncaught: `Tracks contents` had no Japanese form while the policy learned one, and
@@ -147,6 +172,28 @@ def python_dict(text, name):
     return None
 
 
+
+def measured_strings(repo_dir):
+    """Every string that appears anywhere in an observation record.
+
+    Crude on purpose. The question this answers is not "was this string read as THIS label" — that
+    is what `provenance` is for — but the much weaker "did anyone ever see this string on a live
+    Logic". A live-kit spelling that passes this and is absent from the policy was measured and the
+    product still cannot match it; one that FAILS it is a string in a matcher that nobody has ever
+    read, which is the worse of the two and has no business in a harness at all.
+    """
+    blob = []
+    for path in sorted(glob.glob(os.path.join(repo_dir, "docs", "observations", "*.json"))):
+        if not re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(path)):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                blob.append(handle.read())
+        except OSError:
+            continue
+    return "\n".join(blob)
+
+
 def main():
     try:
         policy_text = open(POLICY, encoding="utf-8").read()
@@ -176,6 +223,30 @@ def main():
             if gap:
                 print(f"-> FAIL: {swift_name} declares {gap} which the region table cannot reach")
                 failed = 1
+
+    # THE REVERSE DIRECTION. A kit spelling the policy does not carry means the harness can find a
+    # region the product cannot. Reported, not failed — closing it edits what the product matches,
+    # which needs a live run behind it. What IS a failure is a kit spelling nobody ever measured.
+    if region_table is not None:
+        corpus = measured_strings(REPO)
+        unknown_to_policy, never_measured = [], []
+        for key, swift_name in REGION_PAIRS:
+            policy_labels = swift_label_set(policy_text, swift_name) or []
+            folded = {str(v).casefold() for v in policy_labels}
+            for spelling in region_table.get(key, []):
+                if str(spelling).casefold() in folded:
+                    continue
+                (unknown_to_policy if spelling in corpus else never_measured).append(
+                    f"{key}\u2192{spelling}")
+        if never_measured:
+            print(f"-> FAIL: {len(never_measured)} live-kit spelling(s) appear in no observation "
+                  f"record, so a harness matches on a string nobody has read: {never_measured}")
+            failed = 1
+        if unknown_to_policy:
+            print(f"   warn  {len(unknown_to_policy)} measured spelling(s) the POLICY does not "
+                  f"carry, so the product cannot match what a harness can find:")
+            for entry in unknown_to_policy:
+                print(f"           {entry}")
 
     for py_name, swift_name in PAIRS:
         policy_labels = swift_label_set(policy_text, swift_name)

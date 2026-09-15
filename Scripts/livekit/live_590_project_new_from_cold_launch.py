@@ -146,8 +146,20 @@ def close_open_documents():
                       'return name of every button of window 1')
         if "Save" in buttons or "저장" in buttons:
             if target.startswith("Untitled") or target.startswith("무제"):
-                discard = "Don’t Save" if "Don’t Save" in buttons else (
-                    "Don't Save" if "Don't Save" in buttons else "저장 안 함")
+                # Logic uses TWO Korean labels here, measured 2026-09-15 (record
+                # `2026-09-15-the-korean-project-chooser-names-itself`): a never-saved untitled
+                # document offers `저장 안 함`, a SAVED project with unsaved changes offers
+                # `저장하지 않음`. The old fallback carried only the first, so on the commoner of
+                # the two it clicked a button that was not there. Pick one the window ACTUALLY
+                # OFFERS rather than falling back to a guess.
+                discard = next(
+                    (label for label in
+                     ("Don’t Save", "Don't Save", "저장 안 함", "저장하지 않음")
+                     if label in buttons),
+                    None)
+                if discard is None:
+                    raise SystemExit(
+                        "no discard button among %r -- refusing to guess one" % (buttons,))
                 osa('tell application "System Events" to tell process "Logic Pro" to '
                     f'click button "{discard}" of window 1')
                 time.sleep(2)

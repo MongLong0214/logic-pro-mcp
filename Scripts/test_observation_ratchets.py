@@ -107,6 +107,12 @@ def main():
         # than left out: an unlisted dimension makes the guard refuse, which is correct behaviour
         # and would have failed this fixture for the wrong reason.
         "records_without_evidence": ["2026-09-05-r1", "2026-09-05-r2"],
+        # Both build-drift dimensions are empty in a fixture tree: it carries no LOGIC-BUILD.json,
+        # so there is no declared build for a reading to be superseded FROM. Listed rather than
+        # omitted because an unlisted dimension makes the guard refuse -- correct behaviour, and it
+        # would fail these cases for a reason none of them is about.
+        "records_from_a_superseded_build": [],
+        "label_readings_from_a_superseded_build": [],
         "surfaces_without_records": sorted(
             f"{loc}\u2192{s_}" for loc in ("en-US", "ko-KR", "ja-JP")
             for s_ in ("arrange.regions", "mixer.inserts")

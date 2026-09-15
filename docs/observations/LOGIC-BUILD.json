@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "app": "Logic Pro",
+ "version": "12.3",
+ "build": "6674",
+ "declared": "2026-09-15",
+ "note": "The Logic build every reading in this repository is understood to describe. Records carry their own host block and label provenance names its own host, but nothing could compare either to anything: CI has no Logic installed, so there was no build to compare AGAINST. This file is that build, declared rather than detected, which is what lets an offline check exist at all. Bump it when the project moves to a new Logic, and `check-observation-ratchets.py` will then count every reading that still describes the old one - a number that may only shrink, so the bump forces a decision about each instead of letting 102 records and 80 label readings quietly describe a build nobody runs. `Scripts/logic-build-drift.py` compares this declaration to the Logic actually installed and prints what to do."
+}

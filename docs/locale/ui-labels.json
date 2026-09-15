@@ -2279,6 +2279,93 @@
     "de-DE": "unmeasured"
    }
   },
+  "projectChooserCommitButton": {
+   "canonical": "Choose",
+   "variants": [
+    "선택"
+   ],
+   "rationale": "The chooser's commit control, matched by AXButton title. Korean read live 2026-09-15 beside `취소` and `기존 프로젝트 열기…` in the same census (#885). ja-JP and de-DE unmeasured.",
+   "provenance": {
+    "선택": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact_strict",
+     "observed": "선택",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "role": "AXButton"
+    }
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "match": "exact_strict",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "projectChooserEmptyProjectLabel": {
+   "canonical": "Empty Project",
+   "variants": [
+    "비어 있는 프로젝트"
+   ],
+   "rationale": "The Empty Project tile's label, read as an AXStaticText value after selecting the `새로운 프로젝트` category. Korean read live 2026-09-15 (#885); the details panel alongside it read `비어 있는 프로젝트 생성`, which is how the selection is confirmed without a coordinate. ja-JP and de-DE unmeasured.",
+   "provenance": {
+    "비어 있는 프로젝트": {
+     "attribute": "value",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact_strict",
+     "observed": "비어 있는 프로젝트",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "role": "AXStaticText"
+    }
+   },
+   "roles": [
+    "AXStaticText"
+   ],
+   "match": "exact_strict",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "projectChooserWindowTitle": {
+   "canonical": "Choose a Project",
+   "variants": [
+    "프로젝트 선택"
+   ],
+   "rationale": "Identifies Logic's New Project chooser by its AXWindow title; read-only classification. Korean read live 2026-09-15 off the window `파일 > 템플릿으로부터 신규…` opened with no document, whose title was `프로젝트 선택` exactly (AXStandardWindow, not an AXDialog). ja-JP and de-DE unmeasured (#885).",
+   "provenance": {
+    "프로젝트 선택": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact_strict",
+     "observed": "프로젝트 선택",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "role": "AXWindow"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
+   "match": "exact_strict",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "projectOrSectionMenuItem": {
    "canonical": "Project or Section…",
    "variants": [

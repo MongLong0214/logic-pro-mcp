@@ -335,6 +335,30 @@ enum AXLocalePolicy {
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
     )
 
+    /// #885 -- the three strings `project.new`'s chooser branch matched as bare English literals, so
+    /// that branch could never match on a non-English Logic. Korean read live 2026-09-15 on Logic
+    /// 12.3 (6674) via `파일 > 템플릿으로부터 신규…` with no document open; record
+    /// `2026-09-15-the-korean-project-chooser-names-itself`. ja-JP and de-DE are NOT measured and
+    /// carry no variant, so this reader gains nothing on those hosts until someone reads them --
+    /// which is the point: a translated guess would look right and match nothing.
+    static let projectChooserWindowTitle = LabelSet(
+        canonical: "Choose a Project",
+        variants: ["프로젝트 선택"],
+        rationale: "Identifies Logic's New Project chooser by its AXWindow title; read-only classification. Korean read live 2026-09-15 off the window `파일 > 템플릿으로부터 신규…` opened with no document, whose title was `프로젝트 선택` exactly (AXStandardWindow, not an AXDialog). ja-JP and de-DE unmeasured (#885)."
+    )
+
+    static let projectChooserCommitButton = LabelSet(
+        canonical: "Choose",
+        variants: ["선택"],
+        rationale: "The chooser's commit control, matched by AXButton title. Korean read live 2026-09-15 beside `취소` and `기존 프로젝트 열기…` in the same census (#885). ja-JP and de-DE unmeasured."
+    )
+
+    static let projectChooserEmptyProjectLabel = LabelSet(
+        canonical: "Empty Project",
+        variants: ["비어 있는 프로젝트"],
+        rationale: "The Empty Project tile's label, read as an AXStaticText value after selecting the `새로운 프로젝트` category. Korean read live 2026-09-15 (#885); the details panel alongside it read `비어 있는 프로젝트 생성`, which is how the selection is confirmed without a coordinate. ja-JP and de-DE unmeasured."
+    )
+
     static let newProjectMenuItem = LabelSet(
         canonical: "New",
         variants: ["신규", "新規", "Neu"],
@@ -1943,6 +1967,9 @@ enum AXLocalePolicy {
         eventPositionAsTimeMenuItem,
         fileMenuBar,
         newProjectMenuItem,
+        projectChooserWindowTitle,
+        projectChooserCommitButton,
+        projectChooserEmptyProjectLabel,
         exportMenuItem,
         allTracksAsAudioFilesMenuItem,
         oneFilePerTrackPopupValue,

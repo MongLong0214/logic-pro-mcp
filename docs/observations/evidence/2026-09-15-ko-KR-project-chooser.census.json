@@ -1,0 +1,30 @@
+{
+  "what": "AX census of Logic's New Project chooser on a ko-KR Logic, read 2026-09-15",
+  "how": "File > 템플릿으로부터 신규… with no document open, then Scripts/livekit/ax_sheet_census.swift",
+  "window": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "title": "프로젝트 선택",
+    "description": "",
+    "modal": false,
+    "control_count": 89
+  },
+  "sidebar_categories_AXStaticText": [
+    "새로운 프로젝트", "최근 사용", "Live Loop 그리드", "프로젝트 템플릿", "나의 템플릿"
+  ],
+  "default_landing_category": "Live Loop 그리드",
+  "after_selecting_새로운_프로젝트": {
+    "tiles_AXStaticText": ["비어 있는 프로젝트", "Live Loop"],
+    "details_panel_AXStaticText": ["세부사항", "비어 있는 프로젝트 생성"]
+  },
+  "buttons_AXButton_title": ["기존 프로젝트 열기…", "취소", "선택", "추가 사운드 가져오기"],
+  "category_selection_mechanism": "AXSelected = true on the AXRow at AXWindow/AXSplitGroup/AXScrollArea/AXOutline/AXRow whose descendant AXStaticText value is the category name; returned .success",
+  "applescript_paths_that_failed": [
+    "table 1 of scroll area 1 of splitter group 1 of window \"프로젝트 선택\"  -> -1719 invalid index",
+    "table 1 of scroll area 1 of UI element 1 of window \"프로젝트 선택\"      -> -1719 invalid index"
+  ],
+  "save_prompt_button_titles_seen_on_the_way": {
+    "saved_project_with_unsaved_changes": ["저장", "저장하지 않음", "취소"],
+    "never_saved_untitled_document": ["저장", "저장 안 함", "취소"]
+  }
+}

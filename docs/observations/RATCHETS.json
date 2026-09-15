@@ -1,5 +1,16 @@
 {
  "allowed": {
+  "label_readings_from_a_superseded_build": [
+   "audioPluginSlotLabel→オーディオプラグイン",
+   "audioPluginSlotLabel→오디오 플러그인",
+   "hideAllPluginWindowsMenuItem→すべてのプラグインウインドウ",
+   "hideAllPluginWindowsMenuItem→모든 플러그인 윈도우",
+   "playheadPositionGroupLabel→再生ヘッドの位置",
+   "showStepInputKeyboardMenuItem→ステップインプットキーボード",
+   "showStepInputKeyboardMenuItem→스텝 입력 키보드",
+   "trackContentExplicit→tracks contents",
+   "trackContentExplicit→トラックコンテンツ"
+  ],
   "manual_reverify": [
    "2026-09-03-sort-settle-witness-accepts-prescroll-order",
    "2026-09-03-sort-tracks-by-track-name-is-inert",
@@ -52,8 +63,11 @@
    "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
    "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
    "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
-   "2026-09-15-phase-c-live-runs-and-four-destructive-operations-land-while-reporting-state-b"
+   "2026-09-15-phase-c-live-runs-and-four-destructive-operations-land-while-reporting-state-b",
+   "2026-09-15-the-automation-lane-is-legible-and-inert",
+   "2026-09-15-the-korean-project-chooser-names-itself"
   ],
+  "records_from_a_superseded_build": [],
   "records_without_evidence": [
    "2026-09-03-sort-settle-witness-accepts-prescroll-order",
    "2026-09-03-sort-tracks-by-track-name-is-inert",
@@ -534,6 +548,9 @@
     "pluginWindowEditorViewMenuItem",
     "pluginWindowSmartControlsControl",
     "pluginWindowViewSwitcher",
+    "projectChooserCommitButton",
+    "projectChooserEmptyProjectLabel",
+    "projectChooserWindowTitle",
     "projectPickerWindow",
     "recordArmKeyCommandName",
     "regionHelpKeyword",
@@ -651,6 +668,9 @@
     "pluginWindowEditorViewMenuItem",
     "pluginWindowSmartControlsControl",
     "pluginWindowViewSwitcher",
+    "projectChooserCommitButton",
+    "projectChooserEmptyProjectLabel",
+    "projectChooserWindowTitle",
     "projectPickerWindow",
     "recordArmKeyCommandName",
     "regionHelpKeyword",
@@ -780,6 +800,9 @@
     "pluginWindowEditorViewMenuItem",
     "pluginWindowSmartControlsControl",
     "pluginWindowViewSwitcher",
+    "projectChooserCommitButton",
+    "projectChooserEmptyProjectLabel",
+    "projectChooserWindowTitle",
     "projectPickerWindow",
     "recordArmKeyCommandName",
     "regionHelpKeyword",
@@ -972,6 +995,21 @@
  },
  "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
  "raised": {
+  "label_readings_from_a_superseded_build": {
+   "date": "2026-09-15",
+   "members": [
+    "audioPluginSlotLabel→オーディオプラグイン",
+    "audioPluginSlotLabel→오디오 플러그인",
+    "hideAllPluginWindowsMenuItem→すべてのプラグインウインドウ",
+    "hideAllPluginWindowsMenuItem→모든 플러그인 윈도우",
+    "playheadPositionGroupLabel→再生ヘッドの位置",
+    "showStepInputKeyboardMenuItem→ステップインプットキーボード",
+    "showStepInputKeyboardMenuItem→스텝 입력 키보드",
+    "trackContentExplicit→tracks contents",
+    "trackContentExplicit→トラックコンテンツ"
+   ],
+   "reason": "These nine label readings carry no host, or one this check cannot parse, so they cannot be shown to describe the declared Logic build. They are not known to be WRONG - they predate the provenance format settling - and re-reading each one needs a live Logic in its locale, which is why they are carried rather than closed. The dimension itself is new in this commit, so this is its starting ceiling; from here it may only shrink.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
+  },
   "manual_reverify": {
    "date": "2026-09-15",
    "members": [
@@ -989,7 +1027,7 @@
     "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
     "2026-09-15-phase-c-live-runs-and-four-destructive-operations-land-while-reporting-state-b"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe ko-KR New Project chooser record reverifies MANUALLY: reaching that window needs every project closed, which discards unsaved work, and a script that does that on an operator's machine is worse than a person following four steps. Carried for that reason, not for want of trying to script it.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
   },
   "records_without_evidence": {
    "date": "2026-09-15",
@@ -1008,7 +1046,7 @@
     "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
     "2026-09-15-phase-c-live-runs-and-four-destructive-operations-land-while-reporting-state-b"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe ledger was deleted on 2026-09-13 together with the release-qualification subsystem and restored on 2026-09-15. These members are the gaps that opened in the two days nothing was counting them: label variants and records written on 2026-09-13 and 2026-09-14 for the transport display-mode work, the MIDI-import panel and the German locale readings. They are admitted as a starting ceiling rather than closed, because closing them needs live readings and a raise is the honest way to carry a gap somebody has looked at. The guard that would have refused them at the time did not exist; it does now, and it refuses this file without this entry."
   },
   "schema_v1_records": {
    "date": "2026-09-15",
@@ -1026,7 +1064,7 @@
     "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
     "2026-09-15-phase-c-live-runs-and-four-destructive-operations-land-while-reporting-state-b"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe ledger was deleted on 2026-09-13 together with the release-qualification subsystem and restored on 2026-09-15. These members are the gaps that opened in the two days nothing was counting them: label variants and records written on 2026-09-13 and 2026-09-14 for the transport display-mode work, the MIDI-import panel and the German locale readings. They are admitted as a starting ceiling rather than closed, because closing them needs live readings and a raise is the honest way to carry a gap somebody has looked at. The guard that would have refused them at the time did not exist; it does now, and it refuses this file without this entry."
   },
   "surfaces_without_records": {
    "date": "2026-09-12",
@@ -1059,7 +1097,7 @@
     "newTrackSheetDescription→Neue Spur",
     "recordArmKeyCommandName→트랙 녹음 활성화 토글"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe ledger was deleted on 2026-09-13 together with the release-qualification subsystem and restored on 2026-09-15. These members are the gaps that opened in the two days nothing was counting them: label variants and records written on 2026-09-13 and 2026-09-14 for the transport display-mode work, the MIDI-import panel and the German locale readings. They are admitted as a starting ceiling rather than closed, because closing them needs live readings and a raise is the honest way to carry a gap somebody has looked at. The guard that would have refused them at the time did not exist; it does now, and it refuses this file without this entry."
   },
   "unmeasured_coverage.de-DE": {
    "date": "2026-09-15",
@@ -1068,7 +1106,7 @@
     "learnByKeyLabelCheckbox",
     "recordArmKeyCommandName"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
   },
   "unmeasured_coverage.en-US": {
    "date": "2026-09-15",
@@ -1077,7 +1115,7 @@
     "learnByKeyLabelCheckbox",
     "recordArmKeyCommandName"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
   },
   "unmeasured_coverage.ja-JP": {
    "date": "2026-09-15",
@@ -1086,7 +1124,7 @@
     "learnByKeyLabelCheckbox",
     "recordArmKeyCommandName"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
   },
   "unmeasured_coverage.ko-KR": {
    "date": "2026-09-15",
@@ -1095,7 +1133,7 @@
     "learnByKeyLabelCheckbox",
     "recordArmKeyCommandName"
    ],
-   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression."
+   "reason": "The German locale campaign (#876, #883) and the Phase-B qualification work landed together on this branch. These members are the gaps those measurements opened: six label variants read on a de-DE Logic that carry no provenance row yet, and the records written between 2026-09-14 and 2026-09-15 that reverify manually or cite no evidence file. They are admitted as a ceiling rather than closed, because closing them needs readings this branch did not take. The same run CLOSED three surfaces, and those are removed from `allowed` in this commit rather than left to hide a future regression.\n\n--- merged 2026-09-15 with the other branch's reason for the same dimension ---\n\nThe ledger was deleted on 2026-09-13 together with the release-qualification subsystem and restored on 2026-09-15. These members are the gaps that opened in the two days nothing was counting them: label variants and records written on 2026-09-13 and 2026-09-14 for the transport display-mode work, the MIDI-import panel and the German locale readings. They are admitted as a starting ceiling rather than closed, because closing them needs live readings and a raise is the honest way to carry a gap somebody has looked at. The guard that would have refused them at the time did not exist; it does now, and it refuses this file without this entry."
   }
  },
  "schema": 2,

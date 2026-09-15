@@ -1,0 +1,86 @@
+{
+ "schema": 2,
+ "id": "2026-09-15-the-automation-lane-is-legible-and-inert",
+ "date": "2026-09-15",
+ "subject": "Logic's track automation lane, as an AX surface",
+ "question": "Can the automation mode, parameter or value be read, and can any of them be driven?",
+ "verdict": "wall",
+ "surface": "arrange.transport",
+ "issues": [884, 862],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Mix > 오토메이션 보기, then Scripts/livekit/ax_sheet_census.swift, then AXShowMenu on the 오토메이션 모드 and 오토메이션 파라미터 popups while counting AXMenu elements under the application root",
+  "expected": "both popups return success and the application's AXMenu count does not change; Mix > 트랙 오토메이션 생성 leaves the Edit menu's first item reading 실행 취소할 수 없음",
+  "cost": "needs Logic with a project open; toggles the automation view and toggles it back; ~2 min"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Server/OperationRegistry.swift:tracksSetAutomation"
+ ],
+ "method": "The automation view was toggled on from the Mix menu, the arrange window censused, and every automation-named element probed for its attribute names, action names and whether AXValue is settable. Then each actuation was attempted and its EFFECT measured rather than its return code: AXPress and AXShowMenu were counted against the application's AXMenu total before and after, and the menu item was checked against Logic's own undo stack. The parameter popup was driven in the same run as a positive control, so a zero is not a statement about one element. No coordinate was used and no point was placed by clicking the lane.",
+ "observations": [
+  {
+   "what": "the arrange window's control count, automation view off then on",
+   "view_off": 871,
+   "view_on": 985
+  },
+  {
+   "what": "automation-named elements by role, with the view on",
+   "AXCheckBox": 23,
+   "AXButton": 77,
+   "AXPopUpButton": 38
+  },
+  {
+   "what": "the three elements that would carry a read or a write, as element rows",
+   "rows": [
+    {"role": "AXPopUpButton", "description": "오토메이션 모드", "value": "Read"},
+    {"role": "AXPopUpButton", "description": "오토메이션 파라미터", "value": "볼륨"},
+    {"role": "AXButton", "description": "오토메이션 값"},
+    {"role": "AXCheckBox", "description": "오토메이션 보기/가리기"}
+   ],
+   "settable_AXValue": {"오토메이션 모드": false, "오토메이션 파라미터": false, "오토메이션 값": false},
+   "actions": {"오토메이션 모드": ["AXPress", "AXShowMenu"], "오토메이션 파라미터": ["AXPress", "AXShowMenu"], "오토메이션 값": ["AXPress"]},
+   "AXValue_present": {"오토메이션 모드": true, "오토메이션 파라미터": true, "오토메이션 값": false}
+  },
+  {
+   "what": "every actuation attempted, with its EFFECT beside its return code",
+   "attempts": [
+    {"target": "오토메이션 값", "action": "AXPress", "returned": "success", "app_AXMenu_before": 65, "app_AXMenu_after": 65, "children_before": 0, "children_after": 0},
+    {"target": "오토메이션 모드", "action": "AXShowMenu", "returned": "success", "app_AXMenu_before": 66, "app_AXMenu_after": 66},
+    {"target": "오토메이션 파라미터", "action": "AXShowMenu", "returned": "success", "app_AXMenu_before": 66, "app_AXMenu_after": 66, "role": "positive control"}
+   ]
+  },
+  {
+   "what": "the menu route, checked against Logic's own undo stack",
+   "item": "Mix > 트랙 오토메이션 생성",
+   "enabled": true,
+   "arrange_controls_before": 985,
+   "arrange_controls_after": 985,
+   "edit_menu_first_item_after": "실행 취소할 수 없음"
+  },
+  {
+   "what": "the product's own route",
+   "call": "logic_tracks.set_automation {index: 0, mode: touch}",
+   "state": "C",
+   "error": "channels_exhausted",
+   "hint": "MCU feedback not detected: no feedback has been received on 'LogicProMCP-MCU-Internal' (2 endpoint(s) visible, all owned by this server). Check the Logic Pro > Control Surfaces > Setup binding."
+  }
+ ],
+ "evidence": ["evidence/2026-09-15-ko-KR-automation-lane-and-control-surface.census.json"],
+ "conclusion": "The automation lane is LEGIBLE AND INERT. Its mode and parameter are readable by name — `오토메이션 모드` reports `Read` and `오토메이션 파라미터` reports `볼륨` — so the addressing an automation API would need exists. Nothing else does: `오토메이션 값` carries no AXValue at all, AXValue is settable on none of the three, and every actuation returns success and changes nothing, including the parameter popup driven as a positive control in the same run. `Mix > 트랙 오토메이션 생성` is enabled and its click is confirmed by name, and Logic's undo stack reads `실행 취소할 수 없음` afterwards — nothing was created. So no automation point exists to be read, and no route measured here can create one.",
+ "limits": [
+  "ko-KR only, one project, one track.",
+  "This does NOT establish that automation points are unreadable — it establishes that none could be created to look for. An empty lane read as unreadable would be a check that cannot fail, and that reading is not made here.",
+  "The Event List was NOT probed for automation events, for the same reason: there was nothing to find.",
+  "The product's route was refused for an ENVIRONMENTAL reason on this host — no control surface is installed — not because `set_automation` is wrong. See `2026-09-15-the-control-surface-lost-its-device`.",
+  "Placing a point by clicking the lane was not attempted: it needs a coordinate, which this repository does not use.",
+  "AXPress on the two popups was not tried, only AXShowMenu."
+ ],
+ "supersedes": null
+}

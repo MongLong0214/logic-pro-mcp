@@ -1,0 +1,160 @@
+{
+ "schema": 2,
+ "id": "2026-09-15-the-korean-project-chooser-names-itself",
+ "date": "2026-09-15",
+ "subject": "The New Project chooser on a Korean Logic",
+ "question": "What does the chooser call itself, its commit button and its Empty Project tile on a non-English Logic?",
+ "verdict": "works",
+ "surface": "project.lifecycle",
+ "issues": [
+  885
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Quit every open project, then File > 템플릿으로부터 신규… , then Scripts/livekit/ax_sheet_census.swift",
+  "expected": "an AXStandardWindow titled 프로젝트 선택 carrying AXButton 선택 and, under 새로운 프로젝트, an AXStaticText 비어 있는 프로젝트",
+  "cost": "needs Logic with no document open; discards unsaved changes on the way; ~2 min"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift:chooserSelectionIsUnambiguous",
+  "Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift:isExactEmptyProjectLabel"
+ ],
+ "method": "Logic was running in ko-KR with lpm-locale-campaign open. `파일 > 신규` did NOT present the chooser: it raised the save prompt and then created 무제 30 directly, which is the branch #885 says masks this defect. `파일 > 템플릿으로부터 신규…` with no document open is what presents it. The File menu's item names were READ (`get name of every menu item`) rather than translated. Category selection was driven by setting AXSelected on the AXRow, which is the mechanism already recorded for this window; two AppleScript element paths were tried first and both answered -1719, and they are listed in the evidence rather than dropped. Nothing in the chooser was committed: the run ended by cancelling, and the operator's project was reopened from disk.",
+ "observations": [
+  {
+   "what": "the chooser window, verbatim",
+   "role": "AXWindow",
+   "subrole": "AXStandardWindow",
+   "title": "프로젝트 선택",
+   "modal": false,
+   "controls": 89
+  },
+  {
+   "what": "its buttons, verbatim AXButton titles",
+   "strings": [
+    "기존 프로젝트 열기…",
+    "취소",
+    "선택",
+    "추가 사운드 가져오기"
+   ]
+  },
+  {
+   "what": "sidebar categories, verbatim AXStaticText values",
+   "strings": [
+    "새로운 프로젝트",
+    "최근 사용",
+    "Live Loop 그리드",
+    "프로젝트 템플릿",
+    "나의 템플릿"
+   ],
+   "default_landing": "Live Loop 그리드"
+  },
+  {
+   "what": "tiles and details panel after selecting 새로운 프로젝트, verbatim AXStaticText values",
+   "strings": [
+    "비어 있는 프로젝트",
+    "Live Loop",
+    "세부사항",
+    "비어 있는 프로젝트 생성"
+   ]
+  },
+  {
+   "what": "the two Korean spellings Logic uses for Don't Save, read on the way to the chooser",
+   "saved_project_with_unsaved_changes": [
+    "저장",
+    "저장하지 않음",
+    "취소"
+   ],
+   "never_saved_untitled_document": [
+    "저장",
+    "저장 안 함",
+    "취소"
+   ]
+  },
+  {
+   "what": "the same readings as element rows -- role plus the attribute that carried the string",
+   "rows": [
+    {
+     "role": "AXWindow",
+     "subrole": "AXStandardWindow",
+     "title": "프로젝트 선택"
+    },
+    {
+     "role": "AXButton",
+     "title": "선택"
+    },
+    {
+     "role": "AXButton",
+     "title": "취소"
+    },
+    {
+     "role": "AXButton",
+     "title": "기존 프로젝트 열기…"
+    },
+    {
+     "role": "AXButton",
+     "description": "추가 사운드 가져오기"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "새로운 프로젝트"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "최근 사용"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "Live Loop 그리드"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "프로젝트 템플릿"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "나의 템플릿"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "비어 있는 프로젝트"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "Live Loop"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "세부사항"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "비어 있는 프로젝트 생성"
+    },
+    {
+     "role": "AXStaticText",
+     "value": "프로젝트 선택"
+    }
+   ]
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-15-ko-KR-project-chooser.census.json"
+ ],
+ "conclusion": "The three English literals `project.new` matches on have Korean counterparts and all three were read: the window is titled 프로젝트 선택, the commit button's AXButton title is 선택, and the Empty Project tile's AXStaticText value is 비어 있는 프로젝트. The details panel reads 비어 있는 프로젝트 생성 when that tile is the selection, which is a coordinate-free way to confirm WHICH tile is selected. Separately: Logic uses TWO different Korean labels for Don't Save — 저장하지 않음 for a saved project with unsaved changes, 저장 안 함 for a never-saved untitled document — so a matcher built on either one alone breaks on the other dialog.",
+ "limits": [
+  "ko-KR only. ja-JP and de-DE are not measured for this window, and nothing here licenses translating them.",
+  "The tile was never PRESSED and no project was created from the chooser: this establishes what the surface is called, not that a selection can be made or committed through it.",
+  "`선택` was read as an AXButton title; whether it is the only enabled button with that title, which is what `chooserSelectionIsUnambiguous` requires, was not counted.",
+  "The chooser's own AXStaticText also carries 프로젝트 선택, so a matcher on window title and one on a descendant text are not the same check and this record does not say which the product should use.",
+  "Cancelling the chooser did NOT close it; the window was still present afterwards and was dismissed by opening a project from disk. Why is unmeasured."
+ ],
+ "supersedes": null
+}

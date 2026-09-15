@@ -45,6 +45,32 @@ SURFACES_DOC = os.path.join(REPO, "docs", "observations", "SURFACES.md")
 LABELS_DOC = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
 
+def declared_logic_build(repo_dir):
+    """The build every reading in this repository is understood to describe, or a reason it is not
+    readable.
+
+    Absence is a FAILURE here and silence in `check-observation-ratchets.py`: that guard computes
+    "readings from a superseded build" against this declaration, and with the file missing it has
+    nothing to compare to, so both dimensions come back empty and the drift is uncounted. A
+    dimension that reads clean because its input vanished is the worst of the three ways to be
+    wrong, so the file's existence is asserted where a failure is loud.
+    """
+    path = os.path.join(repo_dir, "docs", "observations", "LOGIC-BUILD.json")
+    if not os.path.exists(path):
+        return None, ("docs/observations/LOGIC-BUILD.json is missing. It declares the Logic build "
+                      "every reading describes, and check-observation-ratchets.py counts drift "
+                      "against it -- without the file that count is silently zero")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except ValueError as exc:
+        return None, f"docs/observations/LOGIC-BUILD.json: {exc}"
+    for key in ("app", "version", "build"):
+        if not str(doc.get(key) or "").strip():
+            return None, f"docs/observations/LOGIC-BUILD.json: `{key}` is missing or empty"
+    return doc, None
+
+
 def known_surfaces():
     """The taxonomy, read from its own table so the two cannot drift apart."""
     out = set()
@@ -279,6 +305,26 @@ def main():
     paths = sorted(p for p in glob.glob(os.path.join(DIR, "*.json"))
                    if re.match(r"^\d{4}-\d{2}-\d{2}-.*\.json$", os.path.basename(p)))
     problems = []
+    declared, why = declared_logic_build(REPO)
+    if declared is None:
+        problems.append(why)
+    else:
+        # Every record says which Logic it is true OF, and until the declaration existed nothing
+        # compared the two. A record naming a different build is not WRONG -- it is a reading of a
+        # Logic this repository no longer targets -- so it is not refused here; it is counted by
+        # `check-observation-ratchets.py`, where the count may only shrink. What IS refused is a
+        # record whose host block cannot be compared at all.
+        for p in paths:
+            try:
+                with open(p, encoding="utf-8") as handle:
+                    host = (json.load(handle).get("host") or {})
+            except (OSError, ValueError):
+                continue          # the per-record check below reports a malformed record
+            stem = os.path.basename(p)[:-5]
+            for key in ("version", "build"):
+                if not str(host.get(key) or "").strip():
+                    problems.append(f"{stem}: host.{key} is missing, so this record cannot be "
+                                    f"compared to the declared Logic build")
     for p in paths:
         problems += check(p)
     if problems:

@@ -40,6 +40,40 @@ func creatorStudioEmptyProjectLabelGate() {
     #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project Copy", value: nil))
 }
 
+/// #885 -- the chooser branch matched three bare English literals, so it could never match on a
+/// non-English Logic. Korean read live 2026-09-15 (record
+/// `2026-09-15-the-korean-project-chooser-names-itself`); ja-JP and de-DE are deliberately NOT
+/// asserted here, because they have not been measured and a translated guess is what #883 showed
+/// looks right and matches nothing.
+@Test("the Korean chooser is recognised by its measured strings, and near-misses still are not")
+func koreanProjectChooserIsRecognised() {
+    #expect(AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "프로젝트 선택",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: true))
+    #expect(AccessibilityChannel.isExactEmptyProjectLabel(title: "비어 있는 프로젝트", value: nil))
+    #expect(AccessibilityChannel.isExactEmptyProjectLabel(title: nil, value: "비어 있는 프로젝트"))
+
+    // The details panel reads `비어 있는 프로젝트 생성` when that tile is selected. It is a DIFFERENT
+    // string and the tile matcher must not accept it, or the check that confirms WHICH tile is
+    // selected would also satisfy the check for the tile itself.
+    #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "비어 있는 프로젝트 생성", value: nil))
+    // A project a user named after the chooser must not be taken for the chooser.
+    #expect(!AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "프로젝트 선택 - 트랙",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: true))
+    // Unmeasured locales gain nothing, and saying so is the point.
+    #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "空のプロジェクト", value: nil))
+    #expect(!AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "Projekt auswählen",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: true))
+}
+
 @Test("Creator Studio accepts a direct zero-track Project window after exact chooser selection")
 func creatorStudioDirectEmptyProjectWindowGate() {
     #expect(AccessibilityChannel.isCreatedProjectWindowTitle("Untitled - Tracks"))

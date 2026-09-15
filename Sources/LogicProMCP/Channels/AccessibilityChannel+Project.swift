@@ -227,7 +227,7 @@ extension AccessibilityChannel {
             }
             let chooseButtons = AXHelpers.findAllDescendants(
                 of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
-            ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
+            ).filter { AXLocalePolicy.projectChooserCommitButton.matches(AXHelpers.getTitle($0, runtime: runtime.ax), mode: .exactStrict) }
             let chooseEnabled: Bool = chooseButtons.first.flatMap {
                 AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
             } ?? false
@@ -247,14 +247,15 @@ extension AccessibilityChannel {
         chooseButtonCount: Int,
         chooseEnabled: Bool
     ) -> Bool {
-        windowTitle == "Choose a Project"
+        AXLocalePolicy.projectChooserWindowTitle.matches(windowTitle, mode: .exactStrict)
             && emptyProjectLabelCount == 1
             && chooseButtonCount == 1
             && chooseEnabled
     }
 
     static func isExactEmptyProjectLabel(title: String?, value: String?) -> Bool {
-        title == "Empty Project" || value == "Empty Project"
+        AXLocalePolicy.projectChooserEmptyProjectLabel.matches(title, mode: .exactStrict)
+            || AXLocalePolicy.projectChooserEmptyProjectLabel.matches(value, mode: .exactStrict)
     }
 
     static func isCreatedProjectWindowTitle(_ title: String?) -> Bool {
@@ -400,7 +401,7 @@ extension AccessibilityChannel {
         }
         let chooseButtons = AXHelpers.findAllDescendants(
             of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
-        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
+        ).filter { AXLocalePolicy.projectChooserCommitButton.matches(AXHelpers.getTitle($0, runtime: runtime.ax), mode: .exactStrict) }
         let chooseEnabled: Bool = chooseButtons.first.flatMap {
             AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
         } ?? false
