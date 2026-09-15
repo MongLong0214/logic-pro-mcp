@@ -6,8 +6,8 @@
  "question": "Two mixer operations produced a complete Phase-B write-and-restore cycle and still did not qualify, with readback_not_ax_live. Is the mixer readback actually not live, or is the gate asking it the wrong question?",
  "verdict": "works",
  "issues": [
-  "#373",
-  "#284"
+  373,
+  284
  ],
  "surface": "mixer.channel_strips",
  "host": {

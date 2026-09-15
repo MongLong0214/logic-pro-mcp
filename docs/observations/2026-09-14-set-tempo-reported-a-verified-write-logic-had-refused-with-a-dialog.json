@@ -6,7 +6,7 @@
   "question": "set_tempo verifies by reading the tempo field it just typed into. Is a field holding the typed value the same fact as Logic having applied it?",
   "verdict": "wall",
   "issues": [
-    "#304"
+    304
   ],
   "surface": "arrange.transport",
   "host": {

@@ -6,7 +6,7 @@
   "question": "Does anything at the SOURCE report which destination a send slot holds?",
   "verdict": "partial",
   "issues": [
-    "#291"
+    291
   ],
   "surface": "mixer.routing",
   "host": {

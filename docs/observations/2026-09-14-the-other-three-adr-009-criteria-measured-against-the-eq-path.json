@@ -6,7 +6,7 @@
   "question": "Criterion 1 is now met by eighteen Channel EQ parameters. Are the other three met, or was the parameter count the only thing standing between this ADR and done?",
   "verdict": "partial",
   "issues": [
-    "#292"
+    292
   ],
   "surface": "plugin.controls_view",
   "host": {

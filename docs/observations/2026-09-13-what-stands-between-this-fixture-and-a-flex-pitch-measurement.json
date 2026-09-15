@@ -6,7 +6,7 @@
   "question": "Can the measurement this issue asks for be taken on the campaign fixture as it stands?",
   "verdict": "wall",
   "issues": [
-    "#305"
+    305
   ],
   "surface": "system.midi",
   "host": {

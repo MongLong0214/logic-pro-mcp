@@ -6,7 +6,7 @@
  "question": "ADR-008 Phase 1 is filed as BLOCKED on node identity. Is the graph unable to resolve ANY endpoint, or only some — and does its answer depend on what the client read first?",
  "verdict": "partial",
  "issues": [
-  "#291"
+  291
  ],
  "surface": "mixer.routing",
  "host": {

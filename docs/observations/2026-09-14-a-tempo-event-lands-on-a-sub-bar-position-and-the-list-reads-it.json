@@ -6,7 +6,7 @@
   "question": "ADR-016 records sub-bar tempo events as untouched. Can a tempo event be placed at a position finer than a bar, does the Tempo list report that position, and can it be taken back?",
   "verdict": "works",
   "issues": [
-    "#304"
+    304
   ],
   "surface": "editor.event_list",
   "host": {

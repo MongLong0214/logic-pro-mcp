@@ -6,7 +6,7 @@
   "question": "A one-way State A says a write landed once. Does the same parameter come BACK, and does rewriting the value it already holds still verify?",
   "verdict": "works",
   "issues": [
-    "#292"
+    292
   ],
   "surface": "plugin.controls_view",
   "host": {

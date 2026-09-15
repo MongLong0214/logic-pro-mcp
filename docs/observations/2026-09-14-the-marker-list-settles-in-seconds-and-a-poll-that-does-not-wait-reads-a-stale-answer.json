@@ -6,7 +6,7 @@
   "question": "A delete that answered State A left the marker visible in the list. Is that a false State A, or is the list slow?",
   "verdict": "works",
   "issues": [
-    "#373"
+    373
   ],
   "surface": "arrange.transport",
   "host": {

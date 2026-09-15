@@ -6,8 +6,8 @@
  "question": "tracks.arm and tracks.create_audio both succeed standalone and fail inside the sweep. Two hypotheses died (Logic not frontmost; a composing input source). What is it?",
  "verdict": "works",
  "issues": [
-  "#373",
-  "#284"
+  373,
+  284
  ],
  "surface": "arrange.menus",
  "host": {

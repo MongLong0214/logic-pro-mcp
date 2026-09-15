@@ -6,7 +6,7 @@
  "question": "The qualification sweep files these as measured walls. Is the wall the readback — a write that lands and cannot be confirmed — or does the write not land at all, and do they share a cause?",
  "verdict": "wall",
  "issues": [
-  "#373"
+  373
  ],
  "surface": "arrange.transport",
  "host": {

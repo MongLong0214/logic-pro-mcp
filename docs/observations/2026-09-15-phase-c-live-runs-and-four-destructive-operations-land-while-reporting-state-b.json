@@ -6,8 +6,8 @@
  "question": "Phase C-live needs a Logic with no open document. Given one, does it work — and do the destructive operations behave?",
  "verdict": "partial",
  "issues": [
-  "#373",
-  "#284"
+  373,
+  284
  ],
  "surface": "project.lifecycle",
  "host": {

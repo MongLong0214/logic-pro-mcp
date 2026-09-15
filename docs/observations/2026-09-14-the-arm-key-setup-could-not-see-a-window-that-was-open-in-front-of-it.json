@@ -6,7 +6,7 @@
  "question": "tracks.arm is unqualifiable because no MCU control surface is registered. The product ships a consented, coordinate-free alternative — system.setup_arm_key, which assigns a key command through Logic's own GUI. Does it work on this host?",
  "verdict": "works",
  "issues": [
-  "#373"
+  373
  ],
  "surface": "system.preferences",
  "host": {

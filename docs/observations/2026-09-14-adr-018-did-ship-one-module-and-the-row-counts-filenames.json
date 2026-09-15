@@ -6,8 +6,8 @@
   "question": "The roadmap says ADR-018's four modules each count zero references outside their own directory, which reads as an ADR that shipped nothing. Is that what the tree says?",
   "verdict": "works",
   "issues": [
-    "#306",
-    "#299"
+    306,
+    299
   ],
   "surface": "plugin.controls_view",
   "host": {

@@ -6,7 +6,7 @@
  "question": "Six operations that had qualified stopped qualifying, with no code change between the runs. What changed?",
  "verdict": "wall",
  "issues": [
-  "#373"
+  373
  ],
  "surface": "system.preferences",
  "host": {

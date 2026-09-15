@@ -316,3 +316,76 @@ struct QualificationReadbackFreshnessTests {
         )
     }
 }
+
+/// #882 review BLOCKER 1 — the recipe's OWN readings decide whether a reading happened.
+///
+/// `readbackFreshness` cannot answer this. It is computed from the operation's later readback, and
+/// it returns `.admissible` for every verification policy that is not `.readbackRequired` — which
+/// both operations carrying a mutation/restore record are (`mixer.set_volume` and `mixer.set_pan`
+/// are `.none`). A cycle could read `data_source: "mixer_not_visible"` three times and be promoted.
+@Suite("Phase-B record readings")
+struct QualificationRecipeReadingTests {
+    private static func envelope(
+        readable: Bool? = nil, axOccluded: Bool? = nil,
+        rows: String = #"[{"index":0,"volume":0.4}]"#, verifiedEmpty: Bool? = nil
+    ) -> String {
+        var fields = [#""data_source":"ax_live""#, "\"data\":\(rows)"]
+        if let readable { fields.append("\"readable\":\(readable)") }
+        if let axOccluded { fields.append("\"ax_occluded\":\(axOccluded)") }
+        if let verifiedEmpty { fields.append("\"verified_empty\":\(verifiedEmpty)") }
+        return "{" + fields.joined(separator: ",") + "}"
+    }
+
+    private static func record(
+        preState: String? = nil, readback: String? = nil, restoreReadback: String? = nil
+    ) -> QualificationMutationRestoreRecord {
+        QualificationMutationRestoreRecord(
+            operationID: "mixer.set_volume",
+            preState: preState ?? envelope(),
+            mutation: "{\"state\":\"A\"}",
+            readback: readback ?? envelope(),
+            restore: "{\"state\":\"A\"}",
+            restoreReadback: restoreReadback ?? envelope()
+        )
+    }
+
+    @Test("three real readings are not flagged")
+    func allThreeReadingsHappened() {
+        #expect(Self.record().readingThatDidNotHappen == nil)
+    }
+
+    @Test("an unreadable reading is named, whichever of the three it is")
+    func unreadableIsNamed() throws {
+        let pre = try #require(Self.record(preState: Self.envelope(readable: false))
+            .readingThatDidNotHappen)
+        #expect(pre.contains("pre_state"))
+        let mid = try #require(Self.record(readback: Self.envelope(readable: false))
+            .readingThatDidNotHappen)
+        #expect(mid.contains("readback"))
+        let post = try #require(Self.record(restoreReadback: Self.envelope(readable: false))
+            .readingThatDidNotHappen)
+        #expect(post.contains("restore_readback"))
+    }
+
+    @Test("an occluded reading is named")
+    func occludedIsNamed() throws {
+        let why = try #require(Self.record(readback: Self.envelope(axOccluded: true))
+            .readingThatDidNotHappen)
+        #expect(why.contains("ax_occluded"))
+    }
+
+    @Test("empty is a reading only when the emptiness was verified")
+    func emptyNeedsVerification() throws {
+        let unverified = try #require(Self.record(readback: Self.envelope(rows: "[]"))
+            .readingThatDidNotHappen)
+        #expect(unverified.contains("verified_empty"))
+        #expect(Self.record(readback: Self.envelope(rows: "[]", verifiedEmpty: true))
+            .readingThatDidNotHappen == nil)
+    }
+
+    @Test("a body that is not an envelope is not a reading")
+    func nonEnvelopeIsNotAReading() throws {
+        let why = try #require(Self.record(readback: "not json").readingThatDidNotHappen)
+        #expect(why.contains("readback"))
+    }
+}

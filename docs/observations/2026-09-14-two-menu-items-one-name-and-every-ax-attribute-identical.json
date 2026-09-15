@@ -6,7 +6,7 @@
  "question": "Seven operations fail because no MCU control surface is registered. SETUP.md registers one through Logic Pro -> Control Surfaces -> Setup. Can that menu item be reached without positional addressing?",
  "verdict": "wall",
  "issues": [
-  "#373"
+  373
  ],
  "surface": "system.preferences",
  "host": {

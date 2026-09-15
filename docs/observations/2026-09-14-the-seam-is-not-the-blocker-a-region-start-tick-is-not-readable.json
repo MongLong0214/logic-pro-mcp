@@ -6,9 +6,9 @@
   "question": "Three roadmap rows name the same blocker: the identity proof's only mint is debug-only, so a release build cannot construct one. Is the seam the blocker, or is the seam debug-only BECAUSE nothing can produce what the proof needs?",
   "verdict": "wall",
   "issues": [
-    "#293",
-    "#302",
-    "#303"
+    293,
+    302,
+    303
   ],
   "surface": "arrange.transport",
   "host": {

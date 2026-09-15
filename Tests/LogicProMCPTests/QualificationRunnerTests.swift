@@ -1740,6 +1740,26 @@ struct QualificationRunnerTests {
         // wrong once — a record short-circuited above every other check and laundered an injected
         // fault — so this asserts what the rule actually permits. `.failed` is what it must never
         // be: a record cannot coexist with a failed probe.
+        // `allSatisfy` on an empty collection is true, so every line below would hold for a run in
+        // which no recipe produced evidence at all -- delete every Phase-B recipe and this block
+        // stays green. The positive control has to come first.
+        #expect(!withEvidence.isEmpty)
+        // And specifically: the VALUE cycle ran. `withEvidence` being non-empty only says SOME
+        // recipe produced a record, and the boolean and transport cycles can supply that on their
+        // own -- so the operations whose recipe restores a continuous value, the two this branch
+        // rewrote to address a track by `track_ref` and to compensate a landed write, could be
+        // absent from every run and nothing here would say so.
+        let valueCycleOperations = Set(
+            QualificationTransport.valueRestoreReadbackField.keys.map(\.rawValue))
+        let valueCycleEvidence = withEvidence.filter { valueCycleOperations.contains($0.operationID) }
+        #expect(
+            !valueCycleEvidence.isEmpty,
+            """
+            no value-restore cycle produced evidence in this run. Expected one of \
+            \(valueCycleOperations.sorted()); saw records for \
+            \(withEvidence.map(\.operationID).sorted())
+            """
+        )
         #expect(withEvidence.allSatisfy {
             ($0.status == .passed || $0.status == .notQualified)
                 && $0.mutationRestore?.operationID == $0.operationID
@@ -1884,7 +1904,14 @@ struct QualificationRunnerTests {
         #expect(everyCreditedOperationIsRegistered)
         // A live run that credits nothing would satisfy every line above, so the run has to have
         // produced credit at all. This is the same positive control the other live harnesses carry.
+        //
+        // And it has to be credit for a MUTATING operation. `credited` includes read-only semantic
+        // credit, which a run with every Phase-B recipe removed still earns, so `!credited.isEmpty`
+        // on its own cannot tell a working Phase B from an absent one -- the same vacuity as the
+        // `allSatisfy` above, one level out.
         #expect(!credited.isEmpty)
+        let creditedMutating = credited.intersection(Set(mutating.map(\.operationID)))
+        #expect(!creditedMutating.isEmpty)
     }
 
     /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT

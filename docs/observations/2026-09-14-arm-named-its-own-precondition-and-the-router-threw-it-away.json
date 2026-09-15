@@ -6,7 +6,7 @@
  "question": "tracks.arm falls back to MCU and answers State B with its flag unmoved. What is the accessibility channel actually refusing on, and why does the caller never learn it?",
  "verdict": "works",
  "issues": [
-  "#373"
+  373
  ],
  "surface": "arrange.track_headers",
  "host": {

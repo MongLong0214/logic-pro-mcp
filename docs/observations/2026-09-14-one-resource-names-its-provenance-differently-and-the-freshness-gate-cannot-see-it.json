@@ -6,8 +6,8 @@
   "question": "Two mixer operations produced a VERIFIED Phase-B write-and-restore cycle and still did not qualify. Is the cycle wrong, or is the gate reading the wrong thing?",
   "verdict": "works",
   "issues": [
-    "#373",
-    "#284"
+    373,
+    284
   ],
   "surface": "mixer.channel_strips",
   "host": {

@@ -6,8 +6,8 @@
  "question": "32 of the deferred operations are destructive and belong to a Phase C-live with a disposable fixture. Can that fixture be created from a running qualification session?",
  "verdict": "wall",
  "issues": [
-  "#373",
-  "#284"
+  373,
+  284
  ],
  "surface": "project.lifecycle",
  "host": {

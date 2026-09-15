@@ -51,6 +51,37 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
     let restore: String
     let restoreReadback: String
 
+    /// The name of the first reading in this record that says it did not HAPPEN, or nil when all
+    /// three report a real one.
+    ///
+    /// Why this exists rather than leaning on `readbackFreshness`: that verdict is computed from
+    /// the operation's own later readback, not from these three, and it short-circuits to
+    /// `.admissible` for every verification policy that is not `.readbackRequired` — which
+    /// includes `mixer.set_volume` and `mixer.set_pan`, the only two operations this record is
+    /// built for. A cycle could therefore read `data_source: "mixer_not_visible"` three times and
+    /// still be promoted, with the unavailable artifact published as `verified: true`.
+    ///
+    /// It checks the three statements an envelope makes about whether a reading occurred, and
+    /// nothing about freshness: `readable`, `ax_occluded`, and empty-without-`verified_empty`. A
+    /// stale reading is a different complaint and has its own verdict.
+    var readingThatDidNotHappen: String? {
+        for (name, raw) in [("pre_state", preState), ("readback", readback),
+                            ("restore_readback", restoreReadback)] {
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return "\(name): not readable as a JSON envelope"
+            }
+            if object["readable"] as? Bool == false { return "\(name): readable=false" }
+            if object["ax_occluded"] as? Bool == true { return "\(name): ax_occluded=true" }
+            let rows = object["data"] as? [Any]
+            let isEmpty = rows?.isEmpty ?? (object["data"] == nil)
+            if isEmpty, object["verified_empty"] as? Bool != true {
+                return "\(name): empty without verified_empty"
+            }
+        }
+        return nil
+    }
+
     enum CodingKeys: String, CodingKey {
         case operationID = "operation_id"
         case preState = "pre_state"
@@ -298,7 +329,16 @@ struct QualificationOperationResult: Equatable, Sendable {
             if isError == false, !readbackFreshness.isAdmissible { return .notQualified }
             // Freshness is required of the recipe's readback too: a cycle read through a stale or
             // partial resource is the same unverified claim with more steps.
-            if mutationRestore != nil, readbackFreshness.isAdmissible { return .passed }
+            //
+            // And freshness is not enough on its own. `readbackFreshness` is computed from the
+            // operation's LATER readback and returns `.admissible` unconditionally for any policy
+            // that is not `.readbackRequired`, which both operations carrying a record are. So the
+            // record's own three readings are inspected here for whether a reading happened at all.
+            // Without this a cycle reading `mixer_not_visible` three times was promoted to `.passed`
+            // and the unavailable artifact published as `verified: true`.
+            if let record = mutationRestore, readbackFreshness.isAdmissible {
+                return record.readingThatDidNotHappen == nil ? .passed : .notQualified
+            }
             return .notQualified
         }
     }
@@ -1779,13 +1819,16 @@ struct QualificationTransport: Sendable {
         .mixerSetPan: "pan",
     ]
 
+    /// The row's `track_ref` comes back with its value, and its absence is a refusal rather than a
+    /// fallback. The cycle addresses the track by that reference; an index is a position, and the
+    /// position of a row is not a property of the track sitting in it.
     private func observedTrackValue(
         _ session: QualificationSubprocessSession,
         id: Int,
         trackIndex: Int,
         field: String,
         phase: String
-    ) throws -> (value: Double, raw: String) {
+    ) throws -> (value: Double, raw: String, trackRef: String) {
         _ = try? invoke(
             session, id: id, tool: "logic_system", command: "refresh_cache",
             params: [:], phase: "\(phase).refresh")
@@ -1799,7 +1842,44 @@ struct QualificationTransport: Sendable {
                 "\(phase): logic://tracks did not report \(field) for track \(trackIndex)"
             )
         }
-        return (value, raw)
+        guard let trackRef = rows[trackIndex]["track_ref"] as? String, !trackRef.isEmpty else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks row \(trackIndex) carries no track_ref, so this cycle has "
+                    + "no identity to address. It does NOT fall back to the bare index: the index is "
+                    + "what the identity exists to replace."
+            )
+        }
+        return (value, raw, trackRef)
+    }
+
+    /// Put the value back after the cycle has failed somewhere between the write and its restore.
+    ///
+    /// Returns a sentence describing what happened, which the caller folds into the error it throws.
+    /// A compensating restore that fails silently is worse than none: the sweep continues, the
+    /// refusal is recorded, and nothing says the operator's mixer was left moved.
+    private func compensateValue(
+        _ session: QualificationSubprocessSession,
+        spec: OperationSpec,
+        field: String,
+        targetRef: String,
+        value: Double,
+        nextID: inout Int
+    ) -> String {
+        let callID = nextID
+        nextID += 1
+        do {
+            let answer = try invoke(
+                session, id: callID,
+                tool: spec.tool.rawValue, command: spec.command,
+                params: ["target_ref": targetRef, field: value],
+                phase: "phase_b.compensate", timeout: spec.deadline.seconds + 5)
+            if Self.mutationSaysItFailed(answer.text) {
+                return "REFUSED, \(field) may still be moved: " + answer.text.prefix(200)
+            }
+            return "sent, \(field) asked back to \(value) (not re-read: the read is what failed)"
+        } catch {
+            return "THREW, \(field) may still be moved: \(error)"
+        }
     }
 
     /// #373 Phase B for a continuous control: pre-state → move → readback → restore → readback.
@@ -1834,51 +1914,88 @@ struct QualificationTransport: Sendable {
         // Move toward the middle of the range, so a control already at an extreme still has
         // somewhere to go. 0.1 is far enough to clear any detent the measurements showed.
         let target = pre.value > 0.5 ? max(0.1, pre.value - 0.1) : min(0.9, pre.value + 0.1)
-        let mutation = try invoke(
-            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, readbackField: target], phase: "phase_b.mutation",
-            timeout: spec.deadline.seconds + 5)
-        guard !Self.mutationSaysItFailed(mutation.text) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+
+        // Everything from here can leave the operator's mixer moved, INCLUDING a call that throws:
+        // a timeout is a statement about the answer, not about the effect. So every exit between
+        // this point and a verified restore compensates, and says in the thrown error whether the
+        // compensation landed. Without this the sweep recorded a refusal and walked on with the
+        // fader still at `target`.
+        var restoreVerified = false
+        func failing(_ message: String) -> QualificationTransportError {
+            guard !restoreVerified else { return .protocolViolation(message) }
+            let note = compensateValue(
+                session, spec: spec, field: readbackField, targetRef: pre.trackRef,
+                value: pre.value, nextID: &nextID)
+            return .protocolViolation(message + " | compensating restore: " + note)
+        }
+
+        do {
+            let mutation = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+                params: ["target_ref": pre.trackRef, readbackField: target],
+                phase: "phase_b.mutation", timeout: spec.deadline.seconds + 5)
+            guard !Self.mutationSaysItFailed(mutation.text) else {
+                throw failing("phase_b.mutation: \(spec.id.rawValue) refused the real request: "
                     + mutation.text.prefix(220))
-        }
-        let after = try observedTrackValue(
-            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
-            phase: "phase_b.readback")
-        guard after.value != pre.value else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.readback: \(readbackField) did not move from \(pre.value)")
-        }
-        let restore = try invoke(
-            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: ["index": trackIndex, readbackField: pre.value], phase: "phase_b.restore",
-            timeout: spec.deadline.seconds + 5)
-        guard !Self.mutationSaysItFailed(restore.text) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.restore: \(spec.id.rawValue) refused the restore: "
+            }
+            let after = try observedTrackValue(
+                session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+                phase: "phase_b.readback")
+            // The row at this index must still be the SAME track. Logic reorders on selection, and
+            // a cycle that read one track, wrote to another and "restored" the first one's value
+            // onto it would satisfy every comparison below while corrupting a track it never named.
+            guard after.trackRef == pre.trackRef else {
+                throw failing("phase_b.readback: row \(trackIndex) changed identity mid-cycle — "
+                    + "pre \(pre.trackRef), now \(after.trackRef)")
+            }
+            guard after.value != pre.value else {
+                throw failing("phase_b.readback: \(readbackField) did not move from \(pre.value)")
+            }
+            let restore = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+                params: ["target_ref": pre.trackRef, readbackField: pre.value],
+                phase: "phase_b.restore", timeout: spec.deadline.seconds + 5)
+            guard !Self.mutationSaysItFailed(restore.text) else {
+                throw failing("phase_b.restore: \(spec.id.rawValue) refused the restore: "
                     + restore.text.prefix(220))
-        }
-        let restored = try observedTrackValue(
-            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
-            phase: "phase_b.restore_readback")
-        guard restored.value == pre.value else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.restore_readback: \(readbackField) not restored — observed "
+            }
+            let restored = try observedTrackValue(
+                session, id: readStep(), trackIndex: trackIndex, field: readbackField,
+                phase: "phase_b.restore_readback")
+            guard restored.trackRef == pre.trackRef else {
+                throw failing("phase_b.restore_readback: row \(trackIndex) changed identity — "
+                    + "pre \(pre.trackRef), now \(restored.trackRef)")
+            }
+            guard restored.value == pre.value else {
+                throw failing("phase_b.restore_readback: \(readbackField) not restored — observed "
                     + "\(restored.value), expected \(pre.value); the restore answered: "
                     + restore.text.prefix(300))
+            }
+            restoreVerified = true
+            return (
+                QualificationMutationRestoreRecord(
+                    operationID: spec.id.rawValue,
+                    preState: pre.raw,
+                    mutation: mutation.text,
+                    readback: after.raw,
+                    restore: restore.text,
+                    restoreReadback: restored.raw
+                ),
+                nextID
+            )
+        } catch let error as QualificationTransportError {
+            // `failing()` has already compensated for the cases it built. Anything else -- a
+            // timeout, a closed pipe, a malformed frame from any of the calls above -- reaches here
+            // without having done so, and the write may have landed.
+            if case .protocolViolation(let text) = error, text.contains("compensating restore:") {
+                throw error
+            }
+            let note = compensateValue(
+                session, spec: spec, field: readbackField, targetRef: pre.trackRef,
+                value: pre.value, nextID: &nextID)
+            throw QualificationTransportError.protocolViolation(
+                "\(error) | compensating restore: " + note)
         }
-        return (
-            QualificationMutationRestoreRecord(
-                operationID: spec.id.rawValue,
-                preState: pre.raw,
-                mutation: mutation.text,
-                readback: after.raw,
-                restore: restore.text,
-                restoreReadback: restored.raw
-            ),
-            nextID
-        )
     }
 
     /// #373 Phase B: transport operations whose effect is a boolean the transport resource reports,
