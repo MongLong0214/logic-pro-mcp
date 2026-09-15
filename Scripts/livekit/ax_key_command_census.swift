@@ -46,8 +46,16 @@ let openedByUs = keyCommandWindow() == nil
 if openedByUs {
     guard let bar = attr(ax, kAXMenuBarAttribute as String) else { print("no menu bar"); exit(1) }
     var target: AXUIElement?
+    // Both spellings, because the application menu-bar item is NOT spelled the same everywhere:
+    // measured 2026-09-15 across the four navigation-free censuses, en-US and ja-JP read
+    // `Logic Pro` with U+0020 while ko-KR and de-DE read `Logic\u{00A0}Pro` with a non-breaking
+    // space. Matching only the first made this census find no menu bar on half the locales and
+    // report "no menu bar" — a message about structure for a problem about one character.
+    // (The System Events PROCESS name is a different string and IS plain: measured the same day,
+    // `every process whose name is "Logic Pro"` returns 1 on this Korean host.)
+    let appMenuTitles = ["Logic Pro", "Logic\u{00A0}Pro"]
     for m in kids(bar as! AXUIElement)
-    where str(m, kAXTitleAttribute as String) == "Logic Pro" {
+    where appMenuTitles.contains(str(m, kAXTitleAttribute as String)) {
         for sub in kids(m) {
             for item in kids(sub)
             where str(item, kAXTitleAttribute as String).lowercased().contains("key command") {

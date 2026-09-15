@@ -154,6 +154,27 @@ PROTOCOL_COMPARISONS = (
     ('"control") == "pan"', "pan"),
     ('get("control") == "pan"', "pan"),
     ('["control"] == "pan"', "pan"),
+    # System Events' PROCESS name is not Logic's UI, and it is not the string the policy carries.
+    # MEASURED 2026-09-15 on a Korean Logic 12.3 (6674), all three in the same minute:
+    #
+    #   every process whose name is "Logic Pro"            (U+0020)  -> 1
+    #   every process whose name is "Logic\u00a0Pro"        (U+00A0)  -> 0
+    #   name of every process whose bundle identifier ...  -> bytes `L o g i c   P r o`
+    #
+    # while the AXMenuBarItem title on the SAME host is the non-breaking spelling. Two different
+    # strings that read alike; `applicationMenuBarItem` is about the second one. Without this the
+    # guard would push five harnesses to "fix" a line that is already right, and the fix would
+    # break them.
+    ('every process whose ', "logic pro"),
+    ('name is "Logic Pro"', "logic pro"),
+    ('tell process "Logic Pro"', "logic pro"),
+    ('tell application "Logic Pro"', "logic pro"),
+    # Two comparisons against a name that was ALREADY normalised or already read as a process name.
+    # `evidence.py` strips the non-breaking space on the line above its compare and says so in a
+    # comment older than this guard; `live_614` compares `name of first process whose frontmost is
+    # true`. Keyed by the variable so the exemption cannot spread to a window or menu title.
+    ('owner == "Logic Pro"', "logic pro"),
+    ('front == "Logic Pro"', "logic pro"),
 )
 ANY_LITERAL = re.compile(r'"([^"\\\n]{1,80})"')
 
@@ -204,11 +225,18 @@ def _hits(text, known_canonicals, patterns):
         stripped = line.strip()
         if stripped.startswith(("#", "//", "*")):
             continue
-        if any(marker in line for marker, _ in PROTOCOL_COMPARISONS):
-            continue
+        # The exemption is keyed by the literal AND the expression, which is what the comment on
+        # PROTOCOL_COMPARISONS has always said. The code used to `continue` on the whole LINE as
+        # soon as any marker matched, so one exempt word silently exempted every OTHER localisable
+        # string sharing that line. Found 2026-09-15 by adding a marker for `tell process "Logic
+        # Pro"`: three real `'Save'` findings vanished with it. A line-wide skip is an exemption
+        # that grows on its own.
+        exempt = {lit for marker, lit in PROTOCOL_COMPARISONS if marker in line}
         for pattern in patterns:
             for match in pattern.finditer(line):
                 literal = match.group("lit") if "lit" in (match.re.groupindex or {}) else match.group(1)
+                if literal.strip().lower() in exempt:
+                    continue
                 name = known_canonicals.get(literal.strip().lower())
                 if not name:
                     continue

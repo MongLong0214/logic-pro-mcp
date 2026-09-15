@@ -1,0 +1,34 @@
+{
+  "what": "Every route tried, 2026-09-15, to install a control surface on a ko-KR Logic 12.3 (6674) without a human using the GUI",
+  "preference_file": {
+    "path": "~/Library/Preferences/com.apple.logic.pro.cs",
+    "format": "not a plist — plutil reports 'Unexpected character M at line 1'; Logic's own binary format",
+    "size_bytes": 27505,
+    "LogicProMCP_occurrences_before": 0,
+    "LogicProMCP_occurrences_after_rebuild": 5,
+    "strings_after": ["LogicProMCP-MCU-Internal", "LogicProMCP-KeyCmd-Internal", "LogicProMCP-Scripter-Internal", "LogicProMCP-MIDI-Internal"]
+  },
+  "coremidi": {
+    "with_no_server_running": {"sources": ["Maschine MK3", "Logic Pro 가상 출력"], "destinations": ["Maschine MK3", "Logic Pro 가상 입력"]},
+    "with_the_server_running": {"sources": ["Maschine MK3", "Logic Pro 가상 출력", "LogicProMCP-MCU-Internal", "LogicProMCP-KeyCmd-Internal", "LogicProMCP-Scripter-Internal", "LogicProMCP-MIDI-Internal"], "destinations": ["Maschine MK3", "Logic Pro 가상 입력", "LogicProMCP-MCU-Internal"]},
+    "note": "the virtual ports exist only while a server process is alive; with none running there is nothing for Logic to bind to"
+  },
+  "routes_tried": [
+    {"route": "컨트롤 서피스 설정 window, its only unnamed AXButton", "path": "AXWindow/AXGroup[0]/AXList[0]/AXGroup[0]/AXButton[1]", "action": "AXPress", "returned": "success", "window_list_before": ["컨트롤 서피스 설정", "설정", "lpm-locale-campaign - 트랙"], "window_list_after": ["컨트롤 서피스 설정", "설정", "lpm-locale-campaign - 트랙"], "effect": "none"},
+    {"route": "컨트롤 서피스 submenu, all 8 items enumerated", "items": ["'오토메이션 보기/가리기' 할당 학습", "컨트롤러 할당…", "설정…", "설정…", "기본값 재형성", "모든 컨트롤 서피스 바이패스"], "effect": "no item installs a device"},
+    {"route": "컨트롤 서피스 > 설정… (index 5)", "opened": "AXDialog titled 설정, 37 controls — global control-surface preferences (픽업 모드, 페이더를 터치하여 트랙 선택, …)", "effect": "not a device installer"},
+    {"route": "컨트롤 서피스 > 기본값 재형성, WITH the MCU ports up", "click_confirmed_by_name": true, "preference_file_changed": true, "LogicProMCP_occurrences": "0 -> 5", "설정_window_기기_field_after": "기기 없음", "effect": "the ports were LEARNED into the preference file; no device was installed"},
+    {"route": "the application menu bar while the Setup window is key", "menu_bar_items": ["Apple", "Logic Pro", "파일", "편집", "트랙", "탐색", "녹음", "Mix", "보기", "윈도우", "1", "도움말"], "effect": "unchanged — the window contributes no menu of its own to AX"}
+  ],
+  "product_after_all_of_it": {
+    "call": "logic_tracks.set_automation {index: 0, mode: touch}",
+    "state": "C",
+    "error": "channels_exhausted",
+    "hint": "MCU feedback not detected: no feedback has been received on 'LogicProMCP-MCU-Internal' (2 endpoint(s) visible, all owned by this server)."
+  },
+  "incidents": [
+    "Pressing `button 1` of the Setup window to close it OPENED 컨트롤러 할당 instead — an unnamed button addressed by index, which is the positional targeting this repository refuses everywhere else.",
+    "컨트롤러 할당 and 설정 then refused Cmd+W and had to be dismissed with Escape (key code 53), the documented open-window wedge.",
+    "A held server process kept the MCU endpoints alive after its call finished, and the product then refused with a DIFFERENT message — 'include one this server did not create' — so a stale endpoint is distinguishable from an absent device, which is worth knowing."
+  ]
+}

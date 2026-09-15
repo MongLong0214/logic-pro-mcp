@@ -24,6 +24,23 @@ struct SystemDispatcher: OperationTraceDispatching {
         ), isError: true)
     }
 
+    /// #884 — the control-surface consent gate. Separate from the arm-key gate because it names a
+    /// different configuration write: this one installs a device into Logic's control-surface setup
+    /// and rebinds two MIDI ports, and a consent sentence that described the Key Commands window
+    /// would be asking for permission to do something else.
+    static func setupControlSurfaceConsentRequiredResult(_ params: [String: Value]) -> CallTool.Result? {
+        guard params["consent"]?.stringValue != "true" else { return nil }
+        return toolTextResult(HonestContract.encodeStateC(
+            error: .consentRequired,
+            hint: "One-time setup installs the \"\(ControlSurfaceSetup.model)\" control surface into Logic "
+                + "and binds its Output and Input ports to \"\(ControlSurfaceSetup.portName)\", which is what "
+                + "makes every MCU operation take effect. The server drives Logic's Control Surface Setup "
+                + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
+            extras: ["stage": "consent", "write_source": "none",
+                     "write_attempted": false, "configuration_write_attempted": false]
+        ), isError: true)
+    }
+
     /// Environment variable that overrides `setup_arm_key`'s server-side deadline
     /// (in whole milliseconds). Unset uses the default `DeadlineClass.long`; a
     /// valid value shortens the REAL `runWithDeadline` deadline so a genuine
@@ -259,7 +276,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
             saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
-            setup_arm_key, help. \
+            setup_arm_key, setup_control_surface, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
@@ -270,7 +287,10 @@ struct SystemDispatcher: OperationTraceDispatching {
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
             saga_status/saga_cancel -> { idempotency_key: String }; \
             setup_arm_key -> { consent: "true" } (one-time consent-gated Key Commands GUI \
-            drive that assigns the coordinate-free record-arm chord; no mouse). \
+            drive that assigns the coordinate-free record-arm chord; no mouse); \
+            setup_control_surface -> { consent: "true" } (one-time consent-gated install of the \
+            Mackie Control surface plus binding of both its MIDI ports to this server's port, \
+            which is what makes MCU operations take effect; no mouse). \
             Saga work is ordered best-effort work with compensation; it does not promise \
             all-or-nothing completion or durable recovery. The journal is session-only and \
             cleared when the server session ends, including process restart. \
@@ -358,6 +378,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                     ownsGate: ownsGate
                 )
             )
+        },
+        // #884 — the consent-gated control-surface install. The default wires the production
+        // engine; tests inject a canned Outcome so the envelope mapping is exercised without a live
+        // Setup window. The functional verifier is supplied by the CALLER at the dispatch site
+        // (below) because it needs the state cache, which this default cannot reach.
+        controlSurfaceSetup: @escaping @Sendable (Bool) -> ControlSurfaceSetup.DriveOutcome = { consent in
+            let ownsGate: @Sendable () -> Bool = { OperationTraceContext.current?.ownsGate() ?? true }
+            return ControlSurfaceSetup.drive(consent: consent, runtime: .production(ownsGate: ownsGate))
         }
     ) async -> CallTool.Result {
         switch command {
@@ -616,6 +644,86 @@ struct SystemDispatcher: OperationTraceDispatching {
                 ), isError: true)
             }
             return await finalizeTrace(armResult, traceID: armTraceID)
+
+        case "setup_control_surface":
+            // Consent-first, ahead of the trace and any app activation: this writes to the user's
+            // Logic configuration, and #884 is the reason it exists — with no control surface
+            // installed, Logic silently discards every MCU message this server sends while
+            // `system health` still reports the MCU channel ready.
+            if let refusal = Self.setupControlSurfaceConsentRequiredResult(params) { return refusal }
+            let csTraceID = await startTraceIfEnabled(command: command)
+            let csResult: CallTool.Result
+            // The feedback instant BEFORE the drive. `isConnected` alone would be satisfied by a
+            // message Logic sent minutes ago through a binding this operation is about to change,
+            // so the verifier below requires feedback NEWER than this — a reading that cannot have
+            // been produced before the drive ran.
+            let csFeedbackBefore = await cache.getMCUConnection().lastFeedbackAt
+            // The drive is synchronous AX work: off the cooperative pool, so a long GUI wait cannot
+            // starve the executor this dispatcher runs on.
+            let csDrive = await Task.detached(priority: .userInitiated) {
+                controlSurfaceSetup(true)
+            }.value
+            // The functional proof, taken AFTER the drive and from the application rather than from
+            // the two popup labels this operation just wrote: Logic emits MCU feedback only once a
+            // control surface is installed and bound to this server's port, and `isConnected` is set
+            // by feedback actually received. Re-reading the popups would be the check agreeing with
+            // itself.
+            let csVerdict: ControlSurfaceSetup.VerifyResult
+            switch csDrive {
+            case .consentRequired, .failed:
+                // Nothing was configured, so there is nothing for a feedback poll to be evidence
+                // about; polling here would spend five seconds to learn what the drive already said.
+                csVerdict = .couldNotAttempt("the setup drive did not complete")
+            case .alreadyConfigured, .configured:
+                var observed = false
+                for _ in 0..<20 {
+                    let conn = await cache.getMCUConnection()
+                    if conn.isConnected, let at = conn.lastFeedbackAt,
+                       csFeedbackBefore.map({ at > $0 }) ?? true {
+                        observed = true
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+                csVerdict = observed ? .effectObserved : .noEffect
+            }
+            switch ControlSurfaceSetup.conclude(csDrive, verifiedBy: csVerdict) {
+            case .consentRequired:
+                csResult = Self.setupControlSurfaceConsentRequiredResult([:]) ?? toolTextResult(
+                    HonestContract.encodeStateC(error: .consentRequired, hint: "Consent required.",
+                                               extras: ["stage": "consent"]), isError: true)
+            case .alreadyBound(let evidence):
+                csResult = toolTextResult(HonestContract.encodeStateA(extras: evidence.extras.merging([
+                    "verified": true,
+                    "detail": "The control surface was already installed with both ports bound, and a "
+                        + "real MCU operation was observed to take effect. No configuration was written.",
+                ]) { _, new in new }))
+            case .configuredAndVerified(let evidence):
+                csResult = toolTextResult(HonestContract.encodeStateA(extras: evidence.extras.merging([
+                    "verified": true,
+                    "detail": "Control surface configured through Logic's Setup window and confirmed by a "
+                        + "real MCU operation taking effect.",
+                ]) { _, new in new }))
+            case .configuredUnverified(let why, let evidence):
+                // The ports reading the right names is configuration, not proof. Nothing observed an
+                // MCU message land, so this must not claim the surface works.
+                csResult = toolTextResult(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: evidence.extras.merging([
+                        "detail": "Setup steps ran, but the binding is UNPROVEN — \(why).",
+                    ]) { _, new in new }
+                ))
+            case .failed(let stage, let hint, let evidence):
+                csResult = toolTextResult(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: hint,
+                    extras: evidence.extras.merging([
+                        "stage": stage,
+                        "write_attempted": evidence.configurationWriteAttempted,
+                    ]) { _, new in new }
+                ), isError: true)
+            }
+            return await finalizeTrace(csResult, traceID: csTraceID)
 
         case "export_support_bundle":
             let createdAt = Date()

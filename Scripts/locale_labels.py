@@ -61,8 +61,28 @@ STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
 LINE_COMMENT = re.compile(r"//[^\n]*")
 
 
+# Swift string escapes this projection has to decode. `\u{...}` matters more than it looks: the
+# de-DE application menu-bar item is `Logic\u{00A0}Pro` with a NON-BREAKING space, and a projection
+# that copied the eight literal characters `\u{00A0}` would disagree with what the compiled policy
+# actually matches -- silently, because `--check` parses both sides the same way and would report
+# agreement. A divergence a comparison cannot see is the worst kind this file can have.
+_ESCAPE = re.compile(r'\\u\{([0-9A-Fa-f]{1,8})\}|\\(.)')
+_SIMPLE = {'"': '"', "\\": "\\", "n": "\n", "t": "\t", "r": "\r", "0": "\0", "'": "'"}
+
+
 def _unescape(text):
-    return text.replace('\\"', '"').replace("\\\\", "\\")
+    """Decode Swift's escapes in one left-to-right pass.
+
+    One pass, not a chain of `.replace()`: chained replacement decodes the OUTPUT of an earlier
+    replacement, so `\\\\u{41}` -- an escaped backslash followed by literal `u{41}` -- would become a
+    backslash and then be re-read as a unicode escape yielding `A`. Left to right, each escape is
+    consumed exactly once.
+    """
+    def one(m):
+        if m.group(1) is not None:
+            return chr(int(m.group(1), 16))
+        return _SIMPLE.get(m.group(2), m.group(2))
+    return _ESCAPE.sub(one, text)
 
 
 def _rationale(raw):
