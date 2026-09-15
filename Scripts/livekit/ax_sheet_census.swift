@@ -25,16 +25,40 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-func attr(_ e: AXUIElement, _ a: String) -> CFTypeRef? {
+func attrRead(_ e: AXUIElement, _ a: String) -> (value: CFTypeRef?, error: AXError) {
     var v: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(e, a as CFString, &v) == .success else { return nil }
-    return v
+    let error = AXUIElementCopyAttributeValue(e, a as CFString, &v)
+    return (v, error)
+}
+func attr(_ e: AXUIElement, _ a: String) -> CFTypeRef? {
+    let read = attrRead(e, a)
+    return read.error == .success ? read.value : nil
+}
+/// `String(describing:)` on an AXError prints `AXError(rawValue: -25212)`, which tells a reader
+/// nothing about whether the read failed or the element simply has no such value.
+func axErrorName(_ e: AXError) -> String {
+    switch e {
+    case .success: return "success"
+    case .failure: return "failure"
+    case .illegalArgument: return "illegalArgument"
+    case .invalidUIElement: return "invalidUIElement"
+    case .invalidUIElementObserver: return "invalidUIElementObserver"
+    case .cannotComplete: return "cannotComplete"
+    case .attributeUnsupported: return "attributeUnsupported"
+    case .actionUnsupported: return "actionUnsupported"
+    case .notificationUnsupported: return "notificationUnsupported"
+    case .notImplemented: return "notImplemented"
+    case .notificationAlreadyRegistered: return "notificationAlreadyRegistered"
+    case .notificationNotRegistered: return "notificationNotRegistered"
+    case .apiDisabled: return "apiDisabled"
+    case .noValue: return "noValue"
+    case .parameterizedAttributeUnsupported: return "parameterizedAttributeUnsupported"
+    case .notEnoughPrecision: return "notEnoughPrecision"
+    @unknown default: return "unknown(\(e.rawValue))"
+    }
 }
 func str(_ e: AXUIElement, _ a: String) -> String? { attr(e, a) as? String }
 func bool(_ e: AXUIElement, _ a: String) -> Bool? { attr(e, a) as? Bool }
-func kids(_ e: AXUIElement) -> [AXUIElement] {
-    (attr(e, kAXChildrenAttribute as String) as? [AXUIElement]) ?? []
-}
 
 let interesting: Set<String> = [
     "AXButton", "AXRadioButton", "AXCheckBox", "AXPopUpButton", "AXStaticText",
@@ -45,7 +69,12 @@ let interesting: Set<String> = [
     "AXSheet",
 ]
 
-func controls(_ e: AXUIElement, depth: Int, into out: inout [[String: Any]]) {
+func controls(
+    _ e: AXUIElement,
+    depth: Int,
+    into out: inout [[String: Any]],
+    childReadFailures: inout [[String: Any]]
+) {
     guard depth < 14 else { return }
     let role = str(e, kAXRoleAttribute as String) ?? "?"
     if interesting.contains(role) {
@@ -61,7 +90,33 @@ func controls(_ e: AXUIElement, depth: Int, into out: inout [[String: Any]]) {
             out.append(row)
         }
     }
-    for child in kids(e) { controls(child, depth: depth + 1, into: &out) }
+    let childRead = attrRead(e, kAXChildrenAttribute as String)
+    // `.noValue` and `.attributeUnsupported` are not failures: they are how the API says this
+    // element HAS no children. Recording them as failures was the first cut of this check and it
+    // reported hundreds of them against a live Logic on the first run -- the same conflation of a
+    // failed reading with an empty one, pointed the other way. Only an error meaning the read could
+    // not be performed belongs in `child_read_failures`.
+    let childlessButReadable: Set<AXError> = [.noValue, .attributeUnsupported]
+    if childRead.error == .success, let children = childRead.value as? [AXUIElement] {
+        for child in children {
+            controls(
+                child,
+                depth: depth + 1,
+                into: &out,
+                childReadFailures: &childReadFailures
+            )
+        }
+    } else if !childlessButReadable.contains(childRead.error) {
+        childReadFailures.append([
+            "attribute": kAXChildrenAttribute as String,
+            "depth": depth,
+            "role": role,
+            "ax_error": childRead.error == .success
+                ? "success_without_child_array"
+                : axErrorName(childRead.error),
+            "ax_error_code": childRead.error.rawValue,
+        ])
+    }
 }
 
 guard let app = NSRunningApplication.runningApplications(
@@ -71,16 +126,29 @@ guard let app = NSRunningApplication.runningApplications(
 }
 let ax = AXUIElementCreateApplication(app.processIdentifier)
 var windows: [[String: Any]] = []
-for window in (attr(ax, kAXWindowsAttribute as String) as? [AXUIElement]) ?? [] {
+let windowRead = attrRead(ax, kAXWindowsAttribute as String)
+guard windowRead.error == .success else {
+    let message = "Could not read AXWindows: \(axErrorName(windowRead.error)) "
+        + "(code \(windowRead.error.rawValue))\n"
+    FileHandle.standardError.write(Data(message.utf8))
+    exit(3)
+}
+guard let applicationWindows = windowRead.value as? [AXUIElement] else {
+    FileHandle.standardError.write(Data("AXWindows read succeeded but returned no window list\n".utf8))
+    exit(3)
+}
+for window in applicationWindows {
     var rows: [[String: Any]] = []
-    controls(window, depth: 0, into: &rows)
-    var entry: [String: Any] = [
+    var childReadFailures: [[String: Any]] = []
+    controls(window, depth: 0, into: &rows, childReadFailures: &childReadFailures)
+    let entry: [String: Any] = [
         "role": str(window, kAXRoleAttribute as String) ?? "?",
         "subrole": str(window, kAXSubroleAttribute as String) ?? "",
         "title": str(window, kAXTitleAttribute as String) ?? "",
         "description": str(window, kAXDescriptionAttribute as String) ?? "",
         "modal": bool(window, "AXModal") ?? false,
         "controls": rows,
+        "child_read_failures": childReadFailures,
     ]
     windows.append(entry)
 }

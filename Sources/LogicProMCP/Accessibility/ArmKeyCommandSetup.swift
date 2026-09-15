@@ -849,10 +849,18 @@ enum ArmKeyCommandSetup {
         // window is titled `Key Commands`. Hangul canonical (NFC/NFD) matching comes along with it,
         // which this label needs.
         return windows.first { win in
-            AXLocalePolicy.keyCommandsWindowTitle.matches(
+            let titleMatches = AXLocalePolicy.keyCommandsWindowTitle.matches(
                 AXHelpers.getTitle(win, runtime: runtime.ax),
                 mode: .contains
             )
+            // A project may legitimately contain the localized title fragment in its name. Arrange
+            // windows carry AXDocument; the Key Commands utility window does not. Pair the necessary
+            // containment match with that independent structural signal before cleanup is allowed to
+            // treat the window as ours and press its close control.
+            let document: String? = AXHelpers.getAttribute(
+                win, kAXDocumentAttribute as String, runtime: runtime.ax
+            )
+            return titleMatches && document == nil
         }
     }
 

@@ -71,6 +71,8 @@ import Testing
         // The Key Commands window's TITLE. Logic localizes it, and the matcher used to hold an
         // English literal, so a test that only ever builds an English title cannot see that bug.
         windowTitle: String = "Key Commands",
+        // Arrange windows carry AXDocument; the Key Commands utility window does not.
+        documentURL: String? = nil,
         // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
         learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
         // What Logic reports its UI language as. nil models a reading that failed.
@@ -142,6 +144,9 @@ import Testing
         // app's focused window elsewhere so the pre-chord focus-ownership gate trips.
         builder.setAttribute(app, kAXFocusedWindowAttribute as String, kcFocusedBeforeChord ? window : close)
         builder.setAttribute(window, kAXTitleAttribute as String, windowTitle)
+        if let documentURL {
+            builder.setAttribute(window, kAXDocumentAttribute as String, documentURL)
+        }
         builder.setAttribute(window, "AXCloseButton", close)
         builder.setAttribute(scrollArea, kAXRoleAttribute as String, kAXScrollAreaRole as String)
         // Empty table shell (ZERO AXRows) — matches the live flat surface.
@@ -1190,6 +1195,16 @@ import Testing
                 "a window titled \(title) is not the Key Commands window"
             )
         }
+    }
+
+    @Test("a Korean project name containing the Key Commands token is not selected")
+    func koreanDocumentWindowIsNotTheKeyCommandsWindow() {
+        let fixture = Self.fixture(
+            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            documentURL: "file:///Users/test/Music/내%20키%20명령%20프로젝트.logicx/"
+        )
+
+        #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
     }
 
 
