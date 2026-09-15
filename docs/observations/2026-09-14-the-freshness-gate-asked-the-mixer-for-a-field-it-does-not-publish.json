@@ -1,0 +1,120 @@
+{
+ "id": "2026-09-14-the-freshness-gate-asked-the-mixer-for-a-field-it-does-not-publish",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "logic://mixer provenance, and the #373 readback freshness gate that reads it",
+ "question": "Two mixer operations produced a complete Phase-B write-and-restore cycle and still did not qualify, with readback_not_ax_live. Is the mixer readback actually not live, or is the gate asking it the wrong question?",
+ "verdict": "works",
+ "issues": [
+  373,
+  284
+ ],
+ "surface": "mixer.channel_strips",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "Read logic://mixer and logic://tracks from the release binary with the Mixer panel visible and list their envelope keys, then run the qualification sweep (--qualify) and read evidence/operation-mixer.set_volume-readback.json.",
+  "expected": "logic://tracks publishes source=ax_live; logic://mixer publishes NO source key and instead data_source, whose value is ax_poll when the Mixer has been polled within 5 s, cache_stale beyond that, and mixer_not_visible when no poll has ever succeeded. With the dialect in place mixer.set_volume and mixer.set_pan reach passed; with the Mixer closed they return to the same refusal, which is then correct."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Qualification/QualificationReadbackFreshness.swift",
+  "Sources/LogicProMCP/Resources/ResourceHandlers+StateReaders.swift"
+ ],
+ "evidence": [],
+ "method": "The qualification sweep was run live against the release binary, and the two deferrals that said a cycle had VERIFIED were read against the readback evidence files the same run wrote. The envelope keys of both resources were then read directly out of the running server rather than out of the source, and the dialect change was mutation-tested three ways before the sweep was repeated.",
+ "observations": [
+  {
+   "resource": "logic://tracks",
+   "envelope_keys": [
+    "cache_age_sec",
+    "fetched_at",
+    "ax_occluded",
+    "complete",
+    "readable",
+    "reason",
+    "source",
+    "verified_empty"
+   ],
+   "provenance_key": "source",
+   "live_token": "ax_live"
+  },
+  {
+   "resource": "logic://mixer",
+   "envelope_keys": [
+    "cache_age_sec",
+    "data_source",
+    "fetched_at",
+    "ax_occluded",
+    "mcu_connected",
+    "mcu_registered",
+    "mcu_last_feedback_age_ms",
+    "registered"
+   ],
+   "provenance_key": "data_source",
+   "live_token": "ax_poll",
+   "other_tokens": [
+    "cache_stale",
+    "mixer_not_visible"
+   ],
+   "note": "no source key, and no data key either"
+  },
+  {
+   "operation": "mixer.set_volume",
+   "before": "not_qualified",
+   "deferral": "a Phase-B write-and-restore cycle VERIFIED, but its independent readback was not admissible: readback_not_ax_live"
+  },
+  {
+   "operation": "mixer.set_pan",
+   "before": "not_qualified",
+   "deferral": "a Phase-B write-and-restore cycle VERIFIED, but its independent readback was not admissible: readback_not_ax_live"
+  },
+  {
+   "operation": "mixer.set_volume",
+   "after": "passed",
+   "readback_evidence": {
+    "data_source": "ax_poll",
+    "cache_age_sec": 0.0031790733337402344,
+    "ax_occluded": false
+   }
+  },
+  {
+   "mutation": "dialect(for:) always returns the default dialect",
+   "result": "5 issues across 2 tests — RED"
+  },
+  {
+   "mutation": "dialect prefix widened from logic://mixer to logic://",
+   "result": "the scoping test fails — RED"
+  },
+  {
+   "mutation": "none (restored)",
+   "result": "13 tests pass — GREEN"
+  },
+  {
+   "probe": "logic://mixer read from a freshly started server at 06:53 local, before any qualification sweep",
+   "data_source": "mixer_not_visible",
+   "cache_age_sec": null,
+   "note": "the same resource answered ax_poll at 0.003 s during the sweep, so the value does move"
+  },
+  {
+   "probe": "navigate.toggle_view view=mixer, twice, reading logic://mixer at +1 s, +3 s and +6 s after each",
+   "data_source_throughout": "ax_poll",
+   "strips": 25,
+   "operation_answer": "method: midi_key_command, operation: view.toggle_mixer — the press is reported, nothing verifies it",
+   "note": "data_source did not move in either direction, so this is NOT an observable for mixer visibility and toggle_view has no independent readback here"
+  }
+ ],
+ "conclusion": "The mixer readback was live and the gate could not see it. Resource provenance is not one vocabulary: logic://tracks says source=ax_live, logic://mixer says data_source=ax_poll, and the gate hard-coded the tracks pair. Asking the mixer envelope for source returns nil, which reads as not-live and is indistinguishable from a Mixer that was genuinely never polled — so a real refusal and a mis-asked question arrived as the same string. The gate now carries a per-resource dialect keyed by URI prefix. That is a fact about one resource family and not a relaxation: the entry still has to produce its own live token, every other admissibility check runs unchanged, and the scoping is what a mutation test pins, because a dialect that leaked to every reader would have widened the gate rather than corrected it.",
+ "limits": [
+  "This says nothing about whether an ax_poll reading is TRUSTWORTHY, only that it is the mixer's word for live. mixerDataSource labels the poll fresh within 5 s of the last successful Mixer poll; the gate's own cache_age_sec bound still applies on top of it.",
+  "What makes the mixer poll succeed was NOT established. A freshly started server read mixer_not_visible and the sweep read ax_poll, so the value does move; but driving navigate.toggle_view view=mixer twice did not move it at +1 s, +3 s or +6 s either way. The earlier draft of this limit asserted 'the pair passes only while the Mixer panel is visible' from reading mixerDataSource's source rather than from a measurement, and the measurement does not support that sentence. What is established is only that the pair passed with data_source ax_poll at cache_age 0.003 s.",
+  "Only one dialect is measured. Every other resource is assumed to use source/ax_live because that is what the gate has always demanded and what the passing operations produce; no sweep of the remaining resource envelopes was done, so another mis-asked question could be sitting in the same place.",
+  "navigate.toggle_view is left with no independent readback by the same measurement: its own answer is a reported key press, and the one resource that might have witnessed it does not move."
+ ],
+ "supersedes": null
+}

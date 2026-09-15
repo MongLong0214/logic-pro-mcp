@@ -1,0 +1,68 @@
+{
+ "id": "2026-09-14-phase-c-live-needs-a-logic-with-no-open-document",
+ "date": "2026-09-14",
+ "schema": 1,
+ "subject": "project.new's precondition, and what it means for the destructive half of the qualification program",
+ "question": "32 of the deferred operations are destructive and belong to a Phase C-live with a disposable fixture. Can that fixture be created from a running qualification session?",
+ "verdict": "wall",
+ "issues": [
+  373,
+  284
+ ],
+ "surface": "project.lifecycle",
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "manual",
+  "command": "With a project open in Logic, call logic_project.new and read the envelope.",
+  "expected": "State C `unsupported_state`, with a hint naming how many windows are open and stating that nothing was attempted."
+ },
+ "depends": [
+  "Sources/LogicProMCP/Dispatchers/ProjectDispatcher.swift"
+ ],
+ "evidence": [],
+ "method": "Driven once through the release binary with the operator's project open, and the window list read immediately afterwards to confirm nothing had been created.",
+ "observations": [
+  {
+   "source": "the qualification sweep's own classification of its deferrals, same day",
+   "destructive_operations_awaiting_phase_c_live": 32,
+   "examples": [
+    "tracks.create_audio",
+    "tracks.delete",
+    "tracks.duplicate",
+    "project.save_as",
+    "project.close",
+    "edit.cut",
+    "edit.paste",
+    "edit.split",
+    "midi.import_file",
+    "plugins.insert_verified"
+   ],
+   "note": "the count this record's conclusion refers to"
+  },
+  {
+   "operation": "project.new",
+   "state": "C",
+   "success": false,
+   "error": "unsupported_state",
+   "hint": "project.new requires Logic to have no open document; 3 window(s) are open. With a document already open a newly created project cannot be told apart from the windows already on screen, so nothing was attempted.",
+   "windows_after": [
+    "lpm-locale-campaign - 마커 목록",
+    "lpm-locale-campaign - 트랙"
+   ],
+   "note": "the refusal is fail-closed and precise: it names the count it saw and says no attempt was made"
+  }
+ ],
+ "conclusion": "The destructive half of the qualification program cannot be run from a session that has the operator's project open, and the reason is a deliberate product contract rather than a gap. `project.new` refuses while any document is open, because a newly created project could not be told apart from the windows already on screen — so it will not create one it cannot then identify. That is the right refusal, and it settles the SHAPE of Phase C-live: it needs Logic running with no open document, which means a dedicated qualification session rather than a phase bolted onto the same sweep that qualifies the read-only and reversible operations. Anything that tries to create its disposable fixture mid-sweep will meet this refusal, and the 32 destructive operations stay deferred until the run topology accounts for it.",
+ "limits": [
+  "One call on one host. Whether `project.new` succeeds on a Logic with no open document was NOT tested here — that would have required closing the operator's project, and the refusal already answers the question that was asked.",
+  "This says nothing about the other lifecycle operations. `project.close`, `project.save_as` and `project.quit` have their own preconditions and none of them were driven.",
+  "It does not establish that a dedicated session is SUFFICIENT, only that the current topology is insufficient. The New Project chooser's own accessibility surface is a separate known wall."
+ ],
+ "supersedes": null
+}

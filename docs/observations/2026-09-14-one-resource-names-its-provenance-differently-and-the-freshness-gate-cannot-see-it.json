@@ -1,0 +1,70 @@
+{
+  "id": "2026-09-14-one-resource-names-its-provenance-differently-and-the-freshness-gate-cannot-see-it",
+  "date": "2026-09-14",
+  "schema": 1,
+  "subject": "logic://mixer's provenance key, and the readback-freshness gate that reads a different one",
+  "question": "Two mixer operations produced a VERIFIED Phase-B write-and-restore cycle and still did not qualify. Is the cycle wrong, or is the gate reading the wrong thing?",
+  "verdict": "works",
+  "issues": [
+    373,
+    284
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Run `--qualify` and read `evidence/operation-mixer.set_volume-readback.json`, then compare its payload's top-level keys against `evidence/operation-tracks.mute-readback.json`. Then read `QualificationReadbackFreshness.verdict`, which requires `envelope.source == liveSourceToken`.",
+    "expected": "The `logic://mixer` payload carries `data_source` and no `source`; the `logic://tracks` payload carries `source`. The gate reads `source`, so the mixer envelope resolves to `.notLive(source: nil)` and the operation is refused with `readback_not_ax_live` even though its cycle verified."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Qualification/QualificationReadbackFreshness.swift",
+    "Sources/LogicProMCP/Qualification/QualificationTransport.swift"
+  ],
+  "evidence": [],
+  "method": "Found by making a gate STRICTER rather than by looking for it. A first version of the Phase-B promotion let a verified record short-circuit above every other check; tightening it so the record is honoured only after the operation's own probe contract AND readback admissibility dropped two operations from passing. The question was then which of the two was wrong, and the readback evidence files answer it by key comparison rather than by reasoning.",
+  "observations": [
+    {
+      "resource": "logic://tracks",
+      "provenance_key": "source",
+      "value": "ax_live",
+      "gate_verdict": "admissible"
+    },
+    {
+      "resource": "logic://mixer",
+      "provenance_key": "data_source",
+      "has_source_key": false,
+      "cache_age_sec": 0.0047,
+      "ax_occluded": false,
+      "gate_verdict": "notLive(source: nil)",
+      "refusal": "readback_not_ax_live"
+    },
+    {
+      "what": "the gate's requirement",
+      "code": "guard envelope.source == liveSourceToken else { return .notLive(source: envelope.source) }",
+      "note": "age and occlusion both passed; only the provenance key did not"
+    },
+    {
+      "what": "operations affected",
+      "operations": [
+        "mixer.set_volume",
+        "mixer.set_pan"
+      ],
+      "cycle_verified": true,
+      "qualified": false
+    }
+  ],
+  "conclusion": "The cycle is not wrong and the gate is not wrong about what it asks. One resource answers the question under a different name: `logic://mixer` reports its provenance as `data_source` while `logic://tracks` reports `source`, and the freshness gate reads `source`. Its age was 0.0047 s and it was not occluded — the only thing it failed was being recognisable as live. So two operations with a verified write-and-restore cycle are refused for a naming difference, and the evidence now says exactly that instead of the generic 'requires an operation-specific recipe', which was false: one ran, and succeeded.",
+  "limits": [
+    "NOT FIXED here, and deliberately. Teaching the gate to accept a second key widens a shared definition to make two operations pass, which is the shape this repository keeps finding in its own rules. The dispositions are to make `logic://mixer` emit `source` like its siblings, or to point these operations at a readback that already does — both are changes to the thing being read, not to the reader.",
+    "Two resources compared, not a census. Whether any OTHER resource names its provenance differently was not swept, and a third spelling would fail the same way silently.",
+    "The cycle's own correctness is asserted from its record's fields, not re-driven here. That it verified is what the record's existence means; whether the values it wrote were musically sensible is a different question nobody is asking.",
+    "One host, one locale, one run."
+  ],
+  "supersedes": null
+}

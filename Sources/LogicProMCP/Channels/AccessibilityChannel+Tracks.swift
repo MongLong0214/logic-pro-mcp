@@ -1,5 +1,9 @@
 import ApplicationServices
 import AppKit
+// Carbon, only for the Text Input Source services: there is no modern replacement for reading
+// which keyboard input source is active, and that reading is what explains a synthetic key
+// arriving as a different character than it was posted as.
+import Carbon
 import Foundation
 
 /// Track surface: enumerate/select tracks, mute/solo/arm/rename toggles, track creation via menu, and deletion.
@@ -1562,10 +1566,56 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// The active macOS keyboard input source, or nil when it cannot be read.
+    ///
+    /// Load-bearing for every rung that posts a synthetic key. Measured 2026-09-14: with
+    /// `com.apple.inputmethod.Korean.2SetKorean` active, a chord posted as virtual key 14 with
+    /// control+shift arrives at Logic as `⌃⇧ㄷ` — the Hangul character on that physical key — and
+    /// matches no key command. Logic's own Learn records it the same way, writing `⌃⇧ㄷ` into the
+    /// key field. The keystroke is DELIVERED (a bare spacebar toggles play under the same source);
+    /// it is the character it carries that changes. Four operations moved from refusing to
+    /// qualifying between two sweeps that differed in nothing else.
+    static func activeInputSourceID() -> String? {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else {
+            return nil
+        }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+    }
+
+    /// Whether `id` is a plain Latin keyboard LAYOUT rather than an input METHOD.
+    ///
+    /// Deliberately narrow: `com.apple.keylayout.*` is a layout that delivers the character its key
+    /// carries, and anything else — every `inputmethod` — composes. A Latin layout that REMAPS
+    /// letters (Dvorak, AZERTY) is still `keylayout` and is not flagged here, because it was not
+    /// measured and guessing at it would put a wrong sentence in a hint.
+    static func inputSourceDeliversLatinKeys(_ id: String?) -> Bool {
+        guard let id else { return true }
+        return id.hasPrefix("com.apple.keylayout.")
+    }
+
+    /// The sentence appended to a synthetic-key failure when the input source can explain it.
+    /// Empty when the source is a Latin layout or could not be read — an unread source is not
+    /// evidence of anything and must not be blamed.
+    static func inputSourceHintSuffix(_ id: String? = activeInputSourceID()) -> String {
+        guard let id, !inputSourceDeliversLatinKeys(id) else { return "" }
+        return " The active macOS input source is '\(id)', which composes characters: a synthetic "
+            + "key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives "
+            + "as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard "
+            + "layout and retry."
+    }
+
     /// Fail-closed hint (read-back never flipped). Arm points the operator at
     /// the required "Toggle Track Record Enable" key-command assignment — the
     /// only coordinate-free arm path on Logic 12.x.
     static func trackToggleFailHint(buttonName: String, index: Int, desired: Bool) -> String {
+        trackToggleFailHintBody(buttonName: buttonName, index: index, desired: desired)
+            + inputSourceHintSuffix()
+    }
+
+    private static func trackToggleFailHintBody(
+        buttonName: String, index: Int, desired: Bool
+    ) -> String {
         switch buttonName {
         case "Record":
             return "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "
@@ -1860,7 +1910,11 @@ extension AccessibilityChannel {
         // 0 to stay fast; production keeps a real gap so a delayed AX publish
         // has time to land.
         dialogPollAttempts: Int = 5,
-        dialogPollDelayNanoseconds: UInt64 = 200_000_000
+        dialogPollDelayNanoseconds: UInt64 = 200_000_000,
+        // The pre-write rail read gets its own budget, because it answers a different question
+        // than the New Track sheet poll does and failing it costs the whole verdict. Tests set it
+        // to 1 to keep a single attempt.
+        railReadAttempts: Int = 5
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
             return .error("No document open for track creation")
@@ -1879,8 +1933,40 @@ extension AccessibilityChannel {
         // delete path. The historic flattening enumerator turns a failed
         // pre-write read into `[]`, which makes tracks that were already there
         // look like the result of this menu click.
-        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
-        let beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+        // A rail read that failed ONCE is not evidence about the rail. Measured 2026-09-15 on a
+        // just-created project: this read came back nil, and because `beforeTracks == nil` forces
+        // State B `retry_exhausted` no matter what happens afterwards, `create_audio`,
+        // `create_instrument` and `delete` all reported an unverified write for a track that had
+        // demonstrably appeared or gone. The window and its header rail need a moment to publish
+        // after a document opens; one attempt catches that moment only by luck.
+        var arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        var beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+        if beforeTracks == nil {
+            for _ in 1..<max(railReadAttempts, 1) {
+                try? await Task.sleep(nanoseconds: dialogPollDelayNanoseconds)
+                arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+                beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+                if beforeTracks != nil { break }
+            }
+        }
+
+        // RAISE THE WINDOW THIS OPERATION ALREADY RESOLVED, before driving the menu.
+        //
+        // Logic's Track menu acts on the front window, and this code resolved the arrange window
+        // for its READS while clicking the menu without raising it. Measured 2026-09-15 on a
+        // disposable project: with only the arrange window open, `create_audio` answers State A and
+        // the count rises; after `navigate.create_marker` opens the Marker List the same call
+        // answers State B and the count does not move AT ALL; raising the arrange window by name
+        // makes it land again. The qualification sweep drives operations sorted by id, so every
+        // `navigate.*` runs before every `tracks.*` — which is why a track create that works when
+        // driven alone fails inside a sweep, and why seventy read-only operations beforehand change
+        // nothing. Traffic was never the cause; a window in front was.
+        //
+        // This raises a window the operation has already identified as its target, not an arbitrary
+        // one, and only on the path that is about to act on that window.
+        if case .found(let window) = arrangeWindow {
+            _ = AXHelpers.performAction(window, kAXRaiseAction as String, runtime: runtime.ax)
+        }
 
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)

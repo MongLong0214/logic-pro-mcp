@@ -6,6 +6,10 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "LogicProMCP", targets: ["LogicProMCPCLI"]),
+        // #284: the independent verifier ships as its own product so a release can be checked by a
+        // binary that is NOT the candidate. Restored 2026-09-14 with the rest of the qualification
+        // subsystem, on the owner's decision to implement ADR-001 rather than retire it.
+        .executable(name: "trusted-verifier", targets: ["TrustedVerifier"]),
     ],
     dependencies: [
         // swift-sdk 0.11.0+ adopts the short-form
@@ -57,6 +61,11 @@ let package = Package(
             name: "LogicProMCPCLI",
             dependencies: ["LogicProMCP"],
             path: "Sources/LogicProMCPCLI"
+        ),
+        .executableTarget(
+            name: "TrustedVerifier",
+            dependencies: ["LogicProMCP"],
+            path: "Sources/TrustedVerifier"
         ),
         .testTarget(
             name: "LogicProMCPTests",

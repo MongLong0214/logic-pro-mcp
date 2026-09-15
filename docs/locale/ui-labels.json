@@ -80,9 +80,10 @@
    "canonical": "Tracks",
    "variants": [
     "트랙",
-    "トラック"
+    "トラック",
+    "Spuren"
    ],
-   "rationale": "Witnesses that an arrange window exists after project.new; read-only classification.",
+   "rationale": "Witnesses that an arrange window exists after project.new; read-only classification. German read 2026-09-15 on a de-DE Logic 12.3 (#883): File > New skipped the chooser and created the project directly, whose window titled itself `Ohne Titel - Spuren` — and without this variant project.new spent its whole 40-iteration wait beside a project it had just made, then reported that neither a chooser nor a created window ever appeared.",
    "match": "contains",
    "coverage": {
     "en-US": "unmeasured",
@@ -389,9 +390,10 @@
    "canonical": "Create",
    "variants": [
     "생성",
-    "作成"
+    "作成",
+    "Erzeugen"
    ],
-   "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`).",
+   "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`). German read 2026-09-15 by opening the sheet on a de-DE Logic 12.3 and enumerating `group 1 of sheet 1`: `Erzeugen`, `Abbrechen`, both enabled (#883).",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -1483,6 +1485,34 @@
     "de-DE": "unmeasured"
    }
   },
+  "keyCommandsWindowTitle": {
+   "canonical": "Key Command",
+   "variants": [
+    "키 명령"
+   ],
+   "rationale": "Identifies the Key Commands window by title substring; read-only classification. Korean read live 2026-09-14 off the window Logic opened in response to Option+K, whose full title was `키 명령 할당 – U.S. – 편집됨`; only the head is matched because the preset name and the edited marker vary. ja-JP and de-DE are NOT measured and carry no variant, so this reader gains nothing on those hosts until someone reads them.",
+   "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "learnByKeyLabelCheckbox": {
+   "canonical": "Learn by Key Label",
+   "variants": [
+    "키 레이블로 학습"
+   ],
+   "rationale": "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord. Korean read live 2026-09-14 off the AXCheckBox title in the open window, distinguished there from `키 위치로 학습` and `새로운 할당 학습`. ja-JP and de-DE are NOT measured and carry no variant.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
   "libraryPanelLabel": {
    "canonical": "library",
    "variants": [
@@ -1878,9 +1908,10 @@
    "canonical": "New Track",
    "variants": [
     "새로운 트랙",
-    "新規トラック"
+    "新規トラック",
+    "Neue Spur"
    ],
-   "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled).",
+   "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled). German read 2026-09-15 on a de-DE Logic 12.3: the AXSheet answers `Neue Spur`, while `Neue Spur erzeugen` is an AXStaticText heading inside it and is deliberately not a variant (#883).",
    "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
@@ -2406,6 +2437,20 @@
    ],
    "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
    "match": "contains",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "recordArmKeyCommandName": {
+   "canonical": "Toggle Track Record Enable",
+   "variants": [
+    "트랙 녹음 활성화 토글"
+   ],
+   "rationale": "The Key Commands entry `system.setup_arm_key` assigns a chord to. Korean read live 2026-09-14 out of the open Key Commands window, alongside the two sibling commands it must not be confused with. ja-JP and de-DE are NOT measured and carry no variant.",
+   "match": "exact",
    "coverage": {
     "en-US": "unmeasured",
     "ko-KR": "unmeasured",

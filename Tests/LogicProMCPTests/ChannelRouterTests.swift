@@ -9,11 +9,25 @@ actor MockChannel: Channel {
     var executedOps: [(String, [String: String])] = []
     var isAvailable: Bool = true
     let healthOverride: ChannelHealth?
+    /// When set, `execute` refuses with this raw message instead of succeeding.
+    let failWith: String?
+    /// When set, a successful `execute` answers with this body instead of the plain mock string.
+    /// Needed because router evidence rides on a HonestContract ENVELOPE, and the default mock
+    /// answer is not one.
+    let successEnvelope: String?
 
-    init(id: ChannelID, available: Bool = true, healthOverride: ChannelHealth? = nil) {
+    init(
+        id: ChannelID,
+        available: Bool = true,
+        healthOverride: ChannelHealth? = nil,
+        failWith: String? = nil,
+        successEnvelope: String? = nil
+    ) {
         self.id = id
         self.isAvailable = available
         self.healthOverride = healthOverride
+        self.failWith = failWith
+        self.successEnvelope = successEnvelope
     }
 
     func start() async throws {}
@@ -21,7 +35,8 @@ actor MockChannel: Channel {
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         executedOps.append((operation, params))
-        return .success("Mock: \(operation)")
+        if let failWith { return .error(failWith) }
+        return .success(successEnvelope ?? "Mock: \(operation)")
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -727,4 +742,269 @@ private func verifiedReadbackMismatchEnvelope() -> String {
 
     probe.unblock()
     await stopTask.value
+}
+
+// MARK: - #373: a walked-past refusal rides along
+
+/// Measured 2026-09-14. `track.set_arm`'s accessibility rung answered
+/// `logic_not_frontmost` with the hint "track 0 is exclusively selected, but Logic could not be
+/// confirmed frontmost … the key was NOT posted" — and the caller received MCU's
+/// `readback_unavailable` instead, because the router walked past that refusal and wrote it only to
+/// a DEBUG log. Hours went into re-deriving a precondition the operation had already named.
+@Test func routerCarriesTheRefusalItWalkedPast() async throws {
+    let refusal = HonestContract.encodeStateC(
+        error: .axWriteFailed,
+        hint: "track 0 is exclusively selected, but Logic could not be confirmed frontmost.",
+        extras: ["track": 0]
+    )
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility, failWith: refusal)
+    let mcu = MockChannel(
+        id: .mcu,
+        successEnvelope: HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [:])
+    )
+    await router.register(ax)
+    await router.register(mcu)
+
+    let result = await router.route(operation: "track.set_arm")
+    #expect(result.isSuccess)
+    guard case .success(let body) = result,
+          let data = body.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        Issue.record("expected a JSON envelope, got \(result)")
+        return
+    }
+    #expect(object["fallback_from_channel"] as? String == ChannelID.accessibility.rawValue)
+    #expect(object["fallback_from_error"] as? String == "ax_write_failed")
+    #expect((object["fallback_from_hint"] as? String ?? "").contains("frontmost"))
+    // The answering channel's own fields are untouched — this is additive, not a rewrite.
+    #expect(object["state"] as? String == "B")
+    // Bound with `try #require` and asserted bare. Comparing an optional Bool to a literal is a
+    // dead assertion in swift-testing: it passes whatever the value is.
+    let success = try #require(object["success"] as? Bool)
+    #expect(success)
+}
+
+/// A channel that refused without naming a cause has nothing to hand on. Carrying a bare string
+/// would put noise where an actionable sentence belongs.
+@Test func routerCarriesNothingFromAnUntypedFailure() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility, failWith: "Cannot find Record button on track 0")
+    let mcu = MockChannel(
+        id: .mcu,
+        successEnvelope: HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [:])
+    )
+    await router.register(ax)
+    await router.register(mcu)
+
+    guard case .success(let body) = await router.route(operation: "track.set_arm"),
+          let data = body.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        Issue.record("expected a JSON envelope")
+        return
+    }
+    #expect(object["fallback_from_channel"] == nil)
+    #expect(object["fallback_from_error"] == nil)
+}
+
+/// The FIRST refusal is the one the routing table preferred, so it is the one worth reporting.
+@Test func routerKeepsTheFirstRefusalNotTheLast() async {
+    let first = HonestContract.encodeStateC(error: .axWriteFailed, hint: "first refusal")
+    // Both refusals use a NON-terminal code on purpose: a terminal State C stops the walk, and
+    // this test is about which refusal survives a walk that continues.
+    let second = HonestContract.encodeStateC(error: .axWriteFailed, hint: "second refusal")
+    let router = ChannelRouter()
+    await router.register(MockChannel(id: .accessibility, failWith: first))
+    await router.register(MockChannel(id: .mcu, failWith: second))
+    await router.register(MockChannel(
+        id: .cgEvent,
+        successEnvelope: HonestContract.encodeStateA(extras: [:])
+    ))
+
+    guard case .success(let body) = await router.route(operation: "track.set_arm"),
+          let data = body.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        Issue.record("expected a JSON envelope")
+        return
+    }
+    #expect(object["fallback_from_channel"] as? String == ChannelID.accessibility.rawValue)
+    #expect(object["fallback_from_hint"] as? String == "first refusal")
+}
+
+/// Nothing was walked past, so nothing is added. A first-channel success must look exactly as it
+/// did before this existed.
+@Test func routerAddsNothingWhenThePreferredChannelAnswers() async {
+    let router = ChannelRouter()
+    await router.register(MockChannel(
+        id: .accessibility,
+        successEnvelope: HonestContract.encodeStateA(extras: ["track": 0])
+    ))
+
+    guard case .success(let body) = await router.route(operation: "track.set_arm"),
+          let data = body.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        Issue.record("expected a JSON envelope")
+        return
+    }
+    #expect(object["fallback_from_channel"] == nil)
+    #expect(object["state"] as? String == "A")
+}
+
+// MARK: - #373: a composing input source explains a synthetic-key failure
+
+/// Measured 2026-09-14: with `com.apple.inputmethod.Korean.2SetKorean` active, a chord posted as
+/// virtual key 14 with control+shift reaches Logic as `⌃⇧ㄷ` and matches no key command. Four
+/// operations moved from refusing to qualifying between two sweeps that differed in nothing else.
+/// The hint has to be able to say so.
+@Test func inputSourceHintNamesAComposingSource() {
+    let suffix = AccessibilityChannel.inputSourceHintSuffix("com.apple.inputmethod.Korean.2SetKorean")
+    #expect(suffix.contains("com.apple.inputmethod.Korean.2SetKorean"))
+    #expect(suffix.contains("⌃⇧ㄷ"))
+}
+
+/// A Latin LAYOUT delivers the character its key carries, so there is nothing to explain and
+/// nothing to append. An unreadable source is not evidence either, and must not be blamed.
+@Test func inputSourceHintStaysSilentWhenItCannotExplainAnything() {
+    #expect(AccessibilityChannel.inputSourceHintSuffix("com.apple.keylayout.ABC").isEmpty)
+    #expect(AccessibilityChannel.inputSourceHintSuffix("com.apple.keylayout.US").isEmpty)
+    #expect(AccessibilityChannel.inputSourceHintSuffix(nil).isEmpty)
+}
+
+/// The classification is narrow on purpose: `keylayout` delivers keys, every `inputmethod`
+/// composes. A remapping Latin layout (Dvorak) was NOT measured, so it is not flagged.
+@Test func onlyInputMethodsAreTreatedAsComposing() {
+    #expect(AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.keylayout.Dvorak"))
+    #expect(AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.keylayout.ABC"))
+    #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Korean.2SetKorean"))
+    #expect(!AccessibilityChannel.inputSourceDeliversLatinKeys("com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese"))
+}
+
+// MARK: - #373 Phase C: what a cycle is allowed to delete
+
+private func trackRow(_ name: String, _ ref: String) -> [String: Any] {
+    ["name": name, "track_ref": ref]
+}
+
+/// The situation this rule exists for, as a test input rather than a hope. When Logic's track stack
+/// EXPANDS mid-run, every newly visible child carries a reference that was not in the pre-state —
+/// so a rule of "delete the reference that is new" would be free to name one of the operator's
+/// tracks. Measured 2026-09-15 on a real project: 19 rows before, 19 after, `complete` false then
+/// true, and the first row was no longer the operator's.
+@Test func phaseCDeletesOnlyTheTrackTheCreateNamed() {
+    let preState = ["trk_stackhdr"]
+    // After: the stack expanded, so eight children are new references, and one row is the track
+    // the create reported making.
+    let rows = (1...8).map { trackRow("Deluxe Classic", "trk_child\($0)") }
+        + [trackRow("오디오 1", "trk_created")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: rows, excluding: preState) == "trk_created"
+    )
+}
+
+/// Zero matches and several matches are both refusals. Neither licenses a delete, and the rule
+/// deliberately does not distinguish them: a cycle that cannot name what it made must not guess.
+@Test func phaseCRefusesWhenTheNameDoesNotIdentifyExactlyOneTrack() {
+    let preState = ["trk_a"]
+    let twoMatches = [trackRow("오디오 1", "trk_x"), trackRow("오디오 1", "trk_y")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: twoMatches, excluding: preState) == nil
+    )
+    let noMatch = [trackRow("Deluxe Classic", "trk_x")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: noMatch, excluding: preState) == nil
+    )
+    // No name reported at all, and an empty one, are the same refusal.
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: nil, in: twoMatches, excluding: preState) == nil
+    )
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "  ", in: twoMatches, excluding: preState) == nil
+    )
+}
+
+/// A row already in the pre-state is never a candidate, even when its name matches — that is the
+/// operator's track, not one this cycle made.
+@Test func phaseCNeverNamesATrackThatWasAlreadyThere() {
+    let preState = ["trk_existing"]
+    let rows = [trackRow("오디오 1", "trk_existing")]
+    #expect(
+        QualificationTransport.soleCreatedTrack(
+            named: "오디오 1", in: rows, excluding: preState) == nil
+    )
+}
+
+// MARK: - #373 Phase C: the cycle's own handle on what it created
+
+/// Logic selects a newly created track and it is the only selected one — measured twice on
+/// 2026-09-15. That is the handle the cycle takes, ONCE and immediately, because it cannot rely on
+/// the create to name what it made: a create that landed reported no `observed_track_name` when its
+/// own modal reconciliation came back incomplete, and the cleanup then had nothing safe to delete.
+@Test func phaseCTakesTheNewlySelectedRowAsItsHandle() {
+    let pre = ["trk_existing"]
+    let rows: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": false],
+        ["name": "오디오 1", "track_ref": "trk_new", "isSelected": true],
+    ]
+    #expect(
+        QualificationTransport.soleNewlySelectedTrack(in: rows, excluding: pre) == "trk_new"
+    )
+}
+
+/// A row that was already there is never the handle, even when it is the selected one — that is the
+/// operator's track. And a selection that is not exactly one new row is a refusal, not a guess.
+@Test func phaseCRefusesAHandleItCannotIsolate() {
+    let pre = ["trk_existing"]
+    let selectedButOld: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": true],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: selectedButOld, excluding: pre) == nil)
+
+    let twoNewSelected: [[String: Any]] = [
+        ["name": "a", "track_ref": "trk_x", "isSelected": true],
+        ["name": "b", "track_ref": "trk_y", "isSelected": true],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: twoNewSelected, excluding: pre) == nil)
+
+    let noneSelected: [[String: Any]] = [
+        ["name": "a", "track_ref": "trk_x", "isSelected": false],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: noneSelected, excluding: pre) == nil)
+}
+
+/// The handle is a REFERENCE, never a row position. `tracks.rename` is driven by a bare `index`
+/// (`AccessibilityChannel+Tracks.swift:1714`), so the second identity that a rename would give the
+/// cycle would cost it the property the project is removing everywhere else. The reference the
+/// selection yields is already an identity the cycle controls, and it survives a row order that
+/// does not match the pre-state's.
+@Test func phaseCHandleIsAReferenceAndNotARowPosition() {
+    let pre = ["trk_a", "trk_b"]
+    let reordered: [[String: Any]] = [
+        ["name": "new", "track_ref": "trk_new", "isSelected": true],
+        ["name": "b", "track_ref": "trk_b", "isSelected": false],
+        ["name": "a", "track_ref": "trk_a", "isSelected": false],
+    ]
+    #expect(QualificationTransport.soleNewlySelectedTrack(in: reordered, excluding: pre) == "trk_new")
+}
+
+/// Two sources that answer with DIFFERENT tracks is not a tie to break — one of them is wrong and
+/// the cycle does not know which. This is the shape both cycles refuse on, stated over the helpers
+/// the refusal is built from.
+@Test func phaseCsTwoSourcesCanDisagreeAndThatIsARefusal() {
+    let pre = ["trk_existing"]
+    let rows: [[String: Any]] = [
+        ["name": "Absolute Zero", "track_ref": "trk_existing", "isSelected": false],
+        ["name": "오디오 1", "track_ref": "trk_named", "isSelected": false],
+        ["name": "오디오 2", "track_ref": "trk_selected", "isSelected": true],
+    ]
+    let named = QualificationTransport.soleCreatedTrack(
+        named: "오디오 1", in: rows, excluding: pre)
+    let selected = QualificationTransport.soleNewlySelectedTrack(in: rows, excluding: pre)
+    #expect(named == "trk_named")
+    #expect(selected == "trk_selected")
+    #expect(named != selected)
 }

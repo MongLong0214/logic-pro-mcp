@@ -24,16 +24,47 @@ enum AXLocalePolicy {
         let canonical: String
         let variants: [String]
         let rationale: String
+        /// Variants that are additionally known to belong to a specific UI LANGUAGE, keyed by its
+        /// code (`ko`, `ja`, `de`). Empty for every label set that only ever needs to RECOGNISE a
+        /// string, which is almost all of them.
+        ///
+        /// The distinction is between reading and writing. Recognising can accept every variant at
+        /// once and does — `labels` folds these in, so matching behaviour is unchanged by using
+        /// this. PRODUCING a string cannot: a caller that has to type one word into a search field
+        /// must pick, and picking needs to know which language the host is speaking. Added
+        /// 2026-09-14 for `system.setup_arm_key`, which types a command name into Logic's Key
+        /// Commands filter and gets an empty list if it guesses wrong.
+        let locales: [String: String]
 
-        init(canonical: String, variants: [String], rationale: String) {
+        init(
+            canonical: String,
+            variants: [String],
+            locales: [String: String] = [:],
+            rationale: String
+        ) {
             self.canonical = canonical
             self.variants = variants
+            self.locales = locales
             self.rationale = rationale
+        }
+
+        /// The label to PRODUCE for a host whose UI locale reads as `locale` (`ko-KR`, `ko`, …).
+        /// `canonical` when the language is unknown or unmeasured — the pre-existing behaviour, and
+        /// one that fails closed loudly rather than typing a guess.
+        func label(forLocale locale: String?) -> String {
+            guard let language = locale?
+                .split(separator: "-").first
+                .map(String.init)?
+                .lowercased(),
+                let measured = locales[language] else {
+                return canonical
+            }
+            return measured
         }
 
         var labels: [String] {
             var result: [String] = []
-            for label in [canonical] + variants {
+            for label in [canonical] + variants + locales.keys.sorted().compactMap({ locales[$0] }) {
                 let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty, !result.contains(trimmed) {
                     result.append(trimmed)
@@ -786,8 +817,8 @@ enum AXLocalePolicy {
     /// (Logic 12.3: `생성`); JA live-confirmed (Logic 12.3: `作成`).
     static let createButton = LabelSet(
         canonical: "Create",
-        variants: ["생성", "作成"],
-        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
+        variants: ["생성", "作成", "Erzeugen"],
+        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`). German read 2026-09-15 by opening the sheet on a de-DE Logic 12.3 and enumerating `group 1 of sheet 1`: `Erzeugen`, `Abbrechen`, both enabled (#883)."
     )
 
     /// #346/#350: `AXDescription` that identifies the mandatory New Track sheet.
@@ -795,10 +826,14 @@ enum AXLocalePolicy {
     /// Japanese Logic 12.3 the Cancel button is enabled. Read-only classifier;
     /// KO live-confirmed (Logic 12.3: `새로운 트랙`); JA live-confirmed (Logic 12.3:
     /// `新規トラック`).
+    /// German is `Neue Spur` and NOT `Neue Spur erzeugen`. The sheet shows the longer string as a
+    /// heading — it is what #883's reporter quoted, because it is what a person sees — but the
+    /// AXDescription this classifier reads is the short one. Taking the visible heading would have
+    /// produced a variant that is real text on the real sheet and still never matches.
     static let newTrackSheetDescription = LabelSet(
         canonical: "New Track",
-        variants: ["새로운 트랙", "新規トラック"],
-        rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
+        variants: ["새로운 트랙", "新規トラック", "Neue Spur"],
+        rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled). German read 2026-09-15 on a de-DE Logic 12.3: the AXSheet answers `Neue Spur`, while `Neue Spur erzeugen` is an AXStaticText heading inside it and is deliberately not a variant (#883)."
     )
 
     /// #346/#350/#545: primary destructive button on the track-delete confirm sheets.
@@ -1008,8 +1043,58 @@ enum AXLocalePolicy {
     /// the #516 regression, still live for anyone not running Logic in English.
     static let arrangeWindowTitleSuffix = LabelSet(
         canonical: "Tracks",
-        variants: ["트랙", "トラック"],
-        rationale: "Witnesses that an arrange window exists after project.new; read-only classification."
+        variants: ["트랙", "トラック", "Spuren"],
+        rationale: "Witnesses that an arrange window exists after project.new; read-only classification. German read 2026-09-15 on a de-DE Logic 12.3 (#883): File > New skipped the chooser and created the project directly, whose window titled itself `Ohne Titel - Spuren` — and without this variant project.new spent its whole 40-iteration wait beside a project it had just made, then reported that neither a chooser nor a created window ever appeared."
+    )
+
+    /// The Key Commands window's title, for `ArmKeyCommandSetup.keyCommandsWindow`.
+    ///
+    /// Same class as `arrangeWindowTitleSuffix` and live for the same reason: the matcher held the
+    /// English literal `Key Command`, so on a Korean Logic it could never find a window that was
+    /// open in front of it. Measured 2026-09-14 — `system.setup_arm_key` posted Option+K, Logic
+    /// opened `키 명령 할당 – U.S. – 편집됨`, and setup answered State C `ax_write_failed` at stage
+    /// `open_key_commands` with "The Key Commands window did not open". It had. The operation is
+    /// unreachable on every non-English Logic, which also strands `tracks.arm`'s only
+    /// coordinate-free setup path.
+    ///
+    /// `키 명령` is the stable head of that title: what follows is the preset name and an edited
+    /// marker, both of which vary. The canonical stays `Key Command` rather than `Key Commands`
+    /// because that is the substring the matcher used, and widening it here would change English
+    /// behaviour while fixing Korean.
+    static let keyCommandsWindowTitle = LabelSet(
+        canonical: "Key Command",
+        variants: ["키 명령"],
+        rationale: "Identifies the Key Commands window by title substring; read-only classification. Korean read live 2026-09-14 off the window Logic opened in response to Option+K, whose full title was `키 명령 할당 – U.S. – 편집됨`; only the head is matched because the preset name and the edited marker vary. ja-JP and de-DE are NOT measured and carry no variant, so this reader gains nothing on those hosts until someone reads them."
+    )
+
+    /// Logic's record-arm key command, as its Key Commands list names it.
+    ///
+    /// `ArmKeyCommandSetup` types this string into the list's search field and then matches a
+    /// command cell against it EXACTLY, so a wrong string filters to nothing. Korean measured live
+    /// 2026-09-14 by searching the open Key Commands window: `트랙 녹음 활성화 토글` (Logic appends
+    /// ` *` to an assigned command's cell, which `commandIdentity` already strips).
+    ///
+    /// Exactness is load-bearing here rather than stylistic: the same search also returns
+    /// `채널 스트립 녹음 활성화 토글` — Toggle Channel Strip Record Enable — and
+    /// `퍼포먼스 녹음 활성화 켬/끔`. Learning a chord onto either would arm the wrong thing, which
+    /// is why the setup refuses a non-unique match instead of taking the first.
+    static let recordArmKeyCommandName = LabelSet(
+        canonical: "Toggle Track Record Enable",
+        variants: [],
+        locales: ["ko": "트랙 녹음 활성화 토글"],
+        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Korean read live 2026-09-14 out of the open Key Commands window, alongside the two sibling commands it must not be confused with. ja-JP and de-DE are NOT measured and carry no variant."
+    )
+
+    /// The Key Commands window's `Learn by Key Label` checkbox.
+    ///
+    /// Korean measured live 2026-09-14 in the same window: `키 레이블로 학습`. Its siblings there are
+    /// `키 위치로 학습` (Learn by Key Position) and `새로운 할당 학습` (Learn New Assignment), so an
+    /// inexact match could arm the wrong learning mode.
+    static let learnByKeyLabelCheckbox = LabelSet(
+        canonical: "Learn by Key Label",
+        variants: [],
+        locales: ["ko": "키 레이블로 학습"],
+        rationale: "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord. Korean read live 2026-09-14 off the AXCheckBox title in the open window, distinguished there from `키 위치로 학습` and `새로운 할당 학습`. ja-JP and de-DE are NOT measured and carry no variant."
     )
 
     static let trackMuteButton = LabelSet(
@@ -1951,6 +2036,9 @@ enum AXLocalePolicy {
         tempoSliderContainsLabel,
         horizontalZoomSlider,
         arrangeWindowTitleSuffix,
+        keyCommandsWindowTitle,
+        recordArmKeyCommandName,
+        learnByKeyLabelCheckbox,
         trackMuteButton,
         trackSoloButton,
         trackRecordButton,

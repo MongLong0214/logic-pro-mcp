@@ -151,6 +151,22 @@ jobs:
         # previous 16.2 pin (Swift 6.0) cannot compile that form.
         run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
+      - name: Record the toolchain this gate actually ran
+        # The step below compares a FILE that a Swift toolchain wrote against one
+        # committed by a developer's toolchain, and `originHash` is not portable
+        # between them: this machine's Swift 6.2.4 computes c671d134 for the current
+        # manifest while this runner computed 8ae3b940 for the same manifest and
+        # added 16 transitive pins. A gate that compares toolchain-produced artifacts
+        # and does not record its own toolchain cannot be read afterwards — the first
+        # hour of that investigation went into inferring this number instead of
+        # looking it up. The comment above also CLAIMS 6.2; this prints the truth
+        # next to it. Also lists the installed Xcodes, so choosing a matching one is
+        # a lookup rather than a guess.
+        run: |
+          swift --version
+          xcodebuild -version
+          ls -d /Applications/Xcode*.app
+
       - name: Build
         run: swift build -c release
 
