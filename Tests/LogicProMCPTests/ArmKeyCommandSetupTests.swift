@@ -1,3 +1,4 @@
+import Foundation
 @preconcurrency import ApplicationServices
 import CoreGraphics
 import MCP
@@ -77,6 +78,11 @@ import Testing
         // which is a window that genuinely has none -- the discriminator must not treat the two the
         // same, and without this the fixture could not tell them apart either.
         documentReadFails: Bool = false,
+        // Fail the AXDocument read only AFTER this many successful ones. A global failure trips the
+        // OPEN stage first, so a cleanup-path case written with `documentReadFails` alone never
+        // reaches cleanup and its assertion holds for the wrong reason — measured 2026-09-15 when
+        // exactly that case survived the mutation it was written to catch.
+        documentReadFailsAfter: Int? = nil,
         // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
         learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
         // What Logic reports its UI language as. nil models a reading that failed.
@@ -201,7 +207,9 @@ import Testing
         let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueHandler: nil,
-            attributeValueResultHandler: documentReadFails ? Self.failingDocumentRead : nil,
+            attributeValueResultHandler: (documentReadFails || documentReadFailsAfter != nil)
+                ? Self.documentReadThatFails(after: documentReadFailsAfter)
+                : nil,
             setAttributeHandler: { element, attribute, value in
                 if CFEqual(element, search), attribute == (kAXFocusedAttribute as String),
                    !focusSetSucceeds {
@@ -809,6 +817,27 @@ import Testing
 
     /// A clean conflict decline reports its cleanup HONESTLY: Learn was restored and
     /// the window closed, and the reassignment control was never pressed.
+    /// The OTHER direction of the same rule, and the one a fix for the first direction broke.
+    /// `closeWindow` reads "no Key Commands window" as "it is gone — report closed", so a document
+    /// read that FAILS on the still-open window must not answer that question. If it does, the
+    /// teardown publishes `closeConfirmed` and `restored` for a window sitting in front of the
+    /// operator, and the close control is never pressed.
+    @Test("a document read that fails during teardown does not claim the window was closed")
+    func failedDocumentReadDoesNotClaimClosed() throws {
+        // The open stage reads AXDocument first and must SUCCEED, or the run fails there and
+        // `closeConfirmed` is false because cleanup never happened — which is a pass for the wrong
+        // reason, and is what the first version of this case measured.
+        let fixture = Self.fixture(
+            documentURL: nil, documentReadFailsAfter: 1,
+            conflictAlertOnChord: true, closeRemovesWindow: false, verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        let failure = try #require(Self.failure(outcome))
+
+        #expect(!failure.evidence.closeConfirmed)
+        #expect(!failure.evidence.restored)
+    }
+
     @Test func conflictWithCleanDeclineReportsRestoredAndClosed() throws {
         let fixture = Self.fixture(conflictAlertOnChord: true, verify: .verified)
         let outcome = Self.run(fixture)
@@ -1204,12 +1233,31 @@ import Testing
 
     /// A reader whose AXDocument read FAILS. Every other attribute falls through to the builder,
     /// so the fixture is unchanged apart from the one status this case is about.
-    private static let failingDocumentRead:
-        @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? = {
-            _, attribute in
+    /// A reader whose AXDocument read fails — immediately, or only after `after` successful reads.
+    /// Every other attribute falls through to the builder.
+    private static func documentReadThatFails(after: Int?)
+        -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
+        let seen = Counter()
+        return { _, attribute in
             guard attribute == (kAXDocumentAttribute as String) else { return nil }
-            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            guard let after else {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return seen.next() > after
+                ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                : nil          // nil = fall through to the builder, which answers honestly
         }
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            value += 1
+            return value
+        }
+    }
 
     /// The discriminator reads AXDocument through the STATUS-PRESERVING seam, because the plain
     /// accessor collapses a failed read into nil -- and nil is the answer that means "this is the
@@ -1217,13 +1265,23 @@ import Testing
     /// the operator's project window and, on the no-search-field path, pressed its close control.
     @Test("a window whose AXDocument read FAILS is not taken for the Key Commands window")
     func failedDocumentReadIsNotAbsence() {
+        // `documentURL: nil` is load-bearing. The first version of this case set a document URL AND
+        // made the read fail, so the OLD accessor -- which the fail flag does not touch -- still
+        // read the stored URL, still saw a document, and still rejected the window: the case passed
+        // with the fix reverted and its real subject was "a window that HAS a document", which the
+        // case below already covers. With no URL stored, the old path answers nil (no document,
+        // title matches, so it IS the Key Commands window) and the new path answers undetermined.
         let fixture = Self.fixture(
             windowTitle: "내 키 명령 프로젝트 - 트랙",
-            documentURL: "file:///Users/test/Music/p.logicx/",
+            documentURL: nil,
             documentReadFails: true
         )
 
         #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
+        if case .undetermined = ArmKeyCommandSetup.keyCommandsWindowLookup(runtime: fixture.runtime) {
+        } else {
+            Issue.record(Comment(rawValue: "a title match whose document read failed must be .undetermined, never .notPresent — closeWindow reads .notPresent as 'the window is gone'"))
+        }
     }
 
     @Test("a Korean project name containing the Key Commands token is not selected")

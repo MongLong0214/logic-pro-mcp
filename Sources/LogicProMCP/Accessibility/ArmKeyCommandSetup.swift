@@ -835,43 +835,52 @@ enum ArmKeyCommandSetup {
 
     // MARK: - Helpers
 
-    static func keyCommandsWindow(runtime: Runtime) -> AXUIElement? {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime.elements) else { return nil }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(app, kAXWindowsAttribute, runtime: runtime.ax) ?? []
-        // The title is matched THROUGH THE LOCALE POLICY, not against an English literal. The
-        // literal was `contains("Key Command")`, and a Korean Logic titles this window
-        // `키 명령 할당 – U.S. – 편집됨`, so setup reported "the Key Commands window did not open"
-        // about a window that was open in front of it — measured 2026-09-14.
-        //
-        // Not a silent equivalence: the policy's `.contains` is CASE-INSENSITIVE where the literal
-        // was case-sensitive, so an English title of `key command` now matches and did not before.
-        // That widening is stated rather than hidden, and it is one Logic does not exercise — its
-        // window is titled `Key Commands`. Hangul canonical (NFC/NFD) matching comes along with it,
-        // which this label needs.
-        return windows.first { win in
-            let titleMatches = AXLocalePolicy.keyCommandsWindowTitle.matches(
-                AXHelpers.getTitle(win, runtime: runtime.ax),
-                mode: .contains
-            )
-            // A project may legitimately contain the localized title fragment in its name. Arrange
-            // windows carry AXDocument; the Key Commands utility window does not. Pair the necessary
-            // containment match with that independent structural signal before cleanup is allowed to
-            // treat the window as ours and press its close control.
-            //
-            // `getAttributeResult`, not `getAttribute`. The plain accessor collapses a FAILED read
-            // into `nil`, and nil is the answer that means "this is the Key Commands window" -- so
-            // an AXDocument read that times out on a busy Logic (the state right after Option+K)
-            // would have selected the operator's project window and, on the no-search-field path,
-            // pressed its close control. A read this guard could not perform is not a statement
-            // that the window has no document. The TYPE is handled the same way: Logic vending
-            // AXDocument as anything but a String must not read as absence, so the value is taken
-            // untyped and any present value counts as a document. Found by blind review 2026-09-15.
+    /// Three answers, not two. `nil` used to carry both "no such window" and "could not tell", and
+    /// the two callers read that same nil in OPPOSITE directions: the open path treats nil as "it
+    /// did not open" and fails closed, while `closeWindow` treats nil as "it is gone" and reports a
+    /// clean teardown. So an AXDocument read that failed — the thing the document check was added
+    /// to stop being mistaken for absence — became an affirmative `closeConfirmed`, and the close
+    /// control was never pressed. Found by blind review 2026-09-15, in the fix for the read-failure
+    /// collapse itself: it was closed in the direction that was already safe and opened in the one
+    /// that was not.
+    enum KeyCommandsWindowLookup {
+        case found(AXUIElement)
+        /// No window matched, and every window that could be examined was examined.
+        case notPresent
+        /// A window matched by title and could not be classified — its document read failed, or the
+        /// window list could not be read at all. Never report this as closed and never as open.
+        case undetermined
+    }
+
+    static func keyCommandsWindowLookup(runtime: Runtime) -> KeyCommandsWindowLookup {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime.elements) else {
+            return .undetermined
+        }
+        let windowsRead: Result<[AXUIElement]?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(app, kAXWindowsAttribute, runtime: runtime.ax)
+        guard case .success(let maybeWindows) = windowsRead else { return .undetermined }
+        var sawUnclassifiable = false
+        for win in maybeWindows ?? [] {
+            guard AXLocalePolicy.keyCommandsWindowTitle.matches(
+                AXHelpers.getTitle(win, runtime: runtime.ax), mode: .contains) else { continue }
             let documentRead: Result<AnyObject?, AXHelpers.AXStatusError> =
                 AXHelpers.getAttributeResult(win, kAXDocumentAttribute as String, runtime: runtime.ax)
-            guard case .success(let document) = documentRead else { return false }
-            return titleMatches && document == nil
+            guard case .success(let document) = documentRead else {
+                sawUnclassifiable = true
+                continue
+            }
+            if document == nil { return .found(win) }
         }
+        return sawUnclassifiable ? .undetermined : .notPresent
     }
+
+    /// The open path's view: anything but a positively identified window is nil, which that path
+    /// reads as "it did not open" and fails closed on. `closeWindow` must NOT use this.
+    static func keyCommandsWindow(runtime: Runtime) -> AXUIElement? {
+        if case .found(let win) = keyCommandsWindowLookup(runtime: runtime) { return win }
+        return nil
+    }
+
 
     /// Every flat command element whose identity matches `commandName` exactly
     /// (tolerating a trailing " *"), excluding the search field that echoes the
@@ -995,13 +1004,19 @@ enum ArmKeyCommandSetup {
     /// whether the window was observed closed.
     @discardableResult
     private static func closeWindow(_ window: AXUIElement, runtime: Runtime) -> Bool {
-        if keyCommandsWindow(runtime: runtime) == nil { return true }
+        // `.notPresent` ONLY. `.undetermined` means a window matched by title and could not be
+        // classified, which is not a reading that it is gone — reporting it as closed publishes
+        // `closeConfirmed` and `restored` for a window still sitting in front of the operator,
+        // starving the track reads this teardown exists to un-starve.
+        func isGone() -> Bool {
+            if case .notPresent = keyCommandsWindowLookup(runtime: runtime) { return true }
+            return false
+        }
+        if isGone() { return true }
         if let closeButton: AXUIElement = AXHelpers.getAttribute(window, "AXCloseButton", runtime: runtime.ax) {
             _ = AXHelpers.performAction(closeButton, kAXPressAction as String, runtime: runtime.ax)
         }
-        return poll(runtime: runtime, deadline: 2.0) {
-            keyCommandsWindow(runtime: runtime) == nil ? true : nil
-        } != nil
+        return poll(runtime: runtime, deadline: 2.0) { isGone() ? true : nil } != nil
     }
 
     // MARK: - Conflict modal (decline only — never steal a chord)
