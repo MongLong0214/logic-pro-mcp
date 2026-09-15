@@ -1164,6 +1164,31 @@ def main():
          f"first difference at "
          + str(next((i for i, (a, b) in enumerate(zip(rendered, on_disk_text)) if a != b), "EOF")))
 
+    # 17b. Swift escapes are DECODED, not copied.
+    #      The de-DE application menu-bar item is `Logic\\u{00A0}Pro` — a non-breaking space. A
+    #      projection that copied those eight literal characters would disagree with what the
+    #      compiled policy matches, and `--check` could never see it: both sides are parsed by this
+    #      same function, so they would agree on the wrong value. That is exactly the shape case 17
+    #      was written for, one layer down.
+    #
+    #      The second row is the one a chained `.replace()` gets wrong. `\\\\u{41}` is an escaped
+    #      backslash followed by the literal text `u{41}`; decoding `\\\\` first and then scanning
+    #      again for `\\u{...}` yields `a\\A`. One left-to-right pass yields `a\\u{41}`.
+    for raw, want, why in [
+        (r"Logic\u{00A0}Pro", "Logic\u00a0Pro", "a unicode escape becomes the character"),
+        (r"a\\u{41}", r"a\u{41}", "an escaped backslash is not re-read as an escape"),
+        (r"say \"hi\"", 'say "hi"', "an escaped quote survives"),
+        ("plain", "plain", "an unescaped string is untouched"),
+    ]:
+        case(f"Swift escape: {why}", labels._unescape(raw) == want,
+             f"{raw!r} -> {labels._unescape(raw)!r}, want {want!r}")
+
+    # 17c. And the fix reaches the real policy: the de-DE variant in the tree holds a real U+00A0.
+    _app = labels.from_swift()["applicationMenuBarItem"]
+    case("the de-DE application menu-bar variant carries a real non-breaking space",
+         any("\u00a0" in v for v in _app["variants"]),
+         f"variants={_app['variants']!r}")
+
     # 18. The real document is clean.
     proc = subprocess.run([sys.executable, str(HERE / "check-locale-labels-json.py")], capture_output=True, text=True)
     case("repository is clean", proc.returncode == 0, proc.stdout.strip()[:200])

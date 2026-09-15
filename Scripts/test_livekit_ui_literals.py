@@ -203,7 +203,28 @@ _ok = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspa
                      capture_output=True, text=True)
 case("and accepts the repository's own harnesses",
      _ok.returncode == 0, (_ok.stdout + _ok.stderr).strip()[:200])
+# 11. An exemption covers its own LITERAL, never the rest of its line.
+#    The table was always documented as keyed by "the literal AND the expression it sits in", and
+#    the code skipped the whole line as soon as any marker matched. Found 2026-09-15: adding a
+#    marker for `tell process "Logic Pro"` made three real `'Save'` findings disappear, because
+#    they shared a line with it. The exempt word must go and everything beside it must stay.
+#    Both strings must sit in ONE AppleScript constant, which is the shape the regression had:
+#    `live_614` reaches a Save panel through `tell process "Logic Pro" to ... "Save" ...`, and the
+#    process name and the button name share the line.
+_line = ('A = \'tell application "System Events" to tell process "Logic Pro" to '
+         'click menu bar item "Mixer" of menu bar 1\'\n')
+_exempt_literal = "logic pro"
+# The fixture has to USE a real table entry, or it proves something about a marker nobody ships.
+case("the fixture exercises a marker the guard actually carries",
+     any(m in _line and lit == _exempt_literal for m, lit in G.PROTOCOL_COMPARISONS),
+     _line.strip()[:70])
+_found = scan(_line, dict(CANONICALS, **{_exempt_literal: "applicationMenuBarItem"}))
+_lits = [lit for _base, lit, _line_no, _name in _found]
+case("an exemption does not silence the other localisable strings on its line",
+     _lits == ["Mixer"], f"found {_lits!r} — want only the non-exempt one")
 
+case("and the exempt literal itself is still exempt",
+     _exempt_literal not in {lit.lower() for lit in _lits}, f"found {_lits!r}")
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

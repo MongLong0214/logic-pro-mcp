@@ -211,14 +211,16 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 113)
-        #expect(mutatingSpecs.count == 90)   // #448 registered tracks.sort_verified
+        #expect(OperationRegistry.specs.count == 114)
+        #expect(mutatingSpecs.count == 91)   // #884 registered system.setup_control_surface
 
-        // A mutating op that refuses BEFORE dispatch starts its trace (the
-        // consent-first setup_arm_key, #413) starts no trace with the coverage
-        // params (which carry no consent), so it is asserted to claim NO trace
-        // coverage rather than to have a trace.
-        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey]
+        // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
+        // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
+        // rather than to have a trace. Two ops are consent-first in that way: setup_arm_key (#413)
+        // and setup_control_surface (#884). Both refuse ahead of `startTraceIfEnabled` on purpose —
+        // a refusal must not have touched the user's configuration, and starting a trace is the
+        // first thing that would.
+        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey, .systemSetupControlSurface]
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
@@ -324,7 +326,7 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 113)
+        #expect(OperationRegistry.specs.count == 114)
         #expect(readOnlySpecs.count == 23)
         // Mutability is total: the mutating census (87) and this inverse gate
         // (23) together account for every registered spec, so a new operation

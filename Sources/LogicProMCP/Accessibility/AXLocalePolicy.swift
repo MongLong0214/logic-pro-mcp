@@ -392,6 +392,110 @@ enum AXLocalePolicy {
 
     /// #369: File > Export. Both forms were read from Logic's File menu; no other locale has been
     /// measured for this submenu, so callers must refuse rather than translate or guess one.
+    /// The application menu-bar item. The product NAME is not translated, but its SPACE is, and NOT
+    /// along the lines anyone would guess: en-US and ja-JP spell it `Logic Pro` with U+0020, while
+    /// ko-KR and de-DE spell it `Logic\u{00A0}Pro` with a NON-BREAKING space. A literal
+    /// `"Logic Pro"` therefore matches nothing on a Korean or German Logic, and a menu walk that
+    /// starts there silently finds no Control Surfaces submenu — a wall that reads as a missing
+    /// feature rather than as a missing character. Measured on all four navigation-free censuses;
+    /// the first draft of this comment asserted Korean used U+0020 and the census said otherwise.
+    static let applicationMenuBarItem = LabelSet(
+        canonical: "Logic Pro",
+        variants: ["Logic\u{00A0}Pro"],
+        rationale: "MEASURED on all four navigation-free censuses, reading the AXMenuBarItem title: en-US 2026-09-12 and ja-JP 2026-09-05 read `Logic Pro` (U+0020); ko-KR 2026-09-05 and de-DE 2026-09-12 read `Logic\u{00A0}Pro` (U+00A0). Menu-bar items publish no AXIdentifier, so the title is the only handle."
+    )
+
+    // MARK: - Control Surface Setup (#884 / #862)
+    //
+    // Logic ships with NO control surface installed, and until one is, every MCU send this server
+    // makes is discarded silently: `logic_system health` still reports `mcu.connected: true`
+    // because that flag is set by ANY inbound traffic rather than by a handshake reply. Installing
+    // the device is a GUI-only route, so these labels exist to drive it without English literals.
+    //
+    // The menu-path labels below are measured on BOTH en-US and ko-KR, from the navigation-free
+    // censuses of 2026-09-12 and 2026-09-05 respectively. The Setup WINDOW's own labels are read
+    // live on ko-KR only (2026-09-15, Logic 12.3 build 6674); their `canonical` is Apple's English
+    // and is NOT measured on this host, which is why each rationale says so rather than implying a
+    // reading nobody took.
+
+    static let controlSurfacesMenuItem = LabelSet(
+        canonical: "Control Surfaces",
+        variants: ["컨트롤 서피스", "コントロールサーフェス", "Bedienoberflächen"],
+        rationale: "The `Logic Pro` menu's Control Surfaces submenu parent, matched by AXMenuItem title. All four spellings are MEASURED at AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem: en-US `Control Surfaces` and de-DE `Bedienoberflächen` in the 2026-09-12 navigation-free censuses, ko-KR `컨트롤 서피스` and ja-JP `コントロールサーフェス` in the 2026-09-05 ones."
+    )
+
+    /// WARNING -- this string is NOT unique inside its own submenu on ko-KR OR ja-JP. The Control
+    /// Surfaces submenu holds `Setup…` and `Settings…` as adjacent items; Korean renders both as
+    /// `설정…` and Japanese renders both as `設定…`, and both carry the identical AXIdentifier
+    /// `globalMenuItemCall:`, so neither the title nor the identifier separates them. Measured
+    /// 2026-09-05 (ko-KR, ja-JP) against 2026-09-12 (en-US, de-DE); German is the only measured
+    /// locale where the two differ (`Setup …` against `Einstellungen …`).
+    /// A caller must therefore press a candidate and then IDENTIFY THE WINDOW THAT APPEARED --
+    /// `Setup…` opens `controlSurfaceSetupWindowTitle`, `Settings…` opens a preferences dialog --
+    /// and fall through to the other candidate when the wrong one opened. Choosing by ordinal is
+    /// exactly the positional targeting this repository refuses.
+    static let controlSurfaceSetupMenuItem = LabelSet(
+        canonical: "Setup…",
+        variants: ["설정…", "設定…", "Setup …"],
+        rationale: "Opens the Control Surface Setup window. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide."
+    )
+
+    /// The sibling this server must NOT mistake for `Setup…`. Present only so the collision is
+    /// nameable in code and in a failure hint; nothing selects by it.
+    static let controlSurfaceSettingsMenuItem = LabelSet(
+        canonical: "Settings…",
+        variants: ["설정…", "設定…", "Einstellungen …"],
+        rationale: "The global control-surface preferences item, adjacent to `Setup…`. MEASURED in all four locales: en-US `Settings…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Einstellungen …`. Its ko-KR and ja-JP spellings are identical to `Setup…`, which is the whole reason the setup drive identifies its window rather than its menu item."
+    )
+
+    static let controlSurfaceSetupWindowTitle = LabelSet(
+        canonical: "Control Surface Setup",
+        variants: ["컨트롤 서피스 설정"],
+        rationale: "Identifies the Setup window by AXWindow title; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured."
+    )
+
+    static let controlSurfaceNewMenuButton = LabelSet(
+        canonical: "New",
+        variants: ["신규"],
+        rationale: "The Setup window's OWN menu button -- an AXMenuButton with subrole AXSegment carrying this string in AXDescription, not AXTitle, and living inside the window rather than in the application menu bar. An earlier probe enumerated only the menu bar and the window's AXButtons and concluded no install route existed; it was reading the wrong two places. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceInstallMenuItem = LabelSet(
+        canonical: "Install…",
+        variants: ["설치…"],
+        rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceInstallWindowTitle = LabelSet(
+        canonical: "Install",
+        variants: ["설치"],
+        rationale: "The device picker opened by `Install…`; an AXFloatingWindow holding a 144-row AXTable of manufacturer/model/profile/version. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceAddButton = LabelSet(
+        canonical: "Add",
+        variants: ["추가"],
+        rationale: "Commits the Install window's selected row. ko-KR `추가` read live 2026-09-15 beside `스캔` and `모두 스캔`. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceOutputPortLabel = LabelSet(
+        canonical: "Output Port:",
+        variants: ["출력 포트:"],
+        rationale: "Labels the popup carrying the device's MIDI destination. Matched with the trailing colon because that is the verbatim AXValue of the AXStaticText beside the popup -- the label and the control are siblings, which is how the popup is found without an index. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceInputPortLabel = LabelSet(
+        canonical: "Input Port:",
+        variants: ["입력 포트:"],
+        rationale: "Labels the popup carrying the device's MIDI source. Defaults to the ALL-sources value after an install, which already includes this server's port -- so a run that only checks the input port can read as bound while the output port is still `Off` and nothing reaches Logic. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+    )
+
+    static let controlSurfaceModelLabel = LabelSet(
+        canonical: "Model:",
+        variants: ["모델:"],
+        rationale: "Labels the AXStaticText naming the installed device model, which is how this server confirms an install landed rather than trusting the Add button's return code. ko-KR read live 2026-09-15 reading `Mackie Control`. English canonical unmeasured on this host."
+    )
+
     static let exportMenuItem = LabelSet(
         canonical: "Export",
         variants: ["내보내기", "書き出す", "Exportieren", "Exportar", "Exporter", "Esporta", "导出", "輸出"],
@@ -2635,6 +2739,18 @@ enum AXLocalePolicy {
         projectChooserWindowTitle,
         projectChooserCommitButton,
         projectChooserEmptyProjectLabel,
+        applicationMenuBarItem,
+        controlSurfacesMenuItem,
+        controlSurfaceSetupMenuItem,
+        controlSurfaceSettingsMenuItem,
+        controlSurfaceSetupWindowTitle,
+        controlSurfaceNewMenuButton,
+        controlSurfaceInstallMenuItem,
+        controlSurfaceInstallWindowTitle,
+        controlSurfaceAddButton,
+        controlSurfaceOutputPortLabel,
+        controlSurfaceInputPortLabel,
+        controlSurfaceModelLabel,
         exportMenuItem,
         allTracksAsAudioFilesMenuItem,
         oneFilePerTrackPopupValue,
