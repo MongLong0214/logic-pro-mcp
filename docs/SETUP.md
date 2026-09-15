@@ -83,15 +83,38 @@ Valid values: `com.apple.logic10` (desktop), `com.apple.mobilelogic` (Creator St
 
 ### MCU Control Surface
 
-Required for MCU-backed mixer control.
+Required for MCU-backed mixer control. Until this is done Logic DISCARDS every MCU message the
+server sends, and `system health` still reports the MCU channel ready — that flag is set by any
+inbound traffic rather than by a handshake, so a missing control surface looks like a working one
+until an operation fails with `channels_exhausted`.
 
-1. Launch Logic Pro and open a project.
-2. Open **Logic Pro -> Control Surfaces -> Setup...**.
-3. Choose **New -> Install...**.
-4. Add **Mackie Designs -> Mackie Control**.
-5. Select the device card.
-6. Set both input and output ports to `LogicProMCP-MCU-Internal`.
-7. Close the setup window.
+The server can do it for you, once per machine:
+
+```
+logic_system { "command": "setup_control_surface", "params": { "consent": "true" } }
+```
+
+It refuses without `consent` because it writes to your Logic configuration. It declines rather than
+replaces if some OTHER control surface is already installed, and it reports success only after Logic
+has actually sent MCU feedback back — the port fields reading the right name is not proof.
+
+To do it by hand instead:
+
+1. Launch Logic Pro and open a project, with the server running (its MIDI ports exist only while it
+   does, so a stopped server means the port is not offered).
+2. Open **Logic Pro -> Control Surfaces -> Setup...**. On a Korean or Japanese Logic that submenu
+   holds TWO items spelled the same (`설정…` / `設定…`) — one opens this window, the other opens
+   preferences. Pick by the window that appears.
+3. In the Setup window's own menu bar, choose **New -> Install...**.
+4. Add **Loud Technologies / Mackie -> Mackie Control**, then press **Add**. Take care not to pick
+   `Mackie Control C4` or either `Mackie Control Extender`.
+5. Set both **Output Port** and **Input Port** to `LogicProMCP-MCU-Internal`. Output first: Input
+   defaults to the all-sources value, which already includes this server, so checking only Input
+   can read as bound while nothing Logic sends reaches anybody.
+6. Close the setup window. Leaving it open makes the live harnesses refuse.
+
+The binding lives in Logic's configuration, not in the server: it survives the server stopping and
+starting, so this is one-time rather than per-session.
 
 Expected health after registration:
 

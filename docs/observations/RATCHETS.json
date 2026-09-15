@@ -52,7 +52,8 @@
    "2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable",
    "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
    "2026-09-15-the-automation-lane-is-legible-and-inert",
-   "2026-09-15-the-korean-project-chooser-names-itself"
+   "2026-09-15-the-korean-project-chooser-names-itself",
+   "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
   ],
   "records_from_a_superseded_build": [],
   "records_without_evidence": [
@@ -456,6 +457,14 @@
     "beatsDisplayModeItem",
     "cancelButton",
     "controlBarGroupLabel",
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle",
     "createButton",
     "deleteTracksPrimaryButton",
     "displayModePopupLabel",
@@ -582,6 +591,14 @@
     "beatsDisplayModeItem",
     "cancelButton",
     "controlBarGroupLabel",
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle",
     "createButton",
     "deleteTracksPrimaryButton",
     "displayModePopupLabel",
@@ -703,6 +720,14 @@
     "beatsDisplayModeItem",
     "cancelButton",
     "controlBarGroupLabel",
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle",
     "createButton",
     "deleteTracksPrimaryButton",
     "displayModePopupLabel",
@@ -959,10 +984,9 @@
   "manual_reverify": {
    "date": "2026-09-15",
    "members": [
-    "2026-09-15-the-automation-lane-is-legible-and-inert",
-    "2026-09-15-the-korean-project-chooser-names-itself"
+    "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
    ],
-   "reason": "The ko-KR New Project chooser record reverifies MANUALLY: reaching that window needs every project closed, which discards unsaved work, and a script that does that on an operator's machine is worse than a person following four steps. Carried for that reason, not for want of trying to script it.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
+   "reason": "The ko-KR New Project chooser record reverifies MANUALLY: reaching that window needs every project closed, which discards unsaved work, and a script that does that on an operator's machine is worse than a person following four steps. Carried for that reason, not for want of trying to script it.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well.\n\n2026-09-15 addition (control surface): Re-verifying the control-surface install means installing a control surface: it writes to the user's Logic configuration and needs a live server so the MCU port exists to bind to. Scripting that would mean shipping a script whose whole job is to mutate somebody's setup on demand, which is a worse thing to have lying around than a paragraph of steps."
   },
   "records_without_evidence": {
    "date": "2026-09-15",
@@ -1048,29 +1072,44 @@
   "unmeasured_coverage.de-DE": {
    "date": "2026-09-15",
    "members": [
-    "projectChooserCommitButton",
-    "projectChooserEmptyProjectLabel",
-    "projectChooserWindowTitle"
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle"
    ],
-   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
+   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well.\n\n2026-09-15 addition (control surface): The eight Control Surface Setup/Install window labels are measured in ko-KR only, live on 2026-09-15 (record `2026-09-15-the-setup-windows-own-menu-installs-the-surface`). Their menu PATH is measured in all four locales — `Control Surfaces` and `Setup…`/`Settings…` come from the navigation-free censuses — but nothing has opened these two WINDOWS on an en-US, ja-JP or de-DE Logic, so their canonicals are Apple's published English and carry no reading on this host. They are deliberately left as a counted gap rather than given translated variants: #883 established that a plausible guess looks right and matches nothing, which is worse than an honest absence. Closing each needs the Setup window opened on a Logic running that language, with a server alive so the port popups are populated."
   },
   "unmeasured_coverage.en-US": {
    "date": "2026-09-15",
    "members": [
-    "projectChooserCommitButton",
-    "projectChooserEmptyProjectLabel",
-    "projectChooserWindowTitle"
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle"
    ],
-   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
+   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well.\n\n2026-09-15 addition (control surface): The eight Control Surface Setup/Install window labels are measured in ko-KR only, live on 2026-09-15 (record `2026-09-15-the-setup-windows-own-menu-installs-the-surface`). Their menu PATH is measured in all four locales — `Control Surfaces` and `Setup…`/`Settings…` come from the navigation-free censuses — but nothing has opened these two WINDOWS on an en-US, ja-JP or de-DE Logic, so their canonicals are Apple's published English and carry no reading on this host. They are deliberately left as a counted gap rather than given translated variants: #883 established that a plausible guess looks right and matches nothing, which is worse than an honest absence. Closing each needs the Setup window opened on a Logic running that language, with a server alive so the port popups are populated."
   },
   "unmeasured_coverage.ja-JP": {
    "date": "2026-09-15",
    "members": [
-    "projectChooserCommitButton",
-    "projectChooserEmptyProjectLabel",
-    "projectChooserWindowTitle"
+    "controlSurfaceAddButton",
+    "controlSurfaceInputPortLabel",
+    "controlSurfaceInstallMenuItem",
+    "controlSurfaceInstallWindowTitle",
+    "controlSurfaceModelLabel",
+    "controlSurfaceNewMenuButton",
+    "controlSurfaceOutputPortLabel",
+    "controlSurfaceSetupWindowTitle"
    ],
-   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well."
+   "reason": "The three New Project chooser labels are measured in ko-KR only (record `2026-09-15-the-korean-project-chooser-names-itself`). en-US, ja-JP and de-DE are unmeasured and carry no variant, deliberately: #883 showed that a translated guess looks right and matches nothing, so the honest state is a counted gap rather than a plausible string. Closing each needs the chooser opened on a Logic running that language.\n\n2026-09-15 addition: Two records written 2026-09-15 for the automation lane and the Control Surface Setup. Both reverify MANUALLY: one toggles a view and drives elements whose effect has to be watched, the other opens a window and reads one field, and scripting either on an operator's machine buys less than a person following the steps. Neither cites an evidence file separate from the census they share, which is why they land in records_without_evidence as well.\n\n2026-09-15 addition (control surface): The eight Control Surface Setup/Install window labels are measured in ko-KR only, live on 2026-09-15 (record `2026-09-15-the-setup-windows-own-menu-installs-the-surface`). Their menu PATH is measured in all four locales — `Control Surfaces` and `Setup…`/`Settings…` come from the navigation-free censuses — but nothing has opened these two WINDOWS on an en-US, ja-JP or de-DE Logic, so their canonicals are Apple's published English and carry no reading on this host. They are deliberately left as a counted gap rather than given translated variants: #883 established that a plausible guess looks right and matches nothing, which is worse than an honest absence. Closing each needs the Setup window opened on a Logic running that language, with a server alive so the port popups are populated."
   },
   "unmeasured_coverage.ko-KR": {
    "date": "2026-09-15",

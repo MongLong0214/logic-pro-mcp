@@ -39,10 +39,23 @@ struct HCGlobalInvariantTests {
         // Consent-gated live Key Commands GUI drive (#413): not headlessly
         // HC-checkable — it needs the real Logic Key Commands window.
         "logic_system.setup_arm_key",
+        // Consent-gated live Control Surface Setup drive (#884): same class. It needs the real
+        // Setup window, the real Install picker, and this server's own virtual MIDI endpoints to
+        // exist so the port popups offer them.
+        //
+        // RULED OUT: giving it a RouteCase with no `consent`, which WOULD pass. `.minimumV1` asks
+        // only for `success`, `verified` and `state`, and the consent refusal is a well-formed
+        // State C envelope — so the route would be counted as HC-checked while nothing ever
+        // reached the drive it exists to perform. That is a check that cannot fail, and this file
+        // would then report full coverage of a route it had never entered.
+        "logic_system.setup_control_surface",
     ]
 
-    // Ratchet: this may only shrink as live-only / legacy non-HC routes become headlessly HC-checkable.
-    private static let hcInvariantAllowlistMaxCount = 7
+    // Ratchet: this may only shrink as live-only / legacy non-HC routes become headlessly
+    // HC-checkable. Raised 7 -> 8 on 2026-09-15 for `logic_system.setup_control_surface` — a NEW
+    // live-only route rather than an old one lingering, and the reason it cannot be checked
+    // headlessly is written beside it above.
+    private static let hcInvariantAllowlistMaxCount = 8
 
     private static func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool) throws -> String {
         let path = FileManager.default.temporaryDirectory
@@ -409,6 +422,7 @@ struct HCGlobalInvariantTests {
             "logic_project.launch",
             "logic_project.quit",
             "logic_system.setup_arm_key",
+            "logic_system.setup_control_surface",
         ]))
     }
 

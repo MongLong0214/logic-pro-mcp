@@ -76,6 +76,50 @@
     "en-US": "title"
    }
   },
+  "applicationMenuBarItem": {
+   "canonical": "Logic Pro",
+   "variants": [
+    "Logic Pro"
+   ],
+   "rationale": "MEASURED on all four navigation-free censuses, reading the AXMenuBarItem title: en-US 2026-09-12 and ja-JP 2026-09-05 read `Logic Pro` (U+0020); ko-KR 2026-09-05 and de-DE 2026-09-12 read `Logic Pro` (U+00A0). Menu-bar items publish no AXIdentifier, so the title is the only handle.",
+   "provenance": {
+    "Logic Pro": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Logic Pro",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuBarItem"
+    }
+   },
+   "roles": [
+    "AXMenuBarItem"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-12-en-US-arrange-menus-census",
+    "ja-JP": "2026-09-05-ja-JP-arrange-menus-census",
+    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuBarItem",
+    "ja-JP": "AXMenuBarItem",
+    "ko-KR": "AXMenuBarItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title",
+    "ja-JP": "title",
+    "ko-KR": "title"
+   }
+  },
   "arrangeWindowTitleSuffix": {
    "canonical": "Tracks",
    "variants": [
@@ -383,6 +427,418 @@
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceAddButton": {
+   "canonical": "Add",
+   "variants": [
+    "추가"
+   ],
+   "rationale": "Commits the Install window's selected row. ko-KR `추가` read live 2026-09-15 beside `스캔` and `모두 스캔`. English canonical unmeasured on this host.",
+   "provenance": {
+    "추가": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "추가",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXButton"
+    }
+   },
+   "roles": [
+    "AXButton"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceInputPortLabel": {
+   "canonical": "Input Port:",
+   "variants": [
+    "입력 포트:"
+   ],
+   "rationale": "Labels the popup carrying the device's MIDI source. Defaults to the ALL-sources value after an install, which already includes this server's port -- so a run that only checks the input port can read as bound while the output port is still `Off` and nothing reaches Logic. ko-KR read live 2026-09-15. English canonical unmeasured on this host.",
+   "provenance": {
+    "입력 포트:": {
+     "attribute": "value",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "입력 포트:",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXStaticText"
+    }
+   },
+   "roles": [
+    "AXStaticText"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceInstallMenuItem": {
+   "canonical": "Install…",
+   "variants": [
+    "설치…"
+   ],
+   "rationale": "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host.",
+   "provenance": {
+    "설치…": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "설치…",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceInstallWindowTitle": {
+   "canonical": "Install",
+   "variants": [
+    "설치"
+   ],
+   "rationale": "The device picker opened by `Install…`; an AXFloatingWindow holding a 144-row AXTable of manufacturer/model/profile/version. ko-KR read live 2026-09-15. English canonical unmeasured on this host.",
+   "provenance": {
+    "설치": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "설치",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXWindow"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceModelLabel": {
+   "canonical": "Model:",
+   "variants": [
+    "모델:"
+   ],
+   "rationale": "Labels the AXStaticText naming the installed device model, which is how this server confirms an install landed rather than trusting the Add button's return code. ko-KR read live 2026-09-15 reading `Mackie Control`. English canonical unmeasured on this host.",
+   "provenance": {
+    "모델:": {
+     "attribute": "value",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "모델:",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXStaticText"
+    }
+   },
+   "roles": [
+    "AXStaticText"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceNewMenuButton": {
+   "canonical": "New",
+   "variants": [
+    "신규"
+   ],
+   "rationale": "The Setup window's OWN menu button -- an AXMenuButton with subrole AXSegment carrying this string in AXDescription, not AXTitle, and living inside the window rather than in the application menu bar. An earlier probe enumerated only the menu bar and the window's AXButtons and concluded no install route existed; it was reading the wrong two places. ko-KR read live 2026-09-15. English canonical unmeasured on this host.",
+   "provenance": {
+    "신규": {
+     "attribute": "description",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "신규",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXMenuButton"
+    }
+   },
+   "roles": [
+    "AXMenuButton"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceOutputPortLabel": {
+   "canonical": "Output Port:",
+   "variants": [
+    "출력 포트:"
+   ],
+   "rationale": "Labels the popup carrying the device's MIDI destination. Matched with the trailing colon because that is the verbatim AXValue of the AXStaticText beside the popup -- the label and the control are siblings, which is how the popup is found without an index. ko-KR read live 2026-09-15. English canonical unmeasured on this host.",
+   "provenance": {
+    "출력 포트:": {
+     "attribute": "value",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "출력 포트:",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXStaticText"
+    }
+   },
+   "roles": [
+    "AXStaticText"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfaceSettingsMenuItem": {
+   "canonical": "Settings…",
+   "variants": [
+    "설정…",
+    "設定…",
+    "Einstellungen …"
+   ],
+   "rationale": "The global control-surface preferences item, adjacent to `Setup…`. MEASURED in all four locales: en-US `Settings…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Einstellungen …`. Its ko-KR and ja-JP spellings are identical to `Setup…`, which is the whole reason the setup drive identifies its window rather than its menu item.",
+   "provenance": {
+    "Einstellungen …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Einstellungen …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "設定…": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "設定…",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "설정…": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "설정…",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-12-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   }
+  },
+  "controlSurfaceSetupMenuItem": {
+   "canonical": "Setup…",
+   "variants": [
+    "설정…",
+    "設定…",
+    "Setup …"
+   ],
+   "rationale": "Opens the Control Surface Setup window. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide.",
+   "provenance": {
+    "Setup …": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Setup …",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "設定…": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "設定…",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "설정…": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "설정…",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-12-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   }
+  },
+  "controlSurfaceSetupWindowTitle": {
+   "canonical": "Control Surface Setup",
+   "variants": [
+    "컨트롤 서피스 설정"
+   ],
+   "rationale": "Identifies the Setup window by AXWindow title; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured.",
+   "provenance": {
+    "컨트롤 서피스 설정": {
+     "attribute": "title",
+     "date": "2026-09-15",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "컨트롤 서피스 설정",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "role": "AXWindow"
+    }
+   },
+   "roles": [
+    "AXWindow"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "measured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured"
+   }
+  },
+  "controlSurfacesMenuItem": {
+   "canonical": "Control Surfaces",
+   "variants": [
+    "컨트롤 서피스",
+    "コントロールサーフェス",
+    "Bedienoberflächen"
+   ],
+   "rationale": "The `Logic Pro` menu's Control Surfaces submenu parent, matched by AXMenuItem title. All four spellings are MEASURED at AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem: en-US `Control Surfaces` and de-DE `Bedienoberflächen` in the 2026-09-12 navigation-free censuses, ko-KR `컨트롤 서피스` and ja-JP `コントロールサーフェス` in the 2026-09-05 ones.",
+   "provenance": {
+    "Bedienoberflächen": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "exact",
+     "observed": "Bedienoberflächen",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "コントロールサーフェス": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "コントロールサーフェス",
+     "record": "2026-09-05-ja-JP-arrange-menus-census",
+     "role": "AXMenuItem"
+    },
+    "컨트롤 서피스": {
+     "attribute": "title",
+     "date": "2026-09-05",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "컨트롤 서피스",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-12-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
    }
   },
   "createButton": {

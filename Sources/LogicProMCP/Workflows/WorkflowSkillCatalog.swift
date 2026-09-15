@@ -548,6 +548,7 @@ enum WorkflowSkillCatalog {
         "logic_system": [
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
             "list_recent_traces", "get_trace", "clear_traces", "setup_arm_key",
+            "setup_control_surface",
             "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
         ],
         "logic_audio": [
