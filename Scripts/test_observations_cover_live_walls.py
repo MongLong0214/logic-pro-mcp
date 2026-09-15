@@ -15,6 +15,8 @@ rather than by a test:
 `claim_in` and `own_issue` are pure functions of one line, so the cases drive them directly and
 neither read nor disturb the real roadmap.
 """
+import contextlib
+import io
 import json
 import shutil
 import tempfile
@@ -106,6 +108,36 @@ try:
 finally:
     G.OBS = _saved
     shutil.rmtree(_bad, ignore_errors=True)
+
+# 8. main() itself must REFUSE on an unreadable record. Nothing drove `main` before this: the whole
+#    file exercised `recorded_issues`, `claim_in` and `own_issue`, so the `return 1` that makes the
+#    guard fail closed could be deleted outright and every case still passed. A branch nobody drives
+#    is a branch nobody has watched work.
+_probe = tempfile.mkdtemp()
+os.makedirs(os.path.join(_probe, "docs", "observations"))
+for _name, _body in (("2026-09-15-string-entry", {"id": "x", "issues": ["#306"]}),
+                     ("2026-09-15-int-container", {"id": "x", "issues": 306})):
+    with open(os.path.join(_probe, "docs", "observations", _name + ".json"), "w") as _h:
+        json.dump(_body, _h)
+_savedOBS, _savedRM = G.OBS, G.ROADMAP
+G.OBS = os.path.join(_probe, "docs", "observations")
+try:
+    # Capture the OUTPUT, not just the exit code. `main` returns 1 for an uncovered roadmap claim
+    # too, so deleting the unreadable-record branch entirely still produced exit 1 and this case
+    # passed for a reason that had nothing to do with what it is named after.
+    _buf = io.StringIO()
+    with contextlib.redirect_stdout(_buf):
+        _rc = G.main()
+    _out = _buf.getvalue()
+    case("main refuses a record it cannot read, and says so",
+         _rc == 1 and "cannot read" in _out and "2026-09-15-int-container" in _out,
+         f"exit {_rc}: {_out.strip().splitlines()[0][:90] if _out.strip() else '(no output)'}")
+except Exception as _exc:                       # noqa: BLE001 - the point is that it must NOT raise
+    case("main refuses a record it cannot read, and says so", False,
+         f"raised {type(_exc).__name__}: {_exc}")
+finally:
+    G.OBS, G.ROADMAP = _savedOBS, _savedRM
+    shutil.rmtree(_probe, ignore_errors=True)
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")

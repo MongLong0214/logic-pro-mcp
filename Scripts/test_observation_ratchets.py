@@ -324,14 +324,56 @@ def main():
                    capture_output=True)
     subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "retire the ledger"], capture_output=True)
-    widened = {k: (sorted(set(v) | {"laundered"}) if isinstance(v, list)
-                   else {loc: sorted(set(m) | {"laundered"}) for loc, m in v.items()})
-               for k, v in exact.items()}
-    env3c = _branch(root, labels, widened)
+    #      THE GAP HAS TO BE LIVE. The first version of this case added a member to `allowed` only
+    #      and never to the tree, so there was no growth to compare and the exit 1 it asserted came
+    #      from the `shrank` branch -- a path that predates the walk entirely and never consults the
+    #      base. It passed with the base wired to the branch's own ledger, which is maximal
+    #      laundering and exactly what it claimed to refuse. Found by review 2026-09-15.
+    laundered = {"L": _label(["a", "b", "c"], prov,
+                             {"en-US": "unmeasured", "ko-KR": "measured", "ja-JP": "unmeasured"})}
+    widened = dict(exact)
+    widened["undocumented_variants"] = sorted(set(exact["undocumented_variants"]) | {"L\u2192c"})
+    env3c = _branch(root, laundered, widened)
     proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
                           env=dict(env3c, CI="true"))
     check("a deleted-then-restored ledger is not a bootstrap",
-          proc.returncode == 1 and "bootstrap" not in proc.stdout,
+          proc.returncode == 1 and "bootstrap" not in proc.stdout
+          # The refusal must be the GROWTH one, naming the member, not a shrink or a missing set.
+          and "did not know it did not know" in proc.stdout and "L\u2192c" in proc.stdout,
+          f"exit {proc.returncode}: {proc.stdout[:300]}")
+
+    # 13d. TWO ancestors carry a ledger and they disagree. The walk must take the NEWEST, because
+    #      the newest is the one that recorded gaps being CLOSED — taking an older, wider ceiling
+    #      re-admits everything closed since, with no `raised` entry, because it is "already in the
+    #      base". 13c cannot see this: its history has exactly one carrying ancestor, so oldest and
+    #      newest are the same commit and reversing the walk passes it.
+    wide = dict(exact)
+    wide["undocumented_variants"] = sorted(set(exact["undocumented_variants"]) | {"L\u2192c"})
+    # The OLDEST carrying commit is the WIDE one, so reversing the walk changes the answer. The
+    # first cut of this case seeded the root with the tight ceiling, which made oldest and newest
+    # identical and let a reversed walk pass.
+    root = _tree(labels, records, wide, git_init=True)
+
+    def _commit(root, message):
+        subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", message], capture_output=True)
+
+    # ... then it is TIGHTENED: L->c was closed.
+    (root / "docs" / "observations" / "RATCHETS.json").write_text(
+        json.dumps({"schema": 2, "allowed": exact, "raised": {}}), encoding="utf-8")
+    _commit(root, "close L->c")
+    subprocess.run(["git", "-C", str(root), "rm", "-q", "docs/observations/RATCHETS.json"],
+                   capture_output=True)
+    _commit(root, "retire the ledger")
+    relaundered = {"L": _label(["a", "b", "c"], prov,
+                               {"en-US": "unmeasured", "ko-KR": "measured", "ja-JP": "unmeasured"})}
+    env3d = _branch(root, relaundered, wide)
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True,
+                          env=dict(env3d, CI="true"))
+    check("the walk takes the newest carrying ancestor, not the widest",
+          proc.returncode == 1 and "did not know it did not know" in proc.stdout
+          and "L\u2192c" in proc.stdout,
           f"exit {proc.returncode}: {proc.stdout[:300]}")
 
     # 14. RATCHETS.json beside the records is not itself counted as one.

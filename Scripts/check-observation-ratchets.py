@@ -156,18 +156,42 @@ def base_allowed(repo):
         #
         # So look for it. The newest ancestor of the merge base that CARRIES the file is the real
         # prior ceiling; only when no ancestor ever carried it is this a first bootstrap.
-        history, _ = git("rev-list", "--max-count=200", merge_base, "--",
+        # `--full-history`. Without it `git rev-list` simplifies: through a merge that is TREESAME
+        # to one parent it follows only that parent, so a delete on a side branch makes the walk
+        # skip whatever the OTHER parent did to the ledger. Measured on a fixture where main had
+        # closed two gaps after the fork: the walk adopted the pre-fork ceiling, and a branch could
+        # have re-admitted both with no `raised` entry because they were "already in the base".
+        # A ceiling that lags reality lets the next regression hide under it -- this file's own
+        # words, and this was that.
+        history, _ = git("rev-list", "--full-history", "--max-count=200", merge_base, "--",
                          "docs/observations/RATCHETS.json")
         for sha in (history or "").split():
             prior, _ = git("show", f"{sha}:docs/observations/RATCHETS.json")
             if prior is None:
                 continue          # the deletion commit itself; keep walking back
             try:
-                return (dict(_flatten(json.loads(prior).get("allowed") or {})),
+                # An `allowed` that is absent or empty is NOT a ceiling of zero: `compare` treats a
+                # falsy base as "no base" and silently uses the branch's own file instead, with no
+                # note and exit 0. Say it is unreadable so the caller's CI branch can refuse.
+                priorAllowed = dict(_flatten(json.loads(prior).get("allowed") or {}))
+                if not priorAllowed:
+                    return None, (f"{sha[:8]} carries a ledger with no `allowed` sets, so it "
+                                  f"cannot serve as a ceiling")
+                return (priorAllowed,
                         f"last ancestor carrying the ledger {sha[:8]} (the merge base "
                         f"{merge_base[:8]} does not carry it)")
             except ValueError as exc:
                 return None, f"{sha[:8]}: {exc}"
+        # Finding nothing is only a bootstrap when the history was ALL THERE to look through. In a
+        # shallow clone `git merge-base` still resolves and `rev-list <mb> -- <path>` still exits 0
+        # with no output, so the walk concluded the ledger had never existed and the branch became
+        # its own ceiling -- silently, and without failing under CI. A clone that cannot see its own
+        # past has to say so instead.
+        shallow, _ = git("rev-parse", "--is-shallow-repository")
+        if shallow == "true":
+            return None, (f"history is truncated (shallow clone), so 'no ancestor carries the "
+                          f"ledger' is not a reading anyone can trust -- check out with "
+                          f"fetch-depth: 0")
         return None, (f"bootstrap: neither the merge base {merge_base[:8]} nor any of its "
                       f"ancestors carries RATCHETS.json, so this is the commit that introduces "
                       f"the ledger and there is no prior ceiling")
