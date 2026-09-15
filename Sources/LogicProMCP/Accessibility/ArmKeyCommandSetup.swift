@@ -857,9 +857,18 @@ enum ArmKeyCommandSetup {
             // windows carry AXDocument; the Key Commands utility window does not. Pair the necessary
             // containment match with that independent structural signal before cleanup is allowed to
             // treat the window as ours and press its close control.
-            let document: String? = AXHelpers.getAttribute(
-                win, kAXDocumentAttribute as String, runtime: runtime.ax
-            )
+            //
+            // `getAttributeResult`, not `getAttribute`. The plain accessor collapses a FAILED read
+            // into `nil`, and nil is the answer that means "this is the Key Commands window" -- so
+            // an AXDocument read that times out on a busy Logic (the state right after Option+K)
+            // would have selected the operator's project window and, on the no-search-field path,
+            // pressed its close control. A read this guard could not perform is not a statement
+            // that the window has no document. The TYPE is handled the same way: Logic vending
+            // AXDocument as anything but a String must not read as absence, so the value is taken
+            // untyped and any present value counts as a document. Found by blind review 2026-09-15.
+            let documentRead: Result<AnyObject?, AXHelpers.AXStatusError> =
+                AXHelpers.getAttributeResult(win, kAXDocumentAttribute as String, runtime: runtime.ax)
+            guard case .success(let document) = documentRead else { return false }
             return titleMatches && document == nil
         }
     }

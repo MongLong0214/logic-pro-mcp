@@ -319,10 +319,14 @@ struct QualificationReadbackFreshnessTests {
 
 /// #882 review BLOCKER 1 — the recipe's OWN readings decide whether a reading happened.
 ///
-/// `readbackFreshness` cannot answer this. It is computed from the operation's later readback, and
-/// it returns `.admissible` for every verification policy that is not `.readbackRequired` — which
-/// both operations carrying a mutation/restore record are (`mixer.set_volume` and `mixer.set_pan`
-/// are `.none`). A cycle could read `data_source: "mixer_not_visible"` three times and be promoted.
+/// `readbackFreshness` cannot answer this. It is computed from the operation's later readback and
+/// returns `.admissible` for every verification policy that is not `.readbackRequired` —
+/// `transport.toggle_cycle` and `transport.set_tempo` among them.
+///
+/// The first version of this paragraph said the two mixer operations were `.none`. They are not:
+/// `OperationRegistry` hardcodes `verification: .readbackRequired` for the whole mixer block, and
+/// the `.none` beside those rows is the ConfirmationPolicy. Corrected after a blind review named
+/// the line.
 @Suite("Phase-B record readings")
 struct QualificationRecipeReadingTests {
     private static func envelope(
@@ -359,18 +363,22 @@ struct QualificationRecipeReadingTests {
         let pre = try #require(Self.record(preState: Self.envelope(readable: false))
             .readingThatDidNotHappen)
         #expect(pre.contains("pre_state"))
+        // `hasPrefix`, not `contains`: "restore_readback" CONTAINS "readback", so a `contains`
+        // test passes when the loop misattributes the middle reading to the last one. Blind review
+        // 2026-09-15 pointed out that only the pre_state case discriminated.
         let mid = try #require(Self.record(readback: Self.envelope(readable: false))
             .readingThatDidNotHappen)
-        #expect(mid.contains("readback"))
+        #expect(mid.hasPrefix("readback:"))
         let post = try #require(Self.record(restoreReadback: Self.envelope(readable: false))
             .readingThatDidNotHappen)
-        #expect(post.contains("restore_readback"))
+        #expect(post.hasPrefix("restore_readback:"))
     }
 
     @Test("an occluded reading is named")
     func occludedIsNamed() throws {
         let why = try #require(Self.record(readback: Self.envelope(axOccluded: true))
             .readingThatDidNotHappen)
+        #expect(why.hasPrefix("readback:"))
         #expect(why.contains("ax_occluded"))
     }
 
@@ -383,9 +391,23 @@ struct QualificationRecipeReadingTests {
             .readingThatDidNotHappen == nil)
     }
 
+    /// The transport family's envelope carries neither `readable` nor `verified_empty` — it says
+    /// the same thing with `unverified: true` beside `source: "cache"`. Without this case the check
+    /// was inert for exactly the operations whose verification policy is `.none`, which is the only
+    /// family where it is the sole defence.
+    @Test("a self-declared unverified reading is named")
+    func unverifiedIsNamed() throws {
+        let cached = #"{"source":"cache","unverified":true,"stale":true,"data":{"state":"playing"}}"#
+        let why = try #require(Self.record(readback: cached).readingThatDidNotHappen)
+        #expect(why.hasPrefix("readback:"))
+        #expect(why.contains("unverified"))
+        let live = #"{"source":"ax_live","data":{"state":"playing"}}"#
+        #expect(Self.record(readback: live).readingThatDidNotHappen == nil)
+    }
+
     @Test("a body that is not an envelope is not a reading")
     func nonEnvelopeIsNotAReading() throws {
         let why = try #require(Self.record(readback: "not json").readingThatDidNotHappen)
-        #expect(why.contains("readback"))
+        #expect(why.hasPrefix("readback:"))
     }
 }

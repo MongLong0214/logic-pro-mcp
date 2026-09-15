@@ -73,6 +73,10 @@ import Testing
         windowTitle: String = "Key Commands",
         // Arrange windows carry AXDocument; the Key Commands utility window does not.
         documentURL: String? = nil,
+        // A read of AXDocument that FAILS rather than answering. Distinct from `documentURL: nil`,
+        // which is a window that genuinely has none -- the discriminator must not treat the two the
+        // same, and without this the fixture could not tell them apart either.
+        documentReadFails: Bool = false,
         // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
         learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
         // What Logic reports its UI language as. nil models a reading that failed.
@@ -197,6 +201,7 @@ import Testing
         let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueHandler: nil,
+            attributeValueResultHandler: documentReadFails ? Self.failingDocumentRead : nil,
             setAttributeHandler: { element, attribute, value in
                 if CFEqual(element, search), attribute == (kAXFocusedAttribute as String),
                    !focusSetSucceeds {
@@ -1195,6 +1200,30 @@ import Testing
                 "a window titled \(title) is not the Key Commands window"
             )
         }
+    }
+
+    /// A reader whose AXDocument read FAILS. Every other attribute falls through to the builder,
+    /// so the fixture is unchanged apart from the one status this case is about.
+    private static let failingDocumentRead:
+        @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? = {
+            _, attribute in
+            guard attribute == (kAXDocumentAttribute as String) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+
+    /// The discriminator reads AXDocument through the STATUS-PRESERVING seam, because the plain
+    /// accessor collapses a failed read into nil -- and nil is the answer that means "this is the
+    /// Key Commands window". A read that times out on a busy Logic would otherwise have selected
+    /// the operator's project window and, on the no-search-field path, pressed its close control.
+    @Test("a window whose AXDocument read FAILS is not taken for the Key Commands window")
+    func failedDocumentReadIsNotAbsence() {
+        let fixture = Self.fixture(
+            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            documentURL: "file:///Users/test/Music/p.logicx/",
+            documentReadFails: true
+        )
+
+        #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
     }
 
     @Test("a Korean project name containing the Key Commands token is not selected")

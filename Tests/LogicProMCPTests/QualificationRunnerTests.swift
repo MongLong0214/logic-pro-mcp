@@ -1746,9 +1746,17 @@ struct QualificationRunnerTests {
         #expect(!withEvidence.isEmpty)
         // And specifically: the VALUE cycle ran. `withEvidence` being non-empty only says SOME
         // recipe produced a record, and the boolean and transport cycles can supply that on their
-        // own -- so the operations whose recipe restores a continuous value, the two this branch
-        // rewrote to address a track by `track_ref` and to compensate a landed write, could be
-        // absent from every run and nothing here would say so.
+        // own, so the two operations whose recipe restores a continuous value could be absent from
+        // every run with nothing here to say so.
+        //
+        // WHAT IT DOES NOT CONTROL FOR, stated because the first version of this comment claimed it
+        // did: it does not prove the cycle addressed the track by `track_ref`, nor that a failed
+        // cycle compensated. Revert the mutation to `["index": trackIndex, …]` and delete the
+        // compensation and this assertion still passes — a cycle that verifies still emits a
+        // record. It controls for "a value cycle ran", which is what the live gate could not
+        // otherwise tell you at all. The targeting and compensation properties have no regression
+        // control below the live gate; making one needs a Phase-B fixture, and the attempt that
+        // produced this branch died building exactly that.
         let valueCycleOperations = Set(
             QualificationTransport.valueRestoreReadbackField.keys.map(\.rawValue))
         let valueCycleEvidence = withEvidence.filter { valueCycleOperations.contains($0.operationID) }
@@ -1807,9 +1815,14 @@ struct QualificationRunnerTests {
         // parameters -- all six have had them for some time, so the note prescribes work already
         // done, and nobody could tell because no run ever printed the names.
         //
-        // Read-only only: a mutating operation cannot reach `passed` at all today
-        // (`QualificationTransport.status` returns `.notQualified` or `.failed` for every one of
-        // them), so listing them here would be listing the Phase-B gap rather than Phase A's.
+        // Read-only only, and the reason is scope rather than impossibility. This used to say a
+        // mutating operation "cannot reach `passed` at all today". That stopped being true when
+        // Phase B started promoting on a mutation/restore record, and a blind review found the
+        // sentence still sitting here: `#expect(!creditedMutating.isEmpty)` below requires a
+        // mutating operation to be `.passed` AND semantically read back (`PromotionGate
+        // .operationIsLiveCredited`), and it passes on a live run. Listing mutating operations here
+        // would still be listing the Phase-B gap rather than Phase A's, which is why this filter
+        // stays as it is.
         let readOnlyShort = readOnly
             .filter { $0.status != .passed }
             .map { "\($0.operationID)=\($0.status.rawValue)" }

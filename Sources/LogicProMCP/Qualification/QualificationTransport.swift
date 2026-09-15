@@ -56,14 +56,24 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
     ///
     /// Why this exists rather than leaning on `readbackFreshness`: that verdict is computed from
     /// the operation's own later readback, not from these three, and it short-circuits to
-    /// `.admissible` for every verification policy that is not `.readbackRequired` — which
-    /// includes `mixer.set_volume` and `mixer.set_pan`, the only two operations this record is
-    /// built for. A cycle could therefore read `data_source: "mixer_not_visible"` three times and
-    /// still be promoted, with the unavailable artifact published as `verified: true`.
+    /// `.admissible` for every verification policy that is not `.readbackRequired`.
     ///
-    /// It checks the three statements an envelope makes about whether a reading occurred, and
-    /// nothing about freshness: `readable`, `ax_occluded`, and empty-without-`verified_empty`. A
-    /// stale reading is a different complaint and has its own verdict.
+    /// THE FIRST VERSION OF THIS COMMENT NAMED THE WRONG OPERATIONS, and a blind review caught it.
+    /// It said `mixer.set_volume` and `mixer.set_pan` were `.none` and were "the only two
+    /// operations this record is built for". Both halves were false. `OperationRegistry.swift`
+    /// hardcodes `verification: .readbackRequired` for the whole `.logicMixer` block; the `.none`
+    /// beside those rows is the **ConfirmationPolicy** — the tuple is
+    /// `(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)`. And fourteen cycles
+    /// in this file produce a `QualificationMutationRestoreRecord`, not two.
+    ///
+    /// The operations where freshness really is vacuous are in the TRANSPORT family —
+    /// `transport.toggle_cycle` and `transport.set_tempo` are `.none` verification — and those read
+    /// `logic://transport/state`, whose envelope carries neither `readable` nor `verified_empty`.
+    /// It says so a different way: `unverified: true` with `source: "cache"`. So that is checked
+    /// here too, or this guard would be absent from exactly the family it is the only defence for.
+    ///
+    /// What it checks is whether a reading OCCURRED, never whether it is fresh: staleness is a
+    /// different complaint and has its own verdict.
     var readingThatDidNotHappen: String? {
         for (name, raw) in [("pre_state", preState), ("readback", readback),
                             ("restore_readback", restoreReadback)] {
@@ -73,6 +83,8 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             }
             if object["readable"] as? Bool == false { return "\(name): readable=false" }
             if object["ax_occluded"] as? Bool == true { return "\(name): ax_occluded=true" }
+            // The transport envelope's own word for "this is not a reading of the live surface".
+            if object["unverified"] as? Bool == true { return "\(name): unverified=true" }
             let rows = object["data"] as? [Any]
             let isEmpty = rows?.isEmpty ?? (object["data"] == nil)
             if isEmpty, object["verified_empty"] as? Bool != true {
@@ -332,10 +344,9 @@ struct QualificationOperationResult: Equatable, Sendable {
             //
             // And freshness is not enough on its own. `readbackFreshness` is computed from the
             // operation's LATER readback and returns `.admissible` unconditionally for any policy
-            // that is not `.readbackRequired`, which both operations carrying a record are. So the
-            // record's own three readings are inspected here for whether a reading happened at all.
-            // Without this a cycle reading `mixer_not_visible` three times was promoted to `.passed`
-            // and the unavailable artifact published as `verified: true`.
+            // that is not `.readbackRequired` — `transport.toggle_cycle` and `transport.set_tempo`
+            // among them. So the record's own readings are inspected here for whether a reading
+            // happened at all, which is a question freshness never asks.
             if let record = mutationRestore, readbackFreshness.isAdmissible {
                 return record.readingThatDidNotHappen == nil ? .passed : .notQualified
             }
@@ -1861,6 +1872,7 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         spec: OperationSpec,
         field: String,
+        trackIndex: Int,
         targetRef: String,
         value: Double,
         nextID: inout Int
@@ -1876,7 +1888,28 @@ struct QualificationTransport: Sendable {
             if Self.mutationSaysItFailed(answer.text) {
                 return "REFUSED, \(field) may still be moved: " + answer.text.prefix(200)
             }
-            return "sent, \(field) asked back to \(value) (not re-read: the read is what failed)"
+            // RE-READ. "sent" is not "landed": State B is accepted-but-unverified and is not State
+            // C, so without this a compensating write the server took but that moved nothing read
+            // identically to one that worked -- which is the exact condition this helper exists to
+            // stop the sweep from walking past.
+            let confirmID = nextID
+            nextID += 2
+            do {
+                let seen = try observedTrackValue(
+                    session, id: confirmID, trackIndex: trackIndex, field: field,
+                    phase: "phase_b.compensate_readback")
+                if seen.trackRef != targetRef {
+                    return "sent and re-read, but row \(trackIndex) now holds \(seen.trackRef) "
+                        + "rather than \(targetRef), so this reading does not describe the track "
+                        + "that was moved"
+                }
+                return seen.value == value
+                    ? "LANDED, \(field) re-read at \(value)"
+                    : "SENT BUT NOT LANDED, \(field) re-read at \(seen.value), wanted \(value)"
+            } catch {
+                return "sent, but the confirming read failed, so whether \(field) came back is "
+                    + "unknown: \(error)"
+            }
         } catch {
             return "THREW, \(field) may still be moved: \(error)"
         }
@@ -1920,21 +1953,39 @@ struct QualificationTransport: Sendable {
         // this point and a verified restore compensates, and says in the thrown error whether the
         // compensation landed. Without this the sweep recorded a refusal and walked on with the
         // fader still at `target`.
-        var restoreVerified = false
+        // Only true once a request that could MOVE something has been issued. A refusal carrying
+        // `write_attempted: false` is the contract saying nothing was written, and compensating
+        // that path is not harmless: the compensating write drives the fader to `pre.value`, which
+        // came from the poller-backed cache, so on a stale read it moves a fader the product left
+        // alone to a value neither the product nor the operator chose.
+        var writeMayHaveLanded = false
         func failing(_ message: String) -> QualificationTransportError {
-            guard !restoreVerified else { return .protocolViolation(message) }
+            guard writeMayHaveLanded else { return .protocolViolation(message) }
             let note = compensateValue(
-                session, spec: spec, field: readbackField, targetRef: pre.trackRef,
-                value: pre.value, nextID: &nextID)
+                session, spec: spec, field: readbackField, trackIndex: trackIndex,
+                targetRef: pre.trackRef, value: pre.value, nextID: &nextID)
             return .protocolViolation(message + " | compensating restore: " + note)
+        }
+        func writeAttemptedIsExplicitlyFalse(_ text: String) -> Bool {
+            guard let data = text.data(using: .utf8),
+                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else { return false }
+            return object["write_attempted"] as? Bool == false
         }
 
         do {
+            // Set BEFORE the call, not after: a timeout is a statement about the answer, not about
+            // the effect, so a throw here can still have moved the fader.
+            writeMayHaveLanded = true
             let mutation = try invoke(
                 session, id: step(), tool: spec.tool.rawValue, command: spec.command,
                 params: ["target_ref": pre.trackRef, readbackField: target],
                 phase: "phase_b.mutation", timeout: spec.deadline.seconds + 5)
             guard !Self.mutationSaysItFailed(mutation.text) else {
+                // The refusal's own word for it. `write_attempted: false` is the fail-closed shape
+                // this repository refuses with everywhere, and it is the one case where the answer
+                // is authoritative that nothing moved.
+                if writeAttemptedIsExplicitlyFalse(mutation.text) { writeMayHaveLanded = false }
                 throw failing("phase_b.mutation: \(spec.id.rawValue) refused the real request: "
                     + mutation.text.prefix(220))
             }
@@ -1971,7 +2022,6 @@ struct QualificationTransport: Sendable {
                     + "\(restored.value), expected \(pre.value); the restore answered: "
                     + restore.text.prefix(300))
             }
-            restoreVerified = true
             return (
                 QualificationMutationRestoreRecord(
                     operationID: spec.id.rawValue,
@@ -1983,16 +2033,23 @@ struct QualificationTransport: Sendable {
                 ),
                 nextID
             )
-        } catch let error as QualificationTransportError {
-            // `failing()` has already compensated for the cases it built. Anything else -- a
-            // timeout, a closed pipe, a malformed frame from any of the calls above -- reaches here
-            // without having done so, and the write may have landed.
-            if case .protocolViolation(let text) = error, text.contains("compensating restore:") {
-                throw error
+        } catch {
+            // NOT `catch let error as QualificationTransportError`. `observedTrackValue` calls
+            // `try JSONSerialization.jsonObject(...)`, which raises an NSError on a malformed
+            // `logic://tracks` body -- and that is reached from BOTH post-write readbacks. Narrowed
+            // to the transport's own error type, such a body let a landed write exit this function
+            // with no compensation at all, and the sweep's untyped catch recorded a refusal with no
+            // note. The universal in the comment above has to be enforced by the catch, not
+            // asserted next to one that is narrower than it.
+            if let transportError = error as? QualificationTransportError,
+               case .protocolViolation(let text) = transportError,
+               text.contains("compensating restore:") {
+                throw error          // `failing()` already compensated for this one
             }
+            guard writeMayHaveLanded else { throw error }
             let note = compensateValue(
-                session, spec: spec, field: readbackField, targetRef: pre.trackRef,
-                value: pre.value, nextID: &nextID)
+                session, spec: spec, field: readbackField, trackIndex: trackIndex,
+                targetRef: pre.trackRef, value: pre.value, nextID: &nextID)
             throw QualificationTransportError.protocolViolation(
                 "\(error) | compensating restore: " + note)
         }
