@@ -881,6 +881,42 @@ enum AXLocalePolicy {
     ///
     /// The two halves are kept: Logic uses bare `クリック` on other surfaces, and a label that
     /// costs nothing to carry should not be removed on the strength of one build.
+    /// The Control Bar's count-in checkbox.
+    ///
+    /// Every variant here is Apple's own, read off `StrTransportBtns|||Count In` in the ten
+    /// locales Logic ships — not translated, not typed. Before 2026-09-16 the transport table
+    /// carried `("카운트 인", "Count In")` and nothing else, so count-in was unreachable in the
+    /// other eight languages.
+    /// The plug-in menu's Audio Units category.
+    ///
+    /// Apple's own, from the `Audio Units` key. Only Chinese translates it, which is exactly why
+    /// `titles.contains("Audio Units")` looked safe and was not: the plug-in menu could not be
+    /// recognised on a Chinese Logic, and nobody had run one.
+    static let pluginMenuAudioUnits = LabelSet(
+        canonical: "Audio Units",
+        variants: ["音频单元", "音訊單元"],
+        rationale: "Derived from Apple's `Audio Units` across the ten locales Logic ships; only zh_CN and zh_TW differ (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json."
+    )
+
+    /// The plug-in menu's Utility category.
+    ///
+    /// NOT derivable: no `.strings` or QuickHelp key holds `Utility`, so this is the other half of
+    /// the axis -- a label that exists only as a runtime reading. The Korean was read off a live
+    /// menu; the other eight locales are unmeasured and that is visible here rather than hidden in
+    /// a `||` chain.
+    static let pluginMenuUtility = LabelSet(
+        canonical: "Utility",
+        variants: ["유틸리티"],
+        rationale: "Absent from every canonical corpus, so measured rather than derived. Korean read off a live plug-in menu; the remaining locales are unmeasured. Carried as a LabelSet so the gap is countable instead of living in a hard-coded `||`."
+    )
+
+    static let transportCountInControl = LabelSet(
+        canonical: "Count In",
+        variants: ["Einzählen", "Compás de entrada", "Décompte", "Precount", "カウントイン",
+                   "카운트 인", "Contagem preparatória", "预备", "預備拍"],
+        rationale: "Derived from Apple's own StrTransportBtns|||Count In across all ten locales Logic ships (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json."
+    )
+
     static let transportMetronomeControl = LabelSet(
         canonical: "metronome",
         variants: ["click", "메트로놈", "클릭", "メトロノームクリック", "メトロノーム", "クリック"],
@@ -1931,6 +1967,9 @@ enum AXLocalePolicy {
         newTrackSheetDescription,
         deleteTracksPrimaryButton,
         saveConfirmationButton,
+        transportCountInControl,
+        pluginMenuAudioUnits,
+        pluginMenuUtility,
         transportPlayControl,
         transportRecordControl,
         transportCycleControl,

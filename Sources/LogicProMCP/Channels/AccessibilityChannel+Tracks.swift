@@ -1047,7 +1047,7 @@ extension AccessibilityChannel {
     /// claim (#2).
     static func transportRecordingState(runtime: AXLogicProElements.Runtime) -> Bool? {
         AXLogicProElements.readControlBarCheckboxValue(
-            named: "녹음", englishName: "Record", runtime: runtime
+            matching: AXLocalePolicy.transportRecordControl, runtime: runtime
         )
     }
 
@@ -1288,7 +1288,7 @@ extension AccessibilityChannel {
         guard let current = transportRecordingState(runtime: runtime) else { return false }
         if current != prior {
             guard let record = AXLogicProElements.findControlBarCheckbox(
-                named: "녹음", englishName: "Record", runtime: runtime
+                named: AXLocalePolicy.transportRecordControl, runtime: runtime
             ) else { return false }
             _ = AXHelpers.performAction(record, kAXPressAction, runtime: runtime.ax)
         }

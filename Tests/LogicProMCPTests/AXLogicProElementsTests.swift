@@ -290,23 +290,19 @@ import Testing
 
     #expect(AXLogicProElements.getControlBar(runtime: runtime) == controlBar)
     #expect(AXLogicProElements.findControlBarCheckbox(
-        named: "녹음",
-        englishName: "Record",
+        named: AXLocalePolicy.transportRecordControl,
         runtime: runtime
     ) == recordTitle)
     #expect(AXLogicProElements.findControlBarCheckbox(
-        named: "사이클",
-        englishName: "Cycle",
+        named: AXLocalePolicy.transportCycleControl,
         runtime: runtime
     ) == cycleDescription)
     #expect(AXLogicProElements.readControlBarCheckboxValue(
-        named: "녹음",
-        englishName: "Record",
+        matching: AXLocalePolicy.transportRecordControl,
         runtime: runtime
     )!)
     #expect(!(AXLogicProElements.readControlBarCheckboxValue(
-        named: "사이클",
-        englishName: "Cycle",
+        matching: AXLocalePolicy.transportCycleControl,
         runtime: runtime
     )!))
     #expect(AXLogicProElements.findControlBarBarSlider(runtime: runtime) == barSlider)

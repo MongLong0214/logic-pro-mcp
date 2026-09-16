@@ -1,0 +1,82 @@
+{
+  "id": "2026-09-16-two-languages-was-the-whole-design",
+  "date": "2026-09-16",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US"
+  },
+  "method": "Values read from the installed bundle with Scripts/logic_canon.py extractors; coverage counted from the regenerated projection. Nothing typed.",
+  "derived_labels": {
+    "transportCountInControl": {
+      "key": "StrTransportBtns|||Count In",
+      "values": {
+        "de": "Einzählen",
+        "en": "Count In",
+        "es": "Compás de entrada",
+        "fr": "Décompte",
+        "it": "Precount",
+        "ja": "カウントイン",
+        "ko": "카운트 인",
+        "pt": "Contagem preparatória",
+        "zh_CN": "预备",
+        "zh_TW": "預備拍"
+      }
+    },
+    "pluginMenuAudioUnits": {
+      "key": "Audio Units",
+      "values": {
+        "de": "Audio Units",
+        "en": "Audio Units",
+        "es": "Audio Units",
+        "fr": "Audio Units",
+        "it": "Audio Units",
+        "ja": "Audio Units",
+        "ko": "Audio Units",
+        "pt": "Audio Units",
+        "zh_CN": "音频单元",
+        "zh_TW": "音訊單元"
+      }
+    }
+  },
+  "not_derivable": {
+    "pluginMenuUtility": {
+      "reason": "no .strings or QuickHelp key holds `Utility`",
+      "measured": [
+        "Utility",
+        "유틸리티"
+      ]
+    }
+  },
+  "coverage_after": {
+    "de-DE": {
+      "measured": 30,
+      "derived": 32,
+      "identifier": 0,
+      "unmeasured": 96,
+      "retired": 1
+    },
+    "en-US": {
+      "measured": 36,
+      "derived": 72,
+      "identifier": 0,
+      "unmeasured": 50,
+      "retired": 1
+    },
+    "ja-JP": {
+      "measured": 29,
+      "derived": 43,
+      "identifier": 0,
+      "unmeasured": 86,
+      "retired": 1
+    },
+    "ko-KR": {
+      "measured": 36,
+      "derived": 104,
+      "identifier": 0,
+      "unmeasured": 18,
+      "retired": 1
+    }
+  }
+}

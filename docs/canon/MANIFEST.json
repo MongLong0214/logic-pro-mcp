@@ -46,6 +46,7 @@
     "absence/strings.zh_CN.u32": "00411c6c92eb549954f8a9f025f0bbbff1318392cc6ec0a906f53c105eb607eb",
     "absence/strings.zh_TW.folded.u32": "3ac8f9d9bf1ad618500c13f453a4d977b056f3cd5702038a6784e3d8f3664519",
     "absence/strings.zh_TW.u32": "ef81ff10d762c8422eabdfa6a06770c5dc4db62922b7318742d778cee7e58bcb",
+    "absence/translated.en.u32": "beccb61fbb65639b07cc0f1479a3d0e91c86ed375d6122fa552b50918db33399",
     "index/madsp.tsv": "664b694f0bacce322cf8b15a4539594f2106d2d5b7c38b10b0e3e508b30d2320",
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nib.tsv": "553195c3d71ee2a71df337975994e7884f227b5a4a36a331b52db02d1d530d79",
@@ -53,7 +54,7 @@
     "index/quickhelp.tsv": "94046f4ccb47eaf494fb50368c690542361fce2117b40399168ab194ffb9504e",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "ba274dfa216a9962cad61cb8778836557d207b20118a9315726d7afbe07541e3",
-    "index/strings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f"
+    "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77"
   },
   "extractor_version": 1,
   "logic": {
@@ -344,7 +345,7 @@
         "zh_TW": 1.087226e-05
       },
       "cited_rows": 8,
-      "cited_values": 0,
+      "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "entries": 605190,
       "files": 2538,
@@ -373,7 +374,11 @@
         "pt",
         "zh_CN",
         "zh_TW"
+      ],
+      "unresolved_citations": [
+        "logic-canon://strings/en#value"
       ]
     }
-  }
+  },
+  "translated_en_values": 66589
 }

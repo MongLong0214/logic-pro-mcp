@@ -510,6 +510,16 @@ enum AXValueExtractors {
     }
 
     /// Read transport bar elements and build a TransportState.
+    /// Whether a value is separated the way a clock time is, in any locale Logic ships.
+    ///
+    /// `value.contains(":")` answered this until 2026-09-16, and a Chinese Logic writes the
+    /// full-width `\u{FF1A}`. The B.B.S.T branch then treated a clock reading as a dotted
+    /// position. Both spellings are the same separator -- Apple's own tables carry both, which is
+    /// why `docs/canon/DECORATION-RULES.json` lists them together for a field label.
+    static func valueLooksLikeAClockTime(_ value: String) -> Bool {
+        value.contains(":") || value.contains("\u{FF1A}")
+    }
+
     static func extractTransportState(
         from transport: AXUIElement,
         runtime: AXHelpers.Runtime = .production
@@ -552,7 +562,7 @@ enum AXValueExtractors {
                     state.tempo = tempo
                 }
             } else if AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower)
-                || value.contains(".") && value.contains(":") == false {
+                || value.contains(".") && !valueLooksLikeAClockTime(value) {
                 // Do not turn a partial display into an invented B.B.S.T position. A labelled
                 // playhead field may faithfully expose a prefix; an unlabelled numeric string is
                 // treated as a position only when it has the historical three-dot shape.
@@ -567,8 +577,13 @@ enum AXValueExtractors {
                         observedComponents: components
                     )
                 }
-            } else if value.contains(":") {
-                // Time format HH:MM:SS
+            } else if valueLooksLikeAClockTime(value) {
+                // Time format HH:MM:SS. The full-width colon is accepted because a Chinese Logic
+                // writes `\u{FF1A}` where the others write `:` -- Apple's own tables carry both
+                // spellings of the same separator, which is why docs/canon/DECORATION-RULES.json
+                // lists `[":", "\u{FF1A}"]` for a field label. Nobody has run a Chinese Logic here,
+                // so this is not a measured reading; accepting both is safe in a way that guessing
+                // which one appears is not, and it cannot regress a locale that uses the ASCII one.
                 state.timePosition = value
             }
         }

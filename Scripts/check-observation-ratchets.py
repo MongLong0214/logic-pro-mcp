@@ -40,6 +40,42 @@ OBS = os.path.join(REPO, "docs", "observations")
 SURFACES = os.path.join(OBS, "SURFACES.md")
 
 
+
+def _derivable_variants(repo: str) -> set:
+    """Every variant Apple's own corpus holds, so the ledger does not ask for a reading of one.
+
+    Offline: `docs/canon/absence/` is committed, so this needs no Logic. A variant absent from
+    every corpus is unchanged -- still debt, still needing somebody to have seen it.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "logic_canon_for_ledger", os.path.join(repo, "Scripts", "logic_canon.py"))
+    try:
+        canon = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(canon)
+        manifest = canon.load_manifest()
+    except Exception:
+        return set()                      # no canon axis here: every variant stays countable
+    corpora = [(src, loc)
+               for src, block in (manifest.get("sources") or {}).items()
+               for loc in (block.get("locales") or [])]
+    labels = json.load(open(os.path.join(repo, "docs", "locale", "ui-labels.json"),
+                            encoding="utf-8")).get("labels") or {}
+    out = set()
+    for entry in labels.values():
+        for variant in (entry.get("variants") or []):
+            if variant in out:
+                continue
+            for src, loc in corpora:
+                try:
+                    if not canon.is_absent(src, loc, variant):
+                        out.add(variant)
+                        break
+                except Exception:
+                    continue
+    return out
+
+
 def live_state(repo=REPO):
     """What the ledger does not know, as SETS of identities — not counts.
 
@@ -51,12 +87,18 @@ def live_state(repo=REPO):
     labels = json.load(open(os.path.join(repo, "docs", "locale", "ui-labels.json"), encoding="utf-8"))
     entries = labels.get("labels") or {}
     locales = tuple(labels.get("supported_locales") or ())
+    # A variant DERIVED from Apple's own data needs no observation record, and demanding one
+    # inverts the axis: `Compás de entrada` is not something anybody can measure without a Spanish
+    # Logic, and it does not have to be -- Apple ships it, and the citation is the evidence. The
+    # ledger counts what nobody has established, so a string the corpus holds was never debt; it
+    # only looked like debt because every variant used to arrive by hand.
+    derived = _derivable_variants(repo)
     undocumented = set()
     unmeasured = {loc: set() for loc in locales}
     for name, entry in entries.items():
         prov = entry.get("provenance") or {}
         for v in (entry.get("variants") or []):
-            if v not in prov:
+            if v not in prov and v not in derived:
                 undocumented.add(f"{name}\u2192{v}")
         for loc in locales:
             if (entry.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured":

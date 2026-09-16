@@ -32,22 +32,22 @@ extension AccessibilityChannel {
         if let controlBar {
             let checkboxes = AXLogicProElements.controlBarCheckboxes(in: controlBar, runtime: runtime)
             if let isPlaying = AXLogicProElements.readControlBarCheckboxValue(
-                among: checkboxes, named: "재생", englishName: "Play", runtime: runtime
+                among: checkboxes, matching: AXLocalePolicy.transportPlayControl, runtime: runtime
             ) {
                 state.isPlaying = isPlaying
             }
             if let isRecording = AXLogicProElements.readControlBarCheckboxValue(
-                among: checkboxes, named: "녹음", englishName: "Record", runtime: runtime
+                among: checkboxes, matching: AXLocalePolicy.transportRecordControl, runtime: runtime
             ) {
                 state.isRecording = isRecording
             }
             if let isCycleEnabled = AXLogicProElements.readControlBarCheckboxValue(
-                among: checkboxes, named: "사이클", englishName: "Cycle", runtime: runtime
+                among: checkboxes, matching: AXLocalePolicy.transportCycleControl, runtime: runtime
             ) {
                 state.isCycleEnabled = isCycleEnabled
             }
             if let isMetronomeEnabled = AXLogicProElements.readControlBarCheckboxValue(
-                among: checkboxes, named: "메트로놈 클릭", englishName: "Metronome", runtime: runtime
+                among: checkboxes, matching: AXLocalePolicy.transportMetronomeControl, runtime: runtime
             ) {
                 state.isMetronomeEnabled = isMetronomeEnabled
             }
@@ -62,20 +62,32 @@ extension AccessibilityChannel {
     ) -> ChannelResult {
         // Try the Logic Pro 12 control-bar checkbox first (Korean + English UI).
         // Falls back to legacy toolbar button search.
-        let controlBarMapping: [String: (korean: String, english: String, desired: Bool?)] = [
-            "Cycle":      ("사이클",        "Cycle",     nil),
-            "Metronome":  ("메트로놈 클릭",  "Metronome", nil),
-            "CountIn":    ("카운트 인",     "Count In",  nil),
-            "Play":       ("재생",          "Play",      true),
-            "Stop":       ("재생",          "Play",      false),
-            "Record":     ("녹음",          "Record",    true),
+        // One LabelSet per control, not one Korean string and one English one. The table was
+        // `(korean:, english:)` until 2026-09-16, which is why `transport.stop` worked in exactly
+        // two languages: on a German Logic it looked for `재생` and `Play` against a checkbox
+        // titled `Wiedergabe`, found neither, and fell through to the legacy button search.
+        // Three things, not two, and conflating any pair of them is a bug this file has had:
+        //   the KEY      the operation's own parameter (`CountIn`, no space)
+        //   `labels`     how the control is FOUND, in every language Logic ships
+        //   `reportAs`   what the receipt calls it — an API contract since #255 (`Count In`)
+        // The old table carried `(korean:, english:)`, where `english` silently did the last two
+        // at once. Splitting matching out left reporting on the map key, which is spelled
+        // differently, and `issue255CountInMatchesLogic123ControlBarTitle` caught it.
+        let controlBarMapping: [String: (labels: AXLocalePolicy.LabelSet,
+                                         reportAs: String, desired: Bool?)] = [
+            "Cycle":      (AXLocalePolicy.transportCycleControl,     "Cycle",     nil),
+            "Metronome":  (AXLocalePolicy.transportMetronomeControl, "Metronome", nil),
+            "CountIn":    (AXLocalePolicy.transportCountInControl,   "Count In",  nil),
+            "Play":       (AXLocalePolicy.transportPlayControl,      "Play",      true),
+            "Stop":       (AXLocalePolicy.transportPlayControl,      "Play",      false),
+            "Record":     (AXLocalePolicy.transportRecordControl,    "Record",    true),
         ]
         // Stop semantics: clear Record too (else recording continues even after Play=false).
         // Avoids regression where stop() during recording leaves track in armed-record loop.
         if name == "Stop" {
             _ = AccessibilityChannel.setControlBarCheckboxValue(
-                korean: "녹음",
-                english: "Record",
+                labels: AXLocalePolicy.transportRecordControl,
+                reportAs: "Record",
                 desired: false,
                 runtime: runtime,
                 mouseRuntime: mouseRuntime
@@ -91,8 +103,8 @@ extension AccessibilityChannel {
             if let desired = mapping.desired {
                 // Conditional toggle: only click if current != desired
                 if let result = AccessibilityChannel.setControlBarCheckboxValue(
-                    korean: mapping.korean,
-                    english: mapping.english,
+                    labels: mapping.labels,
+                    reportAs: mapping.reportAs,
                     desired: desired,
                     runtime: runtime,
                     mouseRuntime: mouseRuntime
@@ -102,8 +114,8 @@ extension AccessibilityChannel {
             } else {
                 // Unconditional toggle
                 if let result = AccessibilityChannel.clickControlBarCheckbox(
-                    korean: mapping.korean,
-                    english: mapping.english,
+                    labels: mapping.labels,
+                    reportAs: mapping.reportAs,
                     runtime: runtime,
                     mouseRuntime: mouseRuntime
                 ) {
@@ -815,8 +827,7 @@ extension AccessibilityChannel {
         }
 
         let cycleCheckbox = AXLogicProElements.findControlBarCheckbox(
-            named: "사이클",
-            englishName: "Cycle",
+            named: AXLocalePolicy.transportCycleControl,
             runtime: runtime
         )
 
@@ -2799,16 +2810,16 @@ extension AccessibilityChannel {
         ))
     }
 
-    /// Click a control-bar checkbox by Korean/English name, toggling its value.
+    /// Click a control-bar checkbox named by a LabelSet, toggling its value.
     /// Returns nil if the checkbox couldn't be located — callers may fall back.
     private static func clickControlBarCheckbox(
-        korean: String,
-        english: String,
+        labels: AXLocalePolicy.LabelSet,
+        reportAs: String,
         runtime: AXLogicProElements.Runtime = .production,
         mouseRuntime: AXMouseHelper.Runtime = .production
     ) -> ChannelResult? {
         guard let cb = AXLogicProElements.findControlBarCheckbox(
-            named: korean, englishName: english, runtime: runtime
+            named: labels, runtime: runtime
         ) else {
             return nil
         }
@@ -2833,8 +2844,8 @@ extension AccessibilityChannel {
                 ) {
                     return .success(HonestContract.encodeStateA(
                         extras: [
-                            "button": english,
-                            "control": korean,
+                            "button": reportAs,
+                            "control": reportAs,
                             "observed": after,
                             "previous": before,
                             "action": strategy.name,
@@ -2846,8 +2857,8 @@ extension AccessibilityChannel {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
-                        "button": english,
-                        "control": korean,
+                        "button": reportAs,
+                        "control": reportAs,
                         "action": strategy.name,
                         "attempts": attempts
                     ]
@@ -2858,10 +2869,10 @@ extension AccessibilityChannel {
         if let before {
             return .error(HonestContract.encodeStateC(
                 error: .readbackMismatch,
-                hint: "control-bar checkbox '\(english)' did not change after AXPress / AXConfirm attempts",
+                hint: "control-bar checkbox '\(labels.canonical)' did not change after AXPress / AXConfirm attempts",
                 extras: [
-                    "button": english,
-                    "control": korean,
+                    "button": reportAs,
+                    "control": reportAs,
                     "observed": before,
                     "attempts": attempts,
                     "safe_to_retry": true
@@ -2870,10 +2881,10 @@ extension AccessibilityChannel {
         }
         return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
-            hint: "control-bar checkbox '\(english)' had no readable value and no click strategy succeeded",
+            hint: "control-bar checkbox '\(labels.canonical)' had no readable value and no click strategy succeeded",
             extras: [
-                "button": english,
-                "control": korean,
+                "button": reportAs,
+                "control": reportAs,
                 "attempts": attempts,
                 "safe_to_retry": true
             ]
@@ -2884,14 +2895,22 @@ extension AccessibilityChannel {
     /// value and clicks only if it differs. Returns nil if the checkbox
     /// cannot be located (caller may fall back).
     private static func setControlBarCheckboxValue(
-        korean: String,
-        english: String,
+        labels: AXLocalePolicy.LabelSet,
+        reportAs: String,
         desired: Bool,
         runtime: AXLogicProElements.Runtime = .production,
         mouseRuntime: AXMouseHelper.Runtime = .production
     ) -> ChannelResult? {
+        // The receipt's token is NOT the LabelSet's canonical. A canonical is written for
+        // MATCHING -- `transportPlayControl` carries `"play"` because the control is read by
+        // containment -- and the receipt's `button` is an API contract that has said `"Play"`
+        // since #255. Folding the two broke that contract, and
+        // `japaneseCreatorStudioPlayUsesExactLocalizedCheckboxAndReadback` caught it: the
+        // operation's own name is the stable token, in every language, and the labels are how the
+        // control is found.
+        let english = reportAs
         guard let cb = AXLogicProElements.findControlBarCheckbox(
-            named: korean, englishName: english, runtime: runtime
+            named: labels, runtime: runtime
         ) else {
             return nil
         }
@@ -2901,7 +2920,7 @@ extension AccessibilityChannel {
                 hint: "control-bar checkbox '\(english)' current value is unreadable; refusing unsafe toggle-click for desired=\(desired)",
                 extras: [
                     "button": english,
-                    "control": korean,
+                    "control": english,
                     "requested": desired,
                     "safe_to_retry": true
                 ]
@@ -2909,7 +2928,7 @@ extension AccessibilityChannel {
         }
         let baseExtras: [String: Any] = [
             "button": english,
-            "control": korean,
+            "control": english,
             "requested": desired
         ]
         if current == desired {

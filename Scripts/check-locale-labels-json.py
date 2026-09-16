@@ -690,6 +690,13 @@ def coverage_problems(name, entry, locales, values):
             continue
         if loc in present_in and state == "measured":
             continue          # derived from a variant's provenance, which was already checked
+        if state == "derived":
+            # `derived` is not a claim of MEASUREMENT and needs no reading behind it. Its evidence
+            # is Apple's own corpus: the string is in `docs/canon/absence/` for that locale, which
+            # is what `locale_labels.py` consults to write the state at all. Asking for an
+            # observation record here would ask somebody to run a Spanish Logic to confirm a value
+            # Apple ships in Spanish -- the exact cost the canon axis exists to remove.
+            continue
         rec = _record(cites.get(loc))
         if rec is None:
             out.append(f"{name}: coverage[{loc}] is {state!r} with no record under "

@@ -725,6 +725,44 @@ class TheGapsReviewFound(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class AValueCitationInABody(unittest.TestCase):
+    """`Count In` and `Audio Units` are both `logic-canon://strings/en#value`.
+
+    A key citation has one row and therefore one digest, so the body check compared against that.
+    A value citation names a corpus and a locale; WHICH string is the quote. Comparing against a
+    single `committed` digest refused the second citation in a body -- and refused the pull request
+    describing the feature that introduced the form.
+    """
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("canon_guard_values", GUARD)
+        self.guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.guard)
+        self.canon = self.guard.canon
+        self.saved = self.canon.load_value_index("strings")
+        self.addCleanup(lambda: self.canon.write_value_index("strings", self.saved))
+        self.canon.write_value_index("strings", {
+            ("en", self.canon.short_digest("Count In")),
+            ("en", self.canon.short_digest("Audio Units")),
+        })
+
+    def test_one_reference_may_carry_two_different_values(self):
+        ref = self.canon.CanonRef.parse("logic-canon://strings/en#value")
+        for value in ("Count In", "Audio Units"):
+            with self.subTest(value=value):
+                self.assertTrue(self.guard._quotes_the_value(f"value:    {value}\n", ref, ""))
+
+    def test_a_value_nobody_pinned_is_refused(self):
+        ref = self.canon.CanonRef.parse("logic-canon://strings/en#value")
+        self.assertFalse(
+            self.guard._quotes_the_value("value:    Not A Shipped String zz91\n", ref, ""))
+
+    def test_the_locale_is_part_of_the_claim(self):
+        """`Count In` is pinned for en; citing it as Korean is a different claim and unpinned."""
+        ref = self.canon.CanonRef.parse("logic-canon://strings/ko#value")
+        self.assertFalse(self.guard._quotes_the_value("value:    Count In\n", ref, ""))
+
+
 class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
     """Rule 13, and the bound that keeps it from becoming a free pass.
 

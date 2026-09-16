@@ -294,14 +294,13 @@ extension AXLogicProElements {
     /// `카운트 인` (Count-in), `메트로놈 클릭` (Metronome).
     /// English equivalents are also attempted as a fallback.
     static func findControlBarCheckbox(
-        named koreanName: String,
-        englishName: String? = nil,
+        named labels: AXLocalePolicy.LabelSet,
         runtime: Runtime = .production
     ) -> AXUIElement? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }
         return findControlBarCheckbox(
             among: controlBarCheckboxes(in: controlBar, runtime: runtime),
-            named: koreanName, englishName: englishName, runtime: runtime
+            matching: labels, runtime: runtime
         )
     }
 
@@ -325,32 +324,30 @@ extension AXLogicProElements {
     }
 
     /// Match one already-collected checkbox set by name. Pure matching: no walk.
+    /// Find a control-bar checkbox by the LabelSet that names it, in any language Logic ships.
+    ///
+    /// This took `named koreanName: String, englishName: String?` until 2026-09-16 — two languages,
+    /// passed as literals by every caller, with a `switch englishName` mapping four of them onto a
+    /// LabelSet as an afterthought. A German or Chinese Logic could not be matched at all: there
+    /// was nowhere to put the label. `transport.stop` on a German Logic looked for `재생` and
+    /// `Play` against a checkbox titled `Wiedergabe`.
+    ///
+    /// The LabelSet is the only parameter now, so a caller cannot express "these two languages"
+    /// even by accident, and adding a locale is a rebuild rather than an edit here.
     static func findControlBarCheckbox(
         among checkboxes: [AXUIElement],
-        named koreanName: String,
-        englishName: String? = nil,
+        matching labels: AXLocalePolicy.LabelSet,
         runtime: Runtime = .production
     ) -> AXUIElement? {
-        let localeLabels: AXLocalePolicy.LabelSet? = switch englishName {
-        case "Play": AXLocalePolicy.transportPlayControl
-        case "Record": AXLocalePolicy.transportRecordControl
-        case "Cycle": AXLocalePolicy.transportCycleControl
-        case "Metronome": AXLocalePolicy.transportMetronomeControl
-        default: nil
-        }
         // Prefer title match (AXTitle) — which is what `name of` returns in AS
         for cb in checkboxes {
             let title = AXHelpers.getTitle(cb, runtime: runtime.ax) ?? ""
-            if title == koreanName { return cb }
-            if let en = englishName, title == en { return cb }
-            if localeLabels?.matches(title, mode: .exactStrict) == true { return cb }
+            if labels.matches(title, mode: .exactStrict) { return cb }
         }
         // Fallback: description match
         for cb in checkboxes {
             let desc = AXHelpers.getDescription(cb, runtime: runtime.ax) ?? ""
-            if desc == koreanName { return cb }
-            if let en = englishName, desc == en { return cb }
-            if localeLabels?.matches(desc, mode: .exactStrict) == true { return cb }
+            if labels.matches(desc, mode: .exactStrict) { return cb }
         }
         return nil
     }
@@ -463,14 +460,13 @@ extension AXLogicProElements {
     /// Read the current value (0/1) of a control-bar checkbox. Returns nil if
     /// the element can't be located or its value is not readable.
     static func readControlBarCheckboxValue(
-        named koreanName: String,
-        englishName: String? = nil,
+        matching labels: AXLocalePolicy.LabelSet,
         runtime: Runtime = .production
     ) -> Bool? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }
         return readControlBarCheckboxValue(
             among: controlBarCheckboxes(in: controlBar, runtime: runtime),
-            named: koreanName, englishName: englishName, runtime: runtime
+            matching: labels, runtime: runtime
         )
     }
 
@@ -482,12 +478,11 @@ extension AXLogicProElements {
     /// which is what every caller already handles.
     static func readControlBarCheckboxValue(
         among checkboxes: [AXUIElement],
-        named koreanName: String,
-        englishName: String? = nil,
+        matching labels: AXLocalePolicy.LabelSet,
         runtime: Runtime = .production
     ) -> Bool? {
         guard let cb = findControlBarCheckbox(
-            among: checkboxes, named: koreanName, englishName: englishName, runtime: runtime
+            among: checkboxes, matching: labels, runtime: runtime
         ) else { return nil }
         if let n: NSNumber = AXHelpers.getAttribute(cb, kAXValueAttribute, runtime: runtime.ax) {
             return n.boolValue

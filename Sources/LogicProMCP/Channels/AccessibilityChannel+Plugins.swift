@@ -443,8 +443,13 @@ extension AccessibilityChannel {
             let titles = Set(AXHelpers.getChildren(element, runtime: runtime).compactMap {
                 AXHelpers.getTitle($0, runtime: runtime)
             })
-            if titles.contains("Audio Units"),
-               titles.contains("Utility") || titles.contains("유틸리티"),
+            // `titles.contains("Audio Units")` plus a hand-written `|| "유틸리티"` recognised this
+            // menu in two languages. Both labels go through AXLocalePolicy now: Audio Units is
+            // derived from Apple's own data, Utility is measured because Apple ships no key for
+            // it. `Channel EQ` stays a literal -- it is a plug-in NAME and Logic does not
+            // translate it in any locale.
+            if titles.contains(where: { AXLocalePolicy.pluginMenuAudioUnits.matches($0) }),
+               titles.contains(where: { AXLocalePolicy.pluginMenuUtility.matches($0) }),
                titles.contains("Channel EQ") {
                 return element
             }

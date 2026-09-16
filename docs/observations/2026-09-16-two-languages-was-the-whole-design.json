@@ -1,0 +1,106 @@
+{
+  "id": "2026-09-16-two-languages-was-the-whole-design",
+  "date": "2026-09-16",
+  "subject": "Whether the transport and plug-in menu could be driven in any language but Korean and English",
+  "question": "Was the two-language shape an oversight in a few call sites, or the shape of the API?",
+  "verdict": "wall",
+  "issues": [
+    892,
+    883
+  ],
+  "surface": "system.bundle",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/check-ax-comparisons-use-labelsets.py",
+    "expected": "every AX comparison outside a LabelSet is on a string Apple does not translate",
+    "cost": "~40s; reads committed digest sets and the Swift tree"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:transportCountInControl",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginMenuAudioUnits"
+  ],
+  "method": "Swept every string literal compared against a variable this tree assigns from an accessibility accessor, kept the ones Apple ships AND translates, then read the control-bar and plug-in-menu call sites.",
+  "observations": [
+    {
+      "what": "AX comparisons outside a LabelSet on a string Apple translates, before",
+      "count": 11
+    },
+    {
+      "what": "of those that were internal identifiers, not AX readings",
+      "count": 9
+    },
+    {
+      "what": "control-bar controls reachable before, by language",
+      "count": 2,
+      "detail": "the table was (korean:, english:) and the finder took two String parameters"
+    },
+    {
+      "what": "locales Count In is reachable in after deriving it",
+      "count": 10,
+      "values": {
+        "de": "Einzählen",
+        "en": "Count In",
+        "es": "Compás de entrada",
+        "fr": "Décompte",
+        "it": "Precount",
+        "ja": "カウントイン",
+        "ko": "카운트 인",
+        "pt": "Contagem preparatória",
+        "zh_CN": "预备",
+        "zh_TW": "預備拍"
+      }
+    },
+    {
+      "what": "locales the plug-in menu's Audio Units is reachable in",
+      "count": 10
+    },
+    {
+      "what": "the plug-in menu category Apple ships no key for, read off a live menu",
+      "count": 2,
+      "values": [
+        "Utility",
+        "유틸리티"
+      ],
+      "note": "English and Korean are what the product had; the other eight locales are unmeasured."
+    }
+  ],
+  "conclusion": "It was the shape of the API. `findControlBarCheckbox` took `named koreanName: String, englishName: String?`, so a German or Chinese Logic could not be matched at all -- there was nowhere to put the label, and `transport.stop` looked for 재생 and Play against a checkbox titled Wiedergabe. The control bar now takes a LabelSet and nothing else, so two-language matching is not expressible. Count In was derived from Apple's own data in 10 locales, where the table had carried 2. Audio Units likewise. Utility could not be derived -- Apple ships no key for it -- so it is carried as a measured LabelSet with one locale and nine gaps that are now countable instead of hidden in a hard-coded ||.",
+  "limits": [
+    "Derived values are Apple's bytes, not readings from a running Logic in those locales. That a German Logic titles the checkbox `Einzählen` follows from the table, and nobody has driven one.",
+    "Utility carries Korean only. The other nine locales are unmeasured and the LabelSet says so.",
+    "The sweep covers `Sources/` and `Scripts/livekit/`. A comparison written in a language other than Swift was not examined.",
+    "It finds comparisons against variables assigned from an accessor IN THE SAME FILE. A reading passed through two files is invisible to it."
+  ],
+  "supersedes": null,
+  "schema": 3,
+  "evidence": [
+    "evidence/2026-09-16-two-languages-was-the-whole-design.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Count In",
+      "used_for": "the control-bar count-in checkbox, whose nine other locales this record derives",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Audio Units",
+      "used_for": "the plug-in menu category the menu is recognised by",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    }
+  ]
+}

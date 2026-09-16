@@ -61,6 +61,51 @@ STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
 LINE_COMMENT = re.compile(r"//[^\n]*")
 
 
+
+_CANON_CACHE = {}
+
+
+def _locale_code(locale: str) -> str:
+    """`ko-KR` -> `ko`. The ledger speaks BCP-47; the corpus is keyed by Logic's .lproj names."""
+    return locale.split("-")[0] if locale != "zh-Hans" else "zh_CN"
+
+
+def _apple_ships(entry: dict, locale: str) -> bool:
+    """Whether Apple's own corpus holds one of this label's strings in this locale.
+
+    Offline: `docs/canon/absence/` is committed. A repository without the canon axis gets False
+    for everything, which leaves the old behaviour exactly as it was.
+    """
+    if "canon" not in _CANON_CACHE:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "logic_canon_for_labels", os.path.join(REPO, "Scripts", "logic_canon.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _CANON_CACHE["canon"] = module
+            _CANON_CACHE["manifest"] = module.load_manifest()
+        except Exception:
+            _CANON_CACHE["canon"] = None
+    canon = _CANON_CACHE.get("canon")
+    if canon is None:
+        return False
+    code = _locale_code(locale)
+    strings = [entry.get("canonical")] + list(entry.get("variants") or [])
+    for source, block in (_CANON_CACHE["manifest"].get("sources") or {}).items():
+        if code not in (block.get("locales") or []):
+            continue
+        for text in strings:
+            if not text:
+                continue
+            try:
+                if not canon.is_absent(source, code, text):
+                    return True
+            except Exception:
+                continue
+    return False
+
+
 def _unescape(text):
     return text.replace('\\"', '"').replace("\\\\", "\\")
 
@@ -146,7 +191,11 @@ def localised_canonicals(doc=None):
 # exactly two arrays and in no LabelSet variant). Adding a locale here widens every label's coverage
 # map by one column, so every label starts `unmeasured` in it and the campaign fills them in.
 SUPPORTED_LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE")
-COVERAGE_VALUES = ("measured", "identifier", "unmeasured", "retired")
+#: `derived` is the state the axis added: Apple ships this label in this locale, and the canon
+#: index pins it. It is not `measured` -- nobody ran a Spanish Logic -- and it is emphatically not
+#: `unmeasured`, which means nobody knows. Before it existed, deriving `Compás de entrada` from
+#: Apple's own table made the ledger count a new GAP, so the axis's output looked like its debt.
+COVERAGE_VALUES = ("measured", "derived", "identifier", "unmeasured", "retired")
 
 
 def swift_containment(repo=REPO):
@@ -392,6 +441,8 @@ def build(existing=None, dropped=None):
                 # cited would otherwise ride through every regeneration as if it were evidence —
                 # the guard would refuse it, but the projection should not emit it.
                 coverage[locale] = prior_coverage[locale]
+            elif _apple_ships(entry, locale):
+                coverage[locale] = "derived"
             else:
                 coverage[locale] = "unmeasured"
         entry["coverage"] = coverage
