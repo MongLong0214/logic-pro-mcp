@@ -1,6 +1,28 @@
 name: Publish MCP Registry Metadata
 
+# WHY THIS IS CALLED RATHER THAN TRIGGERED
+# ----------------------------------------
+# `on: release: [published]` was the only automatic trigger here, and it has never fired. Every
+# release since v3.7.4 is created by `github-actions[bot]` -- `release.yml` uses
+# softprops/action-gh-release with the default GITHUB_TOKEN -- and GitHub does not start workflow
+# runs from events that a GITHUB_TOKEN created. The three runs this workflow has ever had were all
+# `workflow_dispatch`, on 2026-06-23, which is why the registry still advertises 3.7.1 while the
+# repository has shipped through 3.16.0.
+#
+# So `release.yml` calls this directly, after `validate-install` has exercised the published
+# artifact. Publishing the registry record downstream of that check is the point: the record names
+# a release, and the release is the thing that was just verified.
+#
+# `release: [published]` stays as a fallback for a release a HUMAN publishes (those do trigger),
+# and `workflow_dispatch` stays because recovering a stale registry record needs a manual path.
+
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: The release version to publish, with or without a leading v.
+        required: true
+        type: string
   release:
     types: [published]
   workflow_dispatch:
@@ -18,28 +40,49 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-      - name: Sync server.json version from release tag
-        if: github.event_name == 'release'
+      - name: Point server.json at the release being published
+        # Skipped on workflow_dispatch, which has no version to carry: the committed server.json is
+        # then published as it stands, and `check-registry-metadata-matches-the-release.py` is what
+        # keeps that honest -- it fails CI when the committed record names a version the Homebrew
+        # Formula does not, and the Formula's sha256 is compared against the published tarball by
+        # `ci-verify-formula-sha.sh`. So the committed record is chained to a verified artifact.
+        if: inputs.version != '' || github.event_name == 'release'
         env:
-          # Indirect the release tag through the environment instead of
-          # interpolating ${{ github.event.release.tag_name }} straight into the
-          # run: block. This job holds id-token:write and runs mcp-publisher
-          # login/publish, so a crafted tag_name expanded into the script would
-          # be arbitrary code execution under the release-publisher OIDC
-          # identity. As an env value the tag reaches the shell as inert data,
-          # and the SemVer guard below rejects anything that is not
-          # vMAJOR.MINOR.PATCH[-prerelease] (mirrors release.yml's authoritative
-          # tag check).
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          # Indirect the version through the environment instead of interpolating
+          # ${{ github.event.release.tag_name }} straight into the run: block. This job holds
+          # id-token:write and runs mcp-publisher login/publish, so a crafted tag_name expanded
+          # into the script would be arbitrary code execution under the release-publisher OIDC
+          # identity. As an env value it reaches the shell as inert data, and the SemVer guard
+          # below rejects anything that is not vMAJOR.MINOR.PATCH[-prerelease] (mirrors
+          # release.yml's authoritative tag check).
+          RELEASE_TAG: ${{ inputs.version != '' && inputs.version || github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if ! [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
-            echo "::error::release tag '$RELEASE_TAG' is not strict SemVer (vMAJOR.MINOR.PATCH[-prerelease])"
+          if ! [[ "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
+            echo "::error::release version '$RELEASE_TAG' is not strict SemVer (vMAJOR.MINOR.PATCH[-prerelease])"
             exit 1
           fi
-          VERSION="${RELEASE_TAG#v}"
-          jq --arg version "$VERSION" '.version = $version' server.json > server.json.tmp
-          mv server.json.tmp server.json
+          # Writes `.version` AND `distribution.release`. The jq one-liner that stood here wrote
+          # only the first, so a publish of version N advertised N and linked to release N-1.
+          python3 Scripts/sync-server-json-version.py "$RELEASE_TAG"
+
+      - name: The record names the release it links to
+        # Cheap, and it is the assertion the publish rests on. `sync` above may have been skipped
+        # (workflow_dispatch), so this reads the file that is actually about to be published rather
+        # than trusting the step that may or may not have written it.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys
+          doc = json.load(open("server.json", encoding="utf-8"))
+          pub = doc["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]
+          release = pub["distribution"]["release"]
+          tag = release.rsplit("/", 1)[-1]
+          if tag != "v" + doc["version"]:
+              sys.exit(f"::error::server.json says version {doc['version']} and links to {tag}. "
+                       f"Refusing to publish a record that sends readers to another release.")
+          print(f"publishing {doc['version']} -> {release}")
+          PY
 
       - name: Download MCP Publisher
         run: |
