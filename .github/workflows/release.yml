@@ -298,3 +298,22 @@ jobs:
           path: |
             install.log
             uninstall.log
+
+  # The MCP registry record, published LAST -- after `validate-install` has downloaded the release
+  # assets and run the installer against them on two macOS versions. The record names a release,
+  # so it goes out downstream of the check that the release works, not beside it.
+  #
+  # This is a `uses:` rather than `publish-mcp.yml`'s own `on: release` trigger because that
+  # trigger has never fired: the release above is created by softprops/action-gh-release with the
+  # default GITHUB_TOKEN, and GitHub does not start workflow runs from GITHUB_TOKEN events. The
+  # registry has been nine releases stale since 2026-06-23 for exactly that reason.
+  publish-registry:
+    needs: validate-install
+    permissions:
+      contents: read
+      # mcp-publisher authenticates by OIDC; the called workflow gets the intersection of its own
+      # declaration and this one, so omitting it here makes the login fail rather than the job.
+      id-token: write
+    uses: ./.github/workflows/publish-mcp.yml
+    with:
+      version: ${{ github.ref_name }}
