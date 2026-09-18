@@ -37,13 +37,17 @@ struct ReleaseOrderingContractTests {
 
     /// The control: the helper must be able to read a `needs:` at all, or every case below passes
     /// by reading nothing.
+    ///
+    /// The first job is `build-release`, not `build`. `ci.yml`'s aggregate is called `build` and is
+    /// a REQUIRED status check; GitHub matches a required context by name and integration rather
+    /// than by workflow, so two jobs called `build` can both answer to it on one commit.
     @Test("the workflow parses and every job in the chain exists")
     func theParserSeesTheJobs() throws {
         let workflow = try releaseWorkflow()
-        for job in ["build", "validate-install", "publish", "verify-published", "publish-registry"] {
+        for job in ["build-release", "validate-install", "publish", "verify-published", "publish-registry"] {
             #expect(workflow.contains("\n  \(job):\n"), "release.yml has no `\(job)` job")
         }
-        #expect(needs(of: "publish", in: workflow).contains("build"),
+        #expect(needs(of: "publish", in: workflow).contains("build-release"),
                 "if this is empty the parser is reading nothing and the cases below are vacuous")
     }
 
@@ -86,7 +90,7 @@ struct ReleaseOrderingContractTests {
         #expect(needs(of: "publish-registry", in: workflow).contains("verify-published"),
                 "publishing a record that links to a release before that release exists")
         #expect(needs(of: "verify-published", in: workflow).contains("publish"))
-        #expect(needs(of: "verify-published", in: workflow).contains("build"),
+        #expect(needs(of: "verify-published", in: workflow).contains("build-release"),
                 "verify-published compares against the build artifact, so it needs it")
     }
 

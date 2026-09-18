@@ -84,6 +84,18 @@ TOTAL_LINE=$(grep -E "^TOTAL" "$REPORT")
 # llvm-cov column order: regions, missed, cover%, functions, missed, cover%, lines, missed, cover%.
 # A future version that prepends a column would silently grab a different field, so the shape is
 # checked before the number is compared.
+# The FIELD COUNT first. Checking fields 4 and 10 catches a shift of one column and misses a
+# shift of three -- and three is the realistic drift, because a newer llvm-cov appends
+# `branches missed cover%` and every percentage simply moves to a new slot. The TOTAL line this
+# gate understands has exactly ten fields.
+TOTAL_FIELDS=$(echo "$TOTAL_LINE" | awk '{print NF}')
+if [ "$TOTAL_FIELDS" != "10" ]; then
+  echo "::error::the TOTAL line has $TOTAL_FIELDS fields; this gate understands 10."
+  echo "::error::TOTAL line was: $TOTAL_LINE"
+  echo "::error::llvm-cov's column set changed. Two fields can still look like percentages while"
+  echo "::error::naming a different measurement, so the shape is refused rather than guessed at."
+  exit 1
+fi
 REGION_RAW=$(echo "$TOTAL_LINE" | awk '{print $4}')
 LINE_RAW=$(echo "$TOTAL_LINE" | awk '{print $10}')
 for pair in "region:$REGION_RAW" "line:$LINE_RAW"; do

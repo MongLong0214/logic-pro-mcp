@@ -103,10 +103,29 @@ def main():
     check("two TOTAL lines are refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
     check("two TOTAL lines says how many", "has 2 TOTAL lines" in out, out.strip()[:250])
 
-    # The column-order guard: a prepended column shifts every field.
+    # The column-order guard, three ways, because they are caught by different checks and an
+    # outside review found that only one of the three was caught at all. The record for this file
+    # said as much in its own Limit: the shape check "has only been driven by a synthetic shifted
+    # column".
+    #
+    # A PREPENDED column changes the field count, so the shape check refuses it first.
     rc, out = run("TOTAL extra 1000 175 82.50% 200 20 90.00% 5000 600 88.00%\n")
-    check("a shifted column is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
-    check("a shifted column names the pattern", "<float>% pattern" in out, out.strip()[:250])
+    check("a prepended column is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+    check("a prepended column names the shape", "fields; this gate understands 10" in out,
+          out.strip()[:250])
+
+    # A field SWAPPED in place keeps the count, so the pattern check is what has to catch it.
+    rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00% 5000 600 not-a-percent\n")
+    check("a field that is not a percentage is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+    check("and names the pattern", "<float>% pattern" in out, out.strip()[:250])
+
+    # THE ONE THAT USED TO PASS. A newer llvm-cov appends `branches missed cover%`, so every
+    # percentage moves three columns and fields 4 and 10 still hold percentages -- region coverage
+    # would be read out of the FUNCTIONS group and line coverage out of the BRANCHES group, both
+    # matching `<float>%`. Checking two fields cannot see this; checking the field count can.
+    rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00% 5000 600 88.00% 300 30 91.00%\n")
+    check("a whole-column-triple shift is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+    check("a whole-column-triple shift names the shape", "13 fields" in out, out.strip()[:250])
 
     rc, out = run(total(region="NaN%"))
     check("NaN region coverage is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
@@ -150,7 +169,7 @@ def main():
         for failure in failures:
             print(f"FAIL {failure}")
         return 1
-    print("23 case(s) pass: the coverage gate refuses an ambiguous profile, an unreadable report, "
+    print("27 case(s) pass: the coverage gate refuses an ambiguous profile, an unreadable report, "
           "a shifted column and a missed floor")
     return 0
 

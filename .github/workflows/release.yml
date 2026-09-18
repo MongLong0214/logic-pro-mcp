@@ -13,7 +13,12 @@ on:
       - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
 jobs:
-  build:
+  # NOT `build`. `ci.yml`'s aggregate job is also called `build`, and it is one of the three
+  # required status checks on the branch ruleset. GitHub matches a required context by NAME and
+  # integration, not by workflow file, so a tag pushed at a pull request's head SHA would put a
+  # second `build` check run on that commit from this workflow -- one that has nothing to do with
+  # the pull request's gate. Renaming costs three `needs:` lines and removes the collision.
+  build-release:
     runs-on: macos-15
     permissions:
       contents: read
@@ -192,7 +197,7 @@ jobs:
       - name: Upload verified release artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
         with:
-          name: verified-release-artifacts
+          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
             LogicProMCP
@@ -205,7 +210,7 @@ jobs:
   publish:
     # `validate-install` is a gate, not a report. A failure there means nothing is published:
     # no tag release, no assets, nothing for `brew install` or the README's curl to resolve.
-    needs: [build, validate-install]
+    needs: [build-release, validate-install]
     runs-on: macos-15
     permissions:
       contents: write
@@ -213,7 +218,7 @@ jobs:
       - name: Download verified release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts
+          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
       # The checksum check stays and is no longer conditional. A user who downloads a corrupted
       # artifact experiences that directly, which is why it outlived the certification system that
       # used to run beside it.
@@ -244,7 +249,7 @@ jobs:
     # bytes are still compared against the sha256 in that build's own SHA256SUMS.txt -- the local
     # input changes where the bytes come from and nothing about what is checked. So this is the
     # same artifact that `publish` then uploads, verified before anyone can download it.
-    needs: build
+    needs: build-release
     permissions:
       contents: read
     strategy:
@@ -260,7 +265,7 @@ jobs:
       - name: Download verified release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts
+          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/artifact
 
       - name: Reverify downloaded release artifact
@@ -343,7 +348,7 @@ jobs:
   # end. What it catches is a different failure -- a partial or mangled upload, a release whose
   # assets do not match the run that made them.
   verify-published:
-    needs: [build, publish]
+    needs: [build-release, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -351,7 +356,7 @@ jobs:
       - name: Download the artifact this run verified
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: verified-release-artifacts
+          name: verified-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: verified
 
       - name: The published assets are byte-identical to the verified ones

@@ -76,9 +76,21 @@ jobs:
           # answers the same question through ONE mechanism, verified against two real fork pull
           # requests (40 and 9 files). `test -s` keeps the empty case failing closed: an empty list
           # means the query failed, and an empty list used to reopen the opt-out.
-          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json files -q '.files[].path' \
+          # PAGINATED, and counted. `gh pr view --json files` returns one page; a pull request
+          # larger than that page silently narrows what this rule is aimed at, and the opt-out is
+          # derived from the file list. The REST endpoint spells the field `filename` (GraphQL's
+          # `path` returns nothing here and exits 0, which is how an empty list once slipped
+          # through), and `changed_files` is what the count is checked against.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename' \
             > /tmp/pr-changed.txt
           test -s /tmp/pr-changed.txt
+          EXPECTED=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json changedFiles -q .changedFiles)
+          ACTUAL=$(wc -l < /tmp/pr-changed.txt | tr -d ' ')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::listed $ACTUAL changed file(s), the pull request reports $EXPECTED."
+            echo "::error::A partial list narrows this rule to whatever happened to be on page one."
+            exit 1
+          fi
           python3 Scripts/check-canon-citations.py --changed /tmp/pr-changed.txt
 
       - name: The pull request body cites Logic, or says it states no fact about Logic
@@ -90,9 +102,21 @@ jobs:
           # Whether this change may opt out is derived from what it TOUCHES, not from what its
           # description says about itself. Without the file list the opt-out is one sentence
           # anybody can type, and review walked through it three ways.
-          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json files -q '.files[].path' \
+          # PAGINATED, and counted. `gh pr view --json files` returns one page; a pull request
+          # larger than that page silently narrows what this rule is aimed at, and the opt-out is
+          # derived from the file list. The REST endpoint spells the field `filename` (GraphQL's
+          # `path` returns nothing here and exits 0, which is how an empty list once slipped
+          # through), and `changed_files` is what the count is checked against.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename' \
             > /tmp/pr-changed.txt
           test -s /tmp/pr-changed.txt
+          EXPECTED=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json changedFiles -q .changedFiles)
+          ACTUAL=$(wc -l < /tmp/pr-changed.txt | tr -d ' ')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::listed $ACTUAL changed file(s), the pull request reports $EXPECTED."
+            echo "::error::A partial list narrows this rule to whatever happened to be on page one."
+            exit 1
+          fi
           python3 Scripts/check-canon-citations.py \
             --text /tmp/pr-body.md --changed /tmp/pr-changed.txt
 
