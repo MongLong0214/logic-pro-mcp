@@ -89,8 +89,13 @@ class LogicBounceUITests(unittest.TestCase):
                 run_jxa_fn=lambda source, **kwargs: _completed_jxa_snapshot(snapshot),
             )
         )
-        # Single resolved target: one OSA attempt per label until "확인" succeeds.
-        self.assertEqual(len(calls), 2)
+        # Single resolved target: one OSA attempt per label until "확인" succeeds. The count is
+        # DERIVED from the table rather than written down -- it was `2` when the table was
+        # `("OK", "확인")` and became 4 the day the labels were generated for ten languages (#919).
+        # A literal here turns every new language into a failing test that says nothing.
+        from logic_ui_labels import BOUNCE_CONFIRM_BUTTONS
+        expected = list(BOUNCE_CONFIRM_BUTTONS).index("확인") + 1
+        self.assertEqual(len(calls), expected)
 
     def test_click_bounce_settings_confirm_returns_false_when_no_label_matches(self):
         snapshot = {
@@ -147,7 +152,11 @@ class LogicBounceUITests(unittest.TestCase):
                 if "key_command" not in state["strategies"]:
                     state["strategies"].append("key_command")
                 return ""
-            if 'menu item "바운스"' in script or 'menu item "Bounce"' in script:
+            # The menu drive splices its labels from the generated tables, so the script carries
+            # `menu item (bounceName as text)` and a `repeat` over every language rather than two
+            # hard-coded names. Recognise the SHAPE; matching a literal is what broke when the
+            # labels stopped being written into the script (#919).
+            if "menu item (bounceName as text)" in script or 'menu item "Bounce"' in script:
                 state["strategies"].append("file_menu")
                 state["dialog_visible"] = True
                 return "ok"
@@ -174,7 +183,11 @@ class LogicBounceUITests(unittest.TestCase):
             return "ok"
 
         self.assertTrue(open_bounce_dialog_via_menu(run_osa=fake_osa))
-        self.assertIn('"Project or Section…"', scripts[0])
+        # The labels are folded in the generated tables, because the Python side compares against
+        # a lowercased AX reading and AppleScript element specifiers ignore case. Asserting the
+        # shipped CAPITALISATION would be asserting something neither consumer depends on.
+        self.assertIn('"project or section…"', scripts[0])
+        self.assertIn("menu item (targetName as text)", scripts[0])
         self.assertIn('"프로젝트 또는 섹션…"', scripts[0])
         self.assertNotIn("menu item 1", scripts[0])
 
@@ -210,6 +223,28 @@ class LogicBounceUITests(unittest.TestCase):
         }
 
         self.assertTrue(logic_bounce.bounce_settings_present(run_jxa_fn=lambda source, **kwargs: _completed_jxa_snapshot(snapshot)))
+
+    def test_save_panel_present_detects_the_panel_in_a_language_it_could_not_before(self):
+        """#919: the predicate reached two languages and now reaches the tables' languages.
+
+        It used to AND four signals, one of which was the macOS save panel's field label --
+        `save as:` and two Korean spellings. AppKit owns that string, so it could not be derived
+        from Logic's corpus, and a two-language term in an AND capped the whole predicate at two
+        languages. What identifies this panel is the BOUNCE button.
+        """
+        for language, buttons, field in (("German", ["Abbrechen", "Bouncen"], "Sichern unter:"),
+                                         ("Chinese", ["取消", "并轨"], "存储为:"),
+                                         ("Japanese", ["キャンセル", "バウンス"], "名前:")):
+            with self.subTest(language=language):
+                snapshot = {
+                    "status": "ok",
+                    "button_names": buttons,
+                    "text_field_names": [field],
+                    "text_field_count": 1,
+                    "static_texts": [field],
+                }
+                self.assertTrue(logic_bounce.save_panel_present(
+                    run_jxa_fn=lambda source, **kwargs: _completed_jxa_snapshot(snapshot)))
 
     def test_save_panel_present_rejects_generic_save_panel_snapshot(self):
         snapshot = {

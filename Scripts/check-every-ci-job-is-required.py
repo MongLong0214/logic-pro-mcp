@@ -201,17 +201,32 @@ def check(path: str = WORKFLOW):
     # for exactly the change being judged -- and with `required_approving_review_count: 0` on the
     # branch ruleset, nobody is required to read the diff that does it. The seam has to exist for
     # the gate's own self-test, which is why it is refused HERE rather than removed there.
-    for setting in ("LPM_COVERAGE_MIN_REGION", "LPM_COVERAGE_MIN_LINE", "LPM_COVERAGE_TARGET"):
+    # Every seam, not only the coverage floors. Thirteen guards gained an `LPM_*` path override on
+    # 2026-09-19 so their self-tests could drive `main()` at an input that must fail -- and a path
+    # override is also a way to point a guard at nothing. `LPM_POLICY_SWIFT: /dev/null` in the
+    # `guards` job silences the derivation checks as completely as `LPM_COVERAGE_MIN_LINE: "0"`
+    # lowered the coverage bar, and for the same reason: a pull request runs its own copy of this
+    # file. The seams exist for tests; a workflow that sets one is aiming a guard somewhere else.
+    #
+    # Named individually rather than by prefix so that adding a seam is a deliberate edit here too.
+    # A prefix rule would silently cover a future variable that is not a seam at all.
+    for setting in ("LPM_COVERAGE_MIN_REGION", "LPM_COVERAGE_MIN_LINE", "LPM_COVERAGE_TARGET",
+                    "LPM_TESTS_DIR", "LPM_LIVEKIT_DIR", "LPM_CANON_REPO", "LPM_CI_WORKFLOW",
+                    "LPM_POLICY_SWIFT", "LPM_POLICY_ROOTS", "LPM_OBSERVATIONS_DIR",
+                    "LPM_SCRIPTS_DIR", "LPM_INSTALL_SCRIPT", "LPM_AX_COMPARISON_ROOTS",
+                    "LPM_SERVER_JSON", "LPM_FORMULA_PATH", "LPM_GH_BIN",
+                    "LPM_FORMULA_RELEASE_PREPARATION", "LPM_COVERAGE_BUILD_DIR",
+                    "LPM_COVERAGE_SOURCES", "LPM_COVERAGE_REPORT", "LPM_LLVM_COV"):
         for line in text.splitlines():
             stripped = line.strip()
             if stripped.startswith("#") or not stripped.startswith(setting):
                 continue
             problems.append(
-                f"{path}: this workflow sets `{setting}`. The coverage floors are read from the "
-                f"environment so the gate's self-test can drive them; a pull request runs its own "
-                f"copy of this file, so setting one here lets a change choose the bar it is "
-                f"measured against. Change the default in Scripts/ci-coverage-gate.sh instead, "
-                f"where the diff says what the new floor is.")
+                f"{path}: this workflow sets `{setting}`. That variable is a SEAM -- it exists so "
+                f"a guard's self-test can drive it at an input that must fail -- and a pull "
+                f"request runs its own copy of this file, so setting one here lets a change point "
+                f"a guard somewhere else or choose the bar it is measured against. Change the "
+                f"default in the script, where the diff says what changed.")
 
     check_workflows(rules, problems)
 
