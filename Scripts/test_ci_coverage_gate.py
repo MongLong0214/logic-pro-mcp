@@ -43,8 +43,22 @@ def _tree(root, bins=1, profs=1, sources=1):
     return src
 
 
-def run(report_text, bins=1, profs=1, sources=1, **env_overrides):
-    """Run the gate over a fixture tree and a fake `llvm-cov` that prints `report_text`."""
+#: The header real llvm-cov writes above the rows. The gate reads the column NAMES from it to
+#: check that region and line cover are still the third and ninth data columns, so a fixture
+#: without one is testing a report shape the tool does not produce.
+HEADER = ("Filename                    Regions    Missed Regions     Cover   Functions"
+          "  Missed Functions  Executed       Lines      Missed Lines     Cover"
+          "    Branches   Missed Branches     Cover\n"
+          "------------------------------------------------------------------------\n")
+
+
+def run(report_text, bins=1, profs=1, sources=1, header=HEADER, **env_overrides):
+    """Run the gate over a fixture tree and a fake `llvm-cov` that prints `report_text`.
+
+    `header` defaults to the real one; a case testing the column names passes its own, and one
+    testing a headerless report passes "".
+    """
+    report_text = header + report_text
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         build = root / "build"
@@ -91,7 +105,7 @@ def main():
     check("an absent profile is not a pass", "found 0 and 0" in out, out.strip()[:250])
 
     # A06 -- the report itself.
-    rc, out = run("")
+    rc, out = run("", header="")
     check("an empty report is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
     check("an empty report says so", "empty" in out, out.strip()[:250])
 
@@ -108,24 +122,52 @@ def main():
     # said as much in its own Limit: the shape check "has only been driven by a synthetic shifted
     # column".
     #
-    # A PREPENDED column changes the field count, so the shape check refuses it first.
+    # A PREPENDED column pushes an INTEGER into field 4, so the percentage pattern refuses it.
     rc, out = run("TOTAL extra 1000 175 82.50% 200 20 90.00% 5000 600 88.00%\n")
     check("a prepended column is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
-    check("a prepended column names the shape", "fields; this gate understands 10" in out,
-          out.strip()[:250])
+    check("a prepended column names the pattern", "<float>% pattern" in out, out.strip()[:250])
 
     # A field SWAPPED in place keeps the count, so the pattern check is what has to catch it.
     rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00% 5000 600 not-a-percent\n")
     check("a field that is not a percentage is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
     check("and names the pattern", "<float>% pattern" in out, out.strip()[:250])
 
-    # THE ONE THAT USED TO PASS. A newer llvm-cov appends `branches missed cover%`, so every
-    # percentage moves three columns and fields 4 and 10 still hold percentages -- region coverage
-    # would be read out of the FUNCTIONS group and line coverage out of the BRANCHES group, both
-    # matching `<float>%`. Checking two fields cannot see this; checking the field count can.
-    rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00% 5000 600 88.00% 300 30 91.00%\n")
-    check("a whole-column-triple shift is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
-    check("a whole-column-triple shift names the shape", "13 fields" in out, out.strip()[:250])
+    # THIRTEEN FIELDS IS THE NORMAL REPORT, and asserting otherwise broke the gate in CI. Real
+    # llvm-cov on the runner appends `Branches Missed-Branches Cover` after the line group:
+    #
+    #   TOTAL  24107  4929  79.55%  6698  1199  82.10%  74463  9266  87.56%  0  0  -
+    #
+    # Appending does NOT move fields 4 and 10. The first version of this case demanded ten fields,
+    # which is a shape the tool does not produce, and the `test` job went red on a report that was
+    # entirely correct. A count cannot tell an append from an insertion; both give thirteen.
+    rc, out = run("TOTAL 24107 4929 79.55% 6698 1199 82.10% 74463 9266 87.56% 0 0 -\n")
+    check("the real thirteen-column report is accepted", rc == 0, f"exit {rc}: {out.strip()[:250]}")
+
+    # WHAT AN INSERTION LOOKS LIKE, and it is the header that tells them apart. A group ahead of
+    # `Lines` that this gate does not account for moves line cover out of field 10 while leaving a
+    # percentage sitting there.
+    inserted = ("Filename    Regions    Missed Regions     Cover   Functions  Missed Functions"
+                "  Executed    Branches   Missed Branches     Cover       Lines      Missed Lines"
+                "     Cover\n----\n")
+    rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00% 300 30 91.00% 5000 600 88.00%\n",
+                  header=inserted)
+    check("a group inserted before Lines is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+    check("and names the column that moved", "before Lines" in out, out.strip()[:250])
+
+    # A report with no header at all is refused rather than read positionally on faith.
+    rc, out = run(total(), header="")
+    check("a headerless report is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+
+    # A TRUNCATED line. The percentage pattern would refuse this too -- field 10 is empty and an
+    # empty string is not `<float>%` -- so this case exists for the MESSAGE, which is the whole
+    # reason the length check is separate: a report that stops early reads as a column-order
+    # change otherwise, and the gate's own comment says to say which it is. Without this case the
+    # length check could be deleted and every case would stay green, which is the definition of a
+    # check nobody has watched fail.
+    rc, out = run("TOTAL 1000 175 82.50% 200 20 90.00%\n")
+    check("a truncated TOTAL line is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
+    check("and is refused AS truncation, not as a column-order change",
+          "field 10 is the line coverage" in out, out.strip()[:250])
 
     rc, out = run(total(region="NaN%"))
     check("NaN region coverage is refused", rc == 1, f"exit {rc}: {out.strip()[:250]}")
@@ -169,7 +211,7 @@ def main():
         for failure in failures:
             print(f"FAIL {failure}")
         return 1
-    print("27 case(s) pass: the coverage gate refuses an ambiguous profile, an unreadable report, "
+    print("31 case(s) pass: the coverage gate refuses an ambiguous profile, an unreadable report, "
           "a shifted column and a missed floor")
     return 0
 

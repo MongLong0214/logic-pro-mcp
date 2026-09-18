@@ -84,16 +84,47 @@ TOTAL_LINE=$(grep -E "^TOTAL" "$REPORT")
 # llvm-cov column order: regions, missed, cover%, functions, missed, cover%, lines, missed, cover%.
 # A future version that prepends a column would silently grab a different field, so the shape is
 # checked before the number is compared.
-# The FIELD COUNT first. Checking fields 4 and 10 catches a shift of one column and misses a
-# shift of three -- and three is the realistic drift, because a newer llvm-cov appends
-# `branches missed cover%` and every percentage simply moves to a new slot. The TOTAL line this
-# gate understands has exactly ten fields.
+# THE COLUMN NAMES, in order, from the report's own header.
+#
+# The first version of this check counted fields and demanded ten. That was wrong about the shape
+# and it broke the gate: real llvm-cov on the runner emits THIRTEEN, because it appends
+# `Branches Missed-Branches Cover` after the line group --
+#
+#   TOTAL  24107  4929  79.55%  6698  1199  82.10%  74463  9266  87.56%  0  0  -
+#
+# -- and appending does not move fields 4 and 10, which are still region cover and line cover. The
+# harmful change is an INSERTION before or between the groups this gate reads, and a field count
+# cannot tell the two apart: both produce thirteen.
+#
+# The header can. `Regions` must be the first group and `Lines` must be the third, so the third
+# and ninth data columns are the covers this gate compares. A group appearing before `Lines` that
+# is not `Regions` or `Functions` has shifted them.
+HEADER=$(head -1 "$REPORT")
+case "$HEADER" in
+  *Regions*Functions*Lines*) : ;;
+  *)
+    echo "::error::the report's header does not name Regions, then Functions, then Lines."
+    echo "::error::header was: $HEADER"
+    echo "::error::This gate reads region cover from field 4 and line cover from field 10, which"
+    echo "::error::is only true while those three groups come first and in that order."
+    exit 1 ;;
+esac
+BEFORE_LINES=${HEADER%%Lines*}
+case "$BEFORE_LINES" in
+  *Branches*|*Instantiations*)
+    echo "::error::a column group appears before Lines that this gate does not account for."
+    echo "::error::header was: $HEADER"
+    echo "::error::Region and line cover are read positionally, so a group inserted ahead of them"
+    echo "::error::makes both numbers name a different measurement while still looking like one."
+    exit 1 ;;
+esac
+# And the line must still be long enough to HOLD field 10. A truncated report would otherwise
+# reach the pattern check with an empty field, which reads as a format change rather than as a
+# report that stops early.
 TOTAL_FIELDS=$(echo "$TOTAL_LINE" | awk '{print NF}')
-if [ "$TOTAL_FIELDS" != "10" ]; then
-  echo "::error::the TOTAL line has $TOTAL_FIELDS fields; this gate understands 10."
+if [ "$TOTAL_FIELDS" -lt 10 ]; then
+  echo "::error::the TOTAL line has $TOTAL_FIELDS fields; field 10 is the line coverage."
   echo "::error::TOTAL line was: $TOTAL_LINE"
-  echo "::error::llvm-cov's column set changed. Two fields can still look like percentages while"
-  echo "::error::naming a different measurement, so the shape is refused rather than guessed at."
   exit 1
 fi
 REGION_RAW=$(echo "$TOTAL_LINE" | awk '{print $4}')
