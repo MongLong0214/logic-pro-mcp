@@ -117,12 +117,22 @@ struct Issue778RegionBarsLocaleTests {
     }
 
     /// The tolerances the hand-written English pattern carried, which the derived one must not
-    /// lose: case-insensitive, runs of whitespace between words, and no unit required.
+    /// lose: case-insensitive, runs of whitespace between words, no unit required, and the unit on
+    /// EITHER side of the number.
+    ///
+    /// The last one is here because the first version of this derivation dropped it and narrowed
+    /// English. The hand-written pattern had `(?:bar\s+)?` before the digits; `Region starts at
+    /// bar 1` is a string this product reads, and without that the enumeration returned (-1, -1).
+    /// `testAccessibilityChannelAXBackedRegionReadAcceptsPluralTracksContentsLabel` is what went
+    /// red, so the tolerance list is now enumerated here rather than remembered.
     @Test("the English tolerances survive the derivation",
           arguments: [
             ("Region  starts   at 5 bars and ends at 6 bars.", 5, 6),
             ("region starts at 7 bars and ends at 8 bars.", 7, 8),
             ("Region starts at 9 and ends at 10", 9, 10),
+            ("Region starts at bar 1 and ends at bar 2, MIDI region.", 1, 2),
+            ("Region starts at 1 bar  and ends at 2 bars , MIDI region.", 1, 2),
+            ("리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전.", 1, 3),
           ])
     func englishTolerancesSurvive(sample: (String, Int, Int)) {
         let got = AccessibilityChannel.parseRegionBars(from: sample.0)

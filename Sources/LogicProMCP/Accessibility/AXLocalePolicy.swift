@@ -1312,7 +1312,17 @@ enum AXLocalePolicy {
                     .map { NSRegularExpression.escapedPattern(for: String($0)) }
                     .joined(separator: "\\s+")
             }
-            return "(?i)" + chunk(parts[0]) + "\\s*(\\d+)" + ".*?" + chunk(parts[1]) + "\\s*(\\d+)"
+            // `(?:[^\\d\\s]+\\s+)?` is the unit BEFORE the number. Logic writes it on both sides of
+            // the placeholder -- `Region starts at 1 bar` and `Region starts at bar 1` are both
+            // strings this product has had to read -- and the hand-written English pattern carried
+            // an optional `bar ` prefix for exactly that. Deriving the pattern without it narrowed
+            // English, and CI caught it: `testAccessibilityChannelAXBackedRegionReadAcceptsPlural
+            // TracksContentsLabel` reads `at bar 1` and went to (-1, -1).
+            //
+            // One token, anchored immediately after the literal, so it cannot run off into the
+            // rest of the sentence.
+            let number = "\\s*(?:[^\\d\\s]+\\s+)?(\\d+)"
+            return "(?i)" + chunk(parts[0]) + number + ".*?" + chunk(parts[1]) + number
         }
     }
 
