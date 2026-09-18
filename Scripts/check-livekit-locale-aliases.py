@@ -280,10 +280,22 @@ def main():
                   f"record, so a harness matches on a string nobody has read: {never_measured}")
             failed = 1
         if unknown_to_policy:
-            print(f"   warn  {len(unknown_to_policy)} measured spelling(s) the POLICY does not "
+            # A WARNING until 2026-09-18, and the cost of that is measurable. `Position der
+            # Abspielposition` was recorded in the de-DE arrange-transport census on 2026-09-12,
+            # carried by this harness, and reported here as a warning that exits 0 -- so the
+            # product could not find the Playhead Position group on a German Logic for six days
+            # with the measurement sitting in the repository. `Schlag` and `トラックヘッダ` were
+            # the same shape.
+            #
+            # A spelling somebody READ that the product cannot match is a language the product
+            # does not work in. That is the thing this campaign exists to end, so it fails.
+            print(f"-> FAIL: {len(unknown_to_policy)} measured spelling(s) the POLICY does not "
                   f"carry, so the product cannot match what a harness can find:")
             for entry in unknown_to_policy:
                 print(f"           {entry}")
+            print("  Add each to its LabelSet. A measurement that does not reach the policy is a "
+                  "language nobody can use, and a warning is how one sat unused for six days.")
+            failed = 1
 
     derived = derived_policy_spellings(REPO)
     for py_name, swift_name in PAIRS:

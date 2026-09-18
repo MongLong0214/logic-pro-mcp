@@ -5157,7 +5157,8 @@
     "tracks header",
     "tracks headers",
     "트랙 헤더",
-    "Spuren Titel"
+    "Spuren Titel",
+    "トラックヘッダ"
    ],
    "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "match": "exact_strict",

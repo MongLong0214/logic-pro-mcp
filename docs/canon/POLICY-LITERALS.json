@@ -654,6 +654,7 @@
     "トラックを並べ替える": "strings_value",
     "トラックを削除": "quickhelp_title",
     "トラックコンテンツ": "composed_value",
+    "トラックヘッダ": "quickhelp_title",
     "トラック名": "strings_value",
     "トラック名を変更": "quickhelp_title",
     "バイパス": "strings_value",

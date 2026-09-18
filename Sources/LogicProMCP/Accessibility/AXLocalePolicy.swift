@@ -2073,8 +2073,15 @@ enum AXLocalePolicy {
     /// Track-header rail description (normalized exact match).
     static let trackHeadersDescription = LabelSet(
         canonical: "track headers",
-        variants: ["track header", "tracks header", "tracks headers", "트랙 헤더", "Spuren Titel"],
+        variants: ["track header", "tracks header", "tracks headers", "트랙 헤더", "Spuren Titel",
+                   "トラックヘッダ"],
         rationale: "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them."
+            + " Japanese added 2026-09-18. It was ALREADY MEASURED -- `Scripts/livekit/evidence.py`"
+            + " has carried `トラックヘッダ` in its `Tracks header` aliases -- and"
+            + " `check-livekit-locale-aliases.py` had been reporting the policy's lack of it as a"
+            + " warning that exits 0. A measured spelling the product cannot match is a language"
+            + " the product does not work in, so that guard now fails instead, and this was the"
+            + " one entry standing between it and doing so."
     )
 
     /// The Event tab of the List Editors pane, by `AXDescription`.
