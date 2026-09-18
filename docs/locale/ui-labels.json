@@ -495,6 +495,87 @@
     "en-US": "title"
    }
   },
+  "bounceNormalizeSetting": {
+   "canonical": "Normalize",
+   "variants": [
+    "노멀라이즈",
+    "ノーマライズ",
+    "Normalisieren",
+    "Normalizar",
+    "Normaliser",
+    "Normalizza",
+    "正常化",
+    "標準化"
+   ],
+   "rationale": "Apple's Normalize row, read for the bounce settings sheet's own marker set.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "bounceOfflineSetting": {
+   "canonical": "Offline",
+   "variants": [
+    "오프라인",
+    "オフライン",
+    "Sin conexión",
+    "Déconnecté",
+    "Off-line",
+    "离线",
+    "離線"
+   ],
+   "rationale": "Apple's own Bounce nib keys this control `bvc-ZG-Qju.title`. German and",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "bounceRealtimeSetting": {
+   "canonical": "Realtime",
+   "variants": [
+    "실시간",
+    "リアルタイム",
+    "Echtzeit",
+    "Tiempo real",
+    "Temps réel",
+    "In tempo reale",
+    "Tempo Real",
+    "实时",
+    "即時"
+   ],
+   "rationale": "Apple's own Bounce nib keys this control `afY-gP-VHS.title`, which is the",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "cancelButton": {
    "canonical": "Cancel",
    "variants": [
@@ -2859,6 +2940,28 @@
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
     "zh-TW": "unmeasured"
+   }
+  },
+  "okButton": {
+   "canonical": "OK",
+   "variants": [
+    "확인",
+    "Aceptar",
+    "好"
+   ],
+   "rationale": "Apple's OK row. Seven of the ten locales render `OK` itself, so four distinct",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "oneFilePerTrackPopupValue": {

@@ -40,6 +40,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -99,7 +100,12 @@ def main(argv=None) -> int:
             # version skipped this and reported two guards BLIND whose tests had just been fixed --
             # a sweep that measures the last commit rather than the change in front of you answers
             # a question nobody asked.
-            diff = subprocess.run(["git", "-C", REPO, "diff", "HEAD"],
+            # `--binary`, or a change touching one of the committed `.u32` absence sets produces
+            # a patch `git apply` refuses ("cannot apply binary patch ... without full index
+            # line"). The sweep then reported that it could not carry the working tree and exited
+            # 2, which is the honest failure -- but only because the apply is checked. A tool that
+            # measures a tree it silently failed to build is worse than one that refuses.
+            diff = subprocess.run(["git", "-C", REPO, "diff", "--binary", "HEAD"],
                                   capture_output=True, text=True).stdout
             if diff.strip():
                 applied = subprocess.run(["git", "-C", tree, "apply", "-"],
@@ -110,6 +116,22 @@ def main(argv=None) -> int:
                     return 2
                 print(f"(sweeping the working tree: {len(diff.splitlines())} diff line(s) applied "
                       f"over HEAD)")
+            # And the files git has never seen. `git diff` cannot describe an untracked file, so a
+            # NEW guard -- exactly the case a sweep is most useful for -- was invisible: the run
+            # died opening a path that was not there. "The working tree" has to mean the working
+            # tree.
+            untracked = subprocess.run(
+                ["git", "-C", REPO, "ls-files", "--others", "--exclude-standard"],
+                capture_output=True, text=True).stdout.split()
+            for rel in untracked:
+                source = os.path.join(REPO, rel)
+                target = os.path.join(tree, rel)
+                if not os.path.isfile(source):
+                    continue
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy2(source, target)
+            if untracked:
+                print(f"(and {len(untracked)} untracked file(s) copied in)")
             blind, caught, broken = [], [], []
             for guard in targets:
                 path = os.path.join(tree, "Scripts", guard)

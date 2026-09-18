@@ -2308,6 +2308,67 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Region%20Path#value"
     )
 
+    /// The Bounce dialog's Normalize setting, by name.
+    ///
+    /// `Scripts/logic_bounce_ui.py` recognises the bounce settings sheet by looking for its own
+    /// controls, and carried `normalize` beside `노멀라이즈` and nothing else -- two languages in a
+    /// shipped file no locale guard scanned. Apple's row covers ten.
+    /// The plain OK button, as distinct from `saveConfirmationButton`.
+    ///
+    /// `saveConfirmationButton` bundles `Save` with `OK` because the save-confirmation sheet
+    /// offers both. A dialog whose confirm button is OK is a different control, and routing it
+    /// through that set would let `Save` confirm a bounce -- a widening nobody asked for. Apple
+    /// ships the row; the distinction costs one LabelSet.
+    static let okButton = LabelSet(
+        canonical: "OK",
+        variants: ["확인", "Aceptar", "好"],
+        rationale: "Apple's OK row. Seven of the ten locales render `OK` itself, so four distinct"
+            + " members cover all ten.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/OK#value"
+    )
+
+    static let bounceNormalizeSetting = LabelSet(
+        canonical: "Normalize",
+        variants: ["노멀라이즈", "ノーマライズ", "Normalisieren", "Normalizar", "Normaliser",
+                   "Normalizza", "正常化", "標準化"],
+        rationale: "Apple's Normalize row, read for the bounce settings sheet's own marker set."
+            + " Portuguese and Spanish share `Normalizar`, so eight distinct members cover ten"
+            + " languages.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Normalize#value"
+    )
+
+    /// The Bounce dialog's Realtime mode, by name, from the dialog's OWN nib.
+    ///
+    /// English lives in `nibstrings` (`Base.lproj`) and the other nine locales in `strings` --
+    /// the split #895 established -- so this cites the nib side, which is where the English value
+    /// Logic actually renders comes from.
+    static let bounceRealtimeSetting = LabelSet(
+        canonical: "Realtime",
+        variants: ["실시간", "リアルタイム", "Echtzeit", "Tiempo real", "Temps réel",
+                   "In tempo reale", "Tempo Real", "实时", "即時"],
+        rationale: "Apple's own Bounce nib keys this control `afY-gP-VHS.title`, which is the"
+            + " strongest provenance available for it. The reference names the `strings`"
+            + " side ANCHORED AT ko, because a reference names a locale and `en` is not one"
+            + " this row has -- English lives in"
+            + " `nibstrings` (Base.lproj) under the same key -- the split #895 established"
+            + " -- so `Realtime` itself is the one member this derivation does not verify.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FBounce.strings/ko/afY-gP-VHS.title#value"
+    )
+
+    /// The Bounce dialog's Offline mode, from the same nib as Realtime.
+    static let bounceOfflineSetting = LabelSet(
+        canonical: "Offline",
+        variants: ["오프라인", "オフライン", "Sin conexión", "Déconnecté", "Off-line",
+                   "离线", "離線"],
+        rationale: "Apple's own Bounce nib keys this control `bvc-ZG-Qju.title`. German and"
+            + " Italian share the English spelling, so seven distinct members cover ten"
+            + " languages. As with Realtime the reference names the `strings` side anchored"
+            + " at ko rather than the usual en, because the row has no en, and it"
+            + " verifies the nine translated locales; `Offline` itself lives in"
+            + " `nibstrings` and is not covered by it.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FBounce.strings/ko/bvc-ZG-Qju.title#value"
+    )
+
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
         variants: ["리전", "リージョン", "Région", "Pasaje", "Regione", "Região", "片段", "區段"],
@@ -2722,6 +2783,10 @@ enum AXLocalePolicy {
         midiEffectSlotHelpKeyword,
         inspectorChannelStripHelpPrefix,
         assignControlHelpKeyword,
+        okButton,
+        bounceNormalizeSetting,
+        bounceOfflineSetting,
+        bounceRealtimeSetting,
         eventListItemCountHelp,
         eventListRegionPathHelp,
         regionHelpKeyword,

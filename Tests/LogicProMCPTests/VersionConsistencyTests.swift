@@ -209,9 +209,15 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 
     let pkgsharePaths = installPaths("pkgshare")
     let binPaths = installPaths("bin")
+    // ELEVEN since 2026-09-19: `Scripts/logic_ui_labels.py` joined them (#919). It is generated
+    // from AXLocalePolicy by `Scripts/locale_labels.py --write` and imported by
+    // `logic_bounce_ui.py`, which drove Logic's Bounce dialog through hand-typed
+    // English-and-Korean tables until then. A count is the right shape for this assertion --
+    // adding an asset to the Formula and not to the tarball is how v3.11.0 shipped
+    // `logic_bounce.py` without `logic_variants.py` -- so the number moves deliberately.
     #expect(
-        pkgsharePaths.count == 10,
-        "expected the 10 helper assets in Formula pkgshare.install; parser or Formula drifted: \(pkgsharePaths)"
+        pkgsharePaths.count == 11,
+        "expected the 11 helper assets in Formula pkgshare.install; parser or Formula drifted: \(pkgsharePaths)"
     )
     #expect(binPaths == ["LogicProMCP"], "Formula bin.install drifted: \(binPaths)")
     #expect(

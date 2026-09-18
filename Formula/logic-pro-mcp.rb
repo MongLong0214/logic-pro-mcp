@@ -57,6 +57,10 @@ class LogicProMcp < Formula
     # release-verify-formula-install-paths.sh now fails the release if this (or any
     # other transitively-imported logic_* helper) is not installed.
     pkgshare.install "Scripts/logic_variants.py" if (buildpath/"Scripts/logic_variants.py").exist?
+    # #919: generated from AXLocalePolicy and imported by logic_bounce_ui.py. Same rule as
+    # logic_variants.py above -- release-verify-formula-install-paths.sh walks the import closure
+    # and fails if a logic_* module a shipped helper imports is not installed.
+    pkgshare.install "Scripts/logic_ui_labels.py" if (buildpath/"Scripts/logic_ui_labels.py").exist?
   end
 
   def caveats

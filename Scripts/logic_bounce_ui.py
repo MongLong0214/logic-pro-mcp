@@ -22,12 +22,31 @@ RunOsa = Callable[[str, float], str]
 
 
 OSA_TIMEOUT_SEC: Final = 8.0
-BOUNCE_CONFIRM_BUTTONS: Final[tuple[str, str]] = ("OK", "확인")
-BOUNCE_DIALOG_KEYWORDS: Final[tuple[str, str]] = ("bounce", "바운스")
-BOUNCE_SETTINGS_MARKERS: Final[tuple[str, ...]] = ("pcm", "realtime", "offline", "normalize", "audio tail", "실시간", "오프라인", "노멀라이즈")
-SAVE_PANEL_CONFIRM_BUTTONS: Final[tuple[str, str]] = ("bounce", "바운스")
-SAVE_PANEL_CANCEL_BUTTONS: Final[tuple[str, str]] = ("cancel", "취소")
-SAVE_PANEL_NAME_LABELS: Final[tuple[str, str]] = ("save as:", "다른 이름으로 저장:", "이름으로 저장:")
+# Logic's own labels, in every language Logic ships, generated from AXLocalePolicy by
+# `Scripts/locale_labels.py --write` and installed beside this file. They were six hand-typed
+# tables here -- English and Korean, two of ten -- in a file `Scripts/install.sh` INSTALLS, so the
+# bounce flow worked in two languages and no locale guard scanned it (#919).
+from logic_ui_labels import (  # noqa: F401  (re-exported under the names this module used)
+    BOUNCE_CONFIRM_BUTTONS,
+    BOUNCE_DIALOG_KEYWORDS,
+    BOUNCE_PROJECT_OR_SECTION,
+    BOUNCE_SETTINGS_MARKERS,
+    FILE_MENU_BAR_ITEM,
+    SAVE_PANEL_CANCEL_BUTTONS,
+    SAVE_PANEL_CONFIRM_BUTTONS,
+)
+
+# SAVE_PANEL_NAME_LABELS IS GONE, and that is the fix rather than an omission.
+#
+# It held the macOS save panel's field label -- `save as:` and two Korean spellings. AppKit owns
+# that string, not Logic, so it is absent from all 23 corpora by construction and no LabelSet can
+# carry it: the canon axis covers Logic's bundle and this panel is not Logic's.
+#
+# It sat in an AND with three other signals, so a two-language term capped the whole predicate at
+# two languages. What actually identifies the panel is the BOUNCE button -- a save panel with a
+# button named Bounce is this one -- and that is now seven languages. Dropping the label makes the
+# identification work in every language those three signals do; keeping it made them all pointless
+# outside English and Korean.
 KCG_HID_EVENT_TAP: Final = 0
 KCG_EVENT_LEFT_MOUSE_DOWN: Final = 1
 KCG_EVENT_LEFT_MOUSE_UP: Final = 2
@@ -371,6 +390,13 @@ def save_panel_snapshot(run_jxa_fn: RunJxa = run_jxa) -> SavePanelSnapshot:
 
 
 def _normalized_strings(values: list[str]) -> list[str]:
+    """AX readings, lowercased, to be compared against the generated tables.
+
+    `logic_ui_labels` emits its values already folded, so every comparison in this file is
+    folded-against-folded and no call site has to remember to lower one side. One did and one did
+    not before the tables were generated, which is the shape of inconsistency that works until the
+    day a label has a capital in one language and not another.
+    """
     return [value.lower() for value in values]
 
 
@@ -381,12 +407,8 @@ def save_panel_present(run_jxa_fn: RunJxa = run_jxa) -> bool:
         button_names, text_field_names, static_texts, has_text_field = _snapshot_parts(snapshot)
         has_confirm = any(label in button_names for label in SAVE_PANEL_CONFIRM_BUTTONS)
         has_cancel = any(label in button_names for label in SAVE_PANEL_CANCEL_BUTTONS)
-        save_name_labels = text_field_names + static_texts
-        has_save_name_label = any(
-            any(label == value for label in SAVE_PANEL_NAME_LABELS)
-            for value in save_name_labels
-        )
-        return has_text_field and has_confirm and has_cancel and has_save_name_label
+        del text_field_names, static_texts
+        return has_text_field and has_confirm and has_cancel
     if status == "error" or status == "missing_front_window":
         return False
     return _unreachable_status(status)
@@ -404,7 +426,7 @@ def bounce_settings_present(run_jxa_fn: RunJxa = run_jxa) -> bool:
     status = snapshot["status"]
     if status == "ok":
         button_names, _, static_texts, has_text_field = _snapshot_parts(snapshot)
-        has_confirm = any(label.lower() in button_names for label in BOUNCE_CONFIRM_BUTTONS)
+        has_confirm = any(label in button_names for label in BOUNCE_CONFIRM_BUTTONS)
         has_cancel = any(label in button_names for label in SAVE_PANEL_CANCEL_BUTTONS)
         has_marker = any(any(marker in text for marker in BOUNCE_SETTINGS_MARKERS) for text in static_texts)
         return not has_text_field and has_confirm and has_cancel and has_marker
@@ -421,21 +443,37 @@ def wait_for_bounce_dialog(run_osa: RunOsa = osa, sleep_fn: Callable[[float], No
     return False
 
 
+def _applescript_list(values: tuple) -> str:
+    """An AppleScript list literal from a label table.
+
+    The quotes are the only thing that needs escaping: these are Logic's own labels, generated from
+    AXLocalePolicy, and none of them contains a backslash. A label that did would need more than
+    this, and `check-shipped-python-has-no-ui-literals.py` is what would put it here.
+    """
+    return "{" + ", ".join('"' + v.replace('"', '\\"') + '"' for v in values) + "}"
+
+
 def open_bounce_dialog_via_menu(run_osa: RunOsa = osa) -> bool:
+    # The two English-and-Korean fallback chains this used to carry are one loop over three
+    # generated tables. It clicked `메뉴 바 항목 "파일"` and fell back to `"File"`, so the menu was
+    # reachable in two languages and the other eight got the `on error` path twice and gave up.
+    script = (
+        "set frontmost to true\n"
+        f"repeat with barName in {_applescript_list(FILE_MENU_BAR_ITEM)}\n"
+        f"    repeat with bounceName in {_applescript_list(BOUNCE_DIALOG_KEYWORDS)}\n"
+        f"        repeat with targetName in {_applescript_list(BOUNCE_PROJECT_OR_SECTION)}\n"
+        "            try\n"
+        "                click menu item (targetName as text) of menu 1 of menu item "
+        "(bounceName as text) of menu 1 of menu bar item (barName as text) of menu bar 1\n"
+        "                return \"ok\"\n"
+        "            end try\n"
+        "        end repeat\n"
+        "    end repeat\n"
+        "end repeat\n"
+        "return \"\""
+    )
     result = _process_body(
-        """set frontmost to true
-repeat with targetName in {"프로젝트 또는 섹션…", "프로젝트 또는 섹션...", "Project or Section…", "Project or Section..."}
-    try
-        click menu item (targetName as text) of menu 1 of menu item "바운스" of menu 1 of menu bar item "파일" of menu bar 1
-        return "ok"
-    on error
-        try
-            click menu item (targetName as text) of menu 1 of menu item "Bounce" of menu 1 of menu bar item "File" of menu bar 1
-            return "ok"
-        end try
-    end try
-end repeat
-return """"",
+        script,
         run_osa=run_osa,
     )
     return result == "ok"

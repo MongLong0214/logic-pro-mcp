@@ -152,6 +152,11 @@ func makeInstallerFixture(
         }
         try writeExecutable(scripts.appendingPathComponent("logic_input_source.py"), contents: "#!/usr/bin/env python3\n")
         try writeExecutable(scripts.appendingPathComponent("logic_variants.py"), contents: "#!/usr/bin/env python3\ndef logic_process_osa():\n    pass\n")
+        // #919: `logic_bounce_ui.py` imports the generated label tables, and
+        // `release-verify-formula-install-paths.sh` verifies that import closure against what the
+        // Formula installs. The fixture mirrors the real package or it tests a package nobody
+        // ships -- the same reason `logic_variants.py` is here.
+        try writeExecutable(scripts.appendingPathComponent("logic_ui_labels.py"), contents: "#!/usr/bin/env python3\nfrom typing import Final\nBOUNCE_CONFIRM_BUTTONS: Final[tuple[str, ...]] = ('ok',)\n")
         if symlinkedBounceHelper {
             let target = sandbox.appendingPathComponent("outside-bounce-helper.py")
             try writeFile(target, contents: "# outside\n")
