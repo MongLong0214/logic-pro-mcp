@@ -539,6 +539,24 @@ class TellingAbsenceFromATypo(unittest.TestCase):
                 self.assertEqual(canon.fold_for_near_miss(typed),
                                  canon.fold_for_near_miss(shipped))
 
+    def test_invisible_format_characters_are_folded(self):
+        """A character with no width cannot be part of a label somebody read off a screen.
+
+        `Mix\u200ber` renders as `Mixer` and hashes as something else, so it proved ABSENT for a
+        string Logic ships -- a review passed an absence claim through exactly that spelling. The
+        fold drops Unicode category Cf rather than naming each one, because naming them is the
+        shape that misses the next one.
+        """
+        for invisible in ("\u200b", "\u200c", "\u200d", "\u2060", "\ufeff", "\u00ad"):
+            with self.subTest(codepoint=hex(ord(invisible))):
+                self.assertEqual(canon.fold_for_near_miss(f"Mix{invisible}er"),
+                                 canon.fold_for_near_miss("Mixer"))
+
+    def test_a_visible_character_is_not_folded_as_invisible(self):
+        """The control: the rule is about WIDTH, not about being unusual."""
+        self.assertNotEqual(canon.fold_for_near_miss("Mixér"), canon.fold_for_near_miss("Mixer"))
+        self.assertNotEqual(canon.fold_for_near_miss("Mix3r"), canon.fold_for_near_miss("Mixer"))
+
     def test_case_is_NOT_folded(self):
         """Runtime matching is case-insensitive, so a capital is not the defect this looks for.
 

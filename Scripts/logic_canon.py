@@ -200,7 +200,14 @@ def fold_for_near_miss(text: str) -> str:
     # screen and is not the defect this looks for. Folding case here made it fire on that pair and
     # on every lowercase containment fragment (`arm` beside a French `Arm`), 33 findings of which
     # three were real. Decoration only.
-    return "".join(ch for ch in normalize(text) if ch not in _DECORATION)
+    # Format characters (Unicode category Cf) fold too, and they are not in `_DECORATION` because
+    # naming them one by one is the shape that misses the next one. A ZERO WIDTH SPACE, a soft
+    # hyphen, a word joiner or a BOM inside a label is INVISIBLE ON SCREEN -- so a reading that
+    # carries one cannot have been read off a screen as a different string, and `Mix\u200ber`
+    # proving "absent" for `Mixer` is the near miss this fold exists to catch. A review used
+    # exactly that spelling to pass an absence claim for a label Logic ships.
+    return "".join(ch for ch in normalize(text)
+                   if ch not in _DECORATION and unicodedata.category(ch) != "Cf")
 
 
 def short_digest(text: str) -> str:
