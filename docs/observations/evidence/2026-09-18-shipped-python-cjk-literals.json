@@ -1,0 +1,29 @@
+{
+  "note": "Every string literal containing Hangul, kana or Han in each Python helper that Scripts/install.sh installs. Produced by extracting literals from the files install.sh names, so the SET of files is derived from the installer rather than typed.",
+  "shipped": [
+    "logic_bounce.py",
+    "logic_bounce_ui.py",
+    "logic_input_source.py",
+    "logic_ui_jxa.py",
+    "logic_variants.py"
+  ],
+  "literals": {
+    "logic_bounce.py": [],
+    "logic_bounce_ui.py": [
+      "노멀라이즈",
+      "다른 이름으로 저장:",
+      "바운스",
+      "실시간",
+      "오프라인",
+      "이름으로 저장:",
+      "취소",
+      "파일",
+      "프로젝트 또는 섹션...",
+      "프로젝트 또는 섹션…",
+      "확인"
+    ],
+    "logic_input_source.py": [],
+    "logic_ui_jxa.py": [],
+    "logic_variants.py": []
+  }
+}

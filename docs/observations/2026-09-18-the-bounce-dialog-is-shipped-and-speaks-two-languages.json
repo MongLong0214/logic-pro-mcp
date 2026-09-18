@@ -1,0 +1,90 @@
+{
+  "id": "2026-09-18-the-bounce-dialog-is-shipped-and-speaks-two-languages",
+  "date": "2026-09-18",
+  "schema": 3,
+  "subject": "Scripts/logic_bounce_ui.py",
+  "question": "The locale campaign covers `Sources/` and `Scripts/livekit/`. Does anything the product SHIPS sit outside that, and if so what would it cost to bring it in?",
+  "verdict": "partial",
+  "issues": [
+    919
+  ],
+  "surface": "project.export",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/logic_canon.py resolve",
+    "expected": "each of the three refs in `canon` resolves to the value recorded beside it; the literal census is reproduced by grepping Scripts/logic_bounce_ui.py for string literals containing Hangul, kana or Han",
+    "cost": "~5s per ref; reads the committed index, launches nothing"
+  },
+  "method": "Read `Scripts/install.sh` for which Python helpers it installs, then extracted every string literal containing Hangul, kana or Han from each of them. Only `logic_bounce_ui.py` carries any: eleven. Each was looked up against `docs/locale/ui-labels.json` (generated from AXLocalePolicy) and then, for those the policy does not carry, against the committed canon index with `Scripts/logic_canon.py locate` and `resolve` in all ten locales.",
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Normalize#value",
+      "value": "Normalize",
+      "used_for": "the Normalize marker in BOUNCE_SETTINGS_MARKERS, which the file carries in English and Korean only. Apple's row holds all ten locales",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FBounce.strings/en/afY-gP-VHS.title#value",
+      "value": "Realtime",
+      "used_for": "the Realtime marker. This is the Bounce dialog's OWN nib, which is the strongest provenance available for it; English lives in `nibstrings` and the other nine locales in `strings`, the split #895 established, so a single `derivedFrom` may not cover both sides",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FBounce.strings/en/bvc-ZG-Qju.title#value",
+      "value": "Offline",
+      "used_for": "the Offline marker, from the same nib as Realtime",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "what": "which Python helpers install.sh ships",
+      "reading": "logic_bounce.py, logic_bounce_ui.py, logic_input_source.py, logic_ui_jxa.py, logic_variants.py",
+      "means": "these are product, not harness, and no locale guard scans any of them"
+    },
+    {
+      "what": "CJK string literals in each shipped helper",
+      "reading": "logic_bounce.py 0, logic_bounce_ui.py 11, logic_input_source.py 0, logic_ui_jxa.py 0, logic_variants.py 0",
+      "means": "the exposure is one file, which makes it a bounded change rather than a campaign"
+    },
+    {
+      "what": "the six tables in logic_bounce_ui.py",
+      "reading": "BOUNCE_CONFIRM_BUTTONS, BOUNCE_DIALOG_KEYWORDS, BOUNCE_SETTINGS_MARKERS, SAVE_PANEL_CONFIRM_BUTTONS, SAVE_PANEL_CANCEL_BUTTONS, SAVE_PANEL_NAME_LABELS -- every one of them English plus Korean",
+      "means": "the bounce flow refuses or mis-clicks in the other eight languages. BOUNCE_SETTINGS_MARKERS is the clearest case: it looks for `realtime`, `offline` and `normalize` beside 실시간, 오프라인 and 노멀라이즈, and Apple's own Bounce nib keys those under `afY-gP-VHS.title` (Realtime) and `bvc-ZG-Qju.title` (Offline) in ten locales -- so `Echtzeit` and `Sin conexión` are values this repository can already resolve and the file cannot match. `Normalize` is the third of them and sits in Logic's Localizable.strings rather than in the Bounce nib, so the three markers this file matches in two languages are resolvable from two different tables and neither of them is the file"
+    },
+    {
+      "what": "how many of the eleven the policy already carries",
+      "reading": "six: 바운스 (bounceMenuItem), 취소 (cancelButton), 파일 (fileMenuBar), 확인 (saveConfirmationButton), and both spellings of 프로젝트 또는 섹션… (projectOrSectionMenuItem)",
+      "means": "more than half the work needs no research at all, only wiring"
+    },
+    {
+      "what": "SAVE_PANEL_NAME_LABELS",
+      "reading": "'save as:', '다른 이름으로 저장:', '이름으로 저장:'",
+      "means": "the macOS save panel's field label, which AppKit owns. The canon corpus is Logic's bundle, so no row can exist for it and proving it absent would be true and useless. Finding the field by role rather than by label is a design decision this record does not make"
+    }
+  ],
+  "conclusion": "One shipped file does. `Scripts/logic_bounce_ui.py` is installed into the share directory by `Scripts/install.sh` and matches Logic's interface text through six hand-typed two-language tables, so the bounce flow works in English and Korean and nowhere else. Six of its eleven CJK literals are already LabelSets, three more have Apple rows resolved here in all ten locales, and one cannot be cited at all because it belongs to AppKit rather than to Logic. Bringing it in is bounded but not small, because the vocabulary is in Swift and this consumer is Python. A generated module would have to ship -- install.sh, the release tarball, release-verify-formula-install-paths.sh and the installer fixtures -- and hand-maintained Python tables are the shape that already cost this repository six days when `check-livekit-locale-aliases.py` warned about a German label instead of failing.",
+  "limits": [
+    "Nothing here was read off a running Logic. The ten-locale values come from the committed canon index, so what is proved is that these are Apple's values for those rows, not that the Bounce dialog renders them where this file looks.",
+    "The literal census counts Python string literals containing Hangul, kana or Han. A label built by concatenation or interpolation, or written in Latin script for a non-English locale, is not in the count.",
+    "`install.sh` is read for the shipped set. A helper added to the tarball by another route would not appear in it."
+  ],
+  "evidence": [
+    "evidence/2026-09-18-shipped-python-cjk-literals.json"
+  ],
+  "depends": [],
+  "supersedes": null
+}
