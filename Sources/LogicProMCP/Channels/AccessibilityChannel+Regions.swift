@@ -406,33 +406,17 @@ extension AccessibilityChannel {
     /// bar numbers through a live enumeration, which cannot distinguish "the pattern is wrong"
     /// from "the region moved".
     static func parseRegionBars(from help: String) -> (Int, Int) {
-        // Korean:   "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다."
-        // English:  "Region starts at 128 bars and ends at 129 bars, MIDI region."
-        // Japanese: "リージョンの開始位置は1 bar 、終了位置は2 小節 です, MIDIリージョン."
-        // German:   "Region beginnt bei 1 Takt  und endet bei 2 Takte , MIDI-Region."
+        // One row, ten locales, `AXLocalePolicy.regionBarsSentence`. What stood here was four
+        // hand-written regexes -- Korean, English, Japanese, German -- each added the day somebody
+        // hit its absence, and each independently working out that `%@` expands to a number AND a
+        // unit (`128 bars`, `1 마디 `, `2 小節 `, and a German unit inflected by the number,
+        // `1 Takt ` beside `2 Takte `). Apple ships the sentence they are all instances of.
         //
-        // The Japanese row was added 2026-09-06, and it was needed the moment `regionHelpKeyword`
-        // learned `リージョン`: recognising a region and being unable to read its bars leaves the
-        // enumeration returning `startBar: -1, endBar: -1`, measured live on that day for the one
-        // region in the campaign project. Fail-closed downstream — `move_to_playhead` refuses a
-        // readback with `startBar <= 0` — but a caller reading the enumeration gets numbers that
-        // are not positions.
-        //
-        // Note the units are MIXED in Logic's own string: `1 bar ` in ASCII and `2 小節` in
-        // Japanese, in the same sentence. The pattern therefore anchors on the two POSITION nouns
-        // and not on any unit word.
-        let patterns = [
-            #"리전은\s*(\d+)\s*마디.*?시작.*?(\d+)\s*마디.*?끝"#,
-            #"(?i)region\s+starts\s+at\s+(?:bar\s+)?(\d+)(?:\s*bars?)?.*?ends\s+at\s+(?:bar\s+)?(\d+)(?:\s*bars?)?"#,
-            #"リージョンの開始位置は\s*(\d+).*?終了位置は\s*(\d+)"#,
-            // German, read live 2026-09-13 off the region `record_sequence` had just imported on a
-            // de-DE Logic. The unit is INFLECTED by the number in Logic's own sentence — `1 Takt `
-            // singular beside `2 Takte ` plural — so this anchors on the two verbs and not on the
-            // unit word, for the same reason the Japanese row does. Singular `Region` is required
-            // to be followed by whitespace: the invented plural `Regionen beginnen …` is not a
-            // string Logic emits, and this pattern refuses it.
-            #"Region\s+beginnt\s+bei\s*(\d+).*?endet\s+bei\s*(\d+)"#,
-        ]
+        // Recognising a region and failing to read its bars is not a silent gap: the enumeration
+        // returns `startBar: -1, endBar: -1`. Downstream is fail-closed -- `move_to_playhead`
+        // refuses a readback with `startBar <= 0` -- but a caller reading the enumeration gets
+        // numbers that are not positions, which is why a missing language mattered.
+        let patterns = AXLocalePolicy.regionBarsPatterns()
         for pat in patterns {
             guard let rx = try? NSRegularExpression(pattern: pat, options: [.dotMatchesLineSeparators]) else { continue }
             let range = NSRange(help.startIndex..., in: help)

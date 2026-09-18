@@ -85,4 +85,102 @@ struct Issue778RegionBarsLocaleTests {
         #expect(!Self.german.contains("리전은"))
         #expect(!Self.german.contains("リージョン"))
     }
+    // MARK: - The template the four patterns were instances of (#909)
+
+    /// Every locale's template yields a pattern, or a language drops out in silence.
+    ///
+    /// `regionBarsPatterns()` returns nil for a template without exactly two placeholders and
+    /// `compactMap` swallows it, so the only thing standing between "ten patterns" and "nine
+    /// patterns and no message" is this count.
+    @Test("every one of the ten templates produces a pattern")
+    func everyTemplateProducesAPattern() {
+        let labels = AXLocalePolicy.regionBarsSentence.labels
+        #expect(labels.count == 10, "the row Apple ships has ten values")
+        #expect(AXLocalePolicy.regionBarsPatterns().count == labels.count,
+                "a template that yields no pattern is a locale that silently stopped parsing")
+    }
+
+    /// The four sentences this product has actually SEEN still parse -- the same strings the cases
+    /// above use, read here through the derived patterns rather than the four they replaced.
+    @Test("the four measured sentences parse through the derived patterns")
+    func measuredSentencesStillParse() {
+        let samples: [(String, String, (Int, Int))] = [
+            ("korean", Self.korean, (1, 2)),
+            ("english", Self.english, (128, 129)),
+            ("japanese", Self.japanese, (1, 2)),
+            ("german", Self.german, (1, 2)),
+        ]
+        for (name, help, expected) in samples {
+            let got = AccessibilityChannel.parseRegionBars(from: help)
+            #expect(got == expected, "\(name): got \(got)")
+        }
+    }
+
+    /// The tolerances the hand-written English pattern carried, which the derived one must not
+    /// lose: case-insensitive, runs of whitespace between words, and no unit required.
+    @Test("the English tolerances survive the derivation",
+          arguments: [
+            ("Region  starts   at 5 bars and ends at 6 bars.", 5, 6),
+            ("region starts at 7 bars and ends at 8 bars.", 7, 8),
+            ("Region starts at 9 and ends at 10", 9, 10),
+          ])
+    func englishTolerancesSurvive(sample: (String, Int, Int)) {
+        let got = AccessibilityChannel.parseRegionBars(from: sample.0)
+        #expect(got == (sample.1, sample.2), "got \(got)")
+    }
+
+    /// `Chord group starts at %@ and ends at %@` is a DIFFERENT row with a near-identical shape.
+    /// A pattern loose enough to read a chord group's bars as a region's is the failure this whole
+    /// function is downstream of, so it is asserted rather than assumed.
+    @Test("the chord-group sentence, a near twin with its own row, is refused",
+          arguments: [
+            "코드 그룹은 3 마디 에서 시작하여 4 마디, MIDI에서 끝납니다. x",
+            "Chord group starts at 3 bars and ends at 4 bars, x. y",
+            "Akkordgruppe beginnt bei 3 Takt und endet bei 4 Takte, x. y",
+          ])
+    func chordGroupIsNotARegion(sample: String) {
+        let got = AccessibilityChannel.parseRegionBars(from: sample)
+        #expect(got == (-1, -1), "got \(got)")
+    }
+
+    /// The middle literal is what makes the SECOND number the end bar.
+    ///
+    /// SYNTHETIC, and deliberately so. No sentence this product has read puts a number between
+    /// the two bar numbers, so every measured sample parses identically with the `and ends at`
+    /// anchor and without it -- which means none of them can tell whether the anchor is there.
+    /// Deleting it from the transform leaves all four measured cases green. This is the case that
+    /// goes red, and the shape is not far-fetched: the placeholder expands to a number and a unit
+    /// inside a sentence Logic goes on writing after.
+    @Test("a number between the two bars does not become the end bar")
+    func theMiddleAnchorIsLoadBearing() {
+        let got = AccessibilityChannel.parseRegionBars(
+            from: "Region starts at 5 bars (take 2) and ends at 9 bars, MIDI region.")
+        #expect(got == (5, 9), "got \(got); without the `and ends at` anchor this reads (5, 2)")
+    }
+
+    /// The locales with no live reading, driven through their own template.
+    ///
+    /// SYNTHETIC, and it proves the TRANSFORM rather than the sentence: it substitutes into the
+    /// template Apple ships and checks the derived pattern reads the numbers back. That nobody has
+    /// watched a Spanish Logic render this is a limit of the change, not something this closes.
+    @Test("a sentence built from each template parses back through its own pattern")
+    func everyTemplateRoundTrips() {
+        let templates = AXLocalePolicy.regionBarsSentence.labels
+        #expect(!templates.isEmpty, "if this is empty the case is asserting nothing")
+        for template in templates {
+            guard let first = template.range(of: "%@") else {
+                #expect(Bool(false), "template \(template) has no placeholder")
+                continue
+            }
+            let filled = template.replacingCharacters(in: first, with: "11 bars")
+            guard let second = filled.range(of: "%@") else {
+                #expect(Bool(false), "template \(template) lost its second placeholder")
+                continue
+            }
+            let sentence = filled.replacingCharacters(in: second, with: "12 bars")
+            let got = AccessibilityChannel.parseRegionBars(from: sentence)
+            #expect(got == (11, 12), "template \(template) round-tripped to \(got)")
+        }
+    }
+
 }
