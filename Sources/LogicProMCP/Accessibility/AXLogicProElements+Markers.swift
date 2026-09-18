@@ -144,8 +144,13 @@ extension AXLogicProElements {
     /// area has no marker ruler and the keyword scan had nothing to find either. They could not be
     /// tested, could not be cited, and could not be widened past the two languages the keyword bag
     /// carried -- and a path that returns nothing is worse than no path, because its empty answer
-    /// is indistinguishable from "this project has no markers". Removed in #907; whether Logic 11
-    /// is supported at all is #908.
+    /// is indistinguishable from "this project has no markers". Removed in #907.
+    ///
+    /// #908 asked whether Logic 11 is supported at all. Decided 2026-09-18: it is NOT. The answer
+    /// was already in the code and nobody had connected it -- `LogicProSupport
+    /// .minimumSupportedLogicVersion` is `12.0.1` and the `logic.version_support` doctor check
+    /// FAILS below it, so a Logic 11 install has been refused at setup this whole time while this
+    /// comment called the question open. Nothing comes back here.
     ///
     /// Strategy 1's data quality requires the user to keep the Marker List
     /// window open. Callers that need first-class markers without a

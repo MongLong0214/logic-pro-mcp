@@ -573,8 +573,12 @@ actor AccessibilityChannel: Channel {
             // the ten languages Logic ships, and neither string is in ANY locale of the pinned
             // 12.3 corpus -- Apple stopped shipping them when the item was renamed. So it was a
             // guess about an application this repository cannot read, cite or test, in two
-            // languages, and widening it to ten was impossible for the same reason. Restoring it
-            // needs a reading taken on a running Logic 11, which is what #908 asks for.
+            // languages, and widening it to ten was impossible for the same reason.
+            //
+            // #908 decided 2026-09-18 that Logic 11 is NOT supported, so nothing is restored here.
+            // `LogicProSupport.minimumSupportedLogicVersion` is `12.0.1` and the doctor's
+            // `logic.version_support` check fails below it -- which it did before the decision too,
+            // and `Issue908LogicVersionFloorTests` is what now watches it refuse.
             return await AccessibilityChannel.createTrackViaMenu(
                 item: AXLocalePolicy.newSessionPlayerTrackMenuItem,
                 expectedTrackType: .drummer,
