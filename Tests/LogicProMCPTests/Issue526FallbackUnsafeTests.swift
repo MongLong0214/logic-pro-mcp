@@ -389,9 +389,22 @@ private func issue526MarkerDeleteReadbackRuntime(
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "B")
     #expect(envelope["reason"] as? String == "readback_mismatch")
-    #expect(!(try #require(envelope["target_position_unique"] as? Bool)))
+    #expect(!(try #require(envelope["target_position_unique"] as? Bool)),
+            "an unreadable position is not unique however few markers carry it")
+    #expect(envelope["target_position"] as? String == MarkerState.unreadablePosition,
+            "and the envelope must not publish a bar number nobody read")
     #expect(!(try #require(envelope["prewrite_position_evidence_canonical"] as? Bool)))
-    #expect(try #require(envelope["reason_detail"] as? String).contains("cannot establish which marker"))
+    // The refusal MOVED, and it is still a refusal. This case was built on the
+    // fabrication: a failed parse manufactured ordinal 1 as `1.1.1.1`, that collided with
+    // the next row's genuine `1.1.1.1`, and the collision is what produced "cannot
+    // establish which marker". Since 2026-09-18 an unreadable cell yields
+    // `MarkerState.unreadablePosition`, so the collision CANNOT OCCUR and the ambiguity
+    // branch is unreachable for this fixture. What answers instead is the survivor-set
+    // comparison, which is the honest reading of the same situation -- the multiset the
+    // old case relied on matching only matched because of the invented number.
+    #expect(try #require(envelope["reason_detail"] as? String)
+        .contains("a different marker may have been deleted"),
+            "the envelope must still say why it will not claim the delete")
 }
 
 @Test func testIssue526ReadableAmbiguousInventoryIsNotLaunderedBySelectionReadFailure() async throws {

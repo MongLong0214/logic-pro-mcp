@@ -203,7 +203,7 @@ enum EventListReadbackCollector {
         let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
         let filter = try readFilters(in: paneAndTable.pane, runtime: runtime.ax)
         let itemCount = try readStaticText(
-            help: "Number of Items",
+            label: AXLocalePolicy.eventListItemCountHelp,
             in: paneAndTable.pane,
             runtime: runtime.ax
         )
@@ -212,7 +212,7 @@ enum EventListReadbackCollector {
         // to be present, rather than silently treating a missing Region Path as
         // an observation.
         let regionPath = try readStaticText(
-            help: "Region Path",
+            label: AXLocalePolicy.eventListRegionPathHelp,
             in: paneAndTable.pane,
             runtime: runtime.ax
         )
@@ -563,7 +563,7 @@ enum EventListReadbackCollector {
     }
 
     private static func readStaticText(
-        help: String,
+        label: AXLocalePolicy.LabelSet,
         in pane: AXUIElement,
         runtime: AXHelpers.Runtime
     ) throws -> String {
@@ -572,11 +572,14 @@ enum EventListReadbackCollector {
             role: kAXStaticTextRole as String,
             maxDepth: 16,
             runtime: runtime
-        ).filter { AXHelpers.getHelp($0, runtime: runtime) == help }
+        ).filter { label.matches(AXHelpers.getHelp($0, runtime: runtime)) }
         guard matches.count == 1, let text = matches.first,
               let value = AXValueExtractors.extractTextValue(text, runtime: runtime)
         else {
-            if help == "Region Path" {
+            // Keyed on the LabelSet, not on an English string. `help == "Region Path"` decided
+            // which error to raise, so once the comparison above stopped being English-only the
+            // branch would have reported every failure as a missing item count.
+            if label == AXLocalePolicy.eventListRegionPathHelp {
                 throw EventListReadbackCollectorError.regionPathMissing
             }
             throw EventListReadbackCollectorError.itemCountMissing

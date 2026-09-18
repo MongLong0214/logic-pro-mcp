@@ -1250,8 +1250,19 @@ enum AXLocalePolicy {
 
     static let transportMetronomeControl = LabelSet(
         canonical: "metronome",
-        variants: ["click", "메트로놈", "클릭", "メトロノームクリック", "メトロノーム", "クリック"],
+        variants: ["click", "메트로놈", "클릭", "メトロノームクリック", "メトロノーム", "クリック",
+                   "Metronom", "Metrónomo", "Métronome", "Metronomo", "Metrônomo",
+                   "节拍器", "節拍器"],
         rationale: "Identifies the Metronome/Click transport control; read-only."
+            + " Matching is `containsAny` over a lowercased description and is"
+            + " DIACRITIC-SENSITIVE, so the seven members it had reached English, Korean and"
+            + " Japanese and nothing else: German renders `Metronom-Klick`, which contains neither"
+            + " `metronome` nor `click`, and French `Métronome` differs from `metronome` by an"
+            + " accent this comparison respects. `transport.get_state.isMetronomeEnabled` was"
+            + " therefore never set in de, es, fr, it, pt or either Chinese -- a plural-looking"
+            + " set that reached three languages. Apple's row adds the other seven; the `click`"
+            + " members predate it and stay, because the control is named for either word.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Metronome#value"
     )
 
     static let transportAutopunchControl = LabelSet(
@@ -1291,8 +1302,20 @@ enum AXLocalePolicy {
     /// which is why only this one line was wrong.
     static let playheadPositionGroupLabel = LabelSet(
         canonical: "playhead position",
-        variants: ["재생헤드 위치", "再生ヘッドの位置"],
+        variants: ["재생헤드 위치", "再生ヘッドの位置", "Position der Abspielposition",
+                   "Posición del cursor de reproducción", "Position de la tête de lecture",
+                   "Posizione testina di riproduzione", "Posição do Cursor de Reprodução",
+                   "播放头位置", "播放磁頭位置"],
         rationale: "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
+            + " Read `.exactStrict`, so EVERY bar and beat reading in a language this set does not"
+            + " carry was unreachable -- the group is never found, and the transport position and"
+            + " the goto_position readback are gone rather than degraded. It carried three"
+            + " languages until 2026-09-18, and German was missing with its value already written"
+            + " down in this repository: the de-DE arrange-transport census of 2026-09-12 records"
+            + " `Position der Abspielposition`, and check-livekit-locale-aliases.py reports a"
+            + " measured spelling the policy lacks as a WARNING and exits 0, which is how it"
+            + " stayed out. Ten locales now, from Apple's row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Playhead%20Position#value"
     )
 
     /// Logic's region AXDescription, as the TEMPLATE Apple ships rather than as four regexes.
@@ -1423,8 +1446,13 @@ enum AXLocalePolicy {
 
     static let beatSliderLabel = LabelSet(
         canonical: "beat",
-        variants: ["비트"],
+        variants: ["비트", "ビート", "Schlag", "Tiempo", "Temps", "Battito", "Batida",
+                   "节拍", "節拍"],
         rationale: "Identifies the beat slider in the control bar; verbatim description match; read-only."
+            + " Two languages until 2026-09-18, beside a bar slider the same reader resolves: the"
+            + " de-DE census of 2026-09-12 lists `Schlag` and the policy did not carry it. Ten"
+            + " locales now, from Apple's row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Beat#value"
     )
 
     static let subdivisionSliderLabel = LabelSet(
@@ -2239,6 +2267,40 @@ enum AXLocalePolicy {
     /// project on an English Logic reported `nonRegion: 0` and one region. The envelope carried no
     /// error and `complete` was true, so it did not look like a failure — it looked like an
     /// arrangement with nothing in it.
+    /// The Event List's item-count static text, found by its AXHelp.
+    ///
+    /// `EventListReadbackCollector` compared `AXHelpers.getHelp($0) == "Number of Items"` -- an
+    /// English literal against a localized AXHelp -- so the readback threw `itemCountMissing` in
+    /// nine languages. `check-ax-comparisons-use-labelsets.py` could not see it because the help
+    /// text arrives as a function PARAMETER rather than a variable assigned from an accessor in
+    /// that file; the guard's own docstring names `Region Path` as the kind of finding it exists
+    /// for, and it was passing.
+    static let eventListItemCountHelp = LabelSet(
+        canonical: "Number of Items",
+        variants: ["항목 수", "項目数", "Anzahl der Objekte", "Número de ítems",
+                   "Nombre d’éléments", "Numero di elementi", "Número de Itens",
+                   "项目数", "項目數量"],
+        rationale: "Apple's row for the Event List item-count field's AXHelp, read on every MIDI"
+            + " readback. Was an English literal compared with `==`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Number%20of%20Items#value"
+    )
+
+    /// The Event List's region-path static text, found by its AXHelp.
+    ///
+    /// Note the German value carries a trailing colon (`Regionspfad:`) where no other locale does.
+    /// That is Apple's own string; matching goes through `.exact`, which trims surrounding
+    /// whitespace and compares against every member, so the colon is carried rather than guessed at.
+    static let eventListRegionPathHelp = LabelSet(
+        canonical: "Region Path",
+        variants: ["리전 경로", "リージョンパス", "Regionspfad:", "Ruta del pasaje",
+                   "Chemin de la région", "Percorso regione", "Caminho da região",
+                   "片段路径", "區段路徑"],
+        rationale: "Apple's row for the Event List region-path field's AXHelp. Its absence is what"
+            + " `regionPathMissing` reports, and an English-only comparison made that the answer"
+            + " in nine languages.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Region%20Path#value"
+    )
+
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
         variants: ["리전", "リージョン", "Région", "Pasaje", "Regione", "Região", "片段", "區段"],
@@ -2653,6 +2715,8 @@ enum AXLocalePolicy {
         midiEffectSlotHelpKeyword,
         inspectorChannelStripHelpPrefix,
         assignControlHelpKeyword,
+        eventListItemCountHelp,
+        eventListRegionPathHelp,
         regionHelpKeyword,
     ]
 }

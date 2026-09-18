@@ -80,7 +80,14 @@ struct Issue60LocalePhase4Tests {
             // region as NOT a region, so `get_regions` returned an empty enumeration with no error
             // while a region was on screen — `nonRegion: 1, returned_count: 0` on four live heads
             // against `nonRegion: 0` for the same project in English.
-            ("regionHelpKeyword", AXLocalePolicy.regionHelpKeyword.labels, ["region", "리전", "リージョン"]),
+            // Extended to ten locales on 2026-09-18 from Apple's `Region` row. Not drift, and the
+            // same failure as the Japanese line above one scale up: matching is
+            // diacritic-sensitive, so `region` covered German and Italian by accident while
+            // Spanish `Pasaje`, French `Région`, Portuguese `Região` and both Chinese matched
+            // nothing -- `get_regions` answered `returned_count: 0, complete: true` in five
+            // languages, an empty project stated confidently.
+            ("regionHelpKeyword", AXLocalePolicy.regionHelpKeyword.labels,
+             ["region", "리전", "リージョン", "Région", "Pasaje", "Regione", "Região", "片段", "區段"]),
             // Japanese added 2026-09-07 (#778). Every one was READ, not translated: the ja-JP and
             // en-US navigation-free censuses of 2026-09-05 walk the same surfaces in the same
             // order, 1005 of 1031 rows align as matching blocks, and the aligned ja-JP row is the

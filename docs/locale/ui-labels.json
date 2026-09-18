@@ -373,7 +373,15 @@
   "beatSliderLabel": {
    "canonical": "beat",
    "variants": [
-    "비트"
+    "비트",
+    "ビート",
+    "Schlag",
+    "Tiempo",
+    "Temps",
+    "Battito",
+    "Batida",
+    "节拍",
+    "節拍"
    ],
    "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only.",
    "match": "contains",
@@ -381,13 +389,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "beatsDisplayModeItem": {
@@ -1333,6 +1341,62 @@
    },
    "coverage_attributes": {
     "en-US": "title"
+   }
+  },
+  "eventListItemCountHelp": {
+   "canonical": "Number of Items",
+   "variants": [
+    "항목 수",
+    "項目数",
+    "Anzahl der Objekte",
+    "Número de ítems",
+    "Nombre d’éléments",
+    "Numero di elementi",
+    "Número de Itens",
+    "项目数",
+    "項目數量"
+   ],
+   "rationale": "Apple's row for the Event List item-count field's AXHelp, read on every MIDI",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListRegionPathHelp": {
+   "canonical": "Region Path",
+   "variants": [
+    "리전 경로",
+    "リージョンパス",
+    "Regionspfad:",
+    "Ruta del pasaje",
+    "Chemin de la région",
+    "Percorso regione",
+    "Caminho da região",
+    "片段路径",
+    "區段路徑"
+   ],
+   "rationale": "Apple's row for the Event List region-path field's AXHelp. Its absence is what",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "eventListTab": {
@@ -2956,7 +3020,14 @@
    "canonical": "playhead position",
    "variants": [
     "재생헤드 위치",
-    "再生ヘッドの位置"
+    "再生ヘッドの位置",
+    "Position der Abspielposition",
+    "Posición del cursor de reproducción",
+    "Position de la tête de lecture",
+    "Posizione testina di riproduzione",
+    "Posição do Cursor de Reprodução",
+    "播放头位置",
+    "播放磁頭位置"
    ],
    "rationale": "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders.",
    "provenance": {
@@ -2977,13 +3048,13 @@
     "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "measured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-transport-census"
@@ -5601,7 +5672,14 @@
     "클릭",
     "メトロノームクリック",
     "メトロノーム",
-    "クリック"
+    "クリック",
+    "Metronom",
+    "Metrónomo",
+    "Métronome",
+    "Metronomo",
+    "Metrônomo",
+    "节拍器",
+    "節拍器"
    ],
    "rationale": "Identifies the Metronome/Click transport control; read-only.",
    "match": "contains",
@@ -5609,13 +5687,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "transportPlayControl": {

@@ -95,10 +95,15 @@ extension AccessibilityChannel {
             canonicalMarkerIdentity(name: $0.name, position: $0.position)
         }
         let targetPositionMatchCount = before.filter { $0.position == target.position }.count
+        // A position nobody could read is not unique, however few markers share it. Until
+        // 2026-09-18 the fallback manufactured `ordinal + 1.1.1.1`, so it could COLLIDE with a real
+        // position and the count caught it; now it is one sentinel, and a lone unreadable marker
+        // would otherwise report `target_position_unique: true` about a value that is not a
+        // position at all. Uniqueness is a property of an identity, and this is the absence of one.
         let targetPositionUnique = targetPositionMatchCount == 1
-        // A parse fallback manufactures `ordinal + 1.1.1.1`, which can happen to equal a
-        // different marker's parsed position. Do not let a synthetic position participate in a
-        // State-A identity proof, even if it happens not to collide in this particular reading.
+            && target.position != MarkerState.unreadablePosition
+        // Do not let a position that was not read participate in a State-A identity proof, even if
+        // it happens not to collide in this particular reading.
         let prewritePositionEvidenceCanonical = !before.isEmpty
             && before.allSatisfy { $0.positionSource == .parser }
         var extras: [String: Any] = [
