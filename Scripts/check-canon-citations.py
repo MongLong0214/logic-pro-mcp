@@ -355,12 +355,21 @@ RATCHETS = (
     #: anything. A ratchet entry on an absent file is not a mistake -- `_members` returns an empty
     #: set for a missing file, so the first version of it is measured against nothing and every
     #: entry in it is a growth that rule 7 refuses.
-    ("docs/canon/AX-COMPARISON-WAIVERS.json", "waivers", "shrink",
+    #: The key is `literals` because that is what `check-ax-comparisons-use-labelsets.py::waived`
+    #: reads. A ratchet aimed at a key the consumer does not use guards a list nothing obeys, and
+    #: the shape check would report it as a renamed key rather than as the mismatch it is.
+    ("docs/canon/AX-COMPARISON-WAIVERS.json", "literals", "shrink",
      "AX comparisons waived from using a LabelSet", _key_members),
     #: Was a Python set literal in the guard that reads it, so "may only shrink" was a comment and
     #: a change could add a guard with no test and waive it in the same diff.
     ("docs/canon/GUARDS-WITHOUT-A-TEST.json", "guards", "shrink",
      "guards with no test that drives them", _key_members),
+    #: Measured by `Scripts/mutation-sweep-guard-tests.py`, not declared. A guard leaves this list
+    #: by gaining a case that drives its entry point at an input that must fail, and the sweep
+    #: re-measures; a guard cannot be added to it to excuse a test that was never written, because
+    #: rule 7 refuses the growth.
+    ("docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json", "guards", "shrink",
+     "guards whose test does not notice the gate being removed", _key_members),
 )
 
 
@@ -416,6 +425,27 @@ def check_waivers_only_shrink(failures: list) -> None:
             # and every member of the new list must appear there as a quoted string. A member the
             # predecessor did not carry is still a growth from nothing. That is the difference
             # between a decision and a sentence -- the file cannot authorise itself.
+            #
+            # And before that, the distinction the first version of this rule missed: a `shrink`
+            # list is either a set of PERMISSIONS or a CENSUS of measured debt, and only the first
+            # can excuse anything. What separates them is not what the file says about itself --
+            # it is whether any guard READS it to skip something. `AX-COMPARISON-WAIVERS.json` is
+            # read by `check-ax-comparisons-use-labelsets.py`, which skips whatever it names, so a
+            # new entry silences a real finding and its first version must be empty.
+            # `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` is read by no guard at all: it records what
+            # `mutation-sweep-guard-tests.py` measured, and its first version is that measurement.
+            # Refusing a census is refusing somebody for writing down what is already true.
+            #
+            # Checked by looking, not by asking the file.
+            readers = sorted(
+                os.path.basename(g) for g in glob.glob(os.path.join(REPO, "Scripts", "check-*.py"))
+                if os.path.basename(g) != os.path.basename(__file__)
+                and os.path.basename(path) in open(g, encoding="utf-8", errors="replace").read())
+            if not readers and os.path.exists(os.path.join(REPO, path)):
+                _note(f"{path} is new and no guard reads it to exempt anything, so it is a census "
+                      f"rather than a set of permissions. Its first version is the measurement; "
+                      f"the ratchet holds it to shrinking from the next branch on.")
+                continue
             now_doc = _json(os.path.join(REPO, path), {})
             origin = now_doc.get("migrated_from")
             if origin:

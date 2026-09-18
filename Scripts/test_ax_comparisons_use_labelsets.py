@@ -10,6 +10,8 @@ import importlib.util
 import os
 import tempfile
 import json
+import subprocess
+import sys
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -153,6 +155,42 @@ class TheGuardActuallyRefusesSomething(unittest.TestCase):
         ]:
             with self.subTest(shape=label):
                 self.assertTrue(self._scan(source), f"{label} must be refused like `==` is")
+
+
+class TheEntryPointRefuses(unittest.TestCase):
+    """The cases above call `check()`. A `main()` that returned 0 without ever calling it would
+    pass every one of them, because the repository passes -- `Scripts/mutation-sweep-guard-tests.py`
+    measured that on 2026-09-18. A guard is its entry point, so one case drives it at a tree that
+    must fail."""
+
+    def test_main_refuses_an_offending_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "Sources")
+            os.makedirs(root)
+            with open(os.path.join(root, "Offender.swift"), "w", encoding="utf-8") as handle:
+                handle.write('let title = AXHelpers.getTitle(element) ?? ""\n'
+                             'if title == "Mixer" { }\n')
+            proc = subprocess.run(
+                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              "check-ax-comparisons-use-labelsets.py")],
+                capture_output=True, text=True,
+                env=dict(os.environ, LPM_AX_COMPARISON_ROOTS=root))
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+            self.assertIn("Mixer", proc.stdout + proc.stderr)
+
+    def test_main_accepts_a_clean_tree(self):
+        """The control: without it the case above passes on an entry point that always fails."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "Sources")
+            os.makedirs(root)
+            with open(os.path.join(root, "Fine.swift"), "w", encoding="utf-8") as handle:
+                handle.write('let commandName = "x"\nif commandName == "Mixer" { }\n')
+            proc = subprocess.run(
+                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              "check-ax-comparisons-use-labelsets.py")],
+                capture_output=True, text=True,
+                env=dict(os.environ, LPM_AX_COMPARISON_ROOTS=root))
+            self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
 class AgainstTheRealTree(unittest.TestCase):

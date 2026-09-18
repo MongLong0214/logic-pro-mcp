@@ -41,8 +41,12 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SERVER_JSON = os.path.join(REPO, "server.json")
-FORMULA = os.path.join(REPO, "Formula", "logic-pro-mcp.rb")
+#: `LPM_SERVER_JSON` and `LPM_FORMULA_PATH` exist for the self-test, and specifically so it can
+#: drive main() -- the ENTRY POINT -- at a tree that should fail. Without them every case could
+#: only call `check()` with explicit paths, and a `main()` returning 0 unconditionally would have
+#: been green. `Scripts/mutation-sweep-guard-tests.py` measured exactly that on 2026-09-18.
+SERVER_JSON = os.environ.get("LPM_SERVER_JSON") or os.path.join(REPO, "server.json")
+FORMULA = os.environ.get("LPM_FORMULA_PATH") or os.path.join(REPO, "Formula", "logic-pro-mcp.rb")
 PUBLISHER = "io.modelcontextprotocol.registry/publisher-provided"
 
 

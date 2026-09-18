@@ -101,11 +101,32 @@ def main() -> int:
     check("the repository's own server.json and Formula agree", proc.returncode == 0,
           f"exit {proc.returncode}: {proc.stderr.strip()[:300]}")
 
+    # AND THROUGH IT AT A TREE THAT MUST FAIL. Every case above calls `check()`; a `main()` that
+    # returned 0 without ever calling it would pass all of them AND the one above, because the
+    # repository does agree. `Scripts/mutation-sweep-guard-tests.py` measured that on 2026-09-18:
+    # the gate removed, the suite green. A guard is its entry point.
+    with tempfile.TemporaryDirectory() as root:
+        sj = os.path.join(root, "server.json")
+        fm = os.path.join(root, "logic-pro-mcp.rb")
+        with open(sj, "w", encoding="utf-8") as handle:
+            json.dump({"version": "3.15.0",
+                       "_meta": {PUBLISHER: {"distribution": {"release":
+                           "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.15.0"}}}},
+                      handle)
+        with open(fm, "w", encoding="utf-8") as handle:
+            handle.write('class LogicProMcp < Formula\n  version "3.16.0"\n  sha256 "aa"\nend\n')
+        proc = subprocess.run([sys.executable, GUARD], capture_output=True, text=True,
+                              env=dict(os.environ, LPM_SERVER_JSON=sj, LPM_FORMULA_PATH=fm))
+        check("the entry point refuses a disagreement", proc.returncode == 1,
+              f"exit {proc.returncode}: {(proc.stdout + proc.stderr).strip()[:300]}")
+        check("and says which versions disagree",
+              "3.15.0" in proc.stderr and "3.16.0" in proc.stderr, proc.stderr.strip()[:300])
+
     if failures:
         for failure in failures:
             print(f"FAIL {failure}")
         return 1
-    print("14 case(s) pass: the registry record cannot name a release the Formula does not")
+    print("16 case(s) pass: the registry record cannot name a release the Formula does not")
     return 0
 
 
