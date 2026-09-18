@@ -411,7 +411,13 @@ jobs:
     # index or a wrong Formula sha256 would have turned `roadmap` red while `build` stayed green and
     # the ruleset permitted the merge. Found by review 2026-09-15.
     needs: [guards, compile, test, formula, canon-citations-in-the-pull-request]
-    if: always()
+    # `always()` so a FAILED need still reaches the decision below -- that is the point of this
+    # job. `!cancelled()` so a CANCELLED RUN does not. `concurrency.cancel-in-progress` cancels the
+    # previous run on every push, and this job then ran anyway, saw its cancelled needs, and left a
+    # red `build` on the pull request while a healthy run was still in progress. It misled me twice
+    # in one afternoon: `gh pr checks` shows the newest check run per NAME, so a superseded run's
+    # failure sits on top of a run that has not finished. A cancelled run has no verdict to give.
+    if: always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Every gate must have passed
