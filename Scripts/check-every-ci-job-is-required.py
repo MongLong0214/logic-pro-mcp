@@ -189,6 +189,26 @@ def check(path: str = WORKFLOW):
                 f"reopened, so the body could be rewritten after the gate went green and nothing "
                 f"would re-read it.")
 
+    # A gate whose bar the gated change can set is not a bar.
+    #
+    # `ci-coverage-gate.sh` reads its floors from `LPM_COVERAGE_MIN_REGION` and
+    # `LPM_COVERAGE_MIN_LINE`, defaulting to 70 and 78. A pull request runs its OWN copy of
+    # `ci.yml`, so adding `env: LPM_COVERAGE_MIN_LINE: "0"` to the gate step lowers the threshold
+    # for exactly the change being judged -- and with `required_approving_review_count: 0` on the
+    # branch ruleset, nobody is required to read the diff that does it. The seam has to exist for
+    # the gate's own self-test, which is why it is refused HERE rather than removed there.
+    for setting in ("LPM_COVERAGE_MIN_REGION", "LPM_COVERAGE_MIN_LINE", "LPM_COVERAGE_TARGET"):
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped.startswith(setting):
+                continue
+            problems.append(
+                f"{path}: this workflow sets `{setting}`. The coverage floors are read from the "
+                f"environment so the gate's self-test can drive them; a pull request runs its own "
+                f"copy of this file, so setting one here lets a change choose the bar it is "
+                f"measured against. Change the default in Scripts/ci-coverage-gate.sh instead, "
+                f"where the diff says what the new floor is.")
+
     check_workflows(rules, problems)
 
     for command in rules["required_commands"]:

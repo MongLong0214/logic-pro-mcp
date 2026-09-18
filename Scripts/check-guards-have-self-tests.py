@@ -37,27 +37,36 @@ satisfied.
 """
 import ast
 import glob
+import json
 import os
 import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Guards with no test that drives them. This list may only shrink — it was nine when the rule
-# was written and the three that went first are the three this session had to correct four
-# times in a day, which is what made the rule worth writing.
-KNOWN_BARE = {
-    "check-ax-locator-census.py",
-    "check-livekit-locale-aliases.py",
-    "check-locale-policy-coverage.py",
-    "check-python-contracts.py",
-    # check-shipped-variant-claims.py was here until 2026-09-15. It is not in the tree — it was
-    # deleted on 2026-09-13 with the qualification subsystem it reads `shipVariants` from — and
-    # `test_guards_have_self_tests.py` requires this list to EQUAL the repository's bare set, not
-    # merely contain it. A waiver naming a file nobody can open is the shape of bookkeeping that
-    # outlives its reason. Whoever restores that guard restores this line with it.
-    "ci-forbid-dead-expect.sh",
-}
+# Guards with no test that drives them. This list may only shrink -- it was nine when the rule was
+# written and the three that went first are the three this session had to correct four times in a
+# day, which is what made the rule worth writing.
+#
+# It was a set literal HERE until 2026-09-18, and "may only shrink" was therefore a comment: a
+# Python constant is compared against nothing outside the commit that edits it, so a change could
+# add a guard with no test and add its name in the same diff. An outside review did exactly that
+# and every check stayed green. It lives in a JSON file now, and
+# `Scripts/check-canon-citations.py`'s RATCHETS table compares it against `git merge-base`.
+KNOWN_BARE_PATH = os.path.join(REPO, "docs", "canon", "GUARDS-WITHOUT-A-TEST.json")
+
+
+def _known_bare() -> set:
+    try:
+        with open(KNOWN_BARE_PATH, encoding="utf-8") as handle:
+            return set(json.load(handle).get("guards") or {})
+    except (OSError, ValueError):
+        # An unreadable waiver file waives nothing. Every bare guard then reports, which is the
+        # direction that fails loudly rather than the one that passes quietly.
+        return set()
+
+
+KNOWN_BARE = _known_bare()
 
 
 def guards():

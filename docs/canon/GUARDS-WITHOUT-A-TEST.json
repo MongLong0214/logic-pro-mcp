@@ -1,0 +1,11 @@
+{
+  "guards": {
+    "check-ax-locator-census.py": "no test drives it",
+    "check-livekit-locale-aliases.py": "no test drives it",
+    "check-locale-policy-coverage.py": "no test drives it",
+    "check-python-contracts.py": "no test drives it",
+    "ci-forbid-dead-expect.sh": "was joined by check-shipped-variant-claims.py until 2026-09-15; that guard is not in the tree -- it was deleted on 2026-09-13 with the qualification subsystem it read `shipVariants` from -- and the self-test requires this list to EQUAL the repository's bare set rather than merely contain it. A waiver naming a file nobody can open is bookkeeping that outlived its reason."
+  },
+  "migrated_from": "Scripts/check-guards-have-self-tests.py",
+  "note": "Guards with no test that drives them. This list may only SHRINK, and until 2026-09-18 that was prose: `KNOWN_BARE` was a set literal in Scripts/check-guards-have-self-tests.py, compared against nothing outside the commit that edited it, so a change could add a guard with no test and add its name here in the same diff. An outside review did exactly that and every check stayed green. It is a file now so the merge-base ratchet in Scripts/check-canon-citations.py can read it."
+}

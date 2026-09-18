@@ -303,8 +303,13 @@ def main():
               f"and nothing to do with it. And a canonical of two or three characters cannot reach "
               f"this list at all: difflib scores 'Ch' against 'Chx' at 0.8, under the {NEAR} "
               f"cutoff. `--list` prints every absence, including those.")
+    #: NOT A GATE
+    #
     # COUNTED, NOT GATED — for now, and the condition for changing that is written down rather
-    # than left to whoever reads this next.
+    # than left to whoever reads this next. The marker above is read by `run-repo-guards.py`,
+    # which prints `rept` instead of `ok` for this file: an outside review pointed out that a
+    # script returning 0 unconditionally was reporting `ok` in the same column as the rules that
+    # refuse things, so the guard log read as coverage this file does not provide.
     #
     # Gating absence today would mean seeding a ratchet with a hundred entries nobody has read,
     # which is a ceiling that records a number instead of a decision. `evidence.py` set this

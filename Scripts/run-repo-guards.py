@@ -150,6 +150,19 @@ RAN = re.compile(r"^Ran (\d+) tests? in ", re.M)
 SKIPPED = re.compile(r"\bskipped=(\d+)")
 
 
+#: A `check-*.py` carrying this exact sentence declares that it counts rather than refuses. The
+#: runner prints `rept` for it, so the log does not claim it as coverage.
+NOT_A_GATE = "#: NOT A GATE"
+
+
+def _source_of(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return ""
+
+
 def evidence_of_work(text: str):
     """(skips, reason it does not count as a run). `None` reason means it ran something.
 
@@ -211,7 +224,19 @@ def main():
             over_budget = (os.environ.get("CI") == "true" and skips > budget)
             broken = timed_out or code != 0 or vacuous is not None or over_budget
             note = f" ({skips} skipped)" if skips else ""
-            print(f"{'FAIL' if broken else 'ok  '} {rel}{note}  {seconds:.1f}s", flush=True)
+            # A script that CANNOT refuse anything must not print `ok` beside the ones that can.
+            #
+            # `check-variants-appear-in-a-census.py` returns 0 unconditionally and says so in its
+            # own closing comment -- it counts a gap it is deliberately not gating yet, and gating
+            # it today would seed a ratchet with 600 entries nobody has read. That is a defensible
+            # decision. What is not defensible is that it is discovered by the `check-*.py` glob
+            # and reports `ok` in the same column as the rules that refuse things, so the log reads
+            # as 62 checks passing when it is 61 checks and one report.
+            #
+            # The marker is the script's own declaration, and it is one line in each place rather
+            # than a category the runner has to maintain.
+            kind = "rept" if NOT_A_GATE in _source_of(path) else "ok  "
+            print(f"{'FAIL' if broken else kind} {rel}{note}  {seconds:.1f}s", flush=True)
             if not broken:
                 continue
             failures.append(rel)
@@ -239,7 +264,14 @@ def main():
         if failures:
             print(f"{len(failures)} of {len(files)} failed: {', '.join(failures)}")
             return 1
-        print(f"all {len(files)} passed")
+        # "all 65 passed" is the sentence a release note quotes, so it must not count a file
+        # that cannot fail as a check that did not.
+        reports = sum(1 for f in files if NOT_A_GATE in _source_of(f))
+        if reports:
+            print(f"all {len(files)} passed — {len(files) - reports} that can refuse, "
+                  f"{reports} that only count (`rept` above)")
+        else:
+            print(f"all {len(files)} passed")
         return 0
     finally:
         # `mkdtemp` per child leaked one directory per guard, per run, for the life of the machine.

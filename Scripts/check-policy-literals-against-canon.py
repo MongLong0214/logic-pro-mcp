@@ -138,14 +138,43 @@ def policy_literals(source: str) -> set:
 #: label read off Logic. The LIMIT, stated rather than hidden: a German or English label matched
 #: the same way is indistinguishable from any other string in the file, so this finds the ones it
 #: can and does not claim to find all of them.
-_CJK_LITERAL = re.compile(r'"([^"\\\n]*[\uac00-\ud7a3\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff][^"\\\n]*)"')
+#: `[^"\\\n]` on both sides meant any literal CONTAINING A BACKSLASH was skipped, and a Swift
+#: unicode escape is a backslash: `"\\u{BBF9}서"` compiles to `믹서` and was invisible to this
+#: harvester. An outside review used exactly that to put a hardcoded Korean label into the tree
+#: with every guard green. Escapes are now part of the literal and are RESOLVED before
+#: classification, so a label spelled in escapes is the same label.
+_STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+_CJK = re.compile(r'[\uac00-\ud7a3\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]')
+_SWIFT_UNICODE_ESCAPE = re.compile(r'\\u\{([0-9A-Fa-f]{1,8})\}')
+
+
+def _resolve_escapes(raw: str) -> str:
+    """A Swift literal's text, with `\\u{...}` resolved and the ordinary escapes unwrapped.
+
+    A malformed or out-of-range scalar is left as written rather than raised: this runs over every
+    string in the tree, and refusing to read one is not this rule's job.
+    """
+    def one(match):
+        try:
+            return chr(int(match.group(1), 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+    text = _SWIFT_UNICODE_ESCAPE.sub(one, raw)
+    for escape, literal in (("\\\\", "\\"), ('\\"', '"'), ("\\n", "\n"), ("\\t", "\t")):
+        text = text.replace(escape, literal)
+    return text
 
 
 def bare_literals(source: str) -> set:
     """CJK string literals OUTSIDE any LabelSet, with comments removed first."""
     text = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub(" ", source))
     text = re.sub(r'LabelSet\(.*?\)\s*\n', " ", text, flags=re.S)
-    return {canon.normalize(m.group(1)) for m in _CJK_LITERAL.finditer(text) if m.group(1).strip()}
+    out = set()
+    for match in _STRING_LITERAL.finditer(text):
+        resolved = _resolve_escapes(match.group(1))
+        if resolved.strip() and _CJK.search(resolved):
+            out.add(canon.normalize(resolved))
+    return out
 
 
 def all_policy_literals() -> set:

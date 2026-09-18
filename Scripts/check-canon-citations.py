@@ -344,6 +344,10 @@ RATCHETS = (
     #: entry in it is a growth that rule 7 refuses.
     ("docs/canon/AX-COMPARISON-WAIVERS.json", "waivers", "shrink",
      "AX comparisons waived from using a LabelSet", _key_members),
+    #: Was a Python set literal in the guard that reads it, so "may only shrink" was a comment and
+    #: a change could add a guard with no test and waive it in the same diff.
+    ("docs/canon/GUARDS-WITHOUT-A-TEST.json", "guards", "shrink",
+     "guards with no test that drives them", _key_members),
 )
 
 
@@ -389,6 +393,36 @@ def check_waivers_only_shrink(failures: list) -> None:
                 # Absent on both sides. A waiver list that does not exist is the good state, and
                 # the shape check below would otherwise read "one side does not have the key" as a
                 # renamed key. The comparison begins the moment somebody creates the file.
+                continue
+            # A list that MOVED is not a list that appeared. `KNOWN_BARE` lived as a Python set in
+            # the guard that read it, where "may only shrink" was a comment and nothing compared
+            # it; moving it into a file is what makes the ratchet possible, and refusing the move
+            # would keep every such list in code forever.
+            #
+            # `migrated_from` is checked, not believed: the named path is read AT THE MERGE BASE
+            # and every member of the new list must appear there as a quoted string. A member the
+            # predecessor did not carry is still a growth from nothing. That is the difference
+            # between a decision and a sentence -- the file cannot authorise itself.
+            now_doc = _json(os.path.join(REPO, path), {})
+            origin = now_doc.get("migrated_from")
+            if origin:
+                was_text = _git("show", f"{base}:{origin}") or ""
+                if not was_text:
+                    failures.append(
+                        f"{path}: `migrated_from` names {origin!r}, which the merge base does not "
+                        f"carry. A move has a place it moved FROM, and this one cannot be checked.")
+                    continue
+                strays = sorted(m for m in members(now_doc, key)
+                                if f'"{m}"' not in was_text and f"'{m}'" not in was_text)
+                if strays:
+                    failures.append(
+                        f"{path}: {len(strays)} member(s) are not in {origin} at the merge base, so "
+                        f"they were not moved, they were added: {', '.join(strays[:6])}. A new "
+                        f"exemption lands as a growth however the file it lands in was created.")
+                    continue
+                _note(f"{path} was migrated from {origin}; every member is one that file already "
+                      f"carried at {base[:8]}, so the move is not a growth. The ratchet compares "
+                      f"against this file from the next branch on.")
                 continue
             before = {key: []}
             _note(f"{path} is carried by no ancestor of {base[:8]}. It is a waiver list, so its "
