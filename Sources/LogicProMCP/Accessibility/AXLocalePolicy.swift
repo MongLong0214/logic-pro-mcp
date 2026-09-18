@@ -794,10 +794,36 @@ enum AXLocalePolicy {
     )
 
     /// #519: Navigate > Set Locators….
+    /// `Navigate > Set Locators…`, in every language Logic ships, with and without the ellipsis.
+    ///
+    /// Two of the ten before this: `Set Locators…` and `로케이터 설정…`, both carrying U+2026, and
+    /// the ellipsis is why the row was never found -- Apple ships `Set Locators` with no ellipsis
+    /// in ten locales and ships NO row with one. It does ship ellipses elsewhere when a menu item
+    /// opens a dialog (`Set Left Locator numerically…`, ko `숫자로 왼쪽 로케이터 설정…`), so their
+    /// absence here is a fact about this string rather than about the resource format.
+    ///
+    /// That leaves a question nobody can answer without opening the Navigate menu, which is a
+    /// recorded wedge risk on a live session: either the item really is `Set Locators` and the
+    /// ellipsis this product has always carried is wrong, or macOS renders one the resource does
+    /// not contain.
+    ///
+    /// The first version of this change answered it by carrying BOTH forms in all ten -- and the
+    /// ratchet refused, correctly. Appending U+2026 to nine of Apple's values INVENTS nine
+    /// strings: `Locator-Punkte setzen…` is not a value Logic ships, it is one this file made up,
+    /// and `POLICY-LITERALS`'s list of literals answered nowhere may only shrink. So the ten
+    /// derived values go in as they are, the two ellipsis forms that were already here stay
+    /// because they are already on that list, and the eight languages whose menu might render an
+    /// ellipsis stay open. Closing them needs somebody to read the menu, not somebody to type.
+    ///
+    /// The row is the TOOLBAR item's, `StrToolbItemName|||Set Locators`. The Navigate menu item
+    /// has no row of its own in the corpus; `ActionBarCustomization.strings/100247.title` carries
+    /// the same ten values, so the substitution changes no string and is named here rather than
+    /// hidden.
     static let setLocatorsMenuItem = LabelSet(
         canonical: "Set Locators…",
-        variants: ["로케이터 설정…"],
-        rationale: "Navigate menu entry that opens the cycle-range locator dialog."
+        variants: ["Set Locators", "로케이터 설정", "ロケータを設定", "Locator-Punkte setzen", "Fijar localizadores", "Placer les locators", "Imposta localizzatori", "Definir Localizadores", "设定定位符", "設定定位點", "로케이터 설정…"],
+        rationale: "Navigate > Set Locators, resolved by exact menu-item name. Derived from the row Apple keys the toolbar item under, carried beside the two ellipsis forms that predate this change; the other eight ellipsis renderings are NOT invented here, because appending one to a value Apple ships produces a string Apple does not. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrToolbItemName%7C%7C%7CSet%20Locators#value"
     )
 
     /// #519: Navigate > Go To. Korean Logic renders this the same `이동` string as Edit > Move
@@ -1881,10 +1907,23 @@ enum AXLocalePolicy {
     )
 
     /// Automation-mode labels that must NOT be read as a plugin display name.
+    /// The bare automation-mode label, which must not be read as a plug-in's name.
+    ///
+    /// Two members before this: a Korean SENTENCE and the English word. The sentence is redundant
+    /// -- `pluginAutomationLabelSubstring` catches it in all ten locales, checked value by value
+    /// against Apple's `automation enabled` row -- and the word left Korean uncovered, because
+    /// Apple's `Read` row is `Read` in nine locales and `읽기` in exactly one. So a Korean slot
+    /// labelled with the bare mode was the single case neither rule caught.
+    ///
+    /// Measured 2026-09-18 on a running Logic 12.3 ko-KR: the 22 automation groups all carry the
+    /// full sentence `읽기, 오토메이션이 활성화됨`, so the substring rule is what fires in practice
+    /// and this gap has not been hit. The sentence is kept for that reason and the row is added
+    /// for the other one.
     static let pluginAutomationLabelExact = LabelSet(
-        canonical: "읽기, 오토메이션이 활성화됨",
-        variants: ["read"],
-        rationale: "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter."
+        canonical: "Read",
+        variants: ["읽기", "읽기, 오토메이션이 활성화됨"],
+        rationale: "Rejects a bare automation-mode slot label (exact) when extracting a plug-in display name; read-only filter. Derived from Apple's own row, which is `Read` in nine locales and `읽기` in Korean; the Korean sentence is the shape live Logic actually renders and is kept beside it. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Read#value"
     )
     static let pluginAutomationLabelSubstring = LabelSet(
         canonical: "automation",

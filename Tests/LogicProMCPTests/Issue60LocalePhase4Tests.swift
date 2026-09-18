@@ -35,7 +35,15 @@ struct Issue60LocalePhase4Tests {
             ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン"]),
             ("pluginBypassControl", AXLocalePolicy.pluginBypassControl.labels, ["bypass", "바이패스", "バイパス"]),
             ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl.labels, ["open", "열기", "list", "목록", "開く"]),
-            ("pluginAutomationLabelExact", AXLocalePolicy.pluginAutomationLabelExact.labels, ["읽기, 오토메이션이 활성화됨", "read"]),
+            // Extended 2026-09-18 (#892) from the row this LabelSet now names in `derivedFrom`.
+            // Apple's `Read` is `Read` in nine locales and `읽기` in exactly one, so the English
+            // word this set already carried left KOREAN uncovered -- the single case that neither
+            // this filter nor `pluginAutomationLabelSubstring` caught, because the substring rule
+            // needs `오토메이션` and a bare mode label has none. The Korean SENTENCE stays: it is
+            // what a running Logic 12.3 ko-KR renders on all 22 automation groups, read
+            // 2026-09-18, and it is the value of no row -- Apple ships `Read` and
+            // `automation enabled` separately and ships nothing that joins them.
+            ("pluginAutomationLabelExact", AXLocalePolicy.pluginAutomationLabelExact.labels, ["Read", "읽기", "읽기, 오토메이션이 활성화됨"]),
             // Extended 2026-09-16 (#892). Every string past the original two is a value Apple
             // ships at the row this LabelSet names in `derivedFrom` -- MAMixer's `Localizable.strings` key `automation` -- not a
             // translation anybody wrote. The set stays EXACT here on purpose: that is what makes

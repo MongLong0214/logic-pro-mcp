@@ -2996,23 +2996,24 @@
    }
   },
   "pluginAutomationLabelExact": {
-   "canonical": "읽기, 오토메이션이 활성화됨",
+   "canonical": "Read",
    "variants": [
-    "read"
+    "읽기",
+    "읽기, 오토메이션이 활성화됨"
    ],
-   "rationale": "Rejects automation-mode slot labels (exact) when extracting a plugin display name; read-only filter.",
+   "rationale": "Rejects a bare automation-mode slot label (exact) when extracting a plug-in display name; read-only filter. Derived from Apple's own row, which is `Read` in nine locales and `읽기` in Korean; the Korean sentence is the shape live Logic actually renders and is kept beside it. Checked offline by Scripts/check-labelsets-are-derived.py.",
    "match": "exact_strict",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "pluginAutomationLabelSubstring": {
@@ -3986,21 +3987,31 @@
   "setLocatorsMenuItem": {
    "canonical": "Set Locators…",
    "variants": [
+    "Set Locators",
+    "로케이터 설정",
+    "ロケータを設定",
+    "Locator-Punkte setzen",
+    "Fijar localizadores",
+    "Placer les locators",
+    "Imposta localizzatori",
+    "Definir Localizadores",
+    "设定定位符",
+    "設定定位點",
     "로케이터 설정…"
    ],
-   "rationale": "Navigate menu entry that opens the cycle-range locator dialog.",
+   "rationale": "Navigate > Set Locators, resolved by exact menu-item name. Derived from the row Apple keys the toolbar item under, carried beside the two ellipsis forms that predate this change; the other eight ellipsis renderings are NOT invented here, because appending one to a value Apple ships produces a string Apple does not. Checked offline by Scripts/check-labelsets-are-derived.py.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "settingPopupValue": {
