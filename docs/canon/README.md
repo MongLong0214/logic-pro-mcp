@@ -131,10 +131,15 @@ Its SIZE is ratcheted separately, because that comparison is a number rather tha
 the forgery needs "three consistent edits … instead of two", and a rebuild makes all three. Measured
 the same way: twelve sets truncated to 50 entries each, counts and digests rewritten to match,
 410,771 values discarded, `check-canon-citations` at exit 0 and 46 of 48 guards green, and
-`logic_canon.py absent strings es 'Pista'` answering ABSENT for a string Logic ships. Only six of
-the twenty-three corpora carry a committed index row, so `verify_index_against_absence` — the one
-check that could have seen it — is blind to the other seventeen by construction. A set may not lose
-entries while `MANIFEST.json` names the same Logic; a different Logic is allowed to hold different
+`logic_canon.py absent strings es 'Pista'` answering ABSENT for a string Logic ships.
+`verify_index_against_absence` is the one check that could have seen it, and what it sees is
+bounded by CITATION: it checks every committed index row against its corpus's absence set, and a
+value nobody has cited has no row to check. This paragraph used to say "only six of the
+twenty-three corpora carry a committed index row … blind to the other seventeen"; measured
+2026-09-19 that is wrong twice over — the manifest carries TWENTY-FOUR corpora and TWENTY-THREE of
+them carry at least one row, `strings/-` being the only one that carries none. Number WORDS are
+invisible to `check-canon-prose-numbers.py`, which reads digits, which is how it rotted unnoticed.
+A set may not lose entries while `MANIFEST.json` names the same Logic; a different Logic is allowed to hold different
 strings, and the rule says so on stderr instead of passing quietly.
 
 The same ratchet covers `shape` and `round_trip`, because those numbers are the denominator of the
@@ -307,11 +312,28 @@ of trust is a file in the tree.
 | an honest author who errs | nearly everything: a misquoted value, an unpinned reference, a malformed one, a schema-2 record, an edited index, a truncated absence set, a literal Logic does not ship |
 | an author routing around the rule | some of it. The opt-out is derived from the diff, the waiver lists are compared against the merge base, and the classification is committed — but a determined author has more room than an honest one |
 | a committer acting in bad faith | **out of scope, by decision.** `MANIFEST.json` digests the index and the absence sets and is itself a tracked file, so write access is enough to forge all three consistently — review 2026-09-15 did it in three edits. Signing the artefacts would close that for a leaked credential, and it was built and then removed as over-engineering for a repository with one maintainer. The assumption is written here rather than defended. |
-| a fork pull request | the most, since a fork cannot rewrite the guard on the base branch |
+| a fork pull request | **no more than any other branch, and this row used to claim otherwise.** `ci.yml` triggers on `pull_request` and none of its checkouts pins a `ref:`, so the guards that run are the PULL REQUEST HEAD's own copies — a fork rewrites them exactly as a branch does. Measured 2026-09-19 by reading the workflow. What a fork cannot do is push to `main`; that is a different protection and it is the `non_fast_forward` and `deletion` rules, not this axis |
 
 `verify_index_against_absence` and the absence entry counts raise the cost of an accident rather
-than of an attack, which is what they are for: a wrong row needs three consistent edits — the TSV,
-the binary absence set, and a number a reviewer reads — instead of one.
+than of an attack, which is what they are for: a wrong row needs the TSV, the binary absence set
+and `MANIFEST.json` to agree, instead of one text edit.
+
+**Three is the cost of adding a row, not the cost of every forgery, and this paragraph used to say
+three flatly.** Review 2026-09-19 replaced the CONTENTS of `absence/strings.es.u32` — keeping only
+the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count at the
+47926 the manifest records — then refreshed the manifest's `artifacts` digest. TWO files, every
+guard green, and `is_absent("strings", "es", "Editar")` flipped from False to True for a string
+Logic ships. The count ratchet compares a number and the digest compares the bytes that same edit
+rewrote, so nothing looked at the contents. Nothing offline can: an entry nobody has cited has no
+row to check it against, which is the bound `verify_index_against_absence` states above.
+
+And a row can be MINTED without knowing Apple's text. `short_digest` is twelve hex while the
+absence sets store the first eight, so a value whose leading eight hex collide with any committed
+prefix passes `verify_index_against_absence`, and the prefixes are a public list — the `.u32` files
+are in the tree. The search is bounded by the size of that list against a 32-bit space, which for a
+set this size is minutes of computation. "Offline you can VERIFY a claimed value but not READ one"
+is true and is half the sentence; the other half is that the digests bind a claim to the committed
+artefacts, never to Apple.
 
 `.github/CODEOWNERS` names an owner for `docs/canon/` and — measured 2026-09-15 — **does nothing**:
 the branch ruleset has `require_code_owner_review: false` and `required_approving_review_count: 0`.

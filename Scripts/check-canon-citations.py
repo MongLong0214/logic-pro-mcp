@@ -552,8 +552,16 @@ def check_no_measured_count_shrinks(failures: list) -> None:
     happen to be answered only in a shrunken locale -- incidental, and gone as soon as those three
     are answered elsewhere.
 
-    Only six of the twenty-three corpora carry a committed index row, so `verify_index_against_absence`
-    -- the one check that could have seen this -- is blind to the other seventeen by construction.
+    `verify_index_against_absence` is the one check that could have seen this, and what it can see
+    is bounded by CITATION rather than by corpus count. It checks every committed index row against
+    its corpus's absence set; a value nobody has cited has no row, so nothing offline can notice it
+    being removed. This paragraph used to put a number on that -- "only six of the twenty-three
+    corpora carry a committed index row … blind to the other seventeen" -- and the number went
+    stale without anything noticing: measured 2026-09-19, the manifest carries TWENTY-FOUR corpora
+    and TWENTY-THREE of them carry at least one row (only `strings/-` carries none). The conclusion
+    drawn from it was false too. Number words escape `check-canon-prose-numbers.py`, which reads
+    digits, so the sentence is stated as a property now and the count is recomputed by whoever
+    needs it rather than written down here to rot.
 
     A DIFFERENT Logic legitimately holds different strings, so the rule steps aside when the
     manifest's `logic` block changes, and says so rather than passing quietly. That escape is not
