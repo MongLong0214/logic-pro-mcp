@@ -967,6 +967,54 @@ class PullRequestBody(unittest.TestCase):
         return subprocess.run([sys.executable, GUARD, "--text", handle.name],
                               capture_output=True, text=True)
 
+    def _check_changed(self, body, changed):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8")
+        handle.write(body)
+        handle.close()
+        self.addCleanup(os.remove, handle.name)
+        listing = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
+        listing.write("\n".join(changed) + "\n")
+        listing.close()
+        self.addCleanup(os.remove, listing.name)
+        return subprocess.run(
+            [sys.executable, GUARD, "--text", handle.name, "--changed", listing.name],
+            capture_output=True, text=True)
+
+    def test_a_citation_that_bears_on_nothing_changed_is_refused(self):
+        """A resolving reference used to be enough, whatever the change was about.
+
+        Paste any valid citation, change two Logic-facing files that have nothing to do with it,
+        and the body printed "1 citation(s) resolved". The rule says "cite what those claims rest
+        on" and enforced "cite something".
+        """
+        policy = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+        result = self._check_changed(
+            f"before\n{REAL_REF}\n{REAL_VALUE}\nafter\n", [policy])
+        if REAL_REF in open(os.path.join(REPO, policy), encoding="utf-8").read():
+            self.skipTest("the module-level fixture reference is used by the policy, so it BEARS "
+                          "on it -- this case needs one that does not, and picking one here would "
+                          "be reading the index to build a fixture from it")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("bears on", result.stderr)
+
+    def test_a_citation_the_change_uses_is_accepted(self):
+        """The control. The reference is in the file the change touches, which is what a
+        `derivedFrom` gives by construction."""
+        policy = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+        source = open(os.path.join(REPO, policy), encoding="utf-8").read()
+        spec = importlib.util.spec_from_file_location(
+            "logic_canon_for_case", os.path.join(REPO, "Scripts", "logic_canon.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        used = list(module.find_refs(source))
+        self.assertTrue(used, "the policy declares no derivedFrom, so this case checks nothing")
+        ref = used[0]
+        body = f"before\n{REAL_REF}\n{REAL_VALUE}\nand this change rests on\n{ref}\n"
+        result = self._check_changed(body, [policy])
+        # It may still fail on the quoted-value rule for `ref`; what must NOT appear is the
+        # binding complaint, because `ref` is in the changed file.
+        self.assertNotIn("bears on", result.stderr)
+
     def test_a_body_with_a_resolving_citation_and_its_value_passes(self):
         result = self._check(f"before\n{REAL_REF}\n  value: {REAL_VALUE}\nafter\n")
         self.assertEqual(result.returncode, 0, result.stderr)

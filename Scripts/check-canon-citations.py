@@ -1234,6 +1234,26 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
                 f"{path}: {ref} appears without the value it resolves to. A reference alone is a "
                 f"key anybody can type; the citation is the reference AND the value.")
 
+    # A CITATION MUST BEAR ON WHAT CHANGED. Until 2026-09-19 any resolving reference satisfied this
+    # rule: paste the Install.strings reference and `설치` on its own line, change two Logic-facing
+    # files that have nothing to do with either, and the body printed "1 citation(s) resolved".
+    # The rule said "cite what those claims rest on" and enforced "cite something".
+    #
+    # The binding is deliberately loose: ONE reference has to be relevant to ONE changed file,
+    # where relevant means the reference string or the quoted value appears in that file's
+    # post-change contents. A `derivedFrom` satisfies it by construction, which is the common case;
+    # a document that quotes a value it is writing about satisfies it too. Both pull request bodies
+    # this branch descends from bind 2 of 2 references under it, measured before it was written.
+    if touched and references and not failures:
+        relevant = _citation_bears_on(references, body, changed_paths)
+        if not relevant:
+            failures.append(
+                f"{path}: cites {len(references)} reference(s) and none of them bears on anything "
+                f"this change touches. A citation that could sit on any pull request is not "
+                f"evidence for THIS one -- cite the row the change rests on, or say what the "
+                f"cited row has to do with the files being changed by quoting its value where "
+                f"they use it.")
+
     if failures:
         print(f"{path}: {len(failures)} failure(s)", file=sys.stderr)
         for failure in failures:
@@ -1286,6 +1306,42 @@ def _is_derived_from(rel: str, ref_text: str) -> bool:
         _DERIVED_FROM_SITE[rel] = set(
             re.findall(r'derivedFrom:\s*"([^"]*)"', body))
     return ref_text in _DERIVED_FROM_SITE[rel]
+
+
+def _citation_bears_on(references, body: str, changed_paths) -> bool:
+    """Whether any cited reference is relevant to any changed file.
+
+    Relevant = the reference STRING appears in the file (what `derivedFrom` gives, and the common
+    case), or a value the body quotes for it appears there (what a document writing about a label
+    gives). Read from the working tree, which in CI is the pull request's own checkout.
+
+    A file this cannot read is skipped rather than counted against the change: a deleted path is in
+    the changed list and has no contents, and refusing for that would fail a change for the shape
+    of its diff rather than for what it claims.
+    """
+    quoted = [line.strip() for line in body.splitlines() if line.strip()]
+    for path in (changed_paths or []):
+        try:
+            with open(os.path.join(REPO, path), encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+        for ref_text in references:
+            if ref_text in text:
+                return True
+        # A quoted value is only evidence if the body actually quoted it for a reference, which
+        # `_quotes_the_value` has already established for every reference that got this far.
+        for line in quoted:
+            if len(line) >= CITABLE_QUOTE_MIN and line in text and canon.find_refs(line) == []:
+                for ref_text in references:
+                    try:
+                        ref = canon.CanonRef.parse(ref_text)
+                    except canon.CanonError:
+                        continue
+                    if _quotes_the_value(canon.normalize(line), ref,
+                                         canon.resolve_offline(ref) if ref.key else ""):
+                        return True
+    return False
 
 
 def _quotes_the_value(folded_body: str, ref, committed: str) -> bool:
