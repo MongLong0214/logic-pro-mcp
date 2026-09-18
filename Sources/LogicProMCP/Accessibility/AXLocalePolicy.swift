@@ -2550,6 +2550,7 @@ enum AXLocalePolicy {
         cycleRangeLabel,
         cycleRangeStart,
         cycleRangeEnd,
+        regionBarsSentence,
         pluginWindowSmartControlsControl,
         pluginAutomationLabelExact,
         pluginAutomationLabelSubstring,

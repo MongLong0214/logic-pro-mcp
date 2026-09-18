@@ -57,7 +57,7 @@
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/quickhelp.tsv": "fc26998eebb29d44a6998eb5673c611a43f765b0eee5e3c6fa85374203aa6523",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "index/strings.tsv": "0c86c8534844505d077d835b7cb969e27c683bade287ce0f0ce560246e71280e",
+    "index/strings.tsv": "41c325027326fa94c9ef020e3ae4b24119703cde859f38b0f683b317c8ed5903",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77"
   },
   "extractor_version": 2,
@@ -367,7 +367,7 @@
         "zh_CN": 1.1548866e-05,
         "zh_TW": 1.087226e-05
       },
-      "cited_rows": 2034,
+      "cited_rows": 2054,
       "cited_values": 2,
       "corpus_digest": "830a5131378ede72bb0a20211985166f367b7a35a30a85d875c9c25ff0b89e1a",
       "entries": 605190,

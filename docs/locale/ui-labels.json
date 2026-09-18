@@ -3640,6 +3640,34 @@
     "zh-TW": "unmeasured"
    }
   },
+  "regionBarsSentence": {
+   "canonical": "Region starts at %@ and ends at %@",
+   "variants": [
+    "리전은 %@에서 시작하여 %@에서 끝납니다.",
+    "リージョンの開始位置は%@、終了位置は%@です",
+    "Region beginnt bei %@ und endet bei %@",
+    "El pasaje comienza en %@ y termina en %@",
+    "La région commence à %@ et se termine à %@",
+    "Inizio regione: %@; fine regione: %@",
+    "A região começa em %@ e termina em %@",
+    "片段开始于 %@，结束于 %@",
+    "區段起始於 %@，並結束於 %@"
+   ],
+   "rationale": "The sentence Logic renders as a region's AXDescription, in every locale it ships. `AXLocalePolicy.regionBarsPatterns()` turns each into the regex that reads the two bar numbers out of it; the four hand-written patterns this replaces covered four languages. Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "regionHelpKeyword": {
    "canonical": "region",
    "variants": [
