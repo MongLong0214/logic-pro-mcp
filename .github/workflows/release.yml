@@ -203,7 +203,9 @@ jobs:
             release-artifacts.sha256
 
   publish:
-    needs: build
+    # `validate-install` is a gate, not a report. A failure there means nothing is published:
+    # no tag release, no assets, nothing for `brew install` or the README's curl to resolve.
+    needs: [build, validate-install]
     runs-on: macos-15
     permissions:
       contents: write
@@ -233,9 +235,16 @@ jobs:
             SHA256SUMS.txt
 
   validate-install:
-    needs: publish
-    # Read-only: checks out the repo and curls the just-published (public)
-    # release assets to exercise install/uninstall. No write scope required.
+    # BEFORE `publish`, not after. Until 2026-09-18 this ran downstream of the GitHub Release,
+    # so every install defect was found in public: the release existed, `brew install` and the
+    # README's curl-pipe both resolved to it, and the only thing the failing job did was turn a
+    # check red beside an artifact users already had. Nothing gated the publish at all.
+    #
+    # It installs the artifact the build job produced, via `LOGIC_PRO_MCP_LOCAL_ARCHIVE`, and the
+    # bytes are still compared against the sha256 in that build's own SHA256SUMS.txt -- the local
+    # input changes where the bytes come from and nothing about what is checked. So this is the
+    # same artifact that `publish` then uploads, verified before anyone can download it.
+    needs: build
     permissions:
       contents: read
     strategy:
@@ -248,9 +257,33 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-release-artifacts
+          path: ${{ runner.temp }}/artifact
+
+      - name: Reverify downloaded release artifact
+        working-directory: ${{ runner.temp }}/artifact
+        run: |
+          set -euo pipefail
+          test -f release-artifacts.sha256
+          shasum -a 256 --check release-artifacts.sha256
+
+      - name: Record what this runner actually is
+        # The matrix names a runner image, not a CPU. `runs-on: macos-14` has been arm64 for some
+        # time, so reading the label as "this proves x86_64 works" would be a claim about an
+        # architecture nobody ran. Print it instead of assuming it.
+        run: |
+          set -euo pipefail
+          uname -m
+          sw_vers
+
       - name: Validate installer and uninstaller against release asset
         env:
           LOGIC_PRO_MCP_VERSION: ${{ github.ref_name }}
+          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ runner.temp }}/artifact/LogicProMCP-macOS-universal.tar.gz
+          LPM_ARTIFACT_DIR: ${{ runner.temp }}/artifact
           LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-bin
           LOGIC_PRO_MCP_SHARE_DIR: ${{ runner.temp }}/logic-pro/share/logic-pro-mcp
           LOGIC_PRO_MCP_SKIP_SUDO: "1"
@@ -261,21 +294,22 @@ jobs:
         run: |
           mkdir -p "$LOGIC_PRO_MCP_INSTALL_DIR"
 
-          # Resolve provenance pins from the just-published release so we're
-          # exercising the fail-closed hardened path, not the opt-in
-          # same-origin fallback. This simulates what a downstream consumer
-          # following README.md §Quick Start Option B would do.
-          # Use the step env (set from github.ref_name above) rather than
-          # re-interpolating ${{ github.ref_name }} into the run: block. The
-          # tag is already SemVer-gated by the build job this needs:, and as a
-          # shell variable it can't reach the parser as a template expansion.
-          VERSION="$LOGIC_PRO_MCP_VERSION"
-          BASE="https://github.com/${{ github.repository }}/releases/download/$VERSION"
-          LOGIC_PRO_MCP_SHA256=$(curl -fsSL "$BASE/SHA256SUMS.txt" \
-              | awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}')
-          LOGIC_PRO_MCP_TEAM_ID=$(curl -fsSL "$BASE/RELEASE-METADATA.json" \
-              | sed -n 's/.*"team_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-              | head -n 1)
+          set -euo pipefail
+
+          # Resolve the provenance pins from THIS RUN's manifest, so the installer takes its
+          # fail-closed hardened path rather than the opt-in same-origin fallback -- which is
+          # what a downstream consumer following README.md Quick Start Option B does.
+          #
+          # These used to be curled from the published release, which is the reason this job had
+          # to run after `publish`. They come from the build artifact now. That is not a weaker
+          # source: `install.sh` still hashes the archive and compares it against this value, so
+          # a mismatch between what was built and what is being installed still fails here.
+          LOGIC_PRO_MCP_SHA256=$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' \
+              "$LPM_ARTIFACT_DIR/SHA256SUMS.txt")
+          LOGIC_PRO_MCP_TEAM_ID=$(sed -n 's/.*"team_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+              "$LPM_ARTIFACT_DIR/RELEASE-METADATA.json" | head -n 1)
+          test -n "$LOGIC_PRO_MCP_SHA256"
+          test -n "$LOGIC_PRO_MCP_TEAM_ID"
           export LOGIC_PRO_MCP_SHA256 LOGIC_PRO_MCP_TEAM_ID
           echo "Using LOGIC_PRO_MCP_SHA256=$LOGIC_PRO_MCP_SHA256"
           echo "Using LOGIC_PRO_MCP_TEAM_ID=$LOGIC_PRO_MCP_TEAM_ID"
@@ -299,6 +333,56 @@ jobs:
             install.log
             uninstall.log
 
+  # "The artifact we verified is the artifact we published" is a claim, and this is where it stops
+  # being one. `validate-install` proved the BUILD installs; this proves the bytes now sitting on
+  # the release page are those same bytes, by downloading them and comparing against the manifest
+  # the build produced.
+  #
+  # It does not replace the pre-publish validation and must never be allowed to: an install defect
+  # found here is found in public, which is the situation this pipeline was just restructured to
+  # end. What it catches is a different failure -- a partial or mangled upload, a release whose
+  # assets do not match the run that made them.
+  verify-published:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download the artifact this run verified
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-release-artifacts
+          path: verified
+
+      - name: The published assets are byte-identical to the verified ones
+        env:
+          TAG: ${{ github.ref_name }}
+          BASE: https://github.com/${{ github.repository }}/releases/download
+        run: |
+          set -euo pipefail
+          mkdir -p published
+          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
+                       LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json; do
+            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+                 -o "published/$asset" "$BASE/$TAG/$asset"
+          done
+          # Compare bytes, not a manifest against itself: a manifest the same publisher can
+          # rewrite proves nothing on its own, so each downloaded file is hashed here and checked
+          # against the file this run built and installed from.
+          status=0
+          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
+                       LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json; do
+            built=$(shasum -a 256 "verified/$asset" | awk '{print $1}')
+            live=$(shasum -a 256 "published/$asset" | awk '{print $1}')
+            if [ "$built" != "$live" ]; then
+              echo "::error::$asset differs. verified=$built published=$live"
+              status=1
+            else
+              echo "$asset $built"
+            fi
+          done
+          exit "$status"
+
   # The MCP registry record, published LAST -- after `validate-install` has downloaded the release
   # assets and run the installer against them on two macOS versions. The record names a release,
   # so it goes out downstream of the check that the release works, not beside it.
@@ -308,7 +392,7 @@ jobs:
   # default GITHUB_TOKEN, and GitHub does not start workflow runs from GITHUB_TOKEN events. The
   # registry has been nine releases stale since 2026-06-23 for exactly that reason.
   publish-registry:
-    needs: validate-install
+    needs: verify-published
     permissions:
       contents: read
       # mcp-publisher authenticates by OIDC; the called workflow gets the intersection of its own

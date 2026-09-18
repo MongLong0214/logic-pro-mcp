@@ -12,6 +12,7 @@ EXPECTED_TEAM_ID="${LOGIC_PRO_MCP_TEAM_ID:-}"
 REGISTER_CLAUDE="${LOGIC_PRO_MCP_REGISTER_CLAUDE:-1}"
 INSTALL_KEYCMDS="${LOGIC_PRO_MCP_INSTALL_KEYCMDS:-1}"
 SKIP_SUDO="${LOGIC_PRO_MCP_SKIP_SUDO:-0}"
+LOCAL_ARCHIVE="${LOGIC_PRO_MCP_LOCAL_ARCHIVE:-}"
 
 fail_install() { echo "  Error: $1"; exit 1; }
 
@@ -173,7 +174,34 @@ if [ "$VERSION" = "latest" ]; then
     exit 1
 fi
 
-echo "  Downloading release $VERSION..."
+# A LOCAL archive is how the release pipeline installs the build it just produced,
+# BEFORE that build is published. Everything after this point is unchanged: the bytes are
+# still compared against $SHA256, the archive manifest is still validated, the binary is
+# still signature- and Gatekeeper-checked. The seam replaces where the bytes come FROM and
+# nothing about what is done to them -- a local input that skipped a check would make the
+# pre-publish validation prove less than the post-publish one it exists to precede.
+if [ -n "$LOCAL_ARCHIVE" ]; then
+    require_absolute_path "local_archive" "$LOCAL_ARCHIVE"
+    if [ -L "$LOCAL_ARCHIVE" ]; then
+        fail_install "local_archive must not be a symlink: $LOCAL_ARCHIVE"
+    fi
+    if [ ! -f "$LOCAL_ARCHIVE" ]; then
+        fail_install "local_archive is not a regular file: $LOCAL_ARCHIVE"
+    fi
+    if [ ! -r "$LOCAL_ARCHIVE" ]; then
+        fail_install "local_archive is not readable: $LOCAL_ARCHIVE"
+    fi
+    # There is no release surface to fetch provenance from, so the same-origin opt-out has
+    # nothing to opt into -- honouring it here would curl a release that may not exist yet
+    # and call the result a pin. Both values must be supplied out-of-band, which is stricter
+    # than the download path rather than looser.
+    if [ "${LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN:-0}" = "1" ]; then
+        fail_install "LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN cannot be combined with LOGIC_PRO_MCP_LOCAL_ARCHIVE: there is no release to fetch provenance from. Set LOGIC_PRO_MCP_SHA256 and LOGIC_PRO_MCP_TEAM_ID."
+    fi
+    echo "  Using local archive $LOCAL_ARCHIVE (version $VERSION)..."
+else
+    echo "  Downloading release $VERSION..."
+fi
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$ARCHIVE"
 SHA_URL="https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS.txt"
 METADATA_URL="https://github.com/$REPO/releases/download/$VERSION/RELEASE-METADATA.json"
@@ -242,7 +270,15 @@ fi
 
 TMP_DIR=$(mktemp -d)
 TMP_ARCHIVE="$TMP_DIR/$ARCHIVE"
-if curl -fsSL "$DOWNLOAD_URL" -o "$TMP_ARCHIVE" 2>/dev/null; then
+fetch_release_archive() {
+    local destination="$1"
+    if [ -n "$LOCAL_ARCHIVE" ]; then
+        cp "$LOCAL_ARCHIVE" "$destination"
+        return
+    fi
+    curl -fsSL "$DOWNLOAD_URL" -o "$destination" 2>/dev/null
+}
+if fetch_release_archive "$TMP_ARCHIVE"; then
     echo "  Verifying SHA256..."
     ACTUAL_SHA256=$(shasum -a 256 "$TMP_ARCHIVE" | awk '{print $1}')
     if [ "$ACTUAL_SHA256" != "$SHA256" ]; then
@@ -283,7 +319,11 @@ if curl -fsSL "$DOWNLOAD_URL" -o "$TMP_ARCHIVE" 2>/dev/null; then
     rm -rf "$TMP_DIR"
     echo "  Done."
 else
-    echo "  Error: failed to download pinned release artifact."
+    if [ -n "$LOCAL_ARCHIVE" ]; then
+        echo "  Error: failed to read local archive: $LOCAL_ARCHIVE"
+    else
+        echo "  Error: failed to download pinned release artifact."
+    fi
     rm -rf "$TMP_DIR"
     exit 1
 fi
