@@ -182,6 +182,124 @@ class TheGuardAllowsWhatItShould(GuardRun):
         self.assertEqual(code, 0, err)
 
 
+class AComposition(unittest.TestCase):
+    """A waiver may say the set is two rows MULTIPLIED, and then the product is checked.
+
+    `showLibraryMenuItem` is the case: Logic assembles `Show %@` with the Library noun, so the
+    result is the value of nothing while both factors are rows. Everything below drives
+    `prove_composition` directly against a stub corpus, because the interesting states are the
+    ones where it must refuse.
+    """
+
+    def _spec(self, **over):
+        spec = {
+            # `stub-canon://`, not `logic-canon://`. A reference in this tree that LOOKS like a
+            # citation must resolve against the committed index -- `check-canon-citations.py` says
+            # so and caught these when they were written with the real scheme. A fixture
+            # pretending to be a citation is the same defect as a citation nobody checked.
+            "template": "stub-canon://strings/U/en/T#value",
+            "noun": "stub-canon://strings/U/en/N#value",
+            "why_this_noun": "because",
+            "template_values": {"en": "Show %@", "de": "%@ einblenden"},
+            "noun_values": {"en": "Library", "de": "Bibliothek"},
+        }
+        spec.update(over)
+        return {"composed_from": spec}
+
+    def _run(self, entry, members, present=("Show %@", "%@ einblenden", "Library", "Bibliothek")):
+        failures = []
+        declared = guard.prove_composition("s", entry, members, _StubCanon(present), failures)
+        return declared, failures
+
+    def test_a_composition_matching_the_members_passes(self):
+        declared, failures = self._run(self._spec(), ["Show Library", "Bibliothek einblenden"])
+        self.assertTrue(declared)
+        self.assertEqual(failures, [])
+
+    def test_no_declaration_is_not_a_composition(self):
+        declared, failures = self._run({}, ["anything"])
+        self.assertFalse(declared)
+        self.assertEqual(failures, [])
+
+    def test_a_factor_value_the_row_does_not_hold_is_refused(self):
+        """The step that makes declared text usable: a neighbouring row's value does not verify."""
+        spec = self._spec(noun_values={"en": "Library", "de": "Mediathek"})
+        declared, failures = self._run(spec, ["Show Library", "Mediathek einblenden"])
+        self.assertTrue(declared)
+        self.assertTrue(any("is not what that row holds" in f for f in failures), failures)
+
+    def test_a_composed_value_the_set_does_not_carry_is_refused(self):
+        declared, failures = self._run(self._spec(), ["Show Library"])
+        self.assertTrue(any("the LabelSet does not carry" in f for f in failures), failures)
+
+    def test_a_member_neither_composed_nor_declared_is_refused(self):
+        declared, failures = self._run(
+            self._spec(), ["Show Library", "Bibliothek einblenden", "something typed"])
+        self.assertTrue(any("neither composed nor declared" in f for f in failures), failures)
+
+    def test_a_declared_extra_is_accounted_for(self):
+        spec = self._spec(extra=["Bibliothek"], why_extra="the bare noun")
+        declared, failures = self._run(
+            spec, ["Show Library", "Bibliothek einblenden", "Bibliothek"])
+        self.assertEqual(failures, [])
+
+    def test_an_extra_without_a_reason_is_refused(self):
+        spec = self._spec(extra=["Bibliothek"])
+        declared, failures = self._run(
+            spec, ["Show Library", "Bibliothek einblenden", "Bibliothek"])
+        self.assertTrue(any("without `why_extra`" in f for f in failures), failures)
+
+    def test_every_required_field_is_required(self):
+        for field in ("template", "noun", "why_this_noun", "template_values", "noun_values"):
+            spec = self._spec()
+            spec["composed_from"].pop(field)
+            declared, failures = self._run(spec, ["Show Library", "Bibliothek einblenden"])
+            self.assertTrue(any(f"no `{field}`" in f for f in failures), (field, failures))
+
+
+class _StubCanon:
+    """A corpus that verifies exactly the values it is given, whatever the reference says."""
+
+    class CanonError(Exception):
+        pass
+
+    class CanonRef:
+        def __init__(self, source, unit, locale, key, field):
+            self.source, self.unit, self.locale = source, unit, locale
+            self.key, self.field = key, field
+
+        def __str__(self):
+            return f"logic-canon://{self.source}/{self.unit}/{self.locale}/{self.key}#{self.field}"
+
+        @classmethod
+        def parse(cls, text):
+            rest = text.split("://", 1)[1]
+            source, unit, locale, tail = rest.split("/", 3)
+            key, field = tail.split("#", 1)
+            return cls(source, unit, locale, key, field)
+
+    def __init__(self, present):
+        self.present = set(present)
+
+    def check_citation(self, ref, value):
+        if value not in self.present:
+            raise self.CanonError(f"{value!r} is not at {ref}")
+
+
+class TheRepositorysOwnComposition(unittest.TestCase):
+    def test_show_library_is_declared_as_a_composition_and_still_verifies(self):
+        """Pins the repository's own state.
+
+        Composition is OPTIONAL in the schema, so deleting `composed_from` from an entry leaves
+        the guard green with one fewer thing checked -- observed by injecting exactly that. This
+        is what makes that deletion a failure instead of a quieter run.
+        """
+        entry = guard.waivers()["showLibraryMenuItem"]
+        self.assertIn("composed_from", entry,
+                      "showLibraryMenuItem is a composition and must say so")
+        self.assertEqual(guard.main(), 0)
+
+
 class TheWaiverFileIsReadStrictly(unittest.TestCase):
     def test_a_renamed_key_refuses_rather_than_reading_zero_waivers(self):
         root = tempfile.mkdtemp()

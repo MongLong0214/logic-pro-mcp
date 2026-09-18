@@ -4,7 +4,40 @@
     "showLibraryMenuItem": {
       "why_no_row": "Logic ASSEMBLES this menu item; Apple ships no string for it. `Show %@` is the template and the Library noun is the argument, so `Show Library` is the value of nothing in any source's English corpus -- and neither is any of its nine translations, which is why this set reaches ten languages while the string itself exists in none. Composition is what gives it its locales, and `check-labelsets-are-derived.py` verifies a ROW, so nothing offline checks the composition itself. That gap is #910; this entry records that the gap is composition and not an unread row.",
       "date": "2026-09-18",
-      "issue": 910
+      "issue": 910,
+      "composed_from": {
+        "template": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Show%20%25%40#value",
+        "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Library%23acc#value",
+        "why_this_noun": "`Library` is AMBIGUOUS in German and Apple ships both answers: the plain `Localizable.strings/Library` row is `Mediathek` and is the only row that says so, while `Library#acc`, `StrViewBtns|||Library`, `StrTabBtnLabel|||Library` and five more all say `Bibliothek`. Korean is `라이브러리` in every one of them, so the live Korean reading this LabelSet came from could not tell them apart. The de-DE census of 2026-09-12 settles it by reading Logic instead: the transport control answers `Taste „Bibliothek“` and the mixer's library-focus indicators answer `Bibliothek, <plug-in>`. `#acc` is also the namespace an accessibility NAME comes from, which is what this label is matched against.",
+        "template_values": {
+          "en": "Show %@",
+          "ko": "%@ 보기",
+          "ja": "%@を表示",
+          "de": "%@ einblenden",
+          "es": "Mostrar %@",
+          "fr": "Afficher %@",
+          "it": "Mostra %@",
+          "pt": "Mostrar %@",
+          "zh_CN": "显示%@",
+          "zh_TW": "顯示「%@」"
+        },
+        "noun_values": {
+          "en": "Library",
+          "ko": "라이브러리",
+          "ja": "ライブラリ",
+          "de": "Bibliothek",
+          "es": "Biblioteca",
+          "fr": "Bibliothèque",
+          "it": "libreria",
+          "pt": "Biblioteca",
+          "zh_CN": "资源库",
+          "zh_TW": "資料庫"
+        },
+        "extra": [
+          "라이브러리"
+        ],
+        "why_extra": "The bare panel noun. It is a value of the noun row rather than of the composition, kept because dropping it would narrow a match that has been live, and listed here so that `members - composed` is never silently non-empty."
+      }
     }
   }
 }

@@ -15,6 +15,18 @@ be born without an answer. Two answers are accepted:
   2. `docs/canon/LABELSETS-WITHOUT-A-ROW.json` carries an entry for it, and that entry PROVES the
      absence. The proof is re-run here, on Apple's bytes, not trusted from the file.
 
+An entry may ALSO say the set is a COMPOSITION -- two rows multiplied rather than one row's values
+-- and then the multiplication is checked too. `showLibraryMenuItem` is that: Logic assembles
+`Show %@` with the Library noun, so the result is the value of nothing while both FACTORS are rows.
+Declaring them turns "no row, take my word for it" into "these two rows, and here is what they
+produce".
+
+The factor values are declared in the entry because the committed index holds DIGESTS and not
+text, so nothing here can read `Show %@`'s German off disk. That is what makes the declaration
+safe rather than unsafe: every declared value is verified against its own row's digest before it
+is used, so a wrong one -- `Mediathek` where Apple's `Library#acc` says `Bibliothek` -- is refused
+instead of composed.
+
 What "no row" means is narrower than "none of these strings is in Logic", and the narrower thing is
 the true one. A row is found by looking the ENGLISH up: `derive_label_variants.py` indexes the
 corpus by value, and `derivedFrom` points at `.../en/<key>#value`. So a set has no row exactly when
@@ -94,6 +106,67 @@ def waivers():
     return entries
 
 
+def prove_composition(name, entry, members, canon, failures):
+    """Check a declared composition: verified factors, multiplied, against the set's own members.
+
+    Returns True if the entry declares one at all. Everything it needs is in the entry, and
+    nothing in the entry is believed before it is checked against the index.
+    """
+    spec = entry.get("composed_from")
+    if spec is None:
+        return False
+    for field in ("template", "noun", "why_this_noun", "template_values", "noun_values"):
+        if not spec.get(field):
+            failures.append(f"{name}: `composed_from` has no `{field}`. A composition nobody can "
+                            f"re-derive is the same claim as no row at all.")
+            return True
+
+    factors = {}
+    for kind in ("template", "noun"):
+        try:
+            reference = canon.CanonRef.parse(spec[kind])
+        except canon.CanonError as exc:
+            failures.append(f"{name}: `composed_from.{kind}` is not a reference: {exc}")
+            return True
+        values = spec[f"{kind}_values"]
+        for locale, value in values.items():
+            # Locale by locale, against the row's committed digest. This is the step that makes
+            # declared text usable: it cannot be invented, and a value from a neighbouring row --
+            # `Mediathek` for `Library#acc` -- does not verify.
+            located = canon.CanonRef(reference.source, reference.unit, locale,
+                                     reference.key, reference.field)
+            try:
+                canon.check_citation(str(located), value)
+            except canon.CanonError as exc:
+                failures.append(f"{name}: `composed_from.{kind}_values[{locale}]` = {value!r} is "
+                                f"not what that row holds: {exc}")
+                return True
+        factors[kind] = values
+
+    shared = sorted(set(factors["template"]) & set(factors["noun"]))
+    if not shared:
+        failures.append(f"{name}: the template and the noun share no locale, so nothing composes.")
+        return True
+
+    composed = {factors["template"][locale].replace("%@", factors["noun"][locale])
+                for locale in shared}
+    missing = sorted(composed - set(members))
+    if missing:
+        failures.append(
+            f"{name}: the composition produces {missing}, which the LabelSet does not carry. A "
+            f"language Logic assembles and this set cannot match is the gap the set exists to "
+            f"close.")
+    unexplained = sorted(set(members) - composed - set(spec.get("extra") or []))
+    if unexplained:
+        failures.append(
+            f"{name}: carries {unexplained}, which is neither composed nor declared under "
+            f"`extra`. A member nobody can account for is a string somebody typed.")
+    if spec.get("extra") and not spec.get("why_extra"):
+        failures.append(f"{name}: `extra` without `why_extra`. Each one is a member the "
+                        f"composition does not explain, so each needs a reason.")
+    return True
+
+
 def prove_absent(name, entry, canonical, canon, failures):
     """Re-derive the absence rather than believing the file.
 
@@ -139,33 +212,54 @@ def main() -> int:
         return 0
 
     now = {name: ref for name, _, ref in derived.declarations(now_source)}
+    now_members = {name: members for name, members, _ in derived.declarations(now_source)}
     #: members[0] is the canonical -- `declarations` yields `[canonical] + variants`.
     canonicals = {name: members[0] for name, members, _ in derived.declarations(now_source)
                   if members}
     was = {name for name, _, _ in derived.declarations(before)}
     added = sorted(set(now) - was)
-    if not added:
-        print(f"no LabelSet was added on this branch ({len(now)} declared, {len(was)} at the base)")
-        return 0
-
     allowed = waivers()
-    failures, waived, named = [], 0, 0
+    failures, waived, named, composed_count = [], 0, 0, 0
     canon = None
+
+    # EVERY waiver is re-proved on every run, not only while the set it covers is new.
+    #
+    # The delta rule below asks a question of new declarations and cannot ask it twice; a waiver
+    # checked once, on the branch that added it, is a claim nothing revisits. These entries are
+    # few and deliberately listed, so proving all of them costs nothing and is the difference
+    # between "somebody argued this once" and "this is still true".
+    for name in sorted(allowed):
+        entry = allowed[name]
+        if name not in now:
+            failures.append(
+                f"{name} is waived in {os.path.relpath(WAIVERS, REPO)} and is not a LabelSet in "
+                f"the policy. A waiver for something that does not exist is bookkeeping that "
+                f"outlived its reason.")
+            continue
+        if now[name]:
+            failures.append(
+                f"{name} names a row in `derivedFrom` AND is waived from naming one. One of the "
+                f"two is wrong, and the waiver is the one to drop.")
+            continue
+        if canon is None:
+            canon = derived._canon()
+        prove_absent(name, entry, canonicals[name], canon, failures)
+        if prove_composition(name, entry, now_members[name], canon, failures):
+            composed_count += 1
+
     for name in added:
         if now[name]:
             named += 1
             continue
-        entry = allowed.get(name)
-        if entry is None:
+        if name not in allowed:
             failures.append(
                 f"{name} is NEW and names no row. Either give it a `derivedFrom` -- the ten "
                 f"locales then come from Apple's own bytes and are checked offline -- or prove "
                 f"there is no row, with an entry in docs/canon/LABELSETS-WITHOUT-A-ROW.json. A new "
                 f"label with neither is two languages waiting to happen.")
             continue
-        if canon is None:
-            canon = derived._canon()
-        prove_absent(name, entry, canonicals[name], canon, failures)
+        # Its proof already ran in the loop above, which covers every waiver rather than only the
+        # new ones.
         waived += 1
 
     if failures:
@@ -173,8 +267,9 @@ def main() -> int:
         for failure in failures:
             print(f"  {failure}", file=sys.stderr)
         return 1
-    print(f"{len(added)} LabelSet(s) added on this branch: {named} name a row, "
-          f"{waived} are proved to have none")
+    print(f"{len(allowed)} waiver(s) re-proved ({composed_count} of them a checked composition); "
+          f"{len(added)} LabelSet(s) added on this branch, {named} naming a row and "
+          f"{waived} waived")
     return 0
 
 
