@@ -325,9 +325,22 @@ RATCHETS = (
      "cases guards are allowed to SKIP under CI", _skip_members),
     ("docs/canon/MANIFEST.json", "sources", "grow",
      "the (source, locale) corpora every absence proof searches", _corpus_members),
-    ("docs/canon/LABELSETS-WITHOUT-A-ROW.json", "labelsets", "shrink",
-     "LabelSets waived from naming the row they are Apple's values of",
-     _labelset_waiver_members),
+    #: `LABELSETS-WITHOUT-A-ROW.json` WAS HERE as a `shrink` list, and that made the repository's
+    #: own documented path unreachable. `check-new-labelsets-name-a-row.py` offers a new LabelSet
+    #: two answers -- name a row in `derivedFrom`, or carry a waiver with a proof -- and rule 7
+    #: refused the second in the same run that accepted it. An outside review found the pair and
+    #: the code had already recorded this exact contradiction once, for LOGIC-FACING.json.
+    #:
+    #: What makes this list different from every other waiver here is that its entries are not
+    #: taken on trust for a moment. `check-new-labelsets-name-a-row.py:225` re-proves EVERY entry
+    #: on EVERY run -- `prove_absent` searches all 23 corpora in all ten locales, and
+    #: `prove_composition` verifies each factor against the row's committed digest per locale -- and
+    #: that guard is discovered by `run-repo-guards.py`, run by the `guards` job, which `build`
+    #: needs and the ruleset requires. So the bar an added entry must clear is a proof against
+    #: Apple's own data, not a sentence. A monotonic ratchet on top of that adds no protection and
+    #: costs the only path a genuinely composed label has.
+    #:
+    #: The ratchet stays on every other waiver list, where the entries ARE taken on trust.
     #: `not_required` was NOT here, and `check-every-ci-job-is-required.py`'s own comment says the
     #: list was moved into a file "so the merge-base ratchet can see it". Only `required_commands`
     #: was listed, so it could not: a change could add a CI job that always fails, waive it in

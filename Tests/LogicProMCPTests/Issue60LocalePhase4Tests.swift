@@ -63,7 +63,15 @@ struct Issue60LocalePhase4Tests {
             // AXDescription of the AXGroup this label addresses. Not drift: without it `located_band`
             // and every reader keyed on this description find nothing on a German Logic, which is the
             // same shape as the `リージョン` note below — an empty answer where something is on screen.
-            ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels, ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더", "Spuren Titel"]),
+            // `トラックヘッダ` added 2026-09-18, and it was not a new measurement: it had been in
+            // `Scripts/livekit/evidence.py` all along while the policy lacked it, which
+            // `check-livekit-locale-aliases.py` reported as a WARNING that exits 0. A spelling
+            // somebody read that the product cannot match is a language the product does not work
+            // in, so that guard fails on it now -- and this was the last entry standing between it
+            // and being able to.
+            ("trackHeadersDescription", AXLocalePolicy.trackHeadersDescription.labels,
+             ["track headers", "track header", "tracks header", "tracks headers", "트랙 헤더",
+              "Spuren Titel", "トラックヘッダ"]),
             ("projectPickerWindow", AXLocalePolicy.projectPickerWindow.labels, ["프로젝트 선택", "choose a project", "choose project", "new from template"]),
             ("transportTextFieldHint", AXLocalePolicy.transportTextFieldHint.labels, ["tempo", "bpm", "position", "템포", "재생헤드 위치"]),
             // `Spuren enthält` added 2026-09-12 (#876), same census, same reason as the row above.
