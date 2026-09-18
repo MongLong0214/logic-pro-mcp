@@ -127,6 +127,36 @@ struct TempoMapAXTests {
         #expect(fixture.staleDescriptionReads == 0)
     }
 
+    /// Every case of the enum is accepted by the guard that names it.
+    ///
+    /// This is the case that binds the two together. The guard compared against `enUS.rawValue`
+    /// and `koKR.rawValue` spelled out by hand, so adding a case to `MeasuredLocale` would have
+    /// changed what the type says and not what the product does. Driving each case through the
+    /// real entry point is what makes that a failure rather than a silent no-op: a new case with
+    /// no matching arm in the guard turns this red.
+    ///
+    /// Only `unmeasuredLocale` is the subject. Any OTHER refusal is this fixture's business, not
+    /// this case's, so it is allowed through.
+    @Test("every MeasuredLocale case is accepted by the guard that names it")
+    func everyMeasuredCaseIsAccepted() {
+        #expect(!MeasuredLocale.allCases.isEmpty, "an empty enum would make this assert nothing")
+        for locale in MeasuredLocale.allCases {
+            let fixture = TempoListFixture(tempo: 120)
+            do {
+                _ = try TempoMapAX.read(
+                    in: fixture.window,
+                    localeIdentifier: locale.rawValue,
+                    runtime: fixture.runtime()
+                )
+            } catch TempoMapAX.ReadRefusal.unmeasuredLocale(let refused) {
+                #expect(Bool(false),
+                        "\(refused) is a MeasuredLocale case and the guard refused it anyway")
+            } catch {
+                // a different refusal, which this case is not about
+            }
+        }
+    }
+
     @Test("a locale outside the measured English/Korean pair refuses by its identifier")
     func unmeasuredLocaleRefuses() {
         let fixture = TempoListFixture(tempo: 120)

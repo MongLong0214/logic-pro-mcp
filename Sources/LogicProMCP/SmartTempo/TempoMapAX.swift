@@ -913,7 +913,7 @@ enum TempoMapAX {
         localeIdentifier: String?
     ) throws {
         let observed = localeIdentifier ?? AXLogicProElements.logicUILocaleIdentifier(runtime: runtime) ?? "unknown"
-        guard observed == MeasuredLocale.enUS.rawValue || observed == MeasuredLocale.koKR.rawValue else {
+        guard MeasuredLocale.isMeasured(observed) else {
             throw ReadRefusal.unmeasuredLocale(observed)
         }
     }
