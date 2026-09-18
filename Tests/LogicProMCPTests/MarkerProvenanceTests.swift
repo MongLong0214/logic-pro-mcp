@@ -126,12 +126,33 @@ func markerState_fromParsed_success() {
     #expect(m.name == "VOCALS")
 }
 
-@Test("MarkerState.fromParsed: parser 실패 → .fallback + (ordinal+1).1.1.1 합성")
+/// This case used to pin the OPPOSITE contract: `#expect(m.position == "6.1.1.1")`, the marker's
+/// 0-based place in the list written as a bar. It is the shape of test that makes a defect
+/// permanent -- the fabricated number had a case proving it was deliberate, and `goto_marker` fed
+/// that number to `transport.goto_position`, so an unparsed marker moved the playhead to its own
+/// row number. What a parse failure produces must not be mistakable for a position.
+@Test("MarkerState.fromParsed: parser 실패 → .fallback + a position that is not a position")
 func markerState_fromParsed_fallback() {
     let m = MarkerState.fromParsed(nil, ordinal: 5, name: "X")
-    #expect(m.position == "6.1.1.1")
+    #expect(m.position == MarkerState.unreadablePosition)
     #expect(m.positionSource == .fallback)
     #expect(m.id == 5)
+    // The specific thing it must never be again: a well-formed bar.beat.division.tick.
+    #expect(m.position != "6.1.1.1")
+    #expect(m.position.split(separator: ".").count != 4,
+            "a four-part value reads as a position to every caller that parses one")
+}
+
+/// Two unreadable markers must not look like one marker seen twice. `+Markers` and `+MarkerDelete`
+/// use position EQUALITY as an identity, so a shared sentinel makes those uniqueness gates refuse
+/// -- which is the honest answer, and is why the fallback is one string rather than per-ordinal.
+@Test("MarkerState.fromParsed: two unreadable markers share the sentinel, so identity refuses")
+func markerState_fromParsed_fallbackIsNotAnIdentity() {
+    let a = MarkerState.fromParsed(nil, ordinal: 0, name: "A")
+    let b = MarkerState.fromParsed(nil, ordinal: 1, name: "B")
+    #expect(a.position == b.position)
+    #expect([a, b].filter { $0.position == a.position }.count == 2,
+            "a uniqueness gate keyed on position must see more than one and refuse")
 }
 
 // MARK: - logic://markers wire schema (회귀 보호: position_source / is_canonical 키 + derived 정확성)

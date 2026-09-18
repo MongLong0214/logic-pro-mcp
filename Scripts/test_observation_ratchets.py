@@ -274,13 +274,39 @@ def main():
     #     silence — the file permits them and the base is never asked about a key it lacks.
     live_new = {"unmeasured_coverage": {"ko-KR": {"a"}, "fr-FR": {"x", "y", "z"}}}
     ratch_new = {"allowed": {"unmeasured_coverage": {"ko-KR": ["a"], "fr-FR": ["x", "y", "z"]}}}
-    grew, _, _, _ = guard.compare(live_new, ratch_new, {"unmeasured_coverage.ko-KR": ["a"]})
+    grew, _, _, _, _vanished = guard.compare(live_new, ratch_new, {"unmeasured_coverage.ko-KR": ["a"]})
     check("a new axis is not free", grew and grew[0][0] == "unmeasured_coverage.fr-FR"
           and sorted(grew[0][1]) == ["x", "y", "z"], grew)
 
+    # 11b. THE AXIS-DELETION EXPLOIT. `compare` walks `live`, so a key the base counted and that
+    #      `live` no longer produces was never examined: its `allowed` members sat in the file
+    #      unread and every gap on that axis stopped being reported. Removing one locale from
+    #      `SUPPORTED_LOCALES` does exactly that, and on the real tree it silently retired 50-odd
+    #      counted gaps with every guard green.
+    live_gone = {"unmeasured_coverage": {"ko-KR": {"a"}}}
+    ratch_gone = {"allowed": {"unmeasured_coverage": {"ko-KR": ["a"], "fr-FR": ["x", "y", "z"]}}}
+    base_gone = {"unmeasured_coverage.ko-KR": ["a"], "unmeasured_coverage.fr-FR": ["x", "y", "z"]}
+    grew, shrank, missing, understated, vanished = guard.compare(live_gone, ratch_gone, base_gone)
+    check("a deleted axis is reported", [k for k, _ in vanished] == ["unmeasured_coverage.fr-FR"],
+          f"vanished={vanished}")
+    check("and it names the gaps that stopped being counted",
+          vanished and vanished[0][1] == ["x", "y", "z"], f"vanished={vanished}")
+    check("and none of the other findings would have caught it",
+          grew == [] and shrank == [] and missing == [] and understated == [],
+          f"grew={grew} shrank={shrank} missing={missing} understated={understated}")
+
+    # 11c. An axis that reaches ZERO is not a deleted axis: `live` still produces the key with an
+    #      empty set, so finishing the work must not read as deleting the column.
+    live_zero = {"unmeasured_coverage": {"ko-KR": {"a"}, "fr-FR": set()}}
+    ratch_zero = {"allowed": {"unmeasured_coverage": {"ko-KR": ["a"], "fr-FR": []}}}
+    base_zero = {"unmeasured_coverage.ko-KR": ["a"], "unmeasured_coverage.fr-FR": ["x"]}
+    _, shrank0, _, _, vanished0 = guard.compare(live_zero, ratch_zero, base_zero)
+    check("an axis that reached zero is not reported as deleted", vanished0 == [],
+          f"vanished={vanished0}")
+
     # 12. ...but with no base at all, the file is the fallback and says so rather than inventing
     #     a growth out of every key.
-    grew, _, _, _ = guard.compare(live_new, ratch_new, None)
+    grew, _, _, _, _vanished = guard.compare(live_new, ratch_new, None)
     check("no base falls back to the file", grew == [], grew)
 
     # 13. An unreadable base is said out loud. Locally that is a note; in CI it is a failure,

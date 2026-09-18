@@ -328,6 +328,22 @@ RATCHETS = (
     ("docs/canon/LABELSETS-WITHOUT-A-ROW.json", "labelsets", "shrink",
      "LabelSets waived from naming the row they are Apple's values of",
      _labelset_waiver_members),
+    #: `not_required` was NOT here, and `check-every-ci-job-is-required.py`'s own comment says the
+    #: list was moved into a file "so the merge-base ratchet can see it". Only `required_commands`
+    #: was listed, so it could not: a change could add a CI job that always fails, waive it in
+    #: `not_required` in the same commit, and both guards passed. A waiver for "this job does not
+    #: have to be required" is the most load-bearing waiver in the repository, because what it
+    #: waives is the gate itself.
+    ("docs/canon/CI-GATE.json", "not_required", "shrink",
+     "CI jobs that are allowed not to gate a merge", _key_members),
+    #: This file DOES NOT EXIST at the time of writing, and that was the hole: the guard reads it
+    #: (`check-ax-comparisons-use-labelsets.py`) and skips whatever it names, so anyone could
+    #: create it in the same change as the comparison it excuses and nothing compared it to
+    #: anything. A ratchet entry on an absent file is not a mistake -- `_members` returns an empty
+    #: set for a missing file, so the first version of it is measured against nothing and every
+    #: entry in it is a growth that rule 7 refuses.
+    ("docs/canon/AX-COMPARISON-WAIVERS.json", "waivers", "shrink",
+     "AX comparisons waived from using a LabelSet", _key_members),
 )
 
 
@@ -355,7 +371,29 @@ def check_waivers_only_shrink(failures: list) -> None:
         members = entry[4] if len(entry) > 4 else _ratchet_members
         before = _at_base(base, path)
         if before is None:
-            continue
+            # A list no ancestor carries is unratcheted on the branch that introduces it. For a
+            # `grow` list that is necessary -- rule 14 refuses a Logic-facing directory that is not
+            # in LOGIC-FACING.json, so the commit adding the directory must be able to add the
+            # prefix, and refusing it would make the first such change unmergeable.
+            #
+            # For a `shrink` list it is the abuse itself. A waiver list may only shrink, and a NEW
+            # waiver list arriving pre-populated is a growth from nothing that nobody is asked
+            # about. `docs/canon/AX-COMPARISON-WAIVERS.json` was exactly this: the AX-comparison
+            # guard already read it and skipped whatever it named, the file did not exist, and it
+            # was in no ratchet -- so creating it in the same change as the comparison it excuses
+            # cost nothing. An empty base is the honest comparison for a waiver: every entry in the
+            # first version is new, because before it there was no permission at all.
+            if direction != "shrink":
+                continue
+            if not os.path.exists(os.path.join(REPO, path)):
+                # Absent on both sides. A waiver list that does not exist is the good state, and
+                # the shape check below would otherwise read "one side does not have the key" as a
+                # renamed key. The comparison begins the moment somebody creates the file.
+                continue
+            before = {key: []}
+            _note(f"{path} is carried by no ancestor of {base[:8]}. It is a waiver list, so its "
+                  f"first version is compared against an EMPTY set: a new list of exemptions is a "
+                  f"growth from nothing, not a bootstrap.")
         now = _json(os.path.join(REPO, path), {})
         if not isinstance(before.get(key), (list, dict)) or not isinstance(now.get(key), (list, dict)):
             failures.append(

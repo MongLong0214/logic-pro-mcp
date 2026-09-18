@@ -69,6 +69,24 @@ struct NavigateDispatcher: OperationTraceDispatching {
             //
             let markers = await cache.getMarkers()
             func routeMarkerTarget(_ target: MarkerState) async -> CallTool.Result {
+                // A position nobody could read is not a destination. This used to navigate anyway
+                // and annotate the message afterwards, and until 2026-09-18 the value it navigated
+                // to was `\(ordinal + 1).1.1.1` -- the marker's row number written in bar.beat
+                // form. So `goto_marker` on an unparsed marker moved the playhead to a bar chosen
+                // by list order, and told the caller in prose it had to read to find out.
+                //
+                // Refusing is the honest answer, and what is being refused is a WRITE. The
+                // uncertainty merge below still runs for positions that DID parse but whose
+                // provenance is not canonical.
+                guard target.position != MarkerState.unreadablePosition else {
+                    return toolTextResult(
+                        "goto_marker: the marker '\(target.name)' has no position this build could "
+                        + "read from the Marker List, so there is nothing to navigate to. Its "
+                        + "position_source is '\(target.positionSource.rawValue)'. Refusing rather "
+                        + "than moving the playhead to a guess.",
+                        isError: true
+                    )
+                }
                 let traceID = await startTraceIfEnabled(command: command)
                 let beforeTransport = await TransportDispatcher.liveTransportState(router: router, cache: cache)
                 if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(

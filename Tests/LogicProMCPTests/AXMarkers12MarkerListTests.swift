@@ -706,11 +706,14 @@ func enumerateMarkers_malformedRowMakesEnumerationUnavailable() async {
 }
 
 @Test
-func enumerateMarkers_unparseablePosition_usesIndexFallback() async {
-    // When the position cell carries a non-numeric description,
-    // `parseMarkerListPosition` returns nil and the caller substitutes
-    // the index-based fallback "\(index+1).1.1.1". The marker name still
-    // surfaces — this isn't a row rejection.
+func enumerateMarkers_unparseablePosition_refusesToInventAPosition() async {
+    // When the position cell carries a description `parseMarkerListPosition` cannot read, the
+    // marker still surfaces -- this is not a row rejection -- but its position does not.
+    //
+    // It used to substitute "\(index+1).1.1.1", the row number written as a bar. The cell shapes
+    // this parser accepts were measured on ko-KR and en-US while the Marker List window binds in
+    // ten languages, so the six locales with no live reading are exactly where that invented bar
+    // would have been published, and `goto_marker` navigated to it.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(7800)
     let arrange = builder.element(7801)
@@ -724,7 +727,10 @@ func enumerateMarkers_unparseablePosition_usesIndexFallback() async {
     let markers = AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime)
     #expect(markers.count == 1)
     #expect(markers[0].name == "BadPos", "name still captured even when position unparseable")
-    #expect(markers[0].position == "1.1.1.1", "fallback position is index+1.1.1.1")
+    #expect(markers[0].position == MarkerState.unreadablePosition,
+            "an unreadable cell must not become a bar number")
+    #expect(markers[0].position != "1.1.1.1",
+            "this is the exact value it used to invent, from the row index")
     #expect(markers[0].positionSource == .fallback, "parser 실패 → caller fallback provenance")
 }
 

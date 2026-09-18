@@ -35,14 +35,18 @@
 # rather than on a human sentence:
 #
 #   200                       compare the hashes
-#   404, ordinary run         FAIL -- the Formula names a release that is not there
-#   404, release preparation  NOT APPLICABLE (exit 0), only when asked for explicitly
+#   404, version is NEWER     NOT COMPARED (exit 0) -- a release is being prepared, derived from
+#                             the newest published release rather than declared by the caller
+#   404, version is not newer FAIL -- the Formula points backwards at a release that is missing
 #   401 403 429               FAIL -- could not ask, which is not an answer
 #   5xx, or no status at all  FAIL after a short bounded retry
 #
-# Release preparation is `LPM_FORMULA_RELEASE_PREPARATION=1`, and it has to be set by the caller
-# that knows it is preparing a release. It is deliberately NOT the default: a 404 on an ordinary
-# build means the committed Formula points at a release nobody published, which is the state that
+# Release preparation used to require `LPM_FORMULA_RELEASE_PREPARATION=1` from the caller, and
+# NOTHING under .github ever set it -- so the version-bump pull request that every release starts
+# with could not pass `formula`, and `build` needs `formula`. The guard locked the door it guards.
+# It is derived now, by asking which release is newest; the variable remains as an explicit
+# override and the self-test drives both. A 404 on a version that is NOT newer still fails: the
+# committed Formula then points at a release nobody published, which is the state that
 # makes `brew install` fail.
 set -uo pipefail
 
@@ -106,16 +110,45 @@ else
     200)
       : ;;
     404)
-      if [ "${LPM_FORMULA_RELEASE_PREPARATION:-0}" = "1" ]; then
-        echo "NOT APPLICABLE: v$VERSION is not published and this run declared itself a release"
-        echo "preparation. Nothing was compared. This is NOT confirmation that the pinned hash is"
-        echo "right -- the candidate tarball's own hash is what proves that, before publication."
+      # A 404 is one of two very different things, and until 2026-09-18 this could only tell them
+      # apart if a caller SAID which -- through `LPM_FORMULA_RELEASE_PREPARATION=1`, which nothing
+      # under .github ever set. That made the version-bump pull request every release starts with
+      # unmergeable: `formula` went red, `build` needs it, and the ruleset requires `build`. The
+      # guard had locked the door it was guarding.
+      #
+      # The two cases are distinguishable without anyone declaring anything. If the Formula's
+      # version is NEWER than every published release, the release it names has not happened yet
+      # and this run is a preparation. If it is not newer, the Formula points backwards at a
+      # release that is missing, which is the #775 state and a real failure.
+      LATEST=""
+      LATEST_RESP=$("$GH" api "repos/$SLUG/releases/latest" -i 2>"$TMP/gh-latest-err") || true
+      LATEST_STATUS=$(printf '%s\n' "$LATEST_RESP" | head -1 | awk '{print $2}')
+      if [ "$LATEST_STATUS" = "200" ]; then
+        LATEST=$(printf '%s\n' "$LATEST_RESP" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)
+      fi
+      if [ -z "$LATEST" ]; then
+        echo "v$VERSION has no published release (HTTP 404), and the latest release could not be"
+        echo "read either (HTTP ${LATEST_STATUS:-none}). 'Could not ask' is not 'this is fine'."
+        exit 1
+      fi
+      # `sort -V` decides it. Equal versions are NOT newer: the release exists under that name or
+      # the 404 above would not have happened, so equality here means something else is wrong.
+      NEWEST=$(printf '%s\n%s\n' "$VERSION" "$LATEST" | sort -V | tail -1)
+      if [ "$VERSION" != "$LATEST" ] && [ "$NEWEST" = "$VERSION" ]; then
+        echo "NOT COMPARED: the Formula names v$VERSION and the newest published release is"
+        echo "v$LATEST, so this tree is preparing a release that does not exist yet. Nothing was"
+        echo "compared. This is NOT confirmation that the pinned hash is right -- the candidate"
+        echo "tarball's own hash is what proves that, before publication."
         exit 0
       fi
-      echo "v$VERSION has no published release (HTTP 404), and the committed Formula points at it."
-      echo "brew install fails for everyone in this state. Either the release was never published,"
-      echo "or the Formula was bumped ahead of it -- if this run IS preparing a release, say so with"
-      echo "LPM_FORMULA_RELEASE_PREPARATION=1 rather than letting every run treat 404 as fine."
+      if [ "${LPM_FORMULA_RELEASE_PREPARATION:-0}" = "1" ]; then
+        echo "NOT APPLICABLE: v$VERSION is not published and this run declared itself a release"
+        echo "preparation. Nothing was compared."
+        exit 0
+      fi
+      echo "v$VERSION has no published release (HTTP 404) and is not newer than the newest one,"
+      echo "v$LATEST, so the committed Formula points BACKWARDS at a release that is missing."
+      echo "brew install fails for everyone in this state."
       exit 1 ;;
     401|403|429)
       echo "the release lookup answered HTTP $STATUS, so the Formula's hash could not be checked."

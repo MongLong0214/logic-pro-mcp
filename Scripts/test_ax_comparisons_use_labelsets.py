@@ -9,6 +9,7 @@ it upper-cased the haystack and then looked for a lowercase `\\u` escape in it.
 import importlib.util
 import os
 import tempfile
+import json
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,6 +79,80 @@ class SeparatorsAreNotLabels(unittest.TestCase):
     def test_the_literal_character_also_counts(self):
         path = self._file('if value.contains(":") || value.contains("\uff1a") { }\n')
         self.assertTrue(guard.handles_every_spelling(":", [path]))
+
+
+class TheGuardActuallyRefusesSomething(unittest.TestCase):
+    """THE CASES THIS SUITE DID NOT HAVE.
+
+    Every case above drove a helper, and the only whole-guard assertion was "the repository
+    passes" -- which a guard that returns `[]` unconditionally satisfies. An outside review made
+    `check()` return `[]` and this suite stayed green: the rule had never been watched refuse
+    anything, which is the definition of a decorative guard.
+
+    `LPM_AX_COMPARISON_ROOTS` points the scan at a directory the case builds, so a positive input
+    exists at all. The waiver cases use a temporary file: `docs/canon/AX-COMPARISON-WAIVERS.json`
+    is deliberately absent from the tree (a waiver hides a defect instead of removing it, and nine
+    of the eleven findings it would have carried were this guard's own false positives), and these
+    cases must not be the reason it appears.
+    """
+
+    def _scan(self, source, waiver=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "Sources")
+            os.makedirs(root)
+            with open(os.path.join(root, "Offender.swift"), "w", encoding="utf-8") as handle:
+                handle.write(source)
+            before_root = os.environ.get("LPM_AX_COMPARISON_ROOTS")
+            before_waiver = guard.WAIVER
+            os.environ["LPM_AX_COMPARISON_ROOTS"] = root
+            if waiver is not None:
+                path = os.path.join(tmp, "waivers.json")
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump({"literals": waiver}, handle)
+                guard.WAIVER = path
+            try:
+                return guard.check()
+            finally:
+                guard.WAIVER = before_waiver
+                if before_root is None:
+                    os.environ.pop("LPM_AX_COMPARISON_ROOTS", None)
+                else:
+                    os.environ["LPM_AX_COMPARISON_ROOTS"] = before_root
+
+    #: `Mixer` is shipped by Apple and translated by Apple, so it satisfies conditions 2 and 3.
+    _READ = 'let title = AXHelpers.getTitle(element) ?? ""\n'
+
+    def test_the_plain_comparison_is_refused(self):
+        problems = self._scan(self._READ + 'if title == "Mixer" { }\n')
+        self.assertTrue(problems, "a translated label compared against an AX reading must fail")
+        self.assertIn("Mixer", problems[0])
+
+    def test_a_waiver_excuses_it(self):
+        self.assertEqual(self._scan(self._READ + 'if title == "Mixer" { }\n',
+                                    waiver={"Mixer": "declared safe by the case"}), [])
+
+    def test_a_comparison_against_a_non_ax_variable_is_not_refused(self):
+        """The control. Without it the cases above would pass on a rule that fires on everything."""
+        self.assertEqual(self._scan('let commandName = "x"\nif commandName == "Mixer" { }\n'), [])
+
+    def test_an_untranslated_literal_is_not_refused(self):
+        """`MIDI` is in the corpus and identical in every locale — matching it by literal is safe,
+        and condition 3 is what keeps this guard from being wrong more often than right."""
+        self.assertEqual(self._scan(self._READ + 'if title == "MIDI" { }\n'), [])
+
+    def test_the_evasive_shapes_are_refused(self):
+        """The three spellings an outside review walked the same defect through, each of which had
+        been invisible because the patterns anchored on the variable and on `==`."""
+        for label, source in [
+            # `copy`, not `mixer`: `mixer` IS a policy literal (a lowercase containment fragment),
+            # so a comparison against it is correctly not a finding -- the first version of this
+            # case chose it and failed for the right reason, which is what a positive case is for.
+            ("lowercased", self._READ + 'if title.lowercased() == "copy" { }\n'),
+            ("collection", self._READ + 'return ["Mixer", "Cut"].contains(title)\n'),
+            ("switch", self._READ + 'switch title {\ncase "Mixer":\n    break\ndefault:\n    break\n}\n'),
+        ]:
+            with self.subTest(shape=label):
+                self.assertTrue(self._scan(source), f"{label} must be refused like `==` is")
 
 
 class AgainstTheRealTree(unittest.TestCase):

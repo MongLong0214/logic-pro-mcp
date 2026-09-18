@@ -561,8 +561,10 @@ enum AXLocalePolicy {
 
     static let sortTracksByOutputChannelMenuItem = LabelSet(
         canonical: "출력 채널",
-        variants: [],
+        variants: ["Output Channel", "出力チャンネル", "Output-Kanal", "Canal de salida", "Canal de sortie", "Canale di uscita", "Canal de Saída", "输出通道", "輸出聲道"],
         rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+            + " Extended on 2026-09-18 to every locale Logic ships by reading the row Apple keys this control, the same row its siblings `sortTracksByInstrumentNameMenuItem` and `sortTracksByUsedMenuItem` were derived from on 2026-09-16; those two were extended and these three were left behind, so the Korean canonical was the ONLY value and the menu could not be found in English. Nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%20Channel#value"
     )
 
     static let sortTracksByInstrumentNameMenuItem = LabelSet(
@@ -575,8 +577,10 @@ enum AXLocalePolicy {
 
     static let sortTracksByTrackNameMenuItem = LabelSet(
         canonical: "트랙 이름",
-        variants: [],
+        variants: ["Track Name", "トラック名", "Spurname", "Nombre de pista", "Nom de la piste", "Nome traccia", "Nome da Pista", "轨道名称", "音軌名稱"],
         rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+            + " Extended on 2026-09-18 to every locale Logic ships by reading the row Apple keys this control, the same row its siblings `sortTracksByInstrumentNameMenuItem` and `sortTracksByUsedMenuItem` were derived from on 2026-09-16; those two were extended and these three were left behind, so the Korean canonical was the ONLY value and the menu could not be found in English. Nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Track%20Name#value"
     )
 
     static let sortTracksByUsedMenuItem = LabelSet(
@@ -589,8 +593,10 @@ enum AXLocalePolicy {
 
     static let sortTracksByCreationDateMenuItem = LabelSet(
         canonical: "생성일",
-        variants: [],
+        variants: ["Creation Date", "作成日", "Erstellungsdatum", "Fecha de creación", "Date de création", "Data di creazione", "Data de Criação", "创建日期", "製作日期"],
         rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
+            + " Extended on 2026-09-18 to every locale Logic ships by reading the row Apple keys this control, the same row its siblings `sortTracksByInstrumentNameMenuItem` and `sortTracksByUsedMenuItem` were derived from on 2026-09-16; those two were extended and these three were left behind, so the Korean canonical was the ONLY value and the menu could not be found in English. Nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Creation%20Date#value"
     )
 
     /// #519: File > Save As…
@@ -2235,8 +2241,22 @@ enum AXLocalePolicy {
     /// arrangement with nothing in it.
     static let regionHelpKeyword = LabelSet(
         canonical: "region",
-        variants: ["리전", "リージョン"],
+        variants: ["리전", "リージョン", "Région", "Pasaje", "Regione", "Região", "片段", "區段"],
         rationale: "Detects an arrange region by its AXHelp string; read-only classifier."
+            + " It carried three languages until 2026-09-18, and the failure that caused is NOT a"
+            + " refusal: `enumerateRegions` classifies a layout item as a region iff this matches"
+            + " its help, so in a language it does not cover the call returns `returned_count: 0,"
+            + " complete: true` -- an empty project, stated confidently. Matching is"
+            + " diacritic-sensitive, so `region` covered German and Italian by accident and missed"
+            + " Spanish, French, Portuguese and both Chinese entirely."
+            + " Extended to every locale Logic ships from Apple's `Region` row; German and"
+            + " English share `Region`, so eight distinct members cover ten languages."
+            + " The first version of this change typed a Spanish-looking `Región` in the"
+            + " French slot -- a string Apple does not ship anywhere -- and"
+            + " check-labelsets-are-derived.py refused it by name, which is the whole"
+            + " reason a derived label cites a row instead of listing what looks right."
+            + " Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Region#value"
     )
 
     static let showMixerMenuPath = MenuPath(bar: viewMenuBar, item: showMixerMenuItem)

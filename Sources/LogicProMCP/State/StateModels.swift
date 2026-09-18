@@ -226,6 +226,25 @@ struct MarkerState: Sendable, Codable, Identifiable, Equatable {
             ?? .unknown
     }
 
+    /// The position a marker's cell could not be read as.
+    ///
+    /// It used to be the marker's 0-based place in the list written in bar.beat.division.tick.
+    /// That is a WELL-FORMED position, and `goto_marker` fed it straight to
+    /// `transport.goto_position`, so a marker whose cell this build cannot parse moved the playhead
+    /// to a bar number that was really its row number. `positionSource: .fallback` travelled beside
+    /// it, but provenance a caller has to read is not a substitute for not inventing the number:
+    /// the value looked exactly like an answer.
+    ///
+    /// The cell shapes `parseMarkerListPosition` accepts were measured on ko-KR and en-US, and the
+    /// Marker List window binds in ten languages, so the six locales with no live reading are
+    /// precisely where a fabricated bar would have been published.
+    ///
+    /// One shared string on purpose. `AccessibilityChannel+Markers` and `+MarkerDelete` use
+    /// position EQUALITY as a marker identity; two unreadable markers must not look like one
+    /// marker seen twice, and with a shared sentinel those uniqueness gates see a count greater
+    /// than one and refuse, which is the honest answer.
+    static let unreadablePosition = "unreadable"
+
     /// AX walker 의 두 fallback site 공통 factory — `parsed != nil` → `.parser`,
     /// `nil` → `.fallback` + `\(ordinal+1).1.1.1` 합성. `ordinal` 은 0-based
     /// enumeration index (목록 N번째 의미).
@@ -233,7 +252,7 @@ struct MarkerState: Sendable, Codable, Identifiable, Equatable {
         MarkerState(
             id: ordinal,
             name: name,
-            position: parsed ?? "\(ordinal + 1).1.1.1",
+            position: parsed ?? MarkerState.unreadablePosition,
             positionSource: parsed != nil ? .parser : .fallback
         )
     }

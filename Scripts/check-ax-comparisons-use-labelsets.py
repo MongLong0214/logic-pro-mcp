@@ -64,16 +64,71 @@ _COMPARISONS = [
     re.compile(r"\"((?:[^\"\\\n]|\\.)+)\"\s*(?:==|!=)\s*" + _AX_VAR, re.I),
     re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:contains|hasPrefix|hasSuffix"
                r"|localizedCaseInsensitiveContains)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+    #: The three shapes an outside review walked the same defect through with every guard green.
+    #: Each is the SAME comparison wearing different syntax, and each was invisible:
+    #:
+    #:     title.lowercased() == "mixer"          a method call between the name and the operator
+    #:     ["Mixer", "Show Library"].contains(title)   the literal on the collection's side
+    #:     switch title { case "Mixer": }         no operator at all
+    #:
+    #: A rule that names one spelling of a thing is a rule about spelling.
+    re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:trimmingCharacters)\([^)]*\)\s*(?:==|!=)"
+               r"\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
+    re.compile(_AX_VAR + r"\w*(?:\?)?\.(?:caseInsensitiveCompare|localizedStandardContains"
+               r"|localizedCaseInsensitiveCompare)\(\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I),
 ]
+
+#: A comparison that CASE-FOLDS first. `title.lowercased() == "mixer"` compares the same label as
+#: `title == "Mixer"`, but the literal it carries is lowercase and Apple ships `Mixer`, so the
+#: corpus lookup in condition 2 misses it and the comparison passes. The literal must be folded
+#: back before it is looked up, or case-folding is a way to spell your way out of the rule.
+_CASE_FOLDED = re.compile(
+    _AX_VAR + r"\w*(?:\?)?\.(?:lowercased|uppercased|localizedLowercase|localizedUppercase)"
+    r"\([^)]*\)\s*(?:==|!=)\s*\"((?:[^\"\\\n]|\\.)+)\"", re.I)
+
+
+def _folded_candidates(literal: str):
+    """The spellings a case-folded comparison could have been written against."""
+    seen, out = set(), []
+    for candidate in (literal, literal.capitalize(), literal.title(), literal.upper()):
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            out.append(candidate)
+    return out
+
+
+#: `["A", "B"].contains(axVar)` -- the literals sit in a collection and the AX reading is the
+#: ARGUMENT, so every pattern above, which anchors on the variable, looks straight past it.
+_COLLECTION_CONTAINS = re.compile(
+    r"\[((?:\s*\"(?:[^\"\\\n]|\\.)*\"\s*,?)+)\]\s*\.contains\(\s*(" + _AX_VAR + r"\w*)", re.I)
+
+#: `switch axVar { case "A", "B": }` -- no comparison operator exists to match on. The body is
+#: taken non-greedily to the first closing brace at the switch's own indentation, which is coarse;
+#: over-reading a nested block reports a literal the switch does not compare, and that is the safe
+#: direction for a rule whose failure mode is silence.
+_SWITCH = re.compile(r"switch\s+(" + _AX_VAR + r"\w*)\b[^{\n]*\{(.*?)\n\s*\}", re.I | re.S)
+_CASE_LITERAL = re.compile(r"case\s+((?:\"(?:[^\"\\\n]|\\.)*\"\s*,?\s*)+):")
 
 _LINE_COMMENT = re.compile(r"//[^\n]*")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 _LABELSET_BLOCK = re.compile(r"LabelSet\(.*?rationale:.*?\)", re.S)
 
 
+#: The directories scanned. `LPM_AX_COMPARISON_ROOTS` (os.pathsep-separated absolute paths)
+#: replaces them, and exists for one reason: until 2026-09-18 this guard's self-test could not hand
+#: it a file. Every case drove the helper functions and the suite finished with "the repository
+#: passes" -- so `check()` returning `[]` unconditionally was GREEN, and the guard had never been
+#: watched refuse anything. A seam that lets a test build an offending file is the difference
+#: between testing the algorithm and testing the rule.
+def _roots():
+    override = os.environ.get("LPM_AX_COMPARISON_ROOTS")
+    if override:
+        return [p for p in override.split(os.pathsep) if p]
+    return [os.path.join(REPO, "Sources"), os.path.join(REPO, "Scripts", "livekit")]
+
+
 def swift_sources():
-    for root in ("Sources", os.path.join("Scripts", "livekit")):
-        base = os.path.join(REPO, root)
+    for base in _roots():
         for dirpath, dirs, names in os.walk(base):
             dirs[:] = [d for d in dirs if d != ".build"]
             for name in sorted(names):
@@ -123,6 +178,32 @@ def comparisons_outside_labelsets():
                 literal = canon.normalize(match.group(1).replace('\\"', '"'))
                 if literal and literal not in inside:
                     found[literal].add(os.path.relpath(path, REPO))
+        for match in _CASE_FOLDED.finditer(source):
+            variable = re.match(r"[\w.]+", match.group(0)).group(0).split(".")[0]
+            if variable not in backed:
+                continue
+            raw = canon.normalize(match.group(1).replace('\\"', '"'))
+            if not raw or raw in inside:
+                continue
+            # Report the spelling Apple ships, so the message names a label a reader can find.
+            shipped = next((c for c in _folded_candidates(raw) if canon.is_translated(c)), None)
+            if shipped:
+                found[shipped].add(os.path.relpath(path, REPO))
+        for match in _COLLECTION_CONTAINS.finditer(source):
+            if match.group(2).split(".")[0] not in backed:
+                continue
+            for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', match.group(1)):
+                literal = canon.normalize(raw.replace('\\"', '"'))
+                if literal and literal not in inside:
+                    found[literal].add(os.path.relpath(path, REPO))
+        for match in _SWITCH.finditer(source):
+            if match.group(1).split(".")[0] not in backed:
+                continue
+            for group in _CASE_LITERAL.findall(match.group(2)):
+                for raw in re.findall(r'"((?:[^"\\\n]|\\.)*)"', group):
+                    literal = canon.normalize(raw.replace('\\"', '"'))
+                    if literal and literal not in inside:
+                        found[literal].add(os.path.relpath(path, REPO))
     return found
 
 

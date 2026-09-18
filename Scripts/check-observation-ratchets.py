@@ -358,6 +358,23 @@ def compare(live, ratchets, base=None):
     allowed = dict(_flatten(ratchets.get("allowed") or {}))
     base = base or {}
     grew, shrank, missing, understated = [], [], [], []
+    # A dimension the base counted and `live` no longer PRODUCES AT ALL. The loop below walks
+    # `live`, so such a key is never looked at: its `allowed` members sit in the file unread and
+    # every gap on that axis stops being reported, with no growth, no lag and no understatement.
+    #
+    # That is not hypothetical. Deleting one locale from `SUPPORTED_LOCALES` removes its
+    # `unmeasured_coverage.<locale>` key from `live`; on this tree that silently retires 50-odd
+    # counted gaps, and the `allowed` block for the deleted locale can stay behind forever because
+    # nothing reads it. A ledger whose debt falls when a column is deleted is measuring the column.
+    #
+    # An axis that merely reaches ZERO still appears in `live` with an empty set, so this is
+    # specifically "stopped being computed", not "finished".
+    live_keys = {key for key, _ in _flatten(live)}
+    counted = set(base) if base else set(allowed)
+    vanished = sorted((key, sorted(counted_members))
+                      for key, counted_members in
+                      ((k, (set(base[k]) if base else set(allowed.get(k, ()))))
+                       for k in counted - live_keys))
     for key, values in _flatten(live):
         if key not in allowed:
             missing.append((key, values))
@@ -384,7 +401,7 @@ def compare(live, ratchets, base=None):
             shrank.append((key, removed, allowed[key]))
         if unlisted:
             understated.append((key, unlisted, allowed[key]))
-    return grew, shrank, missing, understated
+    return grew, shrank, missing, understated, vanished
 
 
 def main(argv=None):
@@ -416,12 +433,23 @@ def main(argv=None):
         else:
             print(f"note: base sets unreadable ({where}); comparing against the file alone, which "
                   f"a same-commit edit can defeat")
-    grew, shrank, missing, understated = compare(live, ratchets, base)
+    grew, shrank, missing, understated, vanished = compare(live, ratchets, base)
     raised = ratchets.get("raised") or {}
     failed = False
 
     for key, values in missing:
         print(f"{key}: {len(values)} item(s) with no allowed set in RATCHETS.json — add one, or the gap is uncounted")
+        failed = True
+    for key, was in vanished:
+        print(f"{key}: the ledger counted this axis and it is no longer computed at all. "
+              f"{len(was)} counted gap(s) stopped being reported without being closed.")
+        for v in was[:8]:
+            print(f"    ! {v}")
+        if len(was) > 8:
+            print(f"    … and {len(was) - 8} more")
+        print(f"  A gap that disappears because its axis was deleted has not been measured away. "
+              f"Restore the axis, or land the deletion the way any other growth lands — with a "
+              f"dated reason under `raised.{key}` naming what is being dropped.")
         failed = True
     for key, added, allowed in grew:
         entry = raised.get(key) or {}

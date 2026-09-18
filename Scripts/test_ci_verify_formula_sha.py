@@ -52,9 +52,35 @@ def _run(formula_text, sums_text, sums_name="sums.txt"):
 
 FAKE_GH = r"""#!/usr/bin/env bash
 # A `gh` that answers one status, so the classification can be tested without having a 403.
+#
+# `releases/latest` is answered SEPARATELY. The 404 branch asks which release is newest in order to
+# tell "preparing the next release" from "pointing backwards at a missing one", and a fake that
+# gave both questions the same answer could not distinguish the two cases either -- which is how
+# the first version of this fixture turned a real behaviour change into two unexplained failures.
 if [ "$1" = "api" ]; then
   if [ -n "${FAKE_STDERR:-}" ]; then printf '%s
 ' "$FAKE_STDERR" >&2; fi
+  case "${2:-}" in
+    */releases/latest)
+      if [ -z "${FAKE_LATEST_TAG:-}" ]; then
+        printf 'HTTP/2.0 %s Fake
+' "${FAKE_LATEST_STATUS:-404}"
+        printf 'content-type: application/json
+
+'
+        printf '{}
+'
+        exit 1
+      fi
+      printf 'HTTP/2.0 200 Fake
+'
+      printf 'content-type: application/json
+
+'
+      printf '{"tag_name": "%s"}
+' "$FAKE_LATEST_TAG"
+      exit 0 ;;
+  esac
   if [ -n "${FAKE_STATUS:-}" ]; then
     printf 'HTTP/2.0 %s Fake
 ' "$FAKE_STATUS"
@@ -78,7 +104,8 @@ exit 1
 """
 
 
-def _run_network(formula_text, status, sums=None, stderr="", release_prep=False):
+def _run_network(formula_text, status, sums=None, stderr="", release_prep=False,
+                 latest_tag=None, latest_status=None):
     """Run the guard's NETWORK branch against a fake `gh`; return (exit code, output).
 
     No local sums argument, so the rule takes the branch that asks GitHub. The fake is what makes
@@ -99,6 +126,12 @@ def _run_network(formula_text, status, sums=None, stderr="", release_prep=False)
                    FAKE_STDERR=stderr)
         env.pop("FAKE_SUMS", None)
         env.pop("LPM_FORMULA_RELEASE_PREPARATION", None)
+        env.pop("FAKE_LATEST_TAG", None)
+        env.pop("FAKE_LATEST_STATUS", None)
+        if latest_tag is not None:
+            env["FAKE_LATEST_TAG"] = latest_tag
+        if latest_status is not None:
+            env["FAKE_LATEST_STATUS"] = str(latest_status)
         if sums is not None:
             env["FAKE_SUMS"] = sums
         if release_prep:
@@ -178,14 +211,50 @@ def main():
     rc, out = _run_network(formula, "", stderr="dial tcp: lookup api.github.com: no such host")
     check("no status is not a pass", rc == 1, f"exit {rc}: {out.strip()[:200]}")
 
-    # 404 on an ordinary run: the committed Formula points at a release nobody published.
-    rc, out = _run_network(formula, 404)
-    check("404 fails on an ordinary run", rc == 1, f"exit {rc}: {out.strip()[:200]}")
+    # 404 on an ordinary run: the Formula (3.15.0) is BEHIND the newest release (3.16.0), so it
+    # points backwards at something that is not there -- the #775 state.
+    rc, out = _run_network(formula, 404, latest_tag="v3.16.0")
+    check("404 fails when the Formula is behind the newest release", rc == 1,
+          f"exit {rc}: {out.strip()[:200]}")
+    check("and says which release is newest", "3.16.0" in out, out.strip()[:200])
 
-    # 404 while PREPARING a release: not applicable, and it has to say it proved nothing.
-    rc, out = _run_network(formula, 404, release_prep=True)
-    check("404 in release preparation is not applicable", rc == 0, f"exit {rc}: {out.strip()[:200]}")
-    check("release preparation does not claim the hash is right", "NOT" in out,
+    # THE CASE THAT UNBLOCKS A RELEASE. The Formula names a version NEWER than anything published,
+    # which is what the version-bump pull request every release starts with looks like. Until
+    # 2026-09-18 this required `LPM_FORMULA_RELEASE_PREPARATION=1` from a caller, and nothing under
+    # .github set it -- so `formula` went red, `build` needs `formula`, and the ruleset requires
+    # `build`. The guard made the release it guards unshippable. It is derived now.
+    rc, out = _run_network(_formula("3.17.0", GOOD), 404, latest_tag="v3.16.0")
+    check("404 on a version newer than the newest release does not fail", rc == 0,
+          f"exit {rc}: {out.strip()[:200]}")
+    check("and says it compared nothing", "NOT COMPARED" in out, out.strip()[:200])
+    check("and it needed no env var to work that out",
+          "LPM_FORMULA_RELEASE_PREPARATION" not in out, out.strip()[:200])
+
+    # A tag with no `v` prefix must compare the same way -- the prefix is stripped, not assumed.
+    rc, out = _run_network(_formula("3.17.0", GOOD), 404, latest_tag="3.16.0")
+    check("a latest tag without a v prefix is still compared", rc == 0,
+          f"exit {rc}: {out.strip()[:200]}")
+
+    # `sort -V`, not string order: 3.9.0 must not read as newer than 3.16.0.
+    rc, out = _run_network(_formula("3.9.0", GOOD), 404, latest_tag="v3.16.0")
+    check("3.9.0 is not newer than 3.16.0", rc == 1, f"exit {rc}: {out.strip()[:200]}")
+
+    # Equal versions: the release exists under that name or the 404 would not have happened, so
+    # equality means something else is wrong and must not be waved through as preparation.
+    rc, out = _run_network(formula, 404, latest_tag="v3.15.0")
+    check("a version equal to the newest release still fails", rc == 1,
+          f"exit {rc}: {out.strip()[:200]}")
+
+    # Could not read the newest release either. "Could not ask" is not "this is fine" -- the same
+    # rule the 401/403/429 cases enforce, applied to the second question.
+    rc, out = _run_network(_formula("3.17.0", GOOD), 404, latest_status=403)
+    check("an unreadable latest release is not a pass", rc == 1,
+          f"exit {rc}: {out.strip()[:200]}")
+
+    # The explicit override still works, for a caller that knows something the versions cannot say.
+    rc, out = _run_network(formula, 404, latest_tag="v3.16.0", release_prep=True)
+    check("the explicit override is still honoured", rc == 0, f"exit {rc}: {out.strip()[:200]}")
+    check("the override does not claim the hash is right", "NOT" in out,
           f"it must say it confirmed nothing: {out.strip()[:200]}")
 
     # 200 and the manifest agrees -- the whole path, fake `gh` and all.

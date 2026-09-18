@@ -3673,7 +3673,13 @@
    "canonical": "region",
    "variants": [
     "리전",
-    "リージョン"
+    "リージョン",
+    "Région",
+    "Pasaje",
+    "Regione",
+    "Região",
+    "片段",
+    "區段"
    ],
    "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
    "match": "contains",
@@ -3682,12 +3688,12 @@
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "regionKindAudio": {
@@ -4379,23 +4385,33 @@
   },
   "sortTracksByCreationDateMenuItem": {
    "canonical": "생성일",
-   "variants": [],
+   "variants": [
+    "Creation Date",
+    "作成日",
+    "Erstellungsdatum",
+    "Fecha de creación",
+    "Date de création",
+    "Data di creazione",
+    "Data de Criação",
+    "创建日期",
+    "製作日期"
+   ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -4528,23 +4544,33 @@
   },
   "sortTracksByOutputChannelMenuItem": {
    "canonical": "출력 채널",
-   "variants": [],
+   "variants": [
+    "Output Channel",
+    "出力チャンネル",
+    "Output-Kanal",
+    "Canal de salida",
+    "Canal de sortie",
+    "Canale di uscita",
+    "Canal de Saída",
+    "输出通道",
+    "輸出聲道"
+   ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
@@ -4558,23 +4584,33 @@
   },
   "sortTracksByTrackNameMenuItem": {
    "canonical": "트랙 이름",
-   "variants": [],
+   "variants": [
+    "Track Name",
+    "トラック名",
+    "Spurname",
+    "Nombre de pista",
+    "Nom de la piste",
+    "Nome traccia",
+    "Nome da Pista",
+    "轨道名称",
+    "音軌名稱"
+   ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
