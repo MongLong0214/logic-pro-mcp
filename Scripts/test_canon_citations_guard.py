@@ -191,6 +191,42 @@ class GuardBehaviour(unittest.TestCase):
         result = self.run_guard()
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_an_absence_that_only_decorates_a_shipped_string_fails(self):
+        """`is_absent` is EXACT, so a colon, an ellipsis or a capital makes a shipped label look
+        uncitable. `Input Port:`, `Output Port:` and `Model:` were each proved absent from all 23
+        corpora while Logic ships them without the colon, and none had been read off a screen.
+
+        The decoration fold has existed since it was written and only the CLI asked it; the rule
+        that gates a RECORD did not, which is two definitions of "in the corpus" in one system.
+        """
+        self.record("2026-09-15-decorated-absence.json", {
+            "schema": 3, "id": "decorated-absence",
+            "canon_absent": [{"claim": "c", "strings": [REAL_VALUE + ":"],
+                              "searched": self._every_corpus(), "why_runtime": "r"}],
+            "host": {"locale": "ko-KR"}})
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("differ only by case or decoration", result.stderr)
+
+    def test_a_decorated_absence_passes_when_the_shipped_spelling_is_cited(self):
+        """Sometimes the decoration IS the finding. `Set Locators…` is absent from every corpus and
+        Apple ships `Set Locators`, and saying so is the point of the record that carries it.
+
+        A record that has READ the shipped spelling can cite it; one that has not is guessing. So
+        the near miss is allowed exactly when the record also carries a citation whose value folds
+        to the same thing -- which makes the record say which spelling Logic actually has instead
+        of reading as `Logic has no such label`.
+        """
+        self.record("2026-09-15-decorated-and-cited.json", {
+            "schema": 3, "id": "decorated-and-cited",
+            "canon": [{"ref": REAL_REF, "value": REAL_VALUE, "used_for": "the shipped spelling",
+                       "binding": {"kind": "record"}}],
+            "canon_absent": [{"claim": "c", "strings": [REAL_VALUE + ":"],
+                              "searched": self._every_corpus(), "why_runtime": "r"}],
+            "host": {"locale": "ko-KR"}})
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_an_absence_over_a_corpus_with_no_set_fails(self):
         self.record("2026-09-15-no-corpus.json", {
             "schema": 3, "id": "no-corpus",

@@ -747,6 +747,17 @@ def check_not_applicable(rel: str, record: dict, manifest: dict, failures: list)
                         f"{text[:60]!r}, which resolves in {source}/{locale}. A citation was "
                         f"available, so the declaration is false.")
                     return
+                if canon.differs_only_by_decoration(source, locale, text):
+                    # Same reason as the `canon_absent` rule below: exact absence is not absence
+                    # when a shipped label folds to the reading. A declaration that the axis does
+                    # not apply is strongest exactly where the reading is a near miss of a real
+                    # label, because that is where the author typed rather than read.
+                    failures.append(
+                        f"{rel}: declares the canon axis does not apply, and its readings contain "
+                        f"{text[:60]!r}, which is absent from {source}/{locale} only as BYTES -- a "
+                        f"string Logic ships folds to it. Quote it the way the corpus holds it; "
+                        f"the declaration is false for a label that differs by a colon or a case.")
+                    return
             except canon.CanonError:
                 continue
 
@@ -998,7 +1009,13 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
                 f"of them, so proving it in all of them is what the claim means -- and deriving "
                 f"the set from `host.locale` only moved the author's choice, it did not remove it.")
 
+        #: The values this record cites, folded the way a near miss is folded. A `canon_absent`
+        #: entry whose folded form is among them has already named the spelling Logic ships.
+        cited_folded = {canon.fold_for_near_miss(c["value"])
+                        for c in citations if c.get("value")}
+
         for text in strings:
+            folded_is_cited = canon.fold_for_near_miss(text) in cited_folded
             # Absent from ALL of them, not from ANY of them. `any` let a claim stand on the one
             # corpus that happened not to hold the string.
             for source, corpus_locale in sorted(searched):
@@ -1007,6 +1024,30 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
                         failures.append(
                             f"{where}: {text!r} is PRESENT in {source}/{corpus_locale}. It can be "
                             f"cited, so it must be, and a measurement is not the only route to it.")
+                    elif (canon.differs_only_by_decoration(source, corpus_locale, text)
+                          and not folded_is_cited):
+                        # Absent AS BYTES, and a shipped label folds to it -- a colon, an ellipsis,
+                        # a capital, a space. `is_absent` is exact and this rule used to ask
+                        # nothing else, so a truncated or decorated reading proved "uncitable" for
+                        # a label Logic ships. `Input Port:`, `Output Port:` and `Model:` were each
+                        # proved absent from all 23 corpora while Logic ships them without the
+                        # colon, and none had been read off a screen. The CLI has answered NOT
+                        # PROVEN for this since it was written; the rule that gates a RECORD did
+                        # not ask, which is two definitions of "in the corpus" in one system.
+                        #
+                        # `folded_is_cited` is what keeps the rule from refusing the honest case.
+                        # Sometimes the decoration IS the finding -- `Set Locators…` is absent
+                        # everywhere and Apple ships `Set Locators`, and saying so is the point of
+                        # the record. A record that has read the shipped spelling can CITE it, and
+                        # one that has not is guessing. So the near miss is allowed exactly when
+                        # the record also carries a citation whose value folds to the same thing.
+                        failures.append(
+                            f"{where}: {text!r} is absent from {source}/{corpus_locale} as bytes, "
+                            f"but a string Logic ships folds to it -- they differ only by case or "
+                            f"decoration, and this record cites no value that folds to it. Either "
+                            f"the reading was typed rather than read, or the shipped spelling is "
+                            f"the finding; if it is the finding, cite it in `canon` so the record "
+                            f"says which spelling Logic actually has.")
                 except canon.CanonError as exc:
                     failures.append(f"{where}: {exc}")
 

@@ -67,6 +67,14 @@
       "binding": {
         "kind": "record"
       }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrToolbItemName%7C%7C%7CSet%20Locators#value",
+      "value": "Set Locators",
+      "used_for": "the spelling Logic actually ships for the label this record lists as absent. `Set Locators…` is absent from all 23 corpora and that is true of the ELLIPSIS form only -- Apple ships the toolbar item without one, in ten locales, and the product carried the ellipsis. Recording the absence without this citation reads as `Logic has no such label`, which is the opposite of the finding. Apple does ship ellipses where a menu item opens a dialog (`Set Left Locator numerically…`), so their absence here is a fact about this string rather than a corpus that drops them",
+      "binding": {
+        "kind": "record"
+      }
     }
   ],
   "canon_absent": [
