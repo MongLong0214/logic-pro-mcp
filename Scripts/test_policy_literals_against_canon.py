@@ -118,8 +118,15 @@ class Ratchet(unittest.TestCase):
         # defect it injected -- a fixture that is a subset of what the guard reads tests nothing.
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
                         os.path.join(root, "docs", "canon"))
+        # `docs/observations/` and the two guards loaded by path are part of what this guard
+        # reads since the composition-accountability rule landed. A fixture that is a subset of
+        # what the guard reads tests nothing -- the comment above says so, and the rule's first
+        # version proved it by abstaining here and going unmeasured.
+        shutil.copytree(os.path.join(REPO, "docs", "observations"),
+                        os.path.join(root, "docs", "observations"))
         for name in ("logic_canon.py", "nibarchive.py",
-                     "check-policy-literals-against-canon.py"):
+                     "check-policy-literals-against-canon.py",
+                     "check-canon-citations.py", "check-labelsets-are-derived.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         policy_rel = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
         for path in guard.swift_sources():
@@ -150,6 +157,35 @@ class Ratchet(unittest.TestCase):
     def test_the_real_tree_passes(self):
         result = self._run(self._current_allowed())
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+    def test_the_guard_refuses_a_composition_nobody_witnessed(self):
+        """THE CASE THAT DRIVES THE GUARD, not the predicate.
+
+        The first version of this rule was covered only by cases calling
+        `_composition_is_accounted_for` directly, so deleting the guard's `elif` branch produced no
+        failure at all -- the same defect this session spent the day removing, committed again by
+        the change that removes it.
+
+        `%@ 보기` and the noun `트랙` decompose `트랙 보기`, a menu item Logic composes nowhere.
+        """
+        real = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+        with open(real, encoding="utf-8") as handle:
+            policy = handle.read()
+        anchor = "    static let regionHelpKeyword = LabelSet("
+        self.assertEqual(policy.count(anchor), 1)
+        fixture = (
+            '    static let auditInventedComposition = LabelSet(\n'
+            '        canonical: "트랙 보기",\n'
+            '        variants: [],\n'
+            '        rationale: "fixture"\n'
+            '    )\n\n'
+        )
+        allowed = dict(self._current_allowed())
+        allowed["트랙 보기"] = "composed_value"
+        result = self._run(allowed, policy_source=policy.replace(anchor, fixture + anchor, 1))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("DECOMPOSABILITY alone", result.stderr)
 
     def test_a_literal_logic_does_not_ship_fails(self):
         with open(os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility",
@@ -259,6 +295,32 @@ class ComposedLiteralsAreNotNowhere(unittest.TestCase):
         self.assertTrue(composed, "no literal is classified composed, so this case checks nothing")
         unexplained = [text for text in composed if not guard._composed_offline(text)]
         self.assertEqual(unexplained, [])
+
+    def test_every_composed_value_is_witnessed_or_declared(self):
+        """Decomposability is not composition.
+
+        `composed_value` is the one classification that exempts a literal from the `nowhere`
+        ledger without any corpus holding it, so a wrong guess escapes counting entirely. A review
+        walked `트랙 보기` through it -- `%@ 보기` plus the noun `트랙`, a menu item Logic composes
+        nowhere -- and it classified cleanly.
+
+        Two things account for a composition, and both already exist here: an observation record
+        NAMES the literal, or a LabelSet DECLARES the composition in LABELSETS-WITHOUT-A-ROW.json,
+        where every factor is re-proved against the row's digest per locale on every run.
+        """
+        with open(guard.CLASSIFICATION, encoding="utf-8") as handle:
+            committed = json.load(handle)["literals"]
+        composed = [text for text, where in committed.items() if where == "composed_value"]
+        self.assertTrue(composed, "no literal is classified composed, so this case checks nothing")
+        unaccounted = [t for t in composed if not guard._composition_is_accounted_for(t)]
+        self.assertEqual(unaccounted, [])
+
+    def test_a_decomposable_literal_nobody_witnessed_is_not_accounted_for(self):
+        """The control, and the case the rule exists for. Without it the case above passes on a
+        predicate that answers True for everything."""
+        self.assertTrue(guard._composed_offline("트랙 보기"),
+                        "the fixture must decompose, or it tests the wrong branch")
+        self.assertFalse(guard._composition_is_accounted_for("트랙 보기"))
 
 
 if __name__ == "__main__":

@@ -51,6 +51,7 @@ What the list is for is the distinction nothing could draw before: a tolerance v
 look identical in a `LabelSet`, and now one of them is named.
 """
 import importlib.util
+import functools
 import json
 import os
 import re
@@ -413,7 +414,122 @@ def verify_buckets_offline(committed: dict) -> list:
             problems.append(
                 f"{literal!r} is classified `composed_value` and no committed template composes "
                 f"it from a string Apple ships. The classification is false.")
+        elif (where == "composed_value" and _composition_evidence_is_readable()
+              and not _composition_is_accounted_for(literal)):
+            problems.append(
+                f"{literal!r} is classified `composed_value` on DECOMPOSABILITY alone: a committed "
+                f"template plus a noun Apple ships somewhere produce it, and nothing says Logic "
+                f"does. No observation record names it and no LabelSet declares a `composed_from` "
+                f"covering it.\n"
+                f"  Decomposability is not composition. `%@ 보기` and the noun `트랙` produce "
+                f"`트랙 보기`, which Logic composes nowhere -- a review used exactly that shape to "
+                f"classify an invented literal and leave it out of the `nowhere` ledger, which is "
+                f"the only list that counts a literal nobody can explain.\n"
+                f"  Either record a reading that names it, or declare the composition on the "
+                f"LabelSet so `check-new-labelsets-name-a-row.py` verifies each factor against the "
+                f"row's digest per locale.")
     return problems
+
+
+@functools.lru_cache(maxsize=1)
+def _composition_evidence_is_readable() -> bool:
+    """Whether the two things that can account for a composition are even present.
+
+    A tree with no `docs/observations/` and no `LABELSETS-WITHOUT-A-ROW.json` cannot witness or
+    declare anything, and reporting every `composed_value` literal as unaccounted there is refusing
+    for lack of evidence rather than because of it. The self-test builds exactly such a fixture --
+    Scripts and a classification and nothing else -- and the first version of this rule turned its
+    fifteen legitimate literals into fifteen findings.
+
+    Absence of the ARTIFACTS abstains, once, loudly. Artifacts that are present and do not name the
+    literal refuse. That is the same distinction `CANNOT DETERMINE` makes elsewhere here.
+    """
+    missing = []
+    if not os.path.isdir(os.path.join(REPO, "docs", "observations")):
+        missing.append("docs/observations/")
+    if not os.path.exists(os.path.join(REPO, "docs", "canon", "LABELSETS-WITHOUT-A-ROW.json")):
+        missing.append("docs/canon/LABELSETS-WITHOUT-A-ROW.json")
+    # And the READERS, not only the files. Both answers come from other guards loaded by path, and
+    # a tree that does not carry them cannot answer either question. "I could not read it" is not
+    # "it says no" -- the same distinction this repository makes for `history: unavailable`, and
+    # the first version of this rule got it wrong: it turned a fixture missing two Scripts into
+    # fifteen accusations against literals that are fine.
+    for name in ("check-canon-citations.py", "check-labelsets-are-derived.py"):
+        if not os.path.exists(os.path.join(REPO, "Scripts", name)):
+            missing.append(f"Scripts/{name}")
+    if missing:
+        print(f"note: {', '.join(missing)} absent, so whether a `composed_value` is witnessed or "
+              f"declared cannot be answered here. That rule is not applied.", file=sys.stderr)
+        return False
+    return True
+
+
+def _composition_is_accounted_for(literal: str) -> bool:
+    """Whether something beyond the decomposition itself says Logic composes this.
+
+    `composed_value` is the one classification that EXEMPTS a literal from the `nowhere` ledger
+    without any corpus holding it, so it is the one a wrong guess escapes through. Two things
+    count, and they are the two this repository already keeps:
+
+      * an observation record NAMES the literal -- somebody read it off a screen
+      * a LabelSet DECLARES the composition in `LABELSETS-WITHOUT-A-ROW.json`, where
+        `check-new-labelsets-name-a-row.py` re-proves every factor against the row's committed
+        digest per locale on every run
+
+    Measured 2026-09-19 over the fifteen `composed_value` literals: six are witnessed by a record
+    and the other nine are the `Show Library` compositions, all covered by `showLibraryMenuItem`'s
+    declaration. Nothing in the tree relies on decomposability alone.
+    """
+    if canon.normalize(literal) in _literals_in_observation_records():
+        return True
+    return canon.normalize(literal) in _declared_composition_members()
+
+
+@functools.lru_cache(maxsize=1)
+def _literals_in_observation_records() -> frozenset:
+    """Every string any observation record writes, normalized. Reuses the canon guard's reader so
+    the two rules agree about what "a record names it" means."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "canon_citations", os.path.join(REPO, "Scripts", "check-canon-citations.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return frozenset(module._literals_named_in_records())
+    except Exception:
+        # A reader that cannot run must not silently widen the rule. An empty set means every
+        # `composed_value` literal falls through to the declaration check, which is the strict
+        # direction.
+        return frozenset()
+
+
+@functools.lru_cache(maxsize=1)
+def _declared_composition_members() -> frozenset:
+    """Every member of every LabelSet that declares a `composed_from` in the waiver file."""
+    path = os.path.join(REPO, "docs", "canon", "LABELSETS-WITHOUT-A-ROW.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            waived = json.load(handle).get("labelsets") or {}
+    except (OSError, ValueError):
+        return frozenset()
+    declared = {name for name, entry in waived.items()
+                if isinstance(entry, dict) and entry.get("composed_from")}
+    if not declared:
+        return frozenset()
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "labelsets_are_derived", os.path.join(REPO, "Scripts", "check-labelsets-are-derived.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with open(module.SWIFT, encoding="utf-8") as handle:
+            source = handle.read()
+        members = set()
+        for name, values, _ref in module.declarations(source):
+            if name in declared:
+                members.update(canon.normalize(v) for v in values)
+        return frozenset(members)
+    except Exception:
+        # Same direction as the record reader: a reader that cannot run must not widen the rule.
+        return frozenset()
 
 
 def _composed_offline(literal: str) -> bool:
