@@ -161,7 +161,8 @@ def _calls_falsifiable(text):
 def adoption(paths=None, include_hollow=False):
     """Adopting harnesses and total; optionally include separately reported hollow call locations."""
     files = paths if paths is not None else sorted(
-        glob.glob(os.path.join(REPO, "Scripts", "livekit", "live_*.py")))
+        glob.glob(os.path.join(os.environ.get("LPM_LIVEKIT_DIR")
+                               or os.path.join(REPO, "Scripts", "livekit"), "live_*.py")))
     adopters = []
     hollow = []
     for path in files:

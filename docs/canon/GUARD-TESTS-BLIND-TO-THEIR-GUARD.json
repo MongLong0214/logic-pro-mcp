@@ -1,22 +1,23 @@
 {
-  "note": "Guards whose covering test does NOT notice the guard's gate being removed. Measured by Scripts/mutation-sweep-guard-tests.py on 2026-09-18 by inserting `return 0` as the first statement of each guard's main() in a throwaway worktree and running its covering tests: these stayed green. Each drives the guard's helper functions and never its entry point, and the one whole-guard assertion most of them carry is `the real tree passes`, which a guard that refuses nothing satisfies. That is the wiring class of defect this repository keeps finding -- a helper defined and never called, a rule guarding three lists while a fourth sat open -- and a test blind to it cannot see a wiring regression in its own guard. Closing an entry means giving the guard a seam and adding one case that drives main() at an input that must fail; check-ax-comparisons-use-labelsets.py and check-registry-metadata-matches-the-release.py were on this list and were closed that way the same day. This list may only SHRINK.",
+  "note": "Guards whose covering test does NOT notice the guard's gate being removed, measured by Scripts/mutation-sweep-guard-tests.py. EMPTY as of 2026-09-19: all twelve were closed by giving each guard a path seam (an LPM_* environment override, the convention this repository already used for LPM_FORMULA_PATH and LPM_SERVER_JSON) and adding one case that drives main() at an input that must fail, with a control that must pass. The sweep re-measured 22 of 22 caught. This list may only SHRINK, so a guard arriving blind has to be added here and rule 7 refuses the growth -- which is the point of leaving an empty list behind rather than deleting the file.",
   "how_to_reproduce": "python3 Scripts/mutation-sweep-guard-tests.py --fast",
   "not_swept": {
     "check-canon-citations.py": "its test is 76s here; the review's deeper cut showed it catching a permissive decision function, and sweeping it doubles the sweep's cost",
     "check-policy-literals-against-canon.py": "same, 40s"
   },
-  "guards": {
-    "check-canon-prose-numbers.py": "test_canon_prose_numbers.py",
-    "check-dead-harness-helpers.py": "test_dead_harness_helpers.py",
-    "check-every-ci-job-is-required.py": "test_every_ci_job_is_required.py",
-    "check-falsifiable-adoption.py": "test_falsifiable_adoption.py",
-    "check-guards-have-self-tests.py": "test_guards_have_self_tests.py",
-    "check-labelsets-are-derived.py": "test_labelsets_are_derived.py, test_new_labelsets_name_a_row.py",
-    "check-labelsets-live-in-the-policy.py": "test_labelsets_live_in_the_policy.py",
-    "check-livekit-ui-literals.py": "test_livekit_ui_literals.py",
-    "check-locale-detection-is-derived.py": "test_locale_detection_is_derived.py",
-    "check-locale-labels-json.py": "test_locale_campaign.py, test_locale_labels_json.py, test_variants_appear_in_a_census.py",
-    "check-observation-records.py": "test_observation_records.py",
-    "check-test-wall-clock-assertions.py": "test_test_wall_clock_assertions.py"
-  }
+  "guards": {},
+  "closed_2026_09_19": [
+    "check-canon-prose-numbers.py",
+    "check-dead-harness-helpers.py",
+    "check-every-ci-job-is-required.py",
+    "check-falsifiable-adoption.py",
+    "check-guards-have-self-tests.py",
+    "check-labelsets-are-derived.py",
+    "check-labelsets-live-in-the-policy.py",
+    "check-livekit-ui-literals.py",
+    "check-locale-detection-is-derived.py",
+    "check-locale-labels-json.py",
+    "check-observation-records.py",
+    "check-test-wall-clock-assertions.py"
+  ]
 }

@@ -9,6 +9,7 @@ documentation.
 """
 import importlib.util
 import subprocess
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -105,6 +106,36 @@ def main():
                           capture_output=True, text=True)
     case("the repository is green under the rule",
          proc.returncode == 0, (proc.stdout + proc.stderr).strip()[:300])
+
+    # AND THE ENTRY POINT AT A TREE THAT MUST FAIL. Everything above drives the helpers, and the
+    # one whole-guard assertion is "the repository is green" -- which a `main()` returning 0
+    # without calling anything also satisfies. `Scripts/mutation-sweep-guard-tests.py` measured
+    # exactly that on 2026-09-18: the gate removed, this suite green. `LPM_TESTS_DIR` is the seam
+    # that makes a positive input expressible at all.
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "Bad.swift"), "w", encoding="utf-8") as handle:
+            handle.write("import Testing\n@Test func slow() {\n"
+                         "    let started = Date()\n"
+                         "    #expect(Date().timeIntervalSince(started) < 1)\n}\n")
+        bad_run = subprocess.run([sys.executable, str(HERE / "check-test-wall-clock-assertions.py")],
+                                 capture_output=True, text=True,
+                                 env=dict(os.environ, LPM_TESTS_DIR=tmp))
+        case("the entry point refuses a wall-clock read",
+             bad_run.returncode == 1, (bad_run.stdout + bad_run.stderr).strip()[:300])
+        case("and names the file it found it in",
+             "Bad.swift" in bad_run.stdout + bad_run.stderr,
+             (bad_run.stdout + bad_run.stderr).strip()[:300])
+
+    # The control: the same entry point over a tree with nothing wrong must pass, or the case
+    # above proves only that the guard fails on everything.
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "Fine.swift"), "w", encoding="utf-8") as handle:
+            handle.write("import Testing\n@Test func quick() { #expect(1 == 1) }\n")
+        ok_run = subprocess.run([sys.executable, str(HERE / "check-test-wall-clock-assertions.py")],
+                                capture_output=True, text=True,
+                                env=dict(os.environ, LPM_TESTS_DIR=tmp))
+        case("and accepts a tree with no wall-clock read",
+             ok_run.returncode == 0, (ok_run.stdout + ok_run.stderr).strip()[:300])
 
     if failures:
         for f in failures:

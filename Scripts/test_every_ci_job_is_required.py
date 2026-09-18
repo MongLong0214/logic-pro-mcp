@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import tempfile
+import sys
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -312,6 +313,43 @@ class WorkflowDeclarations(unittest.TestCase):
         self.assertEqual(self._run({"thing.yml": {"gates_merges": False, "why": "because",
                                                   "required_commands": ["python3 Scripts/moved.py"]}}),
                          [])
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+
+class TheEntryPointRefuses(unittest.TestCase):
+    """The cases above call the guard's helpers. A `main()` that returned 0 without ever calling
+    them would pass every one, because the repository passes --
+    `Scripts/mutation-sweep-guard-tests.py` measured exactly that on 2026-09-18. A guard is its
+    entry point, so these drive it at an input that must fail, with a control that must pass.
+    """
+
+    def _run(self, script, **env):
+        import subprocess
+        return subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "Scripts", script)],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+    def test_a_job_outside_the_aggregate_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(REPO_ROOT, ".github", "workflows", "ci.yml")
+            source = open(real, encoding="utf-8").read()
+            assert source.count("  guards:\n") == 1
+            path = os.path.join(tmp, "ci.yml")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(source.replace(
+                    "  guards:\n",
+                    "  decoy:\n    runs-on: ubuntu-latest\n    steps:\n      - run: exit 1\n\n  guards:\n", 1))
+            proc = self._run("check-every-ci-job-is-required.py", LPM_CI_WORKFLOW=path)
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+            self.assertIn("decoy", proc.stdout + proc.stderr)
+
+    def test_the_repositorys_own_workflow_is_accepted(self):
+        """The control. Without it the case above passes on a guard that refuses every workflow."""
+        proc = self._run("check-every-ci-job-is-required.py")
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
 if __name__ == "__main__":

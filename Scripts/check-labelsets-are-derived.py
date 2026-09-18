@@ -22,7 +22,11 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SWIFT = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case reaches the helpers only, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured that for
+#: this guard on 2026-09-18.
+SWIFT = os.environ.get("LPM_POLICY_SWIFT") or os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 
 _OPENING = re.compile(r'static let (?P<name>[A-Za-z0-9_]+) = LabelSet\(')
 _CANONICAL = re.compile(r'canonical: "(?P<canonical>(?:[^"\\]|\\.)*)"')

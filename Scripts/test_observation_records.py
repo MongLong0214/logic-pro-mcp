@@ -226,6 +226,27 @@ try:
 finally:
     G.DIR = _saved_dir
 
+# THE ENTRY POINT. Everything above swaps `G.DIR` in-process and calls the helpers; nothing ran
+# the guard. `Scripts/mutation-sweep-guard-tests.py` measured on 2026-09-18 that a `main()`
+# returning 0 without calling anything left this suite green. `LPM_OBSERVATIONS_DIR` is the seam.
+import subprocess as _sp
+with tempfile.TemporaryDirectory() as _tmp:
+    with open(os.path.join(_tmp, "2026-01-01-x.json"), "w", encoding="utf-8") as _h:
+        _h.write('{"id":"2026-01-01-x","date":"2026-01-01","schema":3}\n')
+    _bad = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-observation-records.py")],
+                   capture_output=True, text=True,
+                   env=dict(os.environ, LPM_OBSERVATIONS_DIR=_tmp))
+    case("the entry point refuses a record missing required keys",
+         _bad.returncode == 1, (_bad.stdout + _bad.stderr).strip()[:200])
+    case("and names a key it is missing",
+         "missing required key" in _bad.stdout + _bad.stderr,
+         (_bad.stdout + _bad.stderr).strip()[:200])
+
+_ok = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-observation-records.py")],
+              capture_output=True, text=True)
+case("and accepts the repository's own records",
+     _ok.returncode == 0, (_ok.stdout + _ok.stderr).strip()[:200])
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

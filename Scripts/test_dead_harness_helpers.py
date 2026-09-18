@@ -81,6 +81,32 @@ def main():
                           capture_output=True, text=True)
     case("repository has no dead harness helpers", proc.returncode == 0, proc.stdout.strip()[:200])
 
+    # AND THE ENTRY POINT AT A HARNESS THAT MUST FAIL. "The repository is green" is satisfied by a
+    # `main()` that returns 0 without calling anything, which `Scripts/mutation-sweep-guard-tests
+    # .py` measured on 2026-09-18. `LPM_LIVEKIT_DIR` is the seam; the file must be named
+    # `live_*.py` because that is what this guard treats as an entry point.
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "live_fixture.py"), "w", encoding="utf-8") as handle:
+            handle.write("def helper_nobody_calls():\n    return 1\n")
+        bad_run = subprocess.run([sys.executable, str(HERE / "check-dead-harness-helpers.py")],
+                                 capture_output=True, text=True,
+                                 env=dict(os.environ, LPM_LIVEKIT_DIR=tmp))
+        case("the entry point refuses a helper nobody calls",
+             bad_run.returncode == 1, (bad_run.stdout + bad_run.stderr).strip()[:300])
+        case("and names the helper",
+             "helper_nobody_calls" in bad_run.stdout + bad_run.stderr,
+             (bad_run.stdout + bad_run.stderr).strip()[:300])
+
+    # The control.
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "live_fixture.py"), "w", encoding="utf-8") as handle:
+            handle.write("def used():\n    return 1\n\n\nprint(used())\n")
+        ok_run = subprocess.run([sys.executable, str(HERE / "check-dead-harness-helpers.py")],
+                                capture_output=True, text=True,
+                                env=dict(os.environ, LPM_LIVEKIT_DIR=tmp))
+        case("and accepts a harness whose helpers are called",
+             ok_run.returncode == 0, (ok_run.stdout + ok_run.stderr).strip()[:300])
+
     if failures:
         for f in failures:
             print(f"FAIL {f}")

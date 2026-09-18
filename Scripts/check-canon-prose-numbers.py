@@ -43,6 +43,18 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must fail.
+#: Without one every case could only reach `problems()`, and a `main()` returning 0
+#: unconditionally stayed green; Scripts/mutation-sweep-guard-tests.py measured that on
+#: 2026-09-18.
+#:
+#: It is a ROOT rather than a README path, because `problems()` derives the README, the artifacts
+#: and the records from one root -- pointing only the README elsewhere would check a fixture
+#: against the real repository's numbers, which is a different question.
+def _root() -> str:
+    return os.environ.get("LPM_CANON_REPO") or REPO
+
+
 README = os.path.join(REPO, "docs", "canon", "README.md")
 WAIVER = os.path.join(REPO, "docs", "canon", "PROSE-NUMBERS.json")
 
@@ -102,13 +114,14 @@ def problems(repo: str = None) -> list:
 
 
 def main() -> int:
-    found = problems()
+    root = _root()
+    found = problems(root)
     if found:
         print(f"{len(found)} number(s) in docs/canon/README.md come from nowhere:", file=sys.stderr)
         for line in found:
             print(f"  {line}", file=sys.stderr)
         return 1
-    readme_numbers = numbers_in(_read(README))
+    readme_numbers = numbers_in(_read(os.path.join(root, "docs", "canon", "README.md")))
     print(f"every number in docs/canon/README.md comes from an artifact, a record, or "
           f"{os.path.relpath(WAIVER, REPO)} ({len(readme_numbers)} checked)")
     return 0

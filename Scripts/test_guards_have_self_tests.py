@@ -125,6 +125,27 @@ case("the rule is not exempt from itself",
      "check-guards-have-self-tests.py" not in live_bare,
      "it names a test that drives it")
 
+# THE ENTRY POINT, at a Scripts directory that must fail. Every case above calls `coverage()`;
+# a `main()` returning 0 without calling it passed all of them, which
+# `Scripts/mutation-sweep-guard-tests.py` measured on 2026-09-18. `LPM_SCRIPTS_DIR` is the seam.
+import subprocess as _sp
+with tempfile.TemporaryDirectory() as _tmp:
+    with open(os.path.join(_tmp, "check-zzz-untested.py"), "w", encoding="utf-8") as _h:
+        _h.write('#!/usr/bin/env python3\n"""x"""\nimport sys\nsys.exit(0)\n')
+    _bad = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-guards-have-self-tests.py")],
+                   capture_output=True, text=True,
+                   env=dict(os.environ, LPM_SCRIPTS_DIR=_tmp))
+    case("the entry point refuses a guard with no test",
+         _bad.returncode == 1, (_bad.stdout + _bad.stderr).strip()[:200])
+    case("and names the guard",
+         "check-zzz-untested.py" in _bad.stdout + _bad.stderr,
+         (_bad.stdout + _bad.stderr).strip()[:200])
+
+_ok = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-guards-have-self-tests.py")],
+              capture_output=True, text=True)
+case("and accepts the repository's own Scripts directory",
+     _ok.returncode == 0, (_ok.stdout + _ok.stderr).strip()[:200])
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

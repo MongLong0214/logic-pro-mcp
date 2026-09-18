@@ -125,5 +125,45 @@ class ProseNumbers(unittest.TestCase):
         self.assertEqual(guard.problems(REPO), [])
 
 
+class TheEntryPointRefuses(unittest.TestCase):
+    """Every case above calls `problems()`. A `main()` that returned 0 without ever calling it
+    would pass all of them, because the repository passes -- `Scripts/mutation-sweep-guard-tests.py`
+    measured that on 2026-09-18. A guard is its entry point, so these drive it.
+
+    `LPM_CANON_REPO` is a ROOT rather than a README path: `problems()` derives the README, the
+    artifacts and the records from one root, and pointing only the README elsewhere would check a
+    fixture against the real repository's numbers.
+    """
+
+    def _root(self, readme_text):
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        canon = os.path.join(root, "docs", "canon")
+        os.makedirs(canon)
+        with open(os.path.join(canon, "MANIFEST.json"), "w", encoding="utf-8") as handle:
+            json.dump({"sources": {"strings": {"entries": 605190}}}, handle)
+        with open(os.path.join(canon, "PROSE-NUMBERS.json"), "w", encoding="utf-8") as handle:
+            json.dump({"numbers": {}}, handle)
+        with open(os.path.join(canon, "README.md"), "w", encoding="utf-8") as handle:
+            handle.write(readme_text)
+        return root
+
+    def _run(self, root):
+        import subprocess
+        return subprocess.run(
+            [sys.executable, os.path.join(REPO, "Scripts", "check-canon-prose-numbers.py")],
+            capture_output=True, text=True, env=dict(os.environ, LPM_CANON_REPO=root))
+
+    def test_a_number_from_nowhere_is_refused(self):
+        proc = self._run(self._root("The corpus holds 987654 entries nobody wrote down.\n"))
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+        self.assertIn("987654", proc.stdout + proc.stderr)
+
+    def test_a_number_the_manifest_carries_is_accepted(self):
+        """The control. Without it the case above passes on a guard that refuses every number."""
+        proc = self._run(self._root("The corpus holds 605190 entries.\n"))
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

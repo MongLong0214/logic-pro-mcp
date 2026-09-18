@@ -12,6 +12,8 @@ missed were ordinary Swift.
 import importlib.util
 import os
 import re
+import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -94,6 +96,41 @@ class TheGuardCatchesWhatItNames(unittest.TestCase):
         total = sum(1 for _ in guard.declarations(source))
         self.assertLess(checked, total,
                         "every LabelSet names a row, so this case no longer distinguishes anything")
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+
+class TheEntryPointRefuses(unittest.TestCase):
+    """The cases above call the guard's helpers. A `main()` that returned 0 without ever calling
+    them would pass every one, because the repository passes --
+    `Scripts/mutation-sweep-guard-tests.py` measured exactly that on 2026-09-18. A guard is its
+    entry point, so these drive it at an input that must fail, with a control that must pass.
+    """
+
+    def _run(self, script, **env):
+        import subprocess
+        return subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "Scripts", script)],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+    def test_a_member_that_is_not_the_rows_value_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(REPO_ROOT, "Sources", "LogicProMCP", "Accessibility",
+                                "AXLocalePolicy.swift")
+            source = open(real, encoding="utf-8").read()
+            assert source.count('"리전"') >= 1
+            path = os.path.join(tmp, "Policy.swift")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(source.replace('"리전"', '"NotWhatAppleShips"', 1))
+            proc = self._run("check-labelsets-are-derived.py", LPM_POLICY_SWIFT=path)
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+
+    def test_the_repositorys_own_policy_is_accepted(self):
+        """The control."""
+        proc = self._run("check-labelsets-are-derived.py")
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
 if __name__ == "__main__":

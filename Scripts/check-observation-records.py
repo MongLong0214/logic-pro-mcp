@@ -23,7 +23,11 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIR = os.path.join(REPO, "docs", "observations")
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case reaches the helpers only, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured that for
+#: this guard on 2026-09-18.
+DIR = os.environ.get("LPM_OBSERVATIONS_DIR") or os.path.join(REPO, "docs", "observations")
 
 # WHAT THE NUMBER CHECK IS. It asks whether the numeral appears anywhere in `observations`, not
 # whether the conclusion's use of it follows from that reading — an outside review put it exactly:

@@ -12,6 +12,7 @@ string pointing at an unrelated object.
 import importlib.util
 import json
 import subprocess
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -1211,6 +1212,30 @@ def main():
             _canon.is_absent = _real
         case("a programming error is not read as Apple shipping nothing", not swallowed,
              "a bare except swallowed a TypeError and answered False")
+
+    if failures:
+        for f in failures:
+            print(f"FAIL {f}")
+        return 1
+    # THE ENTRY POINT. Everything above calls the helpers; nothing ran the guard, and
+    # `Scripts/mutation-sweep-guard-tests.py` measured on 2026-09-18 that a `main()` returning 0
+    # without calling them left this suite green. `LPM_OBSERVATIONS_DIR` is the seam.
+    import subprocess as _sp
+    here = os.path.dirname(os.path.abspath(__file__))
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "2026-01-01-x.json"), "w", encoding="utf-8") as handle:
+            handle.write('{"id":"2026-01-01-x","date":"2026-01-01","schema":3}\n')
+        bad = _sp.run([sys.executable, os.path.join(here, "check-locale-labels-json.py")],
+                      capture_output=True, text=True,
+                      env=dict(os.environ, LPM_OBSERVATIONS_DIR=tmp))
+        case("the entry point refuses a records directory that cannot support the ledger",
+             bad.returncode == 1, (bad.stdout + bad.stderr).strip()[:200])
+
+    # The control, against the repository's own records.
+    ok = _sp.run([sys.executable, os.path.join(here, "check-locale-labels-json.py")],
+                 capture_output=True, text=True)
+    case("and accepts the repository's own records",
+         ok.returncode == 0, (ok.stdout + ok.stderr).strip()[:200])
 
     if failures:
         for f in failures:

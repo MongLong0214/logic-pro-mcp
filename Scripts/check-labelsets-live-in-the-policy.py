@@ -22,8 +22,12 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-POLICY = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
-ROOTS = (os.path.join(REPO, "Sources"),)
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case reaches the helpers only, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured that for
+#: this guard on 2026-09-18.
+POLICY = os.environ.get("LPM_POLICY_SWIFT") or os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+ROOTS = tuple(os.environ["LPM_POLICY_ROOTS"].split(os.pathsep)) if os.environ.get("LPM_POLICY_ROOTS") else (os.path.join(REPO, "Sources"),)
 
 _CALL = re.compile(r"LabelSet\(")
 #: How far past the opening token to look for a literal. A declaration's `canonical:` and

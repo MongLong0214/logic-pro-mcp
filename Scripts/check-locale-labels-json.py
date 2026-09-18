@@ -88,7 +88,7 @@ def _is_documented(block, variant=""):
                            in unicodedata.normalize("NFC", str(block.get("observed", ""))).casefold())
 
 
-OBS = os.path.join(REPO, "docs", "observations")
+OBS = os.environ.get("LPM_OBSERVATIONS_DIR") or os.path.join(REPO, "docs", "observations")
 
 
 def _record(record_id):

@@ -122,6 +122,27 @@ failed += 0 if ok else 1
 print(f"{'ok  ' if ok else 'FAIL'} the floor equals live adoption -> "
       f"{len(adopters)} adopters of {total}, FLOOR={G.FLOOR}")
 
+# THE ENTRY POINT, at a harness set that must fail. `LPM_LIVEKIT_DIR` is the seam; the file is
+# named `live_*.py` because that is what this guard counts. Measured blind on 2026-09-18.
+import subprocess as _sp
+with tempfile.TemporaryDirectory() as _tmp:
+    with open(os.path.join(_tmp, "live_fixture.py"), "w", encoding="utf-8") as _h:
+        _h.write("def x():\n    return 1\n")
+    _bad = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-falsifiable-adoption.py")],
+                   capture_output=True, text=True,
+                   env=dict(os.environ, LPM_LIVEKIT_DIR=_tmp))
+    ok = _bad.returncode == 1
+    failed += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} the entry point refuses a harness set below the floor -> "
+          f"exit {_bad.returncode}: {(_bad.stdout + _bad.stderr).strip()[:160]}")
+
+_ok = _sp.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-falsifiable-adoption.py")],
+              capture_output=True, text=True)
+ok = _ok.returncode == 0
+failed += 0 if ok else 1
+print(f"{'ok  ' if ok else 'FAIL'} and accepts the repository's own harnesses -> "
+      f"exit {_ok.returncode}: {(_ok.stdout + _ok.stderr).strip()[:160]}")
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")
 sys.exit(1 if failed else 0)

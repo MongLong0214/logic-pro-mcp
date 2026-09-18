@@ -9,6 +9,7 @@ import importlib.util
 import os
 import shutil
 import tempfile
+import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,6 +79,39 @@ class TheGuardAllowsWhatItMust(ATreeIsBuilt):
 
     def test_the_real_tree_passes(self):
         self.assertEqual(guard.offenders(os.path.join(REPO, "Sources"), guard.POLICY), [])
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+
+class TheEntryPointRefuses(unittest.TestCase):
+    """The cases above call the guard's helpers. A `main()` that returned 0 without ever calling
+    them would pass every one, because the repository passes --
+    `Scripts/mutation-sweep-guard-tests.py` measured exactly that on 2026-09-18. A guard is its
+    entry point, so these drive it at an input that must fail, with a control that must pass.
+    """
+
+    def _run(self, script, **env):
+        import subprocess
+        return subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "Scripts", script)],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+    def test_a_labelset_outside_the_policy_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src")
+            os.makedirs(src)
+            with open(os.path.join(src, "Bad.swift"), "w", encoding="utf-8") as handle:
+                handle.write('let x = LabelSet(canonical: "Mixer", variants: [], rationale: "x")\n')
+            proc = self._run("check-labelsets-live-in-the-policy.py", LPM_POLICY_ROOTS=src)
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+            self.assertIn("Bad.swift", proc.stdout + proc.stderr)
+
+    def test_the_repositorys_own_sources_are_accepted(self):
+        """The control."""
+        proc = self._run("check-labelsets-live-in-the-policy.py")
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
 if __name__ == "__main__":

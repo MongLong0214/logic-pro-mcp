@@ -13,6 +13,7 @@ too would drift with it.
 """
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -173,6 +174,35 @@ found = scan('A = \'click menu bar item "Mixer" of menu bar 1\'\n'
              'B = \'click menu bar item "Mixer" of menu bar 1\'\n', CANONICALS)
 case("two matchers for the same literal are both returned",
      len(found) == 2, f"{len(found)} occurrence(s)")
+
+# 9. THE ENTRY POINT, at a harness that must fail. Everything above drives `scan` and reads
+#    `KNOWN`; nothing ran the guard. `Scripts/mutation-sweep-guard-tests.py` measured on
+#    2026-09-18 that a `main()` returning 0 without calling anything left this suite green.
+#    `LPM_LIVEKIT_DIR` is the seam that makes a positive input expressible.
+with tempfile.TemporaryDirectory() as _tmp:
+    with open(os.path.join(_tmp, "ui.py"), "w", encoding="utf-8") as _h:
+        _h.write("X = 'click menu bar item \"Mixer\" of menu bar 1'\n")
+    _bad = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                        "check-livekit-ui-literals.py")],
+                          capture_output=True, text=True,
+                          env=dict(os.environ, LPM_LIVEKIT_DIR=_tmp))
+    case("the entry point refuses a hardcoded UI literal",
+         _bad.returncode == 1, (_bad.stdout + _bad.stderr).strip()[:200])
+    case("and names the literal and the LabelSet that carries it",
+         "'Mixer'" in _bad.stdout + _bad.stderr and "AXLocalePolicy" in _bad.stdout + _bad.stderr,
+         (_bad.stdout + _bad.stderr).strip()[:200])
+
+# 10. The control, and it runs against the REAL harness directory rather than a fixture. The
+#     `KNOWN` ratchet names 31 files under `Scripts/livekit/`, so pointing the scan at a temporary
+#     directory makes every one of them read as "gone" and the guard fails for a reason that has
+#     nothing to do with the case -- the first version of this control did exactly that. KNOWN is a
+#     ratchet over the real harness set, and comparing it against a fixture compares two different
+#     things. Case 9 shows the guard refuses; this shows it does not refuse everything.
+_ok = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                   "check-livekit-ui-literals.py")],
+                     capture_output=True, text=True)
+case("and accepts the repository's own harnesses",
+     _ok.returncode == 0, (_ok.stdout + _ok.stderr).strip()[:200])
 
 print()
 print(f"FAILED ({failed} unexpected)" if failed else "all cases behaved (0 unexpected)")

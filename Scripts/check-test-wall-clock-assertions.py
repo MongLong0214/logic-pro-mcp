@@ -44,7 +44,11 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(REPO, "Tests")
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case can only reach the helpers, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured exactly
+#: that for this guard on 2026-09-18.
+TESTS = os.environ.get("LPM_TESTS_DIR") or os.path.join(REPO, "Tests")
 
 # Each spelling reads a clock at the moment the test runs. `Date(timeIntervalSince1970: 0)` and
 # `Date(timeIntervalSinceNow: -18)` are constructor labels rather than reads, and carry no leading

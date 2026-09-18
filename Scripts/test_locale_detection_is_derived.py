@@ -12,6 +12,7 @@ type, and it is what the OTHER row whose English is `File` says — so a guard t
 import importlib.util
 import os
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -83,6 +84,40 @@ class TheGuardCatchesWhatItNames(unittest.TestCase):
         """Silence on an unreadable table is how a guard reports clean on a tree it never saw."""
         failures = guard.check("no table here", canon)
         self.assertTrue(failures)
+
+
+
+
+class TheEntryPointRefuses(unittest.TestCase):
+    """The cases above call the guard's helpers. A `main()` returning 0 without ever calling them
+    passed all of them, because the repository passes -- `Scripts/mutation-sweep-guard-tests.py`
+    measured that on 2026-09-18. `LPM_POLICY_SWIFT` is the seam.
+    """
+
+    def _run(self, **env):
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        return subprocess.run(
+            [sys.executable, os.path.join(here, "check-locale-detection-is-derived.py")],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+
+    def test_a_detection_label_that_is_not_the_rows_value_is_refused(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        real = os.path.join(os.path.dirname(here), "Sources", "LogicProMCP", "Accessibility",
+                            "AXLocalePolicy.swift")
+        source = open(real, encoding="utf-8").read()
+        assert '"\ud30c\uc77c"' in source
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "Policy.swift")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(source.replace('"\ud30c\uc77c"', '"NotTheFileMenu"', 1))
+            proc = self._run(LPM_POLICY_SWIFT=path)
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+
+    def test_the_repositorys_own_policy_is_accepted(self):
+        """The control."""
+        proc = self._run()
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
 if __name__ == "__main__":

@@ -33,7 +33,11 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LIVEKIT = os.path.join(REPO, "Scripts", "livekit")
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case can only reach the helpers, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured exactly
+#: that for this guard on 2026-09-18.
+LIVEKIT = os.environ.get("LPM_LIVEKIT_DIR") or os.path.join(REPO, "Scripts", "livekit")
 
 
 def harnesses(root=LIVEKIT):

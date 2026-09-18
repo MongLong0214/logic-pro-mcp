@@ -69,14 +69,22 @@ def _known_bare() -> set:
 KNOWN_BARE = _known_bare()
 
 
+#: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
+#: fail. Without one every case reaches the helpers only, and a `main()` returning 0
+#: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured that for
+#: this guard on 2026-09-18.
+def _scripts() -> str:
+    return os.environ.get("LPM_SCRIPTS_DIR") or os.path.join(REPO, "Scripts")
+
+
 def guards():
-    return sorted(glob.glob(os.path.join(REPO, "Scripts", "check-*.py"))) + \
-           sorted(glob.glob(os.path.join(REPO, "Scripts", "ci-*.sh")))
+    return sorted(glob.glob(os.path.join(_scripts(), "check-*.py"))) + \
+           sorted(glob.glob(os.path.join(_scripts(), "ci-*.sh")))
 
 
 def tests():
-    return sorted(glob.glob(os.path.join(REPO, "Scripts", "test_*.py"))) + \
-           sorted(glob.glob(os.path.join(REPO, "Scripts", "test-*.sh"))) + \
+    return sorted(glob.glob(os.path.join(_scripts(), "test_*.py"))) + \
+           sorted(glob.glob(os.path.join(_scripts(), "test-*.sh"))) + \
            sorted(glob.glob(os.path.join(REPO, "Scripts", "livekit", "test_*.py")))
 
 
