@@ -557,7 +557,13 @@ enum ControlSurfaceSetup {
             let children = AXHelpers.getChildren(group, runtime: runtime.ax)
             guard children.count >= 2 else { continue }
             let text = AXHelpers.getValue(children[0], runtime: runtime.ax) as? String
-            if label.matches(text, mode: .exactStrict) { out.append(children[1]) }
+            // `.prefix`, not `.exactStrict`. The form DRAWS the colon after a field name and Logic's
+            // table holds the bare name -- `field_label` in docs/canon/DECORATION-RULES.json,
+            // witnessed. Comparing verbatim forced these three LabelSets to carry a colon on
+            // every spelling, which made them nine hand-typed strings instead of Apple's row,
+            // and a row is what can be checked offline in all ten locales. Ambiguity still
+            // fails closed: `labelledValue` requires exactly one hit.
+            if label.matches(text, mode: .prefix) { out.append(children[1]) }
         }
         return out
     }

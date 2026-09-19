@@ -224,6 +224,51 @@ import Testing
             in: window, label: AXLocalePolicy.controlSurfaceInputPortLabel, runtime: rt) == "모두")
     }
 
+    @Test("the port labels are found in every language Logic ships, with the colon the form draws")
+    func popupFoundInEveryLocale() {
+        // The reason these three LabelSets carry Apple's row instead of hand-typed spellings. Each
+        // pair below is `Localizable.strings/<locale>/Output Port` and `.../Input Port` verbatim,
+        // with the trailing colon the form DRAWS and the table does not store -- `field_label` in
+        // docs/canon/DECORATION-RULES.json. Under the old `.exactStrict` comparison only the two
+        // spellings somebody had typed matched, and the other eight languages read as unbound.
+        for (locale, output, input) in [
+            ("en", "Output Port", "Input Port"),
+            ("ko", "출력 포트", "입력 포트"),
+            ("ja", "出力ポート", "入力ポート"),
+            ("de", "Output-Port", "Input-Port"),
+            ("es", "Puerto de salida", "Puerto de entrada"),
+            ("fr", "Port de sortie", "Port d’entrée"),
+            ("it", "Porta di uscita", "Porta di ingresso"),
+            ("pt", "Porta de saída", "Porta de entrada"),
+            ("zh_CN", "输出端口", "输入端口"),
+            ("zh_TW", "輸出埠", "輸入埠"),
+        ] {
+            let (_, window, rt) = portWindow(labels: [
+                (output + ":", "AXPopUpButton", "끔"),
+                (input + ":", "AXPopUpButton", "모두"),
+            ])
+            #expect(ControlSurfaceSetup.labelledValue(
+                in: window, label: AXLocalePolicy.controlSurfaceOutputPortLabel,
+                runtime: rt) == "끔", "output port unreadable in \(locale)")
+            #expect(ControlSurfaceSetup.labelledValue(
+                in: window, label: AXLocalePolicy.controlSurfaceInputPortLabel,
+                runtime: rt) == "모두", "input port unreadable in \(locale)")
+        }
+    }
+
+    @Test("the label match is ANCHORED, so a longer field name that merely contains it is not it")
+    func prefixIsAnchoredNotContained() {
+        // The control for the case above. `.prefix` is looser than `.exactStrict` and the looseness
+        // has to stop somewhere: it tolerates what the form DRAWS after the name, never a different
+        // name the label happens to sit inside. Without the anchor this reads the wrong popup and
+        // reports it as the port, which is worse than reporting nothing.
+        let (_, window, rt) = portWindow(labels: [
+            ("MIDI 입력 포트:", "AXPopUpButton", "wrong"),
+        ])
+        #expect(ControlSurfaceSetup.labelledValue(
+            in: window, label: AXLocalePolicy.controlSurfaceInputPortLabel, runtime: rt) == nil)
+    }
+
     @Test("two controls under one label refuse rather than picking whichever came first")
     func duplicateLabelRefuses() {
         let (_, window, rt) = portWindow(labels: [

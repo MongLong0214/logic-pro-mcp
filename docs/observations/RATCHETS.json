@@ -107,8 +107,7 @@
       "2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog",
       "2026-09-14-the-other-three-adr-009-criteria-measured-against-the-eq-path",
       "2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable",
-      "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
-      "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
+      "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does"
     ],
     "schema_v1_records": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -392,14 +391,6 @@
         "automationModeTouch",
         "automationModeTrim",
         "automationModeWrite",
-        "controlSurfaceAddButton",
-        "controlSurfaceInputPortLabel",
-        "controlSurfaceInstallMenuItem",
-        "controlSurfaceInstallWindowTitle",
-        "controlSurfaceModelLabel",
-        "controlSurfaceNewMenuButton",
-        "controlSurfaceOutputPortLabel",
-        "controlSurfaceSetupWindowTitle",
         "deleteTracksPrimaryButton",
         "eventListTab",
         "horizontalZoomSlider",
@@ -451,14 +442,6 @@
         "automationModeTrim",
         "automationModeWrite",
         "controlBarGroupLabel",
-        "controlSurfaceAddButton",
-        "controlSurfaceInputPortLabel",
-        "controlSurfaceInstallMenuItem",
-        "controlSurfaceInstallWindowTitle",
-        "controlSurfaceModelLabel",
-        "controlSurfaceNewMenuButton",
-        "controlSurfaceOutputPortLabel",
-        "controlSurfaceSetupWindowTitle",
         "displayModePopupLabel",
         "eventListTab",
         "inputSlotHelpKeyword",
@@ -637,14 +620,6 @@
         "automationModeTouch",
         "automationModeTrim",
         "automationModeWrite",
-        "controlSurfaceAddButton",
-        "controlSurfaceInputPortLabel",
-        "controlSurfaceInstallMenuItem",
-        "controlSurfaceInstallWindowTitle",
-        "controlSurfaceModelLabel",
-        "controlSurfaceNewMenuButton",
-        "controlSurfaceOutputPortLabel",
-        "controlSurfaceSetupWindowTitle",
         "eventListColumnName",
         "eventListColumnPosition",
         "inputSlotHelpKeyword",
@@ -834,6 +809,13 @@
   },
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
+    "manual_reverify": {
+      "date": "2026-09-19",
+      "members": [
+        "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
+      ],
+      "reason": "Re-verifying the control-surface install means INSTALLING a control surface: it writes to the user's Logic configuration and needs a live server so the MCU port exists to bind to. A script whose whole job is to mutate somebody's setup on demand is a worse thing to have in the repository than a paragraph of steps, so this record reverifies manually. It DOES cite its own evidence file, so it is not in records_without_evidence -- only the re-verification is manual."
+    },
     "surfaces_without_records": {
       "date": "2026-09-18",
       "members": [

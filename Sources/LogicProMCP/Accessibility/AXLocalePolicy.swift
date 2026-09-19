@@ -403,6 +403,8 @@ enum AXLocalePolicy {
         canonical: "Logic Pro",
         variants: ["Logic\u{00A0}Pro"],
         rationale: "MEASURED on all four navigation-free censuses, reading the AXMenuBarItem title: en-US 2026-09-12 and ja-JP 2026-09-05 read `Logic Pro` (U+0020); ko-KR 2026-09-05 and de-DE 2026-09-12 read `Logic\u{00A0}Pro` (U+00A0). Menu-bar items publish no AXIdentifier, so the title is the only handle."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Logic%20Pro#value"
     )
 
     // MARK: - Control Surface Setup (#884 / #862)
@@ -420,8 +422,10 @@ enum AXLocalePolicy {
 
     static let controlSurfacesMenuItem = LabelSet(
         canonical: "Control Surfaces",
-        variants: ["컨트롤 서피스", "コントロールサーフェス", "Bedienoberflächen"],
+        variants: ["컨트롤 서피스", "コントロールサーフェス", "Bedienoberflächen", "Superficies de control", "Surfaces de contrôle", "Superfici di controllo", "Superfícies de Controle", "控制表面"],
         rationale: "The `Logic Pro` menu's Control Surfaces submenu parent, matched by AXMenuItem title. All four spellings are MEASURED at AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem: en-US `Control Surfaces` and de-DE `Bedienoberflächen` in the 2026-09-12 navigation-free censuses, ko-KR `컨트롤 서피스` and ja-JP `コントロールサーフェス` in the 2026-09-05 ones."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Control%20Surfaces#value"
     )
 
     /// WARNING -- this string is NOT unique inside its own submenu on ko-KR OR ja-JP. The Control
@@ -436,64 +440,105 @@ enum AXLocalePolicy {
     /// exactly the positional targeting this repository refuses.
     static let controlSurfaceSetupMenuItem = LabelSet(
         canonical: "Setup…",
-        variants: ["설정…", "設定…", "Setup …"],
+        variants: ["설정…", "設定…", "Setup …", "Configuración…", "Configuration…", "Configurazione…", "Configuração…", "设置…", "設定⋯"],
         rationale: "Opens the Control Surface Setup window. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Setup%E2%80%A6#value"
     )
 
     /// The sibling this server must NOT mistake for `Setup…`. Present only so the collision is
     /// nameable in code and in a failure hint; nothing selects by it.
     static let controlSurfaceSettingsMenuItem = LabelSet(
         canonical: "Settings…",
-        variants: ["설정…", "設定…", "Einstellungen …"],
+        variants: ["설정…", "設定…", "Einstellungen …", "Ajustes…", "Réglages…", "Impostazioni…", "设置…", "設定⋯"],
         rationale: "The global control-surface preferences item, adjacent to `Setup…`. MEASURED in all four locales: en-US `Settings…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Einstellungen …`. Its ko-KR and ja-JP spellings are identical to `Setup…`, which is the whole reason the setup drive identifies its window rather than its menu item."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Settings%E2%80%A6#value"
     )
 
     static let controlSurfaceSetupWindowTitle = LabelSet(
         canonical: "Control Surface Setup",
-        variants: ["컨트롤 서피스 설정"],
+        variants: ["컨트롤 서피스 설정", "コントロールサーフェス設定", "Bedienoberflächen-Setup", "Configuración de superficies de control", "Configuration de la surface de contrôle", "Configurazione superfici di controllo", "Configuração de Superfície de Controle", "控制表面设置", "控制表面設定"],
         rationale: "Identifies the Setup window by AXWindow title; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Control%20Surface%20Setup#value"
     )
 
     static let controlSurfaceNewMenuButton = LabelSet(
         canonical: "New",
-        variants: ["신규"],
+        variants: ["신규", "新規", "Neu", "Nuevo", "Nouveau", "Nuovo", "Novo", "新建", "新增"],
         rationale: "The Setup window's OWN menu button -- an AXMenuButton with subrole AXSegment carrying this string in AXDescription, not AXTitle, and living inside the window rather than in the application menu bar. An earlier probe enumerated only the menu bar and the window's AXButtons and concluded no install route existed; it was reading the wrong two places. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/New%23mti#value"
     )
 
     static let controlSurfaceInstallMenuItem = LabelSet(
         canonical: "Install…",
-        variants: ["설치…"],
+        variants: ["설치…", "インストール…", "Installieren …", "Instalar…", "Installer…", "Installa…", "安装…", "安裝⋯"],
         rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host."
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Install%E2%80%A6#value"
     )
 
     static let controlSurfaceInstallWindowTitle = LabelSet(
         canonical: "Install",
-        variants: ["설치"],
-        rationale: "The device picker opened by `Install…`; an AXFloatingWindow holding a 144-row AXTable of manufacturer/model/profile/version. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+        variants: ["설치", "インストール", "Installieren", "Instalar", "Installer", "Installa",
+                   "Instalação", "安装", "安裝"],
+        rationale: "The device picker opened by the Install menu item; an AXFloatingWindow holding a"
+            + " 144-row AXTable of manufacturer/model/profile/version. Apple's own Install nib keys"
+            + " the window `164.title`. The ko value was read live 2026-09-15. Anchored at ko for the"
+            + " same reason as the Add button: the row has no `en` on the `strings` side and English"
+            + " lives in `nibstrings`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FInstall.strings/ko/164.title#value"
     )
 
     static let controlSurfaceAddButton = LabelSet(
         canonical: "Add",
-        variants: ["추가"],
-        rationale: "Commits the Install window's selected row. ko-KR `추가` read live 2026-09-15 beside `스캔` and `모두 스캔`. English canonical unmeasured on this host."
+        variants: ["추가", "追加", "Hinzufügen", "Añadir", "Ajouter", "Aggiungi", "Adicionar", "添加",
+                   "加入"],
+        rationale: "Commits the Install window's selected row. Apple's own Install nib keys this button"
+            + " `100173.title`, which is the row that MEANS this control -- `Add` also resolves in"
+            + " Localizable.strings and in three MA frameworks, and none of those is this button. The"
+            + " ko value is what was read live 2026-09-15 beside the scan buttons. The reference names"
+            + " the `strings` side ANCHORED AT ko because the row has no `en` there; English lives in"
+            + " `nibstrings` under the same key, the split #895 established, so `Add` itself is the"
+            + " one member this derivation does not verify.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FInstall.strings/ko/100173.title#value"
     )
 
     static let controlSurfaceOutputPortLabel = LabelSet(
-        canonical: "Output Port:",
-        variants: ["출력 포트:"],
-        rationale: "Labels the popup carrying the device's MIDI destination. Matched with the trailing colon because that is the verbatim AXValue of the AXStaticText beside the popup -- the label and the control are siblings, which is how the popup is found without an index. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+        canonical: "Output Port",
+        variants: ["출력 포트", "出力ポート", "Output-Port", "Puerto de salida", "Port de sortie", "Porta di uscita", "Porta de saída", "输出端口", "輸出埠"],
+        rationale: "Labels the popup carrying the device's MIDI destination. The label and the control are"
+            + " siblings, which is how the popup is found without an index. Apple's row; the ko value"
+            + " was read live 2026-09-15. The colon is drawn by the form and not stored (`field_label`"
+            + " in docs/canon/DECORATION-RULES.json), so the match is `.prefix`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Output%20Port#value"
     )
 
     static let controlSurfaceInputPortLabel = LabelSet(
-        canonical: "Input Port:",
-        variants: ["입력 포트:"],
-        rationale: "Labels the popup carrying the device's MIDI source. Defaults to the ALL-sources value after an install, which already includes this server's port -- so a run that only checks the input port can read as bound while the output port is still `Off` and nothing reaches Logic. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
+        canonical: "Input Port",
+        variants: ["입력 포트", "入力ポート", "Input-Port", "Puerto de entrada", "Port d’entrée", "Porta di ingresso", "Porta de entrada", "输入端口", "輸入埠"],
+        rationale: "Labels the popup carrying the device's MIDI source. It defaults to the ALL-sources"
+            + " value after an install, which already includes this server's port -- so a run that"
+            + " only checks the input port can read as bound while the output port is still off and"
+            + " nothing reaches Logic. Apple's row; the ko value was read live 2026-09-15. The colon"
+            + " is drawn by the form and not stored (`field_label` in"
+            + " docs/canon/DECORATION-RULES.json), so the match is `.prefix`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Input%20Port#value"
     )
 
     static let controlSurfaceModelLabel = LabelSet(
-        canonical: "Model:",
-        variants: ["모델:"],
-        rationale: "Labels the AXStaticText naming the installed device model, which is how this server confirms an install landed rather than trusting the Add button's return code. ko-KR read live 2026-09-15 reading `Mackie Control`. English canonical unmeasured on this host."
+        canonical: "Model",
+        variants: ["모델", "モデル", "Modell", "Modelo", "Modèle", "Modello", "Modelo", "型号", "模型"],
+        rationale: "Labels the AXStaticText naming the installed device model, which is how this server"
+            + " confirms an install landed rather than trusting the Add button's return code. Apple's"
+            + " row; the ko value is what was read live 2026-09-15 beside `Mackie Control`. The window"
+            + " DRAWS the trailing colon -- docs/canon/DECORATION-RULES.json says a `field_label` may"
+            + " carry `:` and Logic's table holds the bare name -- so the comparison is `.prefix` and"
+            + " this set carries Apple's bytes rather than nine hand-typed spellings with a colon"
+            + " stuck on.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Model#value"
     )
 
     static let exportMenuItem = LabelSet(

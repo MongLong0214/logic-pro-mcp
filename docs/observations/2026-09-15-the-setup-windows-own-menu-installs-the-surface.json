@@ -1,315 +1,389 @@
 {
- "schema": 2,
- "id": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
- "date": "2026-09-15",
- "subject": "Logic's Control Surface Setup window, as a route to installing a control surface without a mouse",
- "question": "Can a control surface be installed and its MIDI ports bound entirely through AX, so that MCU sends from this server take effect?",
- "verdict": "works",
- "surface": "arrange.menus",
- "issues": [
-  884,
-  862
- ],
- "host": {
-  "app": "Logic Pro",
-  "version": "12.3",
-  "build": "6674",
-  "locale": "ko-KR",
-  "os": "macOS 26.3 (25D125)"
- },
- "reverify": {
-  "kind": "manual",
-  "command": "With a LogicProMCP server running so its virtual ports exist, open Logic Pro > 컨트롤 서피스 > 설정…, dump the window's AX tree, press the AXMenuButton whose AXDescription is 신규, press 설치…, select the row reading `Loud Technologies / Mackie` + `Mackie Control`, press 추가, then set both 출력 포트: and 입력 포트: popups to LogicProMCP-MCU-Internal. Then call logic_tracks.set_automation.",
-  "expected": "the Setup window's 모델: reads `Mackie Control`, both port popups read `LogicProMCP-MCU-Internal`, and set_automation returns state B rather than state C `channels_exhausted`",
-  "cost": "installs a control surface into the user's Logic configuration and rebinds two MIDI ports; ~3 min"
- },
- "depends": [
-  "Sources/LogicProMCP/Accessibility/ControlSurfaceSetup.swift",
-  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:controlSurfaceSetupWindowTitle",
-  "Sources/LogicProMCP/Server/OperationRegistry.swift:systemSetupControlSurface"
- ],
- "method": "Four routes were driven against a live ko-KR Logic and each was judged by its EFFECT, never by an AX return code. Every element was addressed by name — a manufacturer and model string, a label beside a control, a menu item's title — except where noted, and the one place an index was used is recorded below as the incident it was. A server process was held alive throughout so the virtual CoreMIDI endpoints existed for Logic to bind to; with no server running there is nothing to bind and the popups do not offer the name.",
- "observations": [
-  {
-   "what": "the routes that do NOT install a device",
-   "rows": [
+  "schema": 3,
+  "id": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+  "date": "2026-09-15",
+  "subject": "Logic's Control Surface Setup window, as a route to installing a control surface without a mouse",
+  "question": "Can a control surface be installed and its MIDI ports bound entirely through AX, so that MCU sends from this server take effect?",
+  "verdict": "works",
+  "surface": "arrange.menus",
+  "issues": [
+    884,
+    862
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With a LogicProMCP server running so its virtual ports exist, open Logic Pro > 컨트롤 서피스 > 설정…, dump the window's AX tree, press the AXMenuButton whose AXDescription is 신규, press 설치…, select the row reading `Loud Technologies / Mackie` + `Mackie Control`, press 추가, then set both 출력 포트: and 입력 포트: popups to LogicProMCP-MCU-Internal. Then call logic_tracks.set_automation.",
+    "expected": "the Setup window's 모델: reads `Mackie Control`, both port popups read `LogicProMCP-MCU-Internal`, and set_automation returns state B rather than state C `channels_exhausted`",
+    "cost": "installs a control surface into the user's Logic configuration and rebinds two MIDI ports; ~3 min"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/ControlSurfaceSetup.swift",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:controlSurfaceSetupWindowTitle",
+    "Sources/LogicProMCP/Server/OperationRegistry.swift:systemSetupControlSurface"
+  ],
+  "method": "Four routes were driven against a live ko-KR Logic and each was judged by its EFFECT, never by an AX return code. Every element was addressed by name — a manufacturer and model string, a label beside a control, a menu item's title — except where noted, and the one place an index was used is recorded below as the incident it was. A server process was held alive throughout so the virtual CoreMIDI endpoints existed for Logic to bind to; with no server running there is nothing to bind and the popups do not offer the name.",
+  "observations": [
     {
-     "route": "the Setup window's only plain AXButton",
-     "action": "AXPress",
-     "returned": "success",
-     "effect": "none; the window list was identical before and after"
+      "what": "the routes that do NOT install a device",
+      "rows": [
+        {
+          "route": "the Setup window's only plain AXButton",
+          "action": "AXPress",
+          "returned": "success",
+          "effect": "none; the window list was identical before and after"
+        },
+        {
+          "route": "the 컨트롤 서피스 submenu's own items",
+          "items": 8,
+          "effect": "no item installs a device"
+        },
+        {
+          "route": "컨트롤 서피스 > 기본값 재형성 with the MCU ports up",
+          "preference_file": "~/Library/Preferences/com.apple.logic.pro.cs",
+          "LogicProMCP_occurrences_before": 0,
+          "LogicProMCP_occurrences_after": 5,
+          "device_field_after": "기기 없음",
+          "effect": "Logic LEARNED the port names and still installed no device — a check reading only the preference file cannot tell these two apart"
+        }
+      ]
     },
     {
-     "route": "the 컨트롤 서피스 submenu's own items",
-     "items": 8,
-     "effect": "no item installs a device"
+      "what": "the route that works: the Setup window's OWN menu bar",
+      "element": {
+        "role": "AXMenuButton",
+        "subrole": "AXSegment",
+        "AXDescription": "신규",
+        "actions": [
+          "AXPress",
+          "AXShowMenu"
+        ],
+        "AXTitle": ""
+      },
+      "why_it_was_missed": "earlier probes enumerated the APPLICATION menu bar and the window's AXButtons; this element is neither, and it carries its name in AXDescription rather than AXTitle",
+      "menu_items": [
+        "설치…",
+        "모든 모델 스캔",
+        "",
+        "자동 설치"
+      ]
     },
     {
-     "route": "컨트롤 서피스 > 기본값 재형성 with the MCU ports up",
-     "preference_file": "~/Library/Preferences/com.apple.logic.pro.cs",
-     "LogicProMCP_occurrences_before": 0,
-     "LogicProMCP_occurrences_after": 5,
-     "device_field_after": "기기 없음",
-     "effect": "Logic LEARNED the port names and still installed no device — a check reading only the preference file cannot tell these two apart"
+      "what": "the Install window",
+      "title": "설치",
+      "subrole": "AXFloatingWindow",
+      "rows": 144,
+      "columns": [
+        "제조업체",
+        "모델",
+        "플러그인/프로필",
+        "버전"
+      ],
+      "rows_matching_manufacturer_and_model": 1,
+      "matched_row": {
+        "제조업체": "Loud Technologies / Mackie",
+        "모델": "Mackie Control"
+      },
+      "note": "manufacturer and model are NOT localized — they come from the device bundle and read English on a Korean Logic",
+      "commit_button": "추가"
+    },
+    {
+      "what": "the Setup window before and after 추가",
+      "before": {
+        "기기": "기기 없음"
+      },
+      "after": {
+        "모듈": "Logic Control",
+        "모델": "Mackie Control",
+        "출력 포트": "끔",
+        "입력 포트": "모두"
+      }
+    },
+    {
+      "what": "binding each port, by the label beside the popup",
+      "rows": [
+        {
+          "label": "출력 포트:",
+          "before": "끔",
+          "AXPress_rc": 0,
+          "menu_items": [
+            "모두",
+            "Maschine MK3",
+            "LogicProMCP-MCU-Internal",
+            "Logic Pro 가상 출력",
+            "끔"
+          ],
+          "after": "LogicProMCP-MCU-Internal"
+        },
+        {
+          "label": "입력 포트:",
+          "before": "모두",
+          "AXPress_rc": -25205,
+          "menu_items": [
+            "모두",
+            "Maschine MK3",
+            "LogicProMCP-MCU-Internal",
+            "LogicProMCP-KeyCmd-Internal",
+            "LogicProMCP-Scripter-Internal",
+            "LogicProMCP-MIDI-Internal",
+            "Logic Pro 가상 입력"
+          ],
+          "after": "LogicProMCP-MCU-Internal"
+        }
+      ],
+      "note": "the SECOND press returned kAXErrorCannotComplete and the menu opened anyway, which is why the open is judged by whether a menu carrying the popup's current value appeared"
+    },
+    {
+      "what": "the product operation that was blocked, before and after",
+      "call": "logic_tracks.set_automation {index: 0, mode: touch}",
+      "before": {
+        "state": "C",
+        "error": "channels_exhausted",
+        "hint": "MCU feedback not detected: no feedback has been received on 'LogicProMCP-MCU-Internal' (2 endpoint(s) visible, all owned by this server). Check the Logic Pro > Control Surfaces > Setup binding."
+      },
+      "after": {
+        "state": "B",
+        "success": true,
+        "reason": "readback_unavailable",
+        "write_attempted": true
+      },
+      "effect_seen_in_the_application": "track 0's mixer automation button changed from 읽기 to 터치 while every other strip stayed 읽기"
+    },
+    {
+      "what": "the ko-KR menu-item collision that makes ordinal selection wrong",
+      "en_US_items": [
+        "Setup…",
+        "Settings…"
+      ],
+      "ko_KR_items": [
+        "설정…",
+        "설정…"
+      ],
+      "shared_AXIdentifier": "globalMenuItemCall:",
+      "consequence": "neither the title nor the identifier separates them; only the window that opens does"
+    },
+    {
+      "what": "every label this drive matches on, as the element it was read from",
+      "note": "role and attribute are recorded per row because a string is not a sighting — an `설정…` on a menu item and an `설정…` anywhere else are not the same label.",
+      "rows": [
+        {
+          "role": "AXMenuItem",
+          "title": "컨트롤 서피스",
+          "path": "AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem[컨트롤 서피스]"
+        },
+        {
+          "role": "AXMenuItem",
+          "title": "설정…",
+          "path": "AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem[컨트롤 서피스]/AXMenu/AXMenuItem[설정…]"
+        },
+        {
+          "role": "AXWindow",
+          "title": "컨트롤 서피스 설정"
+        },
+        {
+          "role": "AXMenuButton",
+          "description": "신규",
+          "subrole": "AXSegment"
+        },
+        {
+          "role": "AXMenuItem",
+          "title": "설치…"
+        },
+        {
+          "role": "AXWindow",
+          "title": "설치",
+          "subrole": "AXFloatingWindow"
+        },
+        {
+          "role": "AXButton",
+          "title": "추가"
+        },
+        {
+          "role": "AXStaticText",
+          "value": "출력 포트:"
+        },
+        {
+          "role": "AXStaticText",
+          "value": "입력 포트:"
+        },
+        {
+          "role": "AXStaticText",
+          "value": "모델:"
+        }
+      ]
+    },
+    {
+      "what": "the application menu-bar item's space character, per locale",
+      "note": "read from the AXMenuBarItem titles of the four navigation-free censuses. en-US and ja-JP use U+0020; ko-KR and de-DE use U+00A0. A walk that starts from a literal `Logic Pro` finds nothing on half of them.",
+      "rows": [
+        {
+          "role": "AXMenuBarItem",
+          "title": "Logic Pro",
+          "locale": "en-US",
+          "space": "U+0020"
+        },
+        {
+          "role": "AXMenuBarItem",
+          "title": "Logic Pro",
+          "locale": "ja-JP",
+          "space": "U+0020"
+        },
+        {
+          "role": "AXMenuBarItem",
+          "title": "Logic Pro",
+          "locale": "ko-KR",
+          "space": "U+00A0"
+        },
+        {
+          "role": "AXMenuBarItem",
+          "title": "Logic Pro",
+          "locale": "de-DE",
+          "space": "U+00A0"
+        }
+      ]
+    },
+    {
+      "what": "the process name is NOT the menu-bar item — measured in the same minute, same host",
+      "why_it_matters": "a guard reading `applicationMenuBarItem` flagged five live harnesses for `\"Logic Pro\"`; all five were System Events process predicates, which are a different string that happens to read alike. Treating them as the same would have broken five working harnesses.",
+      "rows": [
+        {
+          "role": "AXMenuBarItem",
+          "title": "Logic Pro",
+          "source": "AX menu bar, ko-KR",
+          "space": "U+00A0"
+        },
+        {
+          "source": "System Events: every process whose name is \"Logic Pro\" (U+0020)",
+          "result": 1
+        },
+        {
+          "source": "System Events: every process whose name is \"Logic Pro\" (U+00A0)",
+          "result": 0
+        },
+        {
+          "source": "System Events: name of every process whose bundle identifier is com.apple.logic10",
+          "bytes": "L o g i c U+0020 P r o"
+        }
+      ]
+    },
+    {
+      "what": "the binding survives the server dying — so this setup is genuinely one-time",
+      "method": "after the install, every server process was killed and the CoreMIDI census re-read; then a NEW one-shot server was started and an MCU-only operation driven.",
+      "rows": [
+        {
+          "step": "server processes running",
+          "value": 0
+        },
+        {
+          "step": "endpoints named LogicProMCP-* visible",
+          "value": 0
+        },
+        {
+          "step": "fresh server, track.set_automation latch",
+          "state": "B",
+          "success": true
+        },
+        {
+          "step": "fresh server, track.set_automation read (restore)",
+          "state": "B",
+          "success": true
+        }
+      ],
+      "conclusion": "Logic re-binds the control surface to the port BY NAME when the endpoint reappears. The device and its two port bindings live in Logic's own configuration, not in the running server, so `system.setup_control_surface` needs to succeed once per machine rather than once per session."
     }
-   ]
-  },
-  {
-   "what": "the route that works: the Setup window's OWN menu bar",
-   "element": {
-    "role": "AXMenuButton",
-    "subrole": "AXSegment",
-    "AXDescription": "신규",
-    "actions": [
-     "AXPress",
-     "AXShowMenu"
-    ],
-    "AXTitle": ""
-   },
-   "why_it_was_missed": "earlier probes enumerated the APPLICATION menu bar and the window's AXButtons; this element is neither, and it carries its name in AXDescription rather than AXTitle",
-   "menu_items": [
-    "설치…",
-    "모든 모델 스캔",
-    "",
-    "자동 설치"
-   ]
-  },
-  {
-   "what": "the Install window",
-   "title": "설치",
-   "subrole": "AXFloatingWindow",
-   "rows": 144,
-   "columns": [
-    "제조업체",
-    "모델",
-    "플러그인/프로필",
-    "버전"
-   ],
-   "rows_matching_manufacturer_and_model": 1,
-   "matched_row": {
-    "제조업체": "Loud Technologies / Mackie",
-    "모델": "Mackie Control"
-   },
-   "note": "manufacturer and model are NOT localized — they come from the device bundle and read English on a Korean Logic",
-   "commit_button": "추가"
-  },
-  {
-   "what": "the Setup window before and after 추가",
-   "before": {
-    "기기": "기기 없음"
-   },
-   "after": {
-    "모듈": "Logic Control",
-    "모델": "Mackie Control",
-    "출력 포트": "끔",
-    "입력 포트": "모두"
-   }
-  },
-  {
-   "what": "binding each port, by the label beside the popup",
-   "rows": [
+  ],
+  "evidence": [
+    "evidence/2026-09-15-control-surface-install-routes.json"
+  ],
+  "conclusion": "A control surface CAN be installed and bound entirely through AX, and doing so is what makes MCU operations take effect. The route is the Setup window's OWN menu bar — an AXMenuButton with subrole AXSegment naming itself in AXDescription — and it was missed three times before because every probe read the application menu bar and the window's AXButtons instead. `기본값 재형성` is the trap on the way: with the server's ports up it rewrites com.apple.logic.pro.cs from 0 to 5 occurrences of `LogicProMCP` while the window still reads `기기 없음`, so a check that reads the preference file concludes success from a run that installed nothing. The proof here is neither the preference file nor the popups this drive wrote: it is `set_automation` moving from state C `channels_exhausted` to state B, and track 0's automation button reading 터치 in the mixer.",
+  "limits": [
+    "ko-KR only. The menu PATH (`Control Surfaces` > `Setup…`) is measured on en-US too, from the 2026-09-12 navigation-free census, but every label inside the Setup and Install windows is read on Korean only; their English canonicals in AXLocalePolicy are Apple's published strings and are NOT measured on this host.",
+    "One host, one Logic build (12.3 / 6674), one device (Mackie Control). Nothing here says another surface installs the same way.",
+    "The server's virtual ports exist only while a server process runs, so this route CANNOT be driven from a dead server: the popup would not offer the name. Every reading above was taken with a server held open.",
+    "`set_automation` returns state B, not state A — the MCU send lands but there is no readback for it. This record does not establish that the automation mode can be READ back; see `2026-09-15-the-automation-lane-is-legible-and-inert`.",
+    "The restore of a mixer fader driven during this session is one detent high (raw 180 against an observed 176): Logic quantizes AX fader writes to ~10 raw units, so the original value was not representable through the route that changed it.",
+    "One incident worth carrying forward: pressing the Setup window's unnamed button BY INDEX opened `컨트롤러 할당` instead, and both stray windows then refused Cmd+W and needed Escape. That is the positional targeting this repository refuses, and it behaved exactly as the rule predicts.",
+    "The process name and the menu-bar item are two different strings on this host: System Events answers to `Logic Pro` with U+0020 while the AXMenuBarItem title is U+00A0. Nothing here says that holds on another macOS version, and a harness that conflates them will look correct."
+  ],
+  "supersedes": null,
+  "canon": [
     {
-     "label": "출력 포트:",
-     "before": "끔",
-     "AXPress_rc": 0,
-     "menu_items": [
-      "모두",
-      "Maschine MK3",
-      "LogicProMCP-MCU-Internal",
-      "Logic Pro 가상 출력",
-      "끔"
-     ],
-     "after": "LogicProMCP-MCU-Internal"
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Control%20Surfaces#value",
+      "value": "컨트롤 서피스",
+      "used_for": "the submenu this record enumerates -- eight items, none of which installs a device",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
     },
     {
-     "label": "입력 포트:",
-     "before": "모두",
-     "AXPress_rc": -25205,
-     "menu_items": [
-      "모두",
-      "Maschine MK3",
-      "LogicProMCP-MCU-Internal",
-      "LogicProMCP-KeyCmd-Internal",
-      "LogicProMCP-Scripter-Internal",
-      "LogicProMCP-MIDI-Internal",
-      "Logic Pro 가상 입력"
-     ],
-     "after": "LogicProMCP-MCU-Internal"
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/New%23mti#value",
+      "value": "신규",
+      "used_for": "the AXDescription of the Setup window's OWN menu button, the element earlier probes missed because it is neither in the application menu bar nor an AXButton",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Install%E2%80%A6#value",
+      "value": "설치…",
+      "used_for": "the first item of that menu, the one that opens the device picker",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FInstall.strings/ko/164.title#value",
+      "value": "설치",
+      "used_for": "the Install window's title, keyed by Apple's own Install nib",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FInstall.strings/ko/100173.title#value",
+      "value": "추가",
+      "used_for": "the button that commits the selected row; the same word is the value of Localizable.strings/Add and of a Drummer slider, so the citation names the row that MEANS this button",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Model#value",
+      "value": "모델",
+      "used_for": "the Setup window's model field label, read to confirm an install landed instead of trusting a return code. The window draws the colon the table does not store",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Output%20Port#value",
+      "value": "출력 포트",
+      "used_for": "the label beside the output popup; bound FIRST because the input popup defaults to the all-sources value and would read as bound while nothing reaches Logic",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Input%20Port#value",
+      "value": "입력 포트",
+      "used_for": "the label beside the input popup",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
     }
-   ],
-   "note": "the SECOND press returned kAXErrorCannotComplete and the menu opened anyway, which is why the open is judged by whether a menu carrying the popup's current value appeared"
-  },
-  {
-   "what": "the product operation that was blocked, before and after",
-   "call": "logic_tracks.set_automation {index: 0, mode: touch}",
-   "before": {
-    "state": "C",
-    "error": "channels_exhausted",
-    "hint": "MCU feedback not detected: no feedback has been received on 'LogicProMCP-MCU-Internal' (2 endpoint(s) visible, all owned by this server). Check the Logic Pro > Control Surfaces > Setup binding."
-   },
-   "after": {
-    "state": "B",
-    "success": true,
-    "reason": "readback_unavailable",
-    "write_attempted": true
-   },
-   "effect_seen_in_the_application": "track 0's mixer automation button changed from 읽기 to 터치 while every other strip stayed 읽기"
-  },
-  {
-   "what": "the ko-KR menu-item collision that makes ordinal selection wrong",
-   "en_US_items": [
-    "Setup…",
-    "Settings…"
-   ],
-   "ko_KR_items": [
-    "설정…",
-    "설정…"
-   ],
-   "shared_AXIdentifier": "globalMenuItemCall:",
-   "consequence": "neither the title nor the identifier separates them; only the window that opens does"
-  },
-  {
-   "what": "every label this drive matches on, as the element it was read from",
-   "note": "role and attribute are recorded per row because a string is not a sighting — an `설정…` on a menu item and an `설정…` anywhere else are not the same label.",
-   "rows": [
-    {
-     "role": "AXMenuItem",
-     "title": "컨트롤 서피스",
-     "path": "AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem[컨트롤 서피스]"
-    },
-    {
-     "role": "AXMenuItem",
-     "title": "설정…",
-     "path": "AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem[컨트롤 서피스]/AXMenu/AXMenuItem[설정…]"
-    },
-    {
-     "role": "AXWindow",
-     "title": "컨트롤 서피스 설정"
-    },
-    {
-     "role": "AXMenuButton",
-     "description": "신규",
-     "subrole": "AXSegment"
-    },
-    {
-     "role": "AXMenuItem",
-     "title": "설치…"
-    },
-    {
-     "role": "AXWindow",
-     "title": "설치",
-     "subrole": "AXFloatingWindow"
-    },
-    {
-     "role": "AXButton",
-     "title": "추가"
-    },
-    {
-     "role": "AXStaticText",
-     "value": "출력 포트:"
-    },
-    {
-     "role": "AXStaticText",
-     "value": "입력 포트:"
-    },
-    {
-     "role": "AXStaticText",
-     "value": "모델:"
-    }
-   ]
-  },
-  {
-   "what": "the application menu-bar item's space character, per locale",
-   "note": "read from the AXMenuBarItem titles of the four navigation-free censuses. en-US and ja-JP use U+0020; ko-KR and de-DE use U+00A0. A walk that starts from a literal `Logic Pro` finds nothing on half of them.",
-   "rows": [
-    {
-     "role": "AXMenuBarItem",
-     "title": "Logic Pro",
-     "locale": "en-US",
-     "space": "U+0020"
-    },
-    {
-     "role": "AXMenuBarItem",
-     "title": "Logic Pro",
-     "locale": "ja-JP",
-     "space": "U+0020"
-    },
-    {
-     "role": "AXMenuBarItem",
-     "title": "Logic Pro",
-     "locale": "ko-KR",
-     "space": "U+00A0"
-    },
-    {
-     "role": "AXMenuBarItem",
-     "title": "Logic Pro",
-     "locale": "de-DE",
-     "space": "U+00A0"
-    }
-   ]
-  },
-  {
-   "what": "the process name is NOT the menu-bar item — measured in the same minute, same host",
-   "why_it_matters": "a guard reading `applicationMenuBarItem` flagged five live harnesses for `\"Logic Pro\"`; all five were System Events process predicates, which are a different string that happens to read alike. Treating them as the same would have broken five working harnesses.",
-   "rows": [
-    {
-     "role": "AXMenuBarItem",
-     "title": "Logic Pro",
-     "source": "AX menu bar, ko-KR",
-     "space": "U+00A0"
-    },
-    {
-     "source": "System Events: every process whose name is \"Logic Pro\" (U+0020)",
-     "result": 1
-    },
-    {
-     "source": "System Events: every process whose name is \"Logic Pro\" (U+00A0)",
-     "result": 0
-    },
-    {
-     "source": "System Events: name of every process whose bundle identifier is com.apple.logic10",
-     "bytes": "L o g i c U+0020 P r o"
-    }
-   ]
-  },
-  {
-   "what": "the binding survives the server dying — so this setup is genuinely one-time",
-   "method": "after the install, every server process was killed and the CoreMIDI census re-read; then a NEW one-shot server was started and an MCU-only operation driven.",
-   "rows": [
-    {
-     "step": "server processes running",
-     "value": 0
-    },
-    {
-     "step": "endpoints named LogicProMCP-* visible",
-     "value": 0
-    },
-    {
-     "step": "fresh server, track.set_automation latch",
-     "state": "B",
-     "success": true
-    },
-    {
-     "step": "fresh server, track.set_automation read (restore)",
-     "state": "B",
-     "success": true
-    }
-   ],
-   "conclusion": "Logic re-binds the control surface to the port BY NAME when the endpoint reappears. The device and its two port bindings live in Logic's own configuration, not in the running server, so `system.setup_control_surface` needs to succeed once per machine rather than once per session."
-  }
- ],
- "evidence": [
-  "evidence/2026-09-15-control-surface-install-routes.json"
- ],
- "conclusion": "A control surface CAN be installed and bound entirely through AX, and doing so is what makes MCU operations take effect. The route is the Setup window's OWN menu bar — an AXMenuButton with subrole AXSegment naming itself in AXDescription — and it was missed three times before because every probe read the application menu bar and the window's AXButtons instead. `기본값 재형성` is the trap on the way: with the server's ports up it rewrites com.apple.logic.pro.cs from 0 to 5 occurrences of `LogicProMCP` while the window still reads `기기 없음`, so a check that reads the preference file concludes success from a run that installed nothing. The proof here is neither the preference file nor the popups this drive wrote: it is `set_automation` moving from state C `channels_exhausted` to state B, and track 0's automation button reading 터치 in the mixer.",
- "limits": [
-  "ko-KR only. The menu PATH (`Control Surfaces` > `Setup…`) is measured on en-US too, from the 2026-09-12 navigation-free census, but every label inside the Setup and Install windows is read on Korean only; their English canonicals in AXLocalePolicy are Apple's published strings and are NOT measured on this host.",
-  "One host, one Logic build (12.3 / 6674), one device (Mackie Control). Nothing here says another surface installs the same way.",
-  "The server's virtual ports exist only while a server process runs, so this route CANNOT be driven from a dead server: the popup would not offer the name. Every reading above was taken with a server held open.",
-  "`set_automation` returns state B, not state A — the MCU send lands but there is no readback for it. This record does not establish that the automation mode can be READ back; see `2026-09-15-the-automation-lane-is-legible-and-inert`.",
-  "The restore of a mixer fader driven during this session is one detent high (raw 180 against an observed 176): Logic quantizes AX fader writes to ~10 raw units, so the original value was not representable through the route that changed it.",
-  "One incident worth carrying forward: pressing the Setup window's unnamed button BY INDEX opened `컨트롤러 할당` instead, and both stray windows then refused Cmd+W and needed Escape. That is the positional targeting this repository refuses, and it behaved exactly as the rule predicts.",
-  "The process name and the menu-bar item are two different strings on this host: System Events answers to `Logic Pro` with U+0020 while the AXMenuBarItem title is U+00A0. Nothing here says that holds on another macOS version, and a harness that conflates them will look correct."
- ],
- "supersedes": null
+  ]
 }
