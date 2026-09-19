@@ -9,23 +9,46 @@ extension ResourceHandlers {
     /// can't OOM the server.
     static let libraryInventoryMaxBytes: Int = 64 * 1024 * 1024  // 64 MiB
 
+    /// The two filenames a scan can write, in the order this resource prefers them.
+    ///
+    /// `writeInventoryJSON` sends a DISK scan to `library-inventory-disk.json` and an AX scan to
+    /// `library-inventory.json`, deliberately: an AX scan reads the Library panel and is richer
+    /// than a directory walk, so a disk scan must not clobber it. Only half of that split was
+    /// built -- the writer learned two names and this reader knew one, so the DEFAULT scan
+    /// (`parseScanMode` answers `.disk` for an absent mode) wrote a file nothing could read and
+    /// `logic://library-inventory` stayed empty however many times you scanned (#923).
+    ///
+    /// Canonical first keeps the original intent: where both exist the AX snapshot wins. The
+    /// payload carries a top-level `"source"` field, so a consumer can tell which it got.
+    private static let inventoryFilenames = ["library-inventory.json", "library-inventory-disk.json"]
+
     /// Resolve the library-inventory cache file. Checks (in order):
     /// 1. `LOGIC_PRO_MCP_LIBRARY_INVENTORY` env override (absolute path; symlinks resolved + validated)
-    /// 2. `<CWD>/Resources/library-inventory.json` — dev/CLI launches from repo root
-    /// 3. `~/Library/Application Support/LogicProMCP/library-inventory.json` — daemon/launchd launches where CWD=/
-    private static func libraryInventoryCandidatePaths() -> [String] {
+    /// 2. `<CWD>/Resources/` — dev/CLI launches from repo root, AX file then disk file
+    /// 3. `~/Library/Application Support/LogicProMCP/` — daemon/launchd launches where CWD=/, same order
+    /// `internal`, not `private`, so a test can read the ORDER and the MEMBERSHIP. The defect
+    /// this list carried for months was a missing entry, and a missing entry is invisible from
+    /// outside: the resource simply answers empty, which is also what it answers when nobody
+    /// has scanned yet.
+    static func libraryInventoryCandidatePaths() -> [String] {
         var paths: [String] = []
+        // The override names a FILE, not a directory, so it gets no sibling: an operator who
+        // points at a path means that path.
         if let override = ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_LIBRARY_INVENTORY"],
            !override.isEmpty {
             paths.append(override)
         }
-        paths.append("Resources/library-inventory.json")
+        for filename in inventoryFilenames {
+            paths.append("Resources/" + filename)
+        }
         if let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first {
-            paths.append(
-                appSupport.appendingPathComponent("LogicProMCP/library-inventory.json").path
-            )
+            for filename in inventoryFilenames {
+                paths.append(
+                    appSupport.appendingPathComponent("LogicProMCP/" + filename).path
+                )
+            }
         }
         return paths
     }

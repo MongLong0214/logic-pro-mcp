@@ -233,3 +233,43 @@ private struct InventoryFixture {
     if !music.hasSuffix("/") { music += "/" }
     #expect(prefixes.contains(music), "default allowlist must include ~/Music/Logic/")
 }
+
+// MARK: - #923: the reader has to know both filenames the writer uses
+
+/// `writeInventoryJSON` sends a disk scan to `library-inventory-disk.json` and an AX scan to
+/// `library-inventory.json`. `parseScanMode` answers `.disk` for an absent mode, so the DEFAULT
+/// `scan_library` writes the first name — and this reader knew only the second, so the resource
+/// stayed empty however many times you scanned. The list is asserted rather than the resource
+/// because an absent candidate is invisible from outside: the resource answers empty, which is
+/// also what it answers when nobody has scanned yet.
+@Test func testCandidatePathsCarryBothInventoryFilenames() {
+    let paths = ResourceHandlers.libraryInventoryCandidatePaths()
+
+    let canonical = paths.filter { $0.hasSuffix("/library-inventory.json") }
+    let disk = paths.filter { $0.hasSuffix("/library-inventory-disk.json") }
+    #expect(!canonical.isEmpty, "the AX filename must be a candidate: \(paths)")
+    #expect(!disk.isEmpty, "the DISK filename is what the default scan writes: \(paths)")
+    #expect(canonical.count == disk.count,
+            "every directory that can hold one can hold the other: \(paths)")
+}
+
+/// The half of the original intent that must survive the fix: "an AX snapshot survives a disk
+/// scan". Where both files exist in one directory the AX one is served, so its candidate has to
+/// come first — in EVERY directory, not just the one somebody checked.
+@Test func testTheAXSnapshotIsPreferredOverTheDiskScanInEveryDirectory() {
+    let paths = ResourceHandlers.libraryInventoryCandidatePaths()
+    var directoriesSeen = 0
+    for (index, path) in paths.enumerated() where path.hasSuffix("/library-inventory.json") {
+        let directory = (path as NSString).deletingLastPathComponent
+        let sibling = directory + "/library-inventory-disk.json"
+        guard let siblingIndex = paths.firstIndex(of: sibling) else {
+            Issue.record("no disk sibling for \(path) in \(paths)")
+            continue
+        }
+        directoriesSeen += 1
+        #expect(index < siblingIndex,
+                "\(directory): the AX snapshot must be tried before the disk scan")
+    }
+    #expect(directoriesSeen >= 2,
+            "both <CWD>/Resources and Application Support must be covered: \(paths)")
+}

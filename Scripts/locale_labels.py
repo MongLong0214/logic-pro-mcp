@@ -25,6 +25,7 @@ import json
 import os
 import re
 import sys
+import textwrap
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SWIFT = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
@@ -67,6 +68,152 @@ SHIPPED_LABELS = {
 UNTRANSLATED_EXTRAS = {
     "BOUNCE_SETTINGS_MARKERS": ("pcm", "audio tail"),
 }
+
+
+#: The Swift side of the same problem, and it is NOT the same shape. `logic_ui_labels.py` hands its
+#: consumers a flat folded tuple because they MATCH against a reading; these consumers have to
+#: CHOOSE one string to type, and a set cannot answer that. `ArmKeyCommandSetup.searchQuery` types
+#: the command name into the Key Commands filter, and an English name typed into a Korean Logic
+#: collapses the list to nothing -- so the pick has to be per locale.
+#:
+#: The mapping is DERIVED, never written down: for each locale the generator takes the LabelSet
+#: member whose case-folded digest equals the digest Apple's row is pinned to there, which is the
+#: same question `check-labelsets-are-derived.py` already answers. So it runs offline against
+#: `docs/canon/index/` and a wrong entry is impossible rather than unlikely.
+SWIFT_PATH = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocaleValues.swift")
+
+#: Which LabelSets need a locale-keyed table, and why each one does. Short and explicit for the
+#: same reason `SHIPPED_LABELS` is: a label appears here only because some call site must PICK a
+#: single spelling, and every entry is a call site somebody has to point at.
+LOCALE_KEYED = {
+    "recordArmKeyCommandName":
+        "ArmKeyCommandSetup.searchQuery types this into the Key Commands filter, and the filter is "
+        "a live search -- the wrong language collapses the list to nothing and the setup then "
+        "reports `could not find the command` having never had a chance.",
+}
+
+#: Keyed by the identifiers `AXLogicProElements.logicUILocaleIdentifier` returns, so the Swift side
+#: needs no mapping of its own. A second copy of `ko-KR -> ko` in another language is a second
+#: thing to keep true.
+def _load_canon():
+    """The canon module and its manifest, cached. `None` on a tree without the canon axis."""
+    if "canon" not in _CANON_CACHE:
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "logic_canon_for_labels", os.path.join(REPO, "Scripts", "logic_canon.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _CANON_CACHE["canon"] = module
+            _CANON_CACHE["manifest"] = module.load_manifest()
+        except Exception:
+            _CANON_CACHE["canon"] = None
+    return _CANON_CACHE.get("canon")
+
+
+def _derived_declarations(source: str):
+    """`(name, members, derivedFrom)` -- borrowed from the guard rather than parsed again here.
+
+    Two parsers of one declaration syntax drift, and the one that drifts silently is the generator:
+    a guard that cannot read a block SAYS so, while a generator just omits a table.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "labelsets_derived_for_labels",
+        os.path.join(REPO, "Scripts", "check-labelsets-are-derived.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return list(module.declarations(source))
+
+
+def _locale_values(members, ref_text: str) -> dict:
+    """`{"ko-KR": "키 레이블로 학습", ...}` for one derived LabelSet, resolved offline by digest.
+
+    Empty for a locale the row is not pinned at, or one where no member matches -- both of which
+    `check-labelsets-are-derived.py` already refuses, so an empty answer here means that guard is
+    failing too and this generator is not the place to report it.
+    """
+    canon = _load_canon()
+    if canon is None or not ref_text:
+        return {}
+    try:
+        ref = canon.CanonRef.parse(ref_text)
+    except Exception:
+        return {}
+    manifest = _CANON_CACHE.get("manifest") or {}
+    namespace_of = {name: canon.TRANSLATION_NAMESPACE.get(name, name)
+                    for name in (manifest.get("sources") or {})}
+    peers = [name for name, space in namespace_of.items()
+             if space == namespace_of.get(ref.source, ref.source)]
+    indexes = {name: canon.load_index(name) for name in peers}
+    by_digest = {}
+    for member in members:
+        by_digest.setdefault(canon.short_digest(canon.normalize(member).casefold()), member)
+    out = {}
+    for locale in SUPPORTED_LOCALES:
+        code = _locale_code(locale)
+        row = (ref.unit, code, ref.key, ref.field + canon.CASE_INSENSITIVE)
+        pinned = next((indexes[name].get(row) for name in peers if indexes[name].get(row)), None)
+        if pinned and pinned in by_digest:
+            out[locale] = by_digest[pinned]
+    # A bare language subtag too, but ONLY where it names one locale. `logicUILocaleIdentifier`
+    # answers `ko-KR`, and callers that carry a language alone -- a test, a config, a host that
+    # reports `de` -- would otherwise fall back to English for a language Apple translates. `zh`
+    # is the reason this is derived rather than assumed: it names `zh-CN` AND `zh-TW`, and a table
+    # that picked one would answer Simplified on a Traditional host and never say it guessed.
+    subtags = {}
+    for locale in out:
+        subtags.setdefault(locale.split("-")[0], []).append(locale)
+    for subtag, locales in subtags.items():
+        if len(locales) == 1 and subtag not in out:
+            out[subtag] = out[locales[0]]
+    return out
+
+
+def render_swift(doc: dict) -> str:
+    """One `[String: String]` per name in `LOCALE_KEYED`, keyed by the identifier Logic reports."""
+    with open(SWIFT, encoding="utf-8") as handle:
+        source = handle.read()
+    derived = {name: ref for name, _members, ref in _derived_declarations(source)}
+    members_of = {name: members for name, members, _ref in _derived_declarations(source)}
+    lines = [
+        "// Logic label values, per control, keyed by the locale identifier Logic reports.",
+        "//",
+        "// GENERATED by Scripts/locale_labels.py --write from AXLocalePolicy.swift and",
+        "// docs/canon/index/. Do not edit: the next --write overwrites it, and the policy is where",
+        "// a label is added, cited and checked.",
+        "//",
+        "// A LabelSet answers \"does this reading match?\" and that is the right question almost",
+        "// everywhere. It cannot answer \"which spelling do I TYPE on this host?\", because its",
+        "// members carry no locale. These tables answer that one, and they are derived rather than",
+        "// written: each value is the member whose case-folded digest equals the digest Apple's own",
+        "// row is pinned to in that locale.",
+        "enum AXLocaleValues {",
+    ]
+    missing = []
+    for name, why in sorted(LOCALE_KEYED.items()):
+        if name not in members_of:
+            missing.append(name)
+            continue
+        values = _locale_values(members_of[name], derived.get(name))
+        lines.append("")
+        for chunk in textwrap.wrap(why, 94):
+            lines.append(f"    /// {chunk}")
+        lines.append(f"    /// Apple's row: {derived.get(name) or '(none)'}")
+        lines.append(f"    static let {name}: [String: String] = [")
+        # Full identifiers in the order Logic ships them, then the bare subtags, sorted. A
+        # generated file that reorders itself turns every regeneration into a diff nobody reads.
+        ordered = ([locale for locale in SUPPORTED_LOCALES if locale in values]
+                   + sorted(key for key in values if key not in SUPPORTED_LOCALES))
+        for key in ordered:
+            escaped = values[key].replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'        "{key}": "{escaped}",')
+        lines.append("    ]")
+    lines += ["}", ""]
+    if missing:
+        raise SystemExit(f"LOCALE_KEYED names {missing}, which AXLocalePolicy does not declare. "
+                         f"A generated table cannot invent a label.")
+    return "\n".join(lines)
 
 
 def render_python(doc: dict) -> str:
@@ -704,15 +851,38 @@ def main():
             fh.write(render(doc))
         with open(PY_PATH, "w", encoding="utf-8") as fh:
             fh.write(render_python(doc))
-        print(f"wrote {len(doc['labels'])} labels to docs/locale/ui-labels.json and "
-              f"{len(SHIPPED_LABELS)} shipped table(s) to Scripts/logic_ui_labels.py")
+        with open(SWIFT_PATH, "w", encoding="utf-8") as fh:
+            fh.write(render_swift(doc))
+        print(f"wrote {len(doc['labels'])} labels to docs/locale/ui-labels.json, "
+              f"{len(SHIPPED_LABELS)} shipped table(s) to Scripts/logic_ui_labels.py and "
+              f"{len(LOCALE_KEYED)} locale-keyed table(s) to "
+              f"Sources/LogicProMCP/Accessibility/AXLocaleValues.swift")
         return 0
     if "--check" in args:
+        # EVERY generated artifact, not just the JSON. Until 2026-09-19 this compared the JSON
+        # alone and reported "labels agree", so the shipped Python table could be stale and nothing
+        # said so. A projection nobody checks is the fourth copy this file exists to end, and
+        # adding a second unchecked one to fix a locale bug would have been the same mistake with a
+        # Swift extension.
+        stale = []
         on_disk = load_json()
         if (on_disk.get("labels") or {}) != doc["labels"]:
-            print("docs/locale/ui-labels.json disagrees with AXLocalePolicy.swift")
+            stale.append("docs/locale/ui-labels.json")
+        for path, rendered in ((PY_PATH, render_python(doc)), (SWIFT_PATH, render_swift(doc))):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    current = fh.read()
+            except OSError:
+                current = None
+            if current != rendered:
+                stale.append(os.path.relpath(path, REPO))
+        if stale:
+            for path in stale:
+                print(f"{path} disagrees with AXLocalePolicy.swift")
+            print("Regenerate with `Scripts/locale_labels.py --write`.")
             return 1
-        print(f"{len(doc['labels'])} labels agree")
+        print(f"{len(doc['labels'])} labels agree, and {len(SHIPPED_LABELS) + len(LOCALE_KEYED)} "
+              f"generated table(s) match what this run would write")
         return 0
     sys.stdout.write(render(doc))
     return 0

@@ -1,3 +1,4 @@
+import Foundation
 @preconcurrency import ApplicationServices
 import CoreGraphics
 import MCP
@@ -68,6 +69,24 @@ import Testing
         // Whether the KC window is already open at run() start. When false the engine
         // must post Option+K and poll for it to appear.
         windowInitiallyOpen: Bool = true,
+        // The Key Commands window's TITLE. Logic localizes it, and the matcher used to hold an
+        // English literal, so a test that only ever builds an English title cannot see that bug.
+        windowTitle: String = "Key Commands",
+        // Arrange windows carry AXDocument; the Key Commands utility window does not.
+        documentURL: String? = nil,
+        // A read of AXDocument that FAILS rather than answering. Distinct from `documentURL: nil`,
+        // which is a window that genuinely has none -- the discriminator must not treat the two the
+        // same, and without this the fixture could not tell them apart either.
+        documentReadFails: Bool = false,
+        // Fail the AXDocument read only AFTER this many successful ones. A global failure trips the
+        // OPEN stage first, so a cleanup-path case written with `documentReadFails` alone never
+        // reaches cleanup and its assertion holds for the wrong reason — measured 2026-09-15 when
+        // exactly that case survived the mutation it was written to catch.
+        documentReadFailsAfter: Int? = nil,
+        // The Learn checkbox's TITLE, for the same reason as `windowTitle`: Logic localizes it.
+        learnTitle: String = ArmKeyCommandSetup.learnCheckboxTitle,
+        // What Logic reports its UI language as. nil models a reading that failed.
+        uiLocale: String? = nil,
         // Whether the Option+K post to open the KC window succeeds. When false the
         // engine must fail closed at open_key_commands, carrying the post result.
         optionKPostSucceeds: Bool = true,
@@ -134,7 +153,10 @@ import Testing
         // The KC window owns focus by default; kcFocusedBeforeChord:false points the
         // app's focused window elsewhere so the pre-chord focus-ownership gate trips.
         builder.setAttribute(app, kAXFocusedWindowAttribute as String, kcFocusedBeforeChord ? window : close)
-        builder.setAttribute(window, kAXTitleAttribute as String, "Key Commands")
+        builder.setAttribute(window, kAXTitleAttribute as String, windowTitle)
+        if let documentURL {
+            builder.setAttribute(window, kAXDocumentAttribute as String, documentURL)
+        }
         builder.setAttribute(window, "AXCloseButton", close)
         builder.setAttribute(scrollArea, kAXRoleAttribute as String, kAXScrollAreaRole as String)
         // Empty table shell (ZERO AXRows) — matches the live flat surface.
@@ -152,7 +174,7 @@ import Testing
         // typing, so a refused set (focusSetSucceeds == false) leaves focus nil and
         // fails closed with zero keystrokes.
         builder.setAttribute(learn, kAXRoleAttribute as String, kAXCheckBoxRole as String)
-        builder.setAttribute(learn, kAXTitleAttribute as String, ArmKeyCommandSetup.learnCheckboxTitle)
+        builder.setAttribute(learn, kAXTitleAttribute as String, learnTitle)
         // An unreadable Learn value is a non-numeric string (checkboxState → nil).
         if learnValueUnreadable {
             builder.setAttribute(learn, kAXValueAttribute as String, "unavailable")
@@ -185,6 +207,9 @@ import Testing
         let ax = builder.makeAXRuntime(
             appElement: app,
             attributeValueHandler: nil,
+            attributeValueResultHandler: (documentReadFails || documentReadFailsAfter != nil)
+                ? Self.documentReadThatFails(after: documentReadFailsAfter)
+                : nil,
             setAttributeHandler: { element, attribute, value in
                 if CFEqual(element, search), attribute == (kAXFocusedAttribute as String),
                    !focusSetSucceeds {
@@ -314,6 +339,7 @@ import Testing
             sleep: { _ in },
             isCancelled: { probe.cancelled },
             ownsGate: { probe.ownsGate },
+            uiLocale: { uiLocale },
             ax: ax,
             elements: elements,
             verifyArmFlip: { _, _ in
@@ -791,6 +817,27 @@ import Testing
 
     /// A clean conflict decline reports its cleanup HONESTLY: Learn was restored and
     /// the window closed, and the reassignment control was never pressed.
+    /// The OTHER direction of the same rule, and the one a fix for the first direction broke.
+    /// `closeWindow` reads "no Key Commands window" as "it is gone — report closed", so a document
+    /// read that FAILS on the still-open window must not answer that question. If it does, the
+    /// teardown publishes `closeConfirmed` and `restored` for a window sitting in front of the
+    /// operator, and the close control is never pressed.
+    @Test("a document read that fails during teardown does not claim the window was closed")
+    func failedDocumentReadDoesNotClaimClosed() throws {
+        // The open stage reads AXDocument first and must SUCCEED, or the run fails there and
+        // `closeConfirmed` is false because cleanup never happened — which is a pass for the wrong
+        // reason, and is what the first version of this case measured.
+        let fixture = Self.fixture(
+            documentURL: nil, documentReadFailsAfter: 1,
+            conflictAlertOnChord: true, closeRemovesWindow: false, verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        let failure = try #require(Self.failure(outcome))
+
+        #expect(!failure.evidence.closeConfirmed)
+        #expect(!failure.evidence.restored)
+    }
+
     @Test func conflictWithCleanDeclineReportsRestoredAndClosed() throws {
         let fixture = Self.fixture(conflictAlertOnChord: true, verify: .verified)
         let outcome = Self.run(fixture)
@@ -1153,4 +1200,174 @@ import Testing
         let data = try #require(raw.data(using: .utf8))
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
+
+    /// Measured 2026-09-14 on a Korean Logic 12.3: `setup_arm_key` posted Option+K, Logic opened
+    /// `키 명령 할당 – U.S. – 편집됨`, and setup answered State C `ax_write_failed` at stage
+    /// `open_key_commands` saying the window did not open. It had. The matcher held the English
+    /// literal `Key Command`, which that title does not contain, so the operation was unreachable
+    /// on every non-English Logic — and with it `tracks.arm`'s only coordinate-free setup path.
+    @Test("the Key Commands window is found by its localized title")
+    func keyCommandsWindowIsFoundWhenLogicLocalizesItsTitle() {
+        for title in ["키 명령 할당 – U.S. – 편집됨", "키 명령 할당", "Key Commands"] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) != nil,
+                "a window titled \(title) is the Key Commands window"
+            )
+        }
+    }
+
+    /// The matcher must not answer for any window that happens to be open. A title carrying neither
+    /// the English nor the Korean label is not this window, and treating it as one would drive the
+    /// assignment GUI against something else entirely.
+    @Test("an unrelated window title is not mistaken for the Key Commands window")
+    func unrelatedWindowTitleIsNotTheKeyCommandsWindow() {
+        for title in ["lpm-locale-campaign - 트랙", "Absolute Zero", "마커 목록", ""] {
+            let fixture = Self.fixture(windowTitle: title)
+            #expect(
+                ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil,
+                "a window titled \(title) is not the Key Commands window"
+            )
+        }
+    }
+
+    /// A reader whose AXDocument read FAILS. Every other attribute falls through to the builder,
+    /// so the fixture is unchanged apart from the one status this case is about.
+    /// A reader whose AXDocument read fails — immediately, or only after `after` successful reads.
+    /// Every other attribute falls through to the builder.
+    private static func documentReadThatFails(after: Int?)
+        -> @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
+        let seen = Counter()
+        return { _, attribute in
+            guard attribute == (kAXDocumentAttribute as String) else { return nil }
+            guard let after else {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            }
+            return seen.next() > after
+                ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                : nil          // nil = fall through to the builder, which answers honestly
+        }
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            value += 1
+            return value
+        }
+    }
+
+    /// The discriminator reads AXDocument through the STATUS-PRESERVING seam, because the plain
+    /// accessor collapses a failed read into nil -- and nil is the answer that means "this is the
+    /// Key Commands window". A read that times out on a busy Logic would otherwise have selected
+    /// the operator's project window and, on the no-search-field path, pressed its close control.
+    @Test("a window whose AXDocument read FAILS is not taken for the Key Commands window")
+    func failedDocumentReadIsNotAbsence() {
+        // `documentURL: nil` is load-bearing. The first version of this case set a document URL AND
+        // made the read fail, so the OLD accessor -- which the fail flag does not touch -- still
+        // read the stored URL, still saw a document, and still rejected the window: the case passed
+        // with the fix reverted and its real subject was "a window that HAS a document", which the
+        // case below already covers. With no URL stored, the old path answers nil (no document,
+        // title matches, so it IS the Key Commands window) and the new path answers undetermined.
+        let fixture = Self.fixture(
+            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            documentURL: nil,
+            documentReadFails: true
+        )
+
+        #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
+        if case .undetermined = ArmKeyCommandSetup.keyCommandsWindowLookup(runtime: fixture.runtime) {
+        } else {
+            Issue.record(Comment(rawValue: "a title match whose document read failed must be .undetermined, never .notPresent — closeWindow reads .notPresent as 'the window is gone'"))
+        }
+    }
+
+    @Test("a Korean project name containing the Key Commands token is not selected")
+    func koreanDocumentWindowIsNotTheKeyCommandsWindow() {
+        let fixture = Self.fixture(
+            windowTitle: "내 키 명령 프로젝트 - 트랙",
+            documentURL: "file:///Users/test/Music/내%20키%20명령%20프로젝트.logicx/"
+        )
+
+        #expect(ArmKeyCommandSetup.keyCommandsWindow(runtime: fixture.runtime) == nil)
+    }
+
+
+    /// The whole point of the locale work: a Korean Logic must be able to COMPLETE the setup, not
+    /// merely fail one stage later. Every string this drive touches is the measured Korean one —
+    /// the window title, the command cell, the Learn checkbox — and the host reports ko-KR.
+    @Test("a Korean Logic completes the arm-key setup end to end")
+    func koreanLogicCompletesTheSetup() throws {
+        let fixture = Self.fixture(
+            commandValues: ["트랙 녹음 활성화 토글"],
+            windowTitle: "키 명령 할당 – U.S. – 편집됨",
+            learnTitle: "키 레이블로 학습",
+            uiLocale: "ko-KR",
+            verify: .verified
+        )
+        let outcome = Self.run(fixture)
+        guard case .configuredAndVerified = outcome else {
+            Issue.record("expected a completed assignment, got \(outcome)")
+            return
+        }
+        // It typed the KOREAN name. Typing the English canonical would filter Logic's live list to
+        // nothing, which is exactly how this failed before it was measured.
+        #expect(fixture.probe.typed == ["트랙 녹음 활성화 토글"])
+    }
+
+    /// Logic's own search returns two sibling commands for the same query —
+    /// `채널 스트립 녹음 활성화 토글` and `퍼포먼스 녹음 활성화 켬/끔` were both measured beside the
+    /// real one. Learning a chord onto either would arm the wrong thing, so the match must stay
+    /// exact rather than substring.
+    @Test("a sibling Korean command is not accepted as the record-arm command")
+    func koreanSiblingCommandsAreNotAccepted() throws {
+        for sibling in ["채널 스트립 녹음 활성화 토글", "퍼포먼스 녹음 활성화 켬/끔"] {
+            let fixture = Self.fixture(
+                commandValues: [sibling],
+                windowTitle: "키 명령 할당",
+                learnTitle: "키 레이블로 학습",
+                uiLocale: "ko-KR"
+            )
+            let failure = try #require(Self.failure(Self.run(fixture)))
+            #expect(failure.stage == "command_not_found", "\(sibling) must not match")
+            #expect(fixture.probe.chords.isEmpty, "nothing may be learned onto \(sibling)")
+        }
+    }
+
+    /// What gets TYPED is chosen by the host's language; what gets MATCHED is the whole label set.
+    ///
+    /// The ten spellings are Apple's own, projected into `AXLocaleValues` by
+    /// `Scripts/locale_labels.py --write` from the LabelSet's row. This case is written against
+    /// that table rather than against literals for the same reason the bounce tests are: the
+    /// count and the spellings are what the generator decides, and a literal here turns Apple
+    /// renaming a command into a failing test that says nothing about the product.
+    @Test("the typed query is Apple's own spelling for the host's language, in every language Logic ships")
+    func searchQueryFollowsTheHostLanguage() {
+        for (locale, expected) in AXLocaleValues.recordArmKeyCommandName {
+            #expect(ArmKeyCommandSetup.searchQuery(locale: locale) == expected,
+                    "\(locale) must type Apple's own spelling")
+        }
+        // Ten identifiers plus the bare subtags that name exactly one of them. `zh` names two, so
+        // it is deliberately absent -- a table that picked one would answer Simplified on a
+        // Traditional host and never say it guessed.
+        #expect(AXLocaleValues.recordArmKeyCommandName["zh"] == nil)
+        #expect(AXLocaleValues.recordArmKeyCommandName["zh-CN"]
+                != AXLocaleValues.recordArmKeyCommandName["zh-TW"]
+                || AXLocaleValues.recordArmKeyCommandName["zh-CN"]
+                == ArmKeyCommandSetup.commandName)
+    }
+
+    /// The fallback, and it is the whole safety story: a host whose language was not read, or one
+    /// Logic does not ship, types the English canonical and fails closed exactly as before.
+    @Test("an unread or unknown locale types the English canonical")
+    func searchQueryFallsBackToEnglish() {
+        for unknown in ["zh", "unknown", "xx-YY", "", nil] {
+            #expect(ArmKeyCommandSetup.searchQuery(locale: unknown)
+                        == ArmKeyCommandSetup.commandName,
+                    "\(unknown ?? "nil") names no table entry and must type the canonical")
+        }
+    }
+
 }
