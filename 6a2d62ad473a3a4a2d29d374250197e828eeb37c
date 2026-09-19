@@ -1,0 +1,15 @@
+Limit: The corpus rule skips literals under four characters. `OK` and `Off` fall out with them. That is a deliberate blind spot in the direction that asks for work rather than hiding a finding, and it is the same trade `is_translated`'s own docstring describes -- but it is a hole and a three-character German label would go through it.
+Limit: `PROTOCOL_LITERALS` has three entries and each is a measured collision. It is still a list, and a list of permitted uses is the shape this repository distrusts. What keeps it honest is that every entry names an EXPRESSION, so it cannot spread; what would make it dishonest is adding one because a finding was inconvenient.
+Limit: The `considering case` rule sees LITERALS. `"consider" + "ing case"`, an interpolated variable, or a script read from a file at run time all reach AppleScript without any single literal carrying the words. That cannot be closed by matching harder and the guard's own fixtures are built that way.
+Limit: `rowsKey` is declared for two resource families -- the default `data` and the mixer's `strips`. A resource publishing under a third name reads as empty until somebody adds it, which is one edit rather than a silent wrong answer, but nothing detects the day it is needed.
+Ruled-out: raising the length floor until `name` falls out | `Save` is four characters, so the floor that loses `name` loses a real label too; position separates them and length cannot
+Ruled-out: keeping `is_translated` and adding the German values to it | the table is keyed by English values by construction, so it answers about the wrong direction no matter what is added
+Ruled-out: an allowlist for `considering case` | the sibling guard records why: a list of permitted uses is how a banned instrument comes back
+Ruled-out: asking `isEmpty(object["data"])` everywhere | it calls every mixer reading empty, which the tests proved within one run
+Warn: `is_translated` and "is a value Apple ships" are OPPOSITE questions. The first asks whether an English string has translations; the second whether a string IS one. Reaching for the first to catch a foreign-language label is the mistake this commit made.
+Warn: Emptiness in a readback envelope is meaningless without knowing which key that resource publishes rows at. Any new check that reads `object["data"]` directly is asking the tracks question of every resource.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-labelinanyscript
+Provenance: inherited 799dd7706edba7b091e723631608858bfae9a000
