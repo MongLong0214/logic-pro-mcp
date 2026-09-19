@@ -515,6 +515,62 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
+    /// #921. The refusal payload used to print `could_not_be_closed` for EVERY classification that
+    /// reaches it, including three the script returns only after `dismissOpenMenu` answered exactly
+    /// `CLOSED`. An outside report read that field, concluded the entry cleanup had refused, and
+    /// argued a root cause its own payload rules out. A diagnostic that contradicts an observation
+    /// the same run made is worse than one that says nothing.
+    @Test("a refusal reports the menu state the script OBSERVED, not a constant")
+    func menuStateIsAReadingNotALiteral() async throws {
+        // Each sentinel sits behind `if cleanupState is not "CLOSED" then return MENU_PICK_FAILED`
+        // in the script, so reaching it PROVES the menus were read closed.
+        for (sentinel, outcome) in [
+            ("MENU_NOT_FOUND: no such menu item", "menu_not_found"),
+            ("MENU_STATE_UNREADABLE", "menu_state_unreadable"),
+            ("MENU_DISABLED", "menu_disabled"),
+        ] {
+            let sliderWrites = Issue529Counter()
+            let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+                params: ["bar": "529"],
+                runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+                isFrontmost: { true },
+                activateLogic: { true },
+                sleepMicros: { _ in },
+                executeDialogScript: { _ in .success("{\"result\":\"\(sentinel)\"}") }
+            )
+            let envelope = try #require(issue529Envelope(result), "\(sentinel)")
+            #expect(try #require(envelope["menu_state"] as? String) == "closed",
+                    "\(sentinel): the script read the menus closed before giving up")
+            #expect(try #require(envelope["dialog_route_outcome"] as? String) == outcome,
+                    "\(sentinel): the outcome names the real cause")
+            // The SAFETY contract is unchanged; only the diagnostic stopped lying.
+            #expect(try #require(envelope["state"] as? String) == "C", "\(sentinel)")
+            #expect(!(try #require(envelope["safe_to_retry"] as? Bool)), "\(sentinel)")
+            #expect(!(try #require(envelope["write_attempted"] as? Bool)), "\(sentinel)")
+            #expect(sliderWrites.value == 0, "\(sentinel)")
+        }
+    }
+
+    /// The control for the case above, and the reason it is not just "stop saying that string":
+    /// where the cleanup GENUINELY failed the payload must still say so. Deleting the derivation
+    /// and returning `.closed` everywhere passes the case above and fails this one.
+    @Test("a cleanup that really did not close still reports could_not_be_closed")
+    func aRealCleanupFailureStillSaysSo() async throws {
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_PICK_FAILED: menu cleanup was not observed (OPEN)"}"#)
+            }
+        )
+        let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["menu_state"] as? String) == "could_not_be_closed")
+    }
+
     @Test("a post-click menu close failure records menu navigation, not a position write")
     func postClickMenuCloseFailureRefusesBeforePositionWrite() async throws {
         let sliderWrites = Issue529Counter()

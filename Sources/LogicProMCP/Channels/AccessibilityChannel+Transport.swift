@@ -1180,7 +1180,7 @@ extension AccessibilityChannel {
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "dialog_route_outcome": classification.diagnosticLabel,
-                    "menu_state": "could_not_be_closed",
+                    "menu_state": classification.menuObservation.rawValue,
                     "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
                     "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
                     // Stated on this path too, and stated as false. The refusal above is about
@@ -2278,6 +2278,45 @@ extension AccessibilityChannel {
                 return cleanupObservedClosed
             default:
                 return false
+            }
+        }
+
+        /// What this run OBSERVED about Logic's menus, as a fixed token.
+        ///
+        /// Until 2026-09-19 the unsafe-UI refusal printed the LITERAL `could_not_be_closed` for
+        /// every classification that reaches it. Three of them are returned by the script only
+        /// AFTER `dismissOpenMenu` answered exactly `CLOSED` -- `MENU_NOT_FOUND`,
+        /// `MENU_STATE_UNREADABLE` and `MENU_DISABLED` each sit behind
+        /// `if cleanupState is not "CLOSED" then return "MENU_PICK_FAILED..."`. So the payload
+        /// contradicted an observation the same run had made, four hundred lines apart, in the one
+        /// field a person triages from. An outside report (#921) read it, concluded the entry
+        /// cleanup had refused, and argued a root cause its own payload rules out:
+        /// `dialog_route_outcome: menu_disabled` cannot coexist with a cleanup that failed.
+        ///
+        /// `unobserved` is deliberately wide. Some of the dialog outcomes could probably be proved
+        /// closed as well -- every path past the entry guard has had one CLOSED answer -- but
+        /// "probably" is what produced the constant. A token says what was read or says nothing.
+        ///
+        /// This changes no safety: `safe_to_retry`, `fallback_unsafe` and `write_attempted` are
+        /// untouched on every path. Only the diagnostic stops lying.
+        enum MenuObservation: String {
+            /// The script read the menus closed before it gave up for another reason.
+            case closed
+            /// A cleanup ran and the menus were not observed closed. The only case the old
+            /// constant was true for.
+            case couldNotBeClosed = "could_not_be_closed"
+            /// Nothing here establishes the menu state, and saying so beats guessing either way.
+            case unobserved
+        }
+
+        var menuObservation: MenuObservation {
+            switch self {
+            case .failure(.menuCouldNotBeClosed):
+                return .couldNotBeClosed
+            case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled):
+                return .closed
+            default:
+                return .unobserved
             }
         }
 

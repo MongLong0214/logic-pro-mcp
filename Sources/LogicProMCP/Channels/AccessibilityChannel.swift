@@ -358,7 +358,10 @@ actor AccessibilityChannel: Channel {
             // the same request. Measured 2026-08-17 on Logic 12.3, three samples each way: as the
             // first thing a fresh server process does, the route reports `menu_state:
             // could_not_be_closed` with `menu_actuation_attempted: false` — it never tries, and no
-            // menu is open (an external System Events read counts zero). Adding this read turns
+            // menu is open (an external System Events read counts zero). READ THAT FIELD AS IT WAS
+            // THEN: `menu_state` was a hardcoded constant on that refusal path until #921, so the
+            // 2026-08-17 payload said `could_not_be_closed` whatever the script had observed. What
+            // the measurement establishes is the 3/3 → 3/3 pair below, not the menu token. Adding this read turns
             // 3/3 FAIL into 3/3 OK. The same read issued seconds earlier as a separate request does
             // NOT help, so it is the immediacy that matters, not the warmth.
             //
