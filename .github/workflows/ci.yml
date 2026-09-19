@@ -379,6 +379,14 @@ jobs:
           fi
           echo "LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}." >> "$GITHUB_STEP_SUMMARY"
 
+      # The `*_test.py` suites `run-repo-guards.py` does not discover (#896). They run HERE and
+      # not in `guards`, because `guards` is ubuntu and one of them compiles a Swift file that
+      # imports AppKit -- putting the drive there made the guards job platform-dependent and CI
+      # caught it on the first run. `docs/canon/CI-GATE.json` names the command so this step
+      # cannot be dropped without the required-gate guard noticing.
+      - name: Helper suites the guard runner does not discover (#896)
+        run: python3 Scripts/run-helper-suites.py
+
       - name: Coverage gate
         # Hard thresholds: 70% region, 78% line. 90% line is the project target and deliberately
         # NOT the hard gate -- setting it today would only make every release red. Both numbers

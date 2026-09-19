@@ -15,6 +15,22 @@ a script literal that had become a generated table, and an assertion on capitali
 Worse, three of the twelve have no `unittest.main()`: running them directly exits 0 having asserted
 NOTHING. `python3 Scripts/logic_bounce_ui_test.py` was silent while three of its cases were red.
 
+WHY IT IS NOT NAMED `test_*.py`
+-------------------------------
+`run-repo-guards.py` runs on ubuntu, and that is a MEASURED property: every guard it discovers was
+checked to need neither Xcode nor macOS before the job moved there. Named `test_*.py` this drive
+WAS discovered, ran on Linux, and `logic_key_event_test.py` failed with `no such module 'AppKit'`
+-- it compiles `logic_key_event.swift`, which imports AppKit and CoreGraphics. The drive had
+quietly made the guards job platform-dependent, and CI said so on the first run.
+
+Declaring the skip was the other option and it is wrong twice: `docs/canon/CI-SKIPS.json` may only
+SHRINK, so the allowance could not be added; and a suite skipped on the only machine that runs it
+is a suite nobody runs, which is the defect this file exists to close.
+
+So it is NOT discovered. `ci.yml`'s `test` job runs it on macos-15, where these suites can actually
+run, and `docs/canon/CI-GATE.json`'s `required_commands` -- a list that may only GROW -- names the
+command, so the step cannot be dropped without `check-every-ci-job-is-required.py` noticing.
+
 WHAT THIS DOES, AND WHAT IT DOES NOT
 ------------------------------------
 It runs them through `unittest` discovery, which imports each module and collects its `TestCase`s
@@ -29,7 +45,7 @@ import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-#: A seam, so the self-test can drive main() at a directory whose suites must fail.
+#: A seam, so a caller can drive main() at a directory whose suites must fail.
 SUITES = os.environ.get("LPM_HELPER_SUITES_DIR") or HERE
 PATTERN = "*_test.py"
 

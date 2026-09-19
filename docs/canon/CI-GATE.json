@@ -6,8 +6,9 @@
   "required_commands": [
     "Scripts/check-canon-citations.py --changed",
     "Scripts/check-canon-citations.py \\",
-    "python3 Scripts/run-repo-guards.py",
-    "bash Scripts/ci-coverage-gate.sh"
+    "bash Scripts/ci-coverage-gate.sh",
+    "python3 Scripts/run-helper-suites.py",
+    "python3 Scripts/run-repo-guards.py"
   ],
   "workflows": {
     "ci.yml": {
