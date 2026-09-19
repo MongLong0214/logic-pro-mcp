@@ -1,0 +1,13 @@
+Limit: The census records `derive_label_variants.py`'s verdicts and does NOT check them. That tool reads Logic's bundle, and a guard that needs Logic is a guard CI cannot run. The name set is the contract; the verdicts are a note that can go stale the day Apple ships a new table.
+Limit: 58 is what the policy says today, counted by a regex over `static let X = LabelSet(` blocks. A declaration this parser cannot read would be invisible to the count and to the completeness check alike -- the same exposure `check-labelsets-are-derived.py` handles by raising on an unreadable block, which this guard does not do.
+Limit: The growth ratchet does not run on this commit. The census is not carried by the merge base, so `git show` cannot produce a base to compare against -- a name added ALONGSIDE the file itself is invisible until the next branch. That is the same bootstrap `check-canon-citations.py` prints a note for, and it is a real one-commit hole.
+Ruled-out: applying the five `value` verdicts now | one of them is `trackTypeMaster`, whose candidate is a Bass Amp label; a batch that includes a wrong row is worse than a census that admits the work is unfinished
+Ruled-out: folding these into LABELSETS-WITHOUT-A-ROW.json | that file proves a set has NO row, re-derived from Apple's bytes; 43 of these 58 have one and just do not name it, so putting them there would assert something false
+Ruled-out: making check-new-labelsets-name-a-row.py cover the whole file | its docstring already rules this out, and doing it would turn 58 entries into a waiver list with no reason in any of them
+Warn: A shrink-only list without a completeness check is a number that can be improved by deleting lines. Both halves are here for that reason, and a future edit that relaxes either one relaxes the ratchet entirely.
+Warn: `$?` after `python3 … | head` is head's exit code. The first run of these controls reported `exit=0` for a guard that had just printed a problem and was working correctly. A control that reads the wrong process proves nothing about the right one.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-fiftyeightunasked
+Provenance: inherited f4cf34e3cd7d5c027c3db3c1b38c5fddd84c400f
