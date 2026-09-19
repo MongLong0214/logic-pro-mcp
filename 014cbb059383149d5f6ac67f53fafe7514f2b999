@@ -1,0 +1,137 @@
+Limit: Verified by `actionlint` and by reading GitHub's semantics for `cancelled()`, not by cancelling a run and watching the job skip. The next push that supersedes a run will demonstrate it, and if it does not, this comment is the thing to distrust.
+Ruled-out: dropping `cancel-in-progress` | superseded runs would finish and cost a macOS runner each, and the queue is what the CI restructure just reduced
+Ruled-out: leaving it and reading the run list every time | that is what I did twice, and the second time cost me a wrong report to the user before I checked
+Warn: `gh pr checks` reports the newest check run per name, across runs. A red check beside pending ones may belong to a run that was cancelled minutes ago -- confirm which run produced it before concluding anything about the pull request.
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-cancelledbuild
+Provenance: inherited 9f308e1bef433e2fae02bc13a607377bb13af14c
+
+Limit: `check-probe-product-drift.py` has no `main()` and cannot be mutated this way; the sweep reports it rather than counting it. It is unmeasured, not clean.
+Limit: `check-canon-citations.py` and `check-policy-literals-against-canon.py` are still skipped by `--fast` at 76s and 40s. The review's deeper cut showed both catching a permissive decision function, so they are unmeasured rather than suspected.
+Limit: The seams widen what a caller can point a guard at. Each is read-only and used by tests only, but a guard pointed at a fixture is not checking the repository -- a future caller who sets one in CI would silence the guard, and nothing detects that.
+Ruled-out: adding the sweep to the required gate | it builds a worktree per run and roughly doubles the guard job for one mutation class; the ratchet on the census is what CI holds
+Ruled-out: closing them by asserting on stderr text from the existing in-process calls | that tests the message, not the gate, and the mutation being defended against returns 0 before any message exists
+Warn: A guard with no seam cannot have a positive case, so "the tests pass" says nothing about whether the guard works. When a test only ever asserts that the real tree is green, look for the seam before trusting it -- eleven of these twelve had none, and it was not noticed for as long as they have existed.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-noneblindnow
+Provenance: inherited 978d0b451e17984128591791325686579c71632c
+
+Limit: These are corrections to what the document CLAIMS. No check changed, and the two forgeries described remain possible -- the threat-model table already puts a bad-faith committer out of scope, and that decision is unchanged.
+Limit: The "minutes of computation" figure for a collision search is an order-of-magnitude statement from the prefix width and the set size, not a measurement. Nobody ran the search.
+Ruled-out: widening the absence prefix from 32 to 64 bits to make minting infeasible | it changes a core artifact's format, its false-positive arithmetic, its reader and every committed set, to raise the cost of an attack the threat model already declines to defend against
+Ruled-out: updating "six of twenty-three" to "twenty-three of twenty-four" | the same sentence would rot again the next time a corpus is added, and the guard that would catch it cannot read number words
+Warn: `check-canon-prose-numbers.py` reads DIGITS. A number written as a word -- "six", "twenty-three" -- is invisible to it, and that is how a false claim survived in the document that states the rules. Write counts in digits or state the property instead.
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-canonclaims
+Provenance: inherited 985d2a164a3f7af35010c35f302e3c3abef010b3
+
+Limit: A record NAMING a literal is a weak witness -- `_literals_named_in_records` walks every string in every record, including `limits` prose. It proves somebody wrote the string down, not that they read it off a composed menu item.
+Limit: The declaration branch trusts `composed_from` to COVER the literal by membership: every member of a declaring LabelSet counts. A LabelSet whose declaration is right for nine members and wrong for a tenth is not distinguished here; `check-new-labelsets-name-a-row.py` is where that is proved per locale.
+Limit: The rule abstains when it cannot read its evidence, and says so on stderr. A tree where the readers break silently stops enforcing it -- the note is the only thing that would tell anybody.
+Ruled-out: counting `composed_value` as its own ratchet dimension | it adds a ledger key and bookkeeping for fifteen entries that are all accounted for, and the defect is that a guess is treated as a proof rather than that guesses are uncounted
+Ruled-out: requiring `composed_from` alone and dropping the record branch | six of the fifteen are witnessed and not declared, and refusing a literal somebody actually read off a screen is the wrong direction for a rule about evidence
+Warn: A case that calls a guard's PREDICATE is not a case that drives the guard. Mutate the branch in `check()`, not the helper, and watch the test go red -- the first version of this rule's cases passed with the branch deleted.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-guessedcompos
+Provenance: inherited 791fc4d4b3078a82f920430fb446e82d6a1f26ea
+
+Limit: Relevance is textual. A reference that appears in a changed file for an unrelated reason satisfies the binding, and a change whose citation is genuinely about a file it does not touch fails it -- the second is the direction that costs somebody an argument with the guard.
+Limit: The quoted-value branch re-reads each candidate line against every reference, so a body quoting many values does more work; measured at the sizes this repository writes it is not noticeable, and nothing bounds it.
+Limit: It applies only when the change touches Logic-facing paths. A change that touches none may still cite anything, which is the same scope the opt-out already has.
+Ruled-out: requiring the reference to appear in the DIFF rather than in the file | a change that moves a cited label between files, or that documents one it does not edit, would fail on the shape of the diff while its citation is exactly right
+Ruled-out: requiring every reference to bind rather than one | a body legitimately cites background rows beside the one its change rests on, and refusing that pushes authors toward citing less
+Warn: A control that fails is not a control that works. `Count In` failed this rule's first fixture at resolution, not at the binding, and a green-looking red is how a case ends up proving something nobody asked about -- check WHICH branch refused before believing the case.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-bearsonchange
+Provenance: inherited 43eeb9e4c6b545ec3947c48d9883d70dc0273862
+
+Limit: This is the NEAR-MISS fold only. `normalize` is unchanged, so a digest, a citation and an absence proof still treat an invisible character as part of the string -- which is right, because those compare bytes. What changes is whether the system NOTICES that two strings differ only by one.
+Limit: Cf also covers characters that are not zero-width in every renderer -- bidirectional marks, for instance. Folding them is the same direction (a near miss reported rather than missed) but the justification "cannot be seen" is weaker for them than for ZWSP.
+Ruled-out: adding the six codepoints to `_DECORATION` | it is the enumeration that already missed them, and the seventh would be missed the same way
+Ruled-out: folding them in `normalize` instead | that would change every digest in the committed index and make an absence proof answer a different question from the one it claims
+Warn: A fold is only as good as the class it names. `_DECORATION` is a literal list of characters somebody thought of, and what it missed was the class of characters nobody can see -- check for a CLASS before writing another literal.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-invisiblefold
+Provenance: inherited 321d1a154d5f585fa73ae2f57bc2fecea40d02b6
+
+Limit: Ten languages by DERIVATION and by generation. Nobody has run the bounce flow on a Logic in any of the eight new languages, so what is proved is that the tables carry Apple's values, not that the dialog is recognised.
+Limit: The generated tables are CASE-FOLDED, and that is load-bearing twice. Python compares against `value.lower()`, and the AppleScript splices assume element specifiers ignore case -- true unless a script says `considering case`, which none of ours does. If that changes the menu drive silently stops finding anything.
+Limit: The new guard reads CJK only. A Latin-script label spelled in a shipped helper for a non-English locale is invisible to it; catching that needs the corpus, which is `check-ax-comparisons-use-labelsets.py`'s job and a wider scope than this change.
+Limit: Dropping the save-panel name label removes one of four signals. The remaining three are a text field, a Bounce button and a Cancel button -- discriminating because of the Bounce button, not because of the count -- and nobody has watched the weaker predicate against a non-save panel.
+Ruled-out: shipping `docs/locale/ui-labels.json` and reading it at runtime | 400 KB of ledger in the release tarball to answer six questions, and a helper parsing a schema it does not otherwise use
+Ruled-out: hand-maintained tables in the helper, checked by a guard against the policy | that is exactly `evidence.py`'s arrangement, and its guard printed a warning for six days while the product could not match a label somebody had measured
+Ruled-out: proving SAVE_PANEL_NAME_LABELS absent and waiving it | true, useless, and it would have left the AND chain capped at two languages with a guard recording the claim as settled
+Warn: `Scripts/install.sh` is the list of what ships. Five files under `Scripts/` are installed beside the binary, and every locale rule in this repository was written as though none of them were -- check the installer before assuming a `Scripts/` file is a tool.
+Warn: A guard pointed at the tree for the first time is a measurement, not a formality. This one found four literals the author had already convinced himself were all of them.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-bouncetenlang
+Provenance: inherited 970fea01587690d46c0ef2fa1dbd9826ae90b18c
+
+Limit: The drive runs what discovery finds. A suite that fails to IMPORT is an error rather than a silent skip -- verified -- but a module that guards its cases behind a condition discovery does not satisfy is still invisible, and nothing here counts cases against an expectation.
+Limit: 29 seconds added to a 200-second gate. That is the cost of running suites that were not being run; it is not a regression anybody can point at, and it is not free either.
+Ruled-out: renaming the nine now | it is #896's own proposal and the right end state, and doing it inside a change about something else makes both harder to review -- the gap is closed either way
+Ruled-out: adding the glob `*_test.py` to run-repo-guards.py | three of the twelve exit 0 asserting nothing when run as scripts, which is exactly what that runner would do to them; discovery is what sees their cases
+Warn: `python3 <suite>.py` exiting 0 does not mean the suite passed. A `TestCase` module with no `unittest.main()` runs nothing and says nothing -- check for the entry point before treating a hand-run as evidence.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-twelveunrun
+Provenance: inherited 2a5a02684c85ed038727725f810eb266da1809e8
+
+Limit: The 167 cases now run only on macos-15. Anything that would fail on Linux and pass on macOS is untested, which was already true of them and is no longer hidden by them not running at all.
+Limit: `guards` being platform-independent is a property nothing enforces. It was measured when the job moved to ubuntu and it was broken by a file name; a guard for it would have to know what each discovered script shells out to.
+Ruled-out: adding an entry to CI-SKIPS.json for the AppKit suite | rule 7 refuses the growth, and a skip on the only runner that executes it makes the drive decorative
+Ruled-out: moving the whole guards job back to macOS | it costs a macOS runner for 67 checks that do not need one, which is most of what the CI restructure recovered
+Warn: A FILE NAME decides where a script runs here. `test_*.py` under `Scripts/` is discovered by the ubuntu guards job; a suite that needs macOS must not be named that. The property that job depends on is measured, not enforced.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-guardsstaylinux
+Provenance: inherited eb8c0ff2b6c69603b02746c435ba8ef18c6f5843
+
+Limit: The #921 row is a READING of the current tree against a report about v3.16.0. The entry-guard root cause reproduces by reading; nothing in it was observed on a running Logic, and the discriminator the fix depends on -- why an in-process `menuOpenState` read fails while an external read of the same property succeeds -- is unmeasured.
+Limit: The keyword exemption is only as good as GitHub's automatic issue closing. If that repository setting is off, `Closes #919` buys the exemption and the issue stays open, and `main` goes red on the merge commit for a row nobody can excuse there.
+Ruled-out: flipping the #919 row back to OPEN to make the check pass | it passes, and then the bounce work merges under a row that says the issue is open, and closing #919 by hand afterwards turns `main` red for the opposite reason
+Ruled-out: merging past the red check because `status` is not a required context | the check was correct on both findings, and a guard that is right is not a formality
+Warn: Editing a pull request body restarts the whole of `ci.yml` -- `edited` is in its triggers because a required step reads the body. Batch the body edit with the push, or pay ~25 minutes twice.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-roadmapowes
+Provenance: inherited 5682a57692c25aab94ca3efbd1e696877a17c98b
+
+Limit: `diagnosticLabel` and `requiresUnsafeUIRefusal` were read at `v3.16.0` as well as at HEAD and agree, so the contradiction is not an artifact of the tree moving. No binary was run and the payload was not reproduced.
+Limit: Ruling out the reporter's handler rests on ONE field. It holds while `dialog_route_outcome` is `classification.diagnosticLabel` and nothing else writes that key -- three call sites, verified by grep today, enforced by nothing.
+Ruled-out: fixing the hardcoded `menu_state` here | it is a product diagnostic with its own tests and this pull request is about NOT RUN items; the row names the line so the fix starts somewhere
+Ruled-out: amending the wrong row out of the branch | it was pushed, and a correction that erases what it corrects teaches nobody which half I failed to check
+Warn: `menu_state` in a `transport.goto_position` refusal is NOT a reading. Do not triage from it. `dialog_route_outcome` is derived from the classification and is the field that means something.
+Warn: A quoted source excerpt in a bug report is evidence that the handler exists, never that it ran. Ask which field in the payload could only have come from the accused path before agreeing with it.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-menustateconst
+Provenance: inherited 3fe88e7c954f0eb7190f0994566658320eede789
+
+Limit: Read from the AppleScript source in this tree and at `v3.16.0`; the two agree. No binary was run and the reporter's payload was not reproduced.
+Ruled-out: amending the previous commit | it is pushed, and a correction that deletes the sentence it corrects removes the evidence of which step I skipped
+Warn: `performedDialogSafetyObservation` reads like a claim about UI state in general and is about ONE read: the pre-leaf dialog/window count. Do not infer menu facts from it -- three of its `false` cases are menu outcomes, which is exactly what makes the name misleading.
+Warn: A property NAME is not a specification. I inferred a fact from `performedDialogSafetyObservation` twice in one session before reading its body, and the body said something narrower and more useful both times.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-namedvsread
+Provenance: inherited ccbf2686b31c59fbfc35f3b76dd160ac23b3d97a
