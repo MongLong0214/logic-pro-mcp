@@ -208,15 +208,27 @@ def check(path: str = WORKFLOW):
     # lowered the coverage bar, and for the same reason: a pull request runs its own copy of this
     # file. The seams exist for tests; a workflow that sets one is aiming a guard somewhere else.
     #
-    # Named individually rather than by prefix so that adding a seam is a deliberate edit here too.
-    # A prefix rule would silently cover a future variable that is not a seam at all.
-    for setting in ("LPM_COVERAGE_MIN_REGION", "LPM_COVERAGE_MIN_LINE", "LPM_COVERAGE_TARGET",
-                    "LPM_TESTS_DIR", "LPM_LIVEKIT_DIR", "LPM_CANON_REPO", "LPM_CI_WORKFLOW",
-                    "LPM_POLICY_SWIFT", "LPM_POLICY_ROOTS", "LPM_OBSERVATIONS_DIR",
-                    "LPM_SCRIPTS_DIR", "LPM_INSTALL_SCRIPT", "LPM_AX_COMPARISON_ROOTS",
-                    "LPM_SERVER_JSON", "LPM_FORMULA_PATH", "LPM_GH_BIN",
-                    "LPM_FORMULA_RELEASE_PREPARATION", "LPM_COVERAGE_BUILD_DIR",
-                    "LPM_COVERAGE_SOURCES", "LPM_COVERAGE_REPORT", "LPM_LLVM_COV"):
+    # DERIVED from the scripts, not listed. This was a hand-written tuple of twenty-one names and
+    # it had already gone stale: of the 33 seams the scripts actually read, 12 were missing from
+    # it -- LPM_HELPER_SUITES_DIR, LPM_LABELSET_BASE_REF, LPM_RATCHET_BASE_REF and
+    # LPM_APPLESCRIPT_ROOTS among them -- so a workflow could set any of those and the rule would
+    # not notice. (Measured 2026-09-20; the reverse set was empty, so the list was stale in one
+    # direction only, the direction where the protection is gone.) A list of the things
+    # a rule protects is a second copy of the truth, and it goes stale in the direction where the
+    # protection is missing. That is the defect this repository keeps removing; it does not belong
+    # in the guard that exists to stop guards being switched off.
+    #
+    # The comment this replaces said naming them individually made adding one "a deliberate edit
+    # here too". It did not: nobody made that edit eight times.
+    seams = seam_names()
+    if not seams:
+        # An empty seam set makes the loop below a no-op, and the rule would report clean while
+        # protecting nothing -- the exact shape this guard exists to refuse, arriving inside it.
+        problems.append(
+            f"{path}: no seam could be read from Scripts/, so the rule that stops a workflow "
+            f"aiming a guard elsewhere is checking nothing. That is a broken reader, not a "
+            f"repository with no seams.")
+    for setting in sorted(seams):
         for line in text.splitlines():
             stripped = line.strip()
             if stripped.startswith("#") or not stripped.startswith(setting):
@@ -236,6 +248,43 @@ def check(path: str = WORKFLOW):
                 f"{path}: no step runs `{command}`. A required JOB says nothing about its STEPS, "
                 f"and deleting a step leaves the job green with the check unaimed.")
     return problems
+
+
+def seam_names() -> set:
+    """Every `LPM_*` a script reads from the environment, read out of the scripts themselves.
+
+    A seam is defined by a script asking for it. Scanning for that is the only definition that
+    cannot fall behind the scripts, and the rule that follows is about ALL of them: a workflow
+    that sets one is aiming a guard at something other than this repository.
+
+    Falls back to nothing on an unreadable tree, and the caller refuses rather than passing -- an
+    empty seam set would make this rule vacuous, which is precisely the shape it guards against.
+    """
+    names = set()
+    for base, _dirs, files in os.walk(os.path.join(REPO, "Scripts")):
+        for name in files:
+            if not name.endswith((".py", ".sh")):
+                continue
+            try:
+                with open(os.path.join(base, name), encoding="utf-8") as handle:
+                    source = handle.read()
+            except OSError:
+                continue
+            for line in source.splitlines():
+                stripped = line.strip()
+                # A COMMENT naming a seam is documentation, not a read. Skipping those is not
+                # tidiness: this guard's own explanation names one, and counting it would have the
+                # rule protect a variable no script asks for.
+                if stripped.startswith("#"):
+                    continue
+                # Python: `environ.get("X")`, `environ["X"]`, `environ.pop("X")`. NOT
+                # `dict(os.environ, X=...)` -- that is a test SETTING a seam, which is what seams
+                # are for, and counting it folds the callers in with the definitions.
+                names.update(re.findall(
+                    r'environ(?:\.get|\.pop)?\(?\[?["\']((?:LPM_[A-Z_]+))', line))
+                # Shell: `${X:-default}`, `"$X"`, `$X`.
+                names.update(re.findall(r'\$\{?(LPM_[A-Z_]+)', line))
+    return names
 
 
 def main() -> int:

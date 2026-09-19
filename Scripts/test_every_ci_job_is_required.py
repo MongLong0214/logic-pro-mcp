@@ -8,7 +8,9 @@ came to scan `Sources/` while the defect lived in `Scripts/livekit`.
 import importlib.util
 import json
 import os
+import re
 import shutil
+import subprocess
 import tempfile
 import sys
 import unittest
@@ -350,6 +352,69 @@ class TheEntryPointRefuses(unittest.TestCase):
         """The control. Without it the case above passes on a guard that refuses every workflow."""
         proc = self._run("check-every-ci-job-is-required.py")
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
+
+
+class SeamsAreDerivedNotListed(unittest.TestCase):
+    """The seam set is read out of the scripts, so it cannot fall behind them.
+
+    It was a hand-written tuple of twenty-one names and it HAD fallen behind: seams added since
+    were missing, so a workflow could set one of those and the rule would not notice. A list of
+    the things a rule protects is a second copy of the truth, and it goes stale in the direction
+    where the protection is gone.
+    """
+
+    def _independent_scan(self):
+        """Read the scripts here, so this compares two readers rather than asking one reader
+        whether it agrees with itself."""
+        found = set()
+        for base, _dirs, files in os.walk(os.path.join(REPO, "Scripts")):
+            for name in files:
+                if not name.endswith((".py", ".sh")):
+                    continue
+                with open(os.path.join(base, name), encoding="utf-8") as handle:
+                    for line in handle:
+                        if line.strip().startswith("#"):
+                            continue
+                        found.update(re.findall(r'environ\.get\(["\'](LPM_[A-Z_]+)', line))
+                        found.update(re.findall(r'\$\{(LPM_[A-Z_]+)', line))
+        return found
+
+    def test_every_seam_a_script_reads_is_protected(self):
+        seams = guard.seam_names()
+        self.assertTrue(seams, "an empty seam set would make the rule vacuous")
+        missing = sorted(self._independent_scan() - seams)
+        self.assertEqual(missing, [], f"seams a script reads but the rule does not protect: {missing}")
+
+    def test_a_seam_added_after_the_list_was_written_is_protected(self):
+        """The property the hand-written tuple did not have. These three did not exist when it was
+        written; if the derivation regresses to a list they are the first to fall out of it."""
+        seams = guard.seam_names()
+        for recent in ("LPM_LABELSET_CENSUS", "LPM_APPLESCRIPT_ROOTS", "LPM_POLICY_SWIFT"):
+            self.assertIn(recent, seams)
+
+    def test_a_comment_naming_a_seam_is_not_a_read(self):
+        """This guard's own explanation names a seam. Counting that would protect a variable no
+        script asks for, and the rule would refuse a workflow over a word in a comment."""
+        self.assertNotIn("LPM_X", guard.seam_names())
+
+    def test_a_workflow_setting_a_recently_added_seam_is_refused(self):
+        """End to end, at the seam the old list could not see."""
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(REPO, ".github", "workflows", "ci.yml")
+            with open(real, encoding="utf-8") as handle:
+                source = handle.read()
+            assert source.count("  guards:\n") == 1
+            path = os.path.join(tmp, "ci.yml")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(source.replace(
+                    "  guards:\n",
+                    "  guards:\n    env:\n      LPM_LABELSET_CENSUS: /dev/null\n", 1))
+            proc = subprocess.run(
+                [sys.executable, os.path.join(REPO, "Scripts", "check-every-ci-job-is-required.py")],
+                capture_output=True, text=True,
+                env=dict(os.environ, LPM_CI_WORKFLOW=path))
+            self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+            self.assertIn("LPM_LABELSET_CENSUS", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":
