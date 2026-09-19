@@ -1,0 +1,39 @@
+Limit: NOTHING HERE WAS RUN AGAINST A LIVE LOGIC. The write-cycle path is proved against the verifier's own rules with a constructed result; no bundle was produced on a Logic host and none is committed, so the numbers this subsystem reports remain unreproducible from this repository.
+Limit: The gate is not wired. `release.yml` is main's, untouched. What lands is a CLI and a verifier that are now internally consistent -- not a release that qualifies.
+Limit: The pinned verifier problem is DIAGNOSED, not fixed. Independence and currency are exclusive while the verifier links the whole product library: any pin older than the newest oracle rejects, and any pin the candidate can move is not independent. The fix is the candidate's catalog for required IDs and the oracle table as bundle data; neither is here.
+Limit: `evidenceShapeIsValid` was made `internal` to be testable. The new cases drive the rule directly rather than through a signed bundle, so what is proved is the rule, not the end-to-end path that assembles it.
+Ruled-out: deleting the `if:` guards so the gate enforces | no `QUALIFICATION_EVIDENCE_URL` secret exists, so every tag would fail in `build-release` -- that is a release freeze, not a gate
+Ruled-out: relaxing `operationIsError == false` to accept `true` | it lets a refused READ pass as semantic evidence and sends the oracle to run against a refusal body
+Ruled-out: pointing the mutating case at the write instead of the probe | it drops the probe from evidence, which is the thing the transport checks FIRST because a recipe that succeeds beside an injected fault launders it
+Ruled-out: refusing a record whose case did not pass | the recipe running and the operation deferring is the normal outcome, and refusing it rejects honest bundles
+Warn: A mutation-restore record's `pre_state`, `readback` and `restore_readback` are whole resource ENVELOPES that must parse as JSON objects; `mutation` and `restore` are the values written. Five fields, two kinds. Putting a bare word in a reading field defers the case for a reason that looks nothing like the cause.
+Warn: The readback emptiness check reads `data`. A body that keys its rows anything else passes it by having no `data` key rather than by carrying rows -- green for a reason unrelated to the test.
+Warn: `system.setup_control_surface` is in `structurallyUnverifiedMutatingOperationIDs`, not in a phase set. Those sets record what was pinned when; back-dating a later operation into one falsifies that record.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-gatethatcangate
+Provenance: inherited f6981168876dda7dd3077e7da7ec202132113282
+
+Limit: The 9-to-25 count is read from the failing job's diff, not reproduced here -- a clean resolve is the only way to see it and this worktree cannot produce one without discarding its build state. What IS reproduced locally is the withdrawal: with the product gone, `Package.resolved` does not move.
+Limit: Nothing proves the product is the ONLY trigger. It is the only manifest change in the commit CI refused, which makes it the cause of THIS failure; whether some other executable product would cost less is unmeasured.
+Ruled-out: committing the runner's Package.resolved | it pins 16 packages for an executable nothing runs, and `originHash` is not portable between toolchains -- the next developer's resolve would move it back and the gate would refuse them instead
+Ruled-out: keeping the target without the product | the target alone builds nothing reachable, so it is 12 lines of source with no consumer and the same maintenance claim
+Warn: A `.build` that is already resolved hides manifest-driven resolution changes. `swift package resolve` returning clean says nothing about what a fresh checkout would pin, which is what the CI gate compares against.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-productcostsixteen
+Provenance: inherited 5c0fb18ee8447800bbef16ff9ae5901d1a1aaec6
+
+Limit: "A comment is enough to invalidate originHash" is inferred from two runs -- one with the product and a comment, one with the comment alone -- both producing 25 pins, plus main producing 9 with no edit. I did not isolate the comment by pushing a comment-only change, so the mechanism is read from SwiftPM's documented behaviour and two data points, not from a controlled third run.
+Limit: Whether a fresh resolve on THIS machine would also produce 25 pins is unmeasured. Finding out means discarding this worktree's build state, and the answer would not change what lands.
+Ruled-out: committing the runner's 25-pin Package.resolved | it pins sixteen packages for an executable nothing runs, and the next developer's resolve moves it back
+Ruled-out: keeping the withdrawal comment in Package.swift | that comment IS the trigger, which is the whole finding
+Warn: Editing `Package.swift` at all -- including a comment -- invalidates `originHash` and forces a full re-resolution. If `Package.resolved` then grows, the growth is what a clean resolve always produces and was merely hidden; do not read it as caused by whatever you just declared.
+Warn: An already-resolved `.build` hides this completely. `swift package resolve` answering clean says nothing about what a fresh checkout pins, and a fresh checkout is what the CI gate compares against.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-manifestistrigger
+Provenance: inherited a9c957b9068d6d5541cdc22b9bb8f4588abcea94
