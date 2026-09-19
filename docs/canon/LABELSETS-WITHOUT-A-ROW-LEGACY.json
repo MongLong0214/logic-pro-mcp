@@ -1,0 +1,298 @@
+{
+  "note": "LabelSets that name no Apple row. THIS LIST MAY ONLY SHRINK.\n\n`check-labelsets-are-derived.py` proves, offline and per locale, that a LabelSet's members are the values Apple pins at its row -- but only for the sets that DECLARE one. `check-new-labelsets-name-a-row.py` requires a declaration of every set added from now on, measured against the merge base. Between them sits this census: the sets that predate both rules. Nothing asked whether these work in every language, and the answer is UNMEASURED rather than no.\n\nEach entry carries what `Scripts/derive_label_variants.py` says about it, so the work is sized rather than guessed. `value` and `namespace` mean a row was found; `ambiguous` means several resolve and somebody has to pick the one that MEANS this control; `no-row` means an absence proof is what closes it.\n\nDO NOT CLOSE THESE MECHANICALLY. Measured while writing this file: `trackTypeMaster`'s best candidate is `ChineseOnly_TI_BassAmpLabel_Master_lowercase`, a Bass Amp label whose value happens to match and whose meaning does not. A row that resolves is not the row a control is named by.",
+  "how_to_shrink": "Give the LabelSet a `derivedFrom` naming its row, or prove there is none with an entry in docs/canon/LABELSETS-WITHOUT-A-ROW.json. Then delete its line here. Scripts/check-labelset-census-only-shrinks.py refuses any other direction.",
+  "counted_on": "2026-09-20",
+  "total_labelsets": 195,
+  "undeclared": {
+    "assignControlHelpKeyword": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "audioPluginSlotLabel": {
+      "verdict": "ambiguous",
+      "candidate": "2 candidate(s)",
+      "members": 5
+    },
+    "automationModeOff": {
+      "verdict": "ambiguous",
+      "candidate": "10 candidate(s)",
+      "members": 3
+    },
+    "automationModeRead": {
+      "verdict": "ambiguous",
+      "candidate": "5 candidate(s)",
+      "members": 2
+    },
+    "automationModeTouch": {
+      "verdict": "ambiguous",
+      "candidate": "5 candidate(s)",
+      "members": 2
+    },
+    "automationModeTrim": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 2
+    },
+    "automationModeWrite": {
+      "verdict": "ambiguous",
+      "candidate": "5 candidate(s)",
+      "members": 2
+    },
+    "deleteTracksPrimaryButton": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Delete#key via #key",
+      "members": 4
+    },
+    "headerPanHint": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Pan#par via #par",
+      "members": 4
+    },
+    "horizontalZoomSlider": {
+      "verdict": "value",
+      "candidate": "ControllerAssignments.strings aGM-qO-ZOT.title",
+      "members": 4
+    },
+    "inputSlotHelpKeyword": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 2
+    },
+    "inspectorChannelStripHelpPrefix": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 3
+    },
+    "midiEffectSlotHelpKeyword": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "midiImportTempoAlertText": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Tempo#mti via #mti",
+      "members": 3
+    },
+    "nonInsertButtonText": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Record#mti via #mti",
+      "members": 29
+    },
+    "outputSlotHelpKeyword": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 2
+    },
+    "playheadPositionFieldLabel": {
+      "verdict": "ambiguous",
+      "candidate": "3 candidate(s)",
+      "members": 2
+    },
+    "pluginBypassControl": {
+      "verdict": "ambiguous",
+      "candidate": "4 candidate(s)",
+      "members": 3
+    },
+    "pluginOpenOrListControl": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings StrToolbItemName|||Lists via StrToolbItemName",
+      "members": 5
+    },
+    "pluginWindowControlsViewMenuItem": {
+      "verdict": "ambiguous",
+      "candidate": "6 candidate(s)",
+      "members": 2
+    },
+    "pluginWindowSmartControlsControl": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "projectOrSectionMenuItem": {
+      "verdict": "value",
+      "candidate": "Localizable.strings Project or Section…",
+      "members": 6
+    },
+    "projectPickerWindow": {
+      "verdict": "ambiguous",
+      "candidate": "2 candidate(s)",
+      "members": 4
+    },
+    "regionKindDrummer": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 4
+    },
+    "regionKindMidi": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "saveConfirmationButton": {
+      "verdict": "ambiguous",
+      "candidate": "88 candidate(s)",
+      "members": 4
+    },
+    "sendOrIOControlLabel": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Enter#key via #key",
+      "members": 6
+    },
+    "settingPopupValue": {
+      "verdict": "ambiguous",
+      "candidate": "18 candidate(s)",
+      "members": 4
+    },
+    "showLibraryMenuItem": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Library#acc via #acc",
+      "members": 10
+    },
+    "showMixerMenuItem": {
+      "verdict": "ambiguous",
+      "candidate": "2 candidate(s)",
+      "members": 3
+    },
+    "sliderPanHint": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Pan#par via #par",
+      "members": 5
+    },
+    "sliderSendHint": {
+      "verdict": "ambiguous",
+      "candidate": "10 candidate(s)",
+      "members": 2
+    },
+    "sliderVolumeHint": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Volume#acc via #acc",
+      "members": 4
+    },
+    "sliderZoomHint": {
+      "verdict": "value",
+      "candidate": "SongSettingsScore.strings 101232.title",
+      "members": 2
+    },
+    "tempoFieldLabel": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Tempo#mti via #mti",
+      "members": 3
+    },
+    "tempoSliderLabel": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Tempo#mti via #mti",
+      "members": 4
+    },
+    "tickSliderLabel": {
+      "verdict": "ambiguous",
+      "candidate": "5 candidate(s)",
+      "members": 2
+    },
+    "trackContentExplicit": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 7
+    },
+    "trackContentGeneric": {
+      "verdict": "ambiguous",
+      "candidate": "3 candidate(s)",
+      "members": 3
+    },
+    "trackHeadersDescription": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 7
+    },
+    "trackRecordButton": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Record#mti via #mti",
+      "members": 5
+    },
+    "trackRecordEnableCheckbox": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Record#mti via #mti",
+      "members": 3
+    },
+    "trackTypeAux": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "trackTypeDrummer": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "trackTypeExternalMIDI": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 2
+    },
+    "trackTypeGMDevice": {
+      "verdict": "no-row",
+      "candidate": "0 candidate(s)",
+      "members": 1
+    },
+    "trackTypeInstrument": {
+      "verdict": "value",
+      "candidate": "Localizable.strings instrument",
+      "members": 3
+    },
+    "trackTypeMaster": {
+      "verdict": "value",
+      "candidate": "Localizable.strings ChineseOnly_TI_BassAmpLabel_Master_lowercase",
+      "members": 2
+    },
+    "transportAutopunchControl": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings StrTransportBtns|||Autopunch via StrTransportBtns",
+      "members": 3
+    },
+    "transportContainerControlKeywords": {
+      "verdict": "ambiguous",
+      "candidate": "48 candidate(s)",
+      "members": 18
+    },
+    "transportContainerMetadata": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Control Bar#acc via #acc",
+      "members": 4
+    },
+    "transportCycleControl": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings StrTransportBtns|||Cycle via StrTransportBtns",
+      "members": 4
+    },
+    "transportKeywordFalseFriends": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Loop Browser#acc via #acc",
+      "members": 12
+    },
+    "transportRecordArmExclusion": {
+      "verdict": "ambiguous",
+      "candidate": "3 candidate(s)",
+      "members": 2
+    },
+    "transportSliderHints": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Tempo#mti via #mti",
+      "members": 7
+    },
+    "transportTextFieldHint": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Tempo#mti via #mti",
+      "members": 5
+    },
+    "undoMenuItemPrefix": {
+      "verdict": "ambiguous",
+      "candidate": "13 candidate(s)",
+      "members": 2
+    },
+    "undoPluginInsertMenuItem": {
+      "verdict": "namespace",
+      "candidate": "Localizable.strings Insert Plug-in in Channel Strip#und via #und",
+      "members": 2
+    }
+  }
+}
