@@ -1,0 +1,15 @@
+Limit: Ten locales by DERIVATION. Nobody has run the arm-key setup on a Logic in any language but Korean; what is proved is that the table carries Apple's values for that row and that the right one is chosen per identifier.
+Limit: Apple leaves `Toggle Track Record Enable` untranslated in Italian, Portuguese and Traditional Chinese, so those three type English -- correctly, but a reader comparing the table against the locale list will count seven distinct spellings for ten locales and should not read that as a gap.
+Limit: `libraryInventoryCandidatePaths` was made `internal` to be testable. The cases assert the list, not a served resource: an absent candidate is invisible from outside, because the resource answers empty for that and for "nobody has scanned yet" alike.
+Limit: #923 is fixed here but was not reproduced against a running Logic. All three lines are read from the tree.
+Ruled-out: reviving `LabelSet.locales:` from #882 | it widens a shared definition for one call site, and the locale-to-value map is derivable from the row the LabelSet already names
+Ruled-out: a `_locale_code`-style mapping written in Swift | a second copy of `ko-KR -> ko` in another language is a second thing to keep true; the generator emits the identifiers Logic reports
+Ruled-out: emitting a bare `zh` key | it names two locales, so the table would answer Simplified on a Traditional host and never say it guessed
+Ruled-out: making the reader prefer the disk file | that inverts the intent the writer's comment states -- an AX snapshot must survive a disk scan
+Warn: `AXLocaleValues.swift` is GENERATED. Editing it is silently undone by the next `--write`, and `--check` now fails on the edit -- which is the point, but the error names the policy rather than your edit.
+Warn: `LOCALE_KEYED` is an explicit list, like `SHIPPED_LABELS`. A label belongs there only because some call site must PICK one spelling; adding one because it looks useful puts a table in the build that nothing reads.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-typewhatapple
+Provenance: inherited 15d063dac20023540756d29835d5eea8ddb8c1ad
