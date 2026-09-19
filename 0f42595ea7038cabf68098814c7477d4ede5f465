@@ -1,0 +1,32 @@
+Limit: Logic ships with no control surface installed, and `Rebuild Defaults` rewrites the preference file without installing one, so a check that reads only com.apple.logic.pro.cs cannot tell the two apart.
+Limit: The popup press returns kAXErrorCannotComplete (-25205) on presses that DO open the menu, so the open cannot be judged by its return code.
+Ruled-out: give setup_control_surface an HC RouteCase with no consent | it would pass on the consent-refusal envelope and count the route as HC-checked while never entering the drive
+Warn: State A here rests on MCU feedback newer than the drive, never on re-reading the two port popups this operation just wrote.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-fac36c8035ea
+Provenance: inherited 86eab1748391064e8f1b0ee2bbba076885f80067
+
+Warn: com.apple.logic.pro.cs is an IFF-style chunk container, not a structureless blob: the first four bytes are the FORM magic written back to front, the same way ProjectData writes gnoS for Song.
+Warn: Rebuild Defaults adds the port names and does NOT install the device; the Setup window still reads 기기 없음. Only the install rewrites the file, 27,505 to 264,770 bytes.
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-c2f6671214d6
+Provenance: inherited 39e053219ea28000bb43b9904bf2c17bd9f706dc
+
+Limit: Ten languages by DERIVATION. Nobody has installed a control surface on a Logic in any language but Korean. What is proved is that these are Apple's values for those rows and that the matcher tolerates the drawn colon -- not that a German Setup window renders them where this drive looks.
+Limit: `.prefix` is looser than what it replaces. The anchor control fixes one end; the other end is that a field whose name BEGINS with a port label would be picked up. None exists in this window today and nothing watches for one arriving.
+Limit: The `Model` row is `Localizable.strings/Model`, chosen because its ko value is the `모델` read live. `Install.strings/168.headerCell.title` also reads `Model` in English but has no ko at all, so it could not be the one -- that is an elimination, not a positive identification of which table the Setup window reads.
+Ruled-out: adding Apple's bare values beside the decorated ones | it turns the derived guard green and leaves the product matching two languages, which is a guard passing while proving nothing
+Ruled-out: a new `.fieldLabel` match mode that strips declared decoration | it widens a shared definition to get past a blocker, and `.prefix` already expresses exactly this with an anchor
+Ruled-out: waiving the three labels in LABELSETS-WITHOUT-A-ROW.json | that list may only shrink, and `Input Port` / `Output Port` / `Model` are all rows -- the lookup only missed them because the canonical carried the colon
+Warn: This branch's commits are scoped `(#884)`, and #884 is `Add verified automation-point editing`. The control-surface install is a PRECONDITION named by the observation record's `issues: [884, 862]`, not a fix for either. Nothing here closes an issue and the body carries no closing keyword.
+Warn: `derive_label_variants.py` looks the CANONICAL up verbatim. A label whose canonical carries decoration reads as `no-row` even when its row is right there, which is how three of these looked unwaivable. Strip the decoration before believing `0 candidate(s)`.
+Warn: A record must be `schema: 3` to carry `canon` citations. At `schema: 2` the guard demands a WITHOUT-CANON entry instead and never looks at the `canon` block you just wrote.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-rowsnotguesses
+Provenance: inherited 12136d425afccea88530e3413d51364298f389cc
