@@ -1,0 +1,11 @@
+Limit: `unobserved` covers every dialog outcome, and some of them probably could be proved closed -- the entry guard gives each of them one CLOSED answer before the leaf. Widening `closed` to them needs reading what reopens a menu after actuation, which this change did not do.
+Limit: Read from the AppleScript source and the classifier. No binary was run and the reporter's payload was not reproduced; what is proved is that the three sentinels are unreachable unless the cleanup returned CLOSED.
+Ruled-out: deleting the field | a field that appears on one refusal and is absent on the neighbouring one is not a contract, which the code beside it already says about `dialog_submission_attempted`
+Ruled-out: keeping the constant and documenting it | the reader who was misled had the source in front of them and quoted it correctly; a comment does not reach a payload
+Warn: `menu_state` on a `transport.goto_position` refusal now means three different things. A consumer branching on `== "could_not_be_closed"` to decide "this refusal happened" will stop matching two thirds of the cases -- read `dialog_route_outcome` for that, which is derived from the classification and always was.
+Warn: The marker-delete route has its own `menu_state` (`AccessibilityChannel+MarkerDelete.swift:203`) and it is guarded by `menuCloseWasNotObserved`, so it was already a reading. Do not "fix" it to match this one.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-statewhatyousaw
+Provenance: inherited 89af13420f894f9c4a936b5386587465d76e6db0
