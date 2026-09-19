@@ -95,3 +95,61 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+# ── The corpus rule: a Latin-script Logic label is a label, whatever script it is in ──────────
+#
+# The CJK rule catches Korean, Japanese and Chinese by their characters and is blind to the five
+# languages Logic writes in Latin script. #919 was the Korean-and-English half of that defect; the
+# limit recorded on it said the corpus was what closing the other half would take.
+#
+# The predicate had to be corrected once and the correction is the point: `is_translated` is keyed
+# by the ENGLISH value, so it answers False for `Bouncen` -- the translation rather than the thing
+# translated -- and a rule that cannot see a German label is no rule. What it asks now is whether
+# the literal is a value Apple ships in ANY locale, proved against the committed absence sets.
+import subprocess as _sp
+import tempfile as _tf
+
+_GUARD = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "check-shipped-python-has-no-ui-literals.py")
+
+
+def _at(helper_source: str):
+    """Run the guard's ENTRY POINT at a fixture tree, through the installer seam."""
+    tmp = _tf.mkdtemp()
+    os.makedirs(os.path.join(tmp, "s"), exist_ok=True)
+    with open(os.path.join(tmp, "s", "logic_fixture.py"), "w", encoding="utf-8") as handle:
+        handle.write(helper_source)
+    with open(os.path.join(tmp, "install.sh"), "w", encoding="utf-8") as handle:
+        handle.write("install logic_fixture.py\n")
+    return _sp.run([sys.executable, _GUARD], capture_output=True, text=True,
+                   env=dict(os.environ, LPM_INSTALL_SCRIPT=os.path.join(tmp, "install.sh"),
+                            LPM_SCRIPTS_DIR=os.path.join(tmp, "s")))
+
+
+_bad = _at('BOUNCE = "Bouncen"\n')
+case("a German Logic label in a shipped helper is refused",
+     _bad.returncode == 1 and "Bouncen" in _bad.stderr,
+     (_bad.stdout + _bad.stderr).strip()[:200])
+case("and the refusal names the locale whose corpus holds it",
+     "strings/de" in _bad.stderr, _bad.stderr.strip()[:200])
+
+# The control, and it must pass for the RIGHT reason: `pcm` is absent from every corpus, which is
+# the same derivation `locale_labels.py` uses to exempt it. A control that passes because the rule
+# refuses nothing proves nothing.
+_ok = _at('MARKERS = ("pcm", "audio tail")\n')
+case("a literal Apple ships in no locale is not a finding",
+     _ok.returncode == 0, (_ok.stdout + _ok.stderr).strip()[:200])
+
+# A dict KEY is a protocol key, not a label. Measured: aiming the rule at the real tree produced
+# five findings and every one was `'name'` in key position, because Apple ships a string spelled
+# `name` somewhere in 605,190 entries. Length cannot separate those -- `Save` is four characters
+# and so is `name` -- but position can.
+_key = _at('RESULT = {"name": 1, "text": 2}\n')
+case("a literal in key position is not a label",
+     _key.returncode == 0, (_key.stdout + _key.stderr).strip()[:200])
+
+# An exemption covers its own literal in its own expression, never the line. Same shape as #891.
+_both = _at('BOUNCE = "Bouncen"\nSTATE = {"status": "error"}\n')
+case("an exempt protocol value does not silence a real label beside it",
+     _both.returncode == 1 and "Bouncen" in _both.stderr,
+     (_both.stdout + _both.stderr).strip()[:200])

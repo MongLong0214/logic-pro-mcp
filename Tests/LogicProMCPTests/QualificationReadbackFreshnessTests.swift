@@ -411,3 +411,62 @@ struct QualificationRecipeReadingTests {
         #expect(why.hasPrefix("readback:"))
     }
 }
+
+// MARK: - one emptiness predicate, a case per shape
+
+/// Two checks in one subsystem used to answer this differently. `QualificationTransport` refused an
+/// absent `data` key; this gate waved it through its `default` arm. Whether a rowless readback was
+/// admissible depended on which gate asked, and nothing said so. They are one predicate now, and
+/// every shape it can be handed has a case here — including the two that used to fall through.
+@Suite("readback emptiness, by shape")
+struct ReadbackEmptinessByShapeTests {
+    @Test("an absent `data` key is EMPTY — nothing was published, not rows nobody looked at")
+    func absentIsEmpty() {
+        #expect(QualificationReadbackFreshness.isEmpty(nil))
+    }
+
+    @Test("an explicit null is empty")
+    func nullIsEmpty() {
+        #expect(QualificationReadbackFreshness.isEmpty(NSNull()))
+    }
+
+    @Test("an array says what it holds")
+    func arraysAnswerByCount() {
+        #expect(QualificationReadbackFreshness.isEmpty([Any]()))
+        #expect(!QualificationReadbackFreshness.isEmpty([["name": "Track 1"]]))
+    }
+
+    /// The shape both checks were blind to. `SemanticOracleTable` reads
+    /// `readback["data"] as? [String: Any]`, so a dictionary payload is live here — and an empty
+    /// one used to read as "not empty" and pass.
+    @Test("a dictionary payload answers by count too, and used to be invisible")
+    func dictionariesAnswerByCount() {
+        #expect(QualificationReadbackFreshness.isEmpty([String: Any]()))
+        #expect(!QualificationReadbackFreshness.isEmpty(["tempo": 120]))
+    }
+
+    /// The narrow `default`. A string or a number under `data` is a shape nothing here
+    /// understands; calling it non-empty leaves the refusal to the next check rather than
+    /// inventing one, and the case is written down so the narrowness is a decision and not an
+    /// oversight.
+    @Test("a shape this predicate does not understand is not claimed empty")
+    func unknownShapesAreNotClaimedEmpty() {
+        #expect(!QualificationReadbackFreshness.isEmpty("rows"))
+        #expect(!QualificationReadbackFreshness.isEmpty(0))
+    }
+
+    /// The end the product cares about: a body with no `data` at all must not be admissible, and
+    /// before this it was — on the freshness side.
+    @Test("a body publishing no rows is refused as empty-unverified, not admitted")
+    func aBodyWithNoRowsIsRefused() throws {
+        let body = try JSONSerialization.data(
+            withJSONObject: ["source": "ax_live", "cache_age_sec": 1] as [String: Any])
+        let verdict = QualificationReadbackFreshness.verdict(
+            for: body,
+            uri: "logic://tracks",
+            verification: .readbackRequired,
+            deadline: .short
+        )
+        #expect(verdict == .emptyUnverified, "got \(verdict)")
+    }
+}

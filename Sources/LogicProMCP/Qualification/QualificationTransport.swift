@@ -85,9 +85,17 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             if object["ax_occluded"] as? Bool == true { return "\(name): ax_occluded=true" }
             // The transport envelope's own word for "this is not a reading of the live surface".
             if object["unverified"] as? Bool == true { return "\(name): unverified=true" }
-            let rows = object["data"] as? [Any]
-            let isEmpty = rows?.isEmpty ?? (object["data"] == nil)
-            if isEmpty, object["verified_empty"] as? Bool != true {
+            // THE FRESHNESS GATE'S OWN QUESTION, widened by exactly one step. These were two
+            // checks and they disagreed on an absent rows key -- this one refused, that one waved
+            // it through -- so whether a rowless readback was admissible depended on which gate
+            // asked. Both were also blind to a DICTIONARY payload, which this subsystem reads.
+            //
+            // `showsNoRows` rather than `isEmpty(object["data"])` because a record carries no URI:
+            // its three readings come from whichever resource the recipe used, and `logic://mixer`
+            // publishes `strips` where `logic://tracks` publishes `data`. Asking only about `data`
+            // called every mixer reading empty.
+            if QualificationReadbackFreshness.showsNoRows(object),
+               object["verified_empty"] as? Bool != true {
                 return "\(name): empty without verified_empty"
             }
         }

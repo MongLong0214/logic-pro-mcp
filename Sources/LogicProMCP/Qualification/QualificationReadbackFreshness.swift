@@ -89,6 +89,18 @@ enum QualificationReadbackFreshness {
     struct ProvenanceDialect: Equatable, Sendable {
         let key: String
         let liveToken: String
+        /// Where this resource family publishes its ROWS. `logic://tracks` uses `data`;
+        /// `logic://mixer` uses `strips`. Asking the wrong key cannot distinguish "no rows" from
+        /// "rows under another name", and a gate that cannot tell those apart either refuses every
+        /// resource it does not know or admits every empty one. Measured 2026-09-20 when a fix
+        /// that assumed `data` everywhere refused three mixer cases that were correct.
+        let rowsKey: String
+
+        init(key: String, liveToken: String, rowsKey: String = "data") {
+            self.key = key
+            self.liveToken = liveToken
+            self.rowsKey = rowsKey
+        }
     }
 
     static let defaultDialect = ProvenanceDialect(key: "source", liveToken: liveSourceToken)
@@ -96,7 +108,8 @@ enum QualificationReadbackFreshness {
     /// Keyed by URI PREFIX, because `logic://mixer` and `logic://mixer/{strip}` are one resource
     /// family emitted by one writer and share its vocabulary.
     static let provenanceDialects: [(prefix: String, dialect: ProvenanceDialect)] = [
-        ("logic://mixer", ProvenanceDialect(key: "data_source", liveToken: "ax_poll")),
+        ("logic://mixer", ProvenanceDialect(key: "data_source", liveToken: "ax_poll",
+                                            rowsKey: "strips")),
     ]
 
     static func dialect(for uri: String?) -> ProvenanceDialect {
@@ -132,10 +145,16 @@ enum QualificationReadbackFreshness {
 
         if envelope.readable == false { return .unreadable }
         if envelope.axOccluded == true { return .axOccluded }
-        if envelope.dataIsEmpty && envelope.verifiedEmpty != true { return .emptyUnverified }
+        // PROVENANCE BEFORE EMPTINESS, and the order is load-bearing. Emptiness is asked at this
+        // dialect's `rowsKey`, so a body read under the WRONG dialect has no rows there whatever
+        // it carries -- and answering `emptyUnverified` would report a consequence of the key
+        // mismatch while hiding its cause. A body with no live provenance token cannot be admitted
+        // on any reading of its rows, so that is the refusal worth naming. Both are refusals;
+        // only the reason changes, and the truer reason is the one a person can act on.
         guard envelope.source == liveToken else {
             return .notLive(source: envelope.source)
         }
+        if envelope.dataIsEmpty && envelope.verifiedEmpty != true { return .emptyUnverified }
 
         // The bound is the operation's own deadline, not a new uniform cache constant:
         // short = 25 s, medium = 90 s, and long = 300 s (`DeadlineClass.seconds`). Those are the
@@ -174,19 +193,53 @@ enum QualificationReadbackFreshness {
             readable: object["readable"] as? Bool,
             axOccluded: object["ax_occluded"] as? Bool,
             verifiedEmpty: object["verified_empty"] as? Bool,
-            dataIsEmpty: isEmpty(object["data"]),
+            dataIsEmpty: isEmpty(object[dialect.rowsKey]),
             cacheAgeSeconds: object["cache_age_sec"] as? Double
         )
     }
 
-    private static func isEmpty(_ value: Any?) -> Bool {
+    /// Whether a readback's `data` holds nothing, with a case per SHAPE and no silent default.
+    ///
+    /// This is the one predicate; `QualificationTransport` calls it too. Until 2026-09-20 there
+    /// were two, in the same subsystem, and they disagreed on the case that matters most: an
+    /// ABSENT `data` key. This one answered `false` (not empty, carry on) through its `default`
+    /// arm; the transport's answered `true` and refused. Whether a rowless readback was admissible
+    /// depended on which gate asked, and nothing said so.
+    ///
+    /// `absent` is now its own answer and it means EMPTY, because a body that publishes no rows
+    /// has not shown a reading. The `default` arm stays narrow on purpose -- a `data` that is a
+    /// string or a number is a shape nothing here understands, and calling that non-empty leaves
+    /// the refusal to the next check rather than inventing one here.
+    /// Whether a body shows NO rows under any key this product's resources publish them at.
+    ///
+    /// For a caller that knows its URI, `isEmpty(object[dialect.rowsKey])` is the precise
+    /// question. A mutation-restore record carries no URI -- its three readings come from
+    /// whichever resource the recipe used -- so it asks the wider one: a body carrying rows under
+    /// ANY known key has shown a reading. The key set is derived from the dialect table, so a
+    /// resource that starts publishing under a new name is one edit away from being understood
+    /// here too rather than silently reading as empty.
+    static func showsNoRows(_ object: [String: Any]) -> Bool {
+        var keys = [defaultDialect.rowsKey]
+        keys.append(contentsOf: provenanceDialects.map(\.dialect.rowsKey))
+        for key in Set(keys) where !isEmpty(object[key]) {
+            return false
+        }
+        return true
+    }
+
+    static func isEmpty(_ value: Any?) -> Bool {
         switch value {
+        case nil:
+            // No `data` key at all. Not "rows we did not look at" -- nothing was published.
+            true
+        case is NSNull:
+            true
         case let values as [Any]:
             values.isEmpty
         case let values as [String: Any]:
+            // A dictionary payload is a live shape here -- `SemanticOracleTable` reads
+            // `readback["data"] as? [String: Any]` -- and an empty one is as empty as `[]`.
             values.isEmpty
-        case is NSNull:
-            true
         default:
             false
         }
