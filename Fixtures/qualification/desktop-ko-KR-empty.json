@@ -1,0 +1,19 @@
+{
+  "axis": {
+    "cache": "cold",
+    "fixture": "empty",
+    "locale": "ko-KR",
+    "profile": "core",
+    "variant": "desktop"
+  },
+  "description": "Canonical empty project qualification input for Logic Pro Desktop under the ko-KR UI locale. Reproducible descriptor of the project state a same-artifact qualification run establishes for this axis; project content depends on the fixture size only, while the locale identifies the UI the run drives.",
+  "key": "desktop/ko-KR/core/cold/empty",
+  "project": {
+    "sample_rate_hz": 48000,
+    "tempo_bpm": 120,
+    "time_signature": "4/4",
+    "track_count": 0,
+    "tracks": []
+  },
+  "schema": "qualification-managed-fixture/v1"
+}

@@ -27,6 +27,11 @@ enum MainEntrypoint {
         // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
         isStdoutTTY: () -> Bool = { isatty(STDOUT_FILENO) != 0 },
         doctorEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        // #284: injected so the qualification entry point is drivable in tests without spawning a
+        // real run. Restored 2026-09-14 with the rest of the subsystem.
+        qualificationCommand: ([String]) async -> QualificationCommandResult = { arguments in
+            await QualificationRunner().run(arguments: arguments)
+        },
         writeStdout: (String) -> Void = { message in
             FileHandle.standardOutput.write(Data(message.utf8))
         },
@@ -51,6 +56,18 @@ enum MainEntrypoint {
         if hasFlag("--help", or: "-h", in: arguments) {
             writeStdout(usageText + "\n")
             return 0
+        }
+
+        // #284: `--qualify` runs the live qualification against this exact binary;
+        // `--verify-promotion` reads an attestation and answers whether it may promote. Both write
+        // their own stdout/stderr and return their own exit code, so they short-circuit here before
+        // any server or doctor routing.
+        if let command = arguments.dropFirst().first,
+           command == "--qualify" || command == "--verify-promotion" {
+            let result = await qualificationCommand(arguments)
+            if !result.stdout.isEmpty { writeStdout(result.stdout) }
+            if !result.stderr.isEmpty { writeStderr(result.stderr) }
+            return result.exitCode
         }
 
         let approvalStore = approvalStoreFactory()
@@ -749,6 +766,14 @@ enum MainEntrypoint {
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
+          LogicProMCP --qualify --out <attestation.json> [--mutate-open-project] [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
+                                               Drive the packaged binary over stdio and write a live qualification attestation.
+                                               Exits non-zero if any case FAILED (a declared deferral is not a failure).
+                                               --mutate-open-project WRITES TO THE PROJECT LOGIC HAS OPEN: it renames a
+                                               track, creates and deletes markers, sets the tempo and moves faders. Without
+                                               it every mutating operation is withheld and reported live_mutation_not_run.
+          LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> --expected-commit <sha> [--required-artifacts <path,...>]
+                                               non-authoritative local diagnostic; emits a JSON decision with no promotion authority
           LogicProMCP --list-approvals         List manual channel approvals and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
                                                Record a manual channel approval and exit

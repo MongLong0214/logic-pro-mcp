@@ -1,0 +1,648 @@
+import Foundation
+
+enum QualificationStatus: String, Codable, Sendable {
+    case passed
+    case failed
+    case waived
+    case skipped
+    case notQualified = "not_qualified"
+    case protocolSmoke = "protocol_smoke"
+}
+
+enum LogicVariant: String, Codable, CaseIterable, Sendable {
+    case desktop
+    case creatorStudio = "creator"
+}
+
+enum QualificationLocale: String, Codable, CaseIterable, Sendable {
+    case enUS = "en-US"
+    case koKR = "ko-KR"
+}
+
+enum SetupProfile: String, Codable, CaseIterable, Sendable {
+    case core
+    case full
+}
+
+enum CacheState: String, Codable, CaseIterable, Sendable {
+    case cold
+    case warm
+}
+
+enum ProjectFixture: String, Codable, CaseIterable, Sendable {
+    case empty
+    case medium
+    case large
+}
+
+enum QualificationVerificationKind: String, Codable, Sendable {
+    case readResponse = "read_response"
+    case independentReadback = "independent_readback"
+    case semanticReadback = "semantic_readback"
+    /// A MUTATING operation proved by a write-and-restore cycle.
+    ///
+    /// Filed separately from `semanticReadback` because the two rest on opposite evidence and one
+    /// shape rule cannot hold both. A read is proved by its RESPONSE agreeing with an independent
+    /// readback, so its probe must have succeeded. A mutating operation is proved by a recorded
+    /// cycle -- pre-state, mutation, readback, restore, restore-readback -- and its PROBE is
+    /// required to have been REFUSED fail-closed, because a probe that wrote is a probe that
+    /// cannot vouch for anything. Until 2026-09-19 both were filed as `semantic_readback`, so
+    /// every mutating pass carried `operation_is_error: true` into a rule that requires `false`
+    /// and the verifier rejected the whole class. Nothing noticed: no test had ever put a
+    /// mutation-restore record through verification.
+    case verifiedWriteCycle = "verified_write_cycle"
+    case protocolSmoke = "protocol_smoke"
+    case typedDeferral = "typed_deferral"
+}
+
+enum QualificationDeferralCode: String, Codable, Sendable {
+    case liveMutationNotRun = "live_mutation_not_run"
+    case operationUnavailable = "operation_unavailable"
+    case semanticMismatch = "semantic_mismatch"
+    case semanticValidatorUnavailable = "semantic_validator_unavailable"
+    /// The probe declines this operation's success path ON PURPOSE, because reaching it would
+    /// destroy or mutate something the qualification must not touch.
+    ///
+    /// Distinct from `operationUnavailable`, which says the call did not succeed under the probe's
+    /// current parameters and therefore invites someone to go fix the parameters. For these there
+    /// is nothing to fix: sending the value that would succeed is the one thing the probe must
+    /// never do. Reporting both with one code tells a reader that a deliberate abstention is an
+    /// oversight.
+    case deliberateZeroWriteProbe = "deliberate_zero_write_probe"
+    /// The production MCP contract does not expose this operation, so no parameter can make it
+    /// reach `passed` -- it answers `command_not_exposed` by design until a feature flag is set.
+    ///
+    /// Distinct from `operationUnavailable` for the same reason `deliberateZeroWriteProbe` is: that
+    /// code says the call did not succeed under the probe's current parameters, which is an
+    /// invitation to change them. Here the parameters are irrelevant. Qualifying it at all would
+    /// mean running the gate with a non-production flag set, at which point it is no longer
+    /// qualifying the production contract.
+    case notExposedInProductionContract = "not_exposed_in_production_contract"
+}
+
+struct QualificationDeferral: Codable, Equatable, Sendable {
+    let code: QualificationDeferralCode
+    let detail: String
+}
+
+struct QualificationReadbackEvidence: Codable, Equatable, Sendable {
+    let source: String
+    let requestID: String
+    let verified: Bool
+    let sha256: String
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case requestID = "request_id"
+        case verified
+        case sha256
+    }
+}
+
+struct QualificationOperationResponseArtifact: Codable, Equatable, Sendable {
+    let operationID: String
+    let tool: String
+    let command: String
+    let requestID: String
+    let isError: Bool
+    let payload: String
+
+    enum CodingKeys: String, CodingKey {
+        case operationID = "operation_id"
+        case tool
+        case command
+        case requestID = "request_id"
+        case isError = "is_error"
+        case payload
+    }
+}
+
+struct QualificationReadbackArtifact: Codable, Equatable, Sendable {
+    let source: String
+    let requestID: String
+    let payload: String
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case requestID = "request_id"
+        case payload
+    }
+}
+
+enum QualificationAvailabilityReason: String, Codable, Sendable {
+    case differentLogicVariant = "different_logic_variant"
+    case differentLogicUILocale = "different_logic_ui_locale"
+    case differentLogicVariantAndUILocale = "different_logic_variant_and_ui_locale"
+}
+
+struct QualificationVariantAvailability: Codable, Equatable, Sendable {
+    let variant: LogicVariant
+    let bundleID: String
+    let installed: Bool
+    let running: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case variant
+        case bundleID = "bundle_id"
+        case installed
+        case running
+    }
+}
+
+struct QualificationAvailabilityObservation: Codable, Equatable, Sendable {
+    let activeBundleID: String
+    let activeVariant: LogicVariant
+    let logicUILocale: QualificationLocale
+    let variants: [QualificationVariantAvailability]
+
+    enum CodingKeys: String, CodingKey {
+        case activeBundleID = "active_bundle_id"
+        case activeVariant = "active_variant"
+        case logicUILocale = "logic_ui_locale"
+        case variants
+    }
+}
+
+struct QualificationCase: Codable, Equatable, Sendable {
+    let id: String
+    let status: QualificationStatus
+    let tool: String
+    let command: String
+    let traceID: String
+    let verified: Bool
+    let evidenceFiles: [String]
+    let reason: String?
+    let binarySHA256: String
+    let axis: QualificationAxis
+    let operationID: String
+    let operationRequestID: String?
+    let verificationKind: QualificationVerificationKind
+    let deferral: QualificationDeferral?
+    let readback: QualificationReadbackEvidence?
+    let availabilityReason: QualificationAvailabilityReason?
+    let availabilityObservation: QualificationAvailabilityObservation?
+
+    init(
+        id: String,
+        status: QualificationStatus,
+        tool: String,
+        command: String,
+        traceID: String,
+        verified: Bool,
+        evidenceFiles: [String],
+        reason: String? = nil,
+        binarySHA256: String = "unknown",
+        axis: QualificationAxis = .defaultAxis,
+        operationID: String? = nil,
+        operationRequestID: String? = nil,
+        verificationKind: QualificationVerificationKind = .typedDeferral,
+        deferral: QualificationDeferral? = nil,
+        readback: QualificationReadbackEvidence? = nil,
+        availabilityReason: QualificationAvailabilityReason? = nil,
+        availabilityObservation: QualificationAvailabilityObservation? = nil
+    ) {
+        self.id = id
+        self.status = status
+        self.tool = tool
+        self.command = command
+        self.traceID = traceID
+        self.verified = verified
+        self.evidenceFiles = evidenceFiles
+        self.reason = reason
+        self.binarySHA256 = binarySHA256
+        self.axis = axis
+        self.operationID = operationID ?? id
+        self.operationRequestID = operationRequestID
+        self.verificationKind = verificationKind
+        self.deferral = deferral
+        self.readback = readback
+        self.availabilityReason = availabilityReason
+        self.availabilityObservation = availabilityObservation
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case status
+        case tool
+        case command
+        case traceID = "trace_id"
+        case verified
+        case evidenceFiles = "evidence_files"
+        case reason
+        case binarySHA256 = "binary_sha256"
+        case axis
+        case operationID = "operation_id"
+        case operationRequestID = "operation_request_id"
+        case verificationKind = "verification_kind"
+        case deferral
+        case readback
+        case availabilityReason = "availability_reason"
+        case availabilityObservation = "availability_observation"
+    }
+}
+
+struct CaseEvidence: Codable, Equatable, Sendable {
+    let schema: String
+    let caseID: String
+    let operationID: String
+    let tool: String
+    let command: String
+    let registrySpecFound: Bool
+    let handlerBound: Bool
+    let traceStarted: Bool
+    let traceCompleted: Bool
+    let handshakeOK: Bool
+    let healthOK: Bool
+    let catalogCountMatch: Bool
+    let traceOK: Bool
+    let negativeFailclosed: Bool
+    let observedVariant: String
+    let observedLocale: String
+    let negativeState: String?
+    let negativeWriteAttempted: Bool?
+    let healthReadStable: Bool
+    let catalogReadStable: Bool
+    let failureReason: String?
+    let binarySHA256: String
+    let axis: QualificationAxis
+    let status: QualificationStatus
+    let verified: Bool
+    let verificationKind: QualificationVerificationKind
+    let deferral: QualificationDeferral?
+    let readback: QualificationReadbackEvidence?
+    let operationResponseSHA256: String?
+    let operationRequestID: String?
+    let operationIsError: Bool?
+    let operationState: String?
+    let operationError: String?
+    let operationWriteAttempted: Bool?
+    /// SHA-256 of the mutation-restore record this case rests on, or nil for a case that rests on
+    /// no cycle. It is what makes the record EVIDENCE rather than a file shipped beside evidence:
+    /// before this, `mutation-restore-compensation.json` was checked for internal consistency and
+    /// never bound to a case, so a bundle could carry a passing mutating case and no record at
+    /// all, or a record for an operation no case mentions.
+    let mutationRestoreRecordSHA256: String?
+    let availabilityReason: QualificationAvailabilityReason?
+    let availabilityObservation: QualificationAvailabilityObservation?
+
+    init(
+        schema: String,
+        caseID: String,
+        operationID: String,
+        tool: String,
+        command: String,
+        registrySpecFound: Bool,
+        handlerBound: Bool,
+        traceStarted: Bool,
+        traceCompleted: Bool,
+        handshakeOK: Bool = false,
+        healthOK: Bool = false,
+        catalogCountMatch: Bool = false,
+        traceOK: Bool = false,
+        negativeFailclosed: Bool = false,
+        observedVariant: String = "unknown",
+        observedLocale: String = "unknown",
+        negativeState: String? = nil,
+        negativeWriteAttempted: Bool? = nil,
+        healthReadStable: Bool = false,
+        catalogReadStable: Bool = false,
+        failureReason: String? = nil,
+        binarySHA256: String = "unknown",
+        axis: QualificationAxis = .defaultAxis,
+        status: QualificationStatus = .failed,
+        verified: Bool = false,
+        verificationKind: QualificationVerificationKind = .typedDeferral,
+        deferral: QualificationDeferral? = nil,
+        readback: QualificationReadbackEvidence? = nil,
+        operationResponseSHA256: String? = nil,
+        operationRequestID: String? = nil,
+        operationIsError: Bool? = nil,
+        operationState: String? = nil,
+        operationError: String? = nil,
+        operationWriteAttempted: Bool? = nil,
+        mutationRestoreRecordSHA256: String? = nil,
+        availabilityReason: QualificationAvailabilityReason? = nil,
+        availabilityObservation: QualificationAvailabilityObservation? = nil
+    ) {
+        self.schema = schema
+        self.caseID = caseID
+        self.operationID = operationID
+        self.tool = tool
+        self.command = command
+        self.registrySpecFound = registrySpecFound
+        self.handlerBound = handlerBound
+        self.traceStarted = traceStarted
+        self.traceCompleted = traceCompleted
+        self.handshakeOK = handshakeOK
+        self.healthOK = healthOK
+        self.catalogCountMatch = catalogCountMatch
+        self.traceOK = traceOK
+        self.negativeFailclosed = negativeFailclosed
+        self.observedVariant = observedVariant
+        self.observedLocale = observedLocale
+        self.negativeState = negativeState
+        self.negativeWriteAttempted = negativeWriteAttempted
+        self.healthReadStable = healthReadStable
+        self.catalogReadStable = catalogReadStable
+        self.failureReason = failureReason
+        self.binarySHA256 = binarySHA256
+        self.axis = axis
+        self.status = status
+        self.verified = verified
+        self.verificationKind = verificationKind
+        self.deferral = deferral
+        self.readback = readback
+        self.operationResponseSHA256 = operationResponseSHA256
+        self.operationRequestID = operationRequestID
+        self.operationIsError = operationIsError
+        self.operationState = operationState
+        self.operationError = operationError
+        self.operationWriteAttempted = operationWriteAttempted
+        self.mutationRestoreRecordSHA256 = mutationRestoreRecordSHA256
+        self.availabilityReason = availabilityReason
+        self.availabilityObservation = availabilityObservation
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case caseID = "case_id"
+        case operationID = "operation_id"
+        case tool
+        case command
+        case registrySpecFound = "registry_spec_found"
+        case handlerBound = "handler_bound"
+        case traceStarted = "trace_started"
+        case traceCompleted = "trace_completed"
+        case handshakeOK = "handshake_ok"
+        case healthOK = "health_ok"
+        case catalogCountMatch = "catalog_count_match"
+        case traceOK = "trace_ok"
+        case negativeFailclosed = "negative_failclosed"
+        case observedVariant = "observed_variant"
+        case observedLocale = "observed_locale"
+        case negativeState = "negative_state"
+        case negativeWriteAttempted = "negative_write_attempted"
+        case healthReadStable = "health_read_stable"
+        case catalogReadStable = "catalog_read_stable"
+        case failureReason = "failure_reason"
+        case binarySHA256 = "binary_sha256"
+        case axis
+        case status
+        case verified
+        case verificationKind = "verification_kind"
+        case deferral
+        case readback
+        case operationResponseSHA256 = "operation_response_sha256"
+        case operationRequestID = "operation_request_id"
+        case operationIsError = "operation_is_error"
+        case operationState = "operation_state"
+        case operationError = "operation_error"
+        case operationWriteAttempted = "operation_write_attempted"
+        case mutationRestoreRecordSHA256 = "mutation_restore_record_sha256"
+        case availabilityReason = "availability_reason"
+        case availabilityObservation = "availability_observation"
+    }
+}
+
+struct QualificationCaseManifest: Codable, Equatable, Sendable {
+    let schema: String
+    let binarySHA256: String
+    let cases: [QualificationCase]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case binarySHA256 = "binary_sha256"
+        case cases
+    }
+}
+
+struct QualificationWaiver: Codable, Equatable, Sendable {
+    static let hostAxisAvailabilityCapability = "ADR-001-a host-axis availability"
+
+    /// ADR-003: the waiver-binding capability comes from the registry's
+    /// `CapabilityID` when the operation is registered — the registry is the
+    /// authority, not a string convention. Unregistered IDs (foreign/legacy
+    /// waiver rows under validation) fall back to the literal convention so
+    /// validation can still name what the row claimed to govern.
+    static func operationCapability(_ operationID: String) -> String {
+        let capability = OperationRegistry.specs
+            .first { $0.id.rawValue == operationID }?
+            .capability.rawValue ?? operationID
+        return "operation:\(capability)"
+    }
+
+    let caseID: String
+    let reasonCode: String
+    let owningIssue: String
+    let userImpact: String
+    let affectedCapability: String
+    let affectsDefaultProfile: Bool
+    let expiryVersion: String
+    let releaseNoteVisible: Bool
+
+    var governsHostAxisAvailability: Bool {
+        affectedCapability == Self.hostAxisAvailabilityCapability
+    }
+
+    func governsOperation(caseID: String, operationID: String) -> Bool {
+        self.caseID == caseID
+            && affectedCapability == Self.operationCapability(operationID)
+    }
+}
+
+enum QualificationWaiverReasonCode: String, CaseIterable, Sendable {
+    case knownLimitation = "known-limitation"
+}
+
+enum QualificationWaiverValidationIssue: Equatable, Sendable {
+    case invalidField(caseID: String, field: String)
+    case duplicateCaseID(caseID: String)
+}
+
+struct QualificationWaiverValidator {
+    static func issues(in waivers: [QualificationWaiver]) -> [QualificationWaiverValidationIssue] {
+        var issues: [QualificationWaiverValidationIssue] = []
+        var caseIDs: Set<String> = []
+        for waiver in waivers {
+            let caseID = waiver.caseID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if caseID.isEmpty {
+                issues.append(.invalidField(caseID: waiver.caseID, field: "caseID"))
+            }
+            if QualificationWaiverReasonCode(rawValue: waiver.reasonCode) == nil {
+                issues.append(.invalidField(caseID: caseID, field: "reasonCode"))
+            }
+            let owningIssue = waiver.owningIssue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if owningIssue.first != "#"
+                || owningIssue.dropFirst().isEmpty
+                || !owningIssue.dropFirst().utf8.allSatisfy({ (48...57).contains($0) }) {
+                issues.append(.invalidField(caseID: caseID, field: "owningIssue"))
+            }
+            if waiver.userImpact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.invalidField(caseID: caseID, field: "userImpact"))
+            }
+            if waiver.affectedCapability.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.invalidField(caseID: caseID, field: "affectedCapability"))
+            }
+            if !waiver.releaseNoteVisible {
+                issues.append(.invalidField(caseID: caseID, field: "releaseNoteVisible"))
+            }
+            if SemanticVersion(waiver.expiryVersion) == nil {
+                issues.append(.invalidField(caseID: caseID, field: "expiryVersion"))
+            }
+            if !caseID.isEmpty, !caseIDs.insert(caseID).inserted {
+                issues.append(.duplicateCaseID(caseID: caseID))
+            }
+        }
+        return issues
+    }
+}
+
+struct QualificationProvenanceRecord: Codable, Equatable, Sendable {
+    let schema: String
+    let binarySHA256: String
+    let commitSHA: String
+    let releaseVersion: String
+    let axis: QualificationAxis
+    let runID: String
+    let startedAt: Date
+    let completedAt: Date
+    let evidenceManifestSHA256: String
+}
+
+struct QualificationProvenanceSignature: Codable, Equatable, Sendable {
+    let algorithm: String
+    let keyID: String
+    let value: String
+}
+
+struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
+    let schema: String
+    let serverVersion: String
+    let commitSHA: String
+    let binarySHA256: String
+    let logicVariant: LogicVariant
+    let logicVersion: String
+    let locale: QualificationLocale
+    let profile: SetupProfile
+    let cache: CacheState
+    let fixture: ProjectFixture
+    let startedAt: Date
+    let completedAt: Date
+    let total: Int
+    let passed: Int
+    let failed: Int
+    let waived: Int
+    let cases: [QualificationCase]
+    let waivers: [QualificationWaiver]
+    let evidenceManifestSHA256: String
+    let provenance: QualificationProvenanceRecord?
+    let provenanceSignature: QualificationProvenanceSignature?
+
+    init(
+        schema: String,
+        serverVersion: String,
+        commitSHA: String,
+        binarySHA256: String,
+        logicVariant: LogicVariant,
+        logicVersion: String,
+        locale: QualificationLocale,
+        profile: SetupProfile,
+        cache: CacheState = .cold,
+        fixture: ProjectFixture = .empty,
+        startedAt: Date,
+        completedAt: Date,
+        total: Int,
+        passed: Int,
+        failed: Int,
+        waived: Int,
+        cases: [QualificationCase],
+        waivers: [QualificationWaiver],
+        evidenceManifestSHA256: String,
+        provenance: QualificationProvenanceRecord? = nil,
+        provenanceSignature: QualificationProvenanceSignature? = nil
+    ) {
+        self.schema = schema
+        self.serverVersion = serverVersion
+        self.commitSHA = commitSHA
+        self.binarySHA256 = binarySHA256
+        self.logicVariant = logicVariant
+        self.logicVersion = logicVersion
+        self.locale = locale
+        self.profile = profile
+        self.cache = cache
+        self.fixture = fixture
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.total = total
+        self.passed = passed
+        self.failed = failed
+        self.waived = waived
+        self.cases = cases
+        self.waivers = waivers
+        self.evidenceManifestSHA256 = evidenceManifestSHA256
+        self.provenance = provenance
+        self.provenanceSignature = provenanceSignature
+    }
+}
+
+struct QualificationAxis: Codable, Equatable, Hashable, Sendable {
+    let variant: LogicVariant
+    let locale: QualificationLocale
+    let profile: SetupProfile
+    let cache: CacheState
+    let fixture: ProjectFixture
+
+    /// Variants the product actually ships and therefore qualifies. This is
+    /// an explicit allowlist, NOT `LogicVariant.allCases` — adding a variant
+    /// to the enum (world model) must never auto-add it to the gate (ship
+    /// claims). Owner product decision (2026-07-17): Logic Pro Creator Studio
+    /// (`com.apple.mobilelogic`) is permanently out of scope and will not be
+    /// installed or supported; Desktop Logic Pro is the only ship surface.
+    /// Recorded in docs/adr/README.md (ADR-001) and the CHANGELOG. The
+    /// `LogicVariant.creatorStudio` case stays for honest health reporting
+    /// ("creator not installed") and bundle-id→variant misdetect tests.
+    /// Required matrix = ship claims; waivers are for temporary inability on
+    /// ship claims, never to express product scope.
+    static let shipVariants: [LogicVariant] = [.desktop]
+    static let shipLocales: [QualificationLocale] = [.enUS, .koKR]
+
+    static let requiredCombinations: [QualificationAxis] = shipVariants.flatMap { variant in
+        shipLocales.map { locale in
+            QualificationAxis(
+                variant: variant,
+                locale: locale,
+                profile: .core,
+                cache: .cold,
+                fixture: .empty
+            )
+        }
+    }
+
+    static func requiredAxes(
+        profile: SetupProfile,
+        cache: CacheState,
+        fixture: ProjectFixture
+    ) -> [QualificationAxis] {
+        requiredCombinations.map {
+            QualificationAxis(
+                variant: $0.variant,
+                locale: $0.locale,
+                profile: profile,
+                cache: cache,
+                fixture: fixture
+            )
+        }
+    }
+
+    static let defaultAxis = QualificationAxis(
+        variant: .desktop,
+        locale: .enUS,
+        profile: .core,
+        cache: .cold,
+        fixture: .empty
+    )
+
+    var key: String {
+        "\(variant.rawValue)/\(locale.rawValue)/\(profile.rawValue)/\(cache.rawValue)/\(fixture.rawValue)"
+    }
+}
