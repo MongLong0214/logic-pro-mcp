@@ -6,16 +6,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "LogicProMCP", targets: ["LogicProMCPCLI"]),
-        // #284: the independent verifier WILL ship as its own product, so a release can be
-        // checked by a binary that is not the candidate. It is NOT declared here yet, and the
-        // reason is measured: declaring the executable product expands the resolved dependency
-        // graph from 9 packages to 25 -- async-http-client, the swift-nio family, swift-crypto,
-        // swift-certificates and eleven more -- because an executable product forces SwiftPM to
-        // resolve everything `LogicProMCP` can reach. Sixteen packages of supply surface for a
-        // binary nothing in this repository executes, while the gate that would execute it is not
-        // wired, is a cost paid for nothing. It returns with the gate, and by then the verifier
-        // should not be linking the whole product library anyway -- that coupling is what makes
-        // the pinned verifier unable to read today's evidence.
     ],
     dependencies: [
         // swift-sdk 0.11.0+ adopts the short-form

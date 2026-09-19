@@ -8,6 +8,23 @@ package struct QualificationCommandResult: Sendable {
     package let stderr: String
 }
 
+/// WHY THERE IS NO `trusted-verifier` PRODUCT YET, and why `Package.swift` is byte-identical to
+/// main.
+///
+/// #284 wants a release checked by a binary that is NOT the candidate, and #882 declared that
+/// binary as an executable product. Two measurements on CI say not yet:
+///
+/// 1. Declaring the product made the runner resolve 25 packages where main resolves 9 --
+///    async-http-client, the swift-nio family, swift-crypto, swift-certificates and twelve more,
+///    because an executable product forces SwiftPM to resolve everything `LogicProMCP` can reach.
+/// 2. Removing the product did NOT fix it. `originHash` is a hash of the MANIFEST, so the one
+///    comment left behind was enough to invalidate it, force a full re-resolution, and produce the
+///    same 25 pins. Main is green because its manifest is unchanged and SwiftPM skips resolution
+///    entirely -- the committed 9-pin file is stable only while nobody touches `Package.swift`.
+///
+/// So the manifest is left alone and this note lives in source instead. The product returns with
+/// the gate that would execute it, and that change owns the dependency-graph decision: sixteen
+/// packages is a real cost and it should be paid deliberately, once, by whoever wires the gate.
 package struct QualificationRunner: Sendable {
     struct Runtime: Sendable {
         let executableURL: @Sendable () throws -> URL
