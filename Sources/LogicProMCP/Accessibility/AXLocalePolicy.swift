@@ -1194,6 +1194,47 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FGotoPosition.strings/en/5.title#value"
     )
 
+    static let keyCommandsWindowTitle = LabelSet(
+        canonical: "Key Command",
+        variants: ["키 명령", "キーコマンド", "Befehlstaste", "Comando de teclado", "Raccourci clavier",
+                   "Comando da tastiera", "键盘命令", "按鍵指令"],
+        rationale: "Identifies the Key Commands window by title substring. The window Logic opened for"
+            + " Option+K was titled `키 명령 할당 – U.S. – 편집됨` when it was read live 2026-09-14; only"
+            + " the head is matched because the preset name and the edited marker vary. Apple's row"
+            + " is ControllerAssignments `2163.title`, ANCHORED AT ko because the row has no `en` on"
+            + " the `strings` side -- English lives in `nibstrings`, the split #895 established --"
+            + " so `Key Command` itself is the one member this derivation does not verify. Apple's pt value `Comando de Teclado` is NOT stored: it differs from the es value only by case, and `check-probe-product-drift.py` refuses two members a case-folded match would merge. Every comparison here is case-insensitive, so the es spelling matches a Portuguese reading and nothing is lost -- but the set is one member short of Apple's row for that reason and not by oversight.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FControllerAssignments.strings/ko/2163.title#value"
+    )
+
+    static let recordArmKeyCommandName = LabelSet(
+        canonical: "Toggle Track Record Enable",
+        variants: ["트랙 녹음 활성화 토글", "トラックの録音可能を切り替える",
+                   "Spur für die Aufnahme aktivieren ein-/ausschalten",
+                   "Activar/desactivar grabación de pista",
+                   "Activer/Désactiver l’enregistrement sur piste", "开关轨道录音启用"],
+        rationale: "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple keys it in"
+            + " QuickHelp as `KCE_390_ToggTrackRec`; the ko value is what was read live 2026-09-14"
+            + " alongside the two sibling commands it must not be confused with. Italian, Portuguese"
+            + " and Traditional Chinese leave it in English, so six distinct members cover ten"
+            + " languages. Apple's French value carries a trailing space; `.exact` trims surrounding"
+            + " whitespace, so it is stored without one.",
+        derivedFrom: "logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"
+    )
+
+    static let learnByKeyLabelCheckbox = LabelSet(
+        canonical: "Learn by Key Label",
+        variants: ["키 레이블로 학습", "キーのラベルで登録", "Tastenbeschriftung lernen",
+                   "Aprender por etiqueta", "Apprendre par nom de touche",
+                   "Apprendi da etichetta tasto", "Aprender por Etiqueta da Tecla", "通过按键标签来学习",
+                   "依照按鍵標籤學習"],
+        rationale: "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord,"
+            + " distinguished from `키 위치로 학습` and `새로운 할당 학습` when it was read live 2026-09-14."
+            + " Apple's row is KeyCommands `300557.title`, ANCHORED AT ko for the same reason as the"
+            + " window title: the row has no `en` on the `strings` side.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/300557.title#value"
+    )
+
     static let cancelButton = LabelSet(
         canonical: "Cancel",
         variants: ["취소", "キャンセル", "Abbrechen", "Cancelar", "Annuler", "Annulla", "取消"],
@@ -2758,6 +2799,9 @@ enum AXLocalePolicy {
     /// a shape instead of verbatim. That is the safe direction and it is why this list being a copy
     /// is tolerable at all; the unsafe direction is not reachable from a missing entry.
     static let allLabelSets: [LabelSet] = [
+        keyCommandsWindowTitle,
+        recordArmKeyCommandName,
+        learnByKeyLabelCheckbox,
         viewMenuBar,
         pluginWindowViewSwitcher,
         pluginWindowControlsViewMenuItem,

@@ -43,14 +43,22 @@
       "2026-09-13-the-mcu-lcd-upper-row-names-the-visible-strips",
       "2026-09-13-the-tempo-map-is-readable-and-follows-a-product-write",
       "2026-09-13-what-stands-between-this-fixture-and-a-flex-pitch-measurement",
+      "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
       "2026-09-14-a-tempo-event-lands-on-a-sub-bar-position-and-the-list-reads-it",
       "2026-09-14-adr-018-did-ship-one-module-and-the-row-counts-filenames",
+      "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
       "2026-09-14-eighteen-channel-eq-parameters-move-both-ways-and-stay-put",
       "2026-09-14-logics-plugin-window-declares-neither-ax-association-attribute",
       "2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog",
+      "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
+      "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
       "2026-09-14-the-other-three-adr-009-criteria-measured-against-the-eq-path",
+      "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
       "2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable",
       "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
+      "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
+      "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
+      "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
       "2026-09-15-the-automation-lane-is-legible-and-inert",
       "2026-09-15-the-korean-project-chooser-names-itself",
       "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
@@ -100,14 +108,22 @@
       "2026-09-13-the-send-slot-menu-does-not-mark-its-assignment-but-an-assigned-send-grows-a-level-knob",
       "2026-09-13-the-tempo-map-is-readable-and-follows-a-product-write",
       "2026-09-13-what-stands-between-this-fixture-and-a-flex-pitch-measurement",
+      "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
       "2026-09-14-a-tempo-event-lands-on-a-sub-bar-position-and-the-list-reads-it",
       "2026-09-14-adr-018-did-ship-one-module-and-the-row-counts-filenames",
+      "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
       "2026-09-14-eighteen-channel-eq-parameters-move-both-ways-and-stay-put",
       "2026-09-14-logics-plugin-window-declares-neither-ax-association-attribute",
       "2026-09-14-set-tempo-reported-a-verified-write-logic-had-refused-with-a-dialog",
+      "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
+      "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
       "2026-09-14-the-other-three-adr-009-criteria-measured-against-the-eq-path",
+      "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
       "2026-09-14-the-seam-is-not-the-blocker-a-region-start-tick-is-not-readable",
-      "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does"
+      "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
+      "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
+      "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
+      "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
     ],
     "schema_v1_records": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -162,7 +178,6 @@
       "de-DE→plugin.native_view",
       "de-DE→plugin.window",
       "de-DE→project.export",
-      "de-DE→project.lifecycle",
       "de-DE→system.accessibility",
       "de-DE→system.bundle",
       "de-DE→system.midi",
@@ -812,9 +827,30 @@
     "manual_reverify": {
       "date": "2026-09-19",
       "members": [
-        "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
+        "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
+        "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
+        "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
+        "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
+        "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
+        "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
+        "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
+        "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
       ],
-      "reason": "Re-verifying the control-surface install means INSTALLING a control surface: it writes to the user's Logic configuration and needs a live server so the MCU port exists to bind to. A script whose whole job is to mutate somebody's setup on demand is a worse thing to have in the repository than a paragraph of steps, so this record reverifies manually. It DOES cite its own evidence file, so it is not in records_without_evidence -- only the re-verification is manual."
+      "reason": "Eight records recovered from #882 when its qualification half was held back. Each carries a `reverify.kind: \"manual\"` with a real command, and each is manual for a reason a script cannot reach on somebody else's machine: two need Logic relaunched under a different AppleLanguages (de) or a different keyboard input source, three need a FRESHLY STARTED server or a specific window layout that a test run would have to create by closing the operator's windows, one needs consent for an operation that writes a key command, and two read a menu that must be open. Scripting any of them means shipping a script whose job is to rearrange somebody's session.\n\nThis raise lists EXACTLY the eight this change adds. The control-surface install record that a previous raise named is already in `allowed` and is not being added here -- a raise that keeps naming it pre-authorises a gap nobody is deciding about in this change."
+    },
+    "records_without_evidence": {
+      "date": "2026-09-19",
+      "members": [
+        "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
+        "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
+        "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
+        "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
+        "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
+        "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
+        "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
+        "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
+      ],
+      "reason": "The same eight. None cites an evidence file: each was measured by reading AX or a preference file in the moment and the reading is transcribed into `observations` rather than dumped to a census. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded as one rather than closed by inventing a file."
     },
     "surfaces_without_records": {
       "date": "2026-09-18",

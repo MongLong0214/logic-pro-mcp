@@ -1,0 +1,146 @@
+{
+  "id": "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
+  "schema": 3,
+  "date": "2026-09-15",
+  "subject": "the mandatory New Track sheet, and the three labels a de-DE Logic answers that no LabelSet carried",
+  "question": "Why does a German Logic stop inside the mandatory New Track sheet and block every operation after it, when the same workflow proceeds in English?",
+  "verdict": "works",
+  "issues": [
+    883
+  ],
+  "surface": "project.lifecycle",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "de-DE",
+    "os": "macOS 26.3"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "set com.apple.logic10 AppleLanguages to de, relaunch Logic with no document open, and call logic_project new",
+    "expected": "window_title `Ohne Titel - Spuren`, modal_reconciliation_witness blocker_set_clear true with one present and one gone observation, and zero sheets left open"
+  },
+  "evidence": [],
+  "depends": [],
+  "method": "Read the Korean sheet first as a control, so the instrument was shown to read what the product reads before it was pointed at a locale nobody had measured. Then switched Logic to de-DE, opened the same sheet, and read its AXDescription and the buttons of `group 1 of sheet 1` directly rather than translating. Proved the fix by running project.new live three times on de-DE: once with one variant still missing, once with the two sheet variants deliberately removed again, and twice with all three present.",
+  "observations": [
+    {
+      "host_note": "Logic's application language was switched from ko-KR to de-DE for these readings and switched back afterwards; every German string below was read while Logic was running in German, never translated"
+    },
+    {
+      "read": "the Korean sheet, as a control, before touching anything",
+      "sheet_AXDescription": "새로운 트랙",
+      "buttons_of_group_1_of_sheet_1": [
+        "생성",
+        "취소"
+      ],
+      "both_enabled": true,
+      "significance": "every string the classifier needs is already a variant in KO, so the instrument reads what the product reads"
+    },
+    {
+      "switched": "Logic to de-DE and reopened the same disposable project",
+      "sheet_AXDescription": "Neue Spur",
+      "visible_heading_AXStaticText": "Neue Spur erzeugen",
+      "buttons_of_group_1_of_sheet_1": [
+        "Erzeugen",
+        "Abbrechen"
+      ],
+      "both_enabled": true,
+      "note": "the heading is what the reporter quoted, because it is what a person sees; it is never the AXDescription, so taking it would have produced a variant that is real text on the real sheet and still never matches"
+    },
+    {
+      "read": "the three LabelSets ModalReconciliation.classify consults",
+      "newTrackSheetDescription": [
+        "New Track",
+        "새로운 트랙",
+        "新規トラック"
+      ],
+      "createButton": [
+        "Create",
+        "생성",
+        "作成"
+      ],
+      "cancelButton": [
+        "Cancel",
+        "취소",
+        "キャンセル"
+      ],
+      "consequence": "on German all three miss, classify falls to .unknownSheet, and the reconciler correctly refuses to press a control it cannot name"
+    },
+    {
+      "measured": "the disabled-Cancel conjunct is not the load-bearing signal on ANY locale here",
+      "german_cancel_enabled": true,
+      "korean_cancel_enabled": true,
+      "consequence": "the description disjunct is what identifies this sheet, which is why `Abbrechen` was NOT added to cancelButton — no conjunct needs it and widening a shared dismissal set to fix this blocker would be an unmeasured change riding along"
+    },
+    {
+      "found": "a THIRD German gap on the same path, upstream of the sheet",
+      "measured": "File > New on de-DE skips the chooser and creates the project directly; its window titles itself `Ohne Titel - Spuren`",
+      "arrangeWindowTitleSuffix": [
+        "Tracks",
+        "트랙",
+        "トラック"
+      ],
+      "consequence": "project.new spent its whole 40-iteration wait beside a project it had just created, then reported that neither a chooser nor a created window ever appeared"
+    },
+    {
+      "live_before": "project.new on de-DE, with Neue Spur and Erzeugen present but Spuren absent",
+      "result": "channels_exhausted — 'Exact File > New exposed neither the Creator Studio chooser nor a created project window'"
+    },
+    {
+      "live_negative_control": "project.new on de-DE with Spuren present and exactly the two sheet variants removed again",
+      "result": {
+        "error": "channels_exhausted",
+        "phase": "unexpected_blocking_sheet",
+        "sheet_kind": "unknownSheet"
+      },
+      "sheets_open_after": 1,
+      "significance": "the reported symptom reproduced deterministically, and the control could fail — removing the fix put the sheet back"
+    },
+    {
+      "live_after": "project.new on de-DE with all three variants",
+      "result": {
+        "window_title": "Ohne Titel - Spuren",
+        "modal_reconciliation_witness": {
+          "blocker_set_clear": true,
+          "observations": {
+            "present": 1,
+            "gone": 1
+          },
+          "polls": 2
+        },
+        "mandatory_track_created": true,
+        "state": "B",
+        "verified": false,
+        "reason": "readback_unavailable"
+      },
+      "sheets_open_after": 0,
+      "repeated": "twice, the second time on the exact binary being shipped"
+    },
+    {
+      "not_fixed_and_named_here": "exactEmptyProjectChooserWindow matches on the bare English literals `Choose a Project`, `Choose` and `Empty Project`",
+      "consequence": "the chooser branch of project.new cannot work on ANY non-English Logic, Korean included",
+      "why_not_measured": "this de-DE Logic skipped the chooser entirely and created the project directly, so there was no German chooser on screen to read; guessing its three strings is exactly the move that produced this class of defect"
+    }
+  ],
+  "conclusion": "German Logic was not blocked by a German dialog path nobody had implemented. It was blocked by three LabelSets that had never been READ on a German Logic, and a label that was never read is invisible from inside the product: the matcher simply never matches, the sheet stays open, and the failure reads as 'the dialog did not respond' when it means 'nobody ever looked at this dialog'. The reporter's own evidence made that visible from outside — they quoted `Neue Spur erzeugen`, `Erzeugen` and `Abbrechen` as things they could SEE, and two of those three are not what the AX layer answers. The fix is three measured readings, taken by opening the sheet on a de-DE Logic rather than translating: `Neue Spur` for the sheet's AXDescription, `Erzeugen` for its only exit, and `Spuren` for the arrange window's title suffix so project.new can see the project it just made. What is NOT fixed is named above and not guessed: the chooser branch still holds three bare English literals and is broken on every non-English Logic, and this German build never showed a chooser to read them from.",
+  "limits": [
+    "ja-JP was NOT measured for any of these three labels; this run only had a German Logic in front of it",
+    "the chooser branch of project.new still matches on the bare English literals `Choose a Project`, `Choose` and `Empty Project` and is broken on every non-English Logic — this de-DE build skipped the chooser, so there was nothing on screen to read",
+    "the `Erzeugen` press is proven by the sheet becoming absent, which is what the reconciler's own witness reports; no instrument outside the product watched the button be pressed",
+    "project.new answers State B `readback_unavailable` on this path in German exactly as it does in Korean — the locale work did not change what that operation can verify"
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FBounceInPlace.strings/de/12.title#value",
+      "value": "Neue Spur",
+      "used_for": "the German New Track sheet title this record says had no reading; Apple keys it where `newTrackSheetDescription` already derives from",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ]
+}

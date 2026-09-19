@@ -2706,6 +2706,61 @@
     "zh-TW": "unmeasured"
    }
   },
+  "keyCommandsWindowTitle": {
+   "canonical": "Key Command",
+   "variants": [
+    "키 명령",
+    "キーコマンド",
+    "Befehlstaste",
+    "Comando de teclado",
+    "Raccourci clavier",
+    "Comando da tastiera",
+    "键盘命令",
+    "按鍵指令"
+   ],
+   "rationale": "Identifies the Key Commands window by title substring. The window Logic opened for",
+   "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "learnByKeyLabelCheckbox": {
+   "canonical": "Learn by Key Label",
+   "variants": [
+    "키 레이블로 학습",
+    "キーのラベルで登録",
+    "Tastenbeschriftung lernen",
+    "Aprender por etiqueta",
+    "Apprendre par nom de touche",
+    "Apprendi da etichetta tasto",
+    "Aprender por Etiqueta da Tecla",
+    "通过按键标签来学习",
+    "依照按鍵標籤學習"
+   ],
+   "rationale": "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord,",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "libraryPanelLabel": {
    "canonical": "library",
    "variants": [
@@ -4384,6 +4439,31 @@
     "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",
     "zh-TW": "unmeasured"
+   }
+  },
+  "recordArmKeyCommandName": {
+   "canonical": "Toggle Track Record Enable",
+   "variants": [
+    "트랙 녹음 활성화 토글",
+    "トラックの録音可能を切り替える",
+    "Spur für die Aufnahme aktivieren ein-/ausschalten",
+    "Activar/desactivar grabación de pista",
+    "Activer/Désactiver l’enregistrement sur piste",
+    "开关轨道录音启用"
+   ],
+   "rationale": "The Key Commands entry `system.setup_arm_key` assigns a chord to. Apple keys it in",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "regionBarsSentence": {

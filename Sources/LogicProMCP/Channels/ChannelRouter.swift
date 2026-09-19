@@ -127,6 +127,21 @@ actor ChannelRouter {
 
     /// Route an operation through its fallback chain.
     /// Returns the result from the first channel that succeeds.
+
+    /// The `error` and `hint` of a HonestContract State C envelope, or nil for anything else.
+    ///
+    /// Only a refusal that NAMED its cause is worth carrying forward: a bare string, or a success,
+    /// tells the next caller nothing it could act on.
+    static func typedRefusal(from raw: String) -> (error: String, hint: String)? {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (object["success"] as? Bool) == false,
+              let error = object["error"] as? String else {
+            return nil
+        }
+        return (error, (object["hint"] as? String) ?? "")
+    }
+
     func route(operation: String, params: [String: String] = [:]) async -> ChannelResult {
         guard let chain = Self.routingTable[operation] else {
             return .error("Unknown operation: \(operation)")
@@ -144,6 +159,13 @@ actor ChannelRouter {
         ])
 
         var lastError: String = "No channels available"
+        // The FIRST typed refusal the router walked past, kept so a later channel's answer can
+        // carry it. A preferred channel often knows exactly why it declined — `track.set_arm`'s
+        // accessibility rung says "track 0 is exclusively selected, but Logic could not be confirmed
+        // frontmost … the key was NOT posted" — and until now that sentence went only to a DEBUG
+        // log while the caller received the next channel's vaguer answer. Measured 2026-09-14: that
+        // gap cost hours of root-causing an operation that had described its own precondition.
+        var walkedPastRefusal: (channel: String, error: String, hint: String)?
         let isBypass = Self.bypassReadinessOps.contains(operation)
 
         for channelID in chain {
@@ -197,9 +219,19 @@ actor ChannelRouter {
                 "outcome": result.isSuccess ? "success" : "error",
             ])
             switch result {
-            case .success:
+            case .success(let message):
                 Log.debug("\(operation) succeeded via \(channelID.rawValue)", subsystem: "router")
-                return result
+                // ADDITIVE ONLY. The state, the verified flag and every field the answering channel
+                // wrote stay exactly as they were; this appends what the SKIPPED channel said so the
+                // caller can see the precondition it named. `addExtras` leaves State C envelopes
+                // untouched of its own accord, so a refusal is never decorated with another
+                // channel's story.
+                guard let walkedPastRefusal else { return result }
+                return .success(HonestContract.addExtras([
+                    "fallback_from_channel": walkedPastRefusal.channel,
+                    "fallback_from_error": walkedPastRefusal.error,
+                    "fallback_from_hint": walkedPastRefusal.hint,
+                ], into: message))
             case .error(let msg):
                 // A channel can deliberately refuse an operation when trying
                 // it through another channel would be unsafe (for example, a
@@ -243,6 +275,9 @@ actor ChannelRouter {
                     return result
                 }
                 Log.debug("\(operation) failed via \(channelID.rawValue): \(msg), trying next", subsystem: "router")
+                if walkedPastRefusal == nil, let typed = Self.typedRefusal(from: msg) {
+                    walkedPastRefusal = (channelID.rawValue, typed.error, typed.hint)
+                }
                 lastError = msg
             }
         }

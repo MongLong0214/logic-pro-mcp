@@ -1,0 +1,93 @@
+{
+  "id": "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
+  "date": "2026-09-15",
+  "schema": 3,
+  "subject": "Why track-menu operations succeed when driven alone and fail inside the qualification sweep",
+  "question": "tracks.arm and tracks.create_audio both succeed standalone and fail inside the sweep. Two hypotheses died (Logic not frontmost; a composing input source). What is it?",
+  "verdict": "works",
+  "issues": [
+    373,
+    284
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a project whose only window is the arrange window, call logic_tracks.create_audio and read logic://tracks. Then call logic_navigate.create_marker, which opens the Marker List window, and call create_audio again. Then raise the arrange window by name (AXRaise) and call it a third time.",
+    "expected": "First call State A and the count rises. Second call State B and the count does NOT move. After the raise the count rises again."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift"
+  ],
+  "evidence": [],
+  "method": "Run on a DISPOSABLE project so nothing could reach the operator's work. Each step judged by re-reading logic://tracks, with the window list read between steps so the change in window state is recorded alongside the change in outcome.",
+  "observations": [
+    {
+      "step": "only window is 무제 30 - 트랙",
+      "operation": "tracks.create_audio",
+      "state": "A",
+      "verified": true,
+      "count": "2 -> 3"
+    },
+    {
+      "step": "~70 read-only operations driven first",
+      "operation": "tracks.create_audio",
+      "state": "A",
+      "verified": true,
+      "count": "2 -> 3",
+      "note": "read traffic alone does NOT break it, which kills the cumulative-load explanation"
+    },
+    {
+      "step": "logic_navigate.create_marker opens 무제 30 - 마커 목록",
+      "windows": [
+        "무제 30 - 마커 목록",
+        "무제 30 - 트랙"
+      ],
+      "operation": "tracks.create_audio",
+      "state": "B",
+      "verified": false,
+      "count": "3, unchanged",
+      "hint": "track count did not increase after '새로운 오디오 트랙' click within 4×1s budget"
+    },
+    {
+      "step": "a second attempt with the Marker List still open",
+      "operation": "tracks.create_audio",
+      "state": "B",
+      "count": "3, unchanged"
+    },
+    {
+      "step": "the arrange window raised by name (AXRaise on the window whose title contains 트랙)",
+      "focused_window_after": "무제 30 - 트랙",
+      "operation": "tracks.create_audio",
+      "state": "B",
+      "count": "3 -> 4",
+      "note": "the WRITE landed; the operation still reported State B because its own 4×1s readback budget did not see it"
+    },
+    {
+      "ordering": "the qualification sweep drives operations sorted by id, so every navigate.* runs BEFORE every tracks.*",
+      "note": "the marker cycles open the Marker List window and nothing puts the arrange window back"
+    },
+    {
+      "fix": "createTrackViaMenu raises the arrange window it already resolved, immediately before driving the Track menu",
+      "verified_live": "with the Marker List open — the exact state that broke it — create_audio now LANDS twice in a row, count 1 -> 2 -> 3",
+      "state_still_reported": "B",
+      "reason": "the blocker-set scan does not complete cleanly while another window is up, which is the operation withholding State A rather than a write that failed"
+    }
+  ],
+  "conclusion": "The sweep-only failure is an auxiliary window taking the Track menu. A marker operation opens Logic's Marker List, the sweep's ordering puts every `navigate.*` before every `tracks.*`, and from that point a Track-menu click does not create a track: the count does not move at all. Raising the arrange window by name makes the very same call land again. Two things were separated in the process and both matter: with the wrong window focused the WRITE does not happen, and with the right one focused the write happens but the operation still answers State B because its own 4×1s readback budget misses it. Read traffic is not the cause — seventy read-only operations driven first changed nothing — which is what kills the cumulative-load explanation along with the two that died earlier, Logic not being frontmost and a composing input source. The operation resolves the arrange window for its READS and clicks the Track menu without raising it, so any operation that leaves another window in front silently disarms every track-menu operation after it. FIXED: the operation now raises the window it had already identified as its target, immediately before driving the menu, and only on the path that is about to act on that window. Verified live in the exact state that broke it — with the Marker List open, `create_audio` lands twice in a row, 1 to 2 to 3, where before the count did not move at all. It still ANSWERS State B, and that is a different thing: the blocker-set scan does not complete cleanly while another window is up, so the operation withholds State A rather than claiming a write it cannot prove is unblocked. The write is no longer lost; the certificate is still withheld.",
+  "limits": [
+    "The State B that remains is the blocker-scan strictness, not the focus defect. Whether an operation should certify State A while another Logic window is open is a contract question this record does not answer — it only separates it from the write that used to vanish.",
+    "Only create_audio was driven through the window states. `tracks.arm` shares the symptom and its rung is a key chord rather than a menu click, so the same explanation is plausible for it and is NOT established here.",
+    "The State B on the landing write was not chased. The 4×1s budget missing a write that happened is a second, separate defect from the focus one."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about Logic's BEHAVIOUR -- what a route does, what an element publishes, what order a read returns -- not about a string Logic ships. There is no key to cite and nothing to prove absent. Rule 13 checks the claim: if any reading here resolved in the corpus the declaration would be refused."
+  }
+}

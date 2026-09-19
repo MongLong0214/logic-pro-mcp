@@ -987,15 +987,40 @@ class PullRequestBody(unittest.TestCase):
         and the body printed "1 citation(s) resolved". The rule says "cite what those claims rest
         on" and enforced "cite something".
         """
-        policy = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+        # The changed file is CHOSEN, not named. It used to be `AXLocalePolicy.swift` with a skip
+        # if the fixture reference appeared there -- and the skip looked for the REFERENCE while
+        # the guard binds on the VALUE, so the day a LabelSet carried the fixture's value the case
+        # asserted a refusal that could not happen and the skip did not fire. Found 2026-09-19 when
+        # `트랙 녹음 활성화 토글` was added to the policy. Pick a Logic-facing file that does not
+        # carry the value: the case then stays ALIVE instead of skipping, which is the difference
+        # between a control and a comment.
+        victim = self._logic_facing_file_without(REAL_VALUE)
         result = self._check_changed(
-            f"before\n{REAL_REF}\n{REAL_VALUE}\nafter\n", [policy])
-        if REAL_REF in open(os.path.join(REPO, policy), encoding="utf-8").read():
-            self.skipTest("the module-level fixture reference is used by the policy, so it BEARS "
-                          "on it -- this case needs one that does not, and picking one here would "
-                          "be reading the index to build a fixture from it")
+            f"before\n{REAL_REF}\n{REAL_VALUE}\nafter\n", [victim])
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("bears on", result.stderr)
+
+    def _logic_facing_file_without(self, value):
+        """A Logic-facing path whose contents do not carry `value`, so a citation of it bears on nothing."""
+        with open(os.path.join(REPO, "docs", "canon", "LOGIC-FACING.json"), encoding="utf-8") as fh:
+            prefixes = json.load(fh)["prefixes"]
+        for prefix in prefixes:
+            root = os.path.join(REPO, prefix)
+            if not os.path.isdir(root):
+                continue
+            for base, _dirs, names in os.walk(root):
+                for name in sorted(names):
+                    if not name.endswith((".swift", ".json")):
+                        continue
+                    path = os.path.join(base, name)
+                    try:
+                        with open(path, encoding="utf-8") as fh:
+                            if value in fh.read():
+                                continue
+                    except (OSError, UnicodeDecodeError):
+                        continue
+                    return os.path.relpath(path, REPO)
+        self.fail(f"every Logic-facing file carries {value!r}, so this case has no victim")
 
     def test_a_citation_the_change_uses_is_accepted(self):
         """The control. The reference is in the file the change touches, which is what a
