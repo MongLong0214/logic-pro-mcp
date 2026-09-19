@@ -1,0 +1,13 @@
+Limit: Ten locales by DERIVATION for the three LabelSets. Only the ko readings were taken off a running Logic; the other nine are Apple's bytes for those rows, which is not the same as watching a German Key Commands window render them.
+Limit: The `Key Command` set is one member short of Apple's row ON PURPOSE. Apple's pt `Comando de Teclado` differs from es `Comando de teclado` only by case, and `check-probe-product-drift.py` refuses two members a case-folded match would merge. Every comparison here is case-insensitive so nothing is lost, but the set is not the row verbatim.
+Limit: Eight records declare manual re-verification and cite no evidence file. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded in the ledger rather than closed by inventing a file.
+Ruled-out: bringing ArmKeyCommandSetup across | `searchQuery` must TYPE the host language into the Key Commands filter (an English name typed into a Korean Logic collapses the list to nothing) and main's LabelSet has no locale-to-label map. #882 invented one with `locales:`; reviving it to unblock a rebase would widen a shared definition for one call site. It needs its own design.
+Ruled-out: keeping the two `#373 Phase C` test sections | they drive `QualificationTransport`, which is in the half being held back
+Ruled-out: keeping the three freshness/marker records | their `depends` name Qualification files that do not exist here, and `check-observation-records.py` is right to refuse a record that points at nothing
+Warn: `parseScanMode` returns `.disk` for an empty mode, so the DEFAULT `scan_library` writes `Resources/library-inventory-disk.json` -- and nothing in `Sources/` reads that filename. #882 concluded `scan_library` "never writes the file" and closed `tracks.list_library` as unfixable on that reading. The writer exists (`AccessibilityChannel+Library.swift:270`); the reader half of the filename split was never written. Not fixed here.
+Warn: A test that hard-codes the file it calls "unrelated" is a fixture waiting to become false. The repaired case derives its victim from `LOGIC-FACING.json` instead; anything else keyed to a specific path has the same exposure.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-halfthatstands
+Provenance: inherited fdfc70f7400a164411957b6d0bbc69c8a2c659aa
