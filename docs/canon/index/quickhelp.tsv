@@ -4,6 +4,8 @@
 # data that nothing measured.
 QuickHelp	de	ARR_021_MidiRegion	composed	77f46a6f30a6
 QuickHelp	de	ARR_021_MidiRegion	composed#ci	ea8b9cbb3ac5
+QuickHelp	de	GMM_007_2AutoPointRegionBorders	Title	f6e593ea9b65
+QuickHelp	de	GMM_007_2AutoPointRegionBorders	Title#ci	1e29bb0ee1b7
 QuickHelp	de	KCE_024_Record	composed	e1dbb9837ad6
 QuickHelp	de	KCE_024_Record	composed#ci	e113592eb330
 QuickHelp	de	KCE_390_ToggTrackRec	Title	38669119c9fb
@@ -12,6 +14,8 @@ QuickHelp	de	TRA_073_TunerButton	composed	435829968454
 QuickHelp	de	TRA_073_TunerButton	composed#ci	555ce9b6fb3e
 QuickHelp	en	ARR_021_MidiRegion	composed	35bb04d3512b
 QuickHelp	en	ARR_021_MidiRegion	composed#ci	ce2a13b2d443
+QuickHelp	en	GMM_007_2AutoPointRegionBorders	Title	92ebe3c7900a
+QuickHelp	en	GMM_007_2AutoPointRegionBorders	Title#ci	222c40a54b3c
 QuickHelp	en	KCE_024_Record	Title	aa956bc83484
 QuickHelp	en	KCE_024_Record	composed	e0ea0101f98f
 QuickHelp	en	KCE_024_Record	composed#ci	748de33aa641
@@ -21,6 +25,8 @@ QuickHelp	en	TRA_073_TunerButton	composed	11439ef31808
 QuickHelp	en	TRA_073_TunerButton	composed#ci	5fbfe2fd565b
 QuickHelp	es	ARR_021_MidiRegion	composed	b22686d913f6
 QuickHelp	es	ARR_021_MidiRegion	composed#ci	3e01cd0b0d64
+QuickHelp	es	GMM_007_2AutoPointRegionBorders	Title	f971d87f5e14
+QuickHelp	es	GMM_007_2AutoPointRegionBorders	Title#ci	c733aab2072f
 QuickHelp	es	KCE_024_Record	composed	9faed2b09726
 QuickHelp	es	KCE_024_Record	composed#ci	70e68c8d624a
 QuickHelp	es	KCE_390_ToggTrackRec	Title	355de595a71a
@@ -29,6 +35,8 @@ QuickHelp	es	TRA_073_TunerButton	composed	af7c173ee169
 QuickHelp	es	TRA_073_TunerButton	composed#ci	a8fe862adba7
 QuickHelp	fr	ARR_021_MidiRegion	composed	0124f94c0bd9
 QuickHelp	fr	ARR_021_MidiRegion	composed#ci	6d9bf2c0cc3e
+QuickHelp	fr	GMM_007_2AutoPointRegionBorders	Title	f1a7b92d2b06
+QuickHelp	fr	GMM_007_2AutoPointRegionBorders	Title#ci	76f2ac71ee2f
 QuickHelp	fr	KCE_024_Record	composed	47ebb0fc099e
 QuickHelp	fr	KCE_024_Record	composed#ci	0068b53ad2c8
 QuickHelp	fr	KCE_390_ToggTrackRec	Title	d1fc51b4f6d7
@@ -37,6 +45,8 @@ QuickHelp	fr	TRA_073_TunerButton	composed	1d84d7930b2f
 QuickHelp	fr	TRA_073_TunerButton	composed#ci	8568abf00978
 QuickHelp	it	ARR_021_MidiRegion	composed	35bb04d3512b
 QuickHelp	it	ARR_021_MidiRegion	composed#ci	ce2a13b2d443
+QuickHelp	it	GMM_007_2AutoPointRegionBorders	Title	92ebe3c7900a
+QuickHelp	it	GMM_007_2AutoPointRegionBorders	Title#ci	222c40a54b3c
 QuickHelp	it	KCE_024_Record	composed	e0ea0101f98f
 QuickHelp	it	KCE_024_Record	composed#ci	748de33aa641
 QuickHelp	it	KCE_390_ToggTrackRec	Title	249c0e719e06
@@ -45,6 +55,8 @@ QuickHelp	it	TRA_073_TunerButton	composed	11439ef31808
 QuickHelp	it	TRA_073_TunerButton	composed#ci	5fbfe2fd565b
 QuickHelp	ja	ARR_021_MidiRegion	composed	000fe0964a77
 QuickHelp	ja	ARR_021_MidiRegion	composed#ci	00a7e384b3e2
+QuickHelp	ja	GMM_007_2AutoPointRegionBorders	Title	a7e9e3255894
+QuickHelp	ja	GMM_007_2AutoPointRegionBorders	Title#ci	a7e9e3255894
 QuickHelp	ja	KCE_024_Record	composed	64f1e387b22b
 QuickHelp	ja	KCE_024_Record	composed#ci	64f1e387b22b
 QuickHelp	ja	KCE_390_ToggTrackRec	Title	558ade12e950
@@ -54,6 +66,8 @@ QuickHelp	ja	TRA_073_TunerButton	composed#ci	bea4642f21f5
 QuickHelp	ko	157_0_2	composed	194d3c2ddbf6
 QuickHelp	ko	ARR_021_MidiRegion	composed	a643cf0abf41
 QuickHelp	ko	ARR_021_MidiRegion	composed#ci	fd4567e63a1c
+QuickHelp	ko	GMM_007_2AutoPointRegionBorders	Title	c66ba2c30ea2
+QuickHelp	ko	GMM_007_2AutoPointRegionBorders	Title#ci	c66ba2c30ea2
 QuickHelp	ko	KCE_024_Record	composed	3672f17d15e9
 QuickHelp	ko	KCE_024_Record	composed#ci	3672f17d15e9
 QuickHelp	ko	KCE_390_ToggTrackRec	Title	5a8433b20b5b
@@ -62,6 +76,8 @@ QuickHelp	ko	TRA_073_TunerButton	composed	c38f856a12db
 QuickHelp	ko	TRA_073_TunerButton	composed#ci	c38f856a12db
 QuickHelp	pt	ARR_021_MidiRegion	composed	35bb04d3512b
 QuickHelp	pt	ARR_021_MidiRegion	composed#ci	ce2a13b2d443
+QuickHelp	pt	GMM_007_2AutoPointRegionBorders	Title	92ebe3c7900a
+QuickHelp	pt	GMM_007_2AutoPointRegionBorders	Title#ci	222c40a54b3c
 QuickHelp	pt	KCE_024_Record	composed	e0ea0101f98f
 QuickHelp	pt	KCE_024_Record	composed#ci	748de33aa641
 QuickHelp	pt	KCE_390_ToggTrackRec	Title	249c0e719e06
@@ -70,6 +86,8 @@ QuickHelp	pt	TRA_073_TunerButton	composed	11439ef31808
 QuickHelp	pt	TRA_073_TunerButton	composed#ci	5fbfe2fd565b
 QuickHelp	zh_CN	ARR_021_MidiRegion	composed	2146a96ecedf
 QuickHelp	zh_CN	ARR_021_MidiRegion	composed#ci	5f2a249c7b40
+QuickHelp	zh_CN	GMM_007_2AutoPointRegionBorders	Title	ebfc8130c660
+QuickHelp	zh_CN	GMM_007_2AutoPointRegionBorders	Title#ci	ebfc8130c660
 QuickHelp	zh_CN	KCE_024_Record	composed	48b746bba725
 QuickHelp	zh_CN	KCE_024_Record	composed#ci	48b746bba725
 QuickHelp	zh_CN	KCE_390_ToggTrackRec	Title	dc0dd71bc2b2
@@ -78,6 +96,8 @@ QuickHelp	zh_CN	TRA_073_TunerButton	composed	22425fe8d922
 QuickHelp	zh_CN	TRA_073_TunerButton	composed#ci	22425fe8d922
 QuickHelp	zh_TW	ARR_021_MidiRegion	composed	35bb04d3512b
 QuickHelp	zh_TW	ARR_021_MidiRegion	composed#ci	ce2a13b2d443
+QuickHelp	zh_TW	GMM_007_2AutoPointRegionBorders	Title	92ebe3c7900a
+QuickHelp	zh_TW	GMM_007_2AutoPointRegionBorders	Title#ci	222c40a54b3c
 QuickHelp	zh_TW	KCE_024_Record	composed	e0ea0101f98f
 QuickHelp	zh_TW	KCE_024_Record	composed#ci	748de33aa641
 QuickHelp	zh_TW	KCE_390_ToggTrackRec	Title	249c0e719e06
