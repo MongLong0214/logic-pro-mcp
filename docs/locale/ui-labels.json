@@ -1711,8 +1711,10 @@
   },
   "eventListColumnM": {
    "canonical": "M",
-   "variants": [],
-   "rationale": "Event List mute column; unlabelled in every locale measured.",
+   "variants": [
+    "静音"
+   ],
+   "rationale": "Event List mute column.",
    "roles": [
     "AXButton"
    ],
@@ -1748,7 +1750,13 @@
   "eventListColumnName": {
    "canonical": "Name",
    "variants": [
-    "이름"
+    "이름",
+    "名前",
+    "Nombre",
+    "Nom",
+    "Nome",
+    "名称",
+    "名稱"
    ],
    "rationale": "Region-level name column; distinguishes the region list from the event list.",
    "roles": [
@@ -1764,13 +1772,13 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
+    "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -1830,9 +1838,14 @@
   "eventListColumnPosition": {
    "canonical": "Position",
    "variants": [
-    "위치"
+    "위치",
+    "ポジション",
+    "Posición",
+    "Posizione",
+    "Posição",
+    "位置"
    ],
-   "rationale": "Event List position column; identity is the canonical English form.",
+   "rationale": "Event List position column.",
    "roles": [
     "AXButton"
    ],
@@ -1846,13 +1859,13 @@
    "coverage": {
     "en-US": "measured",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
+    "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    },
    "coverage_records": {
