@@ -491,8 +491,8 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("every refusal uses observed menu cleanup")
-    func refusalPathsUseObservedMenuCleanup() throws {
+    @Test("every menu-cleanup refusal uses observed cleanup and carries its actuation context")
+    func menuCleanupRefusalsUseObservedCleanupAndCarryActuationContext() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let entryCleanup = try issue529Position(
             of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
@@ -518,6 +518,11 @@ struct Issue529MenuValidationTests {
         #expect(menuStateObservations.contains { escape < $0 })
         var previousRefusalReturn = entryRefusal
         for refusalReturn in cleanupRefusalReturns {
+            let refusalLine = String(script[refusalReturn...].prefix { $0 != "\n" })
+            #expect(
+                refusalLine.contains("my menuCleanupActuationContext(menuActuationAttempted)"),
+                "every MENU_PICK_FAILED menu-cleanup return must preserve the actuation context"
+            )
             let cleanupBetweenRefusals = issue529Positions(
                 of: "set cleanupState to my dismissOpenMenu(logicProcess,",
                 in: script
@@ -797,12 +802,21 @@ struct Issue529MenuValidationTests {
         ))
     }
 
-    @Test("legacy or malformed menu-validation sentinels remain conservative safety refusals")
-    func legacyOrMalformedMenuValidationSentinelsRefuseSafely() async throws {
+    @Test("legacy and malformed menu-validation sentinels remain conservative while neighboring values are unrelated")
+    func menuValidationSentinelBoundaryPreservesSafetyWithoutSwallowingNeighbors() async throws {
         // Mutation this rejects: restore the parser's `.unexpectedResult` fallback for malformed
         // MENU_VALIDATION_UNREADABLE values. That fallback appears dialog-safe and could release the
         // later slider route; every spelling below must instead retain the unreadable refusal and its
         // conservative attempted-actuation reading.
+        //
+        // A neighboring token is not the sentinel merely because it shares its characters. Widening
+        // the parser back to `hasPrefix("MENU_VALIDATION_UNREADABLE")` classifies this as a terminal
+        // safety refusal and fails the exact-classification assertion below.
+        let neighboringClassification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"MENU_VALIDATION_UNREADABLENESS"}"#
+        )
+        #expect(neighboringClassification == .failure(.unexpectedResult))
+
         for sentinel in [
             "MENU_VALIDATION_UNREADABLE",
             "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=TRUE",
@@ -871,8 +885,9 @@ struct Issue529MenuValidationTests {
             ("MENU_NOT_FOUND: no such menu item", "menu_not_found", false),
             ("MENU_STATE_UNREADABLE", "menu_state_unreadable", false),
             // MENU_DISABLED can be reached only after its fresh read, which proves the revalidation
-            // click completed. The unreadable result also serializes the opposite observed case:
-            // the click itself threw before it could set `menuActuationAttempted`.
+            // click completed. The generated script now marks its attempted actuation BEFORE that
+            // click, so its own unreadable result remains attempted even if AX throws; the false
+            // fixture below preserves parser coverage for an encoded external result.
             ("MENU_DISABLED", "menu_disabled", true),
             ("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true", "menu_validation_unreadable", true),
             ("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=false", "menu_validation_unreadable", false),
@@ -1113,7 +1128,7 @@ struct Issue529MenuValidationTests {
         // Mutation this rejects: change `if !performedDialogSafetyObservation { return true }`
         // to return false. Each script reply exits before either pre-leaf dialog/window count, so
         // it cannot answer that no modal is open. The recorder would otherwise receive `/`, digits,
-        // and Return globally. Running all three proves every classifier seam reaches this gate.
+        // and Return globally. Running all four proves every classifier seam reaches this gate.
         for (scriptResult, diagnostic) in [
             ("MENU_NOT_FOUND", "menu_not_found"),
             ("MENU_DISABLED", "menu_disabled"),
@@ -1421,8 +1436,9 @@ struct Issue529MenuValidationTests {
         let envelope = try #require(issue529Envelope(result))
         #expect(!result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "C")
-        // `cleanup_closed_true` now, not `_false`: the menu-only loop ran (the fixture's canned
-        // CLOSED) instead of being skipped outright.
+        // `cleanup_closed_true` now, not `_false`: the reconciliation fixture was invoked and
+        // returned canned CLOSED instead of being skipped outright. It captures, but does not
+        // execute, the menu-only loop.
         #expect(try #require(envelope["dialog_route_outcome"] as? String)
             == "execution_failed_issuance_NOT_ISSUED_cleanup_closed_true")
         #expect(reconciliationCalls.value == 1)
@@ -1431,6 +1447,20 @@ struct Issue529MenuValidationTests {
         // -- always false, never reachable -- which is the ownership boundary RV-1 preserves.
         let script = try #require(reconciliationScript.value)
         #expect(script.contains("if \"\" is not \"\" then"))
+        let menuFocus = try issue529Position(
+            of: "set menuFocusState to my menuEscapeFocusState(it)", in: script
+        )
+        let menuLoop = try #require(
+            script.range(of: "repeat 3 times", options: .backwards, range: script.startIndex..<menuFocus)
+        )
+        let menuEscape = try #require(
+            script.range(of: "key code 53", range: menuFocus..<script.endIndex)
+        )
+        let beforeMenuEscape = String(script[menuLoop.lowerBound..<menuEscape.lowerBound])
+        #expect(!beforeMenuEscape.contains("exit repeat"),
+                "the captured menu loop must reach Escape without an early repeat exit")
+        #expect(!beforeMenuEscape.contains("end repeat"),
+                "the captured menu loop must not close before its Escape")
         #expect(sliderWrites.value == 0)
     }
 
@@ -1927,17 +1957,20 @@ struct Issue529MenuValidationTests {
     }
 }
 
-/// Before this run issues its resolved leaf, an unreadable menu read must withhold Escape rather
-/// than sending it into unknown focus. Locale discovery itself owns no menu actuation.
+/// Before this run issues its resolved leaf, an unreadable menu read with no actuation by this run
+/// must withhold Escape rather than sending it into unknown focus. Locale discovery owns no menu
+/// actuation; the forced-revalidation branch below is the explicit pre-leaf exception.
 @Test("locale discovery stays unowned until the resolved leaf issuance boundary")
 func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
-    // Source mutations: change any of the AXEnabled-read, disabled-entry, or LEAF_ARMED-write
-    // failure cleanups to `dismissOpenMenu(logicProcess, true)`. Each is before this run's leaf,
-    // so UNREADABLE must withhold Escape from unrelated focus.
+    // Source mutations: change an AXEnabled-read, locale-resolution, or LEAF_ARMED-write failure
+    // cleanup to `dismissOpenMenu(logicProcess, true)`. Those paths have no confirmed open menu,
+    // so UNREADABLE must withhold Escape from unrelated focus. The disabled-entry cleanup is
+    // deliberately excluded: its `revalidated` argument records the forced menu observation.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
 
-    // Entry, locale discovery, enabled/disabled handling, and a failed durable checkpoint are all
-    // unowned until the resolved leaf is actually issued.
+    // Entry, locale discovery, the initial enabled read, and a failed durable checkpoint use
+    // unowned cleanup. The disabled-entry branch is the pre-leaf exception: its `revalidated`
+    // argument says this run observed the forced revalidation menu open.
     //
     // #519: locale discovery used to have two textually separate cleanup call sites — an explicit
     // "no candidate exists" branch and a catch-all `on error errMsg` handler — because the old

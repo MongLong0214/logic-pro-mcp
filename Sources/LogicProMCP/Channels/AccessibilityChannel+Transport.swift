@@ -1721,9 +1721,10 @@ extension AccessibilityChannel {
                     return "MENU_PICK_FAILED: menu state was not observed closed at entry (" & entryMenuCleanup & ")"
                 end if
                 set menuActuationAttempted to false
-                -- This records whether the resolved leaf actuation was issued. The
-                -- leaf may succeed even if AX reports an error, so any result
-                -- after it becomes true must not release another position route.
+                -- This records whether this run issued either menu actuation: the forced
+                -- revalidation menu-bar click or the resolved leaf click. Either may succeed
+                -- even if AX reports an error, so any result after it becomes true must not
+                -- release another position route.
                 set dialogActuationIssued to false
                 delay 0.2
 
@@ -1842,7 +1843,7 @@ extension AccessibilityChannel {
                     if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
                         set cleanupState to my dismissOpenMenu(logicProcess, false)
                         if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
                         return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
                     end if
@@ -2449,7 +2450,8 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
-        case let value where value.hasPrefix("MENU_VALIDATION_UNREADABLE"):
+        case let value where value == "MENU_VALIDATION_UNREADABLE"
+            || value.hasPrefix("MENU_VALIDATION_UNREADABLE: "):
             let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
             guard value.hasPrefix(prefix),
                   let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
