@@ -785,8 +785,17 @@ struct Issue529MenuValidationTests {
             #expect(try #require(envelope["state"] as? String) == "C", "\(sentinel)")
             #expect(!(try #require(envelope["safe_to_retry"] as? Bool)), "\(sentinel)")
             #expect(!(try #require(envelope["write_attempted"] as? Bool)), "\(sentinel)")
-            #expect(try #require(envelope["menu_actuation_attempted"] as? Bool) == actuationAttempted,
-                    "\(sentinel): actuation truthfulness must match which pass produced this sentinel")
+            // A top-level `Bool == Bool` inside `#expect` passes unconditionally on this toolchain
+            // (Scripts/ci-forbid-dead-expect.sh), so the comparison is branched into two bare
+            // expectations instead. Written as one `==` it proved nothing about either case.
+            let reportedActuation = try #require(envelope["menu_actuation_attempted"] as? Bool)
+            if actuationAttempted {
+                #expect(reportedActuation,
+                        "\(sentinel): the forced revalidation pass clicked, so this must say so")
+            } else {
+                #expect(!reportedActuation,
+                        "\(sentinel): this sentinel returns before any click, so nothing was actuated")
+            }
             #expect(sliderWrites.value == 0, "\(sentinel)")
         }
     }
