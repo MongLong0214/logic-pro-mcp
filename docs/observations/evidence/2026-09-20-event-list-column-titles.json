@@ -1,0 +1,77 @@
+{
+  "what": "Static reads of Logic.framework that decide which rows the Event List's column headers are titled from",
+  "binary": {
+    "path": "Contents/Frameworks/Logic.framework/Versions/A/Logic",
+    "sha256": "eec0d05d7e72b2ca8d0f02e38b12857ac1b3aa1763dfa83dfe2fcda594d961b6",
+    "logic": {
+      "version": "12.3",
+      "build": "6674"
+    }
+  },
+  "commands": [
+    {
+      "command": "nm -arch arm64 <Logic.framework binary> | grep -E '-\\[EventListView (columnTitle:forMenu:|createTableColumns)\\]'",
+      "output": [
+        "00000000003f8c24 t -[EventListView columnTitle:forMenu:]",
+        "00000000003fa468 t -[EventListView createTableColumns]"
+      ]
+    },
+    {
+      "command": "scan every Base.lproj nib in Logic.framework for the bytes `EventList`",
+      "output": [
+        "159 nib(s) scanned",
+        "0 contain it: none"
+      ]
+    },
+    {
+      "command": "reconstruct adrp/add and adrp/ldr pairs in 0x3f8c24..0x3f9100 of `otool -arch arm64 -tvV`",
+      "output": [
+        "25 distinct referenced addresses",
+        "three of them are the CFString objects the column-title dictionary is built from: 0x2322ba0, 0x231fdc0, 0x2316f20",
+        "each lies in __DATA_CONST,__cfstring"
+      ]
+    }
+  ],
+  "rows_read_from_the_pinned_corpus": {
+    "Localizable.strings/M": {
+      "en": "M",
+      "ko": "M",
+      "ja": "M",
+      "de": "M",
+      "es": "M",
+      "fr": "M",
+      "it": "M",
+      "pt": "M",
+      "zh_CN": "静音",
+      "zh_TW": "M"
+    },
+    "Localizable.strings/Position": {
+      "en": "Position",
+      "ko": "위치",
+      "ja": "ポジション",
+      "de": "Position",
+      "es": "Posición",
+      "fr": "Position",
+      "it": "Posizione",
+      "pt": "Posição",
+      "zh_CN": "位置",
+      "zh_TW": "位置"
+    },
+    "Localizable.strings/Name": {
+      "en": "Name",
+      "ko": "이름",
+      "ja": "名前",
+      "de": "Name",
+      "es": "Nombre",
+      "fr": "Nom",
+      "it": "Nome",
+      "pt": "Nome",
+      "zh_CN": "名称",
+      "zh_TW": "名稱"
+    },
+    "MAMixer Localizable.strings/M (the row NOT chosen)": {
+      "en": "M",
+      "zh_CN": "M"
+    }
+  }
+}

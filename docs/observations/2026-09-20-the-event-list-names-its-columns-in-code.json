@@ -1,0 +1,130 @@
+{
+  "id": "2026-09-20-the-event-list-names-its-columns-in-code",
+  "date": "2026-09-20",
+  "schema": 3,
+  "subject": "Which rows the Event List's `M`, `Position` and `Name` column headers are named by, read out of Logic's shipped binary",
+  "question": "Three LabelSets carried one or two locales and named no Apple row. `derive_label_variants.py` answered `ambiguous` for all three -- 4, 7 and 18 rows carry those values. A row whose VALUE matches is not the row a control is NAMED by (`trackTypeMaster`'s best candidate is a Bass Amp label). Does the bundle decide it without a running Logic?",
+  "verdict": "works",
+  "issues": [
+    904
+  ],
+  "surface": "system.accessibility",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3",
+    "locale_note": "Static reads of the shipped bundle; no Logic was running, so no UI locale was in play. en-US is recorded because the schema counts per-locale coverage by this exact string and the English row is the one cited."
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/check-labelsets-are-derived.py",
+    "expected": "exit 0: 137 of 195 LabelSets name a row and every member is that row's own value in every locale the corpus carries -- including eventListColumnM, eventListColumnPosition and eventListColumnName",
+    "cost": "~10s; reads the committed canon index, launches nothing"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "method": "Static reads only. Logic was NOT launched. (1) Every Base.lproj nib in Logic.framework was scanned for the class name `EventList`: 159 files, zero hits, so the columns are not built from a nib. (2) `nm -arch arm64` on Logic.framework's executable located `-[EventListView createTableColumns]` at 0x3fa468 and `-[EventListView columnTitle:forMenu:]` at 0x3f8c24. (3) `otool -arch arm64 -tvV` was dumped and the adrp/add pairs inside 0x3f8c24-0x3f9100 were reconstructed: the method references three `__DATA_CONST,__cfstring` objects at 0x2322ba0, 0x231fdc0 and 0x2316f20, which a co-reader identified as `Muted`, `Position` and `Name`, each passed to a localization helper with a nil table against the bundle of `MAContentPackageManager` -- Logic.framework -- so the table is its own Localizable.strings. (4) The three rows were then read out of the pinned corpus in all ten locales and compared with what each LabelSet already carried.",
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/M#value",
+      "value": "M",
+      "used_for": "the row the Event List's mute header is titled from; nine locales spell it `M`",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/zh_CN/M#value",
+      "value": "静音",
+      "used_for": "the same row in Simplified Chinese -- mute -- which is what separates it from MAMixer's `M`, whose zh_CN value stays `M`",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Position#value",
+      "value": "Position",
+      "used_for": "the row the Event List's position header is titled from",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ja/Position#value",
+      "value": "ポジション",
+      "used_for": "the same row in Japanese; three of the seven rows carrying `Position` in English read 位置 here instead, so the value could not choose the row",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Name#value",
+      "value": "Name",
+      "used_for": "the row the Event List's name header is titled from",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Name#value",
+      "value": "이름",
+      "used_for": "the same row in Korean, which is the one locale this LabelSet already carried",
+      "binding": {
+        "kind": "code",
+        "path": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "what": "Base.lproj nibs in Logic.framework scanned for the class name EventList",
+      "count": 159
+    },
+    {
+      "what": "nibs that mention it",
+      "count": 0
+    },
+    {
+      "what": "rows in the bundle whose English value is `Name`",
+      "count": 18
+    },
+    {
+      "what": "of those, rows sharing one ten-locale spelling",
+      "count": 17
+    },
+    {
+      "what": "rows whose English value is `Position`",
+      "count": 7
+    },
+    {
+      "what": "of those, rows whose Japanese reads 位置 rather than ポジション",
+      "count": 3
+    },
+    {
+      "what": "rows whose English value is `M`",
+      "count": 4
+    },
+    {
+      "what": "of those, chord labels from ChordsKit rather than a mute column",
+      "count": 2
+    }
+  ],
+  "conclusion": "The Event List creates its columns in code and titles each header with a key in Logic.framework's own Localizable.strings: `M`, `Position`, `Name`. Those three rows are now named in `derivedFrom` by eventListColumnM, eventListColumnPosition and eventListColumnName, which took them from one or two locales to ten. The mute column is the one that could not have been guessed: nine locales spell it `M` and Simplified Chinese spells it 静音, which is also what separates this row from MAMixer's `M` -- whose zh_CN value stays `M`. The Japanese position header is ポジション, not 位置, and three of the seven candidate rows would have given the wrong answer.",
+  "limits": [
+    "Nothing here was read off a running Logic. What is proved is which key the shipped code looks up and what Apple pins at that key -- not that a Japanese Logic renders ポジション in that column on screen.",
+    "The instruction reading was done by a co-reader and re-checked here at three points: the two method addresses (nm), the three cfstring addresses being referenced inside the method (adrp/add reconstruction), and the section those addresses live in. The identification of the cfstring CONTENTS as `Muted`, `Position` and `Name` was not re-derived byte by byte; the corroboration is that the rows those names select carry, in ten locales, exactly the values these LabelSets already held.",
+    "`Muted` is the column identifier; the localization key for it is `M`. A rename of either in a later Logic breaks the binding silently, and only check-labelsets-are-derived.py failing would show it."
+  ],
+  "supersedes": null,
+  "evidence": [
+    "evidence/2026-09-20-event-list-column-titles.json"
+  ]
+}

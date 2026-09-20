@@ -44,24 +44,6 @@
       "candidate": "Localizable.strings Delete#key via #key",
       "members": 4
     },
-    "eventListColumnM": {
-      "verdict": "ambiguous",
-      "candidate": "4 candidate(s)",
-      "members": 1,
-      "measured_2026_09_20": "4 candidate rows in four different ten-locale signatures. Two are chord labels from ChordsKit (Maj / maj). The other two read `M` in English and split in Chinese: MAMixer's `M` reads 静音 -- mute -- in zh_CN, and Logic.framework's `M` reads `M`. A mute column plausibly takes the mixer's row, and plausibly is the whole trap: a reading of the Event List header on a Simplified Chinese Logic separates them, and nothing else does."
-    },
-    "eventListColumnName": {
-      "verdict": "ambiguous",
-      "candidate": "18 candidate(s)",
-      "members": 2,
-      "measured_2026_09_20": "18 candidate rows, and 17 of them carry ONE ten-locale signature: Name / 이름 / 名前 / Name / Nombre / Nom / Nome / Nome / 名称 / 名稱. The eighteenth is MAMixer's `name`, which differs from it only by case in en, es, fr and it. The key is ambiguous; the values are not. Closing it still needs somebody to say which row names the Event List's own column, and none of the eighteen is that answer by measurement."
-    },
-    "eventListColumnPosition": {
-      "verdict": "ambiguous",
-      "candidate": "7 candidate(s)",
-      "members": 2,
-      "measured_2026_09_20": "7 candidate rows in two ten-locale signatures, differing in exactly one locale: ja reads ポジション in four of them and 位置 in three. Every other locale agrees (Position / 위치 / Position / Posición / Position / Posizione / Posição / 位置 / 位置). Offline cannot decide it -- reading the column header on a Japanese Logic does, and guessing picks a Japanese word for a column nobody has looked at."
-    },
     "headerPanHint": {
       "verdict": "namespace",
       "candidate": "Localizable.strings Pan#par via #par",
@@ -313,5 +295,5 @@
       "members": 2
     }
   },
-  "why_these_three_arrived_late": "Added 2026-09-20. They are not new LabelSets: they named no row before this branch too, and `check-labelset-census-only-shrinks.py` could not see them because its own parser took the end of a declaration to be the next `\\n    )` in the file. It reads the policy through `check-labelsets-are-derived.py`'s parser now. For contrast, the two Event List columns that DO name a row: `eventListColumnTrack` derives from logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value (`Trk`), and `eventListColumnLength` from the same table's `Length#und`. One row, all ten locales, nothing typed -- which is what these three cannot do yet."
+  "why_these_three_arrived_late": "Added 2026-09-20. They are not new LabelSets: they named no row before this branch too, and `check-labelset-census-only-shrinks.py` could not see them because its own parser took the end of a declaration to be the next `\\n    )` in the file. It reads the policy through `check-labelsets-are-derived.py`'s parser now. For contrast, the two Event List columns that DO name a row: `eventListColumnTrack` derives from logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value (`Trk`), and `eventListColumnLength` from the same table's `Length#und`. One row, all ten locales, nothing typed -- which is what these three cannot do yet. CLOSED 2026-09-20, the same day: all three name their row now. The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under `M`, `Position` and `Name`. Read from the shipped binary, not chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json."
 }

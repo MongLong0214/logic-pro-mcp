@@ -293,10 +293,19 @@ enum AXLocalePolicy {
         rationale: "Event List lock column; unlabelled in every locale measured."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/L#value")
-    static let eventListColumnM = LabelSet(canonical: "M", variants: [],
-        rationale: "Event List mute column; unlabelled in every locale measured.")
-    static let eventListColumnPosition = LabelSet(canonical: "Position", variants: ["위치"],
-        rationale: "Event List position column; identity is the canonical English form.")
+    static let eventListColumnM = LabelSet(canonical: "M", variants: ["静音"],
+        rationale: "Event List mute column."
+            + " The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under this key. Read from the shipped binary on 2026-09-20 (Logic 12.3 build 6674) rather than chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json. Checked offline per locale by Scripts/check-labelsets-are-derived.py."
+            + " Nine locales spell it `M`; Simplified Chinese spells it 静音 -- mute -- which is"
+            + " also what separates this row from MAMixer's `M`, whose zh_CN value stays `M`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/M#value")
+    static let eventListColumnPosition = LabelSet(canonical: "Position", variants: ["위치", "ポジション", "Posición", "Posizione", "Posição", "位置"],
+        rationale: "Event List position column."
+            + " The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under this key. Read from the shipped binary on 2026-09-20 (Logic 12.3 build 6674) rather than chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json. Checked offline per locale by Scripts/check-labelsets-are-derived.py."
+            + " Japanese reads ポジション here. Seven rows in the bundle carry `Position` in English"
+            + " and three of them read 位置 in Japanese; which one this column uses could not be"
+            + " decided by value alone, which is why the binary was read.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Position#value")
     static let eventListColumnStatus = LabelSet(canonical: "Status", variants: ["상태", "状況", "Estado", "État", "Stato", "状态", "狀態"],
         rationale: "Event List status column; identity is the canonical English form."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
@@ -321,8 +330,12 @@ enum AXLocalePolicy {
     /// The region-level header, which is how the collector tells "you are looking at the wrong level"
     /// apart from "Logic changed its columns". Measured in Korean as
     /// `["L","M","위치","이름","트랙","길이"]`.
-    static let eventListColumnName = LabelSet(canonical: "Name", variants: ["이름"],
-        rationale: "Region-level name column; distinguishes the region list from the event list.")
+    static let eventListColumnName = LabelSet(canonical: "Name", variants: ["이름", "名前", "Nombre", "Nom", "Nome", "名称", "名稱"],
+        rationale: "Region-level name column; distinguishes the region list from the event list."
+            + " The Event List builds its columns in code -- no nib in the bundle names `EventListView` -- and `-[EventListView columnTitle:forMenu:]` looks each header up in Logic.framework's own Localizable.strings under this key. Read from the shipped binary on 2026-09-20 (Logic 12.3 build 6674) rather than chosen because a value matched: docs/observations/2026-09-20-the-event-list-names-its-columns-in-code.json. Checked offline per locale by Scripts/check-labelsets-are-derived.py."
+            + " Eighteen rows in the bundle carry `Name` in English, seventeen of them with the"
+            + " same ten-locale spelling, so the values were never in doubt and the row was.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Name#value")
     static let eventListColumnTrack = LabelSet(canonical: "Trk", variants: ["트랙", "Pista", "Piste", "Trc", "Pis", "轨道", "音軌"],
         rationale: "Region-level track column; distinguishes the region list from the event list."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
