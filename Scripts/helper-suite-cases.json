@@ -1,0 +1,17 @@
+{
+  "why": "A floor per suite, so a suite that quietly stops contributing cases fails instead of lowering a total nobody reads. Counted by the module that DEFINES each case, because an aggregator re-exporting a class would otherwise hide the loss. Growing is free; lowering one belongs in the diff, with the reason.",
+  "measured": "2026-09-20",
+  "suites": {
+    "live_e2e_bridge_test": 2,
+    "logic_bounce_main_test": 4,
+    "logic_bounce_support_test": 13,
+    "logic_bounce_ui_test": 15,
+    "logic_controller_learn_mode_test": 8,
+    "logic_free_tempo_modal_test": 7,
+    "logic_key_event_test": 7,
+    "logic_session_bootstrap_action_test": 36,
+    "logic_session_bootstrap_test": 25,
+    "logic_ui_jxa_test": 4,
+    "logic_variants_test": 14
+  }
+}
