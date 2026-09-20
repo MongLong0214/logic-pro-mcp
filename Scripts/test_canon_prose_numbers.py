@@ -165,5 +165,66 @@ class TheEntryPointRefuses(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[:300])
 
 
+class CountsOfCorpora(unittest.TestCase):
+    """A count of corpora is the one quantity here the digit rule cannot see.
+
+    `A_BIG_NUMBER` starts at four digits, and there are 24 corpora. That is not a gap somebody
+    might have: README line 159 said `Input Port:` is "absent from all 23 corpora" while the
+    manifest pinned 24, and line 139 said in prose that number WORDS were invisible -- naming a
+    gap is not closing it.
+    """
+
+    def _root(self, readme_text, corpora=3, rows=2, declared=None):
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        canon = os.path.join(root, "docs", "canon")
+        os.makedirs(os.path.join(canon, "index"))
+        artifacts = {f"absence/strings.l{n}.u32": "0" * 8 for n in range(corpora)}
+        with open(os.path.join(canon, "MANIFEST.json"), "w", encoding="utf-8") as handle:
+            json.dump({"sources": {"strings": {"entries": 605190}}, "artifacts": artifacts}, handle)
+        with open(os.path.join(canon, "index", "strings.tsv"), "w", encoding="utf-8") as handle:
+            handle.write("key\tlocale\tvalue\n")
+            for n in range(rows):
+                handle.write(f"k{n}\tl{n}\tv{n}\n")
+        with open(os.path.join(canon, "PROSE-NUMBERS.json"), "w", encoding="utf-8") as handle:
+            json.dump({"numbers": declared or {}}, handle)
+        with open(os.path.join(canon, "README.md"), "w", encoding="utf-8") as handle:
+            handle.write(readme_text)
+        return root
+
+    def test_all_n_corpora_must_be_every_corpus(self):
+        found = guard.problems(self._root("It is absent from all 2 corpora.\n"))
+        self.assertTrue(any("all 2 corpora" in line for line in found), found)
+
+    def test_all_n_corpora_at_the_manifests_count_passes(self):
+        """The control. Without it the case above passes on a rule that refuses every sentence."""
+        self.assertEqual(guard.problems(self._root("It is absent from all 3 corpora.\n")), [])
+
+    def test_a_count_of_corpora_written_as_a_word_is_read(self):
+        found = guard.problems(self._root("The manifest carries twenty-four corpora.\n"))
+        self.assertTrue(any("twenty-four corpora" in line for line in found), found)
+
+    def test_the_two_legitimate_denominators_pass(self):
+        """How many exist, and how many carry a row. The document uses both."""
+        self.assertEqual(guard.problems(
+            self._root("The manifest carries three corpora and two of the corpora carry a row.\n")), [])
+
+    def test_a_declared_count_is_excused(self):
+        """A retraction QUOTES the number it retracts, and this file quotes several."""
+        self.assertEqual(guard.problems(
+            self._root("It used to say all 2 corpora.\n", declared={"2": "quoted from a retraction"})), [])
+
+    def test_a_sentence_that_names_no_count_is_left_alone(self):
+        self.assertEqual(guard.problems(self._root("The corpora are pinned by the manifest.\n")), [])
+
+    def test_counting_corpora_against_a_manifest_that_names_none_is_refused(self):
+        """Abstaining here would report clean on a broken reader."""
+        root = self._root("It is absent from all 3 corpora.\n")
+        with open(os.path.join(root, "docs", "canon", "MANIFEST.json"), "w", encoding="utf-8") as h:
+            json.dump({"sources": {"strings": {"entries": 605190}}, "artifacts": {}}, h)
+        found = guard.problems(root)
+        self.assertTrue(any("MANIFEST.json names none" in line for line in found), found)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

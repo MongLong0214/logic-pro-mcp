@@ -156,8 +156,8 @@ claim — and the exemption is declared, so a structural number added later is r
 ### Absent as bytes is not the same as uncitable
 
 `absent` proves a BYTE STRING is not in the corpus. That is exactly true and half an answer:
-`Input Port:` is absent from all 23 corpora and Logic ships `Input Port`, so adding a colon proves
-anything uncitable. Three literals on the control-surface branch were proved absent that way and
+`Input Port:` is absent from all 24 corpora and Logic ships `Input Port` — measured 2026-09-20, it
+is in `strings/en` and in no other — so adding a colon proves anything uncitable. Three literals on the control-surface branch were proved absent that way and
 all three are shipped labels.
 
 So each corpus carries a second digest set, `absence/<source>.<locale>.folded.u32`, over the same
