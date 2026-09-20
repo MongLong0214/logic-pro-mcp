@@ -1207,7 +1207,14 @@ def check_exceptions_state_no_fact(failures: list) -> None:
                 f"{rel} is excepted from the Logic-facing prefixes and carries "
                 f"{len(references)} canonical reference(s), first {sorted(references)[0]}. A file "
                 f"that cites Logic is not a file that states no fact about it.")
-        quoted = _citable_strings_in(body)
+        try:
+            quoted = _citable_strings_in(body, strict=True)
+        except CitableScanFailed as exc:
+            failures.append(
+                f"{rel} is excepted from the Logic-facing prefixes and whether it quotes a value "
+                f"Logic ships could not be answered: {exc}. An exemption resting on a corpus "
+                f"nobody could read is an exemption nobody checked.")
+            continue
         if quoted:
             failures.append(
                 f"{rel} is excepted from the Logic-facing prefixes and quotes "
@@ -1251,6 +1258,20 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
         return 1
 
     touched = logic_facing(changed_paths)
+    # The exceptions NARROW that set, so the opt-out below can rest on them -- and rule 15 is what
+    # proves an exception. It runs in the tree check, which is a different invocation: a co-reader
+    # pointed out that `--text` returns before it, so this path was trusting a list the run had not
+    # checked. In CI the tree check is a required command and does run, but a rule that is only
+    # sound because another step happened is a rule with an undeclared dependency.
+    if changed_paths and logic_facing_exceptions():
+        proof: list = []
+        check_exceptions_state_no_fact(proof)
+        if proof:
+            print(f"{path}: the Logic-facing exceptions are not proved, so nothing here may narrow "
+                  f"what counts as a claim about Logic:", file=sys.stderr)
+            for line in proof:
+                print(f"  {line}", file=sys.stderr)
+            return 1
     references = canon.find_refs(body)
     if not references:
         if touched:
@@ -1336,12 +1357,23 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
 CITABLE_QUOTE_MIN = 6
 
 
-def _citable_strings_in(body: str) -> list:
+class CitableScanFailed(Exception):
+    """A corpus lookup failed, so "quotes nothing citable" is UNKNOWN rather than true."""
+
+
+def _citable_strings_in(body: str, strict: bool = False) -> list:
     """Quoted or backticked runs in the body that the pinned corpus actually holds.
 
     Only text the author DELIMITED -- between quotes or backticks. Scanning whole sentences would
     hit every common word; scanning what somebody set apart as a string is scanning what they meant
     as one.
+
+    `strict` decides what a failed lookup means. Reading a pull request body, an unreadable corpus
+    makes this scan advisory and the citation rules around it still apply, so the failure is
+    skipped. As EVIDENCE FOR AN EXEMPTION it is the opposite: "this file quotes nothing Logic
+    ships" would be answered from a corpus nobody could read, which is the shape of every silent
+    pass this repository removes. A co-reader found it by simulating a failure of every lookup --
+    `"Audio Units"` then came back clean.
     """
     manifest = canon.load_manifest()
     corpora = sorted(required_corpora(manifest))
@@ -1356,7 +1388,9 @@ def _citable_strings_in(body: str) -> list:
                 if not canon.is_absent(source, locale, text):
                     found.append(text)
                     break
-            except canon.CanonError:
+            except canon.CanonError as exc:
+                if strict:
+                    raise CitableScanFailed(f"{source}/{locale}: {exc}") from exc
                 continue
     return found
 

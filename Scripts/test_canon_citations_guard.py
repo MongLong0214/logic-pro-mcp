@@ -986,6 +986,57 @@ class LogicFacingIsSelfMaintaining(unittest.TestCase):
         self.assertEqual(self.guard.logic_facing([excepted, "docs/canon/README.md"]),
                          ["docs/canon/README.md"])
 
+    def test_a_corpus_that_cannot_be_read_refuses_the_exception(self):
+        """Evidence for an exemption cannot be "I could not check". A co-reader found this by
+        simulating a failure of every lookup: `"Audio Units"` came back clean."""
+        original = self.guard.canon.is_absent
+
+        def explode(*_args, **_kwargs):
+            raise self.guard.canon.CanonError("no absence set here")
+
+        self.guard.canon.is_absent = explode
+        self.addCleanup(lambda: setattr(self.guard.canon, "is_absent", original))
+        failures = []
+        self.guard.check_exceptions_state_no_fact(failures)
+        self.assertTrue(any("could not be answered" in f for f in failures), failures)
+
+    def test_the_body_path_proves_the_exceptions_before_it_trusts_them(self):
+        """Rule 15 runs in the TREE check, and `--text` returns before that. In CI the tree check
+        is a required command, but a rule that is sound only because another step ran is a rule
+        with an undeclared dependency."""
+        import subprocess
+        import tempfile
+        document = json.loads(self.backup)
+        document["exceptions"] = sorted(set(document.get("exceptions") or []) |
+                                        {"docs/canon/README.md"})
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, ensure_ascii=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            body = os.path.join(tmp, "body.md")
+            with open(body, "w", encoding="utf-8") as handle:
+                handle.write("x\n\nThis pull request body states no fact about Logic: "
+                             "it edits a census of guard names.\n")
+            changed = os.path.join(tmp, "changed.txt")
+            with open(changed, "w", encoding="utf-8") as handle:
+                handle.write("docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json\n")
+            proc = subprocess.run([sys.executable, GUARD, "--text", body, "--changed", changed],
+                                  capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
+        self.assertIn("exceptions are not proved", proc.stdout + proc.stderr)
+
+    def test_rule_15_does_not_see_a_fact_asserted_in_prose(self):
+        """The LIMIT, pinned so nobody reads the exception list as more than it is. This is what
+        `docs/canon/LOGIC-FACING.json` says in `exceptions_note`, and a case is how that sentence
+        stays true when somebody strengthens the rule and forgets to update it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            claim = os.path.join(tmp, "claims.json")
+            with open(claim, "w", encoding="utf-8") as handle:
+                json.dump({"note": "The bounce dialog has three buttons."}, handle)
+            with open(claim, encoding="utf-8") as handle:
+                body = handle.read()
+        self.assertFalse(self.guard.canon.find_refs(body))
+        self.assertEqual(self.guard._citable_strings_in(body, strict=True), [])
+
     def test_livekit_swift_is_scanned(self):
         """`Scripts/livekit` holds Swift that matches Logic and was not looked at."""
         self.assertIn(os.path.join("Scripts", "livekit"), self.guard.SWIFT_ROOTS)
