@@ -1263,6 +1263,12 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
     # pointed out that `--text` returns before it, so this path was trusting a list the run had not
     # checked. In CI the tree check is a required command and does run, but a rule that is only
     # sound because another step happened is a rule with an undeclared dependency.
+    #
+    # `changed_paths and` is the SCOPE of that proof, and it is deliberate. With no changed paths
+    # -- an issue body, or `--text` without `--changed-paths` -- `logic_facing()` returns the empty
+    # set whatever the exceptions say, so nothing here rests on the list and there is nothing to
+    # prove. Read the proof as covering the pull-request path, which is the only one where the list
+    # narrows anything; a bare `--text` run still does not check it.
     if changed_paths and logic_facing_exceptions():
         proof: list = []
         check_exceptions_state_no_fact(proof)

@@ -1037,6 +1037,43 @@ class LogicFacingIsSelfMaintaining(unittest.TestCase):
         self.assertFalse(self.guard.canon.find_refs(body))
         self.assertEqual(self.guard._citable_strings_in(body, strict=True), [])
 
+    def test_rule_15_has_a_six_character_floor(self):
+        """The OTHER limit, and the one the note used to leave out.
+
+        `_citable_strings_in` never tests a delimited run shorter than `CITABLE_QUOTE_MIN`, so an
+        excepted file may quote a short value the corpus holds and still pass. `M` and `Name` are
+        not hypothetical: both were added to the pinned corpus on 2026-09-20 by the change that
+        named the Event List's column headers. `Position`, from the same change and one character
+        over the floor, is the control -- without it this case would pass on a scanner that found
+        nothing at all.
+        """
+        floor = self.guard.CITABLE_QUOTE_MIN
+        for short in ("M", "Name"):
+            self.assertLess(len(short), floor, short)
+            body = json.dumps({"note": short})
+            self.assertEqual(self.guard._citable_strings_in(body, strict=True), [], short)
+        over = json.dumps({"note": "Position"})
+        self.assertEqual(self.guard._citable_strings_in(over, strict=True), ["Position"])
+
+    def test_the_floor_is_not_movable_for_this_list(self):
+        """Why the answer to the case above is prose and not a smaller number.
+
+        At a floor of one, every file on the exception list is refused for its own schema key --
+        `note`, which Logic ships as a value. Lowering the floor would not tighten rule 15; it
+        would empty the list.
+        """
+        import unittest.mock
+        expected = sorted(self.guard.logic_facing_exceptions())
+        self.assertTrue(expected, "the exception list is empty, so this case proves nothing")
+        refused = []
+        with unittest.mock.patch.object(self.guard, "CITABLE_QUOTE_MIN", 1):
+            for rel in expected:
+                with open(os.path.join(REPO, rel), encoding="utf-8") as handle:
+                    body = handle.read()
+                if self.guard._citable_strings_in(body, strict=True):
+                    refused.append(rel)
+        self.assertEqual(refused, expected)
+
     def test_livekit_swift_is_scanned(self):
         """`Scripts/livekit` holds Swift that matches Logic and was not looked at."""
         self.assertIn(os.path.join("Scripts", "livekit"), self.guard.SWIFT_ROOTS)
