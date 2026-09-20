@@ -1086,9 +1086,16 @@ extension AccessibilityChannel {
         } else {
             dialogFailureReconciler = { preLeafWindowSnapshotPath in
                 // A timeout without the child-written pre-leaf snapshot cannot establish that any
-                // currently matching modal belongs to this run. Do not launch a cleanup script
-                // that could cancel a user's already-open dialog.
-                guard let preLeafWindowSnapshotPath else { return false }
+                // currently matching modal belongs to this run, so the DIALOG side of cleanup stays
+                // withheld -- it could cancel a user's already-open dialog. The MENU side does not
+                // have that ownership problem: `observeAndClearStrayGoToPositionUI` always runs its
+                // observation-gated menu-only Escape loop regardless of the snapshot, because
+                // `menuEscapeFocusState` reads Logic's own menu bar fresh and Escapes only what THIS
+                // read finds open. #921 follow-up (RV-1): the forced revalidation pass opens Logic's
+                // top-level menu before the snapshot is ever written (that write is the last step of
+                // the disabled branch), so a timeout during that pass used to hit `guard let
+                // preLeafWindowSnapshotPath else { return false }` here and skip cleanup entirely --
+                // leaving the menu open and every later AppleEvent wedged behind it.
                 return await observeAndClearStrayGoToPositionUI(
                     preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
                     executeScript: { script, timeout in
@@ -1363,11 +1370,15 @@ extension AccessibilityChannel {
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
-        -- `knownOpen` says whether THIS run has issued its resolved leaf. Before that boundary,
-        -- UNREADABLE returns without Escape because unknown focus might be an unrelated dialog/edit;
-        -- the caller must refuse rather than treating the missing read as clean. After this run
-        -- clicked, an unreadable read is not permission to skip Escape, because this run may leave
-        -- its own menu chain up.
+        -- `knownOpen` says whether THIS run has itself confirmed opening some part of the menu
+        -- chain -- either by issuing its resolved leaf (the entry-cleanup and post-actuation
+        -- callers), or, for the #921 forced revalidation pass, by observing `selected` of the
+        -- top-level menu bar item go true after this run's own click (the `dismissOpenMenu(_,
+        -- revalidated)` caller, which runs before any leaf and before a dialog is ever considered).
+        -- Before that boundary, UNREADABLE returns without Escape because unknown focus might be an
+        -- unrelated dialog/edit; the caller must refuse rather than treating the missing read as
+        -- clean. After this run confirmed it opened something, an unreadable read is not permission
+        -- to skip Escape, because this run may leave its own menu chain up.
         on dismissOpenMenu(theProcess, knownOpen)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
@@ -1755,26 +1766,43 @@ extension AccessibilityChannel {
                     set revalidated to false
                     try
                         click menu bar item barName of menu bar 1
+                        -- The click statement above is what actuates the menu; a later throw (the
+                        -- `selected` read, the re-read, or cleanup) must not erase that this run
+                        -- issued it. #921 follow-up (RV-3): this used to stay false all the way to
+                        -- MENU_DISABLED/MENU_VALIDATION_UNREADABLE, so both sentinels reported
+                        -- `menu_actuation_attempted: false` even though this exact click had just run.
+                        set menuActuationAttempted to true
                         delay 0.1
                         if selected of menu bar item barName of menu bar 1 then set revalidated to true
                     end try
+                    -- Distinct from `revalidated`: that only says the menu was observed open.
+                    -- `freshReadingTaken` says a NEW `enabled` value was actually obtained. #921
+                    -- follow-up (RV-2): AppleScript's `try...end try` with no `on error` handler
+                    -- leaves an assigned variable at its prior value when the assignment throws, so
+                    -- a swallowed re-read error used to leave `menuItemEnabled` sitting at the
+                    -- original STALE `false` -- and the branch below reported that as a fresh
+                    -- `MENU_DISABLED` reading it never obtained.
+                    set freshReadingTaken to false
                     if revalidated then
                         try
                             set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
+                            set freshReadingTaken to true
                         end try
                     end if
                     set cleanupState to my dismissOpenMenu(logicProcess, revalidated)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
-                    if menuItemEnabled then
+                    if freshReadingTaken and menuItemEnabled then
                         -- The forced pass revalidated the leaf as actuatable; continue below as if
                         -- the original read had already said so.
-                    else if revalidated then
+                    else if freshReadingTaken then
                         return "MENU_DISABLED"
                     else
-                        -- The menu never opened, so nothing was validated. An unreadable revalidation
-                        -- must not be reported as a leaf-disabled reading -- see menuItemEnabledForActuation.
+                        -- The forced pass produced no reading -- either the menu was never observed
+                        -- open, or it was and the re-read itself failed -- so nothing was validated.
+                        -- Neither case may be reported as a leaf-disabled reading: see RV-2 above and
+                        -- menuItemEnabledForActuation for the same "unreadable is not absent" shape.
                         return "MENU_VALIDATION_UNREADABLE"
                     end if
                 end if
@@ -2362,10 +2390,22 @@ extension AccessibilityChannel {
         }
 
         var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
-            if case let .failure(.menuCouldNotBeClosed(writeAttempted)) = self {
+            switch self {
+            case .failure(.menuDisabled), .failure(.menuValidationUnreadable):
+                // #921 follow-up (RV-3): both sentinels are returned only from inside the forced
+                // revalidation pass's `if not menuItemEnabled then` branch, and that branch always
+                // issues its own top-level-menu click before either exit is reachable -- there is
+                // no path to either literal string that skips it. Hardcoding `true` here (rather
+                // than threading a written flag through the return string) is exact, not a guess:
+                // a fresh-disabled or unreadable-revalidation result that definitely clicked and
+                // observed the menu used to report `menu_actuation_attempted: false` because this
+                // property never looked at these two cases at all.
+                return true
+            case let .failure(.menuCouldNotBeClosed(writeAttempted)):
                 return writeAttempted
+            default:
+                return false
             }
-            return false
         }
     }
 
@@ -2595,9 +2635,17 @@ extension AccessibilityChannel {
 
     /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
     /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
-    /// while the dialog remains on screen.
+    /// while the dialog remains on screen -- that ordering is unchanged whenever a snapshot exists.
+    ///
+    /// `preLeafWindowSnapshotPath` is `nil` when the child died before ever writing it -- which,
+    /// since #921, includes a timeout during the forced revalidation pass, which opens Logic's own
+    /// top-level menu before the leaf click that would have produced this snapshot. Ownership of any
+    /// DIALOG cannot be established without the snapshot, so that half stays withheld exactly as
+    /// before. But the MENU-only recovery below has no such ownership problem -- it Escapes only what
+    /// THIS run's own `menuEscapeFocusState` read finds open -- so a `nil` path now skips straight to
+    /// it instead of refusing every cleanup outright.
     private static func observeAndClearStrayGoToPositionUI(
-        preLeafWindowSnapshotPath: String,
+        preLeafWindowSnapshotPath: String?,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
     ) async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()
@@ -2804,12 +2852,18 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
-                    set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath)")
-                    if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"
-                    set preLeafGoToPositionDialogCount to item 1 of preLeafWindowSnapshot
-                    set preLeafGoToPositionWindowCount to item 2 of preLeafWindowSnapshot
-                    set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
+                    -- #921 follow-up (RV-1): the dialog half needs the snapshot to establish
+                    -- ownership and is skipped entirely without one -- this `if` is the only change
+                    -- from before; the dialog-then-menu sequencing inside it is untouched. A `nil`
+                    -- Swift-side path renders as "" here, so this reads as `if false then ...`.
+                    if "\(preLeafWindowSnapshotPath ?? "")" is not "" then
+                        set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath ?? "")")
+                        if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                        set preLeafGoToPositionDialogCount to item 1 of preLeafWindowSnapshot
+                        set preLeafGoToPositionWindowCount to item 2 of preLeafWindowSnapshot
+                        set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)
+                        if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
+                    end if
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)
                         if menuFocusState is "CLOSED" then return "CLOSED"
