@@ -1080,26 +1080,13 @@ extension AccessibilityChannel {
         // Reconciliation is part of the same injected runtime as dialog execution. Otherwise a
         // fake runtime that omits this optional test seam can launch live osascript while cleaning
         // up a deliberately failed fixture.
-        let dialogFailureReconciler: @Sendable (String?) async -> Bool
+        let dialogFailureReconciler: @Sendable (DialogFailureReconciliation) async -> Bool
         if let reconcileAfterDialogExecutionFailure {
             dialogFailureReconciler = { _ in await reconcileAfterDialogExecutionFailure() }
         } else {
-            dialogFailureReconciler = { preLeafWindowSnapshotPath in
-                // A timeout without the child-written pre-leaf snapshot cannot establish that any
-                // currently matching modal belongs to this run, so the DIALOG side of cleanup stays
-                // withheld -- it could cancel a user's already-open dialog. The MENU side deliberately
-                // has no corresponding ownership gate: the entry guard already applies this route's
-                // policy to a pre-existing open menu via `dismissOpenMenu(..., false)`. The reconciler
-                // applies that same policy only after a fresh read establishes Logic is frontmost and a
-                // menu is open. This is acceptable because reaching this route already requires that
-                // any observed open menu be cleared before another position actuation. #921 follow-up
-                // (RV-1): the forced revalidation pass opens Logic's top-level menu before the snapshot
-                // is ever written. The disabled branch ends before the snapshot is persisted, which
-                // happens after the dialog and total-window observations; a timeout anywhere in that
-                // interval used to take the old early snapshot guard here and skip cleanup entirely --
-                // leaving the menu open and every later AppleEvent wedged behind it.
+            dialogFailureReconciler = { reconciliation in
                 return await observeAndClearStrayGoToPositionUI(
-                    preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
+                    reconciliation: reconciliation,
                     executeScript: { script, timeout in
                         await runtime.executeAppleScriptWithTimeout(script, timeout)
                     }
@@ -2521,10 +2508,19 @@ extension AccessibilityChannel {
         case failed(GotoPositionDialogResultClassification)
     }
 
+    /// The absence of a path is not one state. A known pre-leaf refusal may use menu-only
+    /// reconciliation; a dead child without a readable snapshot must first observe whether a Go To
+    /// Position dialog remains, but cannot safely cancel an unowned one.
+    private enum DialogFailureReconciliation: Sendable {
+        case provablyPreLeaf
+        case snapshot(path: String)
+        case unknown
+    }
+
     private static func gotoPositionViaDialog(
         position: String,
         executeScript: @escaping @Sendable (String) async -> ChannelResult,
-        reconcileAfterExecutionFailure: @escaping @Sendable (String?) async -> Bool,
+        reconcileAfterExecutionFailure: @escaping @Sendable (DialogFailureReconciliation) async -> Bool,
         createIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger?
     ) async -> GotoPositionDialogRouteResult {
         let ledger = createIssuanceLedger()
@@ -2565,10 +2561,10 @@ extension AccessibilityChannel {
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
                     // Every `MENU_PICK_FAILED: menu cleanup was not observed` refusal is emitted
-                    // before the leaf click, so this run cannot own a Go To Position dialog. Pass
-                    // no snapshot to take the menu-only reconciliation path; using the READY
-                    // pre-leaf snapshot here would let the dialog half swallow the needed Escape.
-                    _ = await reconcileAfterExecutionFailure(nil)
+                    // before the leaf click, so this run cannot own a Go To Position dialog.
+                    // Using its READY snapshot here would let the dialog half swallow the needed
+                    // Escape, so this is explicitly the menu-only case rather than a missing path.
+                    _ = await reconcileAfterExecutionFailure(.provablyPreLeaf)
                 }
                 return .failed(classification)
             }
@@ -2577,9 +2573,13 @@ extension AccessibilityChannel {
             // child may have crossed a UI boundary, and a failed reconciliation is never evidence
             // that a dead child left no modal/menu behind.
             let issuance = ledger?.stage ?? .unknown
-            let cleanupObservedClosed = await reconcileAfterExecutionFailure(
-                ledger?.preLeafWindowSnapshotPath
-            )
+            let reconciliation: DialogFailureReconciliation
+            if let snapshotPath = ledger?.preLeafWindowSnapshotPath {
+                reconciliation = .snapshot(path: snapshotPath)
+            } else {
+                reconciliation = .unknown
+            }
+            let cleanupObservedClosed = await reconcileAfterExecutionFailure(reconciliation)
             return .failed(.failure(.executionFailed(
                 issuance: issuance,
                 cleanupObservedClosed: cleanupObservedClosed
@@ -2671,23 +2671,27 @@ extension AccessibilityChannel {
     }
 
     /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
-    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
-    /// while the dialog remains on screen -- that ordering is unchanged whenever a snapshot exists.
-    ///
-    /// `preLeafWindowSnapshotPath` is `nil` when the child died before ever writing it -- which,
-    /// since #921, includes a timeout during the forced revalidation pass, which opens Logic's own
-    /// top-level menu before the leaf click that would have produced this snapshot. Ownership of any
-    /// DIALOG cannot be established without the snapshot, so that half stays withheld exactly as
-    /// before. The MENU-only recovery is intentionally not ownership-gated: the entry guard already
-    /// uses `dismissOpenMenu(..., false)` to clear a freshly observed pre-existing open menu. This
-    /// recovery applies that same route policy only after its own fresh frontmost/menu observation,
-    /// which is acceptable because another position actuation is blocked until the observed menu is
-    /// closed. A `nil` path therefore skips straight to the menu loop instead of refusing every
-    /// cleanup outright.
+    /// not describe a modal dialog, so a post-timeout `CLOSED` menu cannot authorise another route
+    /// while an unobserved dialog remains on screen. A READY snapshot permits owned-dialog cleanup;
+    /// an unknown snapshot state only observes and refuses if a dialog is present; the separate
+    /// provably-pre-leaf state is the sole menu-only path.
     private static func observeAndClearStrayGoToPositionUI(
-        preLeafWindowSnapshotPath: String?,
+        reconciliation: DialogFailureReconciliation,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
     ) async -> StrayGoToPositionUIOutcome {
+        let preLeafWindowSnapshotPath: String?
+        let requiresUnownedDialogObservation: Bool
+        switch reconciliation {
+        case .provablyPreLeaf:
+            preLeafWindowSnapshotPath = nil
+            requiresUnownedDialogObservation = false
+        case let .snapshot(path):
+            preLeafWindowSnapshotPath = path
+            requiresUnownedDialogObservation = false
+        case .unknown:
+            preLeafWindowSnapshotPath = nil
+            requiresUnownedDialogObservation = true
+        }
         let target = LogicProTarget.appleScriptTarget()
         // #892: the localized Cancel of this modal, resolved from AXLocalePolicy.cancelButton
         // rather than from three literals. The three were `Cancel`, `취소` and `キャンセル`, so a
@@ -2892,12 +2896,9 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
-                    -- #921 follow-up (RV-1): the dialog half needs the snapshot to establish
-                    -- ownership and is skipped entirely without one. The menu loop below is
-                    -- intentionally not ownership-gated: it follows the same fresh-observation
-                    -- policy as entry cleanup, which clears a pre-existing observed open menu before
-                    -- this route may actuate anything. A `nil` Swift-side path renders as "" here,
-                    -- so this reads as `if false then ...`.
+                    -- A READY snapshot establishes ownership for the dialog half. Without one, an
+                    -- unknown dead-child state must still observe for an exact Go To Position dialog
+                    -- before a menu-only CLOSED can be believed; it cannot cancel that unowned dialog.
                     if "\(preLeafWindowSnapshotPath ?? "")" is not "" then
                         set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath ?? "")")
                         if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"
@@ -2905,6 +2906,11 @@ extension AccessibilityChannel {
                         set preLeafGoToPositionWindowCount to item 2 of preLeafWindowSnapshot
                         set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)
                         if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
+                    end if
+                    if \(requiresUnownedDialogObservation) then
+                        set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)
+                        if unownedGoToPositionDialogCount is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                        if unownedGoToPositionDialogCount is greater than 0 then return "DIALOG_UNIDENTIFIED"
                     end if
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)
