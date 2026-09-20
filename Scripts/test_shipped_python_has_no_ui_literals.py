@@ -80,6 +80,26 @@ def main() -> int:
     check("an installer that ships no helper is refused", rc == 1, f"exit {rc}: {out[:200]}")
     check("and says the expectation would be empty", "nothing to check" in out, out[:200])
 
+    # THE LENGTH FLOOR. It was four, chosen by reasoning rather than by counting, and it dropped
+    # `OK`, `Off` and every three-letter label Logic ships in any language -- a blind spot two
+    # characters wide in the direction that hides a finding. Measured before lowering it to two:
+    # across every shipped helper, exactly ONE literal of length two or three is a value Apple
+    # ships anywhere, and it is the `...` truncation marker.
+    rc, out = run('CONFIRM = "OK"\n')
+    check("a two-character label Apple ships is a finding", rc == 1, f"exit {rc}: {out[:200]}")
+
+    # The control for it, and it must pass for the right reason: `qz` is in no corpus.
+    rc, out = run('CODE = "qz"\n')
+    check("a two-character string Apple ships nowhere is not a finding", rc == 0,
+          f"exit {rc}: {out[:200]}")
+
+    # The one exemption the measurement bought, and it is scoped to its expression like the rest.
+    rc, out = run('detail = detail[:237] + "..."\n')
+    check("the truncation marker is exempt in the expression that builds it", rc == 0,
+          f"exit {rc}: {out[:200]}")
+    rc, out = run('LABEL = "..."\n')
+    check("and the same literal elsewhere is not exempt", rc == 1, f"exit {rc}: {out[:200]}")
+
     # The real tree.
     proc = subprocess.run([sys.executable, GUARD], capture_output=True, text=True)
     check("the repository's own shipped helpers pass", proc.returncode == 0,
@@ -89,7 +109,7 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL {failure}")
         return 1
-    print("13 case(s) pass: a helper the installer ships cannot spell Logic's interface itself")
+    print("17 case(s) pass: a helper the installer ships cannot spell Logic's interface itself")
     return 0
 
 
