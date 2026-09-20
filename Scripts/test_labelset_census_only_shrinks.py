@@ -78,6 +78,77 @@ case("and it accepts the repository as it stands", _r.returncode == 0,
      (_r.stdout + _r.stderr).strip()[:200])
 case("reporting how many of how many", "of 195" in _r.stdout, _r.stdout.strip()[:200])
 
+# (5) THE PARSER. A declaration that closes on the same line as its last argument was invisible to
+#     this guard's own regex reader: the span it examined ran on into a LATER declaration and found
+#     THAT one's `derivedFrom:`. Three real LabelSets sat in the blind spot.
+same_line = policy.replace(anchor, (
+    '    static let fixtureClosesOnOneLine = LabelSet(canonical: "Fixture", variants: [],\n'
+    '        rationale: "closes on the same line as its last argument")\n\n' + anchor), 1)
+same_line_path = os.path.join(tmp, "policy-closing-on-one-line.swift")
+with open(same_line_path, "w", encoding="utf-8") as handle:
+    handle.write(same_line)
+_r = run(LPM_POLICY_SWIFT=same_line_path)
+case("a declaration closing on one line is SEEN, not skipped", _r.returncode == 1,
+     (_r.stdout + _r.stderr).strip()[:200])
+case("and the refusal names it", "fixtureClosesOnOneLine" in _r.stderr, _r.stderr.strip()[:200])
+
+# (6) An unreadable declaration must stop the run. A parser that skips one reports clean over it,
+#     which is the whole mechanism of the defect above.
+broken = policy.replace(anchor, (
+    '    static let fixtureUnbalanced = LabelSet(canonical: "Fixture", variants: [,\n\n' + anchor), 1)
+broken_path = os.path.join(tmp, "policy-unreadable.swift")
+with open(broken_path, "w", encoding="utf-8") as handle:
+    handle.write(broken)
+_r = run(LPM_POLICY_SWIFT=broken_path)
+case("a declaration the parser cannot read stops the run", _r.returncode != 0,
+     (_r.stdout + _r.stderr).strip()[:200])
+
+# (7) A census short of the tree is refused -- the completeness half, at a REAL entry rather than
+#     a planted one, so the two halves are shown to disagree about the same names.
+short = json.loads(json.dumps(census))
+del short["undeclared"]["fixtureNotInThePolicy"]
+first_real = sorted(short["undeclared"])[0]
+del short["undeclared"][first_real]
+short_path = os.path.join(tmp, "census-short-by-one.json")
+with open(short_path, "w", encoding="utf-8") as handle:
+    json.dump(short, handle, ensure_ascii=False, indent=2)
+_r = run(LPM_LABELSET_CENSUS=short_path)
+case("a census missing a real undeclared set is refused", _r.returncode == 1,
+     (_r.stdout + _r.stderr).strip()[:200])
+case("and it names the one that is missing", first_real in _r.stderr, _r.stderr.strip()[:200])
+
+# (8) GROWTH. This repository's census IS the grown one: three names added today for sets that
+#     named no row at the base too. The control at (4) proves it passes; this pins WHY, so a rule
+#     that starts accepting it for the wrong reason is visible.
+_r = run()
+case("growth that is the census catching up is accepted and SAID",
+     _r.returncode == 0 and "already named no row at the base" in _r.stdout,
+     (_r.stdout + _r.stderr).strip()[:200])
+
+# (9) GROWTH, refused. A set that did not exist at the base, planted in the policy AND written into
+#     the census -- which is the move the ratchet exists to stop: a new LabelSet with no row, filed
+#     under "legacy". The completeness half would pass this one; only the base comparison refuses.
+grown_census = json.loads(json.dumps(census))
+del grown_census["undeclared"]["fixtureNotInThePolicy"]
+grown_census["undeclared"]["fixtureNamesNoRow"] = {
+    "verdict": "no-row", "candidate": "0 candidate(s)", "members": 1}
+grown_path = os.path.join(tmp, "census-with-a-new-set.json")
+with open(grown_path, "w", encoding="utf-8") as handle:
+    json.dump(grown_census, handle, ensure_ascii=False, indent=2)
+base_policy_path = os.path.join(tmp, "policy-at-the-base.swift")
+with open(base_policy_path, "w", encoding="utf-8") as handle:
+    handle.write(policy)  # the base does not carry the planted set
+base_census_path = os.path.join(tmp, "census-at-the-base.json")
+with open(base_census_path, "w", encoding="utf-8") as handle:
+    json.dump({"undeclared": {k: v for k, v in census["undeclared"].items()
+                              if k != "fixtureNotInThePolicy"}}, handle, ensure_ascii=False)
+_r = run(LPM_POLICY_SWIFT=planted_path, LPM_LABELSET_CENSUS=grown_path,
+         LPM_LABELSET_BASE_POLICY=base_policy_path, LPM_LABELSET_BASE_JSON=base_census_path)
+case("a NEW set filed in the census is refused", _r.returncode == 1,
+     (_r.stdout + _r.stderr).strip()[:200])
+case("and the refusal says it did not exist at the base",
+     "fixtureNamesNoRow" in _r.stderr and "at the base" in _r.stderr, _r.stderr.strip()[:300])
+
 print()
 print(f"FAILED ({failed} unexpected)" if failed
       else "all cases behaved: the census is complete, and it can only shrink")
