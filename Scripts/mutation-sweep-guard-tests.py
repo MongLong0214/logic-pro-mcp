@@ -31,7 +31,8 @@ fourth sat open -- and a test blind to it cannot see a wiring regression in its 
 Usage:
   mutation-sweep-guard-tests.py            # every guard with a covering test
   mutation-sweep-guard-tests.py --fast     # skip the two guards whose tests take over a minute
-  mutation-sweep-guard-tests.py NAME ...   # only these guards
+  mutation-sweep-guard-tests.py NAME ...   # only these guards, slow or not
+  mutation-sweep-guard-tests.py --dry-run  # what it would measure, and what it would leave out
 
 Exit 0 whatever it finds: this MEASURES, it does not gate. The gate is
 `docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`, which the merge-base ratchet holds to shrinking.
@@ -46,14 +47,29 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#: Their tests are 76s and 40s here, and neither is in question -- the review's deeper cut showed
-#: both catching a permissive decision function. `--fast` skips them so the sweep is a minute.
+#: Their tests are 76s and 40s here. `--fast` skips them so the sweep is a minute -- and says so,
+#: because a run that quietly leaves two guards out of its denominator is reporting a number for a
+#: set it chose. Measured full on 2026-09-20: both `caught`, each by its own self-test.
 SLOW = {"check-canon-citations.py", "check-policy-literals-against-canon.py"}
 
 _spec = importlib.util.spec_from_file_location(
     "guards_have_self_tests", os.path.join(REPO, "Scripts", "check-guards-have-self-tests.py"))
 _cov = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_cov)
+
+
+def select_targets(covered: dict, only: set, fast: bool) -> tuple:
+    """(what to sweep, what `--fast` left out). Sorted, so a run is reproducible.
+
+    A guard NAMED on the command line is swept even under `--fast`. Asking for one of the two slow
+    guards used to produce an empty target list and `no guards to sweep` on exit 0 -- an answer
+    that looks like "nothing to do" to the one question it was asked.
+    """
+    wanted = sorted(g for g in covered if not only or g in only)
+    if not fast:
+        return (wanted, [])
+    skipped = [g for g in wanted if g in SLOW and g not in only]
+    return ([g for g in wanted if g not in skipped], skipped)
 
 
 def neuter(path: str) -> bool:
@@ -75,6 +91,11 @@ def neuter(path: str) -> bool:
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     fast = "--fast" in argv
+    # `--dry-run` answers "what would this measure, and what would it leave out" without paying for
+    # the sweep. It exists because the omission note is the part that can be wrong: a case proving
+    # the ENTRY POINT names what it skipped would otherwise have to run the whole sweep to read one
+    # line of output.
+    dry_run = "--dry-run" in argv
     only = {a for a in argv if not a.startswith("--")}
 
     covered = {}
@@ -82,8 +103,16 @@ def main(argv=None) -> int:
     for guard, tests in covered_map.items():
         if tests and guard.endswith(".py"):
             covered[guard] = tests
-    targets = sorted(g for g in covered
-                     if (not only or g in only) and not (fast and g in SLOW))
+    targets, skipped = select_targets(covered, only, fast)
+    if skipped:
+        # Named, not counted away. `--fast` used to drop these from the target list and then report
+        # "N of M guard(s)" over the set it had chosen, so the two slowest guards in the repository
+        # were absent from the measurement and from the sentence describing it.
+        print(f"--fast: {len(skipped)} guard(s) NOT MEASURED in this run "
+              f"({', '.join(skipped)}). Run without --fast to include them.")
+    if dry_run:
+        print(f"would sweep {len(targets)} guard(s): {', '.join(targets) or 'none'}")
+        return 0
     if not targets:
         print("no guards to sweep", file=sys.stderr)
         return 0
@@ -158,7 +187,9 @@ def main(argv=None) -> int:
                            capture_output=True)
 
     print(f"\n{len(caught)} of {len(caught) + len(blind)} guard(s) have a test that notices the "
-          f"gate being removed.")
+          f"gate being removed."
+          + (f" {len(skipped)} more were skipped as slow and are UNMEASURED here: "
+             f"{', '.join(skipped)}." if skipped else ""))
     if broken:
         print(f"{len(broken)} could not be mutated: " + ", ".join(g for g, _ in broken))
     if blind:
