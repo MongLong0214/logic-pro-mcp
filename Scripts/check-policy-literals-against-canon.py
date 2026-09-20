@@ -390,6 +390,17 @@ def verify_buckets_offline(committed: dict) -> list:
                for source, block in (manifest.get("sources") or {}).items()
                for locale in (block.get("locales") or [])]
     problems = []
+    # Once, not per literal: the composition rule below is switched off when its evidence cannot be
+    # read, and a rule that is not applied has to say so where somebody is stopped -- in the exit
+    # code -- rather than on stderr beside a zero.
+    absent_evidence = _composition_evidence_missing()
+    if absent_evidence and any(where == "composed_value" for where in committed.values()):
+        problems.append(
+            f"{', '.join(absent_evidence)} absent, so whether a `composed_value` is witnessed or "
+            f"declared cannot be answered. That rule covers "
+            f"{sum(1 for where in committed.values() if where == 'composed_value')} literal(s) "
+            f"here and is NOT APPLIED -- which is a broken tree, not a clean one. Restore what is "
+            f"missing, or this guard is passing them unchecked.")
     for literal, where in sorted(committed.items()):
         present = set()
         for source, locale in corpora:
@@ -414,7 +425,7 @@ def verify_buckets_offline(committed: dict) -> list:
             problems.append(
                 f"{literal!r} is classified `composed_value` and no committed template composes "
                 f"it from a string Apple ships. The classification is false.")
-        elif (where == "composed_value" and _composition_evidence_is_readable()
+        elif (where == "composed_value" and not _composition_evidence_missing()
               and not _composition_is_accounted_for(literal)):
             problems.append(
                 f"{literal!r} is classified `composed_value` on DECOMPOSABILITY alone: a committed "
@@ -432,17 +443,20 @@ def verify_buckets_offline(committed: dict) -> list:
 
 
 @functools.lru_cache(maxsize=1)
-def _composition_evidence_is_readable() -> bool:
-    """Whether the two things that can account for a composition are even present.
+def _composition_evidence_missing() -> tuple:
+    """What the composition rule needs to read and cannot find. Empty means it can be applied.
 
-    A tree with no `docs/observations/` and no `LABELSETS-WITHOUT-A-ROW.json` cannot witness or
-    declare anything, and reporting every `composed_value` literal as unaccounted there is refusing
-    for lack of evidence rather than because of it. The self-test builds exactly such a fixture --
-    Scripts and a classification and nothing else -- and the first version of this rule turned its
-    fifteen legitimate literals into fifteen findings.
+    This ABSTAINED until 2026-09-20 -- it printed a note to stderr, returned False, and the run
+    exited 0 with one rule silently not applied. The reasoning was a fixture: the self-test used to
+    build a tree of Scripts and a classification and nothing else, and reporting its fifteen
+    legitimate literals as unaccounted would have been refusing for lack of evidence rather than
+    because of it.
 
-    Absence of the ARTIFACTS abstains, once, loudly. Artifacts that are present and do not name the
-    literal refuse. That is the same distinction `CANNOT DETERMINE` makes elsewhere here.
+    That fixture no longer exists. The self-test copies the whole of `docs/canon`, the whole of
+    `docs/observations` and both readers, "because a fixture that is a subset of what the guard
+    reads tests nothing" -- its own words. So the only tree that reaches this now is one where an
+    artifact this repository ships has GONE, and a note on stderr beside exit 0 is how that goes
+    unnoticed. The note was the only thing that would have told anybody; it is a refusal now.
     """
     missing = []
     if not os.path.isdir(os.path.join(REPO, "docs", "observations")):
@@ -457,11 +471,7 @@ def _composition_evidence_is_readable() -> bool:
     for name in ("check-canon-citations.py", "check-labelsets-are-derived.py"):
         if not os.path.exists(os.path.join(REPO, "Scripts", name)):
             missing.append(f"Scripts/{name}")
-    if missing:
-        print(f"note: {', '.join(missing)} absent, so whether a `composed_value` is witnessed or "
-              f"declared cannot be answered here. That rule is not applied.", file=sys.stderr)
-        return False
-    return True
+    return tuple(missing)
 
 
 def _composition_is_accounted_for(literal: str) -> bool:
