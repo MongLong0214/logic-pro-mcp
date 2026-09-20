@@ -323,5 +323,60 @@ class ComposedLiteralsAreNotNowhere(unittest.TestCase):
         self.assertFalse(guard._composition_is_accounted_for("트랙 보기"))
 
 
+class MissingEvidenceIsRefused(unittest.TestCase):
+    """A rule that cannot be applied must stop somebody, not print a note beside exit 0.
+
+    The composition rule needs `docs/observations/`, `LABELSETS-WITHOUT-A-ROW.json` and two readers.
+    When one was gone it printed a note to stderr and the run exited 0 with fifteen literals
+    unchecked -- recorded as a limit and closed here.
+    """
+
+    def _tree(self, omit):
+        import shutil
+        root = tempfile.mkdtemp(prefix="policy-canon-missing-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        os.makedirs(os.path.join(root, "Scripts"))
+        os.makedirs(os.path.join(root, "docs"))
+        shutil.copytree(os.path.join(REPO, "docs", "canon"), os.path.join(root, "docs", "canon"))
+        shutil.copytree(os.path.join(REPO, "docs", "observations"),
+                        os.path.join(root, "docs", "observations"))
+        for name in ("logic_canon.py", "nibarchive.py",
+                     "check-policy-literals-against-canon.py",
+                     "check-canon-citations.py", "check-labelsets-are-derived.py"):
+            shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
+        for path in guard.swift_sources():
+            target = os.path.join(root, os.path.relpath(path, REPO))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copy2(path, target)
+        if omit:
+            victim = os.path.join(root, omit)
+            shutil.rmtree(victim) if os.path.isdir(victim) else os.remove(victim)
+        return subprocess.run(
+            [sys.executable, os.path.join(root, "Scripts",
+                                          "check-policy-literals-against-canon.py")],
+            capture_output=True, text=True)
+
+    def test_a_tree_carrying_everything_passes(self):
+        """The control. Without it every case below passes on a guard that refuses every tree."""
+        proc = self._tree(omit=None)
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-400:])
+
+    def test_losing_the_observations_is_refused(self):
+        proc = self._tree(omit="docs/observations")
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
+        self.assertIn("NOT APPLIED", proc.stdout + proc.stderr)
+
+    def test_losing_the_labelset_declarations_is_refused(self):
+        proc = self._tree(omit="docs/canon/LABELSETS-WITHOUT-A-ROW.json")
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
+        self.assertIn("LABELSETS-WITHOUT-A-ROW.json", proc.stdout + proc.stderr)
+
+    def test_losing_a_reader_is_refused(self):
+        """"I could not read it" is not "it says no" -- but it is not "fine" either."""
+        proc = self._tree(omit="Scripts/check-labelsets-are-derived.py")
+        self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
+        self.assertIn("NOT APPLIED", proc.stdout + proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
