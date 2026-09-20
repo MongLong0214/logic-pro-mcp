@@ -1,0 +1,7 @@
+Limit: The full sweep is still nobody's gate. No workflow runs this tool, so what it measures is true of the day somebody ran it. The ratchet on GUARD-TESTS-BLIND-TO-THEIR-GUARD.json is the gate, and it only holds the number from growing.
+Ruled-out: Removing --fast so every run is complete | the two slow tests are 76s and 40s, and a minute-long sweep is the one people run while working; making it honest costs nothing, making it slow costs the habit.
+Warn: SLOW is a list of file names. `test_the_slow_set_names_guards_that_exist` pins that they exist, because a skip list keyed to a renamed file skips nothing and still says it skipped two.
+Blast: module
+Record-Id: r-fastsaysso
+Provenance: inherited f28f3badf28df3e9bb122018d0b51c3d6e1056e3
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
