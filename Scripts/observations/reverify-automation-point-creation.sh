@@ -1,6 +1,6 @@
 #!/bin/bash
 # Re-run the measurement behind
-# docs/observations/2026-09-21-the-submenu-leaf-registers-a-shipped-undo-operation.json.
+# docs/observations/2026-09-21-the-parameter-popup-help-reports-automation-data.json.
 #
 # The script tests the Edit-menu label that Logic registers after it drives the submenu leaf. That
 # label identifies an operation by its shipped name; it does not read automation data or prove a
@@ -30,15 +30,15 @@ resolve() {
 PARENT=$(resolve "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Create%20Track%20Automation#value")
 # resolves to: 리전 경계에 2개의 오토메이션 포인트 생성
 LEAF=$(resolve "logic-canon://quickhelp/QuickHelp/ko/GMM_007_2AutoPointRegionBorders#Title")
-# resolves to: 리전
-REGION=$(resolve "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Region#value")
+# resolves to: MIDI 리전. MIDI 노트 및 컨트롤러 이벤트를 포함합니다. 가운데를 드래그하여 이동하고, 하단 가장자리를 드래그하여 크기를 조정하며, 상단 오른쪽 모서리를 드래그하여 루핑합니다. 도구를 사용하여 그 외의 편집을 수행합니다.
+MIDI_REGION_HELP=$(resolve "logic-canon://quickhelp/QuickHelp/ko/ARR_021_MidiRegion#composed")
 # resolves to: Mix
 MIX=$(resolve "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Mix%23mti#value")
 # resolves to: 편집
 EDIT=$(resolve "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Edit#value")
 # resolves to: 리전 경계에 2개의 트랙 오토메이션 포인트 생성
 UNDO_NAME=$(resolve "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Create%202%20Track%20Automation%20Points%20at%20Region%20Borders%23und#value")
-for pair in "PARENT:$PARENT" "LEAF:$LEAF" "REGION:$REGION" "MIX:$MIX" "EDIT:$EDIT" "UNDO_NAME:$UNDO_NAME"; do
+for pair in "PARENT:$PARENT" "LEAF:$LEAF" "MIDI_REGION_HELP:$MIDI_REGION_HELP" "MIX:$MIX" "EDIT:$EDIT" "UNDO_NAME:$UNDO_NAME"; do
   if [ -z "${pair#*:}" ]; then
     echo "cannot resolve ${pair%%:*} from the pinned canon"; exit 2
   fi
@@ -105,10 +105,12 @@ AS
 }
 
 # This is a read-only AX precondition check. It counts selected AXLayoutItems whose AXHelp contains
-# the canonical Region string, rather than treating a region elsewhere in the project as sufficient.
+# the composed QuickHelp text for a MIDI region, rather than treating a region elsewhere in the
+# project as sufficient. This recognises MIDI regions only: an audio region is reported absent and
+# exits 2, a conservative refusal until an audio-region help key is measured.
 selected_region_count() {
-  osascript - "$REGION" <<'AS' 2>/dev/null
-on selectedRegionCount(containerElement, regionName, depth)
+  osascript - "$MIDI_REGION_HELP" <<'AS' 2>/dev/null
+on selectedRegionCount(containerElement, midiRegionHelp, depth)
   using terms from application "System Events"
     if depth > 24 then return -1
     try
@@ -122,11 +124,11 @@ on selectedRegionCount(containerElement, regionName, depth)
       try
         if role of childElement is "AXLayoutItem" then
           set childHelp to help of childElement
-          if childHelp contains regionName then
+          if childHelp contains midiRegionHelp then
             if selected of childElement then set resultCount to resultCount + 1
           end if
         end if
-        set descendantCount to selectedRegionCount(childElement, regionName, depth + 1)
+        set descendantCount to selectedRegionCount(childElement, midiRegionHelp, depth + 1)
         if descendantCount is -1 then return -1
         set resultCount to resultCount + descendantCount
       on error
@@ -138,12 +140,17 @@ on selectedRegionCount(containerElement, regionName, depth)
 end selectedRegionCount
 
 on run argv
-  set regionName to item 1 of argv
+  set midiRegionHelp to item 1 of argv
   tell application "System Events"
     try
       set logicProcess to first process whose bundle identifier is "com.apple.logic10"
-      set mainWindow to window 1 of logicProcess
-      return my selectedRegionCount(mainWindow, regionName, 0)
+      set resultCount to 0
+      repeat with windowReference in every window of logicProcess
+        set windowCount to my selectedRegionCount(contents of windowReference, midiRegionHelp, 0)
+        if windowCount is -1 then return -1
+        set resultCount to resultCount + windowCount
+      end repeat
+      return resultCount
     on error
       return -1
     end try
@@ -157,10 +164,20 @@ pgrep -x "Logic Pro" >/dev/null || { echo "Logic Pro is not running"; exit 2; }
 undo_once() {
   osascript - "$EDIT" <<'AS' 2>/dev/null
 on run argv
+  set editName to item 1 of argv
   tell application "System Events"
     tell (first process whose bundle identifier is "com.apple.logic10")
-      keystroke "z" using command down
-      delay 0.4
+      click menu bar item editName of menu bar 1
+      delay 0.35
+      set undoItem to menu item 1 of menu 1 of menu bar item editName of menu bar 1
+      if enabled of undoItem then
+        click undoItem
+        delay 0.4
+        return "clicked"
+      end if
+      key code 53
+      delay 0.2
+      return "disabled"
     end tell
   end tell
 end run
@@ -187,9 +204,20 @@ esac
 UNDO_LABEL=${UNDO_TEMPLATE/"%@"/"$UNDO_NAME"}
 names_the_op() { [ "$1" = "$UNDO_LABEL" ]; }
 if names_the_op "$BEFORE"; then
-  undo_once
+  UNDO_RESULT=$(undo_once)
+  case "$UNDO_RESULT" in
+    clicked) ;;
+    disabled)
+      echo "PRECONDITION: the undo menu item is disabled; cannot get a clean start."
+      exit 2
+      ;;
+    *)
+      echo "INSTRUMENT FAILURE: cannot click Logic's undo menu item."
+      exit 3
+      ;;
+  esac
   CLEARED=$(undo_label)
-  [ -n "$CLEARED" ] || { echo "INSTRUMENT FAILURE: cannot read the undo label after Cmd-Z."; exit 3; }
+  [ -n "$CLEARED" ] || { echo "INSTRUMENT FAILURE: cannot read the undo label after clicking Undo."; exit 3; }
   if names_the_op "$CLEARED"; then
     echo "undo_before:   $BEFORE"
     echo "PRECONDITION: the stack still names this operation after one undo; cannot get a clean start."
