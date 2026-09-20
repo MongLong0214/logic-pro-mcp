@@ -1,127 +1,284 @@
 {
-  "what": "Raw readings taken 2026-09-21 on ko-KR Logic Pro 12.3 (6674): whether a menu leaf under Mix > 트랙 오토메이션 생성 creates an automation point, and whether a created point can then be read",
-  "how": "Every line below is a string read back from Logic, not a description of one. The menu rows were read with the menu OPEN so the enabled flags are freshly validated; the undo labels were read from the first item of the 편집 menu; the element census was taken by walking the arrange window from its root to depth 14.",
+  "what": "Raw ko-KR Logic Pro 12.3 (6674) readings from 2026-09-21 for the submenu leaf, its Edit-menu undo label, and a paired arrange-window AX census.",
+  "fixture": {
+    "project": "new",
+    "track_kind": "instrument",
+    "region": {
+      "kind": "midi",
+      "note_count": 3,
+      "start_bar": 1,
+      "end_bar": 3,
+      "verify_source": "ax_region_delta"
+    }
+  },
   "submenu": {
-    "read_with_the_menu_open": true,
     "parent": {
       "title": "트랙 오토메이션 생성",
       "enabled": true,
       "has_globalMenuItemCall_identifier": false
     },
-    "leaves": [
-      { "title": "리전 경계에 1개의 오토메이션 포인트 생성", "enabled": true },
-      { "title": "리전 경계에 2개의 오토메이션 포인트 생성", "enabled": true },
-      { "title": "(separator)", "enabled": false },
-      { "title": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성", "enabled": true },
-      { "title": "볼륨, 패닝, 센드에 대해 각 2개의 오토메이션 포인트 생성", "enabled": true },
-      { "title": "표시된 파라미터에 대해 1개의 오토메이션 포인트 생성", "enabled": false },
-      { "title": "표시된 파라미터에 대해 2개의 오토메이션 포인트 생성", "enabled": false },
-      { "title": "(separator)", "enabled": false },
-      { "title": "메인 출력에 대해 볼륨 페이드 아웃 생성", "enabled": false }
-    ],
-    "menus_open_after": 0
+    "leaf_driven": "리전 경계에 2개의 오토메이션 포인트 생성"
   },
-  "undo_labels": [
-    {
-      "step": "control: the undo-label reader must be able to see a change at all",
-      "action": "logic_tracks create_instrument",
-      "before": "실행 취소할 수 없음",
-      "after": "트랙 생성 실행 취소",
-      "product_envelope": {
-        "state": "A",
-        "menu_clicked": "새로운 소프트웨어 악기 트랙",
-        "observed_track_name": "Deluxe Classic",
-        "track_count_before": 1,
-        "track_count_after": 2,
-        "verified": true
-      }
+  "automation_view_control": {
+    "off": {
+      "total_elements": 711,
+      "automation_value_present": false
     },
-    {
-      "step": "the leaf, driven with NO region on the track",
-      "action": "click 리전 경계에 2개의 오토메이션 포인트 생성",
-      "before": "실행 취소할 수 없음",
-      "after": "실행 취소할 수 없음",
-      "menus_open_after": 0
-    },
-    {
-      "step": "a region is recorded so the leaf's precondition exists",
-      "action": "logic_tracks record_sequence {notes: '60,0,1000,90;64,1000,1000,90;67,2000,2000,90'}",
-      "after": "가져오기 실행 취소",
-      "product_envelope": {
-        "region_kind": "midi",
-        "region_name": "MIDI 리전",
-        "start_bar": 1,
-        "end_bar": 3,
-        "note_count": 3,
-        "recorded_to_track": 2,
-        "target_track_name": "Studio Grand",
-        "method": "smf_import",
-        "verified": true,
-        "verify_source": "ax_region_delta"
-      }
-    },
-    {
-      "step": "the leaf, driven WITH a region present",
-      "action": "click 리전 경계에 2개의 오토메이션 포인트 생성",
-      "before": "가져오기 실행 취소",
-      "after": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
-      "menus_open_after": 0
-    },
-    {
-      "step": "the reverify script's own undo bracket, run afterwards",
-      "action": "Scripts/observations/reverify-automation-point-creation.sh",
-      "undo_at_start": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
-      "undo_cleared": "가져오기 실행 취소",
-      "undo_after": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
-      "menus_open_after": 0,
-      "exit": 0
-    },
-    {
-      "step": "mutation of that script: drive the submenu PARENT instead of the leaf, which is what the 2026-09-15 reading did",
-      "action": "click 트랙 오토메이션 생성",
-      "undo_cleared": "가져오기 실행 취소",
-      "undo_after": "가져오기 실행 취소",
-      "menus_open_after": 1,
-      "exit": 2
+    "on": {
+      "role": "AXCheckBox",
+      "description": "오토메이션 보기/가리기",
+      "value": 1,
+      "total_elements": 719,
+      "automation_value_present": true
     }
-  ],
-  "arrange_census_with_two_points_present": {
-    "automation_view": "on",
-    "total_elements": 543,
-    "depth_limit": 14,
-    "elements_by_role": {
-      "AXButton": 193,
-      "AXCheckBox": 57,
-      "AXStaticText": 55,
-      "AXGroup": 50,
-      "AXTextField": 23,
-      "AXPopUpButton": 23,
-      "AXValueIndicator": 21,
-      "AXSlider": 20,
-      "AXScrollBar": 11,
-      "AXScrollArea": 11,
-      "AXLayoutItem": 11,
-      "AXMenuButton": 10,
-      "AXRow": 10,
-      "AXHandle": 9
-    },
-    "automation_named_elements": 18,
-    "elements_representing_an_automation_point": 0,
-    "AXHandle_descriptions": ["왼쪽 경계 이동", "오른쪽 경계 이동", "루프"],
-    "AXValueIndicator_descriptions": ["fader knob", "재생헤드 썸네일", "시작 마커", "끝 마커", "볼륨", ""]
   },
-  "automation_value_element": {
-    "role": "AXButton",
-    "description": "오토메이션 값",
-    "attribute_names": ["AXEnabled", "AXDescription", "AXParent", "AXSize", "AXFocused", "AXChildren", "AXRole", "AXTopLevelUIElement", "AXHelp", "AXPosition", "AXTitle", "AXWindow", "AXRoleDescription", "AXValue", "AXMinValue", "AXMaxValue", "AXFrame"],
-    "AXValue": 1509949440,
-    "AXMinValue": 0,
-    "AXMaxValue": 2130706432,
-    "AXValue_settable": false,
-    "AXTitle": "<unreadable>",
-    "AXChildren": "<unreadable>",
-    "AXRoleDescription": "버튼",
-    "AXHelp": "오토메이션 값/다듬기 필드. 트랙의 모든 오토메이션을 한 번에 조절하려면 드래그합니다. 포인터를 필드 밖으로 이동하여 재생헤드 위치의 파라미터 값을 봅니다. ",
-    "note": "The 2026-09-15 reading recorded AXValue as ABSENT on this element. It is present here. Nothing in this run establishes which difference produced that -- the automation view being on, the points existing, or something else -- and no control was available to test the number's meaning, because this host has no control surface so mixer.set_volume cannot run and the field is not settable."
+  "paired_arrange_census": {
+    "depth_limit": 14,
+    "tuple": [
+      "role",
+      "subrole",
+      "desc",
+      "title",
+      "roleDesc",
+      "value"
+    ],
+    "states": [
+      {
+        "step": "after driving 리전 경계에 2개의 오토메이션 포인트 생성",
+        "undo_label": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+        "total_elements": 719
+      },
+      {
+        "step": "after Cmd-Z",
+        "undo_label": "가져오기 실행 취소",
+        "total_elements": 719
+      },
+      {
+        "step": "after Cmd-Shift-Z",
+        "undo_label": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+        "total_elements": 719
+      }
+    ],
+    "multiset_diffs": {
+      "after_leaf_minus_undone": 0,
+      "undone_minus_after_leaf": 0,
+      "after_leaf_minus_redone": 0,
+      "redone_minus_after_leaf": 0
+    },
+    "automation_value_readback": {
+      "role": "AXButton",
+      "description": "오토메이션 값",
+      "value": 1509949440,
+      "row_count": 2,
+      "invariant_across": [
+        "after driving the leaf",
+        "after Cmd-Z",
+        "after Cmd-Shift-Z"
+      ]
+    },
+    "automation_named_rows": [
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "title": "",
+        "desc": "읽기, 오토메이션이 활성화됨",
+        "roleDesc": "그룹",
+        "value": null,
+        "help": "",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션",
+        "roleDesc": "체크상자",
+        "value": true,
+        "help": "",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox"
+      },
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "title": "",
+        "desc": "읽기, 오토메이션이 활성화됨",
+        "roleDesc": "그룹",
+        "value": null,
+        "help": "",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션",
+        "roleDesc": "체크상자",
+        "value": true,
+        "help": "",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "AXSegment",
+        "title": "",
+        "desc": "오토메이션 보기/가리기",
+        "roleDesc": "체크상자",
+        "value": 1,
+        "help": "오토메이션 보기/가리기   A",
+        "path": "/AXWindow/AXGroup/AXGroup/AXGroup/AXCheckBox"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 활성화",
+        "roleDesc": "체크상자",
+        "value": 1,
+        "help": "오토메이션 켬/끔 버튼. 해당 트랙의 모든 리전 및 트랙 오토메이션을 켜거나 끕니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXCheckBox"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "",
+        "roleDesc": "버튼",
+        "value": 0,
+        "help": "오토메이션 레인 펼침 화살표. 오토메이션 레인을 보거나 가립니다. 동일한 트랙에 대해 여러 개의 채널 스트립 및 플러그인 파라미터를 오토메이션하는 데 사용됩니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 값",
+        "roleDesc": "버튼",
+        "value": 1509949440,
+        "help": "오토메이션 값/다듬기 필드. 트랙의 모든 오토메이션을 한 번에 조절하려면 드래그합니다. 포인터를 필드 밖으로 이동하여 재생헤드 위치의 파라미터 값을 봅니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      },
+      {
+        "role": "AXPopUpButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 모드",
+        "roleDesc": "팝업 버튼",
+        "value": "Read",
+        "help": "오토메이션 모드 팝업 메뉴. 녹음 및 재생 중에 채널 스트립 및 플러그인 변경 사항을 처리하는 방법을 설정합니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXPopUpButton"
+      },
+      {
+        "role": "AXPopUpButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 파라미터",
+        "roleDesc": "팝업 버튼",
+        "value": "볼륨",
+        "help": "오토메이션 파라미터 팝업 메뉴. 오토메이션할 채널 스트립, Smart Control 또는 플러그인 파라미터를 선택합니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXPopUpButton"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 활성화",
+        "roleDesc": "체크상자",
+        "value": 1,
+        "help": "오토메이션 켬/끔 버튼. 해당 트랙의 모든 리전 및 트랙 오토메이션을 켜거나 끕니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXCheckBox"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "",
+        "roleDesc": "버튼",
+        "value": 0,
+        "help": "오토메이션 레인 펼침 화살표. 오토메이션 레인을 보거나 가립니다. 동일한 트랙에 대해 여러 개의 채널 스트립 및 플러그인 파라미터를 오토메이션하는 데 사용됩니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 값",
+        "roleDesc": "버튼",
+        "value": 1509949440,
+        "help": "오토메이션 값/다듬기 필드. 트랙의 모든 오토메이션을 한 번에 조절하려면 드래그합니다. 포인터를 필드 밖으로 이동하여 재생헤드 위치의 파라미터 값을 봅니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      },
+      {
+        "role": "AXPopUpButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 모드",
+        "roleDesc": "팝업 버튼",
+        "value": "Read",
+        "help": "오토메이션 모드 팝업 메뉴. 녹음 및 재생 중에 채널 스트립 및 플러그인 변경 사항을 처리하는 방법을 설정합니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXPopUpButton"
+      },
+      {
+        "role": "AXPopUpButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 파라미터",
+        "roleDesc": "팝업 버튼",
+        "value": "볼륨",
+        "help": "오토메이션 파라미터 켬/끔. 해당 오토메이션 파라미터의 오토메이션 데이터를 켜거나 끕니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXPopUpButton"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "",
+        "roleDesc": "버튼",
+        "value": 0,
+        "help": "오토메이션 트랙. 채널 스트립, Smart Control 및 플러그인 파라미터를 편집하여 오토메이션 커브를 재생하고 쓸 수 있습니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXButton"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "",
+        "roleDesc": "버튼",
+        "value": 0,
+        "help": "오토메이션 트랙. 채널 스트립, Smart Control 및 플러그인 파라미터를 편집하여 오토메이션 커브를 재생하고 쓸 수 있습니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXButton"
+      },
+      {
+        "role": "AXCheckBox",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 보기/가리기   A",
+        "roleDesc": "체크상자",
+        "value": false,
+        "help": "오토메이션 보기/가리기   A",
+        "path": "/AXWindow/AXGroup/AXGroup/AXCheckBox"
+      }
+    ],
+    "automation_value_rows": [
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 값",
+        "roleDesc": "버튼",
+        "value": 1509949440,
+        "help": "오토메이션 값/다듬기 필드. 트랙의 모든 오토메이션을 한 번에 조절하려면 드래그합니다. 포인터를 필드 밖으로 이동하여 재생헤드 위치의 파라미터 값을 봅니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      },
+      {
+        "role": "AXButton",
+        "subrole": "",
+        "title": "",
+        "desc": "오토메이션 값",
+        "roleDesc": "버튼",
+        "value": 1509949440,
+        "help": "오토메이션 값/다듬기 필드. 트랙의 모든 오토메이션을 한 번에 조절하려면 드래그합니다. 포인터를 필드 밖으로 이동하여 재생헤드 위치의 파라미터 값을 봅니다. ",
+        "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup/AXLayoutItem/AXButton"
+      }
+    ]
   }
 }
