@@ -1,0 +1,7 @@
+Limit: The self-test aims the guard by COPYING it into a fixture tree, so `ROOT` follows the file. That works and needs no seam, but it also means a case cannot point the guard at a tree without also copying the guard -- which is why `drift_problems` takes a root the copy trick does not need.
+Ruled-out: An LPM_ environment seam like the other guards have | the self-test already reaches a fixture by copying the file there, and a variable that re-aims a guard is a way to switch one off; adding one to a guard whose tests do not need it buys nothing and widens what CI could point at.
+Warn: `drift_problems()` still defaults to the repository the file sits in. A caller who imports this module from another tree gets THIS tree's answer unless it passes a root.
+Blast: module
+Record-Id: r-probeentry
+Provenance: inherited 9fd262ef62436111d2fbf8b89c437f3599cb10d3
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
