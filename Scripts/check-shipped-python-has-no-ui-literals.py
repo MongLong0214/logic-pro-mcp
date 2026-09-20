@@ -50,10 +50,17 @@ _LITERAL = re.compile(r"""(?<!\\)(['"])((?:(?!\1)[^\\\n]|\\.)*)\1""")
 _ESCAPE = re.compile(r"\\u\{?([0-9A-Fa-f]{1,8})\}?")
 #: The generated module is the one shipped file that MUST carry them -- it is the vocabulary.
 GENERATED = "logic_ui_labels.py"
-#: Below this length a literal is more likely a dict key or a format token than a
-#: label, and the corpus is large enough that short strings collide. Four is where
-#: `OK` and `Off` fall out and `Save` stays in.
-MINIMUM_LITERAL = 4
+#: Below this length a literal is more likely a dict key or a format token than a label. Four was
+#: the first answer, and it was chosen by reasoning rather than by counting: it dropped `OK`, `Off`
+#: and every three-letter label Logic ships in any language, which is a hole in the direction that
+#: hides a finding.
+#:
+#: Measured 2026-09-20 by running the whole rule at 2 instead: across every shipped helper, ONE
+#: literal of length two or three is a value Apple ships anywhere -- `...`, the ASCII ellipsis
+#: `logic_variants.py` appends when it truncates an osascript error. That is a format token in an
+#: expression that says so, which is what `PROTOCOL_LITERALS` is for. One exemption is cheaper than
+#: a blind spot two characters wide.
+MINIMUM_LITERAL = 2
 
 
 def shipped_helpers() -> list:
@@ -130,6 +137,10 @@ PROTOCOL_LITERALS = (
     ('status == "error"', "error"),
     ("LOGIC_APP_NAME =", "logic pro"),
     ('"process_name":', "logic pro"),
+    # The truncation marker, not a label. Apple ships `...` as a value somewhere in the corpus --
+    # short strings collide, which is why the length floor existed -- and this expression is
+    # building a diagnostic string, not matching Logic's UI.
+    ('detail[:237] +', "..."),
 )
 
 
