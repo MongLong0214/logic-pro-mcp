@@ -39,7 +39,7 @@ from logic_ui_labels import (  # noqa: F401  (re-exported under the names this m
 # SAVE_PANEL_NAME_LABELS IS GONE, and that is the fix rather than an omission.
 #
 # It held the macOS save panel's field label -- `save as:` and two Korean spellings. AppKit owns
-# that string, not Logic, so it is absent from all 23 corpora by construction and no LabelSet can
+# that string, not Logic, so it is absent from all 24 corpora by construction and no LabelSet can
 # carry it: the canon axis covers Logic's bundle and this panel is not Logic's.
 #
 # It sat in an AND with three other signals, so a two-language term capped the whole predicate at

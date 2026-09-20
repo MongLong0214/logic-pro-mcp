@@ -189,7 +189,7 @@ def fold_for_near_miss(text: str) -> str:
     NOT a canon comparison and never used as one. `absent` proves a BYTE STRING is not in the
     corpus, and that is exactly true and quietly useless on its own: `Input Port:` is absent and
     `Input Port` is shipped, so adding a colon proves anything uncitable. Three literals on the
-    control-surface branch were proved absent across all 23 corpora that way, and none of them had
+    control-surface branch were proved absent across all 24 corpora that way, and none of them had
     ever been read off a screen -- the observation record mentions `Input Port` zero times.
 
     So the corpus gets a second digest set over this fold, and `absent` answers "not in the corpus,
@@ -1378,7 +1378,7 @@ def differs_only_by_decoration(source: str, locale: str, text: str) -> bool:
     typed the label slightly differently from the way Logic ships it.
 
     Measured on the control-surface branch: `Input Port:`, `Output Port:` and `Model:` were each
-    proved absent from all 23 corpora, and Logic ships `Input Port`, `Output Port` and `Model`.
+    proved absent from all 24 corpora, and Logic ships `Input Port`, `Output Port` and `Model`.
     None had been read off a screen; the observation record names `Input Port` zero times.
     """
     if not is_absent(source, locale, text):

@@ -524,7 +524,7 @@ class ACitationWithoutAKey(unittest.TestCase):
 class TellingAbsenceFromATypo(unittest.TestCase):
     """`absent` proves a BYTE STRING is not in the corpus, which is exactly true and half an answer.
 
-    `Input Port:` is absent from all 23 corpora and Logic ships `Input Port`, so adding a colon
+    `Input Port:` is absent from all 24 corpora and Logic ships `Input Port`, so adding a colon
     proves anything uncitable. Three literals on the control-surface branch were proved absent
     that way. The fold answers the other half, offline, from digest sets committed beside the
     absence sets.

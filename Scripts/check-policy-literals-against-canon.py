@@ -240,7 +240,7 @@ def canonical_literals(source: str) -> set:
     still matches, and those being absent from Apple's data is the point of them. A `canonical`
     that is absent is a different thing: it is the spelling this repository claims Logic uses.
     Measured on the control-surface branch: `Input Port:`, `Output Port:` and `Model:` are
-    canonical, are absent from all 23 corpora, and Logic ships all three without the colon -- and
+    canonical, are absent from all 24 corpora, and Logic ships all three without the colon -- and
     the observation record names `Input Port` zero times, so none was ever read off a screen.
     """
     text = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub(" ", source))
@@ -577,7 +577,7 @@ def near_miss_canonicals(manifest: dict) -> list:
     not carry. REFUSED, not advised.
 
     `absent` proves a byte string is not in the corpus, which is exactly true and half an answer:
-    `Input Port:` is absent from all 23 corpora and Logic ships `Input Port`, so a colon proves
+    `Input Port:` is absent from all 24 corpora and Logic ships `Input Port`, so a colon proves
     any label uncitable. What separates that from a real one is not judgement, it is a table.
 
     `docs/canon/DECORATION-RULES.json` says which trailing punctuation each KIND of control may

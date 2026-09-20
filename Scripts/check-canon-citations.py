@@ -333,7 +333,9 @@ RATCHETS = (
     #:
     #: What makes this list different from every other waiver here is that its entries are not
     #: taken on trust for a moment. `check-new-labelsets-name-a-row.py:225` re-proves EVERY entry
-    #: on EVERY run -- `prove_absent` searches all 23 corpora in all ten locales, and
+    #: on EVERY run -- `prove_absent` searches every ENGLISH corpus the manifest pins (measured
+    #: 2026-09-20: three of the 24, `nibstrings`, `quickhelp` and `strings`, because a waiver's
+    #: claim is that the canonical is the value of no row in English), and
     #: `prove_composition` verifies each factor against the row's committed digest per locale -- and
     #: that guard is discovered by `run-repo-guards.py`, run by the `guards` job, which `build`
     #: needs and the ruleset requires. So the bar an added entry must clear is a proof against
@@ -1038,7 +1040,7 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
                         # a capital, a space. `is_absent` is exact and this rule used to ask
                         # nothing else, so a truncated or decorated reading proved "uncitable" for
                         # a label Logic ships. `Input Port:`, `Output Port:` and `Model:` were each
-                        # proved absent from all 23 corpora while Logic ships them without the
+                        # proved absent from all 24 corpora while Logic ships them without the
                         # colon, and none had been read off a screen. The CLI has answered NOT
                         # PROVEN for this since it was written; the rule that gates a RECORD did
                         # not ask, which is two definitions of "in the corpus" in one system.
