@@ -155,6 +155,18 @@ SKIPPED = re.compile(r"\bskipped=(\d+)")
 NOT_A_GATE = "#: NOT A GATE"
 
 
+def declares_it_counts(text: str) -> bool:
+    """Whether the marker is a COMMENT LINE of its own, rather than a mention.
+
+    `NOT_A_GATE in text` was the test, and it reads the marker wherever it appears -- in a
+    docstring, in a comment ABOUT the marker, inside a string literal. Measured 2026-09-20: a new
+    guard that merely explains what the marker is for was classified `rept` and dropped out of the
+    gate count, without its author asking for that and without anything saying so. Downgrading a
+    guard to a report has to be a line somebody wrote on purpose.
+    """
+    return any(line.strip() == NOT_A_GATE for line in text.splitlines())
+
+
 def _source_of(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as handle:
@@ -235,7 +247,7 @@ def main():
             #
             # The marker is the script's own declaration, and it is one line in each place rather
             # than a category the runner has to maintain.
-            kind = "rept" if NOT_A_GATE in _source_of(path) else "ok  "
+            kind = "rept" if declares_it_counts(_source_of(path)) else "ok  "
             print(f"{'FAIL' if broken else kind} {rel}{note}  {seconds:.1f}s", flush=True)
             if not broken:
                 continue
@@ -266,7 +278,7 @@ def main():
             return 1
         # "all 65 passed" is the sentence a release note quotes, so it must not count a file
         # that cannot fail as a check that did not.
-        reports = sum(1 for f in files if NOT_A_GATE in _source_of(f))
+        reports = sum(1 for f in files if declares_it_counts(_source_of(f)))
         if reports:
             print(f"all {len(files)} passed — {len(files) - reports} that can refuse, "
                   f"{reports} that only count (`rept` above)")
