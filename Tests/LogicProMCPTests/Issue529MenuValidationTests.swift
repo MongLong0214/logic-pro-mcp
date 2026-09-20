@@ -728,7 +728,7 @@ struct Issue529MenuValidationTests {
         // Mutation this rejects: move the attempt marker after the leaf or remove it, which makes
         // a leaf-error cleanup claim the menu was never actuated.
         //
-        // #921 follow-up (RV-3) also sets `menuActuationAttempted` right after the EARLIER
+        // #921 follow-up (RV-3) also sets `menuActuationAttempted` immediately BEFORE the EARLIER
         // revalidation click, so the full script now contains this exact line twice. Scope the
         // search to the region from the end of the disabled branch onward, or `issue529Position`'s
         // first-match semantics would silently bind to the revalidation occurrence instead — which
@@ -819,6 +819,8 @@ struct Issue529MenuValidationTests {
 
         for sentinel in [
             "MENU_VALIDATION_UNREADABLE",
+            "MENU_VALIDATION_UNREADABLE:menu_actuation_attempted=true",
+            "MENU_VALIDATION_UNREADABLE:   menu_actuation_attempted=true",
             "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=TRUE",
             "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=garbage",
         ] {
@@ -919,7 +921,7 @@ struct Issue529MenuValidationTests {
                         "\(sentinel): the forced revalidation pass clicked, so this must say so")
             } else {
                 #expect(!reportedActuation,
-                        "\(sentinel): the script reported that the click did not complete")
+                        "\(sentinel): the script reported that the actuation-attempt marker was never reached")
             }
             #expect(sliderWrites.value == 0, "\(sentinel)")
         }
@@ -1456,11 +1458,17 @@ struct Issue529MenuValidationTests {
         let menuEscape = try #require(
             script.range(of: "key code 53", range: menuFocus..<script.endIndex)
         )
-        let beforeMenuEscape = String(script[menuLoop.lowerBound..<menuEscape.lowerBound])
-        #expect(!beforeMenuEscape.contains("exit repeat"),
-                "the captured menu loop must reach Escape without an early repeat exit")
-        #expect(!beforeMenuEscape.contains("end repeat"),
-                "the captured menu loop must not close before its Escape")
+        let menuPathToEscape = String(script[menuLoop.lowerBound..<menuEscape.lowerBound])
+        let menuPathStatements = menuPathToEscape
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        #expect(menuPathStatements == [
+            "repeat 3 times",
+            "set menuFocusState to my menuEscapeFocusState(it)",
+            "if menuFocusState is \"CLOSED\" then return \"CLOSED\"",
+            "if menuFocusState is not \"FOCUSED\" then return menuFocusState",
+        ], "nothing may interrupt the menu loop's path from its header to Escape")
         #expect(sliderWrites.value == 0)
     }
 

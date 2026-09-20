@@ -2451,7 +2451,7 @@ extension AccessibilityChannel {
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
         case let value where value == "MENU_VALIDATION_UNREADABLE"
-            || value.hasPrefix("MENU_VALIDATION_UNREADABLE: "):
+            || value.hasPrefix("MENU_VALIDATION_UNREADABLE:"):
             let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
             guard value.hasPrefix(prefix),
                   let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
