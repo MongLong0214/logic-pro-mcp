@@ -1,0 +1,8 @@
+Limit: The derivation is textual. A script that builds a seam name at runtime, or reads it through a wrapper that does not spell `environ`, is invisible -- and would be invisible to the old list too.
+Limit: Shell `$X` matching also catches a seam a script EXPORTS rather than reads. That widens the protected set, never narrows it, so the failure direction is a false refusal in a workflow, not a missed one.
+Ruled-out: A prefix rule refusing any `LPM_*` in the workflow | it would refuse a future variable that is not a seam at all, which is why the original author listed them; deriving from the reads gets the completeness without that cost.
+Warn: This closes the `r-noneblindnow` limit that said "a future caller who sets one in CI would silence the guard, and nothing detects that". Something detects it now, by reading the scripts; if `seam_names()` is ever turned back into a list, that limit reopens silently.
+Blast: system
+Record-Id: r-seamsderived
+Provenance: inherited 6b06642af0ee91fd4efbb425302dfbc371b2d2be
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
