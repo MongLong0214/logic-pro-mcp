@@ -1,60 +1,44 @@
-Limit: Nothing was read off a running Logic. What is proved is which key the shipped code looks up and what Apple pins at that key -- not that a Japanese Logic renders ポジション in that column.
-Limit: The instruction reading came from a co-reader and was re-checked here at three points: both method addresses via `nm`, the three cfstring addresses being referenced inside the method, and the section they live in. The cfstring CONTENTS were not re-derived byte by byte; what corroborates them is that the rows those names select carry, in ten locales, exactly what these sets held.
-Ruled-out: Picking the row by value | 17 of 18 `Name` candidates share one spelling, so value alone cannot separate them, and for `Position` the three wrong rows differ only in Japanese. Choosing by value is how `trackTypeMaster` nearly took a Bass Amp label.
-Warn: `Muted` is the column identifier; `M` is the localization key. A rename of either in a later Logic breaks the binding silently, and only check-labelsets-are-derived.py failing would show it.
-Blast: system
-Record-Id: r-eventlistrows
-Provenance: inherited 5b8e80f3ca44a4c50213047ec04947028342559c
-
-Limit: The prose gap stays open, deliberately and in writing. #937 remains the decision: accept a reviewer's classification with a mechanical floor, or close the formats.
-Limit: `strict` is used by rule 15 only. The pull-request body path still skips a failed lookup, which is the right default there and is now a difference between two callers of one helper.
-Ruled-out: Restoring a shrink-only ratchet on `exceptions` to compensate | it does not check the proposition that is actually granted, and it forbids the repair #937 is about. The co-reader's wording: repeated checking does not justify removing a ratchet, but the checked proposition has to match the permission -- so fix the claim, not the ratchet.
-Warn: The limit case asserts what rule 15 does NOT catch. If somebody strengthens the rule, that case goes red and the sentence in LOGIC-FACING.json has to be rewritten in the same change.
-Blast: system
-Record-Id: r-exceptionsproved
-Provenance: inherited 09cfe35a8052a2610df334f130705ed945657677
-
-Limit: `--reclassify` reads Logic's bundle, so this step cannot be re-run on a machine without it. What CI checks is the committed classification against the committed corpus, which is the part that has to hold.
-Warn: Five of the ten new literals classify as `quickhelp_title` rather than `strings_value`, which means the same text is also a QuickHelp title somewhere. That is a property of the corpus, not a claim that the Event List header comes from QuickHelp -- the row it comes from is the one named in `derivedFrom`, and check-labelsets-are-derived.py is what proves it.
 Blast: local
-Record-Id: r-projectionfollows
-Provenance: inherited 5af0d389319076059dee2805ba913d0e231c7378
-
-Limit: The refusing direction was already at fixtures; this makes the pair symmetric. Neither direction now exercises the REAL merge base, so a bug in `_at_base` itself would show up only in the bootstrap case and in CI.
-Blast: local
-Record-Id: r-caseexpired
-Provenance: inherited 34e0a8a8e8be4f063cd21334fb54e34bda7ef99a
-
-Limit: The ceiling counts NAMES, not readings. These seven left the list because the label now derives from Apple's row -- which is a stronger claim than a live reading in one locale and a different one from "somebody looked at this in Japanese".
-Blast: local
-Record-Id: r-ceilingfollows
-Provenance: inherited 236dca7730463b39a93f79a348b677cf570f9dc5
-
-Limit: The decision rests on the threat model staying as it is. If a committer acting in bad faith ever comes into scope, this exception list is one of the places that has to be revisited -- and nothing links the two documents mechanically.
-Ruled-out: A closed schema for the four files | it closes the prose hole, and it closes it for a case the threat model already excludes, at the cost of every reader those files have.
-Blast: local
-Record-Id: r-settledbythreat
-Provenance: inherited b0242ea0f74564a31c9777e3cbe8ade6d1fed6ad
-
-Limit: These are precision corrections to prose and one test assertion. No LabelSet's canonical, variants, or derivedFrom changed, and no guard's pass/fail logic changed except the one assertion that now pins CITABLE_QUOTE_MIN.
-Ruled-out: Deleting the stale "unmeasured (#885)" sentence out of the three rationale strings entirely, instead of appending a superseding note | the sentence is a record of what was true on 2026-09-15, at a specific measurement; deleting it would make the string claim a narrower history than what actually happened.
-Warn: Editing a LabelSet's `rationale` string in AXLocalePolicy.swift without regenerating docs/locale/ui-labels.json (`Scripts/locale_labels.py --write`) fails check-locale-labels-json.py silently until CI or a local guard run catches it -- the JSON mirrors only the first concatenated segment of a multi-part rationale, not the full string.
 Blast: module
-Record-Id: r-eventlistfixups
-Provenance: inherited 7101b0750a3524f0752f3ca660060cfa255f5191
-
-Limit: the six-character floor stays. Run at 1 against all six excepted files, every one fails on its own schema key `note`, which Logic ships as a value -- lowering it would empty the list rather than tighten rule 15.
-Limit: the cfstring contents are now read byte by byte, but the callee at 0x9fd880 being a localization helper, and the bundle it resolves against being `MAContentPackageManager`'s, are still a reading of the disassembly rather than a re-derivation.
-Ruled-out: Lowering CITABLE_QUOTE_MIN so rule 15 sees `M` and `Name` | measured at 1: all six excepted files are refused for the word `note`, so the floor cannot be moved for this list without emptying it.
-Warn: the record for the parent commit (r-eventlistrows, f277e2e5) carries both errors this commit fixes -- it names `Muted` as one of the three cfstrings and says check-labelsets-are-derived.py failing would show a rename. Git history cannot be edited; read this record beside it.
-Blast: local
-Undo: easy
+Blast: system
 Certainty: firm
-Provenance: inherited 07755d7727f00bb91a0b70e3ea4dda76d6969ecf
-
+Limit: Nothing was read off a running Logic. What is proved is which key the shipped code looks up and what Apple pins at that key -- not that a Japanese Logic renders ポジション in that column.
+Limit: The ceiling counts NAMES, not readings. These seven left the list because the label now derives from Apple's row -- which is a stronger claim than a live reading in one locale and a different one from "somebody looked at this in Japanese".
+Limit: The decision rests on the threat model staying as it is. If a committer acting in bad faith ever comes into scope, this exception list is one of the places that has to be revisited -- and nothing links the two documents mechanically.
+Limit: The instruction reading came from a co-reader and was re-checked here at three points: both method addresses via `nm`, the three cfstring addresses being referenced inside the method, and the section they live in. The cfstring CONTENTS were not re-derived byte by byte; what corroborates them is that the rows those names select carry, in ten locales, exactly what these sets held.
+Limit: The prose gap stays open, deliberately and in writing. #937 remains the decision: accept a reviewer's classification with a mechanical floor, or close the formats.
+Limit: The refusing direction was already at fixtures; this makes the pair symmetric. Neither direction now exercises the REAL merge base, so a bug in `_at_base` itself would show up only in the bootstrap case and in CI.
+Limit: These are precision corrections to prose and one test assertion. No LabelSet's canonical, variants, or derivedFrom changed, and no guard's pass/fail logic changed except the one assertion that now pins CITABLE_QUOTE_MIN.
+Limit: `--reclassify` reads Logic's bundle, so this step cannot be re-run on a machine without it. What CI checks is the committed classification against the committed corpus, which is the part that has to hold.
+Limit: `strict` is used by rule 15 only. The pull-request body path still skips a failed lookup, which is the right default there and is now a difference between two callers of one helper.
 Limit: the #937 row is the text PR #939 already wrote, taken verbatim from this branch and not re-derived; the conflict resolution took #940's file whole because it is a superset, and the #937 line was diffed against this branch's own version to confirm it survived unchanged.
-Warn: #940 is now a subset of this branch. Merging both would be a no-op for the second, but leaving #940 open invites somebody to rebase it and re-litigate rows that already landed.
-Blast: local
-Undo: easy
-Certainty: firm
+Limit: the cfstring contents are now read byte by byte, but the callee at 0x9fd880 being a localization helper, and the bundle it resolves against being `MAContentPackageManager`'s, are still a reading of the disassembly rather than a re-derivation.
+Limit: the six-character floor stays. Run at 1 against all six excepted files, every one fails on its own schema key `note`, which Logic ships as a value -- lowering it would empty the list rather than tighten rule 15.
+Provenance: inherited 07755d7727f00bb91a0b70e3ea4dda76d6969ecf
+Provenance: inherited 09cfe35a8052a2610df334f130705ed945657677
+Provenance: inherited 236dca7730463b39a93f79a348b677cf570f9dc5
+Provenance: inherited 34e0a8a8e8be4f063cd21334fb54e34bda7ef99a
+Provenance: inherited 5af0d389319076059dee2805ba913d0e231c7378
+Provenance: inherited 5b8e80f3ca44a4c50213047ec04947028342559c
+Provenance: inherited 7101b0750a3524f0752f3ca660060cfa255f5191
+Provenance: inherited b0242ea0f74564a31c9777e3cbe8ade6d1fed6ad
 Provenance: inherited d459e9058aee9e7a2da9177259496b7130629be7
+Record-Id: r-caseexpired
+Record-Id: r-ceilingfollows
+Record-Id: r-eventlistfixups
+Record-Id: r-eventlistrows
+Record-Id: r-exceptionsproved
+Record-Id: r-projectionfollows
+Record-Id: r-settledbythreat
+Ruled-out: A closed schema for the four files | it closes the prose hole, and it closes it for a case the threat model already excludes, at the cost of every reader those files have.
+Ruled-out: Deleting the stale "unmeasured (#885)" sentence out of the three rationale strings entirely, instead of appending a superseding note | the sentence is a record of what was true on 2026-09-15, at a specific measurement; deleting it would make the string claim a narrower history than what actually happened.
+Ruled-out: Lowering CITABLE_QUOTE_MIN so rule 15 sees `M` and `Name` | measured at 1: all six excepted files are refused for the word `note`, so the floor cannot be moved for this list without emptying it.
+Ruled-out: Picking the row by value | 17 of 18 `Name` candidates share one spelling, so value alone cannot separate them, and for `Position` the three wrong rows differ only in Japanese. Choosing by value is how `trackTypeMaster` nearly took a Bass Amp label.
+Ruled-out: Restoring a shrink-only ratchet on `exceptions` to compensate | it does not check the proposition that is actually granted, and it forbids the repair #937 is about. The co-reader's wording: repeated checking does not justify removing a ratchet, but the checked proposition has to match the permission -- so fix the claim, not the ratchet.
+Undo: easy
+Warn: #940 is now a subset of this branch. Merging both would be a no-op for the second, but leaving #940 open invites somebody to rebase it and re-litigate rows that already landed.
+Warn: Editing a LabelSet's `rationale` string in AXLocalePolicy.swift without regenerating docs/locale/ui-labels.json (`Scripts/locale_labels.py --write`) fails check-locale-labels-json.py silently until CI or a local guard run catches it -- the JSON mirrors only the first concatenated segment of a multi-part rationale, not the full string.
+Warn: Five of the ten new literals classify as `quickhelp_title` rather than `strings_value`, which means the same text is also a QuickHelp title somewhere. That is a property of the corpus, not a claim that the Event List header comes from QuickHelp -- the row it comes from is the one named in `derivedFrom`, and check-labelsets-are-derived.py is what proves it.
+Warn: The limit case asserts what rule 15 does NOT catch. If somebody strengthens the rule, that case goes red and the sentence in LOGIC-FACING.json has to be rewritten in the same change.
+Warn: `Muted` is the column identifier; `M` is the localization key. A rename of either in a later Logic breaks the binding silently, and only check-labelsets-are-derived.py failing would show it.
+Warn: the record for the parent commit (r-eventlistrows, f277e2e5) carries both errors this commit fixes -- it names `Muted` as one of the three cfstrings and says check-labelsets-are-derived.py failing would show a rename. Git history cannot be edited; read this record beside it.
