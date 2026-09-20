@@ -1,0 +1,8 @@
+Limit: Plural only. "one corpus" is generic English in this file -- "One corpus holds 47,115 values" -- and reading the singular as a count would fire on every such sentence.
+Limit: A count inside a QUOTED retraction is checked like any other. This file quotes the numbers it retracts, and one of those quotes passes today only because it happens to equal the row count; the escape is `PROSE-NUMBERS.json`, which the new rule consults for exactly that reason.
+Ruled-out: Widening A_BIG_NUMBER to two and three digits | measured: 45 distinct small numbers in the README, nearly all dates, list markers, bit widths, issue numbers and fragments of larger numbers split by the comma. It would be noise, which is why the original author started at four.
+Warn: `corpora_measured` counts an index row per corpus by reading the `locale` column of docs/canon/index/*.tsv. A source whose index stops carrying that column would silently drop to zero rows, and the with-row denominator would fall without anything saying so.
+Blast: module
+Record-Id: r-corpuscounts
+Provenance: inherited 513706ec900bad717ed5fb3ef39de0dfe0d3b6a4
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
