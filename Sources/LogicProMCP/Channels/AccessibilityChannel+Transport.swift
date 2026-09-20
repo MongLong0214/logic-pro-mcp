@@ -2458,8 +2458,9 @@ extension AccessibilityChannel {
                   let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
             else {
                 // This sentinel is a safety refusal. A legacy bare value or malformed suffix has
-                // lost the observation, not established that no click occurred, so retain the
-                // conservative side that requires post-actuation cleanup.
+                // lost the observation, not established that no click occurred, so retain `true`
+                // in the receipt as an indeterminate menu-actuation attempt. Only
+                // `.menuCouldNotBeClosed(writeAttempted: true)` triggers post-actuation reconciliation.
                 return .failure(.menuValidationUnreadable(menuActuationAttempted: true))
             }
             return .failure(.menuValidationUnreadable(
@@ -2563,7 +2564,11 @@ extension AccessibilityChannel {
                 ))
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
-                    _ = await reconcileAfterExecutionFailure(ledger?.preLeafWindowSnapshotPath)
+                    // Every `MENU_PICK_FAILED: menu cleanup was not observed` refusal is emitted
+                    // before the leaf click, so this run cannot own a Go To Position dialog. Pass
+                    // no snapshot to take the menu-only reconciliation path; using the READY
+                    // pre-leaf snapshot here would let the dialog half swallow the needed Escape.
+                    _ = await reconcileAfterExecutionFailure(nil)
                 }
                 return .failed(classification)
             }

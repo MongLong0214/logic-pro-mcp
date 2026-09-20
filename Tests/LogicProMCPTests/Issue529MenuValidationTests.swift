@@ -21,10 +21,10 @@ private func issue529Positions(of fragment: String, in script: String) -> [Strin
     return positions
 }
 
-/// Neutralises AppleScript `--` and `(* ... *)` comments before a positional or structural
-/// assertion runs against generated script text. #921 follow-up (RV-6): a statement inside either
-/// comment form must not satisfy a source-shape assertion. Newlines are preserved so the structural
-/// helpers below still reason in terms of the original statement lines.
+/// Neutralises AppleScript `--`, `#`, and `(* ... *)` comments before a positional or structural
+/// assertion runs against generated script text. #921 follow-up (RV-6): a statement inside any
+/// stripped comment form must not satisfy a source-shape assertion. Newlines are preserved so the
+/// structural helpers below still reason in terms of the original statement lines.
 private func issue529StrippedOfAppleScriptComments(_ script: String) -> String {
     var stripped = ""
     var index = script.startIndex
@@ -82,6 +82,11 @@ private func issue529StrippedOfAppleScriptComments(_ script: String) -> String {
             stripped.append(" ")
             inLineComment = true
             index = script.index(after: nextIndex)
+            continue
+        } else if character == "#" {
+            stripped.append(" ")
+            inLineComment = true
+            index = nextIndex
             continue
         } else if character == "(", nextCharacter == "*" {
             stripped.append(" ")
@@ -146,9 +151,9 @@ private func issue529MatchingEndTry(after tryStart: String.Index, in script: Str
 }
 
 /// Returns every active multiline `if`, `repeat`, and `try` block enclosing `position`, from
-/// outermost to innermost. Callers pass comment-neutralised script, so a statement inside either
-/// AppleScript comment form cannot acquire a plausible enclosing chain merely by being present in
-/// the source.
+/// outermost to innermost. Callers pass comment-neutralised script, so a statement inside a
+/// stripped AppleScript `--`, `#`, or `(* ... *)` comment cannot acquire a plausible enclosing
+/// chain merely by being present in the source.
 private func issue529EnclosingAppleScriptBlocks(
     at position: String.Index,
     in script: String
@@ -659,22 +664,38 @@ struct Issue529MenuValidationTests {
             of: "return \"MENU_PICK_FAILED: menu state was not observed closed at entry",
             in: script
         )
-        let cleanupRefusalReturns = issue529Positions(of: "return \"", in: script).filter { position in
-            let line = script[position...]
-            return position > entryRefusal
-                && line.hasPrefix("return \"MENU_PICK_FAILED: menu cleanup was not observed")
+        let cleanupRefusalReturns = issue529Positions(of: "return ", in: script).filter { position in
+            let refusalLine = String(script[position...].prefix { $0 != "\n" })
+            guard let refusalTerms = issue529TopLevelAppleScriptConcatenationTerms(in: refusalLine) else {
+                return false
+            }
+            let literalText = refusalTerms.compactMap { term -> String? in
+                guard term.hasPrefix("\""), term.hasSuffix("\""), term.count >= 2 else {
+                    return nil
+                }
+                return String(term.dropFirst().dropLast())
+            }.joined()
+            return literalText.hasPrefix("MENU_PICK_FAILED:")
+                && literalText.contains("menu cleanup was not observed")
         }
         let escape = try issue529Position(of: "key code 53", in: script)
+        let leafClick = try issue529Position(
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
+            in: script
+        )
         let menuStateObservations = issue529Positions(
             of: "set menuState to my menuOpenState(theProcess)",
             in: script
         )
 
-        #expect(cleanupRefusalReturns.count > 0)
+        #expect(cleanupRefusalReturns.count == 4,
+                "the generated dialog script has exactly four menu-cleanup refusal returns")
         #expect(entryCleanup < entryRefusal)
         #expect(menuStateObservations.contains { escape < $0 })
         var previousRefusalReturn = entryRefusal
         for refusalReturn in cleanupRefusalReturns {
+            #expect(refusalReturn < leafClick,
+                    "every menu-cleanup refusal must precede the leaf click, so it cannot own a dialog")
             let refusalLine = String(script[refusalReturn...].prefix { $0 != "\n" })
             let refusalTerms = try #require(
                 issue529TopLevelAppleScriptConcatenationTerms(in: refusalLine),
@@ -902,12 +923,23 @@ struct Issue529MenuValidationTests {
         // the menu-only loop must be reachable OUTSIDE that block, or a nil path never reaches Escape.
         #expect(snapshotGuardStart < dialogCleanup)
         #expect(dialogCleanup < snapshotGuardEnd)
-        let betweenSnapshotGuardAndMenuLoop = String(helper[snapshotGuardEnd..<menuFocus])
+        let snapshotGuardLineEnd = helper[snapshotGuardEnd...].firstIndex(of: "\n") ?? helper.endIndex
+        let afterSnapshotGuard = snapshotGuardLineEnd < helper.endIndex
+            ? helper.index(after: snapshotGuardLineEnd)
+            : helper.endIndex
+        let menuLoop = try #require(
+            helper.range(of: "repeat 3 times", range: snapshotGuardEnd..<helper.endIndex)?.lowerBound,
+            "the menu loop must follow the snapshot-gated dialog block"
+        )
+        let betweenSnapshotGuardAndMenuLoop = issue529StrippedOfAppleScriptComments(
+            String(helper[afterSnapshotGuard..<menuLoop])
+        )
         // A reconciliation fixture returns canned JSON without executing this script. Therefore the
-        // generated source itself must prove that every snapshot outcome reaches the menu loop; no
-        // unconditional return of any literal may appear in this gap.
-        #expect(!betweenSnapshotGuardAndMenuLoop.contains("return"),
-                "the menu loop must not be bypassed by an unconditional return")
+        // generated source itself must prove that every snapshot outcome reaches the menu loop. This
+        // gap has no statements: any statement here can transfer control, and the fixture cannot
+        // observe that because it never executes the script.
+        #expect(betweenSnapshotGuardAndMenuLoop.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "the snapshot-guard-to-menu-loop gap must contain no statements")
         #expect(snapshotGuardEnd < menuFocus)
     }
 
@@ -1140,6 +1172,17 @@ struct Issue529MenuValidationTests {
         let sliderWrites = Issue529Counter()
         let reconciliationCalls = Issue529Counter()
         let reconciliationScript = Issue529StringBox()
+        let ledger = try #require(AccessibilityChannel.DialogIssuanceLedger.create())
+        defer { ledger.remove() }
+        try "READY\n0\n5".write(
+            to: ledger.preLeafWindowSnapshotURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        let snapshotPath = try #require(
+            ledger.preLeafWindowSnapshotPath,
+            "the fixture ledger must hold an accepted READY pre-leaf snapshot"
+        )
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
             runtime: issue529SliderRuntime(
@@ -1155,7 +1198,8 @@ struct Issue529MenuValidationTests {
             sleepMicros: { _ in },
             executeDialogScript: { _ in
                 .success(#"{"result":"MENU_PICK_FAILED: menu cleanup was not observed after menu actuation (UNREADABLE)"}"#)
-            }
+            },
+            createDialogIssuanceLedger: { ledger }
         )
 
         let envelope = try #require(issue529Envelope(result))
@@ -1167,7 +1211,9 @@ struct Issue529MenuValidationTests {
                 "a normal post-actuation cleanup failure must enter the parent-owned reconciler")
         let script = try #require(reconciliationScript.value)
         #expect(script.contains("if \"\" is not \"\" then"),
-                "the normal-result reconciliation must use the existing menu-only path")
+                "the pre-leaf menu-cleanup refusal must use the menu-only reconciliation path")
+        #expect(!script.contains(snapshotPath),
+                "the pre-leaf menu-cleanup refusal must not pass its READY snapshot to dialog cleanup")
         #expect(sliderWrites.value == 0)
     }
 
