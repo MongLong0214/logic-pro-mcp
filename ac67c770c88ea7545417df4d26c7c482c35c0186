@@ -1,0 +1,76 @@
+Limit: A floor is a minimum, not an equality. A suite can still lose a case if another gains one in the same module, and nothing here notices a case that was deleted and replaced by a weaker one.
+Limit: The floors were measured on macOS today. A suite that skips cases on another platform would read as below its floor there -- correct as a signal, and it would stop a Linux run of a drive that is only ever run on macos-15.
+Ruled-out: Putting the floors in docs/canon beside the other ratchets | that prefix is Logic-facing, so every future edit would have to cite a row of Apple's data in its pull request body. This file counts test cases and rests on no such row; the rule would be satisfied by manufacturing a citation, which is the thing the rule exists to stop. It sits beside the drive that reads it.
+Ruled-out: Renaming the twelve to `test_*.py` so the runner discovers them | #896's end state, and it makes the guards job platform-dependent: `logic_key_event_test.py` compiles Swift that imports AppKit, and the guards job runs on ubuntu. The rename needs the job split first.
+Warn: `logic_bounce_test.py` defines no cases of its own; it exists to re-export three classes. The self-test treats a file with no `unittest.TestCase` as an aggregator and does not demand a floor for it -- if that file ever defines a case, the floor for it has to be added by hand.
+Blast: module
+Record-Id: r-suitefloors2
+Provenance: inherited 2ac7a8dd33182bbbc01d20b0248fb0537e28815f
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: The refusal fires only when some literal is classified `composed_value`. A tree with none would lose the evidence and say nothing -- correct today, because the rule covers nothing there, and wrong the moment somebody reads the silence as "the evidence is present".
+Ruled-out: Keeping the abstention and making the note louder | it was already loud and it was on stderr next to exit 0; the thing that fails to stop anybody cannot be fixed by wording.
+Warn: `_composition_evidence_missing` is `lru_cache`d, as its predecessor was. A test that deletes an artifact in-process after the first call gets the earlier answer; the new cases drive a subprocess per tree for that reason.
+Blast: module
+Record-Id: r-noabstain
+Provenance: inherited 6e1427876a0227a4b70538ec796e88cc7e8161b5
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: The three added sets are `ambiguous`, which means the row is unknown, not absent. They are counted as work, not closed; `eventListColumnName` has 18 candidates and picking one by value alone is how `trackTypeMaster` nearly got a Bass Amp label.
+Limit: `base_undeclared` parses the base's policy with TODAY's parser. That is deliberate -- it is what makes the repair legible -- but it means the base is re-read, not remembered: if the shared parser gains a bug, both sides move together and the comparison says nothing.
+Ruled-out: Deriving rows for the three so no census entry is needed | `derive_label_variants.py` answers `ambiguous` for all three; choosing among 4, 18 and 7 candidates is a measurement on a running Logic, not an edit, and inventing one would be the exact failure the census warns about.
+Warn: The count in the census note and in the guard's success line is now 61. Anything that quotes 58 -- prose, a roadmap row, a record -- is stale, and nothing checks prose against this file.
+Blast: module
+Record-Id: r-onecensusparser
+Provenance: inherited 033411feea723e04f4cf0aaf47ceb96e35346359
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: One character is still skipped. A single-character label -- `M`, `L`, `R` in a column header -- collides with too much to separate by value alone, and the measurement was not run at 1.
+Limit: The exemption is keyed to `detail[:237] +`, the expression as it is written today. Changing that truncation width renames the exemption's anchor and the marker becomes a finding again -- loud, and in the safe direction, but it will look like a false positive to whoever hits it.
+Ruled-out: Lowering to 3 instead of 2 | the only literal the measurement found at either length is `...`, which is three characters. Stopping at 3 would have needed the same exemption and kept `OK` and `Off` out, which is exactly the hole the limit named.
+Warn: The measurement is of THIS tree's six shipped helpers. A helper added later that carries many short protocol strings would meet the rule at its new floor, and the answer then is position or an expression-scoped exemption -- not raising the floor back.
+Blast: module
+Record-Id: r-twocharfloor
+Provenance: inherited 5d815f592d94926c485c6c262b09f6d321951d34
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: The rule that would have caught these reads `docs/canon/README.md` alone. Prose in Scripts and in the roadmap is unguarded, which is how one sentence went stale in nine places at once.
+Ruled-out: Widening the corpus-count rule to Scripts and the roadmap | measured: the guards that QUOTE the defective sentence to explain the defect would be flagged by their own rule, and the distinction ("is this number inside a quotation") is not mechanical on the roadmap's table rows, where one line carries dozens of backticks. A rule that cannot separate a claim from a quotation of a retracted claim would train a reader to skim it.
+Warn: `docs/observations/*.json` carries the same sentence twice and was left alone. A record is what somebody measured on a date; when those were written there were 23 corpora, and editing the number would make the record claim a measurement nobody took.
+Blast: local
+Record-Id: r-corporaeverywhere
+Provenance: inherited 3934181ed966851f1b13eefe1a76272439fdc5e7
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: It does not claim the non-zero path is REACHABLE. `return 1` under `if False:` satisfies this, and so does a gate whose condition is never true -- that is what the mutation sweep measures. This is the cheaper question underneath: can the file refuse at all.
+Limit: The scan is one module deep. A guard whose `main` returns 0 and whose only refusal is a `raise` inside an imported helper reads as unable to refuse, which is a false positive in the direction that asks for work.
+Ruled-out: Making the runner's classification the only reader of the marker | it answers a different question -- how to print a line -- and it was the loose reader. Two readers that agree, with a case pinning the agreement, beats one reader that both rules have to trust.
+Warn: `check-a-guard-can-refuse.py` may not spell the marker as a standalone comment line anywhere, including in a docstring example, or it exempts itself. The case named for that is `test_mentioning_the_marker_is_not_declaring_it`.
+Blast: module
+Record-Id: r-canrefuse
+Provenance: inherited c4d6bd8dd3e381e9cea6747c6548512168135a28
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: A sweep result is true of the commit it ran on. Nothing runs this in CI, so 29 of 29 is a reading from today, not a property -- the ratchet on the blind list is what holds, and it can only stop the number growing.
+Warn: The stale lines in GUARD-TESTS-BLIND-TO-THEIR-GUARD.json are still stale. Whoever resolves #937 should correct them in the same change, or this comment becomes the second copy of the truth.
+Blast: local
+Record-Id: r-sweepis29
+Provenance: inherited baf74ccd1e6c147c5d84c1ef09f881a1ad5bddf8
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: The proof is narrower than the claim. A file can state a fact about Logic in PROSE without quoting a value Apple ships or citing a row, and rule 15 does not see that. The exception is only as good as the person adding it, which is why #937 stays open.
+Limit: `_citable_strings_in` is the same reader the pull-request body check uses. It looks for strings that CAN be cited; a file quoting a value in a locale the corpus does not pin reads as clean here.
+Ruled-out: Moving the four files out of docs/canon | it costs the convention that ratchets live in one place and spreads them across the tree. `Scripts/helper-suite-cases.json` went that way today for exactly this reason and it is the wrong reason -- though beside its only reader is defensible on its own, so it stays where it is.
+Ruled-out: Ratcheting `exceptions` to shrink-only | the first version would then have to be empty and every later entry a refused growth, so the list could never do its job. The same circularity `LABELSETS-WITHOUT-A-ROW.json` was rescued from once already.
+Warn: An exception is a FILE path, matched exactly. Renaming an excepted file silently makes it Logic-facing again, and the rename will look like an unrelated citation failure to whoever hits it.
+Blast: system
+Record-Id: r-notallcanon
+Provenance: inherited 709904d4203337c1f666c3376582d421996fea70
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
+
+Limit: The rewrite makes the row honest, not stronger. Nothing mechanically ties the sentence to the guard's behaviour -- a reader has to run the command. That is the same standing as every other undated row here.
+Ruled-out: Writing an observation record with Logic as the host | it would bind a claim about a Python guard to a Logic build, so the record would go stale when Logic moves for a reason that has nothing to do with what it measured.
+Blast: local
+Record-Id: r-datedclaim
+Provenance: inherited 7c5f78ae07cabc67535baf9e6022c46f39ba10e0
+X-Claude-Session: https://claude.ai/code/session_01FPpCJgL1EkuBujPkbEEG2A
