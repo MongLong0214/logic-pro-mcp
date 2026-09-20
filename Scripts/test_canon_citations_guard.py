@@ -1046,8 +1046,16 @@ class LogicFacingIsSelfMaintaining(unittest.TestCase):
         named the Event List's column headers. `Position`, from the same change and one character
         over the floor, is the control -- without it this case would pass on a scanner that found
         nothing at all.
+
+        The `assertEqual` below is the fix for a hole a review found in the first version of this
+        case: with only `assertLess`, every assertion here still passed after `CITABLE_QUOTE_MIN`
+        was mutated from 6 to 5 -- the case constrained the floor's relationship to two short
+        strings, never the floor's own value, so it could not tell a weakened rule from an intact
+        one. `docs/canon/LOGIC-FACING.json`'s `exceptions_note` pins the number in prose; this is
+        what makes changing it here require changing that sentence in the same commit.
         """
         floor = self.guard.CITABLE_QUOTE_MIN
+        self.assertEqual(floor, 6, "LOGIC-FACING.json's exceptions_note pins this number in prose")
         for short in ("M", "Name"):
             self.assertLess(len(short), floor, short)
             body = json.dumps({"note": short})

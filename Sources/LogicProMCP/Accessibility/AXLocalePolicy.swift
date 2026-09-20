@@ -374,7 +374,7 @@ enum AXLocalePolicy {
     static let projectChooserWindowTitle = LabelSet(
         canonical: "Choose a Project",
         variants: ["프로젝트 선택", "プロジェクトを選択", "Wähle ein Projekt aus", "Seleccionar un proyecto", "Choisir un projet", "Scegli un progetto", "Escolha um projeto", "选取项目", "選擇計畫案"],
-        rationale: "Identifies Logic's New Project chooser by its AXWindow title; read-only classification. Korean read live 2026-09-15 off the window `파일 > 템플릿으로부터 신규…` opened with no document, whose title was `프로젝트 선택` exactly (AXStandardWindow, not an AXDialog). ja-JP and de-DE unmeasured (#885)."
+        rationale: "Identifies Logic's New Project chooser by its AXWindow title; read-only classification. Korean read live 2026-09-15 off the window `파일 > 템플릿으로부터 신규…` opened with no document, whose title was `프로젝트 선택` exactly (AXStandardWindow, not an AXDialog). ja-JP and de-DE were unmeasured as of that date (#885) -- superseded below."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose%20a%20Project#value"
     )
@@ -382,7 +382,7 @@ enum AXLocalePolicy {
     static let projectChooserCommitButton = LabelSet(
         canonical: "Choose",
         variants: ["선택", "選択", "Auswählen", "Seleccionar", "Choisir", "Scegli", "Escolher", "选取", "選擇"],
-        rationale: "The chooser's commit control, matched by AXButton title. Korean read live 2026-09-15 beside `취소` and `기존 프로젝트 열기…` in the same census (#885). ja-JP and de-DE unmeasured."
+        rationale: "The chooser's commit control, matched by AXButton title. Korean read live 2026-09-15 beside `취소` and `기존 프로젝트 열기…` in the same census (#885). ja-JP and de-DE were unmeasured as of that date -- superseded below."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Choose#value"
     )
@@ -390,7 +390,7 @@ enum AXLocalePolicy {
     static let projectChooserEmptyProjectLabel = LabelSet(
         canonical: "Empty Project",
         variants: ["비어 있는 프로젝트", "空のプロジェクト", "Leeres Projekt", "Proyecto vacío", "Projet vide", "Progetto vuoto", "Projeto Vazio", "空项目", "空白計畫案"],
-        rationale: "The Empty Project tile's label, read as an AXStaticText value after selecting the `새로운 프로젝트` category. Korean read live 2026-09-15 (#885); the details panel alongside it read `비어 있는 프로젝트 생성`, which is how the selection is confirmed without a coordinate. ja-JP and de-DE unmeasured."
+        rationale: "The Empty Project tile's label, read as an AXStaticText value after selecting the `새로운 프로젝트` category. Korean read live 2026-09-15 (#885); the details panel alongside it read `비어 있는 프로젝트 생성`, which is how the selection is confirmed without a coordinate. ja-JP and de-DE were unmeasured as of that date -- superseded below."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Empty%20Project#value"
     )
