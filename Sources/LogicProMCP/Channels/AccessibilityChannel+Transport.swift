@@ -1087,15 +1087,16 @@ extension AccessibilityChannel {
             dialogFailureReconciler = { preLeafWindowSnapshotPath in
                 // A timeout without the child-written pre-leaf snapshot cannot establish that any
                 // currently matching modal belongs to this run, so the DIALOG side of cleanup stays
-                // withheld -- it could cancel a user's already-open dialog. The MENU side does not
-                // have that ownership problem: `observeAndClearStrayGoToPositionUI` always runs its
-                // observation-gated menu-only Escape loop regardless of the snapshot, because
-                // `menuEscapeFocusState` reads Logic's own menu bar fresh and Escapes only what THIS
-                // read finds open. #921 follow-up (RV-1): the forced revalidation pass opens Logic's
-                // top-level menu before the snapshot is ever written (that write is the last step of
-                // the disabled branch), so a timeout during that pass used to hit `guard let
-                // preLeafWindowSnapshotPath else { return false }` here and skip cleanup entirely --
-                // leaving the menu open and every later AppleEvent wedged behind it.
+                // withheld -- it could cancel a user's already-open dialog. The MENU side deliberately
+                // has no corresponding ownership gate: the entry guard already applies this route's
+                // policy to a pre-existing open menu via `dismissOpenMenu(..., false)`. The reconciler
+                // applies that same policy only after a fresh read establishes Logic is frontmost and a
+                // menu is open. This is acceptable because reaching this route already requires that
+                // any observed open menu be cleared before another position actuation. #921 follow-up
+                // (RV-1): the forced revalidation pass opens Logic's top-level menu before the snapshot
+                // is ever written (that write is the last step of the disabled branch), so a timeout
+                // during that pass used to take the old early snapshot guard here and skip cleanup
+                // entirely -- leaving the menu open and every later AppleEvent wedged behind it.
                 return await observeAndClearStrayGoToPositionUI(
                     preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
                     executeScript: { script, timeout in
@@ -1377,8 +1378,11 @@ extension AccessibilityChannel {
         -- revalidated)` caller, which runs before any leaf and before a dialog is ever considered).
         -- Before that boundary, UNREADABLE returns without Escape because unknown focus might be an
         -- unrelated dialog/edit; the caller must refuse rather than treating the missing read as
-        -- clean. After this run confirmed it opened something, an unreadable read is not permission
-        -- to skip Escape, because this run may leave its own menu chain up.
+        -- clean. Once knownOpen is true, this handler reaches its focus-gated re-read even when the
+        -- initial state read was UNREADABLE, but that re-read can itself return UNREADABLE or
+        -- NOT_FRONTMOST without sending Escape. A known-actuation, not-CLOSED result is therefore
+        -- reconciled by Swift through the separate observation-gated menu loop, never by a blind
+        -- Escape from this script.
         on dismissOpenMenu(theProcess, knownOpen)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
@@ -1766,11 +1770,11 @@ extension AccessibilityChannel {
                     set revalidated to false
                     try
                         click menu bar item barName of menu bar 1
-                        -- The click statement above is what actuates the menu; a later throw (the
-                        -- `selected` read, the re-read, or cleanup) must not erase that this run
-                        -- issued it. #921 follow-up (RV-3): this used to stay false all the way to
-                        -- MENU_DISABLED/MENU_VALIDATION_UNREADABLE, so both sentinels reported
-                        -- `menu_actuation_attempted: false` even though this exact click had just run.
+                        -- This assignment is reached only after the click returned successfully. It is
+                        -- distinct from `revalidated`: an error from the click itself leaves this false,
+                        -- while a later `selected` read can leave it true but revalidated false. The
+                        -- unreadable-validation return serializes this observed fact for Swift rather
+                        -- than letting Swift assume the click happened.
                         set menuActuationAttempted to true
                         delay 0.1
                         if selected of menu bar item barName of menu bar 1 then set revalidated to true
@@ -1803,7 +1807,7 @@ extension AccessibilityChannel {
                         -- open, or it was and the re-read itself failed -- so nothing was validated.
                         -- Neither case may be reported as a leaf-disabled reading: see RV-2 above and
                         -- menuItemEnabledForActuation for the same "unreadable is not absent" shape.
-                        return "MENU_VALIDATION_UNREADABLE"
+                        return "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=" & (menuActuationAttempted as text)
                     end if
                 end if
                 -- A readable count of the exact dialog predicate is the first half of this run's
@@ -2146,7 +2150,7 @@ extension AccessibilityChannel {
             case menuNotFound
             case menuStateUnreadable
             case menuDisabled
-            case menuValidationUnreadable
+            case menuValidationUnreadable(menuActuationAttempted: Bool)
             case menuPickFailed
             case menuCouldNotBeClosed(writeAttempted: Bool)
             case dialogPreexisting
@@ -2175,7 +2179,8 @@ extension AccessibilityChannel {
             case .failure(.menuNotFound): return "menu_not_found"
             case .failure(.menuStateUnreadable): return "menu_state_unreadable"
             case .failure(.menuDisabled): return "menu_disabled"
-            case .failure(.menuValidationUnreadable): return "menu_validation_unreadable"
+            case .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
+                return "menu_validation_unreadable"
             case .failure(.menuPickFailed): return "menu_pick_failed"
             case let .failure(.menuCouldNotBeClosed(writeAttempted)):
                 return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
@@ -2301,7 +2306,7 @@ extension AccessibilityChannel {
             case .failure(.menuNotFound),
                  .failure(.menuStateUnreadable),
                  .failure(.menuDisabled),
-                 .failure(.menuValidationUnreadable):
+                 .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
                 return false
             default:
                 return true
@@ -2382,7 +2387,7 @@ extension AccessibilityChannel {
             case .failure(.menuCouldNotBeClosed):
                 return .couldNotBeClosed
             case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled),
-                 .failure(.menuValidationUnreadable):
+                 .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
                 return .closed
             default:
                 return .unobserved
@@ -2391,21 +2396,32 @@ extension AccessibilityChannel {
 
         var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
             switch self {
-            case .failure(.menuDisabled), .failure(.menuValidationUnreadable):
-                // #921 follow-up (RV-3): both sentinels are returned only from inside the forced
-                // revalidation pass's `if not menuItemEnabled then` branch, and that branch always
-                // issues its own top-level-menu click before either exit is reachable -- there is
-                // no path to either literal string that skips it. Hardcoding `true` here (rather
-                // than threading a written flag through the return string) is exact, not a guess:
-                // a fresh-disabled or unreadable-revalidation result that definitely clicked and
-                // observed the menu used to report `menu_actuation_attempted: false` because this
-                // property never looked at these two cases at all.
+            case .failure(.menuDisabled):
+                // `MENU_DISABLED` is reachable only after `freshReadingTaken` is true. That flag is
+                // assigned only inside `if revalidated`, and revalidated is assigned only after the
+                // top-level click returned and `menuActuationAttempted` was set true. Hardcoding this
+                // one case is therefore a reachability fact, not an assumption about an unreadable
+                // click.
                 return true
+            case let .failure(.menuValidationUnreadable(menuActuationAttempted)):
+                // Unlike MENU_DISABLED, this result includes a click that may itself have thrown.
+                // The generated script writes the flag it observed after that statement, so preserve
+                // that fact rather than manufacturing a constant in the receipt.
+                return menuActuationAttempted
             case let .failure(.menuCouldNotBeClosed(writeAttempted)):
                 return writeAttempted
             default:
                 return false
             }
+        }
+
+        /// A normal script reply can still report a post-actuation menu cleanup that was not
+        /// observed closed. Re-run the parent-owned, independently observation-gated menu loop for
+        /// exactly that case; the generated dialog script must not send a blind Escape on an
+        /// unreadable focus read.
+        var requiresPostActuationMenuReconciliation: Bool {
+            if case .failure(.menuCouldNotBeClosed(writeAttempted: true)) = self { return true }
+            return false
         }
     }
 
@@ -2434,8 +2450,14 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
-        case "MENU_VALIDATION_UNREADABLE":
-            return .failure(.menuValidationUnreadable)
+        case let value where value.hasPrefix("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="):
+            let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
+            guard let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count))) else {
+                return .failure(.unexpectedResult)
+            }
+            return .failure(.menuValidationUnreadable(
+                menuActuationAttempted: menuActuationAttempted
+            ))
         case let value where value.hasPrefix("DIALOG_PREEXISTING"):
             return .failure(.dialogPreexisting)
         case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
@@ -2533,6 +2555,9 @@ extension AccessibilityChannel {
                     ]
                 ))
             case .failure:
+                if classification.requiresPostActuationMenuReconciliation {
+                    _ = await reconcileAfterExecutionFailure(ledger?.preLeafWindowSnapshotPath)
+                }
                 return .failed(classification)
             }
         case .error:
@@ -2641,9 +2666,12 @@ extension AccessibilityChannel {
     /// since #921, includes a timeout during the forced revalidation pass, which opens Logic's own
     /// top-level menu before the leaf click that would have produced this snapshot. Ownership of any
     /// DIALOG cannot be established without the snapshot, so that half stays withheld exactly as
-    /// before. But the MENU-only recovery below has no such ownership problem -- it Escapes only what
-    /// THIS run's own `menuEscapeFocusState` read finds open -- so a `nil` path now skips straight to
-    /// it instead of refusing every cleanup outright.
+    /// before. The MENU-only recovery is intentionally not ownership-gated: the entry guard already
+    /// uses `dismissOpenMenu(..., false)` to clear a freshly observed pre-existing open menu. This
+    /// recovery applies that same route policy only after its own fresh frontmost/menu observation,
+    /// which is acceptable because another position actuation is blocked until the observed menu is
+    /// closed. A `nil` path therefore skips straight to the menu loop instead of refusing every
+    /// cleanup outright.
     private static func observeAndClearStrayGoToPositionUI(
         preLeafWindowSnapshotPath: String?,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
@@ -2853,9 +2881,11 @@ extension AccessibilityChannel {
             tell \(target.systemEventsProcessTarget)
                 try
                     -- #921 follow-up (RV-1): the dialog half needs the snapshot to establish
-                    -- ownership and is skipped entirely without one -- this `if` is the only change
-                    -- from before; the dialog-then-menu sequencing inside it is untouched. A `nil`
-                    -- Swift-side path renders as "" here, so this reads as `if false then ...`.
+                    -- ownership and is skipped entirely without one. The menu loop below is
+                    -- intentionally not ownership-gated: it follows the same fresh-observation
+                    -- policy as entry cleanup, which clears a pre-existing observed open menu before
+                    -- this route may actuate anything. A `nil` Swift-side path renders as "" here,
+                    -- so this reads as `if false then ...`.
                     if "\(preLeafWindowSnapshotPath ?? "")" is not "" then
                         set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath ?? "")")
                         if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"

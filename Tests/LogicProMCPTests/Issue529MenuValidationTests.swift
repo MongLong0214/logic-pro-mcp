@@ -61,6 +61,28 @@ private func issue529MatchingEndIf(after ifStart: String.Index, in script: Strin
     return nil
 }
 
+/// The `try...end try` counterpart to `issue529MatchingEndIf`. The revalidation read must set its
+/// success flag inside its own `try`, not merely later in the enclosing `if revalidated` block: an
+/// AppleScript assignment that throws leaves its old value in place while execution continues after
+/// `end try`.
+private func issue529MatchingEndTry(after tryStart: String.Index, in script: String) -> String.Index? {
+    var index = tryStart
+    var depth = 0
+    while index < script.endIndex {
+        let lineEnd = script[index...].firstIndex(of: "\n") ?? script.endIndex
+        let trimmedLine = script[index..<lineEnd].trimmingCharacters(in: .whitespaces)
+        if trimmedLine == "try" {
+            depth += 1
+        } else if trimmedLine == "end try" {
+            depth -= 1
+            if depth == 0 { return index }
+        }
+        guard lineEnd < script.endIndex else { break }
+        index = script.index(after: lineEnd)
+    }
+    return nil
+}
+
 private func issue529LedgerPath(from script: String, stage: String) throws -> String {
     let prefix = "recordDialogIssuance(\"\(stage)\", \""
     let start = try #require(script.range(of: prefix))
@@ -537,7 +559,7 @@ struct Issue529MenuValidationTests {
             of: "set cleanupState to my dismissOpenMenu(logicProcess, revalidated)", in: script
         )
         let stillDisabledReturn = try issue529Position(of: "return \"MENU_DISABLED\"", in: script)
-        let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE\"", in: script)
+        let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE:", in: script)
         // The first non-comment statement after the disabled branch's `end if` in the unmodified
         // (pre-#921) script — unchanged position proves the enabled path still falls through to
         // exactly what it always did. (Its own former anchor was a comment line, blanked above.)
@@ -583,15 +605,29 @@ struct Issue529MenuValidationTests {
         )
         #expect(rereadPositions.count == 2)
         let revalidationReread = try #require(rereadPositions.last)
+        let rereadTryStart = try #require(
+            script.range(
+                of: "try",
+                options: .backwards,
+                range: script.startIndex..<revalidationReread
+            )?.lowerBound,
+            "the re-read must remain inside an AppleScript try block"
+        )
+        let rereadTryEnd = try #require(
+            issue529MatchingEndTry(after: rereadTryStart, in: script),
+            "the fresh enabled read must have a structurally matching end try"
+        )
         let freshReadingSet = try issue529Position(of: "set freshReadingTaken to true", in: script)
         let disabledDecision = try issue529Position(
             of: "if freshReadingTaken and menuItemEnabled then", in: script
         )
         let stillDisabledReturn = try issue529Position(of: "return \"MENU_DISABLED\"", in: script)
-        let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE\"", in: script)
+        let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE:", in: script)
 
         #expect(freshReadingInit < revalidationReread)
         #expect(revalidationReread < freshReadingSet)
+        #expect(freshReadingSet < rereadTryEnd,
+                "the success flag must stay inside the re-read's try, not after a swallowed error")
         #expect(freshReadingSet < disabledDecision)
         #expect(disabledDecision < stillDisabledReturn)
         #expect(disabledDecision < unreadableReturn)
@@ -644,6 +680,8 @@ struct Issue529MenuValidationTests {
         // the menu-only loop must be reachable OUTSIDE that block, or a nil path never reaches Escape.
         #expect(snapshotGuardStart < dialogCleanup)
         #expect(dialogCleanup < snapshotGuardEnd)
+        #expect(!String(helper[snapshotGuardEnd..<menuFocus]).contains("return \"CLOSED\""),
+                "the menu loop must not be bypassed by an unconditional closed return")
         #expect(snapshotGuardEnd < menuFocus)
     }
 
@@ -707,20 +745,22 @@ struct Issue529MenuValidationTests {
     @Test("JSON-wrapped menu-validation-unreadable result refuses the dialog route without claiming disabled")
     func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() {
         let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
-            #"{"result":"MENU_VALIDATION_UNREADABLE"}"#
+            #"{"result":"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true"}"#
         )
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
 
-        #expect(classification == .failure(.menuValidationUnreadable))
+        #expect(classification == .failure(.menuValidationUnreadable(menuActuationAttempted: true)))
         #expect(classification != .failure(.menuDisabled))
         #expect(classification.diagnosticLabel == "menu_validation_unreadable")
-        // Same shape of refusal as `.menuDisabled`: fail-closed, menus read closed. #921 follow-up
-        // (RV-3): NOT "nothing actuated" — this sentinel is reachable only from inside the forced
-        // revalidation pass, which always issues its own top-level-menu click first. The refusal
-        // must say so: a fresh-disabled or unreadable-revalidation result that definitely clicked
-        // and observed the menu used to report `menu_actuation_attempted: false` regardless.
+        // A readable fresh-disabled result proves the click completed; an unreadable-validation
+        // result does not, because the click itself may have thrown. The generated script therefore
+        // carries its post-click observation to the classifier rather than asking Swift to assume it.
         #expect(classification.requiresUnsafeUIRefusal)
         #expect(classification.menuObservation == .closed)
         #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+        #expect(script.contains(
+            "return \"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=\" & (menuActuationAttempted as text)"
+        ))
     }
 
     @Test("a pre-actuation menu close failure returns State C without touching the slider")
@@ -760,12 +800,12 @@ struct Issue529MenuValidationTests {
         for (sentinel, outcome, actuationAttempted) in [
             ("MENU_NOT_FOUND: no such menu item", "menu_not_found", false),
             ("MENU_STATE_UNREADABLE", "menu_state_unreadable", false),
-            // #921 follow-up (RV-3): both #921 sentinels are reachable ONLY from inside the forced
-            // revalidation pass, which always issues its own top-level-menu click first -- unlike
-            // the two above, which return before that pass (or before it could ever run) and so
-            // never click anything.
+            // MENU_DISABLED can be reached only after its fresh read, which proves the revalidation
+            // click completed. The unreadable result also serializes the opposite observed case:
+            // the click itself threw before it could set `menuActuationAttempted`.
             ("MENU_DISABLED", "menu_disabled", true),
-            ("MENU_VALIDATION_UNREADABLE", "menu_validation_unreadable", true),
+            ("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true", "menu_validation_unreadable", true),
+            ("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=false", "menu_validation_unreadable", false),
         ] {
             let sliderWrites = Issue529Counter()
             let result = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -794,7 +834,7 @@ struct Issue529MenuValidationTests {
                         "\(sentinel): the forced revalidation pass clicked, so this must say so")
             } else {
                 #expect(!reportedActuation,
-                        "\(sentinel): this sentinel returns before any click, so nothing was actuated")
+                        "\(sentinel): the script reported that the click did not complete")
             }
             #expect(sliderWrites.value == 0, "\(sentinel)")
         }
@@ -823,9 +863,18 @@ struct Issue529MenuValidationTests {
     @Test("a post-click menu close failure records menu navigation, not a position write")
     func postClickMenuCloseFailureRefusesBeforePositionWrite() async throws {
         let sliderWrites = Issue529Counter()
+        let reconciliationCalls = Issue529Counter()
+        let reconciliationScript = Issue529StringBox()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
-            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            runtime: issue529SliderRuntime(
+                sliderWrites: sliderWrites,
+                executeAppleScript: { script in
+                    reconciliationScript.set(script)
+                    reconciliationCalls.bump()
+                    return .success(#"{"result":"CLOSED"}"#)
+                }
+            ),
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
@@ -839,6 +888,11 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["menu_actuation_attempted"] as? Bool))
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
         #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+        #expect(reconciliationCalls.value == 1,
+                "a normal post-actuation cleanup failure must enter the parent-owned reconciler")
+        let script = try #require(reconciliationScript.value)
+        #expect(script.contains("if \"\" is not \"\" then"),
+                "the normal-result reconciliation must use the existing menu-only path")
         #expect(sliderWrites.value == 0)
     }
 
@@ -994,7 +1048,7 @@ struct Issue529MenuValidationTests {
             ("MENU_NOT_FOUND", "menu_not_found"),
             ("MENU_DISABLED", "menu_disabled"),
             ("MENU_STATE_UNREADABLE", "menu_state_unreadable"),
-            ("MENU_VALIDATION_UNREADABLE", "menu_validation_unreadable"),
+            ("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true", "menu_validation_unreadable"),
         ] {
             let scriptExecutions = Issue529Counter()
             let sliderWrites = Issue529Counter()
