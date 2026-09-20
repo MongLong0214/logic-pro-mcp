@@ -1769,13 +1769,12 @@ extension AccessibilityChannel {
                     -- allowed to call the item disabled rather than merely cache-stale.
                     set revalidated to false
                     try
-                        click menu bar item barName of menu bar 1
-                        -- This assignment is reached only after the click returned successfully. It is
-                        -- distinct from `revalidated`: an error from the click itself leaves this false,
-                        -- while a later `selected` read can leave it true but revalidated false. The
-                        -- unreadable-validation return serializes this observed fact for Swift rather
-                        -- than letting Swift assume the click happened.
+                        -- Mark this BEFORE issuing the click: AX can open the menu and then report an
+                        -- error, so cleanup must handle the menu this run may have opened. This is
+                        -- deliberately distinct from `revalidated`, which remains the stricter
+                        -- observation that `selected` was read true after the click.
                         set menuActuationAttempted to true
+                        click menu bar item barName of menu bar 1
                         delay 0.1
                         if selected of menu bar item barName of menu bar 1 then set revalidated to true
                     end try
@@ -2450,10 +2449,15 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
-        case let value where value.hasPrefix("MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="):
+        case let value where value.hasPrefix("MENU_VALIDATION_UNREADABLE"):
             let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
-            guard let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count))) else {
-                return .failure(.unexpectedResult)
+            guard value.hasPrefix(prefix),
+                  let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
+            else {
+                // This sentinel is a safety refusal. A legacy bare value or malformed suffix has
+                // lost the observation, not established that no click occurred, so retain the
+                // conservative side that requires post-actuation cleanup.
+                return .failure(.menuValidationUnreadable(menuActuationAttempted: true))
             }
             return .failure(.menuValidationUnreadable(
                 menuActuationAttempted: menuActuationAttempted

@@ -555,6 +555,26 @@ struct Issue529MenuValidationTests {
         let revalidationClick = try issue529Position(
             of: "click menu bar item barName of menu bar 1", in: script
         )
+        let revalidationTryStart = try #require(
+            script.range(
+                of: "try",
+                options: .backwards,
+                range: disabledBranchStart..<revalidationClick
+            )?.lowerBound,
+            "the revalidation click must remain inside its AppleScript try"
+        )
+        let revalidationTryEnd = try #require(
+            issue529MatchingEndTry(after: revalidationTryStart, in: script),
+            "the revalidation click's try must have a structurally matching end try"
+        )
+        let revalidationTry = String(script[revalidationTryStart..<revalidationTryEnd])
+        let revalidationAttemptMarker = try #require(
+            script.range(
+                of: "set menuActuationAttempted to true",
+                range: revalidationTryStart..<revalidationTryEnd
+            )?.lowerBound,
+            "the revalidation try must mark its menu actuation attempt"
+        )
         let revalidationCleanup = try issue529Position(
             of: "set cleanupState to my dismissOpenMenu(logicProcess, revalidated)", in: script
         )
@@ -569,6 +589,13 @@ struct Issue529MenuValidationTests {
         )
 
         #expect(disabledBranchStart < revalidationClick)
+        // The marker must be in the SAME try and before its click. AX can perform the click and
+        // then throw, so moving it after the click (or deleting it) would make unreadable cleanup
+        // act as if no menu could have opened.
+        #expect(revalidationTryStart < revalidationAttemptMarker)
+        #expect(revalidationAttemptMarker < revalidationClick)
+        #expect(revalidationClick < revalidationTryEnd)
+        #expect(issue529Positions(of: "set menuActuationAttempted to true", in: revalidationTry).count == 1)
         #expect(revalidationClick < revalidationCleanup)
         #expect(revalidationCleanup < stillDisabledReturn)
         #expect(revalidationCleanup < unreadableReturn)
@@ -642,8 +669,10 @@ struct Issue529MenuValidationTests {
         // before the pre-leaf snapshot is ever written -- that write is the LAST step of the
         // disabled branch, long after the revalidation click. A timeout during that pass used to
         // hit `guard let preLeafWindowSnapshotPath else { return false }` at the call site and skip
-        // cleanup entirely, including the menu-only Escape that has no snapshot-ownership problem at
-        // all, leaving Logic's menu open and every later AppleEvent wedged behind it.
+        // cleanup entirely, including the menu-only Escape. That loop follows this route's deliberate
+        // fresh-observation policy, not an ownership guarantee: a user could open a menu after the
+        // child dies and before reconciliation, yet another position actuation remains blocked until
+        // the observed menu is closed.
         //
         // Mutation this rejects: restore the early `guard let ... else { return false }`, make the
         // snapshot path parameter non-optional again, or move the menu-escape loop back inside the
@@ -680,8 +709,12 @@ struct Issue529MenuValidationTests {
         // the menu-only loop must be reachable OUTSIDE that block, or a nil path never reaches Escape.
         #expect(snapshotGuardStart < dialogCleanup)
         #expect(dialogCleanup < snapshotGuardEnd)
-        #expect(!String(helper[snapshotGuardEnd..<menuFocus]).contains("return \"CLOSED\""),
-                "the menu loop must not be bypassed by an unconditional closed return")
+        let betweenSnapshotGuardAndMenuLoop = String(helper[snapshotGuardEnd..<menuFocus])
+        // A reconciliation fixture returns canned JSON without executing this script. Therefore the
+        // generated source itself must prove that every snapshot outcome reaches the menu loop; no
+        // unconditional return of any literal may appear in this gap.
+        #expect(!betweenSnapshotGuardAndMenuLoop.contains("return"),
+                "the menu loop must not be bypassed by an unconditional return")
         #expect(snapshotGuardEnd < menuFocus)
     }
 
@@ -754,13 +787,50 @@ struct Issue529MenuValidationTests {
         #expect(classification.diagnosticLabel == "menu_validation_unreadable")
         // A readable fresh-disabled result proves the click completed; an unreadable-validation
         // result does not, because the click itself may have thrown. The generated script therefore
-        // carries its post-click observation to the classifier rather than asking Swift to assume it.
+        // marks the click attempt before issuing it, so cleanup can conservatively handle a menu it
+        // may already have opened.
         #expect(classification.requiresUnsafeUIRefusal)
         #expect(classification.menuObservation == .closed)
         #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
         #expect(script.contains(
             "return \"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=\" & (menuActuationAttempted as text)"
         ))
+    }
+
+    @Test("legacy or malformed menu-validation sentinels remain conservative safety refusals")
+    func legacyOrMalformedMenuValidationSentinelsRefuseSafely() async throws {
+        // Mutation this rejects: restore the parser's `.unexpectedResult` fallback for malformed
+        // MENU_VALIDATION_UNREADABLE values. That fallback appears dialog-safe and could release the
+        // later slider route; every spelling below must instead retain the unreadable refusal and its
+        // conservative attempted-actuation reading.
+        for sentinel in [
+            "MENU_VALIDATION_UNREADABLE",
+            "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=TRUE",
+            "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=garbage",
+        ] {
+            let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+                "{\"result\":\"\(sentinel)\"}"
+            )
+            #expect(classification.diagnosticLabel == "menu_validation_unreadable")
+            #expect(classification.requiresUnsafeUIRefusal)
+            #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+
+            let sliderWrites = Issue529Counter()
+            let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+                params: ["bar": "529"],
+                runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+                isFrontmost: { true },
+                activateLogic: { true },
+                sleepMicros: { _ in },
+                executeDialogScript: { _ in .success("{\"result\":\"\(sentinel)\"}") }
+            )
+
+            let envelope = try #require(issue529Envelope(result))
+            #expect(!result.isSuccess)
+            #expect(try #require(envelope["state"] as? String) == "C")
+            #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+            #expect(sliderWrites.value == 0)
+        }
     }
 
     @Test("a pre-actuation menu close failure returns State C without touching the slider")
@@ -1320,9 +1390,10 @@ struct Issue529MenuValidationTests {
         // #921 follow-up (RV-1): before this fix, `observeAndClearStrayGoToPositionUI` hit `guard
         // let preLeafWindowSnapshotPath else { return false }` before ever calling `executeScript`,
         // so a killed child with no durable ownership snapshot skipped EVERY cleanup, including the
-        // menu-only Escape loop that has no ownership problem at all -- leaving a menu the forced
-        // revalidation pass opened stuck open, wedging every later AppleEvent behind it. This test
-        // used to assert that outcome (`reconciliationCalls.value == 0`) as correct; it was the bug.
+        // menu-only Escape loop. That loop follows this route's deliberate fresh-observation policy,
+        // not an ownership guarantee: a user could open a menu after the child dies and before
+        // reconciliation. This test used to assert the resulting skip (`reconciliationCalls.value ==
+        // 0`) as correct; it was the bug.
         //
         // Mutation this rejects: restore the early `guard let ... else { return false }`, which
         // would make `reconciliationCalls.value` read back 0 again and the dialog-cleanup gate below
@@ -1366,15 +1437,17 @@ struct Issue529MenuValidationTests {
     @Test("the default reconciler attempts menu-only recovery but never cancels a pre-existing dialog after LEAF_ARMED")
     func defaultReconcilerLeavesPreexistingDialogUntouchedAfterLeafTimeout() async throws {
         // #921 follow-up (RV-1): a LEAF_ARMED timeout with no READY pre-leaf snapshot now DOES run
-        // the reconciliation script (menu-only recovery has no ownership problem), but it must still
-        // never press Cancel on the fixture's already-open modal -- that action would require the
-        // DIALOG-cleanup branch, which stays gated behind the (absent) snapshot. `actionCalls.isEmpty`
-        // is the assertion that actually protects the dialog; `reconciliationCalls.value == 1` is the
-        // new, intentional behavior change this issue's revalidation pass requires.
+        // the reconciliation script. Its menu-only loop follows deliberate route policy after a fresh
+        // observation, not an ownership guarantee: a user could open a menu after the child dies and
+        // before reconciliation. The DIALOG-cleanup branch remains gated behind the absent snapshot.
+        // `actionCalls.isEmpty` proves only that this test's fake AX runtime received no Swift AX
+        // action; the captured AppleScript is not executed against that fake runtime.
+        // `reconciliationCalls.value == 1` is the new, intentional behavior change this issue's
+        // revalidation pass requires.
         //
         // Mutation this rejects: let the dialog-cleanup branch run without requiring its READY
-        // pre-leaf snapshot, which would let this reconciliation script press Cancel on the
-        // fixture's already-open dialog (`actionCalls` would stop being empty).
+        // pre-leaf snapshot. The captured-script assertion below would then lose the `if "" is not
+        // "" then` gate; `actionCalls` remains only a check of the fake Swift AX runtime.
         let reconciliationCalls = Issue529Counter()
         let reconciliationScript = Issue529StringBox()
         let fixture = issue529PreexistingDialogRuntime(
