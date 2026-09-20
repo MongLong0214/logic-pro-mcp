@@ -27,10 +27,6 @@ private func issue529IsAppleScriptLineTerminator(_ character: Character) -> Bool
     character.unicodeScalars.allSatisfy(CharacterSet.newlines.contains)
 }
 
-private func issue529AppleScriptLine(at position: String.Index, in script: String) -> String {
-    String(script[position...].prefix { !issue529IsAppleScriptLineTerminator($0) })
-}
-
 /// Neutralises AppleScript `--`, `#`, and `(* ... *)` comments before a positional or structural
 /// assertion runs against generated script text. #921 follow-up (RV-6): a statement inside any
 /// stripped comment form must not satisfy a source-shape assertion. Newlines are preserved so the
@@ -222,11 +218,12 @@ private func issue529NextActiveAppleScriptStatement(
     return nil
 }
 
-/// The reconciliation handler has one direct fallthrough spine: its `try` enters the snapshot
-/// guard, then the unknown-dialog observation, then the menu loop. The guards may refuse their own
-/// unsafe outcomes, but no unscoped statement may divert a path that falls through them.
+/// The reconciliation handler has one direct fallthrough spine: handler entry enters its `try`,
+/// then the snapshot guard, unknown-dialog observation, and menu loop. The guards may refuse their
+/// own unsafe outcomes, but no unscoped statement may divert a path that falls through them.
 private func issue529ReconciliationFallthroughReachesMenuLoop(
     in script: String,
+    handlerEntry: String.Index,
     tryStart: String.Index,
     snapshotGuardStart: String.Index,
     snapshotGuardEnd: String.Index,
@@ -234,118 +231,14 @@ private func issue529ReconciliationFallthroughReachesMenuLoop(
     unknownDialogGuardEnd: String.Index,
     menuLoopStart: String.Index
 ) -> Bool {
-    issue529NextActiveAppleScriptStatement(afterLineStartingAt: tryStart, in: script)
+    issue529NextActiveAppleScriptStatement(afterLineStartingAt: handlerEntry, in: script)
+        == tryStart
+        && issue529NextActiveAppleScriptStatement(afterLineStartingAt: tryStart, in: script)
         == snapshotGuardStart
         && issue529NextActiveAppleScriptStatement(afterLineStartingAt: snapshotGuardEnd, in: script)
         == unknownDialogGuardStart
         && issue529NextActiveAppleScriptStatement(afterLineStartingAt: unknownDialogGuardEnd, in: script)
         == menuLoopStart
-}
-
-/// Removes redundant outer expression parentheses. It leaves handler-call parentheses intact and
-/// only unwraps a pair that encloses the full expression, so equivalent concatenations produce the
-/// same terms regardless of cosmetic grouping.
-private func issue529NormalisedAppleScriptExpression(_ expression: String) -> String? {
-    var normalised = expression.trimmingCharacters(in: .whitespaces)
-
-    while normalised.first == "(", normalised.last == ")" {
-        var depth = 0
-        var inString = false
-        var escaped = false
-        var outerClose: String.Index?
-
-        for index in normalised.indices {
-            let character = normalised[index]
-            if inString {
-                if escaped {
-                    escaped = false
-                } else if character == "\\" {
-                    escaped = true
-                } else if character == "\"" {
-                    inString = false
-                }
-                continue
-            }
-
-            switch character {
-            case "\"":
-                inString = true
-            case "(":
-                depth += 1
-            case ")":
-                guard depth > 0 else { return nil }
-                depth -= 1
-                if depth == 0, outerClose == nil {
-                    outerClose = index
-                }
-            default:
-                break
-            }
-        }
-
-        guard !inString, depth == 0 else { return nil }
-        guard outerClose == normalised.index(before: normalised.endIndex) else { break }
-        normalised = String(normalised.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
-        guard !normalised.isEmpty else { return nil }
-    }
-
-    return normalised
-}
-
-/// Splits a normalised `return` expression on top-level AppleScript concatenation operators.
-/// String literals and handler-call parentheses stay intact, so a handler name written inside a
-/// literal is not mistaken for an invoked expression.
-private func issue529TopLevelAppleScriptConcatenationTerms(in returnLine: String) -> [String]? {
-    let line = returnLine.trimmingCharacters(in: .whitespaces)
-    guard line.hasPrefix("return ") else { return nil }
-    guard let expression = issue529NormalisedAppleScriptExpression(
-        String(line.dropFirst("return ".count))
-    ) else { return nil }
-
-    var terms: [String] = []
-    var currentTerm = ""
-    var inString = false
-    var escaped = false
-    var parenthesisDepth = 0
-
-    for character in expression {
-        if inString {
-            currentTerm.append(character)
-            if escaped {
-                escaped = false
-            } else if character == "\\" {
-                escaped = true
-            } else if character == "\"" {
-                inString = false
-            }
-            continue
-        }
-
-        switch character {
-        case "\"":
-            inString = true
-            currentTerm.append(character)
-        case "(":
-            parenthesisDepth += 1
-            currentTerm.append(character)
-        case ")":
-            guard parenthesisDepth > 0 else { return nil }
-            parenthesisDepth -= 1
-            currentTerm.append(character)
-        case "&" where parenthesisDepth == 0:
-            guard let term = issue529NormalisedAppleScriptExpression(currentTerm) else { return nil }
-            guard !term.isEmpty else { return nil }
-            terms.append(term)
-            currentTerm = ""
-        default:
-            currentTerm.append(character)
-        }
-    }
-
-    guard let finalTerm = issue529NormalisedAppleScriptExpression(currentTerm) else { return nil }
-    guard !inString, parenthesisDepth == 0, !finalTerm.isEmpty else { return nil }
-    terms.append(finalTerm)
-    return terms
 }
 
 private func issue529LedgerPath(from script: String, stage: String) throws -> String {
@@ -756,11 +649,11 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("every menu-cleanup refusal uses observed cleanup and carries its actuation context")
-    func menuCleanupRefusalsUseObservedCleanupAndCarryActuationContext() throws {
-        let script = issue529StrippedOfAppleScriptComments(
-            AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        )
+    @Test("declared menu-cleanup refusal sites correspond exactly to the generated script")
+    func declaredMenuCleanupRefusalSitesCorrespondToTheGeneratedScript() throws {
+        let generatedScript = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let script = issue529StrippedOfAppleScriptComments(generatedScript)
+        let sites = AccessibilityChannel.menuCleanupRefusalSites
         let entryCleanup = try issue529Position(
             of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
             in: script
@@ -769,72 +662,29 @@ struct Issue529MenuValidationTests {
             of: "return \"MENU_PICK_FAILED: menu state was not observed closed at entry",
             in: script
         )
-        let cleanupRefusalReturns = issue529Positions(of: "return ", in: script).filter { position in
-            let refusalLine = issue529AppleScriptLine(at: position, in: script)
-            guard let refusalTerms = issue529TopLevelAppleScriptConcatenationTerms(in: refusalLine) else {
-                return false
-            }
-            let literalText = refusalTerms.compactMap { term -> String? in
-                guard term.hasPrefix("\""), term.hasSuffix("\""), term.count >= 2 else {
-                    return nil
-                }
-                return String(term.dropFirst().dropLast())
-            }.joined()
-            return literalText.hasPrefix("MENU_PICK_FAILED:")
-                && literalText.contains("menu cleanup was not observed")
-        }
         let escape = try issue529Position(of: "key code 53", in: script)
-        let leafClick = try issue529Position(
-            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
-            in: script
-        )
         let menuStateObservations = issue529Positions(
             of: "set menuState to my menuOpenState(theProcess)",
             in: script
         )
+        let refusalPrefixOccurrences = issue529Positions(
+            of: AccessibilityChannel.MenuCleanupRefusalSite.refusalPrefix,
+            in: script
+        )
 
-        #expect(cleanupRefusalReturns.count == 4,
-                "the generated dialog script has exactly four menu-cleanup refusal returns")
+        #expect(sites.count == 4, "the declared registry has one value for each refusal site")
+        #expect(Set(sites.map(\.identifier)).count == sites.count,
+                "each declared menu-cleanup refusal site needs a distinct identifier")
+        #expect(refusalPrefixOccurrences.count == sites.count,
+                "the generated script may not contain an undeclared menu-cleanup refusal")
         #expect(entryCleanup < entryRefusal)
         #expect(menuStateObservations.contains { escape < $0 })
-        var previousRefusalReturn = entryRefusal
-        for refusalReturn in cleanupRefusalReturns {
-            #expect(refusalReturn < leafClick,
-                    "every menu-cleanup refusal must precede the leaf click, so it cannot own a dialog")
-            let refusalLine = issue529AppleScriptLine(at: refusalReturn, in: script)
-            let refusalTerms = try #require(
-                issue529TopLevelAppleScriptConcatenationTerms(in: refusalLine),
-                "every MENU_PICK_FAILED menu-cleanup return must be an assembled expression"
-            )
-            #expect(
-                refusalTerms == [
-                    "\"MENU_PICK_FAILED: menu cleanup was not observed\"",
-                    "my menuCleanupActuationContext(menuActuationAttempted)",
-                    "\" (\"",
-                    "cleanupState",
-                    "\")\"",
-                ],
-                "every MENU_PICK_FAILED menu-cleanup return must concatenate the actuation-context handler as an expression"
-            )
-            let cleanupBetweenRefusals = issue529Positions(
-                of: "set cleanupState to my dismissOpenMenu(logicProcess,",
-                in: script
-            ).contains { previousRefusalReturn < $0 && $0 < refusalReturn }
-            #expect(cleanupBetweenRefusals)
-            previousRefusalReturn = refusalReturn
+        for site in sites {
+            #expect(site.emittedBeforeLeafClick,
+                    "the declared menu-cleanup refusal site \(site.identifier) must be pre-leaf")
+            #expect(generatedScript.contains(site.appleScript),
+                    "the generated script must include the refusal text declared by \(site.identifier)")
         }
-    }
-
-    @Test("parenthesized refusal expressions are selected by their runtime literal content")
-    func parenthesizedMenuCleanupRefusalIsNormalisedBeforeSelection() throws {
-        let refusal = "return \"MENU_PICK_FAILED: menu cleanup was not observed\" & my menuCleanupActuationContext(menuActuationAttempted) & \" (\" & cleanupState & \")\""
-        let parenthesizedRefusal = "return (\"MENU_PICK_FAILED: menu cleanup was not observed\" & my menuCleanupActuationContext(menuActuationAttempted) & \" (\" & cleanupState & \")\")"
-
-        #expect(
-            issue529TopLevelAppleScriptConcatenationTerms(in: parenthesizedRefusal)
-                == issue529TopLevelAppleScriptConcatenationTerms(in: refusal),
-            "redundant expression parentheses must not hide a menu-cleanup refusal from selection"
-        )
     }
 
     /// #921. The forced revalidation click must be reachable ONLY when the entry read already
@@ -994,7 +844,7 @@ struct Issue529MenuValidationTests {
     }
 
     @Test("reconciliation has a direct fallthrough path from entry to its menu loop")
-    func reconciliationEntryFallsThroughToTheMenuLoop() throws {
+    func reconciliationEntryFallsThroughToTheMenuLoop() async throws {
         // #921 follow-up (RV-1): the forced revalidation pass opens Logic's own top-level menu
         // before the pre-leaf snapshot is ever written. The disabled branch ends first; the snapshot
         // is persisted later, after the dialog and total-window observations. Thus a timeout anywhere
@@ -1004,28 +854,44 @@ struct Issue529MenuValidationTests {
         // user could open a menu after the child dies and before reconciliation, yet another position
         // actuation remains blocked until the observed menu is closed.
         //
-        // Mutation this rejects: insert a return (or any other direct statement) before the
-        // snapshot guard or before the menu loop. The fixture only captures this script, so source
-        // structure must establish that an otherwise falling-through execution reaches the loop.
-        let source = try String(
-            contentsOfFile: #filePath.replacingOccurrences(
-                of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
-                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
-            ),
-            encoding: .utf8
+        // Mutation this rejects: insert a return (or any other direct statement) at handler entry,
+        // before the snapshot guard, or before the menu loop. Capture the generated script rather
+        // than scanning its Swift template: an escaped line terminator in a source literal can turn
+        // a source-line comment into an active AppleScript return.
+        let reconciliationScript = Issue529StringBox()
+        let runtime = issue529SliderRuntime(
+            sliderWrites: Issue529Counter(),
+            executeAppleScript: { script in
+                reconciliationScript.set(script)
+                return .success(#"{"result":"CLOSED"}"#)
+            }
         )
-        let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI("))
-        let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
-        let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
-        let templateStart = try #require(helper.range(of: "let script = \"\"\""))
-        let templateEnd = try #require(
-            helper.range(of: "\"\"\"", range: templateStart.upperBound..<helper.endIndex)
+        _ = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: runtime,
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in .error("osascript timed out before any ledger boundary") },
+            createDialogIssuanceLedger: { nil }
         )
         let activeHelper = issue529StrippedOfAppleScriptComments(
-            String(helper[templateStart.upperBound..<templateEnd.lowerBound])
+            try #require(reconciliationScript.value)
+        )
+        let outerSystemEventsTell = try #require(
+            activeHelper.range(of: "tell application \"System Events\"", options: .backwards)?.lowerBound,
+            "the generated reconciliation script must enter System Events"
+        )
+        let reconciliationHandlerEntry = try #require(
+            issue529NextActiveAppleScriptStatement(afterLineStartingAt: outerSystemEventsTell, in: activeHelper),
+            "the generated reconciliation handler must enter its target process"
+        )
+        let reconciliationTryStart = try #require(
+            issue529NextActiveAppleScriptStatement(afterLineStartingAt: reconciliationHandlerEntry, in: activeHelper),
+            "the reconciliation handler must enter its outer try directly from handler entry"
         )
         let snapshotGuardStart = try issue529Position(
-            of: "if \"\\(preLeafWindowSnapshotPath ?? \"\")\" is not \"\" then", in: activeHelper
+            of: "if \"\" is not \"\" then", in: activeHelper
         )
         let snapshotGuardEnd = try #require(
             issue529MatchingEndIf(after: snapshotGuardStart, in: activeHelper),
@@ -1036,19 +902,11 @@ struct Issue529MenuValidationTests {
             in: activeHelper
         )
         let unknownDialogGuardStart = try issue529Position(
-            of: "if \\(requiresUnownedDialogObservation) then", in: activeHelper
+            of: "if true then", in: activeHelper
         )
         let unknownDialogGuardEnd = try #require(
             issue529MatchingEndIf(after: unknownDialogGuardStart, in: activeHelper),
             "the unknown-dialog observation block must close with a structurally matching end if"
-        )
-        let reconciliationTryStart = try #require(
-            activeHelper.range(
-                of: "try",
-                options: .backwards,
-                range: activeHelper.startIndex..<snapshotGuardStart
-            )?.lowerBound,
-            "the reconciliation fallthrough path must start in its outer try"
         )
         let menuLoop = try #require(
             activeHelper.range(
@@ -1067,6 +925,7 @@ struct Issue529MenuValidationTests {
         #expect(dialogCleanup < snapshotGuardEnd)
         let fallsThroughToMenuLoop = issue529ReconciliationFallthroughReachesMenuLoop(
             in: activeHelper,
+            handlerEntry: reconciliationHandlerEntry,
             tryStart: reconciliationTryStart,
             snapshotGuardStart: snapshotGuardStart,
             snapshotGuardEnd: snapshotGuardEnd,
@@ -1811,17 +1670,19 @@ struct Issue529MenuValidationTests {
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
-            executeDialogScript: { _ in .error("osascript timed out before any ledger boundary") }
+            executeDialogScript: { _ in .error("osascript timed out before any ledger boundary") },
+            createDialogIssuanceLedger: { nil }
         )
 
         let envelope = try #require(issue529Envelope(result))
-        #expect(!result.isSuccess)
-        #expect(try #require(envelope["state"] as? String) == "C")
-        // The canned CLOSED is accepted only because the generated unknown-state script first
-        // observes for a dialog and then reaches its menu loop; the fixture captures that structure
-        // but does not execute it.
+        #expect(result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "B")
+        // The canned CLOSED is only this fixture's result. The separate structural assertions below
+        // establish that the generated unknown-state script first observes for a dialog and then
+        // reaches its menu loop; this fixture captures that structure but does not execute it.
         #expect(try #require(envelope["dialog_route_outcome"] as? String)
-            == "execution_failed_issuance_NOT_ISSUED_cleanup_closed_true")
+            == "execution_failed_issuance_unknown_cleanup_closed_true")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(reconciliationCalls.value == 1)
         let capturedScript = try #require(reconciliationScript.value)
         #expect(!capturedScript.contains("\r"),
@@ -1833,11 +1694,40 @@ struct Issue529MenuValidationTests {
         let unknownDialogObservation = try issue529Position(
             of: "set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)", in: script
         )
+        let unknownDialogObservationLoop = try issue529Position(
+            of: "repeat 20 times", in: script
+        )
+        let observationLoopDelay = try #require(
+            script.range(of: "delay 0.1", range: unknownDialogObservationLoop..<script.endIndex)?.lowerBound,
+            "the bounded unknown-dialog observation must delay between counts"
+        )
         let menuFocus = try issue529Position(
             of: "set menuFocusState to my menuEscapeFocusState(it)", in: script
         )
+        let unknownDialogObservationEnd = try #require(
+            script.range(of: "end repeat", range: unknownDialogObservation..<menuFocus)?.lowerBound,
+            "the unknown-dialog observation must close its bounded poll before menu recovery"
+        )
+        let unknownDialogObservationStatements = String(
+            script[unknownDialogObservationLoop..<unknownDialogObservationEnd]
+        )
+        .split(separator: "\n")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
         #expect(unknownDialogObservation < menuFocus,
                 "unknown reconciliation must look for a dialog before it can inspect the menu")
+        #expect(issue529Positions(
+            of: "set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)", in: script
+        ).count == 1, "the dialog count must be a single statement inside the bounded poll")
+        #expect(unknownDialogObservationLoop < observationLoopDelay)
+        #expect(observationLoopDelay < unknownDialogObservation)
+        #expect(unknownDialogObservationStatements == [
+            "repeat 20 times",
+            "delay 0.1",
+            "set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)",
+            "if unownedGoToPositionDialogCount is \"UNREADABLE\" then return \"DIALOG_UNREADABLE\"",
+            "if unownedGoToPositionDialogCount is greater than 0 then return \"DIALOG_UNIDENTIFIED\"",
+        ], "a dialog that appears after the first count must be seen by a bounded poll, not missed after one count")
         let menuLoop = try #require(
             script.range(of: "repeat 3 times", options: .backwards, range: script.startIndex..<menuFocus)
         )

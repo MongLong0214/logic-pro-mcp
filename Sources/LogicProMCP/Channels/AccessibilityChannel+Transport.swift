@@ -1260,6 +1260,49 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The one source of truth for every `MENU_PICK_FAILED` refusal that says menu cleanup was
+    /// not observed. The descriptor is emitted at each site rather than spelling the AppleScript
+    /// return inline, so adding a site requires declaring whether it is before or after the leaf.
+    struct MenuCleanupRefusalSite: Sendable {
+        let identifier: String
+
+        /// A pre-leaf site cannot own a Go To Position dialog, so its Swift caller may use the
+        /// menu-only reconciliation path. This is data rather than an inference from AppleScript
+        /// spelling or source position.
+        let emittedBeforeLeafClick: Bool
+
+        static let localeResolution = Self(
+            identifier: "locale_resolution", emittedBeforeLeafClick: true
+        )
+        static let enabledRead = Self(
+            identifier: "enabled_read", emittedBeforeLeafClick: true
+        )
+        static let revalidation = Self(
+            identifier: "revalidation", emittedBeforeLeafClick: true
+        )
+        static let issuanceLedger = Self(
+            identifier: "issuance_ledger", emittedBeforeLeafClick: true
+        )
+
+        static let refusalPrefix = "MENU_PICK_FAILED: menu cleanup was not observed"
+
+        /// Keep an emitted marker beside the return so tests can check the declared sites and the
+        /// generated script correspond one-for-one without parsing AppleScript expressions.
+        var appleScript: String {
+            """
+            -- MENU_CLEANUP_REFUSAL_SITE: \(identifier)
+            return "\(Self.refusalPrefix)" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+            """
+        }
+    }
+
+    static let menuCleanupRefusalSites = [
+        MenuCleanupRefusalSite.localeResolution,
+        .enabledRead,
+        .revalidation,
+        .issuanceLedger,
+    ]
+
     /// The script is internal so the menu-validation regression tests can assert the
     /// exact generated AppleScript ordering without invoking Logic Pro.
     static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
@@ -1733,7 +1776,7 @@ extension AccessibilityChannel {
                     -- this run and do not authorise Escape from an unreadable AX observation.
                     set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        \(MenuCleanupRefusalSite.localeResolution.appleScript)
                     end if
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
@@ -1743,7 +1786,7 @@ extension AccessibilityChannel {
                     -- An unreadable AXEnabled must not authorise the pick.
                     set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        \(MenuCleanupRefusalSite.enabledRead.appleScript)
                     end if
                     return "MENU_STATE_UNREADABLE"
                 end try
@@ -1783,7 +1826,7 @@ extension AccessibilityChannel {
                     end if
                     set cleanupState to my dismissOpenMenu(logicProcess, revalidated)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        \(MenuCleanupRefusalSite.revalidation.appleScript)
                     end if
                     if freshReadingTaken and menuItemEnabled then
                         -- The forced pass revalidated the leaf as actuatable; continue below as if
@@ -1831,7 +1874,7 @@ extension AccessibilityChannel {
                     if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
                         set cleanupState to my dismissOpenMenu(logicProcess, false)
                         if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                            \(MenuCleanupRefusalSite.issuanceLedger.appleScript)
                         end if
                         return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
                     end if
@@ -2560,8 +2603,8 @@ extension AccessibilityChannel {
                 ))
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
-                    // Every `MENU_PICK_FAILED: menu cleanup was not observed` refusal is emitted
-                    // before the leaf click, so this run cannot own a Go To Position dialog.
+                    // The declared menu-cleanup refusal sites are all pre-leaf, so this run cannot
+                    // own a Go To Position dialog when one of these normal results is returned.
                     // Using its READY snapshot here would let the dialog half swallow the needed
                     // Escape, so this is explicitly the menu-only case rather than a missing path.
                     _ = await reconcileAfterExecutionFailure(.provablyPreLeaf)
@@ -2908,9 +2951,15 @@ extension AccessibilityChannel {
                         if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
                     end if
                     if \(requiresUnownedDialogObservation) then
-                        set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)
-                        if unownedGoToPositionDialogCount is "UNREADABLE" then return "DIALOG_UNREADABLE"
-                        if unownedGoToPositionDialogCount is greater than 0 then return "DIALOG_UNIDENTIFIED"
+                        -- A dead child can deselect its leaf menu before Logic publishes the modal.
+                        -- Reuse the write path's bounded appearance poll: one zero count is not a
+                        -- CLOSED observation, and an unowned dialog may only be observed and refused.
+                        repeat 20 times
+                            delay 0.1
+                            set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)
+                            if unownedGoToPositionDialogCount is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                            if unownedGoToPositionDialogCount is greater than 0 then return "DIALOG_UNIDENTIFIED"
+                        end repeat
                     end if
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)
