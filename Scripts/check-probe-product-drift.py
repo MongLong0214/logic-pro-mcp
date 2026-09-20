@@ -41,16 +41,26 @@ WHAT IT ENFORCES
    so the exact comparisons that carry user data are listed here by name and required to stay exact.
 
     python3 Scripts/check-probe-product-drift.py
+
+WHY IT HAS AN ENTRY POINT AT ALL
+--------------------------------
+This was top-level code until 2026-09-20: reading the tree and calling `sys.exit` at import. It
+worked, and its self-test drove it -- by COPYING the guard into a fixture tree, so the file's own
+location decided which tree it read. What it could not do is be measured.
+`Scripts/mutation-sweep-guard-tests.py` proves a guard's tests would notice the gate being removed,
+by making `main()` return 0 and watching the tests go red. With no `main()` it reported this file
+as "could not be mutated" and moved on -- so the one guard standing between the probe and the
+product was the one guard nobody had watched fail. Measured both ways today: before, `1 could not
+be mutated`; after, `caught check-probe-product-drift.py <- test_probe_product_drift.py`.
+
+No seam was added. The self-test already points this at a fixture by copying it there, and an
+environment variable that re-aims a guard is a way to switch one off.
 """
 import os
 import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROBE = os.path.join(ROOT, "Scripts/livekit/ax_plugin_menu_probe.swift")
-POLICY = os.path.join(ROOT, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift")
-PRODUCT = os.path.join(ROOT, "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift")
-WRITER = os.path.join(ROOT, "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift")
 
 # Comparisons that carry the USER's data rather than policy vocabulary. These must stay exact, and
 # they are named so that adding one is a deliberate act rather than a side effect.
@@ -61,95 +71,6 @@ EXACT_BY_DESIGN = [
     'descriptionText($0) == "EQ"',             # a literal role marker, not vocabulary
 ]
 
-problems = []
-
-
-def read(path):
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return handle.read()
-    except OSError as exc:
-        problems.append(f"cannot read {os.path.relpath(path, ROOT)}: {exc}")
-        return ""
-
-
-probe = read(PROBE)
-policy = read(POLICY)
-product = read(PRODUCT)
-writer = read(WRITER)
-
-# 1. The product's rule is what the probe must mirror. If the product stops lowercasing, this check
-#    is describing a rule that no longer exists and must be revisited rather than silently kept.
-# Anchored on the SPECIFIC comparison, not on any occurrence of `.lowercased()` in the file. A
-# mutation test showed the loose form: the file has several, so deleting the load-bearing one left
-# the check green.
-PRODUCT_RULE = re.compile(
-    r"trimmingCharacters\(in:\s*\.whitespacesAndNewlines\)\.lowercased\(\)[\s\S]{0,200}?"
-    r"AXLocalePolicy\.mixerNamedElement\.labels\.contains"
-)
-if product and not PRODUCT_RULE.search(product):
-    problems.append(
-        "AXLogicProElements+Mixer.swift no longer trims-then-lowercases before comparing against "
-        "AXLocalePolicy.mixerNamedElement — the rule this probe mirrors has changed, so update both "
-        "and this check together"
-    )
-
-# 2. The probe folds, in one place.
-if probe:
-    if not re.search(r"func normalizedPolicyLabel\s*\(", probe):
-        problems.append("the probe has no normalizedPolicyLabel(): the folding rule has no single home")
-    elif not re.search(r"func normalizedPolicyLabel\([^)]*\)\s*->\s*String\s*\{\s*\n\s*trimmed\([^)]*\)\.lowercased\(\)",
-                       probe):
-        problems.append(
-            "normalizedPolicyLabel() no longer trims-then-lowercases; it must mirror the product's rule"
-        )
-    if not re.search(r"func matchesPolicyLabel\s*\(", probe):
-        problems.append("the probe has no matchesPolicyLabel(): callers can fold one side and not the other")
-
-    # 3. No bare == against a policy label, except the user-data comparisons named above.
-    for line_number, line in enumerate(probe.splitlines(), 1):
-        stripped = line.strip()
-        if stripped.startswith("//") or stripped.startswith("///"):
-            continue
-        # Two spellings of the same mistake: `label == observed`, and `labels.contains(observed)`.
-        # A mutation test caught the second slipping through when only the first was checked.
-        bare_equality = re.search(r"(descriptionText|titleText|elementName)\([^)]*\)\s*==", line)
-        bare_contains = re.search(r"\.contains\(\s*(descriptionText|titleText|elementName)\(", line)
-        if not bare_equality and not bare_contains:
-            continue
-        if any(allowed in line for allowed in EXACT_BY_DESIGN):
-            continue
-        problems.append(
-            f"ax_plugin_menu_probe.swift:{line_number}: a policy label compared without folding (bare `==` or `.contains`). "
-            f"Use matchesPolicyLabel(), or add it to EXACT_BY_DESIGN if it carries user data: {stripped[:90]}"
-        )
-
-# 4. Folding is only safe while no set has case-only duplicates.
-if policy:
-    sets = re.findall(
-        r'static let (\w+)\s*=\s*LabelSet\(\s*canonical:\s*"([^"]*)"\s*,\s*variants:\s*\[([^\]]*)\]',
-        policy, re.S)
-    if not sets:
-        problems.append("no LabelSet declarations parsed from AXLocalePolicy.swift — this check went blind")
-    for name, canonical, variants in sets:
-        labels = [canonical] + re.findall(r'"((?:[^"\\]|\\.)*)"', variants)
-        folded = {}
-        for label in labels:
-            key = label.strip().lower()
-            if key in folded and folded[key] != label:
-                problems.append(
-                    f"AXLocalePolicy.{name}: {folded[key]!r} and {label!r} differ only by case, so "
-                    f"case-folded matching would merge two distinct members"
-                )
-            folded[key] = label
-
-
-# 5. The probe's Controls-view control roles are the product's, spelled out in one place.
-#
-# The probe cannot import the product -- that is settled, and it is why the label rule above is
-# restated rather than shared. So this compares the two SPELLINGS and requires them equal. A
-# superset is not accepted either: a probe that recognises a role the product refuses would report a
-# control the product will not touch, which is the same lie pointing the other way.
 def _roles_from_swift_set(text, declaration):
     """Every role name in a Swift Set<String> literal, whether written as a kAX… constant or a string."""
     # `declaration` must anchor past the NAME -- callers pass a trailing `\s*:` -- or a renamed set
@@ -164,45 +85,156 @@ def _roles_from_swift_set(text, declaration):
     roles |= set(re.findall(r'"(AX\w+)"', body))
     return roles
 
-product_roles = _roles_from_swift_set(writer, r"interactiveControlRoles\s*:") if writer else None
-probe_roles = _roles_from_swift_set(probe, r"let controlsViewControlRoles\s*:") if probe else None
 
-if writer and product_roles is None:
-    problems.append(
-        "ControlsViewBooleanParameterWriter.interactiveControlRoles could not be parsed — this check "
-        "went blind rather than passing"
-    )
-if probe and probe_roles is None:
-    problems.append(
-        "the probe has no controlsViewControlRoles set: the Controls-view role rule has no single "
-        "home, so a census can inline its own list again"
-    )
-if product_roles and probe_roles is not None and product_roles != probe_roles:
-    missing = sorted(product_roles - probe_roles)
-    extra = sorted(probe_roles - product_roles)
-    detail = []
-    if missing:
-        detail.append(f"the probe cannot see {', '.join(missing)}")
-    if extra:
-        detail.append(f"the probe accepts {', '.join(extra)}, which the product does not")
-    problems.append(
-        "the probe's Controls-view control roles and the product's interactiveControlRoles differ: "
-        + "; ".join(detail)
-    )
 
-# The census must READ that constant. Without this, the set can be correct and unused -- which is
-# exactly the state the role defect was in, with a literal list inline at the call site.
-if probe and not re.search(r"controlsViewControlRoles\.contains\(roleText\(", probe):
-    problems.append(
-        "rowCensus does not filter with controlsViewControlRoles: the named set is not what decides, "
-        "so it can be right and have no effect"
+def drift_problems(root: str = None) -> list:
+    """Every way the probe and the product can have drifted, as sentences.
+
+    `root` is the tree to read. The four paths are derived from it here rather than at import, so a
+    case can build a tree with a drifted probe and get the same answer the entry point gives.
+    """
+    root = root or ROOT
+    probe_path = os.path.join(root, "Scripts/livekit/ax_plugin_menu_probe.swift")
+    policy_path = os.path.join(root, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift")
+    product_path = os.path.join(root, "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift")
+    writer_path = os.path.join(root,
+                               "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.swift")
+    problems = []
+
+    def read(path):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+        except OSError as exc:
+            problems.append(f"cannot read {os.path.relpath(path, root)}: {exc}")
+            return ""
+
+    probe = read(probe_path)
+    policy = read(policy_path)
+    product = read(product_path)
+    writer = read(writer_path)
+
+    # 1. The product's rule is what the probe must mirror. If the product stops lowercasing, this check
+    #    is describing a rule that no longer exists and must be revisited rather than silently kept.
+    # Anchored on the SPECIFIC comparison, not on any occurrence of `.lowercased()` in the file. A
+    # mutation test showed the loose form: the file has several, so deleting the load-bearing one left
+    # the check green.
+    PRODUCT_RULE = re.compile(
+        r"trimmingCharacters\(in:\s*\.whitespacesAndNewlines\)\.lowercased\(\)[\s\S]{0,200}?"
+        r"AXLocalePolicy\.mixerNamedElement\.labels\.contains"
     )
+    if product and not PRODUCT_RULE.search(product):
+        problems.append(
+            "AXLogicProElements+Mixer.swift no longer trims-then-lowercases before comparing against "
+            "AXLocalePolicy.mixerNamedElement — the rule this probe mirrors has changed, so update both "
+            "and this check together"
+        )
 
-if problems:
-    print(f"{len(problems)} probe/product drift problem(s):")
-    for problem in problems:
-        print(f"  {problem}")
-    print("\nThe probe restates rules the product owns. These must not drift.")
-    sys.exit(1)
+    # 2. The probe folds, in one place.
+    if probe:
+        if not re.search(r"func normalizedPolicyLabel\s*\(", probe):
+            problems.append("the probe has no normalizedPolicyLabel(): the folding rule has no single home")
+        elif not re.search(r"func normalizedPolicyLabel\([^)]*\)\s*->\s*String\s*\{\s*\n\s*trimmed\([^)]*\)\.lowercased\(\)",
+                           probe):
+            problems.append(
+                "normalizedPolicyLabel() no longer trims-then-lowercases; it must mirror the product's rule"
+            )
+        if not re.search(r"func matchesPolicyLabel\s*\(", probe):
+            problems.append("the probe has no matchesPolicyLabel(): callers can fold one side and not the other")
 
-print("probe label matching and Controls-view roles mirror the product, each in one place, and folding is safe")
+        # 3. No bare == against a policy label, except the user-data comparisons named above.
+        for line_number, line in enumerate(probe.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("///"):
+                continue
+            # Two spellings of the same mistake: `label == observed`, and `labels.contains(observed)`.
+            # A mutation test caught the second slipping through when only the first was checked.
+            bare_equality = re.search(r"(descriptionText|titleText|elementName)\([^)]*\)\s*==", line)
+            bare_contains = re.search(r"\.contains\(\s*(descriptionText|titleText|elementName)\(", line)
+            if not bare_equality and not bare_contains:
+                continue
+            if any(allowed in line for allowed in EXACT_BY_DESIGN):
+                continue
+            problems.append(
+                f"ax_plugin_menu_probe.swift:{line_number}: a policy label compared without folding (bare `==` or `.contains`). "
+                f"Use matchesPolicyLabel(), or add it to EXACT_BY_DESIGN if it carries user data: {stripped[:90]}"
+            )
+
+    # 4. Folding is only safe while no set has case-only duplicates.
+    if policy:
+        sets = re.findall(
+            r'static let (\w+)\s*=\s*LabelSet\(\s*canonical:\s*"([^"]*)"\s*,\s*variants:\s*\[([^\]]*)\]',
+            policy, re.S)
+        if not sets:
+            problems.append("no LabelSet declarations parsed from AXLocalePolicy.swift — this check went blind")
+        for name, canonical, variants in sets:
+            labels = [canonical] + re.findall(r'"((?:[^"\\]|\\.)*)"', variants)
+            folded = {}
+            for label in labels:
+                key = label.strip().lower()
+                if key in folded and folded[key] != label:
+                    problems.append(
+                        f"AXLocalePolicy.{name}: {folded[key]!r} and {label!r} differ only by case, so "
+                        f"case-folded matching would merge two distinct members"
+                    )
+                folded[key] = label
+
+
+    # 5. The probe's Controls-view control roles are the product's, spelled out in one place.
+    #
+    # The probe cannot import the product -- that is settled, and it is why the label rule above is
+    # restated rather than shared. So this compares the two SPELLINGS and requires them equal. A
+    # superset is not accepted either: a probe that recognises a role the product refuses would report a
+    # control the product will not touch, which is the same lie pointing the other way.
+    product_roles = _roles_from_swift_set(writer, r"interactiveControlRoles\s*:") if writer else None
+    probe_roles = _roles_from_swift_set(probe, r"let controlsViewControlRoles\s*:") if probe else None
+
+    if writer and product_roles is None:
+        problems.append(
+            "ControlsViewBooleanParameterWriter.interactiveControlRoles could not be parsed — this check "
+            "went blind rather than passing"
+        )
+    if probe and probe_roles is None:
+        problems.append(
+            "the probe has no controlsViewControlRoles set: the Controls-view role rule has no single "
+            "home, so a census can inline its own list again"
+        )
+    if product_roles and probe_roles is not None and product_roles != probe_roles:
+        missing = sorted(product_roles - probe_roles)
+        extra = sorted(probe_roles - product_roles)
+        detail = []
+        if missing:
+            detail.append(f"the probe cannot see {', '.join(missing)}")
+        if extra:
+            detail.append(f"the probe accepts {', '.join(extra)}, which the product does not")
+        problems.append(
+            "the probe's Controls-view control roles and the product's interactiveControlRoles differ: "
+            + "; ".join(detail)
+        )
+
+    # The census must READ that constant. Without this, the set can be correct and unused -- which is
+    # exactly the state the role defect was in, with a literal list inline at the call site.
+    if probe and not re.search(r"controlsViewControlRoles\.contains\(roleText\(", probe):
+        problems.append(
+            "rowCensus does not filter with controlsViewControlRoles: the named set is not what decides, "
+            "so it can be right and have no effect"
+        )
+
+    return problems
+
+
+def main() -> int:
+    problems = drift_problems()
+    if problems:
+        print(f"{len(problems)} probe/product drift problem(s):")
+        for problem in problems:
+            print(f"  {problem}")
+        print("\nThe probe restates rules the product owns. These must not drift.")
+        return 1
+    print("probe label matching and Controls-view roles mirror the product, each in one place, "
+          "and folding is safe")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
