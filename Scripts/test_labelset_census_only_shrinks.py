@@ -117,10 +117,24 @@ case("a census missing a real undeclared set is refused", _r.returncode == 1,
      (_r.stdout + _r.stderr).strip()[:200])
 case("and it names the one that is missing", first_real in _r.stderr, _r.stderr.strip()[:200])
 
-# (8) GROWTH. This repository's census IS the grown one: three names added today for sets that
-#     named no row at the base too. The control at (4) proves it passes; this pins WHY, so a rule
-#     that starts accepting it for the wrong reason is visible.
-_r = run()
+# (8) GROWTH, accepted. A name added for a set that named no row AT THE BASE is the census catching
+#     up with the tree -- the repair the old rule forbade. Driven at fixtures rather than at this
+#     repository: it WAS the grown census for one afternoon, and the three names that grew it name
+#     their rows now, so a case resting on the tree's own state went stale the same day it was
+#     written. A case that describes a moment is a case that expires.
+catching_up = json.loads(json.dumps(census))
+del catching_up["undeclared"]["fixtureNotInThePolicy"]
+catching_up["undeclared"]["fixtureNamesNoRow"] = {
+    "verdict": "no-row", "candidate": "0 candidate(s)", "members": 1}
+catching_up_path = os.path.join(tmp, "census-catching-up.json")
+with open(catching_up_path, "w", encoding="utf-8") as handle:
+    json.dump(catching_up, handle, ensure_ascii=False, indent=2)
+base_with_it = os.path.join(tmp, "census-at-the-base-without-it.json")
+with open(base_with_it, "w", encoding="utf-8") as handle:
+    json.dump({"undeclared": {k: v for k, v in census["undeclared"].items()
+                              if k != "fixtureNotInThePolicy"}}, handle, ensure_ascii=False)
+_r = run(LPM_POLICY_SWIFT=planted_path, LPM_LABELSET_CENSUS=catching_up_path,
+         LPM_LABELSET_BASE_POLICY=planted_path, LPM_LABELSET_BASE_JSON=base_with_it)
 case("growth that is the census catching up is accepted and SAID",
      _r.returncode == 0 and "already named no row at the base" in _r.stdout,
      (_r.stdout + _r.stderr).strip()[:200])
