@@ -1,0 +1,15 @@
+Limit: the six-character floor stays. Run at 1 against all six excepted files, every one fails on its own schema key `note`, which Logic ships as a value -- lowering it would empty the list rather than tighten rule 15.
+Limit: the cfstring contents are now read byte by byte, but the callee at 0x9fd880 being a localization helper, and the bundle it resolves against being `MAContentPackageManager`'s, are still a reading of the disassembly rather than a re-derivation.
+Ruled-out: Lowering CITABLE_QUOTE_MIN so rule 15 sees `M` and `Name` | measured at 1: all six excepted files are refused for the word `note`, so the floor cannot be moved for this list without emptying it.
+Warn: the record for the parent commit (r-eventlistrows, f277e2e5) carries both errors this commit fixes -- it names `Muted` as one of the three cfstrings and says check-labelsets-are-derived.py failing would show a rename. Git history cannot be edited; read this record beside it.
+Blast: local
+Undo: easy
+Certainty: firm
+Provenance: inherited 07755d7727f00bb91a0b70e3ea4dda76d6969ecf
+
+Limit: the #937 row is the text PR #939 already wrote, taken verbatim from this branch and not re-derived; the conflict resolution took #940's file whole because it is a superset, and the #937 line was diffed against this branch's own version to confirm it survived unchanged.
+Warn: #940 is now a subset of this branch. Merging both would be a no-op for the second, but leaving #940 open invites somebody to rebase it and re-litigate rows that already landed.
+Blast: local
+Undo: easy
+Certainty: firm
+Provenance: inherited d459e9058aee9e7a2da9177259496b7130629be7
