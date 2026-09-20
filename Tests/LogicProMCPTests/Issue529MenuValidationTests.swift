@@ -231,6 +231,13 @@ struct Issue529MenuValidationTests {
         // (canonical first, then variants) instead of a hard-coded EN/KO literal branch pair, so
         // the three read-only candidate loops below (bar, then "Go To", then "Position…") replace
         // the old koreanDecision/englishDecision two-branch check.
+        //
+        // #921: locale discovery is still entirely read-only, but the leaf click is no longer the
+        // ONLY click in this script. A disabled `enabled` read can be a stale closed-menu cache, so
+        // the disabled branch (which only runs after `enabledRead`) forces exactly one bounded
+        // menu-bar click to revalidate before trusting it, and closes what it opens before the leaf
+        // is ever reached. The invariant below is narrower, not gone: nothing before the enabled
+        // read opens a menu, and this script contains exactly that one menu-bar click.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         // Candidate lists are derived from the LabelSets rather than spelled out: a measured label
         // added to AXLocalePolicy must not break an ordering test that is about ordering.
@@ -262,7 +269,10 @@ struct Issue529MenuValidationTests {
         #expect(itemResolution < leafResolution)
         #expect(leafResolution < enabledRead)
         #expect(enabledRead < leafClick)
-        #expect(!script.contains("click menu bar item"))
+        #expect(!String(script[..<enabledRead]).contains("click menu bar item"),
+                "locale discovery and the enabled read must stay read-only")
+        #expect(issue529Positions(of: "click menu bar item", in: script).count == 1,
+                "#921 adds exactly one bounded revalidation click; a second would risk a menu wedge")
         #expect(!script.contains("selectedMenuBarItem"))
         #expect(!script.contains("selectedSubmenuItem"))
         #expect(!script.contains("menuItemOpenedAfterClick"))
@@ -448,6 +458,44 @@ struct Issue529MenuValidationTests {
         }
     }
 
+    /// #921. The forced revalidation click must be reachable ONLY when the entry read already
+    /// said the leaf was disabled — otherwise every ordinary enabled leaf would pick up an extra
+    /// menu click before the real leaf actuation, changing the success path this issue was never
+    /// about. Confirms the click, both sentinels, and the disabled-branch `end if` are nested
+    /// inside `if not menuItemEnabled then`, and that the statement immediately after that `end if`
+    /// is the SAME comment the pre-#921 script reached in the enabled case.
+    @Test("the forced revalidation pass only runs inside the already-disabled branch")
+    func forcedRevalidationStaysInsideTheDisabledBranchOnly() throws {
+        // Mutation this rejects: move the `click menu bar item barName of menu bar 1` revalidation
+        // above `if not menuItemEnabled then`, which would open a menu on every enabled leaf too.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 921)
+        let disabledBranchStart = try issue529Position(of: "if not menuItemEnabled then", in: script)
+        let revalidationClick = try issue529Position(
+            of: "click menu bar item barName of menu bar 1", in: script
+        )
+        let revalidationCleanup = try issue529Position(
+            of: "set cleanupState to my dismissOpenMenu(logicProcess, revalidated)", in: script
+        )
+        let stillDisabledReturn = try issue529Position(of: "return \"MENU_DISABLED\"", in: script)
+        let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE\"", in: script)
+        // The comment that begins the very next statement after the disabled branch's `end if` in
+        // the unmodified (pre-#921) script — unchanged position proves the enabled path still
+        // falls through to exactly what it always did.
+        let nextStatementAfterBranch = try issue529Position(
+            of: "-- A readable count of the exact dialog predicate is the first half of this run's",
+            in: script
+        )
+
+        #expect(disabledBranchStart < revalidationClick)
+        #expect(revalidationClick < revalidationCleanup)
+        #expect(revalidationCleanup < stillDisabledReturn)
+        #expect(revalidationCleanup < unreadableReturn)
+        #expect(stillDisabledReturn < nextStatementAfterBranch)
+        #expect(unreadableReturn < nextStatementAfterBranch)
+        // The click's own openness observation, not a hardcoded assumption, gates cleanup's Escape.
+        #expect(script.contains("if selected of menu bar item barName of menu bar 1 then set revalidated to true"))
+    }
+
     @Test("cleanup after the resolved leaf is marked as an attempted menu write")
     func resolvedLeafClickMarksSubsequentCleanupAsAttempted() throws {
         // Mutation this rejects: move the attempt marker after the leaf or remove it, which makes
@@ -490,6 +538,24 @@ struct Issue529MenuValidationTests {
         #expect(classification == .failure(.menuPickFailed))
     }
 
+    /// #921. The forced revalidation pass can fail to open the menu at all (unlike `MENU_DISABLED`,
+    /// which the script only returns once the pass DID open and re-read the leaf). This sentinel
+    /// must not carry the same "the leaf is disabled" meaning, or the refusal message reverts to
+    /// the exact ambiguity #921 reported.
+    @Test("JSON-wrapped menu-validation-unreadable result refuses the dialog route without claiming disabled")
+    func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() {
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"MENU_VALIDATION_UNREADABLE"}"#
+        )
+
+        #expect(classification == .failure(.menuValidationUnreadable))
+        #expect(classification != .failure(.menuDisabled))
+        #expect(classification.diagnosticLabel == "menu_validation_unreadable")
+        // Same shape of refusal as `.menuDisabled`: nothing actuated, fail-closed, menus read closed.
+        #expect(classification.requiresUnsafeUIRefusal)
+        #expect(classification.menuObservation == .closed)
+    }
+
     @Test("a pre-actuation menu close failure returns State C without touching the slider")
     func preActuationMenuCloseFailureDoesNotFallThroughToSlider() async throws {
         let sliderWrites = Issue529Counter()
@@ -528,6 +594,9 @@ struct Issue529MenuValidationTests {
             ("MENU_NOT_FOUND: no such menu item", "menu_not_found"),
             ("MENU_STATE_UNREADABLE", "menu_state_unreadable"),
             ("MENU_DISABLED", "menu_disabled"),
+            // #921: the fourth sentinel behind the identical CLOSED-cleanup guard, returned when
+            // the forced revalidation pass itself could not open the menu.
+            ("MENU_VALIDATION_UNREADABLE", "menu_validation_unreadable"),
         ] {
             let sliderWrites = Issue529Counter()
             let result = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -745,6 +814,7 @@ struct Issue529MenuValidationTests {
             ("MENU_NOT_FOUND", "menu_not_found"),
             ("MENU_DISABLED", "menu_disabled"),
             ("MENU_STATE_UNREADABLE", "menu_state_unreadable"),
+            ("MENU_VALIDATION_UNREADABLE", "menu_validation_unreadable"),
         ] {
             let scriptExecutions = Issue529Counter()
             let sliderWrites = Issue529Counter()
@@ -1540,7 +1610,14 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
     // both ("not found" and "unreadable" are no longer distinguishable, which the old code did not
     // rely on either — both returned the same MENU_NOT_FOUND-prefixed refusal), so one shared
     // `on error errMsg` handler covers what used to be two call sites: 5 sites, not 6.
-    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 5)
+    //
+    // #921: one of those 5 became conditional. The disabled-entry cleanup is now the one pre-leaf
+    // site that may genuinely have opened something (the forced revalidation click), so it passes
+    // `revalidated` instead of a hardcoded `false` — never a hardcoded `true`, which the assertion
+    // below still checks. 4 literal-`false` sites plus that 1 `revalidated` site keeps the same 5
+    // pre-leaf cleanup calls this test has always counted.
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 4)
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, revalidated)", in: script).count == 1)
 
     let leafCheckpoint = try issue529Position(
         of: "recordDialogIssuance(\"LEAF_ARMED\"",

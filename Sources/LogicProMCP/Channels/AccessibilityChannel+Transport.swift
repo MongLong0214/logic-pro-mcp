@@ -1744,11 +1744,39 @@ extension AccessibilityChannel {
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
-                    set cleanupState to my dismissOpenMenu(logicProcess, false)
+                    -- macOS validates a menu item's AXEnabled only while its menu is open; a
+                    -- closed-menu read returns whatever the last validation wrote, which can be
+                    -- arbitrarily stale (#921: closing every document writes false, opening a
+                    -- project makes the leaf actuatable again, but the closed-menu read still says
+                    -- false because opening/closing a document never revalidates it). Force one
+                    -- bounded validation pass -- open the top-level menu, confirm THIS run observed
+                    -- it open, then re-read the leaf while it is open -- before this refusal is
+                    -- allowed to call the item disabled rather than merely cache-stale.
+                    set revalidated to false
+                    try
+                        click menu bar item barName of menu bar 1
+                        delay 0.1
+                        if selected of menu bar item barName of menu bar 1 then set revalidated to true
+                    end try
+                    if revalidated then
+                        try
+                            set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
+                        end try
+                    end if
+                    set cleanupState to my dismissOpenMenu(logicProcess, revalidated)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
-                    return "MENU_DISABLED"
+                    if menuItemEnabled then
+                        -- The forced pass revalidated the leaf as actuatable; continue below as if
+                        -- the original read had already said so.
+                    else if revalidated then
+                        return "MENU_DISABLED"
+                    else
+                        -- The menu never opened, so nothing was validated. An unreadable revalidation
+                        -- must not be reported as a leaf-disabled reading -- see menuItemEnabledForActuation.
+                        return "MENU_VALIDATION_UNREADABLE"
+                    end if
                 end if
                 -- A readable count of the exact dialog predicate is the first half of this run's
                 -- absence → leaf → appearance transition. It records no user-controlled title or
@@ -2090,6 +2118,7 @@ extension AccessibilityChannel {
             case menuNotFound
             case menuStateUnreadable
             case menuDisabled
+            case menuValidationUnreadable
             case menuPickFailed
             case menuCouldNotBeClosed(writeAttempted: Bool)
             case dialogPreexisting
@@ -2118,6 +2147,7 @@ extension AccessibilityChannel {
             case .failure(.menuNotFound): return "menu_not_found"
             case .failure(.menuStateUnreadable): return "menu_state_unreadable"
             case .failure(.menuDisabled): return "menu_disabled"
+            case .failure(.menuValidationUnreadable): return "menu_validation_unreadable"
             case .failure(.menuPickFailed): return "menu_pick_failed"
             case let .failure(.menuCouldNotBeClosed(writeAttempted)):
                 return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
@@ -2242,7 +2272,8 @@ extension AccessibilityChannel {
             switch self {
             case .failure(.menuNotFound),
                  .failure(.menuStateUnreadable),
-                 .failure(.menuDisabled):
+                 .failure(.menuDisabled),
+                 .failure(.menuValidationUnreadable):
                 return false
             default:
                 return true
@@ -2293,6 +2324,15 @@ extension AccessibilityChannel {
         /// cleanup had refused, and argued a root cause its own payload rules out:
         /// `dialog_route_outcome: menu_disabled` cannot coexist with a cleanup that failed.
         ///
+        /// `MENU_VALIDATION_UNREADABLE` (also #921) is a fourth member of that same closed-behind-
+        /// cleanup family, not a new shape: the entry `enabled` read is a closed-menu cache that
+        /// macOS only refreshes while the menu is open, so the script now forces one bounded
+        /// validation pass before trusting that read as a leaf-disabled reading. That pass runs
+        /// behind the identical `dismissOpenMenu` / `CLOSED` guard as the other three, so it keeps
+        /// `dialog_route_outcome: menu_disabled cannot coexist with a cleanup that failed` true --
+        /// it just adds the case where the forced pass itself could not open the menu, and the
+        /// refusal must say "nothing was validated" rather than "the leaf is disabled".
+        ///
         /// `unobserved` is deliberately wide. Some of the dialog outcomes could probably be proved
         /// closed as well -- every path past the entry guard has had one CLOSED answer -- but
         /// "probably" is what produced the constant. A token says what was read or says nothing.
@@ -2313,7 +2353,8 @@ extension AccessibilityChannel {
             switch self {
             case .failure(.menuCouldNotBeClosed):
                 return .couldNotBeClosed
-            case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled):
+            case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled),
+                 .failure(.menuValidationUnreadable):
                 return .closed
             default:
                 return .unobserved
@@ -2353,6 +2394,8 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
+        case "MENU_VALIDATION_UNREADABLE":
+            return .failure(.menuValidationUnreadable)
         case let value where value.hasPrefix("DIALOG_PREEXISTING"):
             return .failure(.dialogPreexisting)
         case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
