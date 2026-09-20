@@ -49,7 +49,14 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #: Their tests are 76s and 40s here. `--fast` skips them so the sweep is a minute -- and says so,
 #: because a run that quietly leaves two guards out of its denominator is reporting a number for a
-#: set it chose. Measured full on 2026-09-20: both `caught`, each by its own self-test.
+#: set it chose.
+#:
+#: FULL SWEEP, 2026-09-20: 29 of 29 caught, both of these included. That number is the whole
+#: repository at this commit, and it is written here rather than in
+#: `docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` -- whose own `not_swept` block and
+#: `how_to_reproduce` line are stale for the same reason -- because a change touching
+#: `docs/canon/` may not use the citation opt-out and there is no row of Apple's data a sweep
+#: result rests on. Filed as #937.
 SLOW = {"check-canon-citations.py", "check-policy-literals-against-canon.py"}
 
 _spec = importlib.util.spec_from_file_location(
