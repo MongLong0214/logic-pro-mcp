@@ -317,6 +317,7 @@ RATCHETS = (
      "files in docs/observations that are declared not to be records"),
     ("docs/canon/LOGIC-FACING.json", "prefixes", "grow",
      "path prefixes whose changes may not use the opt-out"),
+
     ("docs/canon/CI-GATE.json", "required_commands", "grow",
      "commands the required CI gate must carry"),
     ("docs/canon/PROSE-NUMBERS.json", "numbers", "shrink",
@@ -325,6 +326,13 @@ RATCHETS = (
      "cases guards are allowed to SKIP under CI", _skip_members),
     ("docs/canon/MANIFEST.json", "sources", "grow",
      "the (source, locale) corpora every absence proof searches", _corpus_members),
+    #: `LOGIC-FACING.json`'s `exceptions` is NOT here either, and for the same reason as the list
+    #: below: its entries are re-proved on every run. Rule 15 reads each excepted file and refuses
+    #: it if it carries a `logic-canon://` reference or quotes a value the pinned corpus holds, so
+    #: the bar an added entry clears is a property of the file, not a sentence about it. A
+    #: monotonic ratchet on top of that would forbid the repair and buy nothing -- and forbidding
+    #: the repair is what #937 is about.
+    #:
     #: `LABELSETS-WITHOUT-A-ROW.json` WAS HERE as a `shrink` list, and that made the repository's
     #: own documented path unreachable. `check-new-labelsets-name-a-row.py` offers a new LabelSet
     #: two answers -- name a row in `derivedFrom`, or carry a waiver with a proof -- and rule 7
@@ -1155,10 +1163,69 @@ def _visible(body: str) -> str:
     return re.sub(r"```.*?```", " ", without_comments, flags=re.S)
 
 
+def logic_facing_exceptions() -> set:
+    """Files under a Logic-facing prefix that state no fact about Logic.
+
+    `docs/canon/` is a prefix, and four files under it hold job names, guard names, test counts and
+    the numbers a document may state. A change touching only those has no row of Apple's data to
+    cite and could not opt out either, so the only way through was to paste a citation that
+    resolves and quote its value in the diff -- manufacturing evidence, which is the failure the
+    citation rule exists to prevent. Measured twice on 2026-09-20 (#937): a four-line correction to
+    `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` could not be made, and a new ratchet file was moved out
+    of `docs/canon` for no reason but this rule.
+
+    An empty or absent list is the STRICT direction -- everything under a prefix stays Logic-facing
+    -- so it is read leniently here and the entries are proved below instead.
+    """
+    try:
+        return set(_waiver(LOGIC_FACING_PATH, "exceptions"))
+    except CanonWaiverError:
+        return set()
+
+
+def check_exceptions_state_no_fact(failures: list) -> None:
+    """Rule 15: an exception must be a file that cites nothing and quotes nothing citable.
+
+    The list says "this file states no fact about Logic", and that is checkable rather than
+    promised: a file carrying a `logic-canon://` reference is citing Logic, and one quoting a
+    string the corpus holds is stating a fact about it. Either way the exemption is wrong and the
+    file is Logic-facing after all.
+    """
+    for rel in sorted(logic_facing_exceptions()):
+        path = os.path.join(REPO, rel)
+        if not os.path.exists(path):
+            failures.append(
+                f"docs/canon/LOGIC-FACING.json excepts {rel}, which does not exist. An exemption "
+                f"for a file that is gone is a line nobody can check -- delete it; the list may "
+                f"shrink.")
+            continue
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            body = handle.read()
+        references = canon.find_refs(body)
+        if references:
+            failures.append(
+                f"{rel} is excepted from the Logic-facing prefixes and carries "
+                f"{len(references)} canonical reference(s), first {sorted(references)[0]}. A file "
+                f"that cites Logic is not a file that states no fact about it.")
+        quoted = _citable_strings_in(body)
+        if quoted:
+            failures.append(
+                f"{rel} is excepted from the Logic-facing prefixes and quotes "
+                f"{len(quoted)} string(s) the pinned corpus holds, first {quoted[0][:40]!r}. "
+                f"Quoting a value Logic ships is stating a fact about Logic.")
+
+
 def logic_facing(changed):
+    """The changed paths whose contents are claims about Logic.
+
+    A path under a prefix is Logic-facing UNLESS it is named in `exceptions`, and those entries are
+    proved by `check_exceptions_state_no_fact` on every run rather than taken on trust.
+    """
     prefixes = logic_facing_prefixes()
+    excepted = logic_facing_exceptions()
     return sorted({path for path in (changed or [])
-                   if any(path.startswith(prefix) for prefix in prefixes)})
+                   if any(path.startswith(prefix) for prefix in prefixes)
+                   and path not in excepted})
 
 
 
@@ -1446,6 +1513,7 @@ def main() -> int:
     check_no_measured_count_shrinks(failures)
     check_every_json_is_a_record_or_declared(failures)
     check_labelsets_are_logic_facing(failures)
+    check_exceptions_state_no_fact(failures)
     changed = _changed_from_argv()
     references = check_references(failures)
     without_canon = load_without_canon()

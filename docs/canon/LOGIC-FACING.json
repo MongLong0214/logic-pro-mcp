@@ -1,5 +1,5 @@
 {
-  "note": "Path prefixes whose contents are claims about Logic. A change touching one of these may not use the opt-out in a pull request body, whatever its description says. Read from a file rather than held as a tuple so the merge-base ratchet can see it, and because a NEW directory that declares a LabelSet must be added here in the same change -- check-canon-citations.py refuses one that is not.",
+  "note": "Path prefixes whose contents are claims about Logic. A change touching one of these may not use the opt-out in a pull request body, whatever its description says. Read from a file rather than held as a tuple so the merge-base ratchet can see it, and because a NEW directory that declares a LabelSet must be added here in the same change -- check-canon-citations.py refuses one that is not. A file NAMED in `exceptions` is not Logic-facing even though its path sits under one of these prefixes; see that key.",
   "prefixes": [
     "Sources/LogicProMCP/Accessibility/",
     "Sources/LogicProMCP/HostParameters/",
@@ -10,5 +10,14 @@
     "docs/locale/",
     "docs/canon/",
     "Scripts/livekit/"
-  ]
+  ],
+  "exceptions": [
+    "docs/canon/CI-GATE.json",
+    "docs/canon/CI-SKIPS.json",
+    "docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json",
+    "docs/canon/PROSE-NUMBERS.json",
+    "docs/canon/GUARDS-WITHOUT-A-TEST.json",
+    "docs/canon/NOT-A-RECORD.json"
+  ],
+  "exceptions_note": "Files under a Logic-facing prefix that state no fact about Logic: they hold job names, guard names, test counts and the numbers a document may state. A change touching only these may use the `states no fact about Logic` opt-out, because there is no row of Apple's data such a change rests on and the alternative is pasting a citation that resolves and quoting its value in the diff -- manufacturing evidence, which is what the citation rule exists to stop. Measured 2026-09-20 (#937): the rule made a four-line correction to GUARD-TESTS-BLIND-TO-THEIR-GUARD.json unmakeable and pushed a new ratchet file out of docs/canon for no reason but this. THIS LIST MAY ONLY SHRINK, and check-canon-citations.py refuses an entry whose file carries a logic-canon:// reference or quotes a value the corpus holds -- a file that cites Logic is not a file that states no fact about it."
 }

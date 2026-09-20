@@ -1,10 +1,7 @@
 {
-  "note": "Guards whose covering test does NOT notice the guard's gate being removed, measured by Scripts/mutation-sweep-guard-tests.py. EMPTY as of 2026-09-19: all twelve were closed by giving each guard a path seam (an LPM_* environment override, the convention this repository already used for LPM_FORMULA_PATH and LPM_SERVER_JSON) and adding one case that drives main() at an input that must fail, with a control that must pass. The sweep re-measured 22 of 22 caught. This list may only SHRINK, so a guard arriving blind has to be added here and rule 7 refuses the growth -- which is the point of leaving an empty list behind rather than deleting the file.",
-  "how_to_reproduce": "python3 Scripts/mutation-sweep-guard-tests.py --fast",
-  "not_swept": {
-    "check-canon-citations.py": "its test is 76s here; the review's deeper cut showed it catching a permissive decision function, and sweeping it doubles the sweep's cost",
-    "check-policy-literals-against-canon.py": "same, 40s"
-  },
+  "note": "Guards whose covering test does NOT notice the guard's gate being removed, measured by Scripts/mutation-sweep-guard-tests.py. EMPTY as of 2026-09-19: all twelve were closed by giving each guard a path seam (an LPM_* environment override, the convention this repository already used for LPM_FORMULA_PATH and LPM_SERVER_JSON) and adding one case that drives main() at an input that must fail, with a control that must pass. The sweep re-measured 22 of 22 caught, and a FULL sweep on 2026-09-20 measured 29 of 29 -- every guard with a covering test, the two slow ones included. This list may only SHRINK, so a guard arriving blind has to be added here and rule 7 refuses the growth -- which is the point of leaving an empty list behind rather than deleting the file.",
+  "how_to_reproduce": "python3 Scripts/mutation-sweep-guard-tests.py   (add --fast to skip the two slow guards; it names them, and they are then UNMEASURED in that run)",
+  "not_swept": {},
   "guards": {},
   "closed_2026_09_19": [
     "check-canon-prose-numbers.py",
@@ -19,5 +16,6 @@
     "check-locale-labels-json.py",
     "check-observation-records.py",
     "check-test-wall-clock-assertions.py"
-  ]
+  ],
+  "not_swept_note": "EMPTY since 2026-09-20. `--fast` still skips `check-canon-citations.py` (76s) and `check-policy-literals-against-canon.py` (40s), and after #933 it says so and leaves them in the sentence rather than out of the denominator. A full run sweeps them; both were caught."
 }

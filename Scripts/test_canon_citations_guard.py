@@ -951,6 +951,41 @@ class LogicFacingIsSelfMaintaining(unittest.TestCase):
         self.guard.check_labelsets_are_logic_facing(failures)
         self.assertTrue(any("no prefixes" in f for f in failures), failures)
 
+    def test_every_exception_is_a_file_that_cites_nothing(self):
+        """Rule 15, on the real list. An exemption says the file states no fact about Logic, and
+        that is checkable: a file carrying a reference is citing Logic."""
+        failures = []
+        self.guard.check_exceptions_state_no_fact(failures)
+        self.assertEqual(failures, [])
+        self.assertTrue(self.guard.logic_facing_exceptions(),
+                        "an empty exception list would make these cases vacuous")
+
+    def test_an_exception_for_a_file_that_cites_logic_is_refused(self):
+        document = json.loads(self.backup)
+        document["exceptions"] = sorted(set(document.get("exceptions") or []) |
+                                        {"docs/canon/README.md"})
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, ensure_ascii=False)
+        failures = []
+        self.guard.check_exceptions_state_no_fact(failures)
+        self.assertTrue(any("README.md" in f for f in failures), failures)
+
+    def test_an_exception_for_a_file_that_is_gone_is_refused(self):
+        document = json.loads(self.backup)
+        document["exceptions"] = ["docs/canon/A-FILE-THAT-IS-NOT-THERE.json"]
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, ensure_ascii=False)
+        failures = []
+        self.guard.check_exceptions_state_no_fact(failures)
+        self.assertTrue(any("does not exist" in f for f in failures), failures)
+
+    def test_an_excepted_path_is_not_logic_facing_and_its_neighbour_still_is(self):
+        """The behaviour the exception buys, and the control beside it."""
+        excepted = sorted(self.guard.logic_facing_exceptions())[0]
+        self.assertEqual(self.guard.logic_facing([excepted]), [])
+        self.assertEqual(self.guard.logic_facing([excepted, "docs/canon/README.md"]),
+                         ["docs/canon/README.md"])
+
     def test_livekit_swift_is_scanned(self):
         """`Scripts/livekit` holds Swift that matches Logic and was not looked at."""
         self.assertIn(os.path.join("Scripts", "livekit"), self.guard.SWIFT_ROOTS)
