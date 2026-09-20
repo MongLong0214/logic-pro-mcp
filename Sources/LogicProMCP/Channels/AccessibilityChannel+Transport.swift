@@ -1094,9 +1094,10 @@ extension AccessibilityChannel {
                 // menu is open. This is acceptable because reaching this route already requires that
                 // any observed open menu be cleared before another position actuation. #921 follow-up
                 // (RV-1): the forced revalidation pass opens Logic's top-level menu before the snapshot
-                // is ever written (that write is the last step of the disabled branch), so a timeout
-                // during that pass used to take the old early snapshot guard here and skip cleanup
-                // entirely -- leaving the menu open and every later AppleEvent wedged behind it.
+                // is ever written. The disabled branch ends before the snapshot is persisted, which
+                // happens after the dialog and total-window observations; a timeout anywhere in that
+                // interval used to take the old early snapshot guard here and skip cleanup entirely --
+                // leaving the menu open and every later AppleEvent wedged behind it.
                 return await observeAndClearStrayGoToPositionUI(
                     preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
                     executeScript: { script, timeout in
@@ -1372,8 +1373,8 @@ extension AccessibilityChannel {
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
         -- `knownOpen` says whether THIS run has itself confirmed opening some part of the menu
-        -- chain -- either by issuing its resolved leaf (the entry-cleanup and post-actuation
-        -- callers), or, for the #921 forced revalidation pass, by observing `selected` of the
+        -- chain -- either by issuing its resolved leaf (the post-actuation callers), or, for the
+        -- #921 forced revalidation pass, by observing `selected` of the
         -- top-level menu bar item go true after this run's own click (the `dismissOpenMenu(_,
         -- revalidated)` caller, which runs before any leaf and before a dialog is ever considered).
         -- Before that boundary, UNREADABLE returns without Escape because unknown focus might be an

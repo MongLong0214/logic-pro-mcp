@@ -21,18 +21,80 @@ private func issue529Positions(of fragment: String, in script: String) -> [Strin
     return positions
 }
 
-/// Strips AppleScript comment lines (whose trimmed form starts with `--`) before a positional or
-/// count assertion runs against generated script text. #921 follow-up (RV-4): without this,
-/// prefixing the revalidation click and its `selected` observation with `--` left every position
-/// and count assertion passing while no revalidation ran at all — a comment is still a positional
-/// match for `range(of:)`. Only whole-line comments are blanked; this generated source never mixes
-/// code and a trailing `--` comment on the same line.
+/// Neutralises AppleScript `--` and `(* ... *)` comments before a positional or structural
+/// assertion runs against generated script text. #921 follow-up (RV-6): a statement inside either
+/// comment form must not satisfy a source-shape assertion. Newlines are preserved so the structural
+/// helpers below still reason in terms of the original statement lines.
 private func issue529StrippedOfAppleScriptComments(_ script: String) -> String {
-    script.split(separator: "\n", omittingEmptySubsequences: false)
-        .map { line in
-            line.trimmingCharacters(in: .whitespaces).hasPrefix("--") ? "" : String(line)
+    var stripped = ""
+    var index = script.startIndex
+    var blockCommentDepth = 0
+    var inLineComment = false
+    var inString = false
+
+    while index < script.endIndex {
+        let character = script[index]
+        let nextIndex = script.index(after: index)
+        let nextCharacter: Character? = nextIndex < script.endIndex ? script[nextIndex] : nil
+
+        if blockCommentDepth > 0 {
+            if character == "(", nextCharacter == "*" {
+                stripped.append(" ")
+                stripped.append(" ")
+                blockCommentDepth += 1
+                index = script.index(after: nextIndex)
+            } else if character == "*", nextCharacter == ")" {
+                stripped.append(" ")
+                stripped.append(" ")
+                blockCommentDepth -= 1
+                index = script.index(after: nextIndex)
+            } else {
+                stripped.append(character == "\n" ? "\n" : " ")
+                index = nextIndex
+            }
+            continue
         }
-        .joined(separator: "\n")
+
+        if inLineComment {
+            stripped.append(character == "\n" ? "\n" : " ")
+            if character == "\n" { inLineComment = false }
+            index = nextIndex
+            continue
+        }
+
+        if inString {
+            stripped.append(character)
+            if character == "\\", let nextCharacter {
+                stripped.append(nextCharacter)
+                index = script.index(after: nextIndex)
+            } else {
+                if character == "\"" { inString = false }
+                index = nextIndex
+            }
+            continue
+        }
+
+        if character == "\"" {
+            stripped.append(character)
+            inString = true
+        } else if character == "-", nextCharacter == "-" {
+            stripped.append(" ")
+            stripped.append(" ")
+            inLineComment = true
+            index = script.index(after: nextIndex)
+            continue
+        } else if character == "(", nextCharacter == "*" {
+            stripped.append(" ")
+            stripped.append(" ")
+            blockCommentDepth = 1
+            index = script.index(after: nextIndex)
+            continue
+        } else {
+            stripped.append(character)
+        }
+        index = nextIndex
+    }
+    return stripped
 }
 
 /// Structurally locates the `end if` that closes the `if` beginning at `ifStart` (which must point
@@ -81,6 +143,99 @@ private func issue529MatchingEndTry(after tryStart: String.Index, in script: Str
         index = script.index(after: lineEnd)
     }
     return nil
+}
+
+/// Returns every active multiline `if`, `repeat`, and `try` block enclosing `position`, from
+/// outermost to innermost. Callers pass comment-neutralised script, so a statement inside either
+/// AppleScript comment form cannot acquire a plausible enclosing chain merely by being present in
+/// the source.
+private func issue529EnclosingAppleScriptBlocks(
+    at position: String.Index,
+    in script: String
+) -> [String]? {
+    let positionLineStart = script[..<position].lastIndex(of: "\n")
+        .map { script.index(after: $0) } ?? script.startIndex
+    var blocks: [String] = []
+    var lineStart = script.startIndex
+
+    while lineStart < positionLineStart {
+        let lineEnd = script[lineStart...].firstIndex(of: "\n") ?? script.endIndex
+        let line = script[lineStart..<lineEnd].trimmingCharacters(in: .whitespaces)
+
+        if line.hasPrefix("if ") && line.hasSuffix("then") {
+            blocks.append(line)
+        } else if line == "try" {
+            blocks.append(line)
+        } else if line.hasPrefix("repeat ") {
+            blocks.append(line)
+        } else if line == "end if" {
+            guard blocks.last?.hasPrefix("if ") == true else { return nil }
+            blocks.removeLast()
+        } else if line == "end try" {
+            guard blocks.last == "try" else { return nil }
+            blocks.removeLast()
+        } else if line == "end repeat" {
+            guard blocks.last?.hasPrefix("repeat ") == true else { return nil }
+            blocks.removeLast()
+        }
+
+        guard lineEnd < script.endIndex else { break }
+        lineStart = script.index(after: lineEnd)
+    }
+    return blocks
+}
+
+/// Splits a `return` expression on top-level AppleScript concatenation operators. String literals
+/// and handler-call parentheses stay intact, so a handler name written inside a literal is not
+/// mistaken for an invoked expression.
+private func issue529TopLevelAppleScriptConcatenationTerms(in returnLine: String) -> [String]? {
+    let line = returnLine.trimmingCharacters(in: .whitespaces)
+    guard line.hasPrefix("return ") else { return nil }
+
+    var terms: [String] = []
+    var currentTerm = ""
+    var inString = false
+    var escaped = false
+    var parenthesisDepth = 0
+
+    for character in line.dropFirst("return ".count) {
+        if inString {
+            currentTerm.append(character)
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "\"" {
+                inString = false
+            }
+            continue
+        }
+
+        switch character {
+        case "\"":
+            inString = true
+            currentTerm.append(character)
+        case "(":
+            parenthesisDepth += 1
+            currentTerm.append(character)
+        case ")":
+            guard parenthesisDepth > 0 else { return nil }
+            parenthesisDepth -= 1
+            currentTerm.append(character)
+        case "&" where parenthesisDepth == 0:
+            let term = currentTerm.trimmingCharacters(in: .whitespaces)
+            guard !term.isEmpty else { return nil }
+            terms.append(term)
+            currentTerm = ""
+        default:
+            currentTerm.append(character)
+        }
+    }
+
+    let finalTerm = currentTerm.trimmingCharacters(in: .whitespaces)
+    guard !inString, parenthesisDepth == 0, !finalTerm.isEmpty else { return nil }
+    terms.append(finalTerm)
+    return terms
 }
 
 private func issue529LedgerPath(from script: String, stage: String) throws -> String {
@@ -493,7 +648,9 @@ struct Issue529MenuValidationTests {
 
     @Test("every menu-cleanup refusal uses observed cleanup and carries its actuation context")
     func menuCleanupRefusalsUseObservedCleanupAndCarryActuationContext() throws {
-        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let script = issue529StrippedOfAppleScriptComments(
+            AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        )
         let entryCleanup = try issue529Position(
             of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
             in: script
@@ -519,9 +676,19 @@ struct Issue529MenuValidationTests {
         var previousRefusalReturn = entryRefusal
         for refusalReturn in cleanupRefusalReturns {
             let refusalLine = String(script[refusalReturn...].prefix { $0 != "\n" })
+            let refusalTerms = try #require(
+                issue529TopLevelAppleScriptConcatenationTerms(in: refusalLine),
+                "every MENU_PICK_FAILED menu-cleanup return must be an assembled expression"
+            )
             #expect(
-                refusalLine.contains("my menuCleanupActuationContext(menuActuationAttempted)"),
-                "every MENU_PICK_FAILED menu-cleanup return must preserve the actuation context"
+                refusalTerms == [
+                    "\"MENU_PICK_FAILED: menu cleanup was not observed\"",
+                    "my menuCleanupActuationContext(menuActuationAttempted)",
+                    "\" (\"",
+                    "cleanupState",
+                    "\")\"",
+                ],
+                "every MENU_PICK_FAILED menu-cleanup return must concatenate the actuation-context handler as an expression"
             )
             let cleanupBetweenRefusals = issue529Positions(
                 of: "set cleanupState to my dismissOpenMenu(logicProcess,",
@@ -543,12 +710,11 @@ struct Issue529MenuValidationTests {
         // Mutation this rejects: move the `click menu bar item barName of menu bar 1` revalidation
         // above `if not menuItemEnabled then`, which would open a menu on every enabled leaf too.
         //
-        // #921 follow-up (RV-4): stripped of comment lines (a commented-out click/observation must
-        // not keep the count/position checks below passing), and the disabled-branch boundary is
-        // now the STRUCTURALLY matching `end if`, not just the first `end if` string — closing the
-        // branch early and moving the click into a new unconditional block below it preserved every
-        // `position < position` check this test used to run, because textual order does not require
-        // nesting.
+        // #921 follow-up (RV-6): comments are neutralised before any statement is found, and each
+        // revalidation statement's exact active `if`/`try` chain is asserted below. Presence,
+        // ordering, and a matching disabled-branch `end if` alone all let an added false guard make
+        // the pass unreachable; an added `if true` is also rejected because this is an exact
+        // reachability contract, not a claim that today's condition happens to evaluate true.
         let script = issue529StrippedOfAppleScriptComments(
             AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 921)
         )
@@ -559,6 +725,10 @@ struct Issue529MenuValidationTests {
         )
         let revalidationClick = try issue529Position(
             of: "click menu bar item barName of menu bar 1", in: script
+        )
+        let revalidationSelectedRead = try issue529Position(
+            of: "if selected of menu bar item barName of menu bar 1 then set revalidated to true",
+            in: script
         )
         let revalidationTryStart = try #require(
             script.range(
@@ -583,6 +753,14 @@ struct Issue529MenuValidationTests {
         let revalidationCleanup = try issue529Position(
             of: "set cleanupState to my dismissOpenMenu(logicProcess, revalidated)", in: script
         )
+        let revalidationReread = try #require(
+            issue529Positions(
+                of: "set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
+                in: script
+            ).last,
+            "the forced pass must re-read the leaf while its menu is open"
+        )
+        let freshReadingSet = try issue529Position(of: "set freshReadingTaken to true", in: script)
         let stillDisabledReturn = try issue529Position(of: "return \"MENU_DISABLED\"", in: script)
         let unreadableReturn = try issue529Position(of: "return \"MENU_VALIDATION_UNREADABLE:", in: script)
         // The first non-comment statement after the disabled branch's `end if` in the unmodified
@@ -610,8 +788,17 @@ struct Issue529MenuValidationTests {
         #expect(stillDisabledReturn < disabledBranchEnd)
         #expect(unreadableReturn < disabledBranchEnd)
         #expect(disabledBranchEnd < nextStatementAfterBranch)
-        // The click's own openness observation, not a hardcoded assumption, gates cleanup's Escape.
-        #expect(script.contains("if selected of menu bar item barName of menu bar 1 then set revalidated to true"))
+        // Exact active block chains make the statements reachable: no false/true wrapper, loop, or
+        // extra try may sit between this disabled branch and the revalidation pass.
+        let disabledThenTry = ["if not menuItemEnabled then", "try"]
+        let disabledThenValidatedThenTry = ["if not menuItemEnabled then", "if revalidated then", "try"]
+        let disabledOnly = ["if not menuItemEnabled then"]
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: revalidationAttemptMarker, in: script)) == disabledThenTry)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: revalidationClick, in: script)) == disabledThenTry)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: revalidationSelectedRead, in: script)) == disabledThenTry)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: revalidationReread, in: script)) == disabledThenValidatedThenTry)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: freshReadingSet, in: script)) == disabledThenValidatedThenTry)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: revalidationCleanup, in: script)) == disabledOnly)
     }
 
     @Test("a swallowed re-read error refuses as unreadable, not as a fresh disabled reading")
@@ -671,10 +858,10 @@ struct Issue529MenuValidationTests {
     @Test("a reconciliation timeout recovers a stray menu even without the pre-leaf snapshot")
     func strayMenuReconciliationDoesNotRequireThePreLeafSnapshot() throws {
         // #921 follow-up (RV-1): the forced revalidation pass opens Logic's own top-level menu
-        // before the pre-leaf snapshot is ever written -- that write is the LAST step of the
-        // disabled branch, long after the revalidation click. A timeout during that pass used to
-        // hit `guard let preLeafWindowSnapshotPath else { return false }` at the call site and skip
-        // cleanup entirely, including the menu-only Escape. That loop follows this route's deliberate
+        // before the pre-leaf snapshot is ever written. The disabled branch ends first; the snapshot
+        // is persisted later, after the dialog and total-window observations. Thus a timeout anywhere
+        // from revalidation through those observations reaches reconciliation without a snapshot and
+        // must still attempt menu-only cleanup. That loop follows this route's deliberate
         // fresh-observation policy, not an ownership guarantee: a user could open a menu after the
         // child dies and before reconciliation, yet another position actuation remains blocked until
         // the observed menu is closed.
@@ -689,14 +876,15 @@ struct Issue529MenuValidationTests {
             ),
             encoding: .utf8
         )
-        #expect(!source.contains("guard let preLeafWindowSnapshotPath else { return false }"),
-                "a nil snapshot path must still attempt the menu-only recovery, not bail out")
-        #expect(source.contains("preLeafWindowSnapshotPath: String?"),
-                "the reconciler's snapshot path must be optional for a pre-snapshot timeout to reach it")
-
         let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI("))
         let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
         let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
+        let helperSignatureEnd = try #require(helper.firstIndex(of: "{"))
+        let helperSignature = String(helper[..<helperSignatureEnd])
+        #expect(!helper.contains("guard let preLeafWindowSnapshotPath else { return false }"),
+                "a nil snapshot path must still attempt the menu-only recovery, not bail out")
+        #expect(helperSignature.contains("preLeafWindowSnapshotPath: String?,"),
+                "the reconciler's snapshot path must be optional for a pre-snapshot timeout to reach it")
         let snapshotGuardStart = try issue529Position(
             of: "if \"\\(preLeafWindowSnapshotPath ?? \"\")\" is not \"\" then", in: helper
         )
@@ -1447,7 +1635,7 @@ struct Issue529MenuValidationTests {
         // The DIALOG-cleanup gate must still be provably inert for a nil snapshot path: a nil
         // Swift-side value interpolates as the empty string, so this reads as `if "" is not "" then`
         // -- always false, never reachable -- which is the ownership boundary RV-1 preserves.
-        let script = try #require(reconciliationScript.value)
+        let script = issue529StrippedOfAppleScriptComments(try #require(reconciliationScript.value))
         #expect(script.contains("if \"\" is not \"\" then"))
         let menuFocus = try issue529Position(
             of: "set menuFocusState to my menuEscapeFocusState(it)", in: script
@@ -1469,6 +1657,12 @@ struct Issue529MenuValidationTests {
             "if menuFocusState is \"CLOSED\" then return \"CLOSED\"",
             "if menuFocusState is not \"FOCUSED\" then return menuFocusState",
         ], "nothing may interrupt the menu loop's path from its header to Escape")
+        // This fixture captures but does not execute its reconciliation script. The exact active
+        // chain proves that this loop is live in the outer try, rather than merely present inside a
+        // false guard (or any newly added guard) that would leave its statement list unchanged.
+        let menuLoopChain = ["try", "repeat 3 times"]
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: menuFocus, in: script)) == menuLoopChain)
+        #expect(try #require(issue529EnclosingAppleScriptBlocks(at: menuEscape.lowerBound, in: script)) == menuLoopChain)
         #expect(sliderWrites.value == 0)
     }
 
