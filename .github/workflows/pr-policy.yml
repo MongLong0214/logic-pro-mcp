@@ -30,6 +30,20 @@ name: PR policy
 # `docs/canon/CI-GATE.json` is what a guard reads: this file declares `gates_merges: true` and owns
 # the two Canon commands below. Deleting either of them from this file fails the required-gate
 # guard under Scripts/, which is what stops the migration from becoming a deletion.
+#
+# A PULL REQUEST OPENED BEFORE THE RULESET CHANGED
+# ------------------------------------------------
+# A required context is satisfied by a check run on the head commit, and this workflow only
+# produces one when it is TRIGGERED. A pull request whose head predates 2026-09-21 therefore has
+# no `pr-policy` run at all: branch protection reports the context missing and the merge waits --
+# correctly, because nothing has read that body under the rule now in force.
+#
+# The recovery is one event, and none of them is code churn: edit the description, or close and
+# reopen the pull request. Both are in `types:` below, both re-run THIS workflow only, and neither
+# restarts a macOS job or disturbs a code verdict already on the commit. A rebase or an empty
+# commit also works and is the expensive way round -- it moves the head, so the code jobs run
+# again for nothing. There were no open pull requests when the ruleset changed, so this is written
+# for the next migration rather than for a queue that was stranded by this one.
 
 on:
   pull_request:
