@@ -1,0 +1,94 @@
+Ruled-out: relaxing `_visible()` so a fenced declaration counts | that is the rule three earlier opt-out bypasses produced, and reopening it to work around a form rendering setting would reopen all three
+Warn: Do not put the sentence `states no fact about Logic` in a form placeholder or template. With it there, every untouched submission passes the only canon check wired to it -- the same trap an earlier record on these files already names for the pull request template.
+Warn: A YAML assertion that `render` is absent does not test this. The defect lived between the form and the rendered body, so the case has to render the form the way GitHub documents and run the real checker over the result.
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no real GitHub issue was submitted through the repaired form; the rendering is reproduced from GitHub's documented form schema rather than observed
+Record-Id: r-formfencedopt
+Provenance: inherited 23da0e88be940ed1706531e323fef81eb3eb6b3d
+
+Ruled-out: relaxing _visible() so a fenced declaration counts | the new hidden_declaration code names where the sentence is hiding instead; accepting the fenced form would reopen the three earlier opt-out bypasses
+Ruled-out: making _citable_strings_in strict on the pull request path | its docstring already decides that question, and changing it would be a behaviour change to a required gate under cover of an unrelated refactor
+Warn: Exit 2 is ERROR and it is still NONZERO. pr-policy.yml runs this as a required check, so an evaluation that did not finish must not report green -- the softening the error category buys is in the issue bot's wording, not in a gate. Every caller was audited first: all of them treat any nonzero as failure.
+Warn: No option is consumed by position any more. The previous revision required --text at argv[1] and --changed at argv[3] with argc exactly 5, so one extra flag in the line dropped the file list and let a Logic-facing change opt out. Adding a flag to a positional parser is how a gate quietly weakens.
+Warn: The diagnostic codes are the contract canon-issue.yml keys on. Adding one is additive; changing what an existing code MEANS is a breaking change for that workflow.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-canondiagnostics
+Provenance: inherited e6914f608432706b9a46e68496b3909adb623e54
+
+Limit: No real issue was driven through the repaired workflow. The end-to-end cases replace the GitHub API with a recorder and run the actual Canon checker underneath; the API shapes are taken from the REST documentation rather than observed.
+Ruled-out: gh api --paginate for the comment list | it concatenates pages into a stream of JSON arrays, and splitting that apart means scanning text a comment body can contain; pages are walked by hand instead
+Ruled-out: keeping the decisions in the workflow file | an `if` around `gh issue comment` has no seam, so the only way to find out what it says to a contributor is for it to say it to them
+Warn: A note is ours only when the marker AND the writing account agree. A marker is a string anybody can paste, and a contributor quoting a bot note in their own reply would otherwise hand this workflow permission to rewrite what they wrote. CANON_BOT_LOGIN is the account the token comments AS -- never github.actor, which is whoever opened the issue.
+Warn: Nothing that varies per run may enter the rendered body. The state marker is what makes "write nothing when nothing changed" work: the same evaluation renders the same bytes and decide() compares them. A timestamp or a run id would make every run an edit.
+Warn: An evaluation that did not finish renders `unknown`, never `resolved`. A run that did not re-examine the body must not be able to withdraw a warning.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-canonissuenote
+Provenance: inherited 7af5a224db6003f0992f0e2a6e725c0816f2c320
+
+Limit: No pull request was driven through the relocated gate on GitHub. Every measurement here is local: the guards, their suites, and two mutation sweeps.
+Ruled-out: keeping the four lists under docs/canon and widening the exception list | an exemption asks rule 15 to re-prove on every run what a file's location settles once, and it is one rename away from lapsing
+Ruled-out: leaving the moved cases in test_canon_citations_guard.py | a case left behind would have gone red for the right reason and been read as the move breaking something
+Warn: `legacy` is declared by the OWNER and never read out of the moved file. A policy that names its own predecessor chooses what it is compared against. `migrated_from` inside a file is the weaker older form and stays checked rather than believed.
+Warn: A list absent at the merge base is unratcheted on the branch that introduces it, and the branch that MOVES a requirement is exactly the branch where losing one is easiest. Every future relocation of a ratcheted list needs its `legacy` in the same change, or the move is a bootstrap.
+Warn: Three fixtures copy `check-canon-citations.py` into a temporary root. It imports `ratchet.py` by path, so a root without it does not run a weaker guard -- it runs no guard at all, and the case reads the traceback as the refusal it was looking for. Any new fixture copying that guard has to copy `ratchet.py` too.
+Blast: system
+Undo: costly
+Certainty: firm
+Record-Id: r-cidecoupling
+Provenance: inherited 9bc40f3012c869746be94c53a8f0cefc3b218be0
+
+Limit: The workflow step has not run on a GitHub runner. Whether `pip install pyyaml` succeeds on the macos-15 image, and whether the first form or the `--break-system-packages` fallback is the one that lands, is unmeasured until this is pushed.
+Ruled-out: reading the `pip install` line instead of the import readback | it names a package while the driven file asks for a module, and the mapping between them is a second authority this repository would have to keep
+Ruled-out: scanning every file under Scripts/ rather than only the driven set | it demands PyObjC in CI for live harnesses CI never launches, and the usual repair for a rule nobody can satisfy is an exemption list
+Ruled-out: keeping the `plain Python, no third-party imports` contract by hand-parsing the issue forms | a workflow's `needs:` is one line at a known indentation; an issue form is nested field objects whose rendering is the test's entire subject, so a YAML subset written here would be a second authority on the file format
+Warn: A drive that imports a third-party module at module level is a demand on the CI runner, and the runner's library is not the author's. `test_issue_form_canon_field.py` passed on every machine in this project and died on the macOS image 37 minutes into the job, after `swift test`.
+Warn: The readback is what the new guard reads, not the `pip install` line. A package name is not a module name -- `pyyaml` installs and `yaml` imports -- and pip printing nothing is not evidence the interpreter run-repo-guards.py launches can find the module.
+Warn: An import inside a function, a `try` or an `if` is deliberately not counted. That is how Scripts/livekit/evidence.py reaches Quartz, and a harness that asks whether PyObjC is present must not force CI to install it.
+Warn: This retires the contract `83a19d5` (#893) recorded -- `run-repo-guards.py`'s plain-Python-no-third-party rule. The replacement is `check-third-party-imports-are-installed.py`: third-party is allowed where CI proves it can import it. `check-every-ci-job-is-required.py` still parses ci.yml by indentation, now by choice rather than necessity.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-ciimports
+Provenance: inherited 8dc1f299d604df08b3529d56c9def00d9eba9b54
+
+Ruled-out: keeping `None` and having `_before` ask `is_shallow_repository` itself | the caller would have to repeat that question for every reason a history can be unreadable, and the unparsable-ancestor case has no such question to ask -- only the place that failed to read knows why the answer is missing
+Ruled-out: dropping the ancestor-loop early return, since falling through returns the same object | it also prints "ratcheted against <sha>, the last ancestor carrying it" about a commit whose copy it could not read, and a mutation showed the refusal alone cannot tell the two apart
+Warn: A shallow clone reaches `at_base` with a PERFECTLY READABLE merge base. `git rev-list` over a path no reachable commit carries exits 0 with no output, so "no ancestor carries it" and "the history cannot be read" arrived at the caller as the same `None`, and `_before` read it as a first introduction and skipped the comparison. A `grow` list that had lost a required command passed with no failures.
+Warn: Any new case in TheMigrationIsComparedNotBootstrapped must stage `docs/canon` alone. `git add -A` commits `.github/ci/` too, and a base that already carries the new path is compared against it directly -- the unknown-history code is never reached and the case passes for the wrong reason. The first draft of the unparsable-base case did exactly this.
+Warn: `git rev-list` failing cannot be provoked from a git fixture, so that branch is driven through `History.git` by a stub subclass. `History` exists as an object for this reason. A case that cannot be written is a line defended rather than checked.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-unknownhistory
+Provenance: inherited f776be93b085dbfa29ff37ee2d25d113c885e72a
+
+Ruled-out: turning every CanonResolveError into a tooling error | an invented key would become a pass, and `invalid_reference` is the one code that actually tells a contributor what to fix
+Ruled-out: keeping `_require_readable_index` at both loops in diagnose_text | the mutation deleting one of them SURVIVED because the other still raised -- two places deciding the same thing, neither answerable for it
+Ruled-out: leaving the error path's log line as "see the log above" | the note tells the author nothing by design, so that line is the only place a failed run can be told from a quiet one, and it carried no cause
+Warn: A missing docs/canon/index/<source>.tsv makes `load_index` return an EMPTY TABLE, so every reference reads as "not in the index" -- indistinguishable from an invented key. Filing that as INVALID_REFERENCE turns a repository without a corpus build into an accusation against every contributor. `_require_readable_index` is what separates the two; `CanonResolveError` against an index the run COULD read stays the author's.
+Warn: `evaluate` read stdout and never the exit status. A status is what a killed process cannot fake and a category is what the note is worded from, so reading only the category let a checker killed by a signal after printing `satisfied` RESOLVE a standing warning. The two must agree, and `_validated` refuses the pair when they do not.
+Warn: The body freshness check ran once, BEFORE the comment walk -- and the walk is up to a hundred API pages. `body_moved` is asked again immediately before any write and again after the stale-note recovery re-lists. A verdict older than the body it describes must not be published.
+Warn: FakeGitHub.issue_body used to pop unconditionally from a two-element default, so a third read answered "" -- which `main()` now reads as an edited body. The last body in the list stands for every read after it, or every freshness case passes for the wrong reason.
+Warn: A maintainer-facing `::warning::` line is a workflow command. A diagnostic carrying a newline could open one of its own, so `one_line` folds whitespace and `::` before any cause is printed.
+Blast: system
+Undo: easy
+Certainty: firm
+Record-Id: r-whosefault
+Provenance: inherited bc8b142f97a0a87ffe83ced80ff0a103d981bca4
+
+Limit: The category and the exit status are the same with and without this call: `check_text`'s outer `except canon.CanonError` catches the raw parse failure and reaches error/2 by another route. What changed is the message, and the message is the only thing the new case can assert on.
+Ruled-out: documenting the asymmetry instead of closing it | two branches of one function answering the same repository-side fault by different routes is the shape the function exists to remove, and nothing would notice if one route later stopped
+Ruled-out: reusing PINNED_REF for the value-index case | it carries a key, so it takes the key branch; wrecking strings.values.tsv under it returned satisfied and the case proved nothing
+Warn: A reference carrying a key takes the KEY branch: `is_value_citation` is `self.key == ""`. A case that wrecks `strings.values.tsv` while citing `.../en/Trk#value` passes with `satisfied` and proves nothing. Only `logic-canon://<source>/<locale>#value` reaches the value branch at all.
+Warn: `_quote_candidates` yields the whole stripped line, the text after the FIRST colon, and the unquoted forms of both -- not backticked or embedded segments. `NAME = "Count In"` does not satisfy a value citation in the same file; a `#:` line whose text after the colon IS the value does.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-valuebranch
+Provenance: inherited e42db738c5df8282c738916a41c6ccb207156b4d
