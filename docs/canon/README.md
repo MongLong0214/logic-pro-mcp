@@ -35,7 +35,17 @@ find. The repository could not tell which, because it had no notion of a citatio
 talking about it.
 
 * Stating something about Logic: a `logic-canon://<source>/<locale>#value` reference AND the value
-  in quotes. The forms and what each proves are below under *A citation without a key*.
+  in quotes. The forms and what each proves are below under *A citation without a key*. A worked
+  one, so the shape is not only a placeholder — this reference resolves against the pinned corpus
+  and the value beside it is what Logic ships at that key:
+
+  ```text
+  logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Trk#value
+  Trk
+  ```
+
+  Both halves are required. A reference alone does not say what you claimed it says, and a value
+  alone is a string you typed.
 * Stating nothing about Logic: the sentence `This pull request body states no fact about Logic`
   (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence inside a
   fenced code block or an HTML comment is deliberately not read, and the checker says so by name.
