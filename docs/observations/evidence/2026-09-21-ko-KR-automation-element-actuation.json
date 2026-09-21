@@ -1,0 +1,332 @@
+{
+  "captured": "2026-09-21",
+  "locale": "ko",
+  "window": "무제 30 - 트랙",
+  "note": "Raw readings. The three automation elements were located on AXLayoutItem[1], the track the submenu leaf acted on. Actuation was measured by EFFECT as well as by status code, and the two disagree on one element.",
+  "undo_stack_boundaries": {
+    "note": "The first item of the 편집 menu, read by opening that menu and closing it with Escape, at each state boundary. The second item is the redo entry. These are what tag the censuses.",
+    "readings": [
+      {
+        "state": "after_create",
+        "item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+        "item_2": "실행 복귀할 수 없음"
+      },
+      {
+        "state": "after_undo",
+        "item_1": "가져오기 실행 취소",
+        "item_2": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 복귀"
+      },
+      {
+        "state": "after_redo",
+        "item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+        "item_2": "실행 복귀할 수 없음"
+      },
+      {
+        "state": "cycle2_after_undo",
+        "item_1": "가져오기 실행 취소"
+      },
+      {
+        "state": "cycle2_after_redo",
+        "item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소"
+      }
+    ],
+    "how_undo_and_redo_were_driven": "By clicking menu item 1 and menu item 2 of the 편집 menu of Logic's menu bar. NOT by keystroke — see instrument_defects below."
+  },
+  "submenu_structure": {
+    "path": "Mix > 트랙 오토메이션 생성",
+    "parent": {
+      "name": "트랙 오토메이션 생성",
+      "enabled": true,
+      "attribute_names_contains_AXIdentifier": false,
+      "reading": "`name of every attribute of parentItem` does not contain \"AXIdentifier\"; a direct `value of attribute \"AXIdentifier\"` raises `attribute ... 을(를) 가져올 수 없습니다`. The attribute-name list is what establishes absence here; the coercion error alone would not."
+    },
+    "menu_item_count": 9,
+    "items": [
+      {
+        "index": 1,
+        "name": "리전 경계에 1개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      },
+      {
+        "index": 2,
+        "name": "리전 경계에 2개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:",
+        "AXIdentifier_class": "text",
+        "note": "this is the leaf the reverify script drives"
+      },
+      {
+        "index": 3,
+        "name": null,
+        "enabled": false,
+        "AXIdentifier": "<unreadable>",
+        "note": "separator"
+      },
+      {
+        "index": 4,
+        "name": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      },
+      {
+        "index": 5,
+        "name": "볼륨, 패닝, 센드에 대해 각 2개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      },
+      {
+        "index": 6,
+        "name": "표시된 파라미터에 대해 1개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      },
+      {
+        "index": 7,
+        "name": "표시된 파라미터에 대해 2개의 오토메이션 포인트 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      },
+      {
+        "index": 8,
+        "name": null,
+        "enabled": false,
+        "AXIdentifier": "<unreadable>",
+        "note": "separator"
+      },
+      {
+        "index": 9,
+        "name": "메인 출력에 대해 볼륨 페이드 아웃 생성",
+        "enabled": true,
+        "AXIdentifier": "globalMenuItemCall:"
+      }
+    ],
+    "counts": {
+      "command_items": 7,
+      "separators": 2,
+      "command_items_carrying_globalMenuItemCall": 7
+    }
+  },
+  "elements": [
+    {
+      "description": "오토메이션 값",
+      "path": "/AXWindow[0]/AXGroup[8]/AXGroup[1]/AXSplitGroup[0]/AXSplitGroup[1]/AXScrollArea[0]/AXGroup[0]/AXLayoutItem[1]/AXButton[10]",
+      "role": "AXButton",
+      "role_description": "버튼",
+      "attribute_name_count": 17,
+      "attribute_names": [
+        "AXChildren",
+        "AXDescription",
+        "AXEnabled",
+        "AXFocused",
+        "AXFrame",
+        "AXHelp",
+        "AXMaxValue",
+        "AXMinValue",
+        "AXParent",
+        "AXPosition",
+        "AXRole",
+        "AXRoleDescription",
+        "AXSize",
+        "AXTitle",
+        "AXTopLevelUIElement",
+        "AXValue",
+        "AXWindow"
+      ],
+      "AXValue_attribute_present": true,
+      "AXValue_reads": 1509949440,
+      "AXUIElementIsAttributeSettable_AXValue": {
+        "status": 0,
+        "settable": false
+      },
+      "actions": [
+        "AXPress"
+      ],
+      "actuations": [
+        {
+          "action": "AXPress",
+          "status": 0,
+          "axmenu_total_before": 48,
+          "axmenu_total_after": 48,
+          "delta": 0
+        }
+      ]
+    },
+    {
+      "description": "오토메이션 모드",
+      "path": "/AXWindow[0]/AXGroup[8]/AXGroup[1]/AXSplitGroup[0]/AXSplitGroup[1]/AXScrollArea[0]/AXGroup[0]/AXLayoutItem[1]/AXPopUpButton[11]",
+      "role": "AXPopUpButton",
+      "role_description": "팝업 버튼",
+      "attribute_name_count": 14,
+      "attribute_names": [
+        "AXChildren",
+        "AXDescription",
+        "AXEnabled",
+        "AXFocused",
+        "AXFrame",
+        "AXHelp",
+        "AXParent",
+        "AXPosition",
+        "AXRole",
+        "AXRoleDescription",
+        "AXSize",
+        "AXTopLevelUIElement",
+        "AXValue",
+        "AXWindow"
+      ],
+      "AXValue_attribute_present": true,
+      "AXValue_reads": "Read",
+      "AXUIElementIsAttributeSettable_AXValue": {
+        "status": 0,
+        "settable": false
+      },
+      "actions": [
+        "AXPress",
+        "AXShowMenu"
+      ],
+      "actuations": [
+        {
+          "action": "AXPress",
+          "status": 0,
+          "axmenu_total_before": 48,
+          "axmenu_total_after": 48,
+          "delta": 0
+        },
+        {
+          "action": "AXShowMenu",
+          "status": 0,
+          "axmenu_total_before": 48,
+          "axmenu_total_after": 48,
+          "delta": 0
+        }
+      ]
+    },
+    {
+      "description": "오토메이션 파라미터",
+      "path": "/AXWindow[0]/AXGroup[8]/AXGroup[1]/AXSplitGroup[0]/AXSplitGroup[1]/AXScrollArea[0]/AXGroup[0]/AXLayoutItem[1]/AXPopUpButton[12]",
+      "role": "AXPopUpButton",
+      "role_description": "팝업 버튼",
+      "attribute_name_count": 14,
+      "attribute_names": [
+        "AXChildren",
+        "AXDescription",
+        "AXEnabled",
+        "AXFocused",
+        "AXFrame",
+        "AXHelp",
+        "AXParent",
+        "AXPosition",
+        "AXRole",
+        "AXRoleDescription",
+        "AXSize",
+        "AXTopLevelUIElement",
+        "AXValue",
+        "AXWindow"
+      ],
+      "AXValue_attribute_present": true,
+      "AXValue_reads": "볼륨",
+      "AXUIElementIsAttributeSettable_AXValue": {
+        "status": 0,
+        "settable": false
+      },
+      "actions": [
+        "AXPress",
+        "AXShowMenu"
+      ],
+      "actuations": [
+        {
+          "action": "AXPress",
+          "status": -25204,
+          "axmenu_total_before": 48,
+          "axmenu_total_after": 49,
+          "delta": 1,
+          "on_screen": "a Logic window at CGWindowLevel 101, bounds X=791 Y=6 W=197 H=359, appeared; the element's own AXPosition is pt(785,344)",
+          "note": "the status code reports failure (-25204 kAXErrorCannotComplete) while the effect shows the menu opened. Status and effect disagree, in the pessimistic direction."
+        },
+        {
+          "action": "AXShowMenu",
+          "status": -25204,
+          "axmenu_total_before": 49,
+          "axmenu_total_after": 49,
+          "delta": 0,
+          "note": "issued while the menu opened by AXPress was still up"
+        }
+      ]
+    }
+  ],
+  "closing_the_opened_menu": [
+    {
+      "attempt": "CGEvent key 53 postToPid, Logic not frontmost",
+      "axmenu_total_after": 49,
+      "layer_gt_0_windows": 2,
+      "result": "did not close"
+    },
+    {
+      "attempt": "System Events `key code 53` addressed to the Logic process, Logic not frontmost",
+      "axmenu_total_after": 49,
+      "result": "did not close"
+    },
+    {
+      "attempt": "`tell application id \"com.apple.logic10\" to activate` then System Events `key code 53`",
+      "layer_gt_0_windows": 1,
+      "result": "the layer-101 menu closed"
+    }
+  ],
+  "instrument_defects_found_while_measuring": [
+    {
+      "defect": "AppleScript `keystroke` inside `tell (first process whose bundle identifier is ...)` is delivered to the FRONTMOST application, not to the process named in the tell block.",
+      "reading": "With iTerm2 frontmost, three `keystroke \"z\" using command down` sent inside a `tell` block addressed to Logic left the 편집 menu's first item unchanged at `리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소` and its second item at `실행 복귀할 수 없음`. Clicking menu item 1 of the same menu instead moved the label to `가져오기 실행 취소` and armed the redo entry.",
+      "consequence": "A reverify script that drives undo by keystroke can send Cmd-Z to whatever application happens to be frontmost, and then read an unchanged label as a finding about Logic."
+    },
+    {
+      "defect": "The count of AXMenu elements in the application's AX tree does not measure whether a menu is OPEN.",
+      "reading": "After the parameter popup's menu was opened, the AXMenu total stayed at 49 across two failed Escape attempts AND after the menu was successfully closed. `count of (every menu bar item of menu bar 1 whose selected is true)` read 0 the whole time, while CGWindowList reported a Logic window at layer 101.",
+      "consequence": "CGWindowList layer > 0 is the on-screen truth; an AXMenu total is a statement about which menu objects exist."
+    },
+    {
+      "defect": "Korean strings vended by Logic's AX interface are not uniformly normalized, so byte equality against a typed literal can report a difference between two identical texts.",
+      "reading": "The arrange window's AX title reads back as 무제 30 - 트랙 in which 무제 is four conjoining jamo (U+1106 U+116E U+110C U+1166) while 트랙, in the same string, is two precomposed syllables (U+D2B8 U+B799); the string is neither NFC nor NFD. Python byte equality against the NFC literal returned False and equality after NFC normalization returned True. The AXHelp values measured in this run are NFC.",
+      "consequence": "Offline comparisons in Python must normalize both sides when an AX reading meets a typed or canon literal. Comparisons of one AX reading against another must NOT normalize, because a normalization change between two states would be a real difference in the reading.",
+      "does_not_apply_to_applescript": "MEASURED: AppleScript's own comparison already normalizes. `osascript` evaluating `a contains b` and `a is b` with an NFD 무제 against an NFC 무제 returned true for both, so the AppleScript-side predicates in the reverify script need no normalization handling."
+    }
+  ],
+  "region_precondition_control": {
+    "note": "Evaluated offline against the committed after-create census; recomputable by Scripts/observations/derive-automation-census-difference.py.",
+    "axlayoutitem_rows": 10,
+    "naive_predicate": "AXHelp contains the canon Region value",
+    "naive_matches": 4,
+    "naive_match_descriptions": [
+      "MIDI 리전",
+      "Note at 1 마디 , C3",
+      "Note at 1 마디 3 비트 , E3",
+      "Note at 2 마디 , G3"
+    ],
+    "note_help_that_satisfies_the_naive_predicate": "MIDI 노트 또는 명령을 나타내며, 리전과 같은 방법으로 편집할 수 있습니다. ",
+    "canon_predicate": "AXHelp contains the composed QuickHelp text for the MIDI region",
+    "canon_matches": 1,
+    "canon_match_descriptions": [
+      "MIDI 리전"
+    ],
+    "axhelp_reverse_lookup": {
+      "region_help_prefix": "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다.",
+      "logic_canon_axhelp_result": {
+        "tier": "truncated",
+        "keys": [
+          "ARR_021_MidiRegion"
+        ],
+        "locale": "ko",
+        "join_confidence": "measured"
+      },
+      "note_help_result": {
+        "match": null
+      }
+    },
+    "also_excluded_by_the_canon_predicate": [
+      "사이클 리전 (two AXLayoutItem rows whose AXSelected reads as absent)"
+    ],
+    "naive_predicate_ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Region#value",
+    "naive_predicate_value": "리전",
+    "canon_predicate_ref": "logic-canon://quickhelp/QuickHelp/ko/ARR_021_MidiRegion#composed",
+    "canon_predicate_value": "MIDI 리전. MIDI 노트 및 컨트롤러 이벤트를 포함합니다. 가운데를 드래그하여 이동하고, 하단 가장자리를 드래그하여 크기를 조정하며, 상단 오른쪽 모서리를 드래그하여 루핑합니다. 도구를 사용하여 그 외의 편집을 수행합니다."
+  }
+}

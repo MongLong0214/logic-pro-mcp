@@ -1,0 +1,356 @@
+{
+  "schema": 3,
+  "id": "2026-09-21-the-parameter-popup-help-reports-automation-data",
+  "date": "2026-09-21",
+  "subject": "Mix > 트랙 오토메이션 생성 submenu leaf as a creation route, and what the arrange window reads back about the data it creates",
+  "question": "Does driving the leaf create automation data, and does any AX reading in the arrange window distinguish the state where that data exists from the state where it does not?",
+  "verdict": "partial",
+  "surface": "arrange.menus",
+  "issues": [
+    884
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "os": "macOS 26.3 (25D125)",
+    "locale": "ko-KR"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/reverify-automation-point-creation.sh && python3 Scripts/observations/derive-automation-census-difference.py",
+    "expected": "the first script reads 리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소 after driving the leaf and exits 0; the second recomputes every number below from the committed censuses and exits 0",
+    "cost": "the first needs Logic, an open project and a selected region; the second is offline"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TrackDispatcher+RecordSequence.swift:record_sequence"
+  ],
+  "evidence": [
+    "evidence/2026-09-21-ko-KR-automation-census-after-create.json",
+    "evidence/2026-09-21-ko-KR-automation-census-after-undo.json",
+    "evidence/2026-09-21-ko-KR-automation-census-after-redo.json",
+    "evidence/2026-09-21-ko-KR-automation-census-cycle2-after-undo.json",
+    "evidence/2026-09-21-ko-KR-automation-census-cycle2-after-redo.json",
+    "evidence/2026-09-21-ko-KR-automation-element-actuation.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Create%20Track%20Automation#value",
+      "value": "트랙 오토메이션 생성",
+      "used_for": "the submenu parent in the menu reading",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/ko/GMM_007_2AutoPointRegionBorders#Title",
+      "value": "리전 경계에 2개의 오토메이션 포인트 생성",
+      "used_for": "the submenu leaf driven in the paired run",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Create%202%20Track%20Automation%20Points%20at%20Region%20Borders%23und#value",
+      "value": "리전 경계에 2개의 트랙 오토메이션 포인트 생성",
+      "used_for": "the operation name in the Edit-menu undo-label readings",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Automation%20Value#value",
+      "value": "오토메이션 값",
+      "used_for": "the description on the raw AX census rows",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Region#value",
+      "value": "리전",
+      "used_for": "the naive region predicate whose over-matching is the committed control",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/QuickHelp/ko/ARR_021_MidiRegion#composed",
+      "value": "MIDI 리전. MIDI 노트 및 컨트롤러 이벤트를 포함합니다. 가운데를 드래그하여 이동하고, 하단 가장자리를 드래그하여 크기를 조정하며, 상단 오른쪽 모서리를 드래그하여 루핑합니다. 도구를 사용하여 그 외의 편집을 수행합니다.",
+      "used_for": "the region predicate that separates a MIDI region from a MIDI note",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "A three-note MIDI region from bars 1 through 3 was recorded on one instrument track of a two-track ko-KR project, and the automation view was turned on and confirmed by reading its own checkbox rather than by assuming the toggle worked. The leaf was driven from the menu, then undone and redone TWICE, and the arrange window was censused to depth 14 in each of the five resulting states. Each census captured sixteen attributes per row -- role, subrole, title, description, role description, help, identifier, value, min, max, enabled, selected, focused, position, size and the action list -- plus the element's path and depth; all five are committed whole, so the comparison below is recomputable rather than reported. Every state boundary was tagged by reading the first and second items of the 편집 menu, so a census is labelled by what Logic itself says it just did. Undo and redo were driven by CLICKING those menu items, not by keystroke, for the reason in the instrument note below. Separately, the three automation elements on the affected track were probed for attribute names, AXValue settability and actuation measured by effect, and the submenu's items were read for their command identifiers. No coordinate was used and no point was placed by clicking the lane.",
+  "observations": [
+    {
+      "what": "the submenu structure and the leaf driven",
+      "locale": "ko-KR",
+      "parent": "트랙 오토메이션 생성",
+      "parent_enabled": true,
+      "parent_attribute_names_contains_AXIdentifier": false,
+      "parent_identifier_note": "absence is established by the attribute-name list, not by the coercion error a direct read raises; an unreadable attribute is not an absent one",
+      "menu_item_count": 9,
+      "command_items": 7,
+      "separators": 2,
+      "command_items_carrying_globalMenuItemCall": 7,
+      "leaf_driven": "리전 경계에 2개의 오토메이션 포인트 생성"
+    },
+    {
+      "what": "the region fixture",
+      "locale": "ko-KR",
+      "track_kind": "instrument",
+      "region_kind": "midi",
+      "note_count": 3,
+      "start_bar": 1,
+      "end_bar": 3,
+      "verify_source": "ax_region_delta"
+    },
+    {
+      "what": "the five state-tagged censuses, each labelled by Logic's own undo stack",
+      "locale": "ko-KR",
+      "depth_limit": 14,
+      "attributes_per_row": 16,
+      "states": [
+        {
+          "state": "after_create",
+          "undo_item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+          "undo_item_2": "실행 복귀할 수 없음",
+          "total_elements": 719
+        },
+        {
+          "state": "after_undo",
+          "undo_item_1": "가져오기 실행 취소",
+          "undo_item_2": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 복귀",
+          "total_elements": 719
+        },
+        {
+          "state": "after_redo",
+          "undo_item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+          "undo_item_2": "실행 복귀할 수 없음",
+          "total_elements": 719
+        },
+        {
+          "state": "cycle2_after_undo",
+          "undo_item_1": "가져오기 실행 취소",
+          "total_elements": 719
+        },
+        {
+          "state": "cycle2_after_redo",
+          "undo_item_1": "리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소",
+          "total_elements": 719
+        }
+      ]
+    },
+    {
+      "what": "the paired census comparison, over every captured attribute",
+      "compared_fields": [
+        "AXRole",
+        "AXSubrole",
+        "AXTitle",
+        "AXDescription",
+        "AXRoleDescription",
+        "AXHelp",
+        "AXIdentifier",
+        "AXValue",
+        "AXMinValue",
+        "AXMaxValue",
+        "AXEnabled",
+        "AXSelected",
+        "AXFocused",
+        "AXPosition",
+        "AXSize",
+        "actions"
+      ],
+      "also_compared": [
+        "path",
+        "depth"
+      ],
+      "whole_row_multiset_difference_present_vs_absent": 1,
+      "whole_row_multiset_difference_absent_vs_present": 1,
+      "pairs_compared_present_vs_absent": 6,
+      "whole_row_multiset_difference_between_two_censuses_of_the_same_state": 0,
+      "same_state_pairs_compared": 3,
+      "rows_whose_path_disagrees_at_the_same_index": 0,
+      "fields_that_differ": [
+        "AXHelp"
+      ],
+      "rows_that_differ": [
+        475
+      ]
+    },
+    {
+      "what": "the one element that distinguishes the states",
+      "locale": "ko-KR",
+      "census_index": 475,
+      "role": "AXPopUpButton",
+      "role_description": "팝업 버튼",
+      "description": "오토메이션 파라미터",
+      "path": "/AXWindow[0]/AXGroup[8]/AXGroup[1]/AXSplitGroup[0]/AXSplitGroup[1]/AXScrollArea[0]/AXGroup[0]/AXLayoutItem[1]/AXPopUpButton[12]",
+      "help_when_the_operation_is_on_the_undo_stack": "오토메이션 파라미터 켬/끔. 해당 오토메이션 파라미터의 오토메이션 데이터를 켜거나 끕니다. ",
+      "help_when_it_has_been_undone": "오토메이션 파라미터 팝업 메뉴. 오토메이션할 채널 스트립, Smart Control 또는 플러그인 파라미터를 선택합니다. ",
+      "transitions_observed": 4,
+      "cycles": 2,
+      "other_fields_of_this_row_that_moved": []
+    },
+    {
+      "what": "the within-run control: the same control on the other track",
+      "locale": "ko-KR",
+      "census_index": 460,
+      "description": "오토메이션 파라미터",
+      "path": "/AXWindow[0]/AXGroup[8]/AXGroup[1]/AXSplitGroup[0]/AXSplitGroup[1]/AXScrollArea[0]/AXGroup[0]/AXLayoutItem[0]/AXPopUpButton[13]",
+      "help_in_all_five_states": "오토메이션 파라미터 팝업 메뉴. 오토메이션할 채널 스트립, Smart Control 또는 플러그인 파라미터를 선택합니다. ",
+      "distinct_values_across_states": 1
+    },
+    {
+      "what": "settability and actuation on the three automation elements of the affected track",
+      "locale": "ko-KR",
+      "elements": [
+        {
+          "description": "오토메이션 값",
+          "role": "AXButton",
+          "AXValue_attribute_present": true,
+          "AXValue_reads": 1509949440,
+          "AXValue_settable": false,
+          "settable_status": 0,
+          "actuations": [
+            {
+              "action": "AXPress",
+              "status": 0,
+              "axmenu_delta": 0
+            }
+          ]
+        },
+        {
+          "description": "오토메이션 모드",
+          "role": "AXPopUpButton",
+          "AXValue_attribute_present": true,
+          "AXValue_reads": "Read",
+          "AXValue_settable": false,
+          "settable_status": 0,
+          "actuations": [
+            {
+              "action": "AXPress",
+              "status": 0,
+              "axmenu_delta": 0
+            },
+            {
+              "action": "AXShowMenu",
+              "status": 0,
+              "axmenu_delta": 0
+            }
+          ]
+        },
+        {
+          "description": "오토메이션 파라미터",
+          "role": "AXPopUpButton",
+          "AXValue_attribute_present": true,
+          "AXValue_reads": "볼륨",
+          "AXValue_settable": false,
+          "settable_status": 0,
+          "actuations": [
+            {
+              "action": "AXPress",
+              "status": -25204,
+              "axmenu_delta": 1,
+              "on_screen": "a Logic window at CGWindowLevel 101 appeared at X=791 Y=6 W=197 H=359, beside the element's own AXPosition pt(785,344)"
+            },
+            {
+              "action": "AXShowMenu",
+              "status": -25204,
+              "axmenu_delta": 0,
+              "note": "issued while that menu was still open"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "what": "the 오토메이션 값 rows across the paired states",
+      "locale": "ko-KR",
+      "role": "AXButton",
+      "value": 1509949440,
+      "row_count": 2,
+      "invariant_across": [
+        "after_create",
+        "after_undo",
+        "after_redo",
+        "cycle2_after_undo",
+        "cycle2_after_redo"
+      ]
+    },
+    {
+      "what": "the region precondition control, evaluated offline against the committed after-create census",
+      "locale": "ko-KR",
+      "axlayoutitem_rows": 10,
+      "naive_predicate": "AXHelp contains 리전",
+      "naive_matches": 4,
+      "naive_match_descriptions": [
+        "MIDI 리전",
+        "Note at 1 마디 , C3",
+        "Note at 1 마디 3 비트 , E3",
+        "Note at 2 마디 , G3"
+      ],
+      "note_help_that_satisfies_the_naive_predicate": "MIDI 노트 또는 명령을 나타내며, 리전과 같은 방법으로 편집할 수 있습니다. ",
+      "canon_predicate": "AXHelp contains the ARR_021_MidiRegion composed value",
+      "canon_matches": 1,
+      "canon_match_descriptions": [
+        "MIDI 리전"
+      ],
+      "logic_canon_axhelp_reverse_lookup": {
+        "region_help": {
+          "tier": "truncated",
+          "keys": [
+            "ARR_021_MidiRegion"
+          ],
+          "join_confidence": "measured"
+        },
+        "note_help": {
+          "match": null
+        }
+      }
+    },
+    {
+      "what": "instrument readings taken while measuring, which change how these numbers must be read",
+      "readings": [
+        {
+          "instrument": "AppleScript keystroke inside a tell block addressed to a process",
+          "reading": "With iTerm2 frontmost, three `keystroke \"z\" using command down` issued inside `tell (first process whose bundle identifier is \"com.apple.logic10\")` left the 편집 menu's first item at 리전 경계에 2개의 트랙 오토메이션 포인트 생성 실행 취소 and its second at 실행 복귀할 수 없음. Clicking menu item 1 of the same menu instead moved the first item to 가져오기 실행 취소 and armed the redo entry.",
+          "means": "keystroke is delivered to the frontmost application, not to the process named in the tell block"
+        },
+        {
+          "instrument": "count of AXMenu elements in the application's AX tree",
+          "reading": "After the parameter popup's menu opened, the AXMenu total stayed at 49 across two failed Escape attempts and also after the menu was successfully closed, while `count of (every menu bar item of menu bar 1 whose selected is true)` read 0 throughout and CGWindowList reported a Logic window at layer 101.",
+          "means": "an AXMenu total counts menu objects that exist, not menus that are open; CGWindowList layer > 0 is the on-screen reading"
+        },
+        {
+          "instrument": "byte equality against a typed Korean literal",
+          "reading": "The arrange window's AX title reads back as 무제 30 - 트랙 in which 무제 is four conjoining jamo (U+1106 U+116E U+110C U+1166) while 트랙, in the same string, is two precomposed syllables (U+D2B8 U+B799). The string is neither NFC nor NFD. The AXHelp values measured here are NFC.",
+          "means": "a Korean AX string can be mixed-normalization, so a comparison against a typed or canon literal must normalize both sides or it will report a difference between two identical texts",
+          "also_measured": "AppleScript's own comparison already normalizes: `osascript` evaluating `a contains b` and `a is b` with an NFD 무제 against an NFC 무제 returned true for both. The trap is a Python-side one."
+        }
+      ]
+    }
+  ],
+  "conclusion": "Driving 리전 경계에 2개의 오토메이션 포인트 생성 registered Logic's undo operation named 리전 경계에 2개의 트랙 오토메이션 포인트 생성, and the arrange window DOES read back that something exists afterwards. Across five state-tagged depth-14 censuses of 719 rows each, compared over all sixteen captured attributes plus path and depth, exactly one row differs between the states where that operation is on the undo stack and the states where it has been undone, and it differs in exactly one field: the AXHelp of the 오토메이션 파라미터 popup on the track the operation acted on. With the operation applied it reads 오토메이션 파라미터 켬/끔. 해당 오토메이션 파라미터의 오토메이션 데이터를 켜거나 끕니다. and with it undone it reads 오토메이션 파라미터 팝업 메뉴. 오토메이션할 채널 스트립, Smart Control 또는 플러그인 파라미터를 선택합니다. It moved on all four transitions across two undo/redo cycles, two censuses of the same state differ in nothing, and the same control on the other track holds the second string in all five states -- so the signal is specific to the track the operation acted on and is not a global view mode following the undo stack. Nothing else moved: 오토메이션 값 read 1509949440 on both rows in every state, so that field did not distinguish these states; AXValue is settable on none of the three automation elements; and AXPress on 오토메이션 값 and both actions on 오토메이션 모드 changed no menu count. AXPress on 오토메이션 파라미터 returned -25204 and opened a menu anyway, which is a status code disagreeing with its own effect in the pessimistic direction.",
+  "limits": [
+    "The AXHelp difference reports that the parameter has automation data, not what the data is. It carries no count, no position and no value, and it cannot distinguish two points from twenty.",
+    "The undo label establishes that Logic registered the operation bearing its shipped name. It does not establish what that operation wrote.",
+    "It is not established that the help string tracks automation data as such rather than some other state the leaf also changes. What is established is that it moved with this operation, on all four transitions, on the acting track only.",
+    "1509949440 being invariant means this field did not distinguish these three project states. It is not evidence that the field is not a readback of something: the help retained on that element says it reports the parameter value at the playhead, and a genuine readback can hold still if the created points carry the current value or lie away from the playhead.",
+    "The comparison is bounded to this arrange window, a depth-14 census and the sixteen attributes listed. Elements deeper than 14, in another window, or carrying state in an attribute not captured here were not compared. 'Exactly one row differs' is a statement about that census, not about Logic.",
+    "The totals are readings of this project and this screen state, not constants of Logic.",
+    "One ko-KR project, one instrument track, one three-note MIDI region, one leaf of the seven. The other six command leaves were read for their identifiers but none of them was driven.",
+    "The -25204 actuation was measured once, on one element, in one state. It is not established whether the status depends on whether automation data exists."
+  ],
+  "supersedes": "2026-09-15-the-automation-lane-is-legible-and-inert",
+  "supersession_note": "Every load-bearing reading of the superseded record was re-measured here, which is what makes whole-record supersession honest rather than a way of retiring readings nobody checked again. Three are CONFIRMED: 오토메이션 모드 reads Read, 오토메이션 파라미터 reads 볼륨, and AXValue is settable on none of the three elements. Two are REFUTED: 오토메이션 값 does carry AXValue (the attribute is present in its 17-name attribute list and reads 1509949440), and actuation is not uniformly inert -- AXPress on the parameter popup, the element that record drove as its positive control, opened a menu here. One is EXPLAINED rather than contradicted: that record clicked Mix > 트랙 오토메이션 생성 and found nothing created, which is correct, because it is a submenu parent with no AXIdentifier attribute whose nine items hold the seven commands that each carry globalMenuItemCall:. Its conclusion that 'no route measured here can create one' was bounded to what it measured and remains true of that route; the leaf was not a route measured there."
+}
