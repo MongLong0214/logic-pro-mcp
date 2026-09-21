@@ -1303,8 +1303,11 @@ struct Issue529MenuValidationTests {
     @Test("an unparsed dialog result is terminal and cannot release another position route")
     func unexpectedDialogResultDoesNotFallThroughToRetryableRoute() async throws {
         // Mutation this rejects: restore `.unexpectedResult` as an observed dialog-safe result.
-        // One character wrong in a script sentinel establishes no menu/dialog state, so the slider
-        // and every later fallback must remain withheld.
+        // One character wrong in a script sentinel establishes no menu/dialog state, so every later
+        // fallback must remain withheld. The discriminator is `safe_to_retry`, which does change
+        // with the fix; `sliderWrites == 0` is not one. `gotoPositionViaBarSlider` never writes the
+        // bar/beat slider on any path (see its own doc comment), so that count is zero for every
+        // input and is kept only as the shape this file's other cases use.
         let malformedSentinel = "DIALOG_APPEARANCE_UNREADABL3"
         let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
             "{\"result\":\"\(malformedSentinel)\"}"
@@ -1329,6 +1332,85 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
         #expect(sliderWrites.value == 0)
+    }
+
+    @Test("an undecodable dialog payload is terminal for the same reason an unparsed result is")
+    func malformedDialogPayloadDoesNotFallThroughToRetryableRoute() async throws {
+        // Found by review of the `.unexpectedResult` fix: `.malformedPayload` is produced by the
+        // same guard at the top of the classifier, for a strictly worse input -- stdout that is not
+        // even the `{"result": …}` shape -- and it released the fallback because it had never been
+        // named on either safety list. Mutation this rejects: drop `.malformedPayload` from
+        // `performedDialogSafetyObservation`'s false list, which is the state the bug was in.
+        let undecodable = "not even json"
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(undecodable)
+        #expect(classification == .failure(.malformedPayload))
+        #expect(classification.requiresUnsafeUIRefusal)
+
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in .success(undecodable) }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String) == "malformed_payload")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    }
+
+    @Test("every dialog classification states its own fallback safety rather than inheriting one")
+    func everyDialogClassificationDeclaresItsFallbackSafety() throws {
+        // `performedDialogSafetyObservation` used to list the outcomes that had NOT read the state
+        // and default the rest to "observed", so a case added to the enum became fallback-safe by
+        // saying nothing. That is how `.malformedPayload` shipped unsafe. The lists are inverted
+        // and exhaustive now, and this pins the answer for every case so the inversion is checked
+        // rather than trusted: adding a case makes the switch non-exhaustive (a compile error) and
+        // changing an existing answer fails here.
+        let expected: [(AccessibilityChannel.GotoPositionDialogResultClassification, Bool)] = [
+            (.driven, false),
+            (.failure(.menuNotFound), true),
+            (.failure(.menuStateUnreadable), true),
+            (.failure(.menuDisabled), true),
+            (.failure(.menuValidationUnreadable(menuActuationAttempted: false)), true),
+            (.failure(.menuValidationUnreadable(menuActuationAttempted: true)), true),
+            (.failure(.malformedPayload), true),
+            (.failure(.unexpectedResult), true),
+            (.failure(.menuPickFailed), false),
+            (.failure(.menuCouldNotBeClosed(menuActuationAttempted: false, reconciledMenuClosed: false)), true),
+            (.failure(.menuCouldNotBeClosed(menuActuationAttempted: true, reconciledMenuClosed: true)), true),
+            (.failure(.dialogPreexisting), true),
+            (.failure(.dialogPreexistenceUnreadable), true),
+            (.failure(.dialogUnidentifiedNewWindow), true),
+            (.failure(.dialogAppearanceUnreadable), true),
+            (.failure(.dialogActuationIssued(cleanupObservedClosed: false)), true),
+            (.failure(.dialogActuationIssued(cleanupObservedClosed: true)), false),
+            (.failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)), true),
+            (.failure(.dialogSubmissionNotIssued(cleanupObservedClosed: true)), false),
+            (.failure(.dialogInputIssued(issuance: .returnArmed, cleanupObservedClosed: false)), false),
+            (.failure(.dialogSubmissionIssued(cleanupObservedClosed: false)), false),
+            (.failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: false)), true),
+            (.failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: true)), false),
+            (.failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: false)), false),
+        ]
+        for (classification, refuses) in expected {
+            // Not `#expect(a == refuses)`: a top-level `Bool == Bool` inside `#expect` passes
+            // unconditionally on this toolchain (recorded as `r-941round11`), and this table
+            // measured nothing at all until the mutant that flips `.malformedPayload` walked
+            // straight through it.
+            if refuses {
+                #expect(classification.requiresUnsafeUIRefusal,
+                        "\(classification.diagnosticLabel) released the fallback")
+            } else {
+                #expect(!classification.requiresUnsafeUIRefusal,
+                        "\(classification.diagnosticLabel) refused the fallback")
+            }
+        }
     }
 
     @Test("generated dialog result sentinels and classifier sentinels remain in lockstep")

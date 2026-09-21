@@ -2337,16 +2337,34 @@ extension AccessibilityChannel {
         /// Whether this result is downstream of the run's dialog-safety observation. `false`
         /// means the route did not read the pre-leaf dialog/window state, not that it observed no
         /// dialog. Callers must retain the failure rather than treating it as a clean fallback.
+        /// The list is the outcomes that DID read the state, and anything unlisted answers `false`.
+        /// The inverse shape -- a list of outcomes that did not, defaulting to `true` -- is what
+        /// made `.malformedPayload` release the fallback: it was added to the enum and inherited
+        /// "observed" by saying nothing, which is the same defect `.unexpectedResult` was fixed for
+        /// one switch arm away. A case that never declares which side it is on must refuse, because
+        /// the absence of a declaration is the absence of an observation.
         private var performedDialogSafetyObservation: Bool {
             switch self {
+            case .driven,
+                 .failure(.menuPickFailed),
+                 .failure(.menuCouldNotBeClosed),
+                 .failure(.dialogPreexisting),
+                 .failure(.dialogPreexistenceUnreadable),
+                 .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed):
+                return true
             case .failure(.menuNotFound),
                  .failure(.menuStateUnreadable),
                  .failure(.menuDisabled),
-                 .failure(.menuValidationUnreadable(menuActuationAttempted: _)),
+                 .failure(.menuValidationUnreadable),
+                 .failure(.malformedPayload),
                  .failure(.unexpectedResult):
                 return false
-            default:
-                return true
             }
         }
 
