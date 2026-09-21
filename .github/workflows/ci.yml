@@ -372,6 +372,29 @@ jobs:
           fi
           echo "LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: PyYAML, because a guard that cannot import it has not run
+        # `Scripts/test_issue_form_canon_field.py` renders the issue forms the way GitHub does and
+        # runs the real checker over the result, so it needs a real YAML parser -- and it imports
+        # `yaml` at module level rather than skipping, because a drive that cannot read its input
+        # has not checked anything and `run-repo-guards.py` has counted two such skips as passes
+        # before. macOS 15's runner image ships no PyYAML, so the guard died on `ModuleNotFoundError`
+        # in run 35587823299 while passing on every developer machine that happened to have it.
+        # Installing it here is what that file's own docstring asks for, and it retires the older
+        # contract `83a19d5` (#893) recorded -- "run-repo-guards.py's contract is plain Python with
+        # no third-party imports", which is why `check-every-ci-job-is-required.py` parses this
+        # file by indentation. `Scripts/check-third-party-imports-are-installed.py` is the
+        # replacement: third-party is allowed where CI PROVES it can import it, and that guard
+        # fails on a module installed without the readback or imported without the install.
+        #
+        # The `import` afterwards is the check: `pip install` printing nothing is not evidence the
+        # interpreter `run-repo-guards.py` launches can find the module. `--break-system-packages`
+        # is the fallback for an image whose Python is marked externally managed (PEP 668); if both
+        # forms fail the step fails, which is the honest end.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml \
+            || python3 -m pip install --quiet --disable-pip-version-check --break-system-packages pyyaml
+          python3 -c "import yaml; print('PyYAML', yaml.__version__)"
+
       - name: Guards and standalone drives (discovered, not listed)
         # This runs once, on macOS: #896's `test_logic_key_event.py` compiles a Swift file that
         # imports AppKit. The Ubuntu `guards` job remains shell-only and platform-independent.
