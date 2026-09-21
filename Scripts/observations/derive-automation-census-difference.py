@@ -1,256 +1,475 @@
 #!/usr/bin/env python3
-"""Recompute every number the automation-point record publishes, from the committed censuses.
+"""Recompute the automation-data observation from its committed evidence.
 
-The record behind this script says that driving `Mix > 트랙 오토메이션 생성 > 리전 경계에 2개의
-오토메이션 포인트 생성` changes exactly one AX reading in the arrange window. That is a claim about
-a comparison, and a comparison nobody can redo is a summary. This script redoes it: it reads the
-five state-tagged censuses in docs/observations/evidence/ and asserts the published counts against
-what it finds, so a number that drifts from the readings fails here rather than being believed.
-
-It also carries the CONTROL for the region precondition. The earlier precondition accepted any
-selected AXLayoutItem whose AXHelp contained the canon `Region` value; MIDI notes satisfy that,
-because Logic's note help says a note is edited the same way as a region. Asserting the naive
-predicate's wrong answer beside the canon predicate's right one keeps that defect from coming back
-silently -- a guard whose control is not committed is a guard that can rot into agreement.
-
-Run: python3 Scripts/observations/derive-automation-census-difference.py
-Exit 0 if every published number is reproduced, 1 otherwise.
+The observation record is the source of the published readings. This script loads that record, the
+five state-tagged censuses it names, and its actuation evidence. Comparisons use the union of keys
+the rows actually carry, so ``path``, ``d``, a new key, or a missing key cannot be ignored.
 """
 
 import collections
+import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-EVIDENCE = os.path.join(REPO, "docs", "observations", "evidence")
-
-# Every attribute the census captured. The comparison runs over all of them, not over a chosen
-# few: a key that names six fields can only ever report about six fields, and the difference this
-# record is about lives in AXHelp, which an earlier six-field key did not include.
-FIELDS = [
-    "AXRole", "AXSubrole", "AXTitle", "AXDescription", "AXRoleDescription", "AXHelp",
-    "AXIdentifier", "AXValue", "AXMinValue", "AXMaxValue", "AXEnabled", "AXSelected",
-    "AXFocused", "AXPosition", "AXSize", "actions",
-]
-
-STATES = ["after-create", "after-undo", "after-redo", "cycle2-after-undo", "cycle2-after-redo"]
-
-# What the record publishes. Each entry is checked below.
-EXPECTED_ROWS = 719
-EXPECTED_WINDOW = "무제 30 - 트랙"
-EXPECTED_DIFFERING_ROW = 475
-EXPECTED_CONTROL_ROW = 460
-HELP_WITH_DATA = "오토메이션 파라미터 켬/끔. 해당 오토메이션 파라미터의 오토메이션 데이터를 켜거나 끕니다. "
-HELP_WITHOUT_DATA = "오토메이션 파라미터 팝업 메뉴. 오토메이션할 채널 스트립, Smart Control 또는 플러그인 파라미터를 선택합니다. "
-POINTS_PRESENT = ["after-create", "after-redo", "cycle2-after-redo"]
-POINTS_ABSENT = ["after-undo", "cycle2-after-undo"]
-
-EXPECTED_NAIVE_MATCHES = 4
-EXPECTED_CANON_MATCHES = 1
-# A citation is the reference AND the value it resolves to: a reference alone is a key anybody can
-# type. Both are resolved from the pinned corpus at run time below and only quoted here.
-# resolves to: 리전
-REGION_REF = ("logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA"
-              "%2FResources%2FLocalizable.strings/ko/Region#value")
-# resolves to: MIDI 리전. MIDI 노트 및 컨트롤러 이벤트를 포함합니다. 가운데를 드래그하여 이동하고, 하단 가장자리를 드래그하여 크기를 조정하며, 상단 오른쪽 모서리를 드래그하여 루핑합니다. 도구를 사용하여 그 외의 편집을 수행합니다.
-MIDI_REGION_REF = "logic-canon://quickhelp/QuickHelp/ko/ARR_021_MidiRegion#composed"
-
-failures = []
+OBSERVATIONS = os.path.join(REPO, "docs", "observations")
+RECORD_PATH = os.path.join(
+    OBSERVATIONS, "2026-09-21-the-parameter-popup-help-reports-automation-data.json"
+)
+CENSUS_NAME = re.compile(r".*-automation-census-(.+)\.json$")
+ACTUATION_NAME = re.compile(r".*-automation-element-actuation\.json$")
+MISSING = object()
 
 
-def nfc(text):
-    """Compare Korean AX strings under NFC.
+def nfc(value):
+    return unicodedata.normalize("NFC", value) if isinstance(value, str) else value
 
-    Logic does not vend one normalization. The arrange window's title reads back as
-    `무제 30 - 트랙` where `무제` is four conjoining jamo (U+1106 U+116E U+110C U+1166) and `트랙`,
-    four characters later in the same string, is two precomposed syllables (U+D2B8 U+B799) -- the
-    string is neither NFC nor NFD. A typed literal is NFC, so byte equality reports a difference
-    between two strings that are the same text and print identically. The AXHelp values measured
-    here happen to be NFC, which is luck rather than a property to rely on: every comparison in
-    this script normalizes both sides so that a normalization difference can neither pass as a
-    match nor fail as one.
+
+def stable(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+class Audit:
+    def __init__(self, out):
+        self.failures = []
+        self.out = out
+
+    def check(self, condition, message):
+        if not condition:
+            self.failures.append(message)
+        return condition
+
+    def line(self, message=""):
+        print(message, file=self.out)
+
+
+def observation(record, what):
+    """Fetch one structured reading by its stable ``what`` identifier."""
+    matches = [item for item in record.get("observations", []) if item.get("what") == what]
+    if len(matches) != 1:
+        raise ValueError(f"record has {len(matches)} observations named {what!r}; expected one")
+    return matches[0]
+
+
+def published_states(record):
+    return observation(
+        record, "the five state-tagged censuses, each labelled by Logic's own undo stack"
+    )["states"]
+
+
+def state_groups(record):
+    """Derive state groups from the record's own undo-stack readings."""
+    states = published_states(record)
+    if len({item["state"] for item in states}) != len(states):
+        raise ValueError("record repeats a census state role")
+    create = [item for item in states if item["state"].endswith("_create")]
+    if len(create) != 1:
+        raise ValueError("record must identify exactly one *_create census state")
+    applied_item = create[0]["undo_item_1"]
+    applied = [item["state"] for item in states if item["undo_item_1"] == applied_item]
+    undone = [item["state"] for item in states if item["undo_item_1"] != applied_item]
+    by_undo_item = collections.defaultdict(list)
+    for item in states:
+        by_undo_item[item["undo_item_1"]].append(item["state"])
+    # A spanning comparison is sufficient: equality of every state with the first state in its
+    # undo-stack group establishes equality throughout that group without duplicating a pair.
+    same_state_pairs = [(group[0], other) for group in by_undo_item.values() for other in group[1:]]
+    return applied, undone, same_state_pairs
+
+
+def row_index(doc, role, audit):
+    """Validate raw census cardinality and its complete, unique index domain."""
+    rows = doc.get("rows")
+    if not audit.check(isinstance(rows, list), f"{role}: rows is not a list"):
+        return {}
+    total = doc.get("total")
+    total_ok = isinstance(total, int) and not isinstance(total, bool) and total >= 0
+    if not audit.check(total_ok, f"{role}: total is not a non-negative integer: {total!r}"):
+        return {}
+    audit.check(len(rows) == total,
+                f"{role}: len(rows) is {len(rows)}, but census total is {total}")
+    indices = [row.get("i", MISSING) if isinstance(row, dict) else MISSING for row in rows]
+    valid_indices = all(isinstance(index, int) and not isinstance(index, bool) for index in indices)
+    if not audit.check(valid_indices, f"{role}: every row must carry an integer i index"):
+        return {}
+    audit.check(len(indices) == len(set(indices)), f"{role}: row indices are not unique")
+    expected = set(range(1, total + 1))
+    actual = set(indices)
+    audit.check(actual == expected,
+                f"{role}: row indices are {sorted(actual)[:3]}...{sorted(actual)[-3:]}, "
+                f"not the expected 1..{total}")
+    return {row["i"]: row for row in rows}
+
+
+def comparison_fields(left_rows, right_rows):
+    """Every observed key except ``i``, which is the row identity used for the join."""
+    fields = set()
+    for row in itertools.chain(left_rows.values(), right_rows.values()):
+        if isinstance(row, dict):
+            fields.update(row)
+    fields.discard("i")
+    return sorted(fields)
+
+
+def published_field_names(raw_fields):
+    """Translate only the census format's compact depth key to the record's prose field name.
+
+    The raw field set is still derived above; this is a presentation-name bridge for the record,
+    which publishes ``depth`` while each census encodes that property as ``d``.
     """
-    return unicodedata.normalize("NFC", text) if isinstance(text, str) else text
+    return {"depth" if field == "d" else field for field in raw_fields}
 
 
-def check(condition, message):
-    if not condition:
-        failures.append(message)
-    return condition
+def field_differences(left_rows, right_rows, fields):
+    """Missing is distinct from null: a key in only one counterpart is a difference."""
+    differing = collections.defaultdict(list)
+    for index in sorted(set(left_rows) & set(right_rows)):
+        for field in fields:
+            left = left_rows[index].get(field, MISSING)
+            right = right_rows[index].get(field, MISSING)
+            if left is MISSING or right is MISSING or stable(left) != stable(right):
+                differing[field].append(index)
+    return dict(differing)
 
 
-def load(state):
-    path = os.path.join(EVIDENCE, f"2026-09-21-ko-KR-automation-census-{state}.json")
-    with open(path, encoding="utf-8") as handle:
-        return json.load(handle)
+def whole_rows(rows):
+    """Whole raw rows, with only the index identity excluded."""
+    return collections.Counter(
+        stable({field: value for field, value in row.items() if field != "i"})
+        for row in rows.values()
+    )
+
+
+def find_row(index, role, rows, audit):
+    row = rows.get(index)
+    audit.check(row is not None, f"{role}: no row at published census index {index}")
+    return row or {}
+
+
+def record_canon(record, used_for):
+    matches = [item for item in record.get("canon", []) if item.get("used_for") == used_for]
+    if len(matches) != 1:
+        raise ValueError(f"record has {len(matches)} canon entries used for {used_for!r}; expected one")
+    return matches[0]
 
 
 def resolve(ref):
-    """Resolve a canon reference against the PINNED corpus. Never type the value instead."""
+    """Resolve a record-supplied canon reference against the pinned corpus."""
     out = subprocess.run(
         [sys.executable, os.path.join(REPO, "Scripts", "logic_canon.py"), "resolve", ref],
         capture_output=True, text=True,
     )
-    return out.stdout.splitlines()[0] if out.stdout.strip() else ""
+    return out.stdout.splitlines()[0] if out.returncode == 0 and out.stdout.strip() else ""
 
 
-def key(row):
-    return tuple(json.dumps(row.get(f), ensure_ascii=False, sort_keys=True) for f in FIELDS)
+def reconcile_actuation(record, actuation, audit):
+    """Assert every structured actuation figure published from the actuation evidence."""
+    published = observation(record, "settability and actuation on the three automation elements of the affected track")
+    expected_elements = published["elements"]
+    actual_elements = actuation.get("elements", [])
+    actual_by_identity = {(item.get("description"), item.get("role")): item for item in actual_elements}
+    expected_identities = {(item["description"], item["role"]) for item in expected_elements}
+    audit.check(len(actual_elements) == len(actual_by_identity),
+                "actuation evidence repeats an element description/role identity")
+    audit.check(set(actual_by_identity) == expected_identities,
+                "actuation evidence elements do not match the record's published elements")
+    for expected in expected_elements:
+        identity = (expected["description"], expected["role"])
+        actual = actual_by_identity.get(identity)
+        if actual is None:
+            continue
+        audit.check(actual.get("AXValue_attribute_present") == expected["AXValue_attribute_present"],
+                    f"{identity[0]!r}: AXValue attribute-presence disagrees with record")
+        audit.check(actual.get("AXValue_reads") == expected["AXValue_reads"],
+                    f"{identity[0]!r}: AXValue reading disagrees with record")
+        settable = actual.get("AXUIElementIsAttributeSettable_AXValue") or {}
+        audit.check(settable.get("settable") == expected["AXValue_settable"],
+                    f"{identity[0]!r}: AXValue settable reading disagrees with record")
+        audit.check(settable.get("status") == expected["settable_status"],
+                    f"{identity[0]!r}: AXValue settable status disagrees with record")
+        actual_actions = {item.get("action"): item for item in actual.get("actuations", [])}
+        expected_actions = {item["action"]: item for item in expected["actuations"]}
+        audit.check(len(actual_actions) == len(actual.get("actuations", [])),
+                    f"{identity[0]!r}: actuation evidence repeats an action")
+        audit.check(set(actual_actions) == set(expected_actions),
+                    f"{identity[0]!r}: published actions do not match actuation evidence")
+        for action, published_action in expected_actions.items():
+            measured = actual_actions.get(action)
+            if measured is None:
+                continue
+            audit.check(measured.get("status") == published_action["status"],
+                        f"{identity[0]!r} {action}: status disagrees with record")
+            audit.check(measured.get("delta") == published_action["axmenu_delta"],
+                        f"{identity[0]!r} {action}: AXMenu delta disagrees with record")
+    return expected_elements
 
 
-def whole_row(row):
-    return json.dumps({k: v for k, v in row.items() if k != "i"}, ensure_ascii=False, sort_keys=True)
+def reconcile_submenu(record, actuation, audit):
+    """Reproduce the record's menu counts from the same committed actuation evidence."""
+    published = observation(record, "the submenu structure and the leaf driven")
+    measured = actuation.get("submenu_structure") or {}
+    parent = measured.get("parent") or {}
+    audit.check(parent.get("name") == published["parent"], "submenu parent name disagrees with record")
+    audit.check(parent.get("enabled") == published["parent_enabled"],
+                "submenu parent enabled reading disagrees with record")
+    audit.check(parent.get("attribute_names_contains_AXIdentifier") ==
+                published["parent_attribute_names_contains_AXIdentifier"],
+                "submenu parent AXIdentifier-presence reading disagrees with record")
+    items = measured.get("items", [])
+    commands = [item for item in items if item.get("name") is not None]
+    separators = [item for item in items if item.get("name") is None]
+    with_identifier = [item for item in commands if item.get("AXIdentifier") == "globalMenuItemCall:"]
+    audit.check(len(items) == published["menu_item_count"],
+                f"submenu item count is {len(items)}, record says {published['menu_item_count']}")
+    audit.check(len(commands) == published["command_items"],
+                f"submenu command count is {len(commands)}, record says {published['command_items']}")
+    audit.check(len(separators) == published["separators"],
+                f"submenu separator count is {len(separators)}, record says {published['separators']}")
+    audit.check(len(with_identifier) == published["command_items_carrying_globalMenuItemCall"],
+                "submenu globalMenuItemCall count disagrees with record")
+    audit.check(any(item.get("name") == published["leaf_driven"] for item in commands),
+                "the record's driven submenu leaf is not in the actuation evidence")
+
+
+def reconcile_region_control(record, censuses, state_role, audit, resolve_canon):
+    """Reproduce the record's canon-backed region-control counts from the create census."""
+    published = observation(
+        record, "the region precondition control, evaluated offline against the committed after-create census"
+    )
+    region_entry = record_canon(record, "the naive region predicate whose over-matching is the committed control")
+    midi_entry = record_canon(record, "the region predicate that separates a MIDI region from a MIDI note")
+    region, midi_region = resolve_canon(region_entry["ref"]), resolve_canon(midi_entry["ref"])
+    audit.check(bool(region), "cannot resolve the canon Region value")
+    audit.check(bool(midi_region), "cannot resolve the canon MIDI-region composed value")
+    audit.check(nfc(region) == nfc(region_entry["value"]), "resolved Region canon value disagrees with record")
+    audit.check(nfc(midi_region) == nfc(midi_entry["value"]),
+                "resolved MIDI-region canon value disagrees with record")
+    rows = censuses[state_role]
+    layout_items = [row for row in rows.values() if row.get("AXRole") == "AXLayoutItem"]
+    naive = [row for row in layout_items if nfc(region) in nfc(row.get("AXHelp") or "")]
+    canon = [row for row in layout_items if nfc(midi_region) in nfc(row.get("AXHelp") or "")]
+    audit.check(len(layout_items) == published["axlayoutitem_rows"],
+                f"AXLayoutItem count is {len(layout_items)}, record says {published['axlayoutitem_rows']}")
+    audit.check(len(naive) == published["naive_matches"],
+                f"naive predicate matched {len(naive)}, record says {published['naive_matches']}")
+    audit.check([row.get("AXDescription") for row in naive] == published["naive_match_descriptions"],
+                "naive predicate descriptions disagree with record")
+    audit.check(len(canon) == published["canon_matches"],
+                f"canon predicate matched {len(canon)}, record says {published['canon_matches']}")
+    audit.check([row.get("AXDescription") for row in canon] == published["canon_match_descriptions"],
+                "canon predicate descriptions disagree with record")
+    return len(layout_items), len(naive), len(canon)
+
+
+def derive(censuses, record, actuation, out=sys.stdout, resolve_canon=resolve):
+    """Return zero only when in-memory evidence reproduces the record."""
+    audit = Audit(out)
+    census_reading = observation(record, "the five state-tagged censuses, each labelled by Logic's own undo stack")
+    comparison = observation(record, "the paired census comparison, over every captured attribute")
+    distinguishing = observation(record, "the one element that distinguishes the states")
+    control = observation(record, "the within-run control: the same control on the other track")
+    values = observation(record, "the 오토메이션 값 rows across the paired states")
+    published_by_role = {item["state"]: item for item in census_reading["states"]}
+    roles = list(published_by_role)
+    audit.check(len(roles) == len(census_reading["states"]), "record repeats a published census state")
+    audit.check(set(censuses) == set(roles),
+                f"loaded census roles are {sorted(censuses)}, record names {sorted(roles)}")
+
+    indexed = {}
+    for role in roles:
+        doc = censuses.get(role, {})
+        audit.check(doc.get("state") == role,
+                    f"{role}: census state tag is {doc.get('state')!r}, expected {role!r}")
+        indexed[role] = row_index(doc, role, audit)
+        audit.check(doc.get("total") == published_by_role[role]["total_elements"],
+                    f"{role}: census total is {doc.get('total')}, "
+                    f"record says {published_by_role[role]['total_elements']}")
+        depths = [row.get("d", MISSING) for row in indexed[role].values()]
+        depth_values_are_integers = all(isinstance(depth, int) and not isinstance(depth, bool)
+                                        for depth in depths)
+        audit.check(depth_values_are_integers, f"{role}: every indexed row must carry integer depth d")
+        if depth_values_are_integers:
+            audit.check(all(depth <= census_reading["depth_limit"] for depth in depths),
+                        f"{role}: a raw depth exceeds the record's depth limit "
+                        f"{census_reading['depth_limit']}")
+
+    titles = {nfc(censuses[role].get("window_title")) for role in roles if role in censuses}
+    audit.check(len(titles) == 1, f"census window titles are not constant: {sorted(titles)!r}")
+    audit.check(titles == {nfc(actuation.get("window"))},
+                "census window title does not match the actuation evidence window")
+    title = next(iter(titles), None)
+    published_totals = {published_by_role[role]["total_elements"] for role in roles}
+    audit.check(len(published_totals) == 1,
+                f"record publishes inconsistent census totals: {sorted(published_totals)}")
+    audit.line(f"censuses: {len(roles)} states, {next(iter(published_totals), None)} rows each, "
+               f"window {title!r}")
+
+    applied, undone, same_state_pairs = state_groups(record)
+    audit.check(len(applied) * len(undone) == comparison["pairs_compared_present_vs_absent"],
+                "record's present-versus-undone pair count disagrees with its state readings")
+    audit.check(len(same_state_pairs) == comparison["same_state_pairs_compared"],
+                "record's same-state pair count disagrees with its state readings")
+    expected_fields = set(comparison["compared_fields"]) | set(comparison["also_compared"])
+    compared_pairs = []
+    audit.line("whole-row multiset differences (every captured field):")
+    for left_role in applied:
+        for right_role in undone:
+            left, right = indexed[left_role], indexed[right_role]
+            fields = comparison_fields(left, right)
+            audit.check(published_field_names(fields) == expected_fields,
+                        f"{left_role} vs {right_role}: row-key union is {fields}, "
+                        "not the record's published comparison fields")
+            attribute_fields = [field for field in fields
+                                if published_field_names([field]).isdisjoint(comparison["also_compared"])]
+            audit.check(len(attribute_fields) == census_reading["attributes_per_row"],
+                        f"{left_role} vs {right_role}: raw row-key union has {len(attribute_fields)} "
+                        f"captured attributes, record says {census_reading['attributes_per_row']}")
+            audit.check(set(left) == set(right), f"{left_role} vs {right_role}: census index sets differ")
+            left_counter, right_counter = whole_rows(left), whole_rows(right)
+            only_left, only_right = sum((left_counter - right_counter).values()), sum((right_counter - left_counter).values())
+            audit.line(f"  {left_role:18s} vs {right_role:18s}: {only_left} / {only_right}")
+            audit.check(only_left == comparison["whole_row_multiset_difference_present_vs_absent"] and
+                        only_right == comparison["whole_row_multiset_difference_absent_vs_present"],
+                        f"{left_role} vs {right_role}: whole-row differences are {only_left}/{only_right}, "
+                        "not the record's published values")
+            differing = field_differences(left, right, fields)
+            path_count = len(differing.get("path", []))
+            audit.check(path_count == comparison["rows_whose_path_disagrees_at_the_same_index"],
+                        f"{left_role} vs {right_role}: {path_count} path differences, not the record's value")
+            fields_that_differ = list(differing)
+            rows_that_differ = sorted({index for indices in differing.values() for index in indices})
+            audit.check(fields_that_differ == comparison["fields_that_differ"],
+                        f"{left_role} vs {right_role}: differing fields are {fields_that_differ}, "
+                        f"not {comparison['fields_that_differ']}")
+            audit.check(rows_that_differ == comparison["rows_that_differ"],
+                        f"{left_role} vs {right_role}: differing rows are {rows_that_differ}, "
+                        f"not {comparison['rows_that_differ']}")
+            compared_pairs.append(differing)
+
+    for left_role, right_role in same_state_pairs:
+        left_counter, right_counter = whole_rows(indexed[left_role]), whole_rows(indexed[right_role])
+        only_left, only_right = sum((left_counter - right_counter).values()), sum((right_counter - left_counter).values())
+        audit.line(f"  {left_role:18s} vs {right_role:18s}: {only_left} / {only_right}   (same-state pair)")
+        audit.check(only_left == comparison["whole_row_multiset_difference_between_two_censuses_of_the_same_state"] and
+                    only_right == comparison["whole_row_multiset_difference_between_two_censuses_of_the_same_state"],
+                    f"{left_role} vs {right_role}: same-state whole-row differences are {only_left}/{only_right}, "
+                    "not the record's published value")
+    audit.line()
+
+    published_difference_fields = set(comparison["fields_that_differ"])
+    other_fields = sorted({field for differing in compared_pairs for field in differing
+                           if field not in published_difference_fields})
+    audit.check(other_fields == distinguishing["other_fields_of_this_row_that_moved"],
+                f"other fields moving with the distinguishing row are {other_fields}, not the record's value")
+    target_index, target_role = distinguishing["census_index"], applied[0]
+    target_row = find_row(target_index, target_role, indexed[target_role], audit)
+    audit.line(f"differing element: i={target_index} role={target_row.get('AXRole')} description={target_row.get('AXDescription')!r}")
+    audit.line(f"  path: {target_row.get('path')}")
+    audit.check(target_row.get("AXRole") == distinguishing["role"], "distinguishing element role disagrees with record")
+    audit.check(target_row.get("AXRoleDescription") == distinguishing["role_description"],
+                "distinguishing element role description disagrees with record")
+    audit.check(nfc(target_row.get("AXDescription")) == nfc(distinguishing["description"]),
+                "distinguishing element description disagrees with record")
+    audit.check(target_row.get("path") == distinguishing["path"], "distinguishing element path disagrees with record")
+    for role in applied:
+        row = find_row(target_index, role, indexed[role], audit)
+        audit.check(nfc(row.get("AXHelp")) == nfc(distinguishing["help_when_the_operation_is_on_the_undo_stack"]),
+                    f"{role}: distinguishing help disagrees with record's applied-state reading")
+    for role in undone:
+        row = find_row(target_index, role, indexed[role], audit)
+        audit.check(nfc(row.get("AXHelp")) == nfc(distinguishing["help_when_it_has_been_undone"]),
+                    f"{role}: distinguishing help disagrees with record's undone-state reading")
+    ordered_help = [find_row(target_index, role, indexed[role], audit).get("AXHelp") for role in roles]
+    transitions = sum(left != right for left, right in zip(ordered_help, ordered_help[1:]))
+    audit.check(transitions == distinguishing["transitions_observed"],
+                f"distinguishing help moved {transitions} times, record says {distinguishing['transitions_observed']}")
+    audit.check(transitions // 2 == distinguishing["cycles"],
+                f"derived undo/redo cycles are {transitions // 2}, record says {distinguishing['cycles']}")
+    audit.line()
+
+    control_index = control["census_index"]
+    control_row = find_row(control_index, target_role, indexed[target_role], audit)
+    audit.line(f"control element: i={control_index} description={control_row.get('AXDescription')!r} path={control_row.get('path')}")
+    audit.check(nfc(control_row.get("AXDescription")) == nfc(control["description"]),
+                "control description disagrees with record")
+    audit.check(control_row.get("path") == control["path"], "control path disagrees with record")
+    control_helps = [find_row(control_index, role, indexed[role], audit).get("AXHelp") for role in roles]
+    audit.check(len(set(control_helps)) == control["distinct_values_across_states"],
+                "control distinct-help count disagrees with record")
+    audit.check({nfc(help_text) for help_text in control_helps} == {nfc(control["help_in_all_five_states"])},
+                "control help does not match the record in every state")
+    audit.line()
+
+    expected_elements = reconcile_actuation(record, actuation, audit)
+    reconcile_submenu(record, actuation, audit)
+    value_element = [element for element in expected_elements if element["AXValue_reads"] == values["value"]]
+    audit.check(len(value_element) == 1,
+                "record does not identify exactly one actuation element with the published value reading")
+    value_description = value_element[0]["description"] if value_element else None
+    audit.check(set(values["invariant_across"]) == set(roles),
+                "record's automation-value invariant states do not name every loaded census")
+    for role in values["invariant_across"]:
+        if role not in indexed:
+            audit.check(False, f"automation-value invariant names unloaded state {role!r}")
+            continue
+        rows = [row for row in indexed[role].values() if row.get("AXDescription") == value_description]
+        audit.check(len(rows) == values["row_count"],
+                    f"{role}: found {len(rows)} automation-value rows, record says {values['row_count']}")
+        audit.check(all(row.get("AXRole") == values["role"] for row in rows),
+                    f"{role}: an automation-value row has a role other than {values['role']}")
+        audit.check(all(row.get("AXValue", MISSING) != MISSING and row.get("AXValue") == values["value"] for row in rows),
+                    f"{role}: automation-value AXValue does not equal the published invariant")
+    audit.line(f"automation-value rows: {values['row_count']} per state; AXValue invariant {values['value']!r}")
+    audit.line()
+
+    layout_count, naive_count, canon_count = reconcile_region_control(record, indexed, target_role, audit, resolve_canon)
+    audit.line(f"region precondition control: {layout_count} AXLayoutItem rows; naive={naive_count}, canon={canon_count}")
+    audit.line()
+    if audit.failures:
+        audit.line(f"FAIL: {len(audit.failures)} published number(s) not reproduced by the committed readings")
+        for failure in audit.failures:
+            audit.line(f"  - {failure}")
+        return 1
+    audit.line("OK: every published number is reproduced by the committed readings")
+    return 0
+
+
+def load_snapshot():
+    """Load exactly the census and actuation evidence files declared by the observation record."""
+    with open(RECORD_PATH, encoding="utf-8") as handle:
+        record = json.load(handle)
+    censuses, actuation = {}, None
+    for relative in record.get("evidence", []):
+        name, path = os.path.basename(relative), os.path.join(OBSERVATIONS, relative)
+        census_match = CENSUS_NAME.fullmatch(name)
+        if census_match:
+            role = census_match.group(1).replace("-", "_")
+            if role in censuses:
+                raise ValueError(f"record names two census files for role {role!r}")
+            with open(path, encoding="utf-8") as handle:
+                censuses[role] = json.load(handle)
+        elif ACTUATION_NAME.fullmatch(name):
+            if actuation is not None:
+                raise ValueError("record names more than one actuation evidence file")
+            with open(path, encoding="utf-8") as handle:
+                actuation = json.load(handle)
+    if actuation is None:
+        raise ValueError("record names no actuation evidence file")
+    return censuses, record, actuation
 
 
 def main():
-    censuses = {}
-    for state in STATES:
-        doc = load(state)
-        censuses[state] = doc
-        check(doc["total"] == EXPECTED_ROWS,
-              f"{state}: census has {doc['total']} rows, record says {EXPECTED_ROWS}")
-        check(nfc(doc["window_title"]) == nfc(EXPECTED_WINDOW),
-              f"{state}: censused window is {doc['window_title']!r}, record says {EXPECTED_WINDOW!r}")
-
-    print(f"censuses: {len(censuses)} states, {EXPECTED_ROWS} rows each, window {EXPECTED_WINDOW!r}")
-    print(f"fields compared per row: {len(FIELDS)} ({', '.join(FIELDS)})")
-    print()
-
-    # 1. Whole-row multiset, over every captured field including path and depth. Deliberately NOT
-    #    normalized: both sides of this comparison come from AX, so a normalization difference
-    #    between two states would be a real difference in the reading and must not be smoothed away.
-    #    Only comparisons against a typed or canon literal go through nfc().
-    print("whole-row multiset differences (every captured field):")
-    for present in POINTS_PRESENT:
-        for absent in POINTS_ABSENT:
-            a = collections.Counter(whole_row(r) for r in censuses[present]["rows"])
-            b = collections.Counter(whole_row(r) for r in censuses[absent]["rows"])
-            only_a, only_b = sum((a - b).values()), sum((b - a).values())
-            print(f"  {present:18s} vs {absent:18s}: {only_a} / {only_b}")
-            check(only_a == 1 and only_b == 1,
-                  f"{present} vs {absent}: expected exactly 1 row differing each way, got {only_a}/{only_b}")
-
-    for pair in [("after-create", "after-redo"), ("after-create", "cycle2-after-redo"),
-                 ("after-undo", "cycle2-after-undo")]:
-        a = collections.Counter(whole_row(r) for r in censuses[pair[0]]["rows"])
-        b = collections.Counter(whole_row(r) for r in censuses[pair[1]]["rows"])
-        only_a, only_b = sum((a - b).values()), sum((b - a).values())
-        print(f"  {pair[0]:18s} vs {pair[1]:18s}: {only_a} / {only_b}   (same-state pair)")
-        check(only_a == 0 and only_b == 0,
-              f"{pair[0]} vs {pair[1]}: two censuses of the SAME state should not differ, got {only_a}/{only_b}")
-    print()
-
-    # 2. Which row, and which field. Joined by census index, with the path checked to agree so the
-    #    join is not silently comparing different elements.
-    print("per-field differences, joined by census index:")
-    for present in POINTS_PRESENT:
-        for absent in POINTS_ABSENT:
-            ra = {r["i"]: r for r in censuses[present]["rows"]}
-            rb = {r["i"]: r for r in censuses[absent]["rows"]}
-            mismatched_paths = sum(1 for i in ra if ra[i]["path"] != rb[i]["path"])
-            check(mismatched_paths == 0,
-                  f"{present} vs {absent}: {mismatched_paths} rows have different paths at the same "
-                  f"index, so the join does not compare like with like")
-            differing = collections.defaultdict(list)
-            for i in ra:
-                for f in FIELDS:
-                    if json.dumps(ra[i].get(f), ensure_ascii=False, sort_keys=True) != \
-                       json.dumps(rb[i].get(f), ensure_ascii=False, sort_keys=True):
-                        differing[f].append(i)
-            print(f"  {present:18s} vs {absent:18s}: {dict((f, v) for f, v in differing.items())}")
-            check(list(differing) == ["AXHelp"],
-                  f"{present} vs {absent}: expected AXHelp to be the only differing field, got {list(differing)}")
-            check(differing.get("AXHelp") == [EXPECTED_DIFFERING_ROW],
-                  f"{present} vs {absent}: expected row {EXPECTED_DIFFERING_ROW} to be the only one "
-                  f"whose AXHelp differs, got {differing.get('AXHelp')}")
-    print()
-
-    # 3. The differing element's identity, and the two help variants, stated exactly.
-    row = {r["i"]: r for r in censuses["after-create"]["rows"]}[EXPECTED_DIFFERING_ROW]
-    print(f"differing element: i={EXPECTED_DIFFERING_ROW} role={row['AXRole']} "
-          f"description={row['AXDescription']!r}")
-    print(f"  path: {row['path']}")
-    check(row["AXRole"] == "AXPopUpButton",
-          f"differing element role is {row['AXRole']}, record says AXPopUpButton")
-    check(nfc(row["AXDescription"]) == nfc("오토메이션 파라미터"),
-          f"differing element description is {row['AXDescription']!r}, record says 오토메이션 파라미터")
-    check("AXLayoutItem[1]" in row["path"],
-          f"differing element is not under AXLayoutItem[1]: {row['path']}")
-
-    for state in POINTS_PRESENT:
-        got = {r["i"]: r for r in censuses[state]["rows"]}[EXPECTED_DIFFERING_ROW]["AXHelp"]
-        check(nfc(got) == nfc(HELP_WITH_DATA), f"{state}: help is {got!r}, record says {HELP_WITH_DATA!r}")
-    for state in POINTS_ABSENT:
-        got = {r["i"]: r for r in censuses[state]["rows"]}[EXPECTED_DIFFERING_ROW]["AXHelp"]
-        check(nfc(got) == nfc(HELP_WITHOUT_DATA), f"{state}: help is {got!r}, record says {HELP_WITHOUT_DATA!r}")
-    print(f"  with automation data:    {HELP_WITH_DATA!r}")
-    print(f"  without automation data: {HELP_WITHOUT_DATA!r}")
-    print()
-
-    # 4. The within-run control: the SAME control on the other track never moves. Without this, a
-    #    global UI mode that happened to follow undo would read exactly like a per-track readback.
-    control_helps = {
-        state: {r["i"]: r for r in censuses[state]["rows"]}[EXPECTED_CONTROL_ROW]["AXHelp"]
-        for state in STATES
-    }
-    control_row = {r["i"]: r for r in censuses["after-create"]["rows"]}[EXPECTED_CONTROL_ROW]
-    print(f"control element: i={EXPECTED_CONTROL_ROW} description={control_row['AXDescription']!r} "
-          f"path={control_row['path']}")
-    check(nfc(control_row["AXDescription"]) == nfc("오토메이션 파라미터"),
-          "the control element is not the same kind of control as the differing one")
-    check("AXLayoutItem[0]" in control_row["path"],
-          f"the control element is not on the other track: {control_row['path']}")
-    check(len(set(control_helps.values())) == 1,
-          f"the control element's help is not constant across states: {control_helps}")
-    check({nfc(v) for v in control_helps.values()} == {nfc(HELP_WITHOUT_DATA)},
-          "the control element does not read as the no-automation-data variant in every state")
-    print(f"  constant across all {len(STATES)} states: {next(iter(set(control_helps.values())))!r}")
-    print()
-
-    # 5. The region precondition control, against the canon rather than a typed string.
-    region = resolve(REGION_REF)
-    midi_region = resolve(MIDI_REGION_REF)
-    if not check(bool(region), "cannot resolve the canon Region value") or \
-       not check(bool(midi_region), "cannot resolve the canon ARR_021_MidiRegion composed value"):
-        return report()
-
-    layout_items = [r for r in censuses["after-create"]["rows"] if r["AXRole"] == "AXLayoutItem"]
-    naive = [r for r in layout_items if nfc(region) in nfc(r.get("AXHelp") or "")]
-    canon = [r for r in layout_items if nfc(midi_region) in nfc(r.get("AXHelp") or "")]
-    print(f"region precondition control, over {len(layout_items)} AXLayoutItem rows:")
-    print(f"  naive  (AXHelp contains {region!r}): {len(naive)} -> "
-          f"{[r['AXDescription'] for r in naive]}")
-    print(f"  canon  (AXHelp contains ARR_021_MidiRegion composed): {len(canon)} -> "
-          f"{[r['AXDescription'] for r in canon]}")
-    check(len(naive) == EXPECTED_NAIVE_MATCHES,
-          f"naive predicate matched {len(naive)} rows, record says {EXPECTED_NAIVE_MATCHES}")
-    check(len(canon) == EXPECTED_CANON_MATCHES,
-          f"canon predicate matched {len(canon)} rows, record says {EXPECTED_CANON_MATCHES}")
-    # The point of the control is that the naive predicate admits things that are NOT regions.
-    naive_only = [r for r in naive if r not in canon]
-    check(len(naive_only) == EXPECTED_NAIVE_MATCHES - EXPECTED_CANON_MATCHES,
-          "the naive predicate did not over-match, so this control proves nothing")
-    check(all(str(r["AXDescription"]).startswith("Note at") for r in naive_only),
-          f"the rows the naive predicate over-matched are not the MIDI notes: "
-          f"{[r['AXDescription'] for r in naive_only]}")
-    print(f"  over-matched by naive only: {[r['AXDescription'] for r in naive_only]}")
-    print()
-
-    return report()
-
-
-def report():
-    if failures:
-        print(f"FAIL: {len(failures)} published number(s) not reproduced by the committed readings")
-        for f in failures:
-            print(f"  - {f}")
+    try:
+        censuses, record, actuation = load_snapshot()
+        return derive(censuses, record, actuation)
+    except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError) as error:
+        print(f"FAIL: cannot derive the observation from its declared evidence: {error}")
         return 1
-    print("OK: every published number is reproduced by the committed readings")
-    return 0
 
 
 if __name__ == "__main__":
