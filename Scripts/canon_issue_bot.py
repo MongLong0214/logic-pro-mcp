@@ -243,24 +243,86 @@ class GitHub:
                                     method="PATCH", fields={"body": body}))
 
 
+#: The checker's exit status and the category it printed are two halves of one contract, and this
+#: is the reading side of it. `check-canon-citations.py` owns `EXIT_FOR`; a status this does not
+#: name -- 2 from a crashed interpreter, a negative number from a signal -- is an evaluation that
+#: did not finish, whatever the process managed to print before it stopped.
+EXPECTED_STATUS = {0: "satisfied", 1: "actionable", 2: "error"}
+
+#: The checker reads one body and a committed index, which takes about a second. A run past this
+#: is wedged rather than slow, and a wedged child holds a workflow job until the job's own limit.
+CHECKER_TIMEOUT_SECONDS = 180
+
+
+def _did_not_finish(path: str, why: str, stderr: str) -> dict:
+    """The result shape for an evaluation that did not happen. It says nothing about the body."""
+    return {"category": "error", "label": path,
+            "diagnostics": [{"code": "checker_error", "message": why}],
+            "stderr": stderr}
+
+
+def _validated(done) -> dict:
+    """The checker's own result, or ValueError naming what was wrong with it.
+
+    `json.loads` alone was not enough. Its output is JSON in exactly the shape this expects only
+    when it finished: `[]` is valid JSON and made `result.get` raise `AttributeError` out of the
+    workflow, `{"category": "satisfied"}` with the process dead on a signal was read as a pass,
+    and a diagnostic whose `message` is a number reached `sanitize` as one. Every one of those is
+    an evaluation that did not happen being reported as one that did.
+    """
+    if done.returncode not in EXPECTED_STATUS:
+        raise ValueError(f"the checker exited {done.returncode}, which is not one of "
+                         f"{sorted(EXPECTED_STATUS)}")
+    result = json.loads(done.stdout)
+    if not isinstance(result, dict):
+        raise ValueError(f"the result is {type(result).__name__}, not an object")
+    category = result.get("category")
+    if category not in EXPECTED_STATUS.values():
+        raise ValueError(f"unknown category {category!r}")
+    if EXPECTED_STATUS[done.returncode] != category:
+        # Not pedantry: the status is what a wedged or killed process cannot fake, and the
+        # category is what the note is worded from. Disagreement means one of them is not the
+        # checker's answer, and there is no way to tell which.
+        raise ValueError(f"the checker exited {done.returncode} and printed category "
+                         f"{category!r}, which do not agree")
+    diagnostics = result.get("diagnostics")
+    if not isinstance(diagnostics, list):
+        raise ValueError(f"diagnostics is {type(diagnostics).__name__}, not a list")
+    for entry in diagnostics:
+        if not isinstance(entry, dict):
+            raise ValueError(f"a diagnostic is {type(entry).__name__}, not an object")
+        for field in ("code", "message"):
+            if not isinstance(entry.get(field), str):
+                raise ValueError(f"a diagnostic's {field} is "
+                                 f"{type(entry.get(field)).__name__}, not a string")
+    if category == "actionable" and not diagnostics:
+        # The heading is chosen FROM the diagnostics and falls back to "no usable citation" when
+        # there are none. An actionable verdict carrying no finding would word that fallback into
+        # a note about somebody's issue with nothing behind it.
+        raise ValueError("an actionable result carried no diagnostics")
+    return result
+
+
 def evaluate(body: str) -> dict:
     """Ask the pull request gate's own checker about this text. Never a second implementation."""
     workdir = tempfile.mkdtemp(prefix="canon-issue-")
     path = os.path.join(workdir, "issue-body.md")
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(body)
-    done = subprocess.run([sys.executable, CHECKER, "--text", path, "--format", "json"],
-                          capture_output=True, text=True, cwd=REPO)
     try:
-        result = json.loads(done.stdout)
-        # A category this version does not know is an evaluation that did not finish, not a pass.
-        if result.get("category") not in ("satisfied", "actionable", "error"):
-            raise ValueError(f"unknown category {result.get('category')!r}")
+        done = subprocess.run([sys.executable, CHECKER, "--text", path, "--format", "json"],
+                              capture_output=True, text=True, cwd=REPO,
+                              timeout=CHECKER_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return _did_not_finish(
+            path, f"the checker did not finish within {CHECKER_TIMEOUT_SECONDS}s", "")
+    except OSError as exc:
+        return _did_not_finish(path, f"the checker could not be run: "
+                                     f"{type(exc).__name__}: {exc}", "")
+    try:
+        result = _validated(done)
     except (json.JSONDecodeError, ValueError) as exc:
-        return {"category": "error", "label": path,
-                "diagnostics": [{"code": "checker_error",
-                                 "message": f"the checker produced no usable result: {exc}"}],
-                "stderr": done.stderr}
+        return _did_not_finish(path, f"the checker produced no usable result: {exc}", done.stderr)
     result["label"] = path
     result["stderr"] = done.stderr
     return result
@@ -280,6 +342,31 @@ def active_note(comments: list, expected_login: str):
     return live[0], live[1:]
 
 
+def one_line(text: str) -> str:
+    """A maintainer-facing string, folded so it cannot open a workflow command of its own.
+
+    `::name::` at the start of a line is how a runner reads a command, so a diagnostic carrying a
+    newline could make the log claim whatever it liked. Folded rather than escaped: this is a
+    breadcrumb pointing at the log, not the diagnostic itself.
+    """
+    return " ".join(text.split()).replace("::", ":")
+
+
+def body_moved(api, number: int, body: str) -> bool:
+    """Whether the body has changed since this evaluation read it.
+
+    Asked again immediately before every write. The first check happened before the comment list
+    was fetched, and fetching it is the slowest thing this does -- a hundred pages of an API on a
+    busy issue -- so a repair landing during that walk still had the old actionable verdict
+    published over it. The edit that changed the body has its own run, and that run supersedes
+    this one; there is nothing to publish here.
+    """
+    if api.issue_body(number) == body:
+        return False
+    print("::notice::the issue body changed while this ran; its own run will report on it")
+    return True
+
+
 def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     number = int(os.environ["ISSUE_NUMBER"])
@@ -295,8 +382,7 @@ def main() -> int:
 
     # The body may have been repaired while this ran. Publishing now would put an old warning over
     # a newer body; the edit that changed it has its own run, and that run supersedes this one.
-    if api.issue_body(number) != body:
-        print("::notice::the issue body changed while this ran; its own run will report on it")
+    if body_moved(api, number, body):
         return 0
 
     findings = [(entry["code"], entry["message"]) for entry in result.get("diagnostics", [])]
@@ -308,7 +394,15 @@ def main() -> int:
     print(f"category={result['category']} action={action} ({why})")
 
     if result["category"] == "error":
-        print("::warning::the Canon check could not evaluate this issue body; see the log above")
+        # The note tells the author nothing, by design. This line is the maintainer's half: the
+        # cause, folded to one line, so the run that failed can be told from the run that did not.
+        cause = "; ".join(entry["message"] for entry in result.get("diagnostics", []))
+        print(f"::warning::the Canon check could not evaluate this issue body: "
+              f"{one_line(sanitize(cause))} -- see the log above")
+
+    # Asked again here, after the comment walk, because that walk is where the time goes.
+    if action in ("create", "edit") and body_moved(api, number, body):
+        return 0
 
     if action == "create":
         api.create_comment(number, rendered)
@@ -322,6 +416,10 @@ def main() -> int:
             note, extra = active_note(api.comments(number), expected_login)
             if note is None:
                 return 1
+            # And again: the recovery re-listed the comments, which is another round trip, and a
+            # verdict that was stale before the first write is no fresher on the second.
+            if body_moved(api, number, body):
+                return 0
             api.update_comment(note["id"], rendered)
 
     for duplicate in extra:

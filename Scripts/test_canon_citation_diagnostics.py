@@ -190,6 +190,118 @@ class WhenTheCheckerItselfCannotAnswer(unittest.TestCase):
         self.assertEqual(json.loads(stdout)["category"], "satisfied")
 
 
+#: A reference that resolves in the committed index, with the value it resolves to. Both halves,
+#: because a reference alone is a key anybody can type. Taken from `docs/canon/README.md`, which
+#: is where a contributor is sent to copy it.
+PINNED_REF = ("logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA"
+              "%2FResources%2FLocalizable.strings/en/Trk#value")
+PINNED_VALUE = "Trk"
+
+#: A reference `find_refs` takes and `CanonRef.parse` refuses: three path segments where four are
+#: required, and a field that is not `value`. Written in two pieces on purpose -- the tree-wide run
+#: of this same checker scans every file in the repository for references and refuses the malformed
+#: ones, so spelling it out here would fail this repository's own gate on this file.
+MALFORMED_REF = "logic-canon:" + "//strings/a/b#title"
+
+
+class WhoseFaultAnUnresolvedReferenceIs(unittest.TestCase):
+    """The index being unreadable and the key being absent are two answers, not one.
+
+    `load_index` returns an empty table for a MISSING index file, so `resolve_offline` reported
+    every reference as "not in docs/canon/index/<source>.tsv" and `diagnose_text` filed that under
+    `invalid_reference` -- a sentence addressed to the contributor about the citation they typed.
+    On a checkout without the corpus built, every citation in every body became the author's fault,
+    which is the exact confusion the structured diagnosis exists to remove.
+    """
+
+    def tree_with_index(self, mutate):
+        """A repository root whose `docs/canon/index/` is whatever `mutate` leaves behind.
+
+        Symlinked like `tree_without_the_manifest` above and for the same reason: `REPO` comes
+        from `abspath(__file__)` without resolving symlinks, so the checker reads THIS tree's
+        `docs/canon/` and the real `Scripts/`.
+        """
+        root = tempfile.mkdtemp(prefix="canon-index-")
+        self.addCleanup(shutil.rmtree, root, True)
+        for entry in os.listdir(REPO):
+            if entry != "docs":
+                os.symlink(os.path.join(REPO, entry), os.path.join(root, entry))
+        os.makedirs(os.path.join(root, "docs", "canon"))
+        for entry in os.listdir(os.path.join(REPO, "docs")):
+            if entry != "canon":
+                os.symlink(os.path.join(REPO, "docs", entry),
+                           os.path.join(root, "docs", entry))
+        for entry in os.listdir(os.path.join(REPO, "docs", "canon")):
+            if entry != "index":
+                os.symlink(os.path.join(REPO, "docs", "canon", entry),
+                           os.path.join(root, "docs", "canon", entry))
+        index = os.path.join(root, "docs", "canon", "index")
+        os.makedirs(index)
+        for entry in os.listdir(os.path.join(REPO, "docs", "canon", "index")):
+            os.symlink(os.path.join(REPO, "docs", "canon", "index", entry),
+                       os.path.join(index, entry))
+        mutate(index)
+        return root
+
+    def cited_body(self):
+        return BodyFixture(self, f"This rests on Logic's own data.\n\n{PINNED_REF}\n\n"
+                                 f"{PINNED_VALUE}\n")
+
+    def test_the_committed_index_resolves_the_reference(self):
+        """The control. Everything below is "the same body, with the index broken", so without
+        this the cases prove only that the checker dislikes something about the text."""
+        fixture = self.cited_body()
+        root = self.tree_with_index(lambda index: None)
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"], root=root)
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(json.loads(stdout)["category"], "satisfied")
+
+    def test_a_missing_index_is_this_repository_failing_not_the_author(self):
+        fixture = self.cited_body()
+        root = self.tree_with_index(lambda index: os.remove(os.path.join(index, "strings.tsv")))
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"], root=root)
+        result = json.loads(stdout)
+        self.assertEqual(result["category"], "error", stdout)
+        self.assertEqual(status, 2)
+        self.assertEqual([entry["code"] for entry in result["diagnostics"]], ["checker_error"])
+        self.assertIn("repository-side", result["diagnostics"][0]["message"])
+
+    def test_a_malformed_index_row_is_the_same_failure(self):
+        def wreck(index):
+            path = os.path.join(index, "strings.tsv")
+            os.remove(path)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("strings\ten\tTrk\n")  # three fields where five are required
+
+        fixture = self.cited_body()
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"],
+                                root=self.tree_with_index(wreck))
+        result = json.loads(stdout)
+        self.assertEqual(result["category"], "error", stdout)
+        self.assertEqual(status, 2)
+        self.assertEqual([entry["code"] for entry in result["diagnostics"]], ["checker_error"])
+
+    def test_a_key_the_intact_index_does_not_carry_is_still_the_author_to_fix(self):
+        """The other side. Narrowing "unresolved" to a tooling failure would make an invented key
+        a pass, and `invalid_reference` is the code the issue bot words for the contributor."""
+        missing = PINNED_REF.replace("/en/Trk#value", "/en/NoSuchKeyAnywhere#value")
+        fixture = BodyFixture(self, f"This rests on Logic's own data.\n\n{missing}\n\nTrk\n")
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"])
+        result = json.loads(stdout)
+        self.assertEqual(result["category"], "actionable", stdout)
+        self.assertEqual(status, 1)
+        self.assertIn("invalid_reference", [entry["code"] for entry in result["diagnostics"]])
+
+    def test_a_malformed_reference_string_is_the_author_without_reading_the_index(self):
+        """A citation that does not parse is the author's whatever the corpus says, and this run
+        must not need the index to tell them so."""
+        fixture = BodyFixture(self, f"This rests on Logic's own data.\n\n{MALFORMED_REF}\n")
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"])
+        result = json.loads(stdout)
+        self.assertEqual(result["category"], "actionable", stdout)
+        self.assertIn("invalid_reference", [entry["code"] for entry in result["diagnostics"]])
+
+
 class HowItReadsItsOwnCommandLine(unittest.TestCase):
     """A flag that is dropped instead of refused is a check running in a weaker mode."""
 

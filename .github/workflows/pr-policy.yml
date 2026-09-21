@@ -38,12 +38,14 @@ name: PR policy
 # no `pr-policy` run at all: branch protection reports the context missing and the merge waits --
 # correctly, because nothing has read that body under the rule now in force.
 #
-# The recovery is one event, and none of them is code churn: edit the description, or close and
-# reopen the pull request. Both are in `types:` below, both re-run THIS workflow only, and neither
-# restarts a macOS job or disturbs a code verdict already on the commit. A rebase or an empty
-# commit also works and is the expensive way round -- it moves the head, so the code jobs run
-# again for nothing. There were no open pull requests when the ruleset changed, so this is written
-# for the next migration rather than for a queue that was stranded by this one.
+# The recovery is one event, and the two are not equally cheap. PREFER EDITING THE DESCRIPTION:
+# `edited` with only `title`/`body` in `changes` is metadata to `Scripts/classify-pull-request-
+# event.py`, so it re-runs THIS workflow and leaves a code verdict already on the commit alone.
+# Closing and reopening also works and costs more -- `reopened` is a CODE event to that classifier,
+# alongside `opened` and `synchronize`, so it re-runs the full validation including the macOS job.
+# A rebase or an empty commit is the most expensive way round: it moves the head, so nothing on the
+# old commit carries over. There were no open pull requests when the ruleset changed, so this is
+# written for the next migration rather than for a queue that was stranded by this one.
 
 on:
   pull_request:

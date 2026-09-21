@@ -34,6 +34,11 @@ find. The repository could not tell which, because it had no notion of a citatio
 **What you have to provide.** One sentence, in the body, either citing Logic or saying you are not
 talking about it.
 
+On an ISSUE that sentence is asked for, not required: nothing is blocked, nothing is closed, and
+you do not need a corpus build — or Logic — to report a problem. Open it with whatever evidence you
+have, including none, and a maintainer can map what you saw to a row and add the reference. The
+form below is what a pull request is gated on.
+
 * Stating something about Logic: a `logic-canon://<source>/<locale>#value` reference AND the value
   in quotes. The forms and what each proves are below under *A citation without a key*. A worked
   one, so the shape is not only a placeholder — this reference resolves against the pinned corpus

@@ -14,7 +14,9 @@ calls and answers from a list of comments -- so a case that expects no write fai
 happens, which is the property most of these are about.
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import unittest
@@ -34,6 +36,11 @@ bot = _load()
 
 BOT_LOGIN = "github-actions[bot]"
 NO_FACT = "states no fact about Logic"
+
+#: One body the checker calls actionable and one it calls satisfied, so a case can move an issue
+#: from the first to the second mid-run and see whether the verdict followed.
+UNCITED = "Something is wrong with the mixer.\n"
+REPAIRED = f"This issue {NO_FACT} -- packaging only.\n"
 
 
 def comment(cid, body, login=BOT_LOGIN, kind="Bot"):
@@ -235,15 +242,26 @@ class FakeGitHub:
     """Records every write. A case that expects silence fails if anything is written."""
 
     def __init__(self, body, comments, bodies_in_order=None):
-        self.bodies = list(bodies_in_order or [body, body])
+        self.bodies = list(bodies_in_order or [body])
         self.stored = list(comments)
         self.created = []
         self.updated = []
         self.pages_read = 0
+        self.body_reads = 0
         self.fail_update_ids = set()
 
     def issue_body(self, number):
-        return self.bodies.pop(0) if self.bodies else ""
+        """Each read takes the next body, and the LAST one stands for every read after it.
+
+        It used to pop unconditionally from a two-element default, so a third read answered "".
+        `main()` asks again before each write now -- that is what the freshness cases are about --
+        and an empty string would have made every one of them look like an edited body. A case
+        that wants a change supplies the sequence up to it and stops.
+        """
+        self.body_reads += 1
+        if len(self.bodies) > 1:
+            return self.bodies.pop(0)
+        return self.bodies[0] if self.bodies else ""
 
     def comments(self, number):
         self.pages_read += 1
@@ -381,6 +399,287 @@ class EndToEndThroughTheRealChecker(unittest.TestCase):
                     bot.subprocess.run = original
                 self.assertEqual(result["category"], "error")
                 self.assertEqual(result["diagnostics"][0]["code"], "checker_error")
+
+
+class Done:
+    """One finished subprocess, as `evaluate` reads it: a status and two streams."""
+
+    def __init__(self, returncode, stdout, stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+class WhatCountsAsTheCheckerHavingAnswered(unittest.TestCase):
+    """`evaluate` read `done.stdout` and never `done.returncode`.
+
+    A status is what a killed or wedged process cannot fake; a category is what the note is worded
+    from. Reading only the second meant a checker that died on a signal after printing `satisfied`
+    was a pass, and driving `main()` that way RESOLVED a standing warning -- an evaluation that did
+    not happen withdrawing one that did. `[]` as the whole result crashed on `.get`.
+    """
+
+    def run_with(self, done):
+        original = bot.subprocess.run
+        bot.subprocess.run = lambda *a, **k: done
+        try:
+            return bot.evaluate("anything")
+        finally:
+            bot.subprocess.run = original
+
+    def test_the_status_and_the_category_have_to_agree(self):
+        satisfied = json.dumps({"category": "satisfied", "diagnostics": []})
+        self.assertEqual(self.run_with(Done(0, satisfied))["category"], "satisfied")
+        for status in (1, 2):
+            with self.subTest(status=status):
+                result = self.run_with(Done(status, satisfied))
+                self.assertEqual(result["category"], "error")
+                self.assertIn("do not agree", result["diagnostics"][0]["message"])
+
+    def test_a_process_killed_by_a_signal_is_not_a_verdict(self):
+        result = self.run_with(Done(-9, json.dumps({"category": "satisfied",
+                                                    "diagnostics": []})))
+        self.assertEqual(result["category"], "error")
+        self.assertIn("-9", result["diagnostics"][0]["message"])
+
+    def test_a_status_outside_the_contract_is_not_a_verdict(self):
+        result = self.run_with(Done(127, json.dumps({"category": "actionable",
+                                                     "diagnostics": [{"code": "a",
+                                                                      "message": "b"}]})))
+        self.assertEqual(result["category"], "error")
+
+    def test_a_result_that_is_not_an_object_is_refused_rather_than_raising(self):
+        for stdout in ("[]", '"satisfied"', "null", "3"):
+            with self.subTest(stdout):
+                result = self.run_with(Done(0, stdout))
+                self.assertEqual(result["category"], "error")
+                self.assertIn("not an object", result["diagnostics"][0]["message"])
+
+    def test_diagnostics_have_to_be_a_list_of_objects_with_string_fields(self):
+        broken = [
+            {"category": "satisfied", "diagnostics": "none"},
+            {"category": "actionable", "diagnostics": ["missing_declaration"]},
+            {"category": "actionable", "diagnostics": [{"code": 7, "message": "x"}]},
+            {"category": "actionable", "diagnostics": [{"code": "x", "message": None}]},
+            {"category": "satisfied"},
+        ]
+        for result in broken:
+            with self.subTest(str(result)[:40]):
+                self.assertEqual(self.run_with(Done(0 if result["category"] == "satisfied" else 1,
+                                                    json.dumps(result)))["category"], "error")
+
+    def test_an_actionable_verdict_with_nothing_behind_it_is_refused(self):
+        """The heading falls back to "no usable citation" when there are no findings, so this
+        shape would word an accusation with nothing behind it."""
+        result = self.run_with(Done(1, json.dumps({"category": "actionable", "diagnostics": []})))
+        self.assertEqual(result["category"], "error")
+        self.assertIn("no diagnostics", result["diagnostics"][0]["message"])
+
+    def test_a_checker_that_never_returns_is_given_up_on(self):
+        def timeout(*args, **kwargs):
+            self.assertEqual(kwargs.get("timeout"), bot.CHECKER_TIMEOUT_SECONDS)
+            raise bot.subprocess.TimeoutExpired("cmd", kwargs.get("timeout"))
+
+        original = bot.subprocess.run
+        bot.subprocess.run = timeout
+        try:
+            result = bot.evaluate("anything")
+        finally:
+            bot.subprocess.run = original
+        self.assertEqual(result["category"], "error")
+        self.assertIn("did not finish", result["diagnostics"][0]["message"])
+
+    def test_a_checker_that_cannot_be_launched_is_the_same_answer(self):
+        original = bot.subprocess.run
+
+        def refuse(*args, **kwargs):
+            raise OSError(8, "Exec format error")
+        bot.subprocess.run = refuse
+        try:
+            result = bot.evaluate("anything")
+        finally:
+            bot.subprocess.run = original
+        self.assertEqual(result["category"], "error")
+        self.assertIn("could not be run", result["diagnostics"][0]["message"])
+
+    def test_the_agreeing_pairs_all_pass(self):
+        """The control. Every case above is "the pair disagrees", so without this they prove only
+        that `_validated` refuses things."""
+        for status, category, diagnostics in (
+                (0, "satisfied", []),
+                (1, "actionable", [{"code": "missing_declaration", "message": "no citation"}]),
+                (2, "error", [{"code": "checker_error", "message": "corpus unavailable"}])):
+            with self.subTest(category):
+                result = self.run_with(Done(status, json.dumps({"category": category,
+                                                                "diagnostics": diagnostics})))
+                self.assertEqual(result["category"], category)
+
+    def test_the_maintainer_line_carries_the_cause_and_cannot_open_a_command(self):
+        folded = bot.one_line("corpus unavailable\n::error::everything is fine")
+        self.assertNotIn("\n", folded)
+        self.assertNotIn("::", folded)
+        self.assertIn("corpus unavailable", folded)
+
+
+class TheVerdictMayNotOutrunTheBody(unittest.TestCase):
+    """A repair that lands during the comment walk must not be published over.
+
+    The freshness check ran ONCE, before the comment list was fetched -- and fetching it is the
+    slowest thing this does. A body repaired during that walk still got the old actionable note.
+    """
+
+    def setUp(self):
+        self.env = dict(os.environ)
+        os.environ["GITHUB_REPOSITORY"] = "MongLong0214/logic-pro-mcp"
+        os.environ["ISSUE_NUMBER"] = "1"
+        os.environ["CANON_BOT_LOGIN"] = BOT_LOGIN
+        self.original = bot.GitHub
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        bot.GitHub = self.original
+        os.environ.clear()
+        os.environ.update(self.env)
+
+    def drive(self, comments=(), bodies_in_order=None):
+        fake = FakeGitHub(UNCITED, comments, bodies_in_order)
+        bot.GitHub = lambda repo: fake
+        return bot.main(), fake
+
+    def test_a_repair_during_the_comment_walk_is_not_written_over(self):
+        status, fake = self.drive(bodies_in_order=[UNCITED, UNCITED, REPAIRED])
+        self.assertEqual(status, 0)
+        self.assertEqual(fake.created, [], "published a verdict about a body that had moved")
+        self.assertEqual(fake.updated, [])
+
+    def test_the_same_run_writes_when_the_body_holds_still(self):
+        """The control. Three reads of the same body must still produce the note, or the case
+        above passes because nothing was ever going to be written."""
+        status, fake = self.drive(bodies_in_order=[UNCITED, UNCITED, UNCITED])
+        self.assertEqual(status, 0)
+        self.assertEqual(len(fake.created), 1)
+        self.assertGreaterEqual(fake.body_reads, 3, "the pre-write check did not happen")
+
+    def test_a_repair_during_the_stale_note_recovery_is_not_written_over(self):
+        """The recovery re-lists the comments, which is another round trip. A verdict that was
+        stale before the first write is no fresher on the second."""
+        stale = comment(7, bot.render("actionable", [("missing_declaration", "a")]))
+        fake = FakeGitHub(UNCITED, [stale],
+                          [UNCITED, UNCITED, UNCITED, REPAIRED])
+        fake.fail_update_ids = {7}
+        bot.GitHub = lambda repo: fake
+        self.assertEqual(bot.main(), 0)
+        self.assertEqual(fake.updated, [], "retried a stale verdict over a repaired body")
+        self.assertEqual(fake.created, [])
+
+    def test_the_recovery_still_succeeds_when_the_body_holds_still(self):
+        """The control for the case above."""
+        stale = comment(7, bot.render("actionable", [("missing_declaration", "a")]))
+        fake = FakeGitHub(UNCITED, [stale], [UNCITED])
+        fake.fail_update_ids = {7}
+        bot.GitHub = lambda repo: fake
+        self.assertEqual(bot.main(), 0)
+        self.assertEqual([cid for cid, _ in fake.updated], [7])
+
+
+class TheCommentWalkIsTheRealOne(unittest.TestCase):
+    """`GitHub.comments` driven through `_api`, not replaced by a list.
+
+    Every other case here hands `main()` a fake whose `comments()` returns one list, so the paging
+    loop itself -- the thing that makes the freshness window wide -- is never executed. A managed
+    note on page two is the shape that loop exists for.
+    """
+
+    def api_over(self, pages):
+        walk = bot.GitHub("owner/repo")
+        walk.PER_PAGE = 2
+        calls = []
+
+        def fake_api(path, method="GET", fields=None):
+            calls.append(path)
+            page = int(path.rsplit("page=", 1)[1])
+            return json.dumps(pages[page - 1] if page <= len(pages) else [])
+        walk._api = fake_api
+        return walk, calls
+
+    def test_a_note_on_the_second_page_is_found(self):
+        note = comment(9, bot.render("actionable", [("missing_declaration", "a")]))
+        full = [comment(1, "one"), comment(2, "two")]
+        walk, calls = self.api_over([full, [note]])
+        found = walk.comments(5)
+        self.assertEqual(len(calls), 2, "a full first page must not end the walk")
+        active, extra = bot.active_note(found, BOT_LOGIN)
+        self.assertIsNotNone(active, "the managed note on page two was not seen")
+        self.assertEqual(active["id"], 9)
+        self.assertEqual(extra, [])
+
+    def test_a_short_first_page_ends_the_walk(self):
+        """The control. Without it, "two pages were read" says nothing about when it stops."""
+        walk, calls = self.api_over([[comment(1, "one")]])
+        self.assertEqual(len(walk.comments(5)), 1)
+        self.assertEqual(len(calls), 1)
+
+    def test_an_endless_endpoint_refuses_rather_than_spinning(self):
+        walk, calls = self.api_over([[comment(1, "one"), comment(2, "two")]] * 500)
+        with self.assertRaises(RuntimeError):
+            walk.comments(5)
+        self.assertEqual(len(calls), walk.MAX_PAGES)
+
+
+class TheCorpusIsNotTheAuthorsFault(unittest.TestCase):
+    """R1's other half, through the bot: a tooling failure must reach nobody as an accusation."""
+
+    def setUp(self):
+        self.env = dict(os.environ)
+        os.environ["GITHUB_REPOSITORY"] = "MongLong0214/logic-pro-mcp"
+        os.environ["ISSUE_NUMBER"] = "1"
+        os.environ["CANON_BOT_LOGIN"] = BOT_LOGIN
+        self.original_github, self.original_evaluate = bot.GitHub, bot.evaluate
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        bot.GitHub, bot.evaluate = self.original_github, self.original_evaluate
+        os.environ.clear()
+        os.environ.update(self.env)
+
+    def unreadable_index(self):
+        bot.evaluate = lambda body: {
+            "category": "error", "label": "",
+            "diagnostics": [{"code": "checker_error", "message": (
+                "docs/canon/index/strings.tsv does not exist, so no reference for strings can be "
+                "resolved here. Nothing is being asserted about the citation.")}]}
+
+    def test_no_note_is_created_for_an_index_this_run_could_not_read(self):
+        self.unreadable_index()
+        fake = FakeGitHub("Something is wrong with the mixer.\n", [])
+        bot.GitHub = lambda repo: fake
+        self.assertEqual(bot.main(), 0)
+        self.assertEqual(fake.created, [])
+        self.assertEqual(fake.updated, [])
+
+    def test_the_maintainer_is_told_WHICH_failure_it_was(self):
+        """The note says nothing about the body on purpose, so the log is the only place the run
+        that failed can be told from the run that found nothing to say. "See the log above" alone
+        does not distinguish them."""
+        self.unreadable_index()
+        fake = FakeGitHub("Something is wrong with the mixer.\n", [])
+        bot.GitHub = lambda repo: fake
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            self.assertEqual(bot.main(), 0)
+        warning = [line for line in printed.getvalue().splitlines()
+                   if line.startswith("::warning::")]
+        self.assertEqual(len(warning), 1, printed.getvalue())
+        self.assertIn("strings.tsv does not exist", warning[0])
+
+    def test_a_standing_warning_is_not_resolved_by_an_index_failure(self):
+        self.unreadable_index()
+        standing = comment(7, bot.render("actionable", [("missing_declaration", "a")]))
+        fake = FakeGitHub("Something is wrong with the mixer.\n", [standing])
+        bot.GitHub = lambda repo: fake
+        self.assertEqual(bot.main(), 0)
+        self.assertEqual(fake.created, [])
+        self.assertEqual([cid for cid, _ in fake.updated], [7])
+        self.assertEqual(bot.state_of(fake.updated[0][1]), bot.UNKNOWN,
+                         "a run that could not evaluate withdrew a warning")
 
 
 class TheWorkflowStillWiresItUp(unittest.TestCase):

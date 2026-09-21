@@ -103,6 +103,22 @@ class CanonWaiverError(Exception):
     """A waiver file this guard cannot compare. Raised rather than degrading to an empty set."""
 
 
+class CanonIndexUnavailable(Exception):
+    """The committed index a citation would be judged against could not be read here.
+
+    `load_index` returns an empty table for a MISSING index file, so `resolve_offline` says the
+    reference "is not in docs/canon/index/<source>.tsv" -- true, and indistinguishable from the
+    author citing a key that does not exist. `diagnose_text` filed both as INVALID_REFERENCE,
+    which is a sentence addressed to the contributor about their citation. On a checkout without
+    the corpus built, every citation in every body became the author's fault.
+
+    That is the exact confusion this whole axis was rebuilt to remove: a corpus that would not
+    load must not reach a first-time contributor as an accusation. Raised instead, so `check_text`
+    renders ERROR and exits 2 -- nonzero, because a check that could not evaluate has not passed,
+    and saying nothing about the body.
+    """
+
+
 def _json(path, default):
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -1100,6 +1116,39 @@ class Diagnosis:
         }
 
 
+def _require_readable_index(ref) -> None:
+    """Refuse to judge a citation against an index this run could not read.
+
+    Three failures wore the same word before this. A missing index file made `load_index` return
+    an empty table, so every reference "is not in docs/canon/index/<source>.tsv". A malformed row
+    made it raise the base `CanonError`, which the caller filed as the reference being invalid. A
+    missing value index made `resolve_offline` say no value citation for the source is pinned. All
+    three are this repository's corpus, and all three arrived at the contributor as a claim about
+    the reference THEY typed.
+
+    A reference that does not resolve against an index this run CAN read is still the author's --
+    that is the ordinary unknown-key case and it stays actionable.
+    """
+    if ref.is_value_citation:
+        path = canon.value_index_path(ref.source)
+        if not os.path.exists(path):
+            raise CanonIndexUnavailable(
+                f"{path} does not exist, so no value citation for {ref.source} can be checked "
+                f"here. Run Scripts/logic_canon.py build on a machine with Logic. Nothing is "
+                f"being asserted about the citation.")
+        return
+    path = canon.index_path(ref.source)
+    if not os.path.exists(path):
+        raise CanonIndexUnavailable(
+            f"{path} does not exist, so no reference for {ref.source} can be resolved here. Run "
+            f"Scripts/logic_canon.py build on a machine with Logic. Nothing is being asserted "
+            f"about the citation.")
+    try:
+        canon.load_index(ref.source)
+    except canon.CanonError as exc:
+        raise CanonIndexUnavailable(f"{path} could not be read: {exc}") from exc
+
+
 def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = False,
                   label: str = "<body>") -> Diagnosis:
     """Evaluate a pull request or issue body and return what was found.
@@ -1186,8 +1235,16 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
     for ref_text in references:
         try:
             ref = canon.CanonRef.parse(ref_text)
+        except canon.CanonRefError as exc:
+            # The citation STRING is malformed. That is the author's to fix and nothing else here
+            # was consulted to say so.
+            findings.append((INVALID_REFERENCE, f"{label}: {exc}"))
+            continue
+        _require_readable_index(ref)
+        try:
             canon.resolve_offline(ref)
-        except canon.CanonError as exc:
+        except canon.CanonResolveError as exc:
+            # A well-formed reference against an index this run could read: the key is not there.
             findings.append((INVALID_REFERENCE, f"{label}: {exc}"))
 
     # A reference is only half of a citation. The value it resolves to must be in the text too, or
@@ -1196,11 +1253,16 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
     for ref_text in references:
         try:
             ref = canon.CanonRef.parse(ref_text)
-            committed = canon.resolve_offline(ref)
-        except canon.CanonError:
+        except canon.CanonRefError:
             continue
-        table = canon.load_index(ref.source)
-        del table
+        # No `_require_readable_index` here. The loop above already ran it for every reference
+        # that parses, over the same references and the same sources, and raised if any index was
+        # unreadable -- so reaching this line means they all were. A second call would be a second
+        # place deciding the same thing, and the mutation that deleted one of them survived.
+        try:
+            committed = canon.resolve_offline(ref)
+        except canon.CanonResolveError:
+            continue
         if not _quotes_the_value(folded, ref, committed):
             findings.append((MISSING_QUOTED_VALUE, (
                 f"{label}: {ref} appears without the value it resolves to. A reference alone is a "
@@ -1249,7 +1311,8 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False,
         try:
             diagnosis = diagnose_text(body, changed_paths,
                                       require_changed=require_changed, label=path)
-        except (canon.CanonError, CanonWaiverError, CitableScanFailed, OSError) as exc:
+        except (canon.CanonError, CanonWaiverError, CanonIndexUnavailable,
+                CitableScanFailed, OSError) as exc:
             # The evaluation did not finish. That is not the author's doing and must not be
             # reported as though it were -- but it is not a pass either, so the status is nonzero.
             diagnosis = Diagnosis(ERROR, [(CHECKER_ERROR, (
