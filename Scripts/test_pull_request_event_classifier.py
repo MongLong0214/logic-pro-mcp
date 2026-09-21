@@ -39,6 +39,100 @@ CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 #: of them must be unable to publish its canonical name for a metadata-only edit.
 GATED_JOBS = ("guards", "compile", "test", "formula", "build")
 
+_TOKEN = re.compile(r"\s*(\(|\)|&&|\|\||==|!=|'(?:[^']|'')*'|[A-Za-z_][\w.\-]*)")
+
+
+def _resolve(path, context):
+    """`github.event.changes.base` against a context dict. A missing step is null, as on Actions."""
+    value = context
+    for step in path.split("."):
+        if not isinstance(value, dict) or step not in value:
+            return None
+        value = value[step]
+    return value
+
+
+def evaluate_expression(text, context):
+    """Evaluate the `${{ ... }}` segments of a workflow string the way Actions does.
+
+    Deliberately small and deliberately not `eval`. It covers exactly the grammar `ci.yml`'s
+    concurrency group uses -- `&&`, `||`, `==`, `!=`, parentheses, single-quoted strings, `null`,
+    `true`/`false` and context paths -- and raises on anything else rather than guessing, because a
+    silent mis-parse would make the case it serves pass for the wrong reason. `&&` and `||` return
+    an OPERAND, not a boolean, which is what makes `cond && 'a' || 'b'` work at all; falsy is
+    `null`, `false`, `''` and `0`.
+    """
+    def segment(expression):
+        expression = expression.strip()
+        tokens, position = [], 0
+        while position < len(expression):
+            match = _TOKEN.match(expression, position)
+            if not match:
+                raise ValueError(f"cannot tokenise at {expression[position:position + 20]!r}")
+            tokens.append(match.group(1))
+            position = match.end()
+        tokens.append(None)
+        index = [0]
+
+        def peek():
+            return tokens[index[0]]
+
+        def take():
+            token = tokens[index[0]]
+            index[0] += 1
+            return token
+
+        def truthy(value):
+            return value not in (None, False, "", 0)
+
+        def primary():
+            token = take()
+            if token == "(":
+                value = disjunction()
+                if take() != ")":
+                    raise ValueError("unbalanced parenthesis")
+                return value
+            if token is None:
+                raise ValueError("expression ended early")
+            if token.startswith("'"):
+                return token[1:-1].replace("''", "'")
+            if token == "null":
+                return None
+            if token in ("true", "false"):
+                return token == "true"
+            return _resolve(token, context)
+
+        def comparison():
+            left = primary()
+            while peek() in ("==", "!="):
+                operator = take()
+                right = primary()
+                left = (left == right) if operator == "==" else (left != right)
+            return left
+
+        def conjunction():
+            left = comparison()
+            while peek() == "&&":
+                take()
+                right = comparison()
+                left = right if truthy(left) else left
+            return left
+
+        def disjunction():
+            left = conjunction()
+            while peek() == "||":
+                take()
+                right = conjunction()
+                left = left if truthy(left) else right
+            return left
+
+        value = disjunction()
+        if peek() is not None:
+            raise ValueError(f"trailing tokens: {tokens[index[0]:]}")
+        return "" if value is None else str(value)
+
+    return re.sub(r"\$\{\{(.*?)\}\}", lambda m: segment(m.group(1)), text, flags=re.S)
+
 #: The contexts the branch ruleset requires (re-read from the API 2026-09-21). A name a skipped job
 #: could publish must never be one of these.
 REQUIRED_CONTEXTS = ("build", "compile", "test", "pr-policy")
@@ -251,20 +345,83 @@ class WorkflowWiring(unittest.TestCase):
         # one. Without it a superseded run leaves a red `build` on top of a healthy one.
         self.assertRegex(self.jobs["build"], r"(?m)^    if:.*!cancelled\(\)")
 
-    def test_metadata_and_code_runs_are_in_different_cancellation_domains(self):
-        # E02 and E10. The workflow-level group cannot call the classifier -- it is evaluated
-        # before any job runs -- so it repeats the conservative half of the same rule: a run enters
-        # the metadata domain only when the payload positively says a title or body changed and
-        # says nothing about the base.
+    def _concurrency_group(self):
         group = re.search(r"^concurrency:\n(?:.*\n)*?\s*group:(.*(?:\n\s{4,}.*)*)",
                           self.executable, re.M)
         self.assertIsNotNone(group, "ci.yml has no concurrency group")
-        expression = " ".join(group.group(1).split())
-        self.assertIn("github.event.changes.base == null", expression)
-        self.assertIn("github.event.action == 'edited'", expression)
-        self.assertIn("'metadata'", expression)
-        self.assertIn("'code'", expression)
-        self.assertIn("github.ref", expression)
+        return " ".join(group.group(1).split())
+
+    def _domain(self, context):
+        """Which cancellation domain `ci.yml` puts this event in -- by evaluating its expression.
+
+        The previous version of this case asserted that certain substrings appeared in the group.
+        A substring is not a decision: the expression could compare `changes.base` against the
+        wrong thing, or return the two domains the wrong way round, and every one of those
+        assertions would still have held. `evaluate_expression` reads the same string GitHub reads.
+        """
+        rendered = evaluate_expression(self._concurrency_group(), context)
+        self.assertTrue(rendered.endswith(("-metadata", "-code")),
+                        f"the group did not resolve to a domain: {rendered!r}")
+        return rendered.rsplit("-", 1)[1]
+
+    @staticmethod
+    def _context(payload, event_name="pull_request", ref="refs/pull/1/merge"):
+        return {"github": {"workflow": "CI", "ref": ref,
+                           "event_name": event_name, "event": payload}}
+
+    def test_the_group_expression_and_the_classifier_agree_on_every_payload_github_sends(self):
+        # E02 and E10. The workflow-level group cannot call the classifier -- it is evaluated
+        # before any job runs -- so it states the same rule a second time, which is the shape that
+        # drifts. `changes` on `edited` is documented to carry only `title`, `body` and `base`, so
+        # these are the whole space, and the two authorities must not disagree anywhere in it.
+        cases = [
+            {"action": "edited", "changes": {"title": {"from": "a"}}},
+            {"action": "edited", "changes": {"body": {"from": "a"}}},
+            {"action": "edited", "changes": {"title": {"from": "a"}, "body": {"from": "b"}}},
+            {"action": "edited", "changes": {"base": {"ref": {"from": "main"}}}},
+            {"action": "edited",
+             "changes": {"title": {"from": "a"}, "base": {"ref": {"from": "main"}}}},
+            {"action": "edited", "changes": {}},
+            {"action": "edited"},
+            {"action": "synchronize"},
+            {"action": "opened"},
+        ]
+        for payload in cases:
+            label = ",".join(sorted(payload.get("changes") or {})) or payload["action"]
+            with self.subTest(changes=label):
+                decision = classifier.classify("pull_request", payload)
+                expected = "metadata" if decision == classifier.METADATA_ONLY else "code"
+                self.assertEqual(self._domain(self._context(payload)), expected,
+                                 f"the classifier says {decision!r}")
+
+    def test_a_push_is_a_code_run(self):
+        # Not a `pull_request` at all. The group must not read `changes` off an event that has none
+        # and land a push in the metadata domain, where a later description edit could cancel it.
+        self.assertEqual(
+            self._domain(self._context({}, event_name="push", ref="refs/heads/main")), "code")
+
+    def test_an_event_that_is_not_a_pull_request_is_code_even_when_it_carries_changes(self):
+        # This payload cannot reach `ci.yml` today -- it triggers on `push` and `pull_request` and
+        # nothing else -- and that is exactly why the case exists. Without it, deleting
+        # `github.event_name == 'pull_request'` from the group changes no outcome any other case
+        # measures (measured: that mutation left the suite green), so the clause would be a guard
+        # nothing can catch being removed. The clause is what keeps the rule correct for whatever
+        # trigger is added next, and this is the payload that says so.
+        carries_changes = {"action": "edited", "changes": {"title": {"from": "a"}}}
+        self.assertEqual(
+            self._domain(self._context(carries_changes, event_name="issues")), "code")
+
+    def test_the_group_expression_names_every_key_the_classifier_knows(self):
+        # The expression cannot ask "does `changes` contain ONLY these keys?" -- GitHub expressions
+        # cannot enumerate an object's keys -- so it names them one at a time. That makes growing
+        # `METADATA_KEYS` a change in two places, and this is what fails when somebody grows it in
+        # one. The residue is stated in `ci.yml`: an `edited` carrying a key GitHub does not
+        # document today is `code` to the classifier and `metadata` to the expression. That one
+        # cannot be closed from inside an expression, only watched.
+        expression = self._concurrency_group()
+        for key in sorted(classifier.METADATA_KEYS) + ["base"]:
+            with self.subTest(key=key):
+                self.assertIn(f"github.event.changes.{key}", expression)
 
     def test_the_body_check_is_no_longer_in_the_code_workflow(self):
         # It moved to the separately required `pr-policy` context. Leaving a copy here is what made

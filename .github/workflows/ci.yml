@@ -30,10 +30,21 @@ concurrency:
   # defect this workflow was carrying. This expression is evaluated before any job runs, so it
   # cannot call `classify` and has to repeat the conservative half of the same rule itself: a run
   # enters the metadata domain only when the payload positively says a title or a body changed AND
-  # says nothing about the base. Anything else -- a push, an unrecognised `changes` key, a
-  # retarget -- is a code run and shares the code domain, so a newer commit still supersedes an
-  # older run of itself. Erring the other way would put a run that DOES validate code in a domain
-  # a later typo fix can cancel.
+  # says nothing about the base. A push and a retarget are code runs and share the code domain, so
+  # a newer commit still supersedes an older run of itself. Erring the other way would put a run
+  # that DOES validate code in a domain a later typo fix can cancel.
+  #
+  # It is NOT identical to `classify`, and the difference is worth naming rather than papering
+  # over. The classifier asks "does `changes` contain ONLY title and body?"; an expression cannot
+  # enumerate an object's keys, so this asks after each known key by name instead. On every
+  # payload GitHub documents for `edited` -- `changes` carries `title`, `body` and `base` and
+  # nothing else -- the two agree, and `Scripts/test_pull_request_event_classifier.py` evaluates
+  # this very string against every one of those payloads to say so. An `edited`
+  # carrying some key GitHub does not document today would be `code` to the classifier and
+  # `metadata` here. That residue fails in the safe direction -- such a run could be cancelled by a
+  # later description edit, and a cancelled check is not a satisfied one, so the merge stays
+  # blocked and the run has to be retriggered -- but it is a divergence, not a guarantee. Growing
+  # `METADATA_KEYS` means editing this expression too, and a case fails if only one of them moves.
   group: >-
     ${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'pull_request' &&
     github.event.action == 'edited' && github.event.changes.base == null &&
