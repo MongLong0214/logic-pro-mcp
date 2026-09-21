@@ -6,9 +6,9 @@
 # edit and only one of them was mechanically required — `Scripts/release-verify-formula-install-
 # paths.sh` verifies this same file, but it checks the install PATHS and never looks at the hash.
 #
-# This is a CI step rather than a `check-*.py` on purpose. `run-repo-guards.py` states its contract
-# as "plain Python needing neither Xcode nor a network", and the only way to know a hash is right is
-# to ask the release what it published. So the network lives here, where CI already has it.
+# This is a CI step rather than a `check-*.py` on purpose. `run-repo-guards.py` has no network or
+# GitHub-authentication contract, and the only way to know a hash is right is to ask the release
+# what it published. So the network lives here, where CI already has it.
 #
 # Usage:
 #   ci-verify-formula-sha.sh                       # fetch the named release from GitHub

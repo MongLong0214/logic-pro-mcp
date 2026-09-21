@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The ADR index may not call an ADR unfinished after its issue closed.
 
-NOT discovered by `run-repo-guards.py`, and deliberately not named `check-*.py`. That runner's
-contract is plain Python needing neither Xcode nor a network, and this asks GitHub for issue state
+NOT discovered by `run-repo-guards.py`, and deliberately not named `check-*.py`. That runner has
+no network or GitHub-authentication contract, and this asks GitHub for issue state
 — the same reason `roadmap-table-matches-github.py` sits outside it. It runs in the `roadmap` CI
 job, which is the one job holding a token, beside the check it is the sibling of.
 

@@ -764,7 +764,7 @@ Production-readiness hardening pass. No public tool/resource/template surface ch
 
 ### Tests
 
-- v3.7.0 release-tree local gates: `python3 Scripts/logic_session_bootstrap_test.py` -> `14` passed; `python3 Scripts/logic_free_tempo_modal_test.py` passed; `python3 -m py_compile Scripts/live-e2e-test.py Scripts/logic_session_bootstrap.py Scripts/logic_session_bootstrap_test.py Scripts/logic_free_tempo_modal.py Scripts/logic_free_tempo_modal_test.py` passed; `ruby -c Formula/logic-pro-mcp.rb` passed; `swift build -c release` passed; `swift test --no-parallel` -> `1743` passed.
+- v3.7.0 release-tree local gates: `python3 Scripts/test_logic_session_bootstrap.py` -> `14` passed; `python3 Scripts/test_logic_free_tempo_modal.py` passed; `python3 -m py_compile Scripts/live-e2e-test.py Scripts/logic_session_bootstrap.py Scripts/test_logic_session_bootstrap.py Scripts/logic_free_tempo_modal.py Scripts/test_logic_free_tempo_modal.py` passed; `ruby -c Formula/logic-pro-mcp.rb` passed; `swift build -c release` passed; `swift test --no-parallel` -> `1743` passed.
 - Issue #60 close gate: `swift test --filter Issue60LocalePhase --no-parallel` -> `19` passed; `swift test --filter AXLocalePolicy --no-parallel` -> `25` passed; `swift test --filter AXLogicProElements --no-parallel` -> `24` passed.
 - Strict fresh live close gate: English `LOGIC_PRO_MCP_STRICT_LIVE=1 LOGIC_PRO_MCP_BOOTSTRAP_FRESH=1 LOGIC_PRO_MCP_BOOTSTRAP_LANGUAGE=en python3 Scripts/live-e2e-test.py` -> `341` passed / `0` skipped; Korean equivalent -> `341` passed / `0` skipped.
 - GitHub CI for PR #166 passed on build/test/coverage; main push CI after merge was in progress at release-prep start and is recorded in the GitHub Actions run history.
