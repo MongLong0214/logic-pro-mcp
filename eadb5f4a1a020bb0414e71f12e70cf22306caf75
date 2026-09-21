@@ -1,0 +1,159 @@
+Limit: a closed-menu enabled read is a stale validation cache: macOS only refreshes AXEnabled while the menu is open
+Ruled-out: treating dismissOpenMenu's UNREADABLE branch as recoverable | a different guard, ruled out because it would not have fixed any of the three measured failures, and the payload's menu_state "closed" rules it out
+Warn: opening a menu is a recorded wedge risk -- a second click would risk a menu wedge, so the revalidation pass sends exactly one and only closes what it observed itself open, never a hardcoded assumption
+Record-Id: r-3e12a8b0aad5
+Provenance: inherited b7eb272b21c78ce89ae66be6e38c2fa4336795f1
+
+Limit: AppleScript's try...end try with no on error handler leaves an assigned variable at its prior value when the assignment throws, so a swallowed re-read of menuItemEnabled silently kept its stale value instead of surfacing as a failed read
+Record-Id: r-01c182830e7c
+Provenance: inherited b9d704d5b0b54ca4ae7da2637b2e62361b692495
+
+Limit: On this toolchain a top-level `Bool == Bool` inside `#expect` passes unconditionally, which is exactly what Scripts/ci-forbid-dead-expect.sh exists to catch
+Ruled-out: leaving the `==` comparison in place but wrapping it in `#require` instead | the dead spelling is the top-level Bool == Bool itself, so the scanner rejects the shape regardless of which macro wraps it
+Warn: the reason the RV-3 assertion needed repairing is that it could not fail. Re-running it green proves nothing on its own; the mutation is the evidence
+Warn: A future edit to this test that reverts to an `==` comparison of two Bools will re-enter the same vacuum and will only be caught by the pre-push preflight, not by a green local `swift test`
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-deadexpect921
+Provenance: inherited e49aec3769e3a14ee3be8be0e14cac7988067af2
+
+Limit: an unreadable focus read returns without ever sending `key code 53`, and the caller then returns a MENU_PICK_FAILED string, which is a NORMAL script result, so the Swift side never invoked `dialogFailureReconciler`
+Limit: if `click menu bar item` itself throws, `menuActuationAttempted` is never set, revalidated stays false, and the script still returns MENU_VALIDATION_UNREADABLE
+Ruled-out: a blind `key code 53` on an unreadable frontmost read | Escape would then be sent to whatever application actually holds focus
+Ruled-out: widening both MENU_DISABLED and MENU_VALIDATION_UNREADABLE the same way | only one of the two is unsound, and the other one's constant is a reachability fact
+Ruled-out: rewriting the menu-cleanup behaviour to be ownership-gated | the entry guard already clears a pre-existing open menu through `dismissOpenMenu(..., false)`, so escaping an unowned menu is this route's existing policy rather than something this PR introduced
+Warn: `writeAttempted` inside `menuCouldNotBeClosed` does not mean a position was written. It encodes whether the script appended " after menu actuation", that is whether a menu click happened, and the new reconciliation trigger depends on exactly that reading
+Warn: the reconciliation fixtures in this test file never execute the script they capture, so any assertion about what the reconciliation DOES must be structural against the generated text
+Warn: moving `set freshReadingTaken to true` to just after `end try` recreated the stale-false MENU_DISABLED bug with every assertion green
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: No live Logic result is claimed for this commit. The live A/B was run separately against a build of e49aec37.
+Record-Id: r-rv2blockers921
+Follows: r-01c182830e7c
+Provenance: inherited 79e6bffafe3a060cbd9743b801486b0778d2845e
+
+Limit: An AX action can take effect and then report an error, so a click that opened the menu and threw left the flag false
+Limit: `.unexpectedResult` reports `performedDialogSafetyObservation == true`, does not force the unsafe-UI refusal, and falls through to the ordinary unavailable/safe-to-retry result
+Limit: Twelve other return sites after the LEAF actuation report that menu cleanup was not observed and none of them reconcile either (issue #942, unchanged on main)
+Limit: `diagnosticLabel` emits `menu_could_not_be_closed_write_attempted_true` into a response whose top level carries `"write_attempted": false` (issue #943, unchanged on main)
+Ruled-out: routing a malformed safety sentinel to `.unexpectedResult` | a lost observation is not evidence that no click occurred
+Ruled-out: widening the reconciliation trigger to the twelve post-leaf return sites | widening a shared trigger while fixing a blocker is how the next blocker gets made, and the post-leaf case may legitimately want the dialog half of cleanup too, which is a different call
+Ruled-out: renaming the writeAttempted diagnostic token in this PR | the label is a published receipt token and deserves its own change and its own review
+Warn: the reconciliation fixtures in this test file capture the generated AppleScript and return a canned result without executing it, so any assertion about what the reconciliation DOES must be structural against the generated text
+Warn: `menuActuationAttempted` and `revalidated` are not interchangeable. The first means a click was issued and drives cleanup; the second means the menu was observed open and gates the re-read
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: No live Logic result is claimed for this commit; the live drive is run separately against a build of the final head.
+Record-Id: r-rv3blockers921
+Follows: r-rv2blockers921
+Provenance: inherited f6f89e01392bac2817355249570aaff3da2016d2
+
+Limit: Since #921 added the forced revalidation pass, the LEAF_ARMED persistence failure became reachable AFTER a click this run issued, and its context-free refusal string read as `.menuCouldNotBeClosed(writeAttempted: false)` so the reconciliation did not run
+Limit: the fixture captures the generated script and returns a canned CLOSED without executing it, so inserting `exit repeat` before that loop's `key code 53` left every behavioural assertion green while no Escape executed
+Ruled-out: a test that names the single repaired site | a single-site assertion would not have caught the sibling that this PR did not touch
+Warn: a refusal string assembled in this script is also a classification input. Dropping `menuCleanupActuationContext` from any `menu cleanup was not observed` return silently turns a reconcilable outcome into an unreconciled one, and nothing about the local code reads as wrong
+Warn: F1 moved `set menuActuationAttempted to true` ahead of the click and invalidated four comments; the flag no longer records only the resolved-leaf issuance
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: No live Logic result is claimed for this commit; the live drive is run separately against a build of the final head.
+Record-Id: r-rv4blockers921
+Follows: r-rv3blockers921
+Provenance: inherited a19fba1db18ac83f2491c446716b09f0ded774e9
+
+Limit: `MENU_VALIDATION_UNREADABLE:menu_actuation_attempted=true`, with the colon present and the space omitted, matched neither, fell to `.unexpectedResult`, and the route then returned an ordinary `safe_to_retry: true` that can release the fallback
+Limit: every reconciliation fixture returns a canned CLOSED without executing the script, so inserting `return "OPEN"` after the focus read left `key code 53` unreachable with every assertion still green
+Limit: fourteen further post-leaf returns (1856, 1893, 1894, 1897, 1913, 1928, 1941, 1954, 1968, 1981, 1996, 2010, 2024, 2038) neither clean the menu nor reconcile; folded into issue #942, which now names twenty-six sites across three shapes
+Ruled-out: enumerating more forbidden spellings in the structural assertion | the assertion now pins the exact statement sequence on the path from the loop header to the Escape, so anything inserted anywhere in that path fails, whatever it is spelled
+Ruled-out: widening the reconciliation trigger to the fourteen further post-leaf returns | widening a shared trigger while fixing a blocker is how the next blocker gets made
+Warn: a structural assertion written as a list of forbidden spellings tests the list, not the property. Both defects in this commit came from that shape. Pin the sequence or pin the property
+Warn: the round-3 commit message's claim that malformed variants fail closed was too broad while round 4's narrowing stood
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: No live Logic result is claimed for this commit; the live drive is run separately against a build of the final head.
+Record-Id: r-rv5blockers921
+Follows: r-rv4blockers921
+Provenance: inherited 1fab02c8251980ba8889ec0d1d3a8be30304f94f
+
+Limit: this PR's suite did not fail when this PR's core behaviour was switched off, because the source-shape assertions checked textual presence and ordering and the stripper removed only `--` comments
+Limit: a mis-cased sentinel token reaching `.unexpectedResult` and its safe-to-retry result is filed as issue #945; the twenty-six post-leaf return sites are #942 and the `write_attempted` diagnostic token is #943
+Ruled-out: adding more forbidden spellings to the structural assertions | rounds 4, 5 and 6 each walked around the previous round's list, so the assertion pins the chain and an extra enclosing guard is RED even when that guard is `if true`
+Ruled-out: making a single sentinel case-insensitive | the script returns a compile-time constant so it cannot emit one, and it would be an inconsistency dressed as a fix while its neighbours stay exact
+Warn: in this suite the generated AppleScript is inspected as text and never executed, so presence and ordering are the weakest possible witnesses. Assert the enclosing block chain, not the substring
+Warn: a `contains` assertion on a handler name is satisfied by putting that text inside the returned string literal instead of calling the handler, which reopens the skipped-reconciliation hole
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: No live Logic result is claimed for this commit; the live drive is run separately against a build of the final head.
+Record-Id: r-rv6blockers921
+Follows: r-rv5blockers921
+Provenance: inherited 9c21deb2fbd2e4bf02524aa5c7b7e35f29e38ad8
+
+Limit: the reconciliation fixtures capture the generated AppleScript and return a canned result without executing it, so every assertion about what reconciliation DOES is structural against the generated text, not behavioural
+Limit: the full suite under -j 4 is contaminated at HEAD: reverting both files and running the same command produced six failures. Suite colour under parallelism says nothing here; the filtered suite and the mutations are the evidence
+Ruled-out: changing the `.error` call site to pass nil as well | a dead child may genuinely have crossed the leaf click, so there the pre-leaf snapshot is still the correct argument
+Ruled-out: adding `#` to the stripper's list of comment spellings and stopping there | that is the defect shape this PR kept reproducing; the stripper now covers all three forms the language has, closing the list by definition rather than by enumeration
+Warn: passing nil to the reconciler is only correct while every `menu cleanup was not observed after menu actuation` emission precedes the leaf click. A fifth refusal site added after the click makes it wrong, and the suite catches that positionally -- do not silence that assertion
+Warn: an assertion written as a list of spellings will be walked around by the next one nobody listed; rounds 6 and 7 were both defeated that way. Assert the property
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-941round7
+Provenance: inherited c07e247e04170ac5d26adcac4ddf7221ff9a8089
+
+Limit: the reconciliation fixtures capture the generated AppleScript and return a canned result without executing it, so these remain structural assertions about generated text, not observations of a run
+Limit: the full suite under -j 4 is contaminated at HEAD (six failures with both files reverted), so it cannot be used as a verdict on this change
+Ruled-out: adding a second optional or a bool beside the existing path | the defect was one channel carrying three meanings, and another parallel channel reproduces it; the enum makes the compiler carry the distinction
+Ruled-out: having the unknown case cancel the dialog it finds | ownership cannot be established without the snapshot, so it may only observe and refuse -- cancelling could close a dialog the user opened
+Warn: a line comment in AppleScript ends at a CARRIAGE RETURN as well as a linefeed; `osascript -e $'-- padding\rreturn "OPEN"'` prints OPEN. Any tool that strips comments by scanning for \n alone will hide active code
+Warn: nil meant two opposite things on this path once before. If a future change reintroduces an optional here, the pre-leaf and unknown cases collapse again and a dialog is reported closed while it is open
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-941round8
+Provenance: inherited 654f9cda96cc86b450840daf2cb677074fdc3ec5
+
+Limit: the fallthrough-spine assertion started at the `try` line, so a statement inserted between the handler's entry and its `try` was outside everything the assertion pinned
+Limit: rounds 4 through 8 each walked around the previous round's spelling list, and a parser that has to anticipate every way the text can be written is the same shape one level up
+Limit: the reconciliation fixtures still capture the generated AppleScript and return a canned result without executing it, so these remain structural assertions about generated text rather than observations of a run
+Ruled-out: teach the parser two more spellings | the refusal sites are now declared in Swift and the AppleScript is generated from the declaration, which closes the spelling-escape family by construction rather than by enumeration
+Warn: the four interpolation points are the only places the refusal prefix can enter the script; adding a fifth refusal without declaring it in menuCleanupRefusalSites turns the occurrence-count test RED, which is the intended behaviour
+Warn: the filtered suite goes from 56 to 55 by design: two tests that asserted properties of the parser's output were removed and one that asserts the property they were trying to reach was added
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no run of the reconciliation path was observed; the fixtures return a canned result without executing the generated script
+Record-Id: r-941round9
+Follows: r-941round8
+Provenance: inherited 4e75a3bf7c6f46c441f76c3d15f44ec02c370ae3
+
+Limit: the reconciliation fixtures still return a canned result without executing the generated script, so menu_state == closed is asserted against a fixture's answer and not against an observed menu
+Limit: the receipt token menu_could_not_be_closed_write_attempted_<bool> still names only the write flag although the case now carries two Booleans; #943 owns that rename
+Ruled-out: add a sibling case for the reconciled closure | requiresUnsafeUIRefusal matches menuCouldNotBeClosed whatever its payload, so widening the case keeps the safety refusal attached by construction while a sibling case would turn it into a match-list the next edit can forget to extend
+Warn: the parser must keep constructing reconciledMenuClosed: false — it reports what the script observed, and only the parent's reconciliation pass may write true by rebuilding the classification at the call site
+Warn: a mutation harness that anchors on a single-line declaration silently matches nothing against the multi-line Self(...) form and exits 0 over unmutated source; count the occurrences after substituting and fail when the count is zero
+Warn: containment cannot distinguish a refusal site emitted before the leaf click from one emitted after it, which is exactly what emittedBeforeLeafClick claims; do not reduce that test to flag-and-containment checks again
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no live run of the reconciliation path was observed; every result here is the exit status of the filtered test suite over generated text
+Record-Id: r-941round10
+Follows: r-941round9
+Provenance: inherited e17dfd0fc6a96c8b756674359b83bac43049a672
+
+Limit: the widened predicate tests Bool-ness, not liveness; a Bool-returning function call or two differently-named Bool members on either side of == are still invisible to it
+Limit: the reconciliation fixtures still return canned results without executing the generated script, so menu_state == closed is asserted against a fixture's answer
+Ruled-out: keep the == form and trust the mutation results from round 10 | those mutations were killed by neighbouring assertions -- the occurrence count and the bare flag expectation -- so they measured those, not this one
+Warn: a top-level Bool == Bool inside #expect passes unconditionally on this toolchain; assert the position on its own because the flag is already pinned to true by the expectation above it
+Warn: run a lint change against BOTH trees: the repaired one must report nothing and the tree with the defect restored must report exactly the defect, or the negative case was never exercised
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no live Logic Pro run backs this; every result is a test exit status over generated text
+Record-Id: r-941round11
+Follows: r-941round10
+Provenance: inherited b29976b30616c768c58624e3f7865212ec2be6a0
