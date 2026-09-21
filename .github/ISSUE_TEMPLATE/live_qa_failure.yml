@@ -90,16 +90,26 @@ body:
     attributes:
       label: Logic canon
       description: |
-        Every statement this issue makes about Logic must cite Apple's own data, or say that no
-        canonical source can answer it. Paste each reference with the value it resolves to, from
-        `Scripts/logic_canon.py resolve <ref>`. For anything uncitable, paste the output of
-        `Scripts/logic_canon.py absent <source> <locale> '<string>'`. See docs/canon/README.md.
+        Optional. Fill this in if you can; an advisory bot comments here when it finds nothing,
+        and a maintainer can help either way. Nothing about this field blocks the issue.
 
-        Write "states no fact about Logic" if that is the case, and say why in one line.
+        Whichever of these fits:
+
+        1. You have a reference. Paste it with the value it resolves to, from
+           `Scripts/logic_canon.py resolve <ref>`, and say what it supports.
+        2. You saw it but have no reference. Describe the observation and where you made it --
+           Logic version, locale, machine. Mapping it to the corpus is a maintainer's job, not
+           yours; you do not need the corpus build to report a problem.
+        3. This issue claims nothing about Logic at all -- packaging, docs, process. Write the
+           sentence `states no fact about Logic` and a one-line reason.
+
+        Write that sentence as ordinary text. A declaration that appears only inside a code
+        fence or an HTML comment is deliberately not read, so a fenced one does not count.
       placeholder: |
         logic-canon://<source>/<unit>/<locale>/<key>#<field>
           value:    ...
           used for: ...
-      render: text
+
+        or: what I saw, in Logic <version>, locale <xx-XX>, on <machine>
     validations:
-      required: true
+      required: false
