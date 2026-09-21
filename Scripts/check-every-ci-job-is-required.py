@@ -112,8 +112,7 @@ def check_workflows(rules: dict, problems: list) -> None:
 def jobs_and_needs(text: str):
     """The workflow's job names and the gate's `needs`, read without a YAML dependency.
 
-    Parsed by indentation rather than with PyYAML because this guard runs in the same plain-Python
-    contract as the rest of `run-repo-guards.py`, which deliberately has no third-party imports.
+    Parsed by indentation rather than with PyYAML because this guard has no third-party imports.
     The shapes it must handle are the two this file uses: a flow sequence on one line, and a block
     sequence of `- name` lines.
     """

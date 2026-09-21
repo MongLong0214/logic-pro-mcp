@@ -43,7 +43,7 @@ jobs:
   # Its own job rather than a step in `compile`: the check reads issue state, so it needs a token
   # scope the build jobs do not have. Adding `issues: read` to the workflow-level `permissions`
   # would hand it to every job instead of the one that needs it. It is also not in
-  # `run-repo-guards.py`, whose contract is plain Python needing neither Xcode nor a network.
+  # `run-repo-guards.py`, whose contract does not include GitHub access or a network.
   # A pull request body is not a file in the tree, so `check-canon-citations.py`'s tree-wide sweep
   # cannot see it -- and the two documents a change is actually reviewed through were therefore
   # exempt from the rule they are supposed to carry. `docs/canon/README.md` says every artefact
@@ -150,9 +150,9 @@ jobs:
         # without the file moving at all: it is a claim about a RELEASE, not about this tree, so
         # gating it on a diff would skip exactly the builds where it has newly become wrong.
         #
-        # It cannot live in `run-repo-guards.py`: that job's contract is plain Python needing
-        # neither Xcode nor a network, and the only way to know a hash is right is to ask the
-        # release what it published. Its OFFLINE half does live there --
+        # It cannot live in `run-repo-guards.py`: only the published release can answer whether
+        # the hash is right, and the runner has no network/GitHub-authentication contract. Its
+        # OFFLINE half does live there --
         # `Scripts/test_ci_verify_formula_sha.py` drives every classification through a fake `gh`.
         #
         # This is a merge gate and not a maintenance check, which is the line the roadmap and ADR
@@ -163,19 +163,9 @@ jobs:
         run: bash Scripts/ci-verify-formula-sha.sh
 
 
-  # Every guard and headless drive, ONCE. They used to be five steps duplicated across `compile`
-  # and `test`, which on the 2026-09-17 main run cost 13.3 minutes of the first and 11.7 of the
-  # second -- most of both jobs, for the same answer twice.
-  #
-  # Ubuntu, and that is measured rather than assumed. Every one of the 57 discovered guards and
-  # all four shell guards were run in a `python:3.12-slim` container on 2026-09-18: 55 passed and
-  # the two that did not were the merge-base checks failing on a bind-mounted git WORKTREE, which
-  # is an artefact of how the container saw `.git` and not a Linux difference. Nothing here shells
-  # out to `plutil`, `xcrun`, `osascript` or `sed -i ''`.
-  #
-  # It does NOT gate `compile` and `test` -- all three start together. Serialising would add the
-  # guard's wall time to the front of a 23-minute test job to save runner minutes on the runs that
-  # fail, and the guards are now two minutes rather than thirteen, so there is little left to save.
+  # Platform-independent shell integrity checks. The discovered Python runner runs in the macOS
+  # `test` job: #896 adds `test_logic_key_event.py`, whose Swift subprocess imports AppKit. Keeping
+  # that runner out of this Ubuntu job preserves the measured platform-independent shell boundary.
   guards:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -211,44 +201,6 @@ jobs:
         # reappears — see the script for the full rationale.
         run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
 
-
-      - name: Guards and headless drives (discovered, not listed)
-        # Each of these used to be its own step, duplicated across compile and test, and the file
-        # conflicted on three consecutive PRs — every one appending at the same point. The runner
-        # discovers Scripts/check-*.py and the test_*.py drives, so adding a guard no longer edits
-        # this workflow. It prints each one and its result, its wall time, and runs them all before
-        # reporting.
-        #
-        # `|| status=$?` rather than disabling errexit around the call. Both capture the exit
-        # code; only one of them leaves error handling ON for every other line, and
-        # `InstallScriptContractTests.swift` forbids turning it off anywhere in this file --
-        # because doing that around a gate is the H-4 defect verbatim, where the coverage step
-        # disabled it and exited 0 for months. A command on the left of `||` does not trip
-        # errexit, so this needs no exemption and asks for none.
-        #
-        # That contract test is a plain substring check over this whole file, so it cannot tell
-        # code from a comment: the first version of THIS comment quoted the forbidden line and
-        # turned the test red while the code was already correct. Do not name it here.
-        #
-        # Redirected rather than piped through `tee`: `pipefail` makes `cmd | tee` correct today
-        # and one shell setting away from not being.
-        run: |
-          status=0
-          python3 Scripts/run-repo-guards.py > guard-run.log 2>&1 || status=$?
-          cat guard-run.log
-          exit "$status"
-
-      - name: Keep the guard log whatever happened
-        # `always()` belongs on diagnostics, not on the step that decides. If the run above failed,
-        # this is the artefact somebody reads to find out which guard and why.
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: guards-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            guard-run.log
-          retention-days: 7
-          if-no-files-found: ignore
 
   compile:
     runs-on: macos-15
@@ -379,12 +331,21 @@ jobs:
           fi
           echo "LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}." >> "$GITHUB_STEP_SUMMARY"
 
-      # The `*_test.py` suites `run-repo-guards.py` does not discover (#896). They run HERE and
-      # not in `guards`, because `guards` is ubuntu and one of them compiles a Swift file that
-      # imports AppKit -- putting the drive there made the guards job platform-dependent and CI
-      # caught it on the first run. `docs/canon/CI-GATE.json` names the command so this step
-      # cannot be dropped without the required-gate guard noticing.
-      - name: Helper suites the guard runner does not discover (#896)
+      - name: Guards and standalone drives (discovered, not listed)
+        # This runs once, on macOS: #896's `test_logic_key_event.py` compiles a Swift file that
+        # imports AppKit. The Ubuntu `guards` job remains shell-only and platform-independent.
+        # The runner discovers new `test_*.py` drives, so adding one does not edit this workflow.
+        # Its log is retained by the diagnostic upload below if any child fails.
+        run: |
+          status=0
+          python3 Scripts/run-repo-guards.py > guard-run.log 2>&1 || status=$?
+          cat guard-run.log
+          exit "$status"
+
+      # The three `logic_bounce_*_test.py` libraries have no `unittest.main()`, so discovery in
+      # the runner would report success without executing cases. This collector imports them and
+      # checks each module's committed case floor instead.
+      - name: Non-executable bounce test libraries (#896)
         run: python3 Scripts/run-helper-suites.py
 
       - name: Coverage gate
@@ -393,7 +354,7 @@ jobs:
         # live in the script beside the comparison that uses them.
         run: bash Scripts/ci-coverage-gate.sh
 
-      - name: Keep the test log and the coverage report whatever happened
+      - name: Keep the test, guard, and coverage reports whatever happened
         # This is where `always()` belongs: after the step that decides, so a red gate leaves
         # behind the report that explains it. An upload that fails does not turn a failed test run
         # green -- this step's own result is not in `build`'s aggregate.
@@ -402,6 +363,7 @@ jobs:
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            guard-run.log
             coverage-report.txt
             ${{ runner.temp }}/logicpromcp-coverage.log
           retention-days: 7

@@ -29,7 +29,7 @@ Prevent live-e2e MIDI playback and transport record calls from running while Log
 | 4 | `test_detect_error_returns_error_with_policy_id` | Unit | Detector error | Error diagnostic |
 
 ### 3.2 Test File Location
-- `Scripts/logic_controller_learn_mode_test.py`
+- `Scripts/test_logic_controller_learn_mode.py`
 
 ### 3.3 Mock/Setup Required
 - Fake runner returning static UI snapshots.
@@ -40,7 +40,7 @@ Prevent live-e2e MIDI playback and transport record calls from running while Log
 | File | Change Type | Description |
 |------|------------|-------------|
 | `Scripts/logic_controller_learn_mode.py` | Add | Pure classifier plus JXA runner |
-| `Scripts/logic_controller_learn_mode_test.py` | Add | Regression tests |
+| `Scripts/test_logic_controller_learn_mode.py` | Add | Regression tests |
 | `Scripts/live-e2e-test.py` | Modify | Gate live MIDI/record call sites |
 | `Scripts/release-stable.sh` | Modify | Include helper/test in release script validation |
 

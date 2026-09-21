@@ -3,12 +3,12 @@
 
 The drive refused only when the TOTAL case count was zero. One suite losing every case lowered a
 number nobody reads and passed -- the same shape as a guard that checks nothing. And the number it
-printed was not the number of cases it had: `logic_bounce_test.py` re-exports three `TestCase`
+printed was not the number of cases it had: `test_logic_bounce.py` re-exports three `TestCase`
 classes from its neighbours, discovery loads a class wherever it finds it, and 32 cases were run
 and counted twice (167 reported over 135 distinct).
 
-Driven against fixture directories, so these run on any platform -- the real suites compile Swift
-and import AppKit, which is why `run-repo-guards.py` does not discover them.
+Driven against fixture directories, so these run on any platform. The real runner runs on macOS,
+where the AppKit-dependent standalone drive can execute.
 
     python3 Scripts/test_helper_suite_floors.py
 """
@@ -48,12 +48,12 @@ class Beta(unittest.TestCase):
         pass
 '''
 
-#: The aggregator, as `logic_bounce_test.py` is written: it imports a neighbour's class to
+#: The aggregator, as `test_logic_bounce.py` is written: it imports a neighbour's class to
 #: re-export it, and discovery then loads that class twice.
 AGGREGATOR = '''\
 import unittest
 
-from alpha_test import Alpha
+from logic_bounce_alpha_test import Alpha
 
 __all__ = ["Alpha"]
 '''
@@ -75,37 +75,42 @@ class Floors(unittest.TestCase):
 
     def test_a_tree_at_its_floors_passes(self):
         """The control. Without it every case below passes on a drive that refuses every tree."""
-        proc = self._tree({"alpha_test.py": ALPHA, "beta_test.py": BETA},
-                          {"alpha_test": 2, "beta_test": 1})
+        proc = self._tree({"logic_bounce_alpha_test.py": ALPHA,
+                           "logic_bounce_beta_test.py": BETA},
+                          {"logic_bounce_alpha_test": 2, "logic_bounce_beta_test": 1})
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("3 distinct case(s)", proc.stdout)
 
     def test_a_suite_that_lost_a_case_is_refused(self):
-        proc = self._tree({"alpha_test.py": BETA.replace("Beta", "Alpha")},
-                          {"alpha_test": 2})
+        proc = self._tree({"logic_bounce_alpha_test.py": BETA.replace("Beta", "Alpha")},
+                          {"logic_bounce_alpha_test": 2})
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("below its committed floor", proc.stderr)
 
     def test_a_suite_that_vanished_entirely_is_refused(self):
         """The total falling to zero was already refused. This is one suite of two going quiet."""
-        proc = self._tree({"alpha_test.py": ALPHA}, {"alpha_test": 2, "beta_test": 1})
+        proc = self._tree({"logic_bounce_alpha_test.py": ALPHA},
+                          {"logic_bounce_alpha_test": 2, "logic_bounce_beta_test": 1})
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("discovery found NONE of it", proc.stderr)
 
     def test_an_undeclared_suite_is_refused(self):
-        proc = self._tree({"alpha_test.py": ALPHA, "beta_test.py": BETA}, {"alpha_test": 2})
+        proc = self._tree({"logic_bounce_alpha_test.py": ALPHA,
+                           "logic_bounce_beta_test.py": BETA},
+                          {"logic_bounce_alpha_test": 2})
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("no floor", proc.stderr)
 
     def test_an_empty_floor_file_is_refused_rather_than_passed(self):
-        proc = self._tree({"alpha_test.py": ALPHA}, {})
+        proc = self._tree({"logic_bounce_alpha_test.py": ALPHA}, {})
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("names no suite", proc.stderr)
 
     def test_a_reexported_class_is_counted_once_and_under_the_module_that_defines_it(self):
-        """`logic_bounce_test.py` exactly: 32 cases were being run, and counted, twice."""
-        proc = self._tree({"alpha_test.py": ALPHA, "bundle_test.py": AGGREGATOR},
-                          {"alpha_test": 2})
+        """`test_logic_bounce.py` exactly: 32 cases were being run, and counted, twice."""
+        proc = self._tree({"logic_bounce_alpha_test.py": ALPHA,
+                           "logic_bounce_bundle_test.py": AGGREGATOR},
+                          {"logic_bounce_alpha_test": 2})
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-400:])
         self.assertIn("2 distinct case(s)", proc.stdout)
         self.assertIn("Ran 2 tests", proc.stderr)
@@ -119,7 +124,7 @@ class TheRealSuitesAreDeclared(unittest.TestCase):
         committed = json.load(open(os.path.join(REPO, "Scripts", "helper-suite-cases.json"),
                                    encoding="utf-8"))["suites"]
         self.assertTrue(committed)
-        for path in sorted(glob.glob(os.path.join(REPO, "Scripts", "*_test.py"))):
+        for path in sorted(glob.glob(os.path.join(REPO, "Scripts", drive.PATTERN))):
             name = os.path.basename(path)[: -len(".py")]
             with open(path, encoding="utf-8") as handle:
                 source = handle.read()

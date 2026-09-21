@@ -16,8 +16,9 @@ WHAT IT RUNS
   Scripts/check-*.py          guards — refuse a state the repository must not be in
   Scripts/**/test_*.py        drives — call an API and assert what comes back
 
-Both are plain Python needing neither Xcode nor Logic. Anything that needs the running application
-belongs in Scripts/livekit/ as a live harness and is not picked up here.
+They need no network or running Logic instance. `test_logic_key_event.py` compiles an
+AppKit-dependent Swift helper, so CI runs this runner on macOS. Anything that needs the running
+application belongs in Scripts/livekit/ as a live harness and is not picked up here.
 
 Every discovered file runs even after one fails, because "which guards are broken" is more useful
 than "the first one". The exit code is non-zero if any failed.
