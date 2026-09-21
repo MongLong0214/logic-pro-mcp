@@ -29,6 +29,39 @@ at once, in a change whose subject is typed numbers drifting from measured ones.
 Some of those 37 are deliberate substrings for `.contains` matching. Some are labels nobody can
 find. The repository could not tell which, because it had no notion of a citation.
 
+## If you are opening an issue or a pull request
+
+**What you have to provide.** One sentence, in the body, either citing Logic or saying you are not
+talking about it.
+
+* Stating something about Logic: a `logic-canon://<source>/<locale>#value` reference AND the value
+  in quotes. The forms and what each proves are below under *A citation without a key*.
+* Stating nothing about Logic: the sentence `This pull request body states no fact about Logic`
+  (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence inside a
+  fenced code block or an HTML comment is deliberately not read, and the checker says so by name.
+* A change that touches a Logic-facing path cannot use the opt-out, whatever its description says.
+  The prefixes are in `LOGIC-FACING.json` and the check derives this from the files, not the words.
+
+**What the checker establishes.** That a reference resolves against bytes committed to this
+repository, and that a quoted value's digest matches Apple's at the pinned Logic build. Nothing
+more. It is a check on the FORM of your evidence: it never ran Logic, it cannot tell you your
+sentence about Logic is true, and passing it is not a statement that the change works.
+
+**What stays human, or stays for runtime.** Whether the cited row is the RIGHT row. Whether a
+`canon_absent` declaration is honest. Anything about how Logic behaves rather than what it ships —
+that is measured live and recorded under `docs/observations/`, and no gate here does it for you.
+
+**An issue is advised; a pull request is gated.** `canon-issue.yml` leaves ONE note on an issue and
+edits that same note as you edit the body; nothing is blocked and no label is applied. A pull
+request is different: `pr-policy` is a required check and a refusal blocks the merge. If the
+checker itself could not finish — a corpus it could not read, a crash — it says so and blames
+nobody; that is a repository-side failure, not a finding about your text.
+
+**Where CI-integrity policy lives.** Not here. `.github/ci/` holds the four lists about this
+repository's own CI — which jobs must gate, which commands must run, which guards may skip, which
+guards have no test — owned by `Scripts/check-every-ci-job-is-required.py`. Editing one of those
+does not go through the citation rule, because none of them rests on a row of Apple's data.
+
 ## The rule
 
 1. A fact about Logic is **cited** to bytes inside Logic, by a reference that resolves and a quoted
@@ -55,8 +88,16 @@ check time   (needs nothing)   resolve a citation against what was committed
 | `index/<source>.tsv` | key → digest, for keys something in this repository actually cites |
 | `absence/<source>.<locale>.u32` | the sorted 32-bit digest prefixes of **every** value in that corpus |
 | `WITHOUT-CANON.json` | records written before the rule. May only shrink. |
-| `CI-SKIPS.json` | how many cases each guard may SKIP under CI, and why. A skip exits 0, so a guard that ran nothing reports the same as one that passed. May only shrink |
 | `PROSE-NUMBERS.json` | numbers this README may state that no artifact and no record carries, and why each has none. May only shrink |
+| `NOT-A-RECORD.json` | files under `docs/observations/` that are not observation records. May only shrink |
+
+Four more lists were here until #951: `CI-GATE.json`, `CI-SKIPS.json`, `GUARDS-WITHOUT-A-TEST.json`
+and `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`. They hold job names, guard names and test counts —
+nothing about Logic — and they now live in `.github/ci/`, ratcheted by
+`Scripts/check-every-ci-job-is-required.py`. **Where CI-integrity policy lives is `.github/ci/`.**
+They were here only because the merge-base comparison happened to be written in this directory's
+guard, and the cost was real: a contributor correcting a guard name had to satisfy the citation
+rule over a change that rests on no row of Apple's data.
 
 ### A citation without a key
 
@@ -259,11 +300,16 @@ logic-canon://<source>/<unit>/<locale>/<key>#<field>
 
 ## Where it is enforced
 
-| | |
-|---|---|
-| files in the tree | `Scripts/check-canon-citations.py`, run by `run-repo-guards.py` in CI |
-| a pull request body | the `canon-citations-in-the-pull-request` CI job, which reads the body |
-| issue bodies | the issue templates require it; nothing checks an issue mechanically yet |
+| where | what runs | what happens when it refuses |
+|---|---|---|
+| files in the tree | `Scripts/check-canon-citations.py`, discovered and run by `run-repo-guards.py` in `ci.yml`'s macOS `test` job | the job fails; `build` needs it, so the merge is blocked |
+| the files a pull request touches | the same script with `--changed pr-changed.txt`, in `pr-policy.yml` | `pr-policy` is a required context, so the merge is blocked |
+| a pull request body | the same script with `--text pr-body.md --changed pr-changed.txt`, in `pr-policy.yml` | the same |
+| issue bodies | `Scripts/canon_issue_bot.py`, run by `canon-issue.yml` on `issues: [opened, edited]` | **nothing is blocked.** It leaves one advisory note and edits that same note as the body changes |
+
+The pull-request row named a `canon-citations-in-the-pull-request` job until #950 moved the body
+check into `pr-policy.yml`; the job is gone and the requirement is not. The issue row said
+"nothing checks an issue mechanically yet" until #951.
 
 A pull request body is not a file, so the tree-wide sweep could not see it — and the two documents
 a change is actually reviewed through were exempt from the rule they carry. That is the

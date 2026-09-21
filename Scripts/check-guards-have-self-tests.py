@@ -51,9 +51,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # It was a set literal HERE until 2026-09-18, and "may only shrink" was therefore a comment: a
 # Python constant is compared against nothing outside the commit that edits it, so a change could
 # add a guard with no test and add its name in the same diff. An outside review did exactly that
-# and every check stayed green. It lives in a JSON file now, and
-# `Scripts/check-canon-citations.py`'s RATCHETS table compares it against `git merge-base`.
-KNOWN_BARE_PATH = os.path.join(REPO, "docs", "canon", "GUARDS-WITHOUT-A-TEST.json")
+# and every check stayed green. It lives in a JSON file now, compared against `git merge-base` by
+# `Scripts/check-every-ci-job-is-required.py`'s RATCHETS table -- the CI-integrity owner. It was
+# `check-canon-citations.py` until #951: this file names guards, not rows of Apple's data, and a
+# contributor who could not run Logic had to satisfy the Canon gate to correct it.
+KNOWN_BARE_PATH = os.path.join(REPO, ".github", "ci", "GUARDS-WITHOUT-A-TEST.json")
 
 
 def _known_bare() -> set:

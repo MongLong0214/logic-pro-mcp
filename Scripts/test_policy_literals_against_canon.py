@@ -126,7 +126,10 @@ class Ratchet(unittest.TestCase):
                         os.path.join(root, "docs", "observations"))
         for name in ("logic_canon.py", "nibarchive.py",
                      "check-policy-literals-against-canon.py",
-                     "check-canon-citations.py", "check-labelsets-are-derived.py"):
+                     "check-canon-citations.py", "check-labelsets-are-derived.py",
+                     # `check-canon-citations.py` imports the shared merge-base comparison by
+                     # path. Without it the copy does not run a weaker guard, it does not run.
+                     "ratchet.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         policy_rel = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
         for path in guard.swift_sources():
@@ -342,7 +345,10 @@ class MissingEvidenceIsRefused(unittest.TestCase):
                         os.path.join(root, "docs", "observations"))
         for name in ("logic_canon.py", "nibarchive.py",
                      "check-policy-literals-against-canon.py",
-                     "check-canon-citations.py", "check-labelsets-are-derived.py"):
+                     "check-canon-citations.py", "check-labelsets-are-derived.py",
+                     # `check-canon-citations.py` imports the shared merge-base comparison by
+                     # path. Without it the copy does not run a weaker guard, it does not run.
+                     "ratchet.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         for path in guard.swift_sources():
             target = os.path.join(root, os.path.relpath(path, REPO))

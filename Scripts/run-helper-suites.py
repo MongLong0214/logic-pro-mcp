@@ -17,7 +17,7 @@ NOTHING. `python3 Scripts/logic_bounce_ui_test.py` was silent while three of its
 
 The runner is in `ci.yml`'s macos-15 `test` job, where the AppKit-dependent
 `test_logic_key_event.py` can run. The Ubuntu `guards` job retains only shell guards, so it stays
-platform-independent. `docs/canon/CI-GATE.json` names this helper command, so it cannot be dropped
+platform-independent. `.github/ci/CI-GATE.json` names this helper command, so it cannot be dropped
 without `check-every-ci-job-is-required.py` noticing.
 
 WHAT THIS DOES, AND WHAT IT DOES NOT

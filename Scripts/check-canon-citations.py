@@ -72,6 +72,23 @@ def _load_canon():
 
 canon = _load_canon()
 
+
+def _load_ratchet():
+    """The merge-base comparison, shared with `check-every-ci-job-is-required.py`.
+
+    Loaded the same way `logic_canon` is, because `Scripts/` is not a package and
+    these guards run as scripts from the repository root. It knows nothing about
+    Logic: the CI-integrity owner uses it without loading the corpus.
+    """
+    path = os.path.join(REPO, "Scripts", "ratchet.py")
+    spec = importlib.util.spec_from_file_location("ratchet_for_guard", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ratchet = _load_ratchet()
+
 #: Records that predate the canon axis. This set may only SHRINK -- a new record joining it is
 #: refused. Written as identities rather than a count because a count hides a swap, which is the
 #: same reasoning `docs/observations/RATCHETS.json` is built on.
@@ -118,86 +135,23 @@ def load_without_canon() -> set:
 POLICY_CLASSIFICATION = os.path.join(REPO, "docs", "canon", "POLICY-LITERALS.json")
 
 
+#: One reader of this repository's history, shared with the CI-integrity owner. Its `note()` says
+#: a thing once: two rules ratchet MANIFEST.json, and a note repeated per caller reads as two
+#: findings rather than one fact about the branch.
+_HISTORY = ratchet.History(REPO)
+R = ratchet.Ratchet
+
+
 def _merge_base():
-    """The commit this branch forked from, or None when it cannot be read.
-
-    A waiver list that may only shrink has to be compared against something OUTSIDE the branch.
-    Comparing it against its own file is what a same-commit edit defeats: add a record at schema 1
-    AND add it to the waiver in one commit, and a file-only check sees a consistent tree. Same
-    reasoning as `check-observation-ratchets.py`, and it fails outright under CI when the base is
-    unreadable rather than degrading to the weaker comparison.
-    """
-    for ref in ("origin/main", "main"):
-        found = subprocess.run(["git", "merge-base", "HEAD", ref],
-                               cwd=REPO, capture_output=True, text=True)
-        if found.returncode == 0 and found.stdout.strip():
-            return found.stdout.strip()
-    return None
-
-
-def _git(*args):
-    out = subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True)
-    return out.stdout.strip() if out.returncode == 0 else None
-
-
-def _show_json(sha, path):
-    out = subprocess.run(["git", "-C", REPO, "show", f"{sha}:{path}"],
-                         capture_output=True, text=True)
-    if out.returncode != 0:
-        return None
-    try:
-        return json.loads(out.stdout)
-    except json.JSONDecodeError:
-        return None
+    return _HISTORY.merge_base()
 
 
 def _at_base(base, path):
-    """The ratcheted file as the branch departed from it, or (None, why) dressed as None + a note.
-
-    The merge base not carrying the file is NOT the same as the file being new, and this returned
-    None for both and the caller skipped. `check-observation-ratchets.py`, one directory over,
-    already worked out why that is wrong, and this is the same walk:
-
-      * A delete-then-restore pair reaches a branch too. Treating it as a bootstrap adopts whatever
-        the restored file says as the permanent base.
-      * `--full-history`, or `rev-list` simplifies through a TREESAME merge and follows one parent,
-        so a delete on a side branch hides what the other parent did.
-      * In a shallow clone `rev-list` exits 0 with no output, so "no ancestor carries it" is not a
-        reading anyone can trust.
-
-    The window this closes is not hypothetical: every ratchet introduced on this branch was
-    invisible for exactly this reason, which is how rule 14 and rule 7 came to contradict each
-    other without anything firing.
-    """
-    found = _show_json(base, path)
-    if found is not None:
-        return found
-    history = _git("rev-list", "--full-history", "--max-count=200", base, "--", path)
-    for sha in (history or "").split():
-        prior = _show_json(sha, path)
-        if prior is not None:
-            _note(f"{path} is absent at the merge base {base[:8]}; ratcheted against "
-                  f"{sha[:8]}, the last ancestor carrying it.")
-            return prior
-    if _git("rev-parse", "--is-shallow-repository") == "true":
-        _note(f"{path}: history is truncated (shallow clone), so 'no ancestor carries it' is not "
-              f"a reading anyone can trust. Check out with fetch-depth: 0.")
-        return None
-    _note(f"{path} is carried by neither the merge base {base[:8]} nor any ancestor, so this is "
-          f"the commit that introduces it and its ratchet does not run here. It runs on the next "
-          f"branch -- a contradiction introduced with a new list is invisible until then.")
-    return None
-
-
-_SAID = set()
+    return _HISTORY.at_base(base, path)
 
 
 def _note(message):
-    """Said once. Two rules ratchet MANIFEST.json, and a note repeated per caller reads as two
-    findings rather than one fact about the branch."""
-    if message not in _SAID:
-        _SAID.add(message)
-        print(f"  note: {message}", file=sys.stderr)
+    _HISTORY.note(message)
 
 
 def _corpus_members(blob, key):
@@ -309,78 +263,49 @@ def _labelset_waiver_members(blob, key):
 #: would have had nowhere to go. It had not fired only because those two files do not exist at the
 #: merge base of the branch that introduces them; it fires on the next one.
 RATCHETS = (
-    ("docs/canon/WITHOUT-CANON.json", "records", "shrink",
-     "records predating the canon axis"),
-    ("docs/canon/POLICY-LITERALS.json", "literals", "shrink",
-     "literals classified as answered nowhere in Logic"),
-    ("docs/canon/NOT-A-RECORD.json", "files", "shrink",
-     "files in docs/observations that are declared not to be records"),
-    ("docs/canon/LOGIC-FACING.json", "prefixes", "grow",
-     "path prefixes whose changes may not use the opt-out"),
-
-    ("docs/canon/CI-GATE.json", "required_commands", "grow",
-     "commands the required CI gate must carry"),
-    ("docs/canon/PROSE-NUMBERS.json", "numbers", "shrink",
-     "numbers docs/canon/README.md may state with no artifact behind them", _key_members),
-    ("docs/canon/CI-SKIPS.json", "allowed", "shrink",
-     "cases guards are allowed to SKIP under CI", _skip_members),
-    ("docs/canon/MANIFEST.json", "sources", "grow",
-     "the (source, locale) corpora every absence proof searches", _corpus_members),
-    #: `LOGIC-FACING.json`'s `exceptions` is NOT here either, and for the same reason as the list
-    #: below: its entries are re-proved on every run. Rule 15 reads each excepted file and refuses
-    #: it if it carries a `logic-canon://` reference or quotes a value the pinned corpus holds, so
-    #: the bar an added entry clears is a property of the file, not a sentence about it. A
-    #: monotonic ratchet on top of that would forbid the repair and buy nothing -- and forbidding
-    #: the repair is what #937 is about.
-    #:
-    #: `LABELSETS-WITHOUT-A-ROW.json` WAS HERE as a `shrink` list, and that made the repository's
-    #: own documented path unreachable. `check-new-labelsets-name-a-row.py` offers a new LabelSet
-    #: two answers -- name a row in `derivedFrom`, or carry a waiver with a proof -- and rule 7
-    #: refused the second in the same run that accepted it. An outside review found the pair and
-    #: the code had already recorded this exact contradiction once, for LOGIC-FACING.json.
-    #:
-    #: What makes this list different from every other waiver here is that its entries are not
-    #: taken on trust for a moment. `check-new-labelsets-name-a-row.py:225` re-proves EVERY entry
-    #: on EVERY run -- `prove_absent` searches every ENGLISH corpus the manifest pins (measured
-    #: 2026-09-20: three of the 24, `nibstrings`, `quickhelp` and `strings`, because a waiver's
-    #: claim is that the canonical is the value of no row in English), and
-    #: `prove_composition` verifies each factor against the row's committed digest per locale -- and
-    #: that guard is discovered by `run-repo-guards.py`, run by the `guards` job, which `build`
-    #: needs and the ruleset requires. So the bar an added entry must clear is a proof against
-    #: Apple's own data, not a sentence. A monotonic ratchet on top of that adds no protection and
-    #: costs the only path a genuinely composed label has.
+    R("docs/canon/WITHOUT-CANON.json", "records", "shrink",
+      "records predating the canon axis", _ratchet_members),
+    R("docs/canon/POLICY-LITERALS.json", "literals", "shrink",
+      "literals classified as answered nowhere in Logic", _ratchet_members),
+    R("docs/canon/NOT-A-RECORD.json", "files", "shrink",
+      "files in docs/observations that are declared not to be records", _ratchet_members),
+    R("docs/canon/LOGIC-FACING.json", "prefixes", "grow",
+      "path prefixes whose changes may not use the opt-out", _ratchet_members),
+    R("docs/canon/PROSE-NUMBERS.json", "numbers", "shrink",
+      "numbers docs/canon/README.md may state with no artifact behind them", ratchet.key_members),
+    R("docs/canon/MANIFEST.json", "sources", "grow",
+      "the (source, locale) corpora every absence proof searches", _corpus_members),
+    #: `LOGIC-FACING.json`'s `exceptions` is NOT here, and neither is `LABELSETS-WITHOUT-A-ROW`:
+    #: their entries are re-proved on every run. Rule 15 reads each excepted file and refuses it
+    #: if it carries a `logic-canon://` reference or quotes a value the pinned corpus holds, and
+    #: `check-new-labelsets-name-a-row.py:225` re-proves EVERY waiver against Apple's own data --
+    #: `prove_absent` searches every ENGLISH corpus the manifest pins, `prove_composition` verifies
+    #: each factor against the row's committed digest per locale. The bar an added entry clears is
+    #: a property of the file, not a sentence about it. A monotonic ratchet on top of that would
+    #: forbid the repair and buy nothing -- and `LABELSETS-WITHOUT-A-ROW.json` WAS here as a
+    #: `shrink` list, which made the repository's own documented path unreachable: the guard
+    #: offered a new LabelSet two answers and rule 7 refused the second in the same run that
+    #: accepted it.
     #:
     #: The ratchet stays on every other waiver list, where the entries ARE taken on trust.
-    #: `not_required` was NOT here, and `check-every-ci-job-is-required.py`'s own comment says the
-    #: list was moved into a file "so the merge-base ratchet can see it". Only `required_commands`
-    #: was listed, so it could not: a change could add a CI job that always fails, waive it in
-    #: `not_required` in the same commit, and both guards passed. A waiver for "this job does not
-    #: have to be required" is the most load-bearing waiver in the repository, because what it
-    #: waives is the gate itself.
-    ("docs/canon/CI-GATE.json", "not_required", "shrink",
-     "CI jobs that are allowed not to gate a merge", _key_members),
-    #: This file DOES NOT EXIST at the time of writing, and that was the hole: the guard reads it
-    #: (`check-ax-comparisons-use-labelsets.py`) and skips whatever it names, so anyone could
-    #: create it in the same change as the comparison it excuses and nothing compared it to
-    #: anything. A ratchet entry on an absent file is not a mistake -- `_members` returns an empty
-    #: set for a missing file, so the first version of it is measured against nothing and every
-    #: entry in it is a growth that rule 7 refuses.
+    #:
+    #: The file below DOES NOT EXIST at the time of writing, and that was the hole: the guard
+    #: reads it (`check-ax-comparisons-use-labelsets.py`) and skips whatever it names, so anyone
+    #: could create it in the same change as the comparison it excuses and nothing compared it to
+    #: anything. A ratchet entry on an absent file is not a mistake -- the comparison begins the
+    #: moment somebody creates it, and every entry in the first version is a growth rule 7 refuses.
     #: The key is `literals` because that is what `check-ax-comparisons-use-labelsets.py::waived`
-    #: reads. A ratchet aimed at a key the consumer does not use guards a list nothing obeys, and
-    #: the shape check would report it as a renamed key rather than as the mismatch it is.
-    ("docs/canon/AX-COMPARISON-WAIVERS.json", "literals", "shrink",
-     "AX comparisons waived from using a LabelSet", _key_members),
-    #: Was a Python set literal in the guard that reads it, so "may only shrink" was a comment and
-    #: a change could add a guard with no test and waive it in the same diff.
-    ("docs/canon/GUARDS-WITHOUT-A-TEST.json", "guards", "shrink",
-     "guards with no test that drives them", _key_members),
-    #: Measured by `Scripts/mutation-sweep-guard-tests.py`, not declared. A guard leaves this list
-    #: by gaining a case that drives its entry point at an input that must fail, and the sweep
-    #: re-measures; a guard cannot be added to it to excuse a test that was never written, because
-    #: rule 7 refuses the growth.
-    ("docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json", "guards", "shrink",
-     "guards whose test does not notice the gate being removed", _key_members),
+    #: reads. A ratchet aimed at a key the consumer does not use guards a list nothing obeys.
+    R("docs/canon/AX-COMPARISON-WAIVERS.json", "literals", "shrink",
+      "AX comparisons waived from using a LabelSet", ratchet.key_members),
 )
+
+#: THE CI-ONLY LISTS ARE NOT HERE ANY MORE. `CI-GATE.json`, `CI-SKIPS.json`,
+#: `GUARDS-WITHOUT-A-TEST.json` and `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` say nothing about
+#: Logic: they are the CI gate's own topology and debt, and they were ratcheted here only because
+#: this is where the comparison happened to live. They moved to `.github/ci/` with their owner,
+#: `check-every-ci-job-is-required.py`, which declares the same ratchets over the new paths and
+#: names the old ones as `legacy` so the relocation is compared rather than bootstrapped (#951).
 
 
 def check_waivers_only_shrink(failures: list) -> None:
@@ -389,127 +314,12 @@ def check_waivers_only_shrink(failures: list) -> None:
     Compared against `git merge-base`, not against the file itself, because a file-only check is
     what a same-commit edit defeats: add a record at schema 1 AND add it to the waiver in one
     commit, and the tree is internally consistent.
-    """
-    base = _merge_base()
-    under_ci = os.environ.get("CI") == "true"
-    if base is None:
-        message = ("the merge base could not be read, so a ratcheted list can only be compared "
-                   "against its own file -- which a same-commit edit defeats")
-        if under_ci:
-            failures.append(f"canon ratchets: {message}. A shallow clone has no base; "
-                            f"CI must check out with fetch-depth: 0.")
-        else:
-            print(f"  note: {message}", file=sys.stderr)
-        return
 
-    for entry in RATCHETS:
-        path, key, direction, what = entry[:4]
-        members = entry[4] if len(entry) > 4 else _ratchet_members
-        before = _at_base(base, path)
-        if before is None:
-            # A list no ancestor carries is unratcheted on the branch that introduces it. For a
-            # `grow` list that is necessary -- rule 14 refuses a Logic-facing directory that is not
-            # in LOGIC-FACING.json, so the commit adding the directory must be able to add the
-            # prefix, and refusing it would make the first such change unmergeable.
-            #
-            # For a `shrink` list it is the abuse itself. A waiver list may only shrink, and a NEW
-            # waiver list arriving pre-populated is a growth from nothing that nobody is asked
-            # about. `docs/canon/AX-COMPARISON-WAIVERS.json` was exactly this: the AX-comparison
-            # guard already read it and skipped whatever it named, the file did not exist, and it
-            # was in no ratchet -- so creating it in the same change as the comparison it excuses
-            # cost nothing. An empty base is the honest comparison for a waiver: every entry in the
-            # first version is new, because before it there was no permission at all.
-            if direction != "shrink":
-                continue
-            if not os.path.exists(os.path.join(REPO, path)):
-                # Absent on both sides. A waiver list that does not exist is the good state, and
-                # the shape check below would otherwise read "one side does not have the key" as a
-                # renamed key. The comparison begins the moment somebody creates the file.
-                continue
-            # A list that MOVED is not a list that appeared. `KNOWN_BARE` lived as a Python set in
-            # the guard that read it, where "may only shrink" was a comment and nothing compared
-            # it; moving it into a file is what makes the ratchet possible, and refusing the move
-            # would keep every such list in code forever.
-            #
-            # `migrated_from` is checked, not believed: the named path is read AT THE MERGE BASE
-            # and every member of the new list must appear there as a quoted string. A member the
-            # predecessor did not carry is still a growth from nothing. That is the difference
-            # between a decision and a sentence -- the file cannot authorise itself.
-            #
-            # And before that, the distinction the first version of this rule missed: a `shrink`
-            # list is either a set of PERMISSIONS or a CENSUS of measured debt, and only the first
-            # can excuse anything. What separates them is not what the file says about itself --
-            # it is whether any guard READS it to skip something. `AX-COMPARISON-WAIVERS.json` is
-            # read by `check-ax-comparisons-use-labelsets.py`, which skips whatever it names, so a
-            # new entry silences a real finding and its first version must be empty.
-            # `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` is read by no guard at all: it records what
-            # `mutation-sweep-guard-tests.py` measured, and its first version is that measurement.
-            # Refusing a census is refusing somebody for writing down what is already true.
-            #
-            # Checked by looking, not by asking the file.
-            readers = sorted(
-                os.path.basename(g) for g in glob.glob(os.path.join(REPO, "Scripts", "check-*.py"))
-                if os.path.basename(g) != os.path.basename(__file__)
-                and os.path.basename(path) in open(g, encoding="utf-8", errors="replace").read())
-            if not readers and os.path.exists(os.path.join(REPO, path)):
-                _note(f"{path} is new and no guard reads it to exempt anything, so it is a census "
-                      f"rather than a set of permissions. Its first version is the measurement; "
-                      f"the ratchet holds it to shrinking from the next branch on.")
-                continue
-            now_doc = _json(os.path.join(REPO, path), {})
-            origin = now_doc.get("migrated_from")
-            if origin:
-                was_text = _git("show", f"{base}:{origin}") or ""
-                if not was_text:
-                    failures.append(
-                        f"{path}: `migrated_from` names {origin!r}, which the merge base does not "
-                        f"carry. A move has a place it moved FROM, and this one cannot be checked.")
-                    continue
-                strays = sorted(m for m in members(now_doc, key)
-                                if f'"{m}"' not in was_text and f"'{m}'" not in was_text)
-                if strays:
-                    failures.append(
-                        f"{path}: {len(strays)} member(s) are not in {origin} at the merge base, so "
-                        f"they were not moved, they were added: {', '.join(strays[:6])}. A new "
-                        f"exemption lands as a growth however the file it lands in was created.")
-                    continue
-                _note(f"{path} was migrated from {origin}; every member is one that file already "
-                      f"carried at {base[:8]}, so the move is not a growth. The ratchet compares "
-                      f"against this file from the next branch on.")
-                continue
-            before = {key: []}
-            _note(f"{path} is carried by no ancestor of {base[:8]}. It is a waiver list, so its "
-                  f"first version is compared against an EMPTY set: a new list of exemptions is a "
-                  f"growth from nothing, not a bootstrap.")
-        now = _json(os.path.join(REPO, path), {})
-        if not isinstance(before.get(key), (list, dict)) or not isinstance(now.get(key), (list, dict)):
-            failures.append(
-                f"{path}: the list this ratchet compares lives under {key!r}, and one side does "
-                f"not have it. A renamed key makes the comparison silently empty.")
-            continue
-        was, is_now = members(before, key), members(now, key)
-        if not was and before.get(key):
-            # The extractor reads a SHAPE. Change the shape and it returns nothing, the comparison
-            # is empty, and the ratchet passes everything -- the failure mode this whole file is
-            # about. An empty reading of a non-empty value is a broken extractor, not a clean run.
-            failures.append(
-                f"{path}: the ratchet read no members out of a non-empty {key!r}. Its extractor "
-                f"no longer matches the file's shape, so the comparison would pass anything.")
-            continue
-        gained = sorted(is_now - was)
-        lost = sorted(was - is_now)
-        if direction == "shrink":
-            for member in gained:
-                failures.append(
-                    f"{path}: {member!r} was added to the list of {what}. That list may only "
-                    f"SHRINK. A change that breaks the rule and waives itself in the same commit "
-                    f"passes every check that reads only the tree.")
-        else:
-            for member in lost:
-                failures.append(
-                    f"{path}: {member!r} was removed from the list of {what}. That list may only "
-                    f"GROW -- it is a requirement, not a waiver, and dropping an entry quietly "
-                    f"removes a rule.")
+    The comparison itself is `Scripts/ratchet.py`, shared with the CI-integrity owner. What stays
+    here is WHICH Logic-facing lists are ratcheted and how their members are read.
+    """
+    ratchet.check(REPO, RATCHETS, failures, history=_HISTORY,
+                  owner=os.path.basename(__file__))
 
 
 #: Numbers under `sources.*.shape` and `sources.*.round_trip` that may move DOWN without the
@@ -1166,13 +976,18 @@ def _visible(body: str) -> str:
 def logic_facing_exceptions() -> set:
     """Files under a Logic-facing prefix that state no fact about Logic.
 
-    `docs/canon/` is a prefix, and four files under it hold job names, guard names, test counts and
-    the numbers a document may state. A change touching only those has no row of Apple's data to
-    cite and could not opt out either, so the only way through was to paste a citation that
+    `docs/canon/` is a prefix, and two files under it hold the numbers a document may state and the
+    paths that are not observation records. A change touching only those has no row of Apple's data
+    to cite and could not opt out either, so the only way through was to paste a citation that
     resolves and quote its value in the diff -- manufacturing evidence, which is the failure the
     citation rule exists to prevent. Measured twice on 2026-09-20 (#937): a four-line correction to
     `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` could not be made, and a new ratchet file was moved out
     of `docs/canon` for no reason but this rule.
+
+    The list was six entries until #951. The other four governed CI rather than Logic and moved to
+    `.github/ci/`, which is under no prefix here, so they need no exemption -- a file in the right
+    place beats a file with a note saying it is an exception, because the exemption is one rename
+    away from lapsing and the location is not.
 
     An empty or absent list is the STRICT direction -- everything under a prefix stays Logic-facing
     -- so it is read leniently here and the entries are proved below instead.

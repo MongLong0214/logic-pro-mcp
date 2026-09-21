@@ -493,7 +493,7 @@ class TheMigrationsOwnMutations(unittest.TestCase):
     """
 
     REAL_WORKFLOWS = os.path.join(REPO, ".github", "workflows")
-    REAL_POLICY = os.path.join(REPO, "docs", "canon", "CI-GATE.json")
+    REAL_POLICY = os.path.join(REPO, ".github", "ci", "CI-GATE.json")
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -666,6 +666,326 @@ class TheMigrationsOwnMutations(unittest.TestCase):
                    "  pr-policy:\n    env:\n      LPM_COVERAGE_MIN_LINE: \"0\"\n"
                    "    runs-on: ubuntu-latest\n")
         self._refuses("LPM_COVERAGE_MIN_LINE")
+
+
+class TheRatchetsOverTheCiLists(unittest.TestCase):
+    """Rule 7 for the four CI-only lists, which this guard owns since #951.
+
+    These cases lived in `test_canon_citations_guard.py` while `check-canon-citations.py` held the
+    ratchet table. They moved WITH the lists, because a ratchet with no case that watches it going
+    the wrong way is a comment: `GUARDS-WITHOUT-A-TEST.json` was a Python set literal for exactly
+    that reason until 2026-09-18, and an outside review added a bare guard and its waiver in one
+    diff with every check green.
+
+    The guard takes its repository root from `abspath(__file__)` and the comparison is against
+    `git merge-base`, so the fixture is a real repository with the guard INSIDE it -- driven by
+    its path in that root, never by changing the working directory.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="ci-ratchet-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "Scripts"))
+        for name in ("check-every-ci-job-is-required.py", "ratchet.py"):
+            shutil.copy2(os.path.join(REPO, "Scripts", name),
+                         os.path.join(self.root, "Scripts", name))
+        for parts in ((".github", "workflows"), (".github", "ci")):
+            shutil.copytree(os.path.join(REPO, *parts), os.path.join(self.root, *parts))
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.email", "t@example.com")
+        self._git("config", "user.name", "t")
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "base")
+
+    def _git(self, *args):
+        subprocess.run(("git", "-C", self.root) + args, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _run(self):
+        return subprocess.run(
+            [sys.executable, os.path.join(self.root, "Scripts",
+                                          "check-every-ci-job-is-required.py")],
+            capture_output=True, text=True)
+
+    def _list(self, name):
+        return os.path.join(self.root, ".github", "ci", name)
+
+    def _rewrite(self, name, mutate):
+        with open(self._list(name), encoding="utf-8") as handle:
+            body = json.load(handle)
+        mutate(body)
+        with open(self._list(name), "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+
+    # ---- the control -----------------------------------------------------------------------
+    def test_the_unmutated_copy_passes(self):
+        """Without this every case below passes on a guard that refuses its own fixture."""
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    # ---- CI-GATE.json: a requirement list, which may only GROW --------------------------------
+    def test_removing_from_a_requirement_list_fails(self):
+        self._rewrite("CI-GATE.json",
+                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only", result.stderr)
+        self.assertIn("CI-GATE", result.stderr)
+
+    # ---- CI-SKIPS.json: an allowance, which may only SHRINK -----------------------------------
+    # A skip exits 0, so `run-repo-guards.py` reports ok for a check that ran nothing. The members
+    # are one per ALLOWED SKIP rather than one per guard, so the number moves in the right
+    # direction.
+    def _a_guard_that_may_skip(self):
+        with open(self._list("CI-SKIPS.json"), encoding="utf-8") as handle:
+            return sorted(json.load(handle)["allowed"])[0]
+
+    def test_raising_a_skip_allowance_fails(self):
+        name = self._a_guard_that_may_skip()
+        self._rewrite("CI-SKIPS.json", lambda body: body["allowed"][name].update(
+            skips=body["allowed"][name]["skips"] + 1))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("CI-SKIPS", result.stderr)
+        self.assertIn("may only", result.stderr)
+
+    def test_lowering_a_skip_allowance_passes(self):
+        """The direction that must stay open, or the allowance can never be paid down."""
+        name = self._a_guard_that_may_skip()
+        self._rewrite("CI-SKIPS.json", lambda body: body["allowed"][name].update(
+            skips=body["allowed"][name]["skips"] - 1))
+        result = self._run()
+        self.assertNotIn("CI-SKIPS", result.stderr)
+
+    def test_a_new_guard_claiming_a_skip_fails(self):
+        self._rewrite("CI-SKIPS.json", lambda body: body["allowed"].update(
+            {"Scripts/check-something-new.py": {"skips": 1, "why": "because"}}))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("check-something-new.py", result.stderr)
+
+    # ---- the two debt lists -------------------------------------------------------------------
+    def test_a_guard_arriving_without_a_test_fails(self):
+        self._rewrite("GUARDS-WITHOUT-A-TEST.json", lambda body: body["guards"].update(
+            {"check-something-new.py": "no test yet"}))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("GUARDS-WITHOUT-A-TEST", result.stderr)
+
+    def test_a_guard_arriving_blind_to_its_own_gate_fails(self):
+        self._rewrite("GUARD-TESTS-BLIND-TO-THEIR-GUARD.json", lambda body: body["guards"].update(
+            {"check-something-new.py": "its test does not notice the gate going away"}))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("GUARD-TESTS-BLIND-TO-THEIR-GUARD", result.stderr)
+
+
+class TheMigrationIsComparedNotBootstrapped(unittest.TestCase):
+    """#951 M01-M03, M05, M06: the base carries the OLD path and the tree carries the new one.
+
+    This is the shape the relocation actually has, and the one where a ratchet quietly stops
+    existing: a list absent at the merge base is unratcheted on the branch that introduces it, and
+    the branch that MOVES a requirement is exactly the branch where losing one is easiest. The
+    class above starts from a base that already carries `.github/ci/` -- the follow-up branch, M06
+    -- so between them the ratchet is driven from both starting states.
+
+    `legacy` is declared by the owner and never read out of the moved file. A policy that names its
+    own predecessor chooses what it is compared against.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="ci-migration-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "Scripts"))
+        for name in ("check-every-ci-job-is-required.py", "ratchet.py"):
+            shutil.copy2(os.path.join(REPO, "Scripts", name),
+                         os.path.join(self.root, "Scripts", name))
+        shutil.copytree(os.path.join(REPO, ".github", "workflows"),
+                        os.path.join(self.root, ".github", "workflows"))
+        # THE BASE CARRIES THE OLD PATHS, and only those.
+        self.old = os.path.join(self.root, "docs", "canon")
+        os.makedirs(self.old)
+        self.names = sorted(os.listdir(os.path.join(REPO, ".github", "ci")))
+        for name in self.names:
+            shutil.copy2(os.path.join(REPO, ".github", "ci", name),
+                         os.path.join(self.old, name))
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.email", "t@example.com")
+        self._git("config", "user.name", "t")
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "base: the lists under docs/canon")
+        # The working tree carries the new ones. This is the migration commit, uncommitted.
+        self.new = os.path.join(self.root, ".github", "ci")
+        os.makedirs(self.new)
+        for name in self.names:
+            shutil.move(os.path.join(self.old, name), os.path.join(self.new, name))
+
+    def _git(self, *args):
+        subprocess.run(("git", "-C", self.root) + args, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _run(self, **env):
+        return subprocess.run(
+            [sys.executable, os.path.join(self.root, "Scripts",
+                                          "check-every-ci-job-is-required.py")],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+
+    def _rewrite(self, name, mutate):
+        path = os.path.join(self.new, name)
+        with open(path, encoding="utf-8") as handle:
+            body = json.load(handle)
+        mutate(body)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+
+    def test_an_exact_relocation_passes_and_says_what_it_compared(self):
+        """M01. Passing is not enough: a ratchet that skipped would also pass, and the note is the
+        only way to tell the two apart from outside."""
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name in self.names:
+            self.assertIn(f"compared against docs/canon/{name}", result.stderr,
+                          f"{name} was not compared against the path it moved from")
+
+    def test_adding_a_waiver_while_relocating_fails(self):
+        """M02. The move is not a fresh start for the allowance."""
+        self._rewrite("CI-SKIPS.json", lambda body: body["allowed"].update(
+            {"Scripts/check-something-new.py": {"skips": 1, "why": "because"}}))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("check-something-new.py", result.stderr)
+
+    def test_removing_a_mandatory_command_while_relocating_fails(self):
+        """M03. A migration that removes a requirement is a deletion wearing its name."""
+        self._rewrite("CI-GATE.json",
+                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only", result.stderr)
+
+    def test_a_renamed_key_is_an_error_not_an_empty_set(self):
+        """M04. `required_commands` read under another name yields no members, and an empty set
+        compares clean against anything if nobody notices it is empty."""
+        self._rewrite("CI-GATE.json", lambda body: body.update(
+            commands=body.pop("required_commands")))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        # Named, so the case cannot pass on some other refusal the same edit happens to trigger.
+        self.assertIn("no `required_commands`", result.stderr)
+
+    def test_a_corrupt_policy_is_an_error_not_a_pass(self):
+        """M04, the other half."""
+        with open(os.path.join(self.new, "CI-GATE.json"), "w", encoding="utf-8") as handle:
+            handle.write("{ not json")
+        result = self._run()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_delete_then_restore_does_not_become_the_new_base(self):
+        """M05. `at_base` returned None both when a file is NEW and when the base does not carry
+        it, and the caller skipped for both -- so deleting a list and restoring it with anything
+        written in handed the ratchet whatever the restored file said."""
+        self._git("rm", "-q", "-r", "--cached", "docs/canon")
+        self._git("commit", "-q", "-m", "delete the lists")
+        self._rewrite("CI-SKIPS.json", lambda body: body["allowed"].update(
+            {"Scripts/check-something-new.py": {"skips": 1, "why": "because"}}))
+        result = self._run()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("last ancestor carrying it", result.stderr)
+
+    def test_a_shallow_checkout_under_ci_fails_rather_than_degrading(self):
+        """M05, the other half. In a shallow clone `rev-list` exits 0 with no output, so "no
+        ancestor carries it" is not a reading anyone can trust."""
+        shutil.rmtree(os.path.join(self.root, ".git"), ignore_errors=True)
+        result = self._run(CI="true")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+
+class TheTwoOwnersFailIndependently(unittest.TestCase):
+    """#951 M07-M09: a defect in one owner's subject does not need the other owner to diagnose it.
+
+    Relocating JSON while keeping the coupling would pass every case above and fail this one. The
+    fixture carries BOTH owners over one tree, so each assertion is about the same repository
+    state seen by two guards rather than about two fixtures chosen to agree.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="two-owners-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "Scripts"))
+        os.makedirs(os.path.join(self.root, "docs", "observations"))
+        for name in ("check-every-ci-job-is-required.py", "check-canon-citations.py",
+                     "ratchet.py", "logic_canon.py", "nibarchive.py"):
+            shutil.copy2(os.path.join(REPO, "Scripts", name),
+                         os.path.join(self.root, "Scripts", name))
+        for parts in ((".github", "workflows"), (".github", "ci"), ("docs", "canon")):
+            shutil.copytree(os.path.join(REPO, *parts), os.path.join(self.root, *parts))
+        with open(os.path.join(self.root, "docs", "canon", "WITHOUT-CANON.json"),
+                  "w", encoding="utf-8") as handle:
+            json.dump({"records": ["docs/observations/2000-01-01-seeded.json"]}, handle)
+        self.seeded = os.path.join(self.root, "docs", "observations",
+                                   "2000-01-01-seeded.json")
+        with open(self.seeded, "w", encoding="utf-8") as handle:
+            json.dump({"schema": 1, "id": "seeded"}, handle)
+        for args in (("init", "-q", "-b", "main"), ("config", "user.email", "t@example.com"),
+                     ("config", "user.name", "t"), ("add", "-A"), ("commit", "-q", "-m", "base")):
+            subprocess.run(("git", "-C", self.root) + args, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _run(self, script):
+        return subprocess.run([sys.executable, os.path.join(self.root, "Scripts", script)],
+                              capture_output=True, text=True)
+
+    def _ci(self):
+        return self._run("check-every-ci-job-is-required.py")
+
+    def _canon(self):
+        return self._run("check-canon-citations.py")
+
+    def test_the_unmutated_tree_passes_both(self):
+        """Without this, either assertion below could be reporting a fixture neither owner
+        accepts."""
+        self.assertEqual(self._ci().returncode, 0, self._ci().stderr)
+        self.assertEqual(self._canon().returncode, 0, self._canon().stderr)
+
+    def test_a_ci_policy_defect_fails_the_ci_owner_and_not_canon(self):
+        """M07. Nothing about Logic changed, so the Canon gate has nothing to say -- and before
+        this split it would have been the gate a contributor had to satisfy to fix a job name."""
+        path = os.path.join(self.root, ".github", "ci", "CI-SKIPS.json")
+        with open(path, encoding="utf-8") as handle:
+            body = json.load(handle)
+        body["allowed"]["Scripts/check-something-new.py"] = {"skips": 1, "why": "because"}
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+        ci = self._ci()
+        self.assertEqual(ci.returncode, 1, ci.stdout + ci.stderr)
+        self.assertIn("check-something-new.py", ci.stderr)
+        canon = self._canon()
+        self.assertEqual(canon.returncode, 0,
+                         "a CI-topology defect made the Canon gate fail:\n" + canon.stderr)
+
+    def test_a_citation_defect_fails_canon_and_not_the_ci_owner(self):
+        """M08. The converse, and the one that says the coupling is gone in both directions."""
+        with open(os.path.join(self.root, "docs", "observations",
+                               "2026-09-21-new.json"), "w", encoding="utf-8") as handle:
+            json.dump({"schema": 1, "id": "new"}, handle)
+        canon = self._canon()
+        self.assertEqual(canon.returncode, 1, canon.stdout + canon.stderr)
+        ci = self._ci()
+        self.assertEqual(ci.returncode, 0,
+                         "a citation defect made the CI-integrity gate fail:\n" + ci.stderr)
+
+    def test_both_owners_are_discovered_by_the_runner_that_ci_invokes(self):
+        """M09. `CI-GATE.json` requires `python3 Scripts/run-repo-guards.py`, and that runner
+        discovers by FILENAME. Extracting an owner into a file the runner does not discover is how
+        a required execution contract becomes a file nobody runs."""
+        spec = importlib.util.spec_from_file_location(
+            "repo_guards_under_test", os.path.join(REPO, "Scripts", "run-repo-guards.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        discovered = {os.path.basename(p) for p in runner.discovered()}
+        for name in ("check-every-ci-job-is-required.py", "check-canon-citations.py",
+                     "test_every_ci_job_is_required.py", "test_canon_citations_guard.py"):
+            self.assertIn(name, discovered)
 
 
 if __name__ == "__main__":

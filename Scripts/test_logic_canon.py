@@ -587,7 +587,7 @@ class LocatingAStringForCitation(unittest.TestCase):
     as "uncitable" would have declared a shipped string absent.
 
     Driven over ROWS rather than over Logic, deliberately. A case needing Logic could not run in
-    CI, and `docs/canon/CI-SKIPS.json` is shrink-only -- adding a fifth skip is admitting debt,
+    CI, and `.github/ci/CI-SKIPS.json` is shrink-only -- adding a fifth skip is admitting debt,
     which is the ratchet working rather than a wall to route around.
     """
 

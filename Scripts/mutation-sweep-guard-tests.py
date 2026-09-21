@@ -35,7 +35,7 @@ Usage:
   mutation-sweep-guard-tests.py --dry-run  # what it would measure, and what it would leave out
 
 Exit 0 whatever it finds: this MEASURES, it does not gate. The gate is
-`docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`, which the merge-base ratchet holds to shrinking.
+`.github/ci/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`, which the merge-base ratchet holds to shrinking.
 """
 import importlib.util
 import json
@@ -51,12 +51,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #: because a run that quietly leaves two guards out of its denominator is reporting a number for a
 #: set it chose.
 #:
-#: FULL SWEEP, 2026-09-20: 29 of 29 caught, both of these included. That number is the whole
-#: repository at this commit, and it is written here rather than in
-#: `docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` -- whose own `not_swept` block and
-#: `how_to_reproduce` line are stale for the same reason -- because a change touching
-#: `docs/canon/` may not use the citation opt-out and there is no row of Apple's data a sweep
-#: result rests on. Filed as #937.
+#: The last FULL sweep's result lives in `.github/ci/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json` and is
+#: NOT repeated here. It used to be: that file sat under `docs/canon/`, a change touching it could
+#: not use the citation opt-out, and there is no row of Apple's data a sweep result rests on, so
+#: the number was written where it could be corrected (#937). `ac67c770` (#938) added the exception
+#: that let the file be corrected and corrected it in the same commit -- which left this comment
+#: holding a second copy, and a record on that commit still saying the file was stale. #951 took
+#: the file out of `docs/canon/` entirely, so the reason is gone and so is the copy.
 SLOW = {"check-canon-citations.py", "check-policy-literals-against-canon.py"}
 
 _spec = importlib.util.spec_from_file_location(

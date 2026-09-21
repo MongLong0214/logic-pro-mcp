@@ -71,7 +71,10 @@ class GuardBehaviour(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         os.makedirs(os.path.join(self.root, "Scripts"))
         os.makedirs(os.path.join(self.root, "docs", "observations"))
-        for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py"):
+        # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
+        # fixture without it does not run a weaker guard, it runs no guard at all.
+        for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
+                     "ratchet.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -311,18 +314,13 @@ class GuardBehaviour(unittest.TestCase):
         result = self.run_guard()
         self.assertNotIn("LOGIC-FACING", result.stderr)
 
-    def test_removing_from_a_requirement_list_fails(self):
-        self._make_repo_with_a_base()
-        path = os.path.join(self.root, "docs", "canon", "CI-GATE.json")
-        with open(path, encoding="utf-8") as handle:
-            body = json.load(handle)
-        body["required_commands"] = body["required_commands"][:-1]
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(body, handle, ensure_ascii=False)
-        result = self.run_guard()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("may only", result.stderr)
-        self.assertIn("CI-GATE", result.stderr)
+    # `test_removing_from_a_requirement_list_fails` used to sit here, over `CI-GATE.json`. That
+    # list and the three other CI-only lists moved to `.github/ci/` with their owner in #951, and
+    # the case moved with them, to `test_every_ci_job_is_required.py`. A case left behind would
+    # have gone red for the right reason and been read as the move breaking something.
+    #
+    # The grow direction is still covered HERE by the LOGIC-FACING case above, which is the
+    # requirement list this guard still owns.
 
     # -- rule 7, applied to the corpus: the denominator of every absence proof ------------------
     # The four lists above are hand-written, and the corpus is derived, so it was not on the list
@@ -529,49 +527,11 @@ class GuardBehaviour(unittest.TestCase):
         self.assertIn("names a different Logic, so this is allowed", result.stderr)
         self.assertNotIn("over the same Logic", result.stderr)
 
-    # -- rule 7 over the CI skip allowance ------------------------------------------------------
-    # A skip exits 0, so `run-repo-guards.py` reports ok for a check that ran nothing. The
-    # allowance lives in a file so this ratchet can see it, and its members are one per ALLOWED
-    # SKIP rather than one per guard, so the number moves in the right direction.
-
-    def _skips(self):
-        return os.path.join(self.root, "docs", "canon", "CI-SKIPS.json")
-
-    def _rewrite_skips(self, mutate):
-        with open(self._skips(), encoding="utf-8") as handle:
-            body = json.load(handle)
-        mutate(body)
-        with open(self._skips(), "w", encoding="utf-8") as handle:
-            json.dump(body, handle, ensure_ascii=False)
-
-    def test_raising_a_skip_allowance_fails(self):
-        self._make_repo_with_a_base()
-        with open(self._skips(), encoding="utf-8") as handle:
-            name = sorted(json.load(handle)["allowed"])[0]
-        self._rewrite_skips(lambda body: body["allowed"][name].update(
-            skips=body["allowed"][name]["skips"] + 1))
-        result = self.run_guard()
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("CI-SKIPS", result.stderr)
-        self.assertIn("may only", result.stderr)
-
-    def test_lowering_a_skip_allowance_passes(self):
-        """The direction that must stay open, or the allowance can never be paid down."""
-        self._make_repo_with_a_base()
-        with open(self._skips(), encoding="utf-8") as handle:
-            name = sorted(json.load(handle)["allowed"])[0]
-        self._rewrite_skips(lambda body: body["allowed"][name].update(
-            skips=body["allowed"][name]["skips"] - 1))
-        result = self.run_guard()
-        self.assertNotIn("CI-SKIPS", result.stderr)
-
-    def test_a_new_guard_claiming_a_skip_fails(self):
-        self._make_repo_with_a_base()
-        self._rewrite_skips(lambda body: body["allowed"].update(
-            {"Scripts/check-something-new.py": {"skips": 1, "why": "because"}}))
-        result = self.run_guard()
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("check-something-new.py", result.stderr)
+    # -- rule 7 over the CI skip allowance: MOVED ----------------------------------------------
+    # `CI-SKIPS.json` is how many cases a guard may skip under CI. It says nothing about Logic, it
+    # moved to `.github/ci/` in #951, and the three cases that drove it -- raising an allowance,
+    # lowering one, a new guard claiming one -- moved to `test_every_ci_job_is_required.py` with
+    # the ratchet that reads it.
 
     def test_removing_from_a_waiver_list_passes(self):
         os.remove(os.path.join(self.root, "docs", "observations", "2000-01-01-seeded.json"))
@@ -614,9 +574,9 @@ class GuardBehaviour(unittest.TestCase):
         guard = os.path.join(self.root, "Scripts", "check-canon-citations.py")
         with open(guard, encoding="utf-8") as handle:
             body = handle.read()
-        body = body.replace('    ("docs/canon/CI-GATE.json", "required_commands", "grow",',
-                            '    ("docs/canon/BRAND-NEW-LIST.json", "prefixes", "grow", "a new list"),\n'
-                            '    ("docs/canon/CI-GATE.json", "required_commands", "grow",', 1)
+        body = body.replace('    R("docs/canon/NOT-A-RECORD.json", "files", "shrink",',
+                            '    R("docs/canon/BRAND-NEW-LIST.json", "prefixes", "grow", "a new list"),\n'
+                            '    R("docs/canon/NOT-A-RECORD.json", "files", "shrink",', 1)
         self.assertIn("BRAND-NEW-LIST", body, "the ratchet table anchor moved; this case is inert")
         with open(guard, "w", encoding="utf-8") as handle:
             handle.write(body)
@@ -813,7 +773,10 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         os.makedirs(os.path.join(self.root, "Scripts"))
         os.makedirs(os.path.join(self.root, "docs", "observations"))
-        for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py"):
+        # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
+        # fixture without it does not run a weaker guard, it runs no guard at all.
+        for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
+                     "ratchet.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -1015,10 +978,12 @@ class LogicFacingIsSelfMaintaining(unittest.TestCase):
             body = os.path.join(tmp, "body.md")
             with open(body, "w", encoding="utf-8") as handle:
                 handle.write("x\n\nThis pull request body states no fact about Logic: "
-                             "it edits a census of guard names.\n")
+                             "it edits the numbers a document may state.\n")
             changed = os.path.join(tmp, "changed.txt")
             with open(changed, "w", encoding="utf-8") as handle:
-                handle.write("docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json\n")
+                # An EXCEPTED path under a Logic-facing prefix, which is the only case where the
+                # list narrows anything -- so the opt-out here rests on the proof below.
+                handle.write("docs/canon/PROSE-NUMBERS.json\n")
             proc = subprocess.run([sys.executable, GUARD, "--text", body, "--changed", changed],
                                   capture_output=True, text=True)
         self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])

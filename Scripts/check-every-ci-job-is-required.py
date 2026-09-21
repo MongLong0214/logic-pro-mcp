@@ -20,7 +20,7 @@ may only shrink.
 
 Scope is now DECLARED rather than assumed. `ci.yml` carries the required gate and is the workflow
 whose jobs are audited against `build.needs`. Every other workflow file must be named in
-`docs/canon/CI-GATE.json` under `workflows`, with `gates_merges` and a reason -- and a file nobody
+`.github/ci/CI-GATE.json` under `workflows`, with `gates_merges` and a reason -- and a file nobody
 named is a failure.
 
 That last rule is the same rule as the first one, moved up a level. The three defects above are all
@@ -33,12 +33,30 @@ easily be a gate nobody wired up.
 leaving its string in this guard's list would have kept a test looking in the wrong file; moving it
 out and checking nothing would have lost the step silently. The command follows the workflow.
 """
+import importlib.util
 import json
 import os
 import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _load_ratchet():
+    """The merge-base comparison, shared with `check-canon-citations.py`.
+
+    Loaded by path because `Scripts/` is not a package. It knows nothing about Logic, which is the
+    point of the split: this guard decides CI topology without loading the corpus, and the Canon
+    checker decides citations without loading CI topology.
+    """
+    path = os.path.join(REPO, "Scripts", "ratchet.py")
+    spec = importlib.util.spec_from_file_location("ratchet_for_ci_guard", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ratchet = _load_ratchet()
 #: A seam, so the self-test can drive main() -- the ENTRY POINT -- at a tree that must
 #: fail. Without one every case reaches the helpers only, and a `main()` returning 0
 #: unconditionally stays green; Scripts/mutation-sweep-guard-tests.py measured that for
@@ -54,7 +72,46 @@ GATE = "build"
 #: `required_commands` exists because a JOB being required says nothing about its STEPS. The
 #: tree-wide citation check runs with `--changed` in one step of one job, and deleting that step
 #: leaves the job green and the check unaimed.
-POLICY_PATH = os.path.join(REPO, "docs", "canon", "CI-GATE.json")
+POLICY_PATH = os.path.join(REPO, ".github", "ci", "CI-GATE.json")
+
+#: THE CI-ONLY RATCHETS, moved here from `check-canon-citations.py` with the files they compare
+#: (#951). None of these four lists says anything about Logic -- they are this gate's own topology
+#: and its own debt -- and they were ratcheted in the Canon checker only because that is where the
+#: merge-base comparison happened to live. Owning the rule and owning the file is the same job.
+#:
+#: `legacy` is how the relocation is CHECKED rather than bootstrapped. Without it a list absent at
+#: the merge base is unratcheted on the branch that introduces it, and the branch that moves a
+#: requirement is exactly the branch where losing one is easiest. It is declared HERE, by the
+#: owner, and never read out of the moved file: a policy that names its own predecessor chooses
+#: what it is compared against.
+RATCHETS = (
+    ratchet.Ratchet(".github/ci/CI-GATE.json", "required_commands", "grow",
+                    "commands the required CI gate must carry",
+                    legacy="docs/canon/CI-GATE.json"),
+    #: A waiver for "this job does not have to be required" is the most load-bearing waiver in the
+    #: repository, because what it waives is the gate itself. It was NOT ratcheted until 2026-09-20
+    #: -- only `required_commands` was -- so a change could add a CI job that always fails, waive
+    #: it in `not_required` in the same commit, and both guards passed.
+    ratchet.Ratchet(".github/ci/CI-GATE.json", "not_required", "shrink",
+                    "CI jobs that are allowed not to gate a merge", ratchet.key_members,
+                    legacy="docs/canon/CI-GATE.json"),
+    ratchet.Ratchet(".github/ci/CI-SKIPS.json", "allowed", "shrink",
+                    "cases guards are allowed to SKIP under CI", ratchet.skip_members,
+                    legacy="docs/canon/CI-SKIPS.json"),
+    #: Was a Python set literal in the guard that reads it, so "may only shrink" was a comment and
+    #: a change could add a guard with no test and waive it in the same diff.
+    ratchet.Ratchet(".github/ci/GUARDS-WITHOUT-A-TEST.json", "guards", "shrink",
+                    "guards with no test that drives them", ratchet.key_members,
+                    legacy="docs/canon/GUARDS-WITHOUT-A-TEST.json"),
+    #: A CENSUS, not a set of permissions: no guard reads it to skip anything. It is measured by
+    #: `Scripts/mutation-sweep-guard-tests.py`, and a guard leaves it by gaining a case that drives
+    #: its entry point at an input that must fail. Removing an entry therefore needs the sweep to
+    #: say so; editing the file is not evidence. The ratchet is `shrink` for the same reason.
+    ratchet.Ratchet(".github/ci/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json", "guards", "shrink",
+                    "guards whose test does not notice the gate being removed",
+                    ratchet.key_members,
+                    legacy="docs/canon/GUARD-TESTS-BLIND-TO-THEIR-GUARD.json"),
+)
 
 
 WORKFLOW_DIR = os.path.join(REPO, ".github", "workflows")
@@ -375,6 +432,11 @@ def seam_names() -> set:
 
 def main() -> int:
     problems = check()
+    # The ratchets run on the ENTRY POINT rather than inside `check()`, which the focused tests
+    # drive against fixture trees through the `LPM_CI_*` seams. A comparison against this
+    # repository's own merge base belongs to the real run, and `run-repo-guards.py` discovers this
+    # file, so the `guards` job -- which `build` needs -- is what executes them.
+    ratchet.check(REPO, RATCHETS, problems, owner=os.path.basename(__file__))
     if problems:
         print(f"{len(problems)} problem(s) with the required gate:", file=sys.stderr)
         for problem in problems:
