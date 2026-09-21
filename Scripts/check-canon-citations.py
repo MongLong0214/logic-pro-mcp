@@ -1136,6 +1136,14 @@ def _require_readable_index(ref) -> None:
                 f"{path} does not exist, so no value citation for {ref.source} can be checked "
                 f"here. Run Scripts/logic_canon.py build on a machine with Logic. Nothing is "
                 f"being asserted about the citation.")
+        # The same second question the key branch asks below. Existence is not readability: a
+        # `.values.tsv` row with the wrong field count raises the base `CanonError` out of
+        # `load_value_index`, and without this the two branches would answer differently about
+        # the same repository-side fault -- which is the asymmetry this function exists to close.
+        try:
+            canon.load_value_index(ref.source)
+        except canon.CanonError as exc:
+            raise CanonIndexUnavailable(f"{path} could not be read: {exc}") from exc
         return
     path = canon.index_path(ref.source)
     if not os.path.exists(path):

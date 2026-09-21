@@ -197,6 +197,14 @@ PINNED_REF = ("logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FV
               "%2FResources%2FLocalizable.strings/en/Trk#value")
 PINNED_VALUE = "Trk"
 
+#: The other citation shape, and the reason it is here: it resolves against `strings.values.tsv`
+#: rather than `strings.tsv`, so it is the only way to reach the value branch of
+#: `_require_readable_index`. A value citation is the reference AND the value, and the tree-wide
+#: run holds this file to that rule too -- so the value it resolves to is written down here:
+#: Count In
+PINNED_VALUE_REF = "logic-canon://strings/en#value"
+PINNED_VALUE_ONLY = "Count In"
+
 #: A reference `find_refs` takes and `CanonRef.parse` refuses: three path segments where four are
 #: required, and a field that is not `value`. Written in two pieces on purpose -- the tree-wide run
 #: of this same checker scans every file in the repository for references and refuses the malformed
@@ -280,6 +288,45 @@ class WhoseFaultAnUnresolvedReferenceIs(unittest.TestCase):
         self.assertEqual(result["category"], "error", stdout)
         self.assertEqual(status, 2)
         self.assertEqual([entry["code"] for entry in result["diagnostics"]], ["checker_error"])
+
+    def value_cited_body(self):
+        """A VALUE citation, which resolves against a DIFFERENT file: `<source>.values.tsv`.
+
+        The reference above carries a key, so it takes the key branch of `_require_readable_index`
+        and says nothing about the value branch. Both cases below need this shape.
+        """
+        return BodyFixture(self, f"This rests on Logic's own data.\n\n{PINNED_VALUE_REF}\n\n"
+                                 f"{PINNED_VALUE_ONLY}\n")
+
+    def test_a_value_citation_resolves_against_the_committed_value_index(self):
+        """The value branch's control. Without it, the malformation case below cannot tell an
+        unreadable index from a reference form the checker refuses for some other reason."""
+        fixture = self.value_cited_body()
+        root = self.tree_with_index(lambda index: None)
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"], root=root)
+        self.assertEqual(status, 0, stdout)
+        self.assertEqual(json.loads(stdout)["category"], "satisfied")
+
+    def test_a_malformed_VALUE_index_row_is_the_same_failure_too(self):
+        """The value index is a second file asked a different question, and the round-3 review
+        found only the key branch parsing what it found. Existence is not readability: a
+        `.values.tsv` row with the wrong field count raised the base `CanonError` past
+        `CanonIndexUnavailable`, so the two branches reached the same category by different routes
+        and nothing here would have noticed if one of them stopped."""
+        def wreck(index):
+            path = os.path.join(index, "strings.values.tsv")
+            os.remove(path)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("en\t9c434e85b363\tone-field-too-many\n")  # two fields are required
+
+        fixture = self.value_cited_body()
+        status, stdout, _ = run(["--text", fixture.body, "--format", "json"],
+                                root=self.tree_with_index(wreck))
+        result = json.loads(stdout)
+        self.assertEqual(result["category"], "error", stdout)
+        self.assertEqual(status, 2)
+        self.assertEqual([entry["code"] for entry in result["diagnostics"]], ["checker_error"])
+        self.assertIn("could not be read", result["diagnostics"][0]["message"])
 
     def test_a_key_the_intact_index_does_not_carry_is_still_the_author_to_fix(self):
         """The other side. Narrowing "unresolved" to a tooling failure would make an invented key
