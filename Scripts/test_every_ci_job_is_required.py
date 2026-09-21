@@ -892,12 +892,187 @@ class TheMigrationIsComparedNotBootstrapped(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("last ancestor carrying it", result.stderr)
 
-    def test_a_shallow_checkout_under_ci_fails_rather_than_degrading(self):
-        """M05, the other half. In a shallow clone `rev-list` exits 0 with no output, so "no
-        ancestor carries it" is not a reading anyone can trust."""
+    def test_no_readable_merge_base_under_ci_fails_rather_than_degrading(self):
+        """M05, the other half. Named for what it covers: there is no repository at all here, so
+        `merge_base()` returns None and `base_or_refuse` refuses. It was called the shallow case
+        and is not one -- a shallow clone HAS a readable merge base, which is the whole difficulty
+        and is driven by `test_a_shallow_clone_cannot_bootstrap_a_grow_list` below."""
         shutil.rmtree(os.path.join(self.root, ".git"), ignore_errors=True)
         result = self._run(CI="true")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+    def _introduce_the_new_layout(self, root, shortened):
+        """Put `.github/ci/` in that root's WORKING TREE, optionally one requirement short."""
+        target = os.path.join(root, ".github", "ci")
+        os.makedirs(target, exist_ok=True)
+        if os.path.abspath(target) != os.path.abspath(self.new):
+            for name in self.names:
+                shutil.copy2(os.path.join(self.new, name), os.path.join(target, name))
+        if not shortened:
+            return
+        gate = os.path.join(target, "CI-GATE.json")
+        with open(gate, encoding="utf-8") as handle:
+            body = json.load(handle)
+        body["required_commands"] = body["required_commands"][:-1]
+        with open(gate, "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+
+    def _run_in(self, root, **env):
+        return subprocess.run(
+            [sys.executable, os.path.join(root, "Scripts",
+                                          "check-every-ci-job-is-required.py")],
+            capture_output=True, text=True, env=dict(os.environ, **env))
+
+    def _shallow_clone_of_this_fixture(self):
+        """A real `--depth=1` clone over `file://`, which is what CI's `fetch-depth: 1` produces.
+
+        `--depth` is ignored for a local path clone, so the URL has to be `file://`. The clone
+        carries one commit; `git merge-base HEAD origin/main` still answers, and `git rev-list`
+        over a path no reachable commit carries exits 0 with NO OUTPUT. That pair is the defect:
+        a readable base and an unreadable history.
+
+        The DELETION commit is what makes the truncation bite. `docs/canon/` exists only in the
+        first commit, so a one-commit clone cannot see it, while a full clone finds it by walking
+        back -- which is exactly the difference the case is about. The new path stays uncommitted,
+        because a base that already carries it is compared directly and never reaches this code.
+        """
+        self._git("rm", "-q", "-r", "--cached", "docs/canon")
+        self._git("commit", "-q", "-m", "the old lists leave the tree")
+        shallow = tempfile.mkdtemp(prefix="ci-shallow-")
+        self.addCleanup(shutil.rmtree, shallow, ignore_errors=True)
+        target = os.path.join(shallow, "clone")
+        subprocess.run(["git", "clone", "-q", "--depth=1", "file://" + self.root, target],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return target
+
+    def test_a_shallow_clone_cannot_bootstrap_a_grow_list(self):
+        """M05, the case the `.git`-deletion test never covered.
+
+        Reproduced by a reviewer against a real `--depth=1` clone: the old path is gone from the
+        truncated history, the new path is absent at the base, `at_base` returned None for both,
+        and `_before` called it a genuine first introduction. A `grow` list that had lost a
+        required command passed with NO failures. `Unknown` is what separates the two answers.
+        """
+        clone = self._shallow_clone_of_this_fixture()
+        self._introduce_the_new_layout(clone, shortened=True)
+        result = self._run_in(clone, CI="true")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("truncated", result.stderr)
+
+    def test_the_same_loss_is_caught_with_full_history(self):
+        """The positive control for the case above, in the same shape. Without it, "the shallow
+        clone refuses" says nothing about whether the requirement loss is what it refused."""
+        self._git("rm", "-q", "-r", "--cached", "docs/canon")
+        self._git("commit", "-q", "-m", "the old lists leave the tree")
+        self._introduce_the_new_layout(self.root, shortened=True)
+        result = self._run(CI="true")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only GROW", result.stderr)
+
+    def test_full_history_accepts_the_equivalent_relocation(self):
+        """The negative control. The same two commits with the requirement intact must PASS, or
+        the two cases above are only proving that this fixture refuses everything."""
+        self._git("rm", "-q", "-r", "--cached", "docs/canon")
+        self._git("commit", "-q", "-m", "the old lists leave the tree")
+        self._introduce_the_new_layout(self.root, shortened=False)
+        result = self._run(CI="true")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_shallow_clone_control_is_a_clone_and_not_a_broken_root(self):
+        """The control for the case above. An unmodified shallow clone must still REFUSE -- the
+        history it needs is not there either way -- and it must refuse for the truncation rather
+        than because the fixture failed to build. Without this, a clone that silently did not
+        happen would make the previous case pass for the wrong reason."""
+        clone = self._shallow_clone_of_this_fixture()
+        self.assertTrue(os.path.exists(os.path.join(clone, ".git")))
+        base = subprocess.run(["git", "-C", clone, "merge-base", "HEAD", "origin/main"],
+                              capture_output=True, text=True)
+        self.assertEqual(base.returncode, 0, base.stderr)
+        self.assertTrue(base.stdout.strip(), "a shallow clone still answers merge-base")
+        shallow = subprocess.run(["git", "-C", clone, "rev-parse", "--is-shallow-repository"],
+                                 capture_output=True, text=True)
+        self.assertEqual(shallow.stdout.strip(), "true")
+
+    def test_an_unparsable_policy_at_the_base_is_not_read_as_absent(self):
+        """`show_json` returned None for "that commit does not carry it" AND for "it does and is
+        not JSON". The second is unknown history, and skipping the comparison for it is the same
+        bootstrap in a different coat.
+
+        Only `docs/canon` is staged. `git add -A` would commit `.github/ci/` as well, and a base
+        that carries the new path directly is compared against itself and never reaches the code
+        this case is about -- which is how the first draft of it passed for the wrong reason.
+        """
+        with open(os.path.join(self.old, "CI-GATE.json"), "w", encoding="utf-8") as handle:
+            handle.write("{ not json")
+        self._git("add", "--", "docs/canon")
+        self._git("commit", "-q", "-m", "the base policy becomes unreadable")
+        self._rewrite("CI-GATE.json",
+                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
+        result = self._run(CI="true")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("not readable JSON", result.stderr)
+
+    def test_an_unparsable_ANCESTOR_is_not_read_as_absent_either(self):
+        """The same third answer one commit further back, which is a separate line.
+
+        The case above stops at the merge base, where `show_json` answers directly. This one makes
+        the base carry nothing and leaves the unreadable copy in an ancestor, so the refusal has to
+        come out of the walk in `at_base` rather than out of its first call. Without it that early
+        return is a line no case can fail for.
+        """
+        with open(os.path.join(self.old, "CI-GATE.json"), "w", encoding="utf-8") as handle:
+            handle.write("{ not json")
+        self._git("add", "--", "docs/canon")
+        self._git("commit", "-q", "-m", "an ancestor's policy becomes unreadable")
+        self._git("rm", "-q", "-r", "--cached", "docs/canon")
+        self._git("commit", "-q", "-m", "and then the old path leaves the tree")
+        self._rewrite("CI-GATE.json",
+                      lambda body: body.update(required_commands=body["required_commands"][:-1]))
+        result = self._run(CI="true")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("not readable JSON", result.stderr)
+        # And it must not ALSO announce that it ratcheted against that ancestor. Falling through
+        # to the "found one" branch returns the same object and still refuses, so the refusal
+        # alone cannot tell the two apart -- the note is where the difference shows.
+        self.assertFalse(
+            [line for line in result.stderr.splitlines()
+             if "docs/canon/CI-GATE.json" in line and "last ancestor carrying it" in line],
+            "claimed to ratchet against a commit whose copy it could not read:\n" + result.stderr)
+
+
+class AFailedGitCommandIsUnknownHistory(unittest.TestCase):
+    """`at_base` driven through `History.git` directly, because a fixture cannot break `rev-list`.
+
+    The other unknown-history cases are reachable from a real repository -- a shallow clone, an
+    unparsable committed file. This one is not: `git rev-list` over a readable base practically
+    always exits 0, so the branch that handles it failing had no case that could fail for it and
+    would have been a line defended rather than checked. `History` exists as an object precisely
+    so a test can point it somewhere, and the seam is one method.
+    """
+
+    def _history(self, rev_list):
+        ratchet = guard.ratchet
+
+        class Stubbed(ratchet.History):
+            def git(self, *args):
+                if args[0] == "rev-list":
+                    return rev_list
+                return "false"
+
+            def show_json(self, sha, path):
+                return None
+
+        return Stubbed(REPO)
+
+    def test_rev_list_failing_is_unknown_and_not_absence(self):
+        found = self._history(None).at_base("deadbeef", ".github/ci/CI-GATE.json")
+        self.assertIsInstance(found, guard.ratchet.Unknown)
+        self.assertIn("`git rev-list` failed", found.why)
+
+    def test_rev_list_answering_with_nothing_in_a_full_clone_is_still_absence(self):
+        """The control. If every `rev-list` answer became `Unknown`, the case above would pass
+        while the ordinary first introduction of a list stopped working."""
+        self.assertIsNone(self._history("").at_base("deadbeef", ".github/ci/CI-GATE.json"))
 
 
 class TheTwoOwnersFailIndependently(unittest.TestCase):

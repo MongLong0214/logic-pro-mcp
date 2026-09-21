@@ -75,6 +75,26 @@ def skip_members(blob, key):
     return members
 
 
+class Unknown:
+    """History that could not be READ, which is a third answer beside found and absent.
+
+    `at_base` used to return `None` for both, and `_before` read that single `None` as "no ancestor
+    carries this file, so the branch introduces it" -- a bootstrap. A shallow clone reaches that
+    line with a perfectly readable merge base: `git rev-list` exits 0 with no output, so a `grow`
+    list that lost a requirement passed. A review reproduced it against a real `--depth=1` clone
+    over `file://` and the comparison returned no failures at all.
+
+    Unreadable is not absent. Anything holding one of these records a failure rather than
+    comparing against nothing.
+    """
+
+    def __init__(self, why: str):
+        self.why = why
+
+    def __repr__(self):
+        return f"Unknown({self.why!r})"
+
+
 def load_json(path, default):
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -111,17 +131,24 @@ class History:
         return None
 
     def show_json(self, sha, path):
+        """The committed file, None when that commit does not carry it, `Unknown` when it does
+        and cannot be read. The third case was `None` too, so a policy that became unparsable at
+        the merge base read as one that was not there and the ratchet skipped it."""
         out = subprocess.run(["git", "-C", self.repo, "show", f"{sha}:{path}"],
                              capture_output=True, text=True)
         if out.returncode != 0:
             return None
         try:
             return json.loads(out.stdout)
-        except json.JSONDecodeError:
-            return None
+        except json.JSONDecodeError as exc:
+            return Unknown(f"{path} at {sha[:8]} is not readable JSON ({exc.msg})")
 
     def at_base(self, base, path, quiet: bool = False):
-        """The ratcheted file as the branch departed from it, or None with a note saying why.
+        """The ratcheted file as the branch departed from it.
+
+        Three answers, not two: the parsed file, `None` for proven absence, and `Unknown` for
+        history that could not be read. Collapsing the last two is what let a shallow clone
+        bootstrap a `grow` list -- see `Unknown`.
 
         The merge base not carrying the file is NOT the same as the file being new:
 
@@ -140,16 +167,23 @@ class History:
         if found is not None:
             return found
         history = self.git("rev-list", "--full-history", "--max-count=200", base, "--", path)
-        for sha in (history or "").split():
+        if history is None:
+            return Unknown(f"{path}: `git rev-list` failed, so whether an ancestor carries it is "
+                           f"unknown and cannot be read as absence")
+        for sha in history.split():
             prior = self.show_json(sha, path)
+            if isinstance(prior, Unknown):
+                return prior
             if prior is not None:
                 self.note(f"{path} is absent at the merge base {base[:8]}; ratcheted against "
                           f"{sha[:8]}, the last ancestor carrying it.")
                 return prior
         if self.git("rev-parse", "--is-shallow-repository") == "true":
-            self.note(f"{path}: history is truncated (shallow clone), so 'no ancestor carries it' "
-                      f"is not a reading anyone can trust. Check out with fetch-depth: 0.")
-            return None
+            # NOT `None`. A shallow clone reaches here with a readable merge base -- `rev-list`
+            # exits 0 with no output -- and `None` sent `_before` down the "this commit introduces
+            # the file" path, where a `grow` list that had lost a requirement was never compared.
+            return Unknown(f"{path}: history is truncated (shallow clone), so 'no ancestor carries "
+                           f"it' is not a reading anyone can trust. Check out with fetch-depth: 0.")
         if not quiet:
             self.note(f"{path} is carried by neither the merge base {base[:8]} nor any ancestor, "
                       f"so this is the commit that introduces it and its ratchet does not run "
@@ -222,6 +256,11 @@ def check(repo: str, ratchets, failures: list, history: History = None, owner: s
 def _before(repo: str, entry: Ratchet, base: str, failures: list, history: History, owner: str):
     """What this list looked like outside the branch, or None when there is nothing to compare."""
     found = history.at_base(base, entry.path, quiet=bool(entry.legacy))
+    if isinstance(found, Unknown):
+        failures.append(
+            f"{found.why}. The comparison cannot be made, and an unmade comparison is a failure "
+            f"rather than a pass: this is the branch that would lose the requirement.")
+        return None
     if found is not None:
         return found
 
@@ -231,6 +270,11 @@ def _before(repo: str, entry: Ratchet, base: str, failures: list, history: Histo
     # which is exactly the branch where a requirement is easiest to lose.
     if entry.legacy:
         legacy = history.at_base(base, entry.legacy)
+        if isinstance(legacy, Unknown):
+            failures.append(
+                f"{legacy.why}. {entry.path} declares it moved from there, so an unreadable "
+                f"history for the legacy path leaves the relocation uncompared.")
+            return None
         if legacy is not None:
             history.note(f"{entry.path} is absent at {base[:8]}; compared against {entry.legacy}, "
                          f"which this owner declares it was moved from.")
