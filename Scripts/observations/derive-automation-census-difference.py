@@ -62,20 +62,69 @@ def published_states(record):
     )["states"]
 
 
-def state_groups(record):
-    """Derive state groups from the record's own undo-stack readings."""
+def reconcile_undo_stack_boundaries(record, actuation, audit):
+    """Pair each raw undo-stack boundary reading with its published state exactly once."""
     states = published_states(record)
-    if len({item["state"] for item in states}) != len(states):
-        raise ValueError("record repeats a census state role")
-    create = [item for item in states if item["state"].endswith("_create")]
+    boundaries = actuation.get("undo_stack_boundaries")
+    audit.check(isinstance(boundaries, dict),
+                "actuation evidence has no undo-stack boundaries object")
+    readings = boundaries.get("readings") if isinstance(boundaries, dict) else None
+    audit.check(isinstance(readings, list),
+                "actuation evidence undo-stack boundary readings are not a list")
+    if not isinstance(readings, list):
+        return []
+
+    state_roles = [item.get("state", MISSING) if isinstance(item, dict) else MISSING
+                   for item in states]
+    reading_roles = [item.get("state", MISSING) if isinstance(item, dict) else MISSING
+                     for item in readings]
+    valid_state_roles = all(isinstance(role, str) and role for role in state_roles)
+    valid_reading_roles = all(isinstance(role, str) and role for role in reading_roles)
+    audit.check(valid_state_roles, "record states must each carry a non-empty state role")
+    audit.check(valid_reading_roles,
+                "raw undo-stack boundary readings must each carry a non-empty state role")
+    if not valid_state_roles or not valid_reading_roles:
+        return []
+
+    audit.check(len(state_roles) == len(set(state_roles)), "record repeats a census state role")
+    audit.check(len(reading_roles) == len(set(reading_roles)),
+                "raw undo-stack boundary readings repeat a census state role")
+    published_by_role = {item["state"]: item for item in states}
+    reading_by_role = {item["state"]: item for item in readings}
+    for role in state_roles:
+        audit.check(role in reading_by_role,
+                    f"{role}: record state has no raw undo-stack boundary reading")
+    for role in reading_roles:
+        audit.check(role in published_by_role,
+                    f"{role}: raw undo-stack boundary reading has no record state")
+    if audit.failures:
+        return []
+
+    pairs = []
+    for role in state_roles:
+        published, reading = published_by_role[role], reading_by_role[role]
+        audit.check("undo_item_1" in published and "item_1" in reading,
+                    f"{role}: record state and raw boundary reading must both carry item_1")
+        audit.check(reading.get("item_1", MISSING) == published.get("undo_item_1", MISSING),
+                    f"{role}: raw undo-stack item_1 disagrees with the record state")
+        if "undo_item_2" in published or "item_2" in reading:
+            audit.check(reading.get("item_2", MISSING) == published.get("undo_item_2", MISSING),
+                        f"{role}: raw undo-stack item_2 disagrees with the record state")
+        pairs.append((role, reading))
+    return pairs
+
+
+def state_groups(reconciled_pairs):
+    """Derive state groups only from raw boundary readings reconciled to record states."""
+    create = [pair for pair in reconciled_pairs if pair[0].endswith("_create")]
     if len(create) != 1:
         raise ValueError("record must identify exactly one *_create census state")
-    applied_item = create[0]["undo_item_1"]
-    applied = [item["state"] for item in states if item["undo_item_1"] == applied_item]
-    undone = [item["state"] for item in states if item["undo_item_1"] != applied_item]
+    applied_item = create[0][1]["item_1"]
+    applied = [role for role, reading in reconciled_pairs if reading["item_1"] == applied_item]
+    undone = [role for role, reading in reconciled_pairs if reading["item_1"] != applied_item]
     by_undo_item = collections.defaultdict(list)
-    for item in states:
-        by_undo_item[item["undo_item_1"]].append(item["state"])
+    for role, reading in reconciled_pairs:
+        by_undo_item[reading["item_1"]].append(role)
     # A spanning comparison is sufficient: equality of every state with the first state in its
     # undo-stack group establishes equality throughout that group without duplicating a pair.
     same_state_pairs = [(group[0], other) for group in by_undo_item.values() for other in group[1:]]
@@ -270,6 +319,12 @@ def derive(censuses, record, actuation, out=sys.stdout, resolve_canon=resolve):
     """Return zero only when in-memory evidence reproduces the record."""
     audit = Audit(out)
     census_reading = observation(record, "the five state-tagged censuses, each labelled by Logic's own undo stack")
+    reconciled_pairs = reconcile_undo_stack_boundaries(record, actuation, audit)
+    if audit.failures:
+        audit.line(f"FAIL: {len(audit.failures)} published number(s) not reproduced by the committed readings")
+        for failure in audit.failures:
+            audit.line(f"  - {failure}")
+        return 1
     comparison = observation(record, "the paired census comparison, over every captured attribute")
     distinguishing = observation(record, "the one element that distinguishes the states")
     control = observation(record, "the within-run control: the same control on the other track")
@@ -309,7 +364,7 @@ def derive(censuses, record, actuation, out=sys.stdout, resolve_canon=resolve):
     audit.line(f"censuses: {len(roles)} states, {next(iter(published_totals), None)} rows each, "
                f"window {title!r}")
 
-    applied, undone, same_state_pairs = state_groups(record)
+    applied, undone, same_state_pairs = state_groups(reconciled_pairs)
     audit.check(len(applied) * len(undone) == comparison["pairs_compared_present_vs_absent"],
                 "record's present-versus-undone pair count disagrees with its state readings")
     audit.check(len(same_state_pairs) == comparison["same_state_pairs_compared"],
