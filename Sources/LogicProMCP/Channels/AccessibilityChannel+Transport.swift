@@ -1080,17 +1080,13 @@ extension AccessibilityChannel {
         // Reconciliation is part of the same injected runtime as dialog execution. Otherwise a
         // fake runtime that omits this optional test seam can launch live osascript while cleaning
         // up a deliberately failed fixture.
-        let dialogFailureReconciler: @Sendable (String?) async -> Bool
+        let dialogFailureReconciler: @Sendable (DialogFailureReconciliation) async -> Bool
         if let reconcileAfterDialogExecutionFailure {
             dialogFailureReconciler = { _ in await reconcileAfterDialogExecutionFailure() }
         } else {
-            dialogFailureReconciler = { preLeafWindowSnapshotPath in
-                // A timeout without the child-written pre-leaf snapshot cannot establish that any
-                // currently matching modal belongs to this run. Do not launch a cleanup script
-                // that could cancel a user's already-open dialog.
-                guard let preLeafWindowSnapshotPath else { return false }
+            dialogFailureReconciler = { reconciliation in
                 return await observeAndClearStrayGoToPositionUI(
-                    preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
+                    reconciliation: reconciliation,
                     executeScript: { script, timeout in
                         await runtime.executeAppleScriptWithTimeout(script, timeout)
                     }
@@ -1264,6 +1260,49 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The one source of truth for every `MENU_PICK_FAILED` refusal that says menu cleanup was
+    /// not observed. The descriptor is emitted at each site rather than spelling the AppleScript
+    /// return inline, so adding a site requires declaring whether it is before or after the leaf.
+    struct MenuCleanupRefusalSite: Sendable {
+        let identifier: String
+
+        /// A pre-leaf site cannot own a Go To Position dialog, so its Swift caller may use the
+        /// menu-only reconciliation path. This is data rather than an inference from AppleScript
+        /// spelling or source position.
+        let emittedBeforeLeafClick: Bool
+
+        static let localeResolution = Self(
+            identifier: "locale_resolution", emittedBeforeLeafClick: true
+        )
+        static let enabledRead = Self(
+            identifier: "enabled_read", emittedBeforeLeafClick: true
+        )
+        static let revalidation = Self(
+            identifier: "revalidation", emittedBeforeLeafClick: true
+        )
+        static let issuanceLedger = Self(
+            identifier: "issuance_ledger", emittedBeforeLeafClick: true
+        )
+
+        static let refusalPrefix = "MENU_PICK_FAILED: menu cleanup was not observed"
+
+        /// Keep an emitted marker beside the return so tests can check the declared sites and the
+        /// generated script correspond one-for-one without parsing AppleScript expressions.
+        var appleScript: String {
+            """
+            -- MENU_CLEANUP_REFUSAL_SITE: \(identifier)
+            return "\(Self.refusalPrefix)" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+            """
+        }
+    }
+
+    static let menuCleanupRefusalSites = [
+        MenuCleanupRefusalSite.localeResolution,
+        .enabledRead,
+        .revalidation,
+        .issuanceLedger,
+    ]
+
     /// The script is internal so the menu-validation regression tests can assert the
     /// exact generated AppleScript ordering without invoking Logic Pro.
     static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
@@ -1363,11 +1402,18 @@ extension AccessibilityChannel {
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
-        -- `knownOpen` says whether THIS run has issued its resolved leaf. Before that boundary,
-        -- UNREADABLE returns without Escape because unknown focus might be an unrelated dialog/edit;
-        -- the caller must refuse rather than treating the missing read as clean. After this run
-        -- clicked, an unreadable read is not permission to skip Escape, because this run may leave
-        -- its own menu chain up.
+        -- `knownOpen` says whether THIS run has itself confirmed opening some part of the menu
+        -- chain -- either by issuing its resolved leaf (the post-actuation callers), or, for the
+        -- #921 forced revalidation pass, by observing `selected` of the
+        -- top-level menu bar item go true after this run's own click (the `dismissOpenMenu(_,
+        -- revalidated)` caller, which runs before any leaf and before a dialog is ever considered).
+        -- Before that boundary, UNREADABLE returns without Escape because unknown focus might be an
+        -- unrelated dialog/edit; the caller must refuse rather than treating the missing read as
+        -- clean. Once knownOpen is true, this handler reaches its focus-gated re-read even when the
+        -- initial state read was UNREADABLE, but that re-read can itself return UNREADABLE or
+        -- NOT_FRONTMOST without sending Escape. A known-actuation, not-CLOSED result is therefore
+        -- reconciled by Swift through the separate observation-gated menu loop, never by a blind
+        -- Escape from this script.
         on dismissOpenMenu(theProcess, knownOpen)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
@@ -1706,9 +1752,10 @@ extension AccessibilityChannel {
                     return "MENU_PICK_FAILED: menu state was not observed closed at entry (" & entryMenuCleanup & ")"
                 end if
                 set menuActuationAttempted to false
-                -- This records whether the resolved leaf actuation was issued. The
-                -- leaf may succeed even if AX reports an error, so any result
-                -- after it becomes true must not release another position route.
+                -- This records whether this run issued either menu actuation: the forced
+                -- revalidation menu-bar click or the resolved leaf click. Either may succeed
+                -- even if AX reports an error, so any result after it becomes true must not
+                -- release another position route.
                 set dialogActuationIssued to false
                 delay 0.2
 
@@ -1729,7 +1776,7 @@ extension AccessibilityChannel {
                     -- this run and do not authorise Escape from an unreadable AX observation.
                     set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        \(MenuCleanupRefusalSite.localeResolution.appleScript)
                     end if
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
@@ -1739,16 +1786,60 @@ extension AccessibilityChannel {
                     -- An unreadable AXEnabled must not authorise the pick.
                     set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        \(MenuCleanupRefusalSite.enabledRead.appleScript)
                     end if
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
-                    set cleanupState to my dismissOpenMenu(logicProcess, false)
-                    if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    -- macOS validates a menu item's AXEnabled only while its menu is open; a
+                    -- closed-menu read returns whatever the last validation wrote, which can be
+                    -- arbitrarily stale (#921: closing every document writes false, opening a
+                    -- project makes the leaf actuatable again, but the closed-menu read still says
+                    -- false because opening/closing a document never revalidates it). Force one
+                    -- bounded validation pass -- open the top-level menu, confirm THIS run observed
+                    -- it open, then re-read the leaf while it is open -- before this refusal is
+                    -- allowed to call the item disabled rather than merely cache-stale.
+                    set revalidated to false
+                    try
+                        -- Mark this BEFORE issuing the click: AX can open the menu and then report an
+                        -- error, so cleanup must handle the menu this run may have opened. This is
+                        -- deliberately distinct from `revalidated`, which remains the stricter
+                        -- observation that `selected` was read true after the click.
+                        set menuActuationAttempted to true
+                        click menu bar item barName of menu bar 1
+                        delay 0.1
+                        if selected of menu bar item barName of menu bar 1 then set revalidated to true
+                    end try
+                    -- Distinct from `revalidated`: that only says the menu was observed open.
+                    -- `freshReadingTaken` says a NEW `enabled` value was actually obtained. #921
+                    -- follow-up (RV-2): AppleScript's `try...end try` with no `on error` handler
+                    -- leaves an assigned variable at its prior value when the assignment throws, so
+                    -- a swallowed re-read error used to leave `menuItemEnabled` sitting at the
+                    -- original STALE `false` -- and the branch below reported that as a fresh
+                    -- `MENU_DISABLED` reading it never obtained.
+                    set freshReadingTaken to false
+                    if revalidated then
+                        try
+                            set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
+                            set freshReadingTaken to true
+                        end try
                     end if
-                    return "MENU_DISABLED"
+                    set cleanupState to my dismissOpenMenu(logicProcess, revalidated)
+                    if cleanupState is not "CLOSED" then
+                        \(MenuCleanupRefusalSite.revalidation.appleScript)
+                    end if
+                    if freshReadingTaken and menuItemEnabled then
+                        -- The forced pass revalidated the leaf as actuatable; continue below as if
+                        -- the original read had already said so.
+                    else if freshReadingTaken then
+                        return "MENU_DISABLED"
+                    else
+                        -- The forced pass produced no reading -- either the menu was never observed
+                        -- open, or it was and the re-read itself failed -- so nothing was validated.
+                        -- Neither case may be reported as a leaf-disabled reading: see RV-2 above and
+                        -- menuItemEnabledForActuation for the same "unreadable is not absent" shape.
+                        return "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=" & (menuActuationAttempted as text)
+                    end if
                 end if
                 -- A readable count of the exact dialog predicate is the first half of this run's
                 -- absence → leaf → appearance transition. It records no user-controlled title or
@@ -1783,7 +1874,7 @@ extension AccessibilityChannel {
                     if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
                         set cleanupState to my dismissOpenMenu(logicProcess, false)
                         if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                            \(MenuCleanupRefusalSite.issuanceLedger.appleScript)
                         end if
                         return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
                     end if
@@ -2090,11 +2181,16 @@ extension AccessibilityChannel {
             case menuNotFound
             case menuStateUnreadable
             case menuDisabled
+            case menuValidationUnreadable(menuActuationAttempted: Bool)
             case menuPickFailed
-            case menuCouldNotBeClosed(writeAttempted: Bool)
+            /// `reconciledMenuClosed` is written by the parent-owned reconciliation pass, never by
+            /// the parser: the script reports what it observed, and the pass that runs afterwards
+            /// reports what it observed. Keeping them in one case rather than adding a sibling case
+            /// is deliberate -- `requiresUnsafeUIRefusal` matches this case whatever its payload,
+            /// so a reconciled closure cannot quietly release the safety refusal.
+            case menuCouldNotBeClosed(menuActuationAttempted: Bool, reconciledMenuClosed: Bool)
             case dialogPreexisting
             case dialogPreexistenceUnreadable
-            case dialogNotReady
             case dialogUnidentifiedNewWindow
             case dialogAppearanceUnreadable
             case dialogActuationIssued(cleanupObservedClosed: Bool)
@@ -2103,6 +2199,9 @@ extension AccessibilityChannel {
             case dialogSubmissionIssued(cleanupObservedClosed: Bool)
             case executionFailed(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
             case malformedPayload
+            /// An unparsed script result is the absence of a dialog-safety observation, not an
+            /// observation that nothing happened; it must refuse rather than release a later
+            /// position actuator.
             case unexpectedResult
         }
 
@@ -2118,12 +2217,13 @@ extension AccessibilityChannel {
             case .failure(.menuNotFound): return "menu_not_found"
             case .failure(.menuStateUnreadable): return "menu_state_unreadable"
             case .failure(.menuDisabled): return "menu_disabled"
+            case .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
+                return "menu_validation_unreadable"
             case .failure(.menuPickFailed): return "menu_pick_failed"
-            case let .failure(.menuCouldNotBeClosed(writeAttempted)):
-                return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
+            case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
+                return "menu_could_not_be_closed_menu_actuation_attempted_\(menuActuationAttempted)"
             case .failure(.dialogPreexisting): return "dialog_preexisting"
             case .failure(.dialogPreexistenceUnreadable): return "dialog_preexistence_unreadable"
-            case .failure(.dialogNotReady): return "dialog_not_ready"
             case .failure(.dialogUnidentifiedNewWindow): return "dialog_unidentified_new_window"
             case .failure(.dialogAppearanceUnreadable): return "dialog_appearance_unreadable"
             case let .failure(.dialogActuationIssued(closed)):
@@ -2227,7 +2327,6 @@ extension AccessibilityChannel {
                  .failure(.dialogAppearanceUnreadable),
                  .failure(.dialogActuationIssued(cleanupObservedClosed: false)),
                  .failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)),
-                 .failure(.dialogNotReady),
                  .failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: false)):
                 return true
             default:
@@ -2238,21 +2337,40 @@ extension AccessibilityChannel {
         /// Whether this result is downstream of the run's dialog-safety observation. `false`
         /// means the route did not read the pre-leaf dialog/window state, not that it observed no
         /// dialog. Callers must retain the failure rather than treating it as a clean fallback.
+        /// The list is the outcomes that DID read the state, and anything unlisted answers `false`.
+        /// The inverse shape -- a list of outcomes that did not, defaulting to `true` -- is what
+        /// made `.malformedPayload` release the fallback: it was added to the enum and inherited
+        /// "observed" by saying nothing, which is the same defect `.unexpectedResult` was fixed for
+        /// one switch arm away. A case that never declares which side it is on must refuse, because
+        /// the absence of a declaration is the absence of an observation.
         private var performedDialogSafetyObservation: Bool {
             switch self {
+            case .driven,
+                 .failure(.menuPickFailed),
+                 .failure(.menuCouldNotBeClosed),
+                 .failure(.dialogPreexisting),
+                 .failure(.dialogPreexistenceUnreadable),
+                 .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed):
+                return true
             case .failure(.menuNotFound),
                  .failure(.menuStateUnreadable),
-                 .failure(.menuDisabled):
+                 .failure(.menuDisabled),
+                 .failure(.menuValidationUnreadable),
+                 .failure(.malformedPayload),
+                 .failure(.unexpectedResult):
                 return false
-            default:
-                return true
             }
         }
 
         var dialogActuationMayHaveOccurred: Bool {
             switch self {
-            case .failure(.dialogNotReady),
-                 .failure(.dialogUnidentifiedNewWindow),
+            case .failure(.dialogUnidentifiedNewWindow),
                  .failure(.dialogAppearanceUnreadable),
                  .failure(.dialogActuationIssued),
                  .failure(.dialogSubmissionNotIssued),
@@ -2293,6 +2411,15 @@ extension AccessibilityChannel {
         /// cleanup had refused, and argued a root cause its own payload rules out:
         /// `dialog_route_outcome: menu_disabled` cannot coexist with a cleanup that failed.
         ///
+        /// `MENU_VALIDATION_UNREADABLE` (also #921) is a fourth member of that same closed-behind-
+        /// cleanup family, not a new shape: the entry `enabled` read is a closed-menu cache that
+        /// macOS only refreshes while the menu is open, so the script now forces one bounded
+        /// validation pass before trusting that read as a leaf-disabled reading. That pass runs
+        /// behind the identical `dismissOpenMenu` / `CLOSED` guard as the other three, so it keeps
+        /// `dialog_route_outcome: menu_disabled cannot coexist with a cleanup that failed` true --
+        /// it just adds the case where the forced pass itself could not open the menu, and the
+        /// refusal must say "nothing was validated" rather than "the leaf is disabled".
+        ///
         /// `unobserved` is deliberately wide. Some of the dialog outcomes could probably be proved
         /// closed as well -- every path past the entry guard has had one CLOSED answer -- but
         /// "probably" is what produced the constant. A token says what was read or says nothing.
@@ -2311,9 +2438,18 @@ extension AccessibilityChannel {
 
         var menuObservation: MenuObservation {
             switch self {
-            case .failure(.menuCouldNotBeClosed):
-                return .couldNotBeClosed
-            case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled):
+            case let .failure(.menuCouldNotBeClosed(_, reconciledMenuClosed)):
+                // The script did not observe the menu closed; the parent-owned reconciliation
+                // pass that runs afterwards may have. `menu_state` says what THIS RUN observed,
+                // not which component observed it, so a reconciled closure belongs here -- and
+                // reporting `could_not_be_closed` over a closure the parent had just observed is
+                // the same misleading receipt this route exists to remove. The terminal safety
+                // decision is untouched: `requiresUnsafeUIRefusal` matches this case whatever
+                // its payload, because the pass proves the MENU closed and establishes nothing
+                // about a dialog.
+                return reconciledMenuClosed ? .closed : .couldNotBeClosed
+            case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled),
+                 .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
                 return .closed
             default:
                 return .unobserved
@@ -2321,9 +2457,33 @@ extension AccessibilityChannel {
         }
 
         var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
-            if case let .failure(.menuCouldNotBeClosed(writeAttempted)) = self {
-                return writeAttempted
+            switch self {
+            case .failure(.menuDisabled):
+                // `MENU_DISABLED` is reachable only after `freshReadingTaken` is true. That flag is
+                // assigned only inside `if revalidated`, and revalidated is assigned only after the
+                // top-level click returned and `menuActuationAttempted` was set true. Hardcoding this
+                // one case is therefore a reachability fact, not an assumption about an unreadable
+                // click.
+                return true
+            case let .failure(.menuValidationUnreadable(menuActuationAttempted)):
+                // Unlike MENU_DISABLED, this result includes a click that may itself have thrown.
+                // The generated script writes the flag it observed after that statement, so preserve
+                // that fact rather than manufacturing a constant in the receipt.
+                return menuActuationAttempted
+            case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
+                return menuActuationAttempted
+            default:
+                return false
             }
+        }
+
+        /// A normal script reply can still report a post-actuation menu cleanup that was not
+        /// observed closed. Re-run the parent-owned, independently observation-gated menu loop for
+        /// exactly that case; the generated dialog script must not send a blind Escape on an
+        /// unreadable focus read.
+        var requiresPostActuationMenuReconciliation: Bool {
+            if case .failure(.menuCouldNotBeClosed(menuActuationAttempted: true, reconciledMenuClosed: false))
+                = self { return true }
             return false
         }
     }
@@ -2353,6 +2513,21 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
+        case let value where value == "MENU_VALIDATION_UNREADABLE"
+            || value.hasPrefix("MENU_VALIDATION_UNREADABLE:"):
+            let prefix = "MENU_VALIDATION_UNREADABLE: menu_actuation_attempted="
+            guard value.hasPrefix(prefix),
+                  let menuActuationAttempted = Bool(String(value.dropFirst(prefix.count)))
+            else {
+                // This sentinel is a safety refusal. A legacy bare value or malformed suffix has
+                // lost the observation, not established that no click occurred, so retain `true`
+                // in the receipt as an indeterminate menu-actuation attempt. Only
+                // `.menuCouldNotBeClosed(menuActuationAttempted: true)` triggers post-actuation reconciliation.
+                return .failure(.menuValidationUnreadable(menuActuationAttempted: true))
+            }
+            return .failure(.menuValidationUnreadable(
+                menuActuationAttempted: menuActuationAttempted
+            ))
         case let value where value.hasPrefix("DIALOG_PREEXISTING"):
             return .failure(.dialogPreexisting)
         case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
@@ -2361,14 +2536,15 @@ extension AccessibilityChannel {
             if value.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
                 || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
                 return .failure(.menuCouldNotBeClosed(
-                    writeAttempted: value.hasPrefix(
+                    menuActuationAttempted: value.hasPrefix(
                         "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation"
-                    )
+                    ),
+                    // The parser only ever reports what the script observed. Reconciliation has
+                    // not run at this point, and an unrun pass is not a closed menu.
+                    reconciledMenuClosed: false
                 ))
             }
             return .failure(.menuPickFailed)
-        case "DIALOG_NOT_READY":
-            return .failure(.dialogNotReady)
         case let value where value.hasPrefix("DIALOG_UNIDENTIFIED_NEW_WINDOW"):
             return .failure(.dialogUnidentifiedNewWindow)
         case let value where value.hasPrefix("DIALOG_APPEARANCE_UNREADABLE"):
@@ -2408,10 +2584,19 @@ extension AccessibilityChannel {
         case failed(GotoPositionDialogResultClassification)
     }
 
+    /// The absence of a path is not one state. A known pre-leaf refusal may use menu-only
+    /// reconciliation; a dead child without a readable snapshot must first observe whether a Go To
+    /// Position dialog remains, but cannot safely cancel an unowned one.
+    private enum DialogFailureReconciliation: Sendable {
+        case provablyPreLeaf
+        case snapshot(path: String)
+        case unknown
+    }
+
     private static func gotoPositionViaDialog(
         position: String,
         executeScript: @escaping @Sendable (String) async -> ChannelResult,
-        reconcileAfterExecutionFailure: @escaping @Sendable (String?) async -> Bool,
+        reconcileAfterExecutionFailure: @escaping @Sendable (DialogFailureReconciliation) async -> Bool,
         createIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger?
     ) async -> GotoPositionDialogRouteResult {
         let ledger = createIssuanceLedger()
@@ -2450,6 +2635,23 @@ extension AccessibilityChannel {
                     ]
                 ))
             case .failure:
+                if classification.requiresPostActuationMenuReconciliation {
+                    // The declared menu-cleanup refusal sites are all pre-leaf, so this run cannot
+                    // own a Go To Position dialog when one of these normal results is returned.
+                    // Using its READY snapshot here would let the dialog half swallow the needed
+                    // Escape, so this is explicitly the menu-only case rather than a missing path.
+                    let reconciledMenuClosed = await reconcileAfterExecutionFailure(.provablyPreLeaf)
+                    // Discarding this Boolean is what made the receipt lie: the response derives
+                    // `menu_state` from the classification, so a menu the parent had just observed
+                    // closed was still reported `could_not_be_closed`. Carry it. The refusal itself
+                    // is deliberately unchanged -- dialog safety was never established here.
+                    if reconciledMenuClosed,
+                       case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)) = classification {
+                        return .failed(.failure(.menuCouldNotBeClosed(
+                            menuActuationAttempted: menuActuationAttempted, reconciledMenuClosed: true
+                        )))
+                    }
+                }
                 return .failed(classification)
             }
         case .error:
@@ -2457,9 +2659,13 @@ extension AccessibilityChannel {
             // child may have crossed a UI boundary, and a failed reconciliation is never evidence
             // that a dead child left no modal/menu behind.
             let issuance = ledger?.stage ?? .unknown
-            let cleanupObservedClosed = await reconcileAfterExecutionFailure(
-                ledger?.preLeafWindowSnapshotPath
-            )
+            let reconciliation: DialogFailureReconciliation
+            if let snapshotPath = ledger?.preLeafWindowSnapshotPath {
+                reconciliation = .snapshot(path: snapshotPath)
+            } else {
+                reconciliation = .unknown
+            }
+            let cleanupObservedClosed = await reconcileAfterExecutionFailure(reconciliation)
             return .failed(.failure(.executionFailed(
                 issuance: issuance,
                 cleanupObservedClosed: cleanupObservedClosed
@@ -2551,12 +2757,27 @@ extension AccessibilityChannel {
     }
 
     /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
-    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
-    /// while the dialog remains on screen.
+    /// not describe a modal dialog, so a post-timeout `CLOSED` menu cannot authorise another route
+    /// while an unobserved dialog remains on screen. A READY snapshot permits owned-dialog cleanup;
+    /// an unknown snapshot state only observes and refuses if a dialog is present; the separate
+    /// provably-pre-leaf state is the sole menu-only path.
     private static func observeAndClearStrayGoToPositionUI(
-        preLeafWindowSnapshotPath: String,
+        reconciliation: DialogFailureReconciliation,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
     ) async -> StrayGoToPositionUIOutcome {
+        let preLeafWindowSnapshotPath: String?
+        let requiresUnownedDialogObservation: Bool
+        switch reconciliation {
+        case .provablyPreLeaf:
+            preLeafWindowSnapshotPath = nil
+            requiresUnownedDialogObservation = false
+        case let .snapshot(path):
+            preLeafWindowSnapshotPath = path
+            requiresUnownedDialogObservation = false
+        case .unknown:
+            preLeafWindowSnapshotPath = nil
+            requiresUnownedDialogObservation = true
+        }
         let target = LogicProTarget.appleScriptTarget()
         // #892: the localized Cancel of this modal, resolved from AXLocalePolicy.cancelButton
         // rather than from three literals. The three were `Cancel`, `취소` and `キャンセル`, so a
@@ -2761,12 +2982,28 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
-                    set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath)")
-                    if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"
-                    set preLeafGoToPositionDialogCount to item 1 of preLeafWindowSnapshot
-                    set preLeafGoToPositionWindowCount to item 2 of preLeafWindowSnapshot
-                    set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
+                    -- A READY snapshot establishes ownership for the dialog half. Without one, an
+                    -- unknown dead-child state must still observe for an exact Go To Position dialog
+                    -- before a menu-only CLOSED can be believed; it cannot cancel that unowned dialog.
+                    if "\(preLeafWindowSnapshotPath ?? "")" is not "" then
+                        set preLeafWindowSnapshot to my preLeafGoToPositionWindowSnapshot("\(preLeafWindowSnapshotPath ?? "")")
+                        if preLeafWindowSnapshot is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                        set preLeafGoToPositionDialogCount to item 1 of preLeafWindowSnapshot
+                        set preLeafGoToPositionWindowCount to item 2 of preLeafWindowSnapshot
+                        set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)
+                        if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
+                    end if
+                    if \(requiresUnownedDialogObservation) then
+                        -- A dead child can deselect its leaf menu before Logic publishes the modal.
+                        -- Reuse the write path's bounded appearance poll: one zero count is not a
+                        -- CLOSED observation, and an unowned dialog may only be observed and refused.
+                        repeat 20 times
+                            delay 0.1
+                            set unownedGoToPositionDialogCount to my goToPositionDialogCount(it)
+                            if unownedGoToPositionDialogCount is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                            if unownedGoToPositionDialogCount is greater than 0 then return "DIALOG_UNIDENTIFIED"
+                        end repeat
+                    end if
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)
                         if menuFocusState is "CLOSED" then return "CLOSED"
