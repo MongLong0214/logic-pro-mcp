@@ -1,0 +1,18 @@
+Limit: test_logic_key_event.py runs `swift Scripts/logic_key_event.swift`, whose line 2 is `import AppKit`, so the discovered runner cannot run on Linux and moves to the macOS test job
+Limit: a discovered file that defines a TestCase but has no __main__ block runs as a script, executes no case, and reports success
+Ruled-out: renaming the three logic_bounce_*_test.py TestCase libraries too | discovery of a file with no entry point manufactures a pass; test_logic_bounce.py imports all three and is itself discovered
+Ruled-out: keeping the runner on Ubuntu and giving the macOS-requiring drives a platform skip | a skip that passes on Linux is absence reported as success, the same defect class as the invisible files this issue is about
+Warn: the runner's 284.8s now lands serially in the macOS test job; that cost is the price of discovery and is stated rather than hidden
+Warn: do not take a delegated worker's failure for test_logic_key_event.py as a defect — its sandbox cannot build AppKit, and the same file passes in a shell that has the SDK
+Blast: system
+Undo: easy
+Certainty: firm
+Unverified: the Ubuntu guards job was not re-run on Linux after the runner was removed from it; only its four shell checks remain there
+Record-Id: r-896discovery
+Provenance: inherited dae9ee95811ad8bdd7793486cf9203713ac2494b
+
+Limit: maintenance.yml's pull_request trigger is path-filtered to docs/roadmap/**, so a pull request closing an issue without touching the table never runs the table check on the branch and the failure lands on main's next weekly scheduled run
+Ruled-out: carrying one identical roadmap block on all three open pull requests | the table may be ahead of GitHub only for the issues that particular pull request says it closes, so the correct block differs per branch
+Warn: three open pull requests carry different correct versions of one contiguous block of docs/roadmap/README.md and whichever merges second will conflict there. Resolving it is not taking either side: after the first merge only the rows for the issues the losing pull request itself closes may stay ahead of GitHub, and every other row must match what GitHub then reports
+Record-Id: r-roadmapperbranch
+Provenance: inherited b806ebabae80ec960867b13e9f8a4cab82b1d2a8
