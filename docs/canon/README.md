@@ -262,7 +262,7 @@ logic-canon://<source>/<unit>/<locale>/<key>#<field>
 | | |
 |---|---|
 | files in the tree | `Scripts/check-canon-citations.py`, run by `run-repo-guards.py` in CI |
-| a pull request body | the `canon-citations-in-the-pull-request` CI job, which reads the body |
+| a pull request body | the `pr-policy` required check (`.github/workflows/pr-policy.yml`), which reads the body |
 | issue bodies | the issue templates require it; nothing checks an issue mechanically yet |
 
 A pull request body is not a file, so the tree-wide sweep could not see it — and the two documents

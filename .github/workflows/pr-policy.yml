@@ -14,22 +14,22 @@ name: PR policy
 # So the body check gets its own workflow, its own concurrency group, and its own required
 # context. Editing a description then re-runs this and nothing else.
 #
-# THIS IS ADDITIVE TODAY
-# ----------------------
-# `ci.yml` still carries the same check and `edited` is still in its trigger, so the two overlap
-# on purpose. The order matters and it is the whole reason the overlap exists: the branch ruleset
-# requires `build`, `compile` and `test`, and `pr-policy` is required by nothing until somebody
-# with repository administration adds it. Removing the `ci.yml` job first would delete the merge
-# block and leave a green check that stops nothing.
+# THIS IS THE ONLY COPY NOW
+# -------------------------
+# It was additive while the duplicate in `ci.yml` held the merge block, because `pr-policy` was
+# required by nothing and removing the original first would have deleted the block and left a green
+# check that stopped nothing. That order has been followed:
 #
-# The remaining step, to be run by an administrator and then verified by re-reading the ruleset:
+#   2026-09-21  `pr-policy` added to the `required_status_checks` rule of ruleset 19060230
+#               (`release-qualification-trust-boundary`, branch target, `~DEFAULT_BRANCH`,
+#               enforcement active, bypass_actors empty), alongside build, compile and test, each
+#               with integration_id 15368, strict_required_status_checks_policy left true.
+#               Re-read from the API after the change; the delta was that one added context.
+#   then        the duplicate job came out of `ci.yml`, and the body check exists only here.
 #
-#   gh api -X PUT repos/MongLong0214/logic-pro-mcp/rulesets/19060230 ...
-#     adding {"context": "pr-policy"} to required_status_checks, keeping build/compile/test
-#     and strict_required_status_checks_policy: true
-#
-# Only after that context is observed required does the `canon-citations-in-the-pull-request` job
-# come out of `ci.yml`, and `edited` with it.
+# `docs/canon/CI-GATE.json` is what a guard reads: this file declares `gates_merges: true` and owns
+# the two Canon commands below. Deleting either of them from this file fails the required-gate
+# guard under Scripts/, which is what stops the migration from becoming a deletion.
 
 on:
   pull_request:
@@ -106,4 +106,26 @@ jobs:
         # Whether this change may opt out is derived from what it TOUCHES, not from what its
         # description says about itself. Without the file list the opt-out is one sentence anybody
         # can type, and review walked through it three ways.
-        run: python3 Scripts/check-canon-citations.py --text pr-body.md --changed pr-changed.txt
+        #
+        # Split across two lines on purpose: `docs/canon/CI-GATE.json` pins this invocation by the
+        # continuation, which is the spelling it had in `ci.yml` before the body check moved here.
+        # That list may only grow, so the pin follows the command rather than being deleted with
+        # the old job -- a migration that removes the requirement is a deletion wearing its name.
+        run: |
+          python3 Scripts/check-canon-citations.py \
+            --text pr-body.md --changed pr-changed.txt
+
+      - name: What to do about a Canon failure
+        # Diagnostics for the contributor, not a verdict: `if: failure()` and it prints only
+        # static text. Nothing from the body or the title is echoed -- those are attacker-
+        # controlled strings, and a workflow annotation is a rendering surface.
+        if: failure()
+        run: |
+          echo "::notice::The pull request BODY is what this job reads. See CONTRIBUTING.md,"
+          echo "::notice::section 'Citing Logic's own data', and docs/canon/README.md."
+          echo "::notice::If this change states no fact about Logic, write the opt-out sentence"
+          echo "::notice::docs/canon/README.md gives, in visible prose, with the reason. It is"
+          echo "::notice::refused for a change that edits a Logic-facing path (docs/canon/"
+          echo "::notice::LOGIC-FACING.json lists those prefixes), whatever the body says."
+          echo "::notice::Editing the description re-runs THIS workflow only; no compile or test"
+          echo "::notice::job is restarted, and no code verdict already on this commit changes."

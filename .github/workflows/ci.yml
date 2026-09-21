@@ -5,15 +5,18 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    # `edited` is NOT in the default set (opened, synchronize, reopened), and one job here reads
-    # the pull request BODY. Without it that gate only ever saw the body as of the last push:
-    # open a compliant pull request, let it go green, then edit the citations out, and nothing
-    # re-ran. The rule named the body and the enforcement site was the push.
+    # `edited` is NOT in the default set (opened, synchronize, reopened), and it is subscribed for
+    # ONE reason: RETARGETING a pull request arrives as `edited` -- there is no separate event for
+    # it -- and a change that now merges into a different branch has not been validated against the
+    # branch it now merges into.
     #
-    # Everything runs on an edit rather than the body job alone, because `build` refuses a
-    # dependency whose result is `skipped` -- so narrowing this with an `if:` on compile and test
-    # would turn the only required context red on every edit. The cost is a full run on an event
-    # that happens rarely; the alternative is a gate that reads a body nobody re-checks.
+    # It used to be here for the pull request BODY check as well. That check is
+    # `.github/workflows/pr-policy.yml` now and `pr-policy` is a required context in its own right
+    # (added to ruleset 19060230 and re-read from the API on 2026-09-21), so editing a description
+    # re-runs that workflow and not this one.
+    #
+    # What stops a title edit from restarting a macOS test job is `classify` below, not this list:
+    # an event filter cannot tell a retarget from a typo fix, because both are `edited`.
     types: [opened, synchronize, reopened, edited]
 
 # Least privilege: the build job only reads the repo. Declaring the scope here
@@ -23,7 +26,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # TWO cancellation domains, because a description edit cancelling a running macOS test job is the
+  # defect this workflow was carrying. This expression is evaluated before any job runs, so it
+  # cannot call `classify` and has to repeat the conservative half of the same rule itself: a run
+  # enters the metadata domain only when the payload positively says a title or a body changed AND
+  # says nothing about the base. Anything else -- a push, an unrecognised `changes` key, a
+  # retarget -- is a code run and shares the code domain, so a newer commit still supersedes an
+  # older run of itself. Erring the other way would put a run that DOES validate code in a domain
+  # a later typo fix can cancel.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'pull_request' &&
+    github.event.action == 'edited' && github.event.changes.base == null &&
+    (github.event.changes.title != null || github.event.changes.body != null)) && 'metadata' ||
+    'code' }}
   cancel-in-progress: true
 
 # The DEFAULT shell for a `run:` block is `bash -e {0}` -- no `pipefail`. So `a | tee log` reports
@@ -36,89 +51,52 @@ defaults:
     shell: bash
 
 jobs:
-  # `docs/roadmap/README.md` declares itself the source of truth for what is open, and its update
-  # rule ("the same PR that opens or closes an issue updates the table") is a convention until
-  # something fails when it is not kept. This is that something.
+  # Does this event need code validation at all, or did somebody edit a description?
   #
-  # Its own job rather than a step in `compile`: the check reads issue state, so it needs a token
-  # scope the build jobs do not have. Adding `issues: read` to the workflow-level `permissions`
-  # would hand it to every job instead of the one that needs it. It is also not in
-  # `run-repo-guards.py`, whose contract is plain Python needing neither Xcode nor a network.
-  # A pull request body is not a file in the tree, so `check-canon-citations.py`'s tree-wide sweep
-  # cannot see it -- and the two documents a change is actually reviewed through were therefore
-  # exempt from the rule they are supposed to carry. `docs/canon/README.md` says every artefact
-  # this repository produces cites Logic or says it cannot; without this job, "every artefact"
-  # quietly meant "every file".
+  # The rule is in `Scripts/classify-pull-request-event.py` and the cases that drive it are in
+  # `Scripts/test_pull_request_event_classifier.py`. It answers `metadata-only` for exactly one
+  # shape -- a `pull_request` `edited` whose `changes` names title and/or body and nothing else --
+  # and `code` for everything else, including an `edited` carrying `changes.base` (a retarget),
+  # an `edited` with no `changes` at all, and an `edited` naming a key the script has not been
+  # taught. A future editable field must not inherit the exemption by saying nothing.
   #
-  # Its own job because it needs the pull request body, which the build jobs have no reason to read.
-  canon-citations-in-the-pull-request:
-    if: github.event_name == 'pull_request'
+  # THE JOBS BELOW CHANGE THEIR NAME AND NOT ONLY THEIR CONDITION, and that is the whole safety
+  # argument. A job skipped by an `if:` still publishes a check run under its own name, and GitHub
+  # counts a `skipped` required check as SATISFIED -- so the obvious form of this optimisation
+  # would let a title edit publish `compile: skipped` over a real `compile: failure` on the same
+  # head commit and open the merge. Publishing under a name that is not a required context leaves
+  # the code run's verdicts exactly where they were.
+  #
+  # It also decides nothing on its own behalf: if this job fails, the expressions below see an
+  # empty output, every gated job publishes its non-canonical name, and the required contexts are
+  # simply absent for that commit. Absent is not satisfied.
+  classify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
+    outputs:
+      code_validation_required: ${{ steps.decide.outputs.code_validation_required }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          # The waiver ratchet compares against `git merge-base`, and a shallow clone has no base.
-          # The guard fails outright under CI rather than degrading to comparing a file with itself.
-          fetch-depth: 0
 
-      - name: Citations in the tree bind to files this change touches
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+      - id: decide
+        name: Classify this event
+        # The payload is read from the FILE GitHub writes, by the script, from
+        # `GITHUB_EVENT_PATH`. A title and a body are attacker-controlled strings and neither is
+        # interpolated into this shell -- nothing here even names them.
+        #
+        # `|| DECISION=unclassified` rather than letting the failure stop the step: an unreadable
+        # or unexpected answer must mean "validate the code", not "decide nothing". Only the exact
+        # token `metadata-only` turns validation off, and every other string, including the empty
+        # one, falls through to `true`.
         run: |
-          # The API, not `git diff`. The plumbing version assumed `actions/checkout` had created
-          # `origin/$BASE` and that the merge ref resolved -- true for a same-repo pull request and
-          # UNTESTED for one from a fork, which this repository takes. `gh pr view --json files`
-          # answers the same question through ONE mechanism, verified against two real fork pull
-          # requests (40 and 9 files). `test -s` keeps the empty case failing closed: an empty list
-          # means the query failed, and an empty list used to reopen the opt-out.
-          # PAGINATED, and counted. `gh pr view --json files` returns one page; a pull request
-          # larger than that page silently narrows what this rule is aimed at, and the opt-out is
-          # derived from the file list. The REST endpoint spells the field `filename` (GraphQL's
-          # `path` returns nothing here and exits 0, which is how an empty list once slipped
-          # through), and `changed_files` is what the count is checked against.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename' \
-            > /tmp/pr-changed.txt
-          test -s /tmp/pr-changed.txt
-          EXPECTED=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json changedFiles -q .changedFiles)
-          ACTUAL=$(wc -l < /tmp/pr-changed.txt | tr -d ' ')
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::listed $ACTUAL changed file(s), the pull request reports $EXPECTED."
-            echo "::error::A partial list narrows this rule to whatever happened to be on page one."
-            exit 1
+          DECISION=$(python3 Scripts/classify-pull-request-event.py) || DECISION=unclassified
+          if [ "$DECISION" = "metadata-only" ]; then
+            REQUIRED=false
+          else
+            REQUIRED=true
           fi
-          python3 Scripts/check-canon-citations.py --changed /tmp/pr-changed.txt
-
-      - name: The pull request body cites Logic, or says it states no fact about Logic
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body -q .body > /tmp/pr-body.md
-          # Whether this change may opt out is derived from what it TOUCHES, not from what its
-          # description says about itself. Without the file list the opt-out is one sentence
-          # anybody can type, and review walked through it three ways.
-          # PAGINATED, and counted. `gh pr view --json files` returns one page; a pull request
-          # larger than that page silently narrows what this rule is aimed at, and the opt-out is
-          # derived from the file list. The REST endpoint spells the field `filename` (GraphQL's
-          # `path` returns nothing here and exits 0, which is how an empty list once slipped
-          # through), and `changed_files` is what the count is checked against.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename' \
-            > /tmp/pr-changed.txt
-          test -s /tmp/pr-changed.txt
-          EXPECTED=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json changedFiles -q .changedFiles)
-          ACTUAL=$(wc -l < /tmp/pr-changed.txt | tr -d ' ')
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::listed $ACTUAL changed file(s), the pull request reports $EXPECTED."
-            echo "::error::A partial list narrows this rule to whatever happened to be on page one."
-            exit 1
-          fi
-          python3 Scripts/check-canon-citations.py \
-            --text /tmp/pr-body.md --changed /tmp/pr-changed.txt
+          echo "decision=$DECISION code_validation_required=$REQUIRED"
+          echo "code_validation_required=$REQUIRED" >> "$GITHUB_OUTPUT"
 
   # WAS `roadmap`, and carried four things: two that compare GitHub issue state against
   # `docs/roadmap/README.md` and the ADR index, and two about the Homebrew Formula. Only the
@@ -130,6 +108,14 @@ jobs:
   # roadmap row blocked a merge that had nothing to do with the roadmap, which is the cost the
   # instruction to separate them names.
   formula:
+    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'formula' || 'formula (not a code gate - metadata-only edit)' }}"
+    needs: [classify]
+    if: needs.classify.outputs.code_validation_required == 'true'
+    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
+    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
+    # check run that is not a required context, so the verdict the code run left on this commit
+    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
+    # skipped required check as satisfied.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -177,6 +163,14 @@ jobs:
   # guard's wall time to the front of a 23-minute test job to save runner minutes on the runs that
   # fail, and the guards are now two minutes rather than thirteen, so there is little left to save.
   guards:
+    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'guards' || 'guards (not a code gate - metadata-only edit)' }}"
+    needs: [classify]
+    if: needs.classify.outputs.code_validation_required == 'true'
+    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
+    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
+    # check run that is not a required context, so the verdict the code run left on this commit
+    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
+    # skipped required check as satisfied.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -251,6 +245,14 @@ jobs:
           if-no-files-found: ignore
 
   compile:
+    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'compile' || 'compile (not a code gate - metadata-only edit)' }}"
+    needs: [classify]
+    if: needs.classify.outputs.code_validation_required == 'true'
+    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
+    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
+    # check run that is not a required context, so the verdict the code run left on this commit
+    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
+    # skipped required check as satisfied.
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -300,6 +302,14 @@ jobs:
 
 
   test:
+    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'test' || 'test (not a code gate - metadata-only edit)' }}"
+    needs: [classify]
+    if: needs.classify.outputs.code_validation_required == 'true'
+    # `classify` decides whether this event needs code validation at all, and the DISPLAY NAME
+    # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
+    # check run that is not a required context, so the verdict the code run left on this commit
+    # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
+    # skipped required check as satisfied.
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -412,56 +422,44 @@ jobs:
   # is empty, and those three are the whole list. So `needs` is what makes every OTHER job able to
   # block a merge, which is what `check-every-ci-job-is-required.py` enforces.
   build:
+    name: "${{ needs.classify.outputs.code_validation_required == 'true' && 'build' || 'build (not a code gate - metadata-only edit)' }}"
     runs-on: ubuntu-latest
     # `roadmap` joins this list in the same change that restores the job. The instruction three
     # lines above says to, and skipping it is how a restored gate becomes decoration: the job runs,
     # it can fail, and the only required context does not look at it. A stale roadmap, a drifted ADR
     # index or a wrong Formula sha256 would have turned `roadmap` red while `build` stayed green and
     # the ruleset permitted the merge. Found by review 2026-09-15.
-    needs: [guards, compile, test, formula, canon-citations-in-the-pull-request]
+    needs: [classify, guards, compile, test, formula]
     # `always()` so a FAILED need still reaches the decision below -- that is the point of this
     # job. `!cancelled()` so a CANCELLED RUN does not. `concurrency.cancel-in-progress` cancels the
     # previous run on every push, and this job then ran anyway, saw its cancelled needs, and left a
     # red `build` on the pull request while a healthy run was still in progress. It misled me twice
     # in one afternoon: `gh pr checks` shows the newest check run per NAME, so a superseded run's
     # failure sits on top of a run that has not finished. A cancelled run has no verdict to give.
-    if: always() && !cancelled()
+    if: always() && !cancelled() && needs.classify.outputs.code_validation_required == 'true'
     timeout-minutes: 5
     steps:
       - name: Every gate must have passed
-        # `canon-citations-in-the-pull-request` joins this list in the same change that adds the
-        # job, for the reason written five lines above -- and it was left out of the first version
-        # of that change anyway. The job ran, it could fail, and the only required context did not
-        # look at it. That is the same defect this comment already records, committed again by the
-        # change whose whole subject is enforcement sites drifting from named sites.
+        # Each need spelled out and compared to `success`, rather than tested for truthiness:
+        # `cancelled` and `skipped` are not success, and a dependency this list forgets is a job
+        # that can go red while the only required context stays green -- which has happened here
+        # three times and is what the required-gate guard under Scripts/ watches for.
         #
-        # It is the one gate here that can legitimately be SKIPPED: it runs only on
-        # `pull_request`, because a pull request body is what it reads. A push has no body, so
-        # `skipped` is accepted there and refused on a pull request -- spelled out rather than
-        # folded into a truthy test, because `[ "" = "success" ]` and `[ "skipped" = "success" ]`
-        # both read as "did not succeed" and only one of them is.
+        # There is no longer a need that may legitimately be `skipped` here. The body check that
+        # was -- it ran only on `pull_request`, because a pull request body is what it reads -- is
+        # `pr-policy` now, a required context of its own, and this job does not depend on it: a
+        # `jobs.needs` reference cannot cross workflows, and the branch ruleset is what links the
+        # two required paths. `classify` runs on every event and is checked like the rest.
         env:
-          EVENT: ${{ github.event_name }}
+          CLASSIFY: ${{ needs.classify.result }}
           GUARDS: ${{ needs.guards.result }}
           COMPILE: ${{ needs.compile.result }}
           TEST: ${{ needs.test.result }}
           FORMULA: ${{ needs.formula.result }}
-          CANON: ${{ needs.canon-citations-in-the-pull-request.result }}
         run: |
-          echo "guards=$GUARDS compile=$COMPILE test=$TEST formula=$FORMULA canon=$CANON event=$EVENT"
-          # Each one spelled out, and each compared to `success` rather than tested for truthiness.
-          # `cancelled` and `skipped` are not success, and a dependency this list forgets is a job
-          # that can go red while the only required context stays green -- which has happened here
-          # three times and is what `Scripts/check-every-ci-job-is-required.py` now watches for.
+          echo "classify=$CLASSIFY guards=$GUARDS compile=$COMPILE test=$TEST formula=$FORMULA"
+          [ "$CLASSIFY" = "success" ] || { echo "::error::classify did not succeed"; exit 1; }
           [ "$GUARDS" = "success" ] || { echo "::error::guards did not succeed"; exit 1; }
           [ "$COMPILE" = "success" ] || { echo "::error::compile did not succeed"; exit 1; }
           [ "$TEST" = "success" ] || { echo "::error::test did not succeed"; exit 1; }
           [ "$FORMULA" = "success" ] || { echo "::error::formula did not succeed"; exit 1; }
-          if [ "$EVENT" = "pull_request" ]; then
-            [ "$CANON" = "success" ] || {
-              echo "::error::canon-citations-in-the-pull-request did not succeed"; exit 1; }
-          else
-            [ "$CANON" = "skipped" ] || [ "$CANON" = "success" ] || {
-              echo "::error::canon-citations-in-the-pull-request was neither skipped nor green"
-              exit 1; }
-          fi

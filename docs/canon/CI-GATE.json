@@ -1,5 +1,5 @@
 {
-  "note": "What the required CI gate must contain, and what every OTHER workflow in this repository is for. Read from a file so the merge-base ratchet can see it: held as module constants, a job could be excused or a step deleted in the same commit that did it.",
+  "note": "What the required CI gates must contain, and what every OTHER workflow in this repository is for. Read from a file so the merge-base ratchet can see it: held as module constants, a job could be excused or a step deleted in the same commit that did it. There are TWO gating workflows since 2026-09-21 -- ci.yml validates the code and pr-policy.yml validates the pull request description -- and `required_commands` below is satisfied by either of them, which is what lets a check MOVE between them without the move reading as a deletion.",
   "not_required": {
     "build": "it IS the gate; a job cannot require itself"
   },
@@ -7,26 +7,32 @@
     "Scripts/check-canon-citations.py --changed",
     "Scripts/check-canon-citations.py \\",
     "bash Scripts/ci-coverage-gate.sh",
+    "python3 Scripts/classify-pull-request-event.py",
     "python3 Scripts/run-helper-suites.py",
     "python3 Scripts/run-repo-guards.py"
   ],
   "workflows": {
     "ci.yml": {
       "gates_merges": true,
-      "why": "the audited one. `build` is the required context and every job here is in its `needs` or waived above.",
-      "required_commands": []
+      "required_contexts": ["build", "compile", "test"],
+      "why": "the code gate. `build` aggregates every other job here through `needs`, and this is the workflow whose jobs are audited against that list. Its `pull_request` trigger keeps `edited` because RETARGETING arrives as `edited`; `classify` is what stops a title or body edit from restarting a macOS compile and test run, and it does so by changing those jobs' DISPLAY NAMES as well as their conditions -- a job skipped under its canonical name would publish `skipped`, which GitHub counts as a satisfied required check.",
+      "required_commands": [
+        "python3 Scripts/classify-pull-request-event.py"
+      ]
     },
     "pr-policy.yml": {
-      "gates_merges": false,
-      "why": "the pull-request BODY check, split out of ci.yml on 2026-09-18 so that editing a description re-runs this and not a 23-minute macOS test job. `gates_merges` is FALSE because it is true of the ruleset, not of the intent: the branch ruleset requires build, compile and test, and `pr-policy` is required by nothing until an administrator adds the context. The duplicate in ci.yml stays until then -- removing it first would delete the merge block and leave a green check that stops nothing. When the context is observed required, this flips and the ci.yml job goes.",
+      "gates_merges": true,
+      "required_contexts": ["pr-policy"],
+      "why": "the pull-request BODY check, split out of ci.yml on 2026-09-18 so that editing a description re-runs this and not a macOS test job. `gates_merges` is TRUE as of 2026-09-21, when `pr-policy` was added to the `required_status_checks` rule of ruleset 19060230 beside build, compile and test (integration_id 15368 each, strict left true, bypass_actors left empty) and the ruleset was re-read from the API to confirm the delta was that one added context. The duplicate job in ci.yml came out only after that readback -- removing it first would have deleted the merge block and left a green check that stopped nothing. This field states what the ruleset was observed to hold; no guard in this repository queries the API, and none should on a contributor's run.",
       "required_commands": [
         "python3 Scripts/check-canon-citations.py --changed pr-changed.txt",
-        "python3 Scripts/check-canon-citations.py --text pr-body.md --changed pr-changed.txt"
+        "--text pr-body.md --changed pr-changed.txt"
       ]
     },
     "maintenance.yml": {
       "gates_merges": false,
-      "why": "roadmap and ADR-index status against GitHub issues. Moved out of `ci.yml` on 2026-09-18: it is bookkeeping about the project rather than a property of the code a pull request changes, and inside the gate a stale row blocked merges that had not touched the roadmap. It still fails; it no longer blocks.",
+      "required_contexts": [],
+      "why": "roadmap and ADR-index status against GitHub issues. Moved out of `ci.yml` on 2026-09-18: it is bookkeeping about the project rather than a property of the code a pull request changes, and inside the gate a stale row blocked merges that had not touched the roadmap. It still fails; it no longer blocks, and this migration did not move it back.",
       "required_commands": [
         "python3 Scripts/roadmap-table-matches-github.py",
         "python3 Scripts/adr-index-matches-github.py",
@@ -36,21 +42,25 @@
     },
     "canon-issue.yml": {
       "gates_merges": false,
+      "required_contexts": [],
       "why": "runs on `issues`. There is no merge to block and no `build` job; it comments rather than fails, and that is its whole contract.",
       "required_commands": []
     },
     "release.yml": {
       "gates_merges": false,
+      "required_contexts": [],
       "why": "runs on a tag. It gates a RELEASE, not a merge, and its own ordering is what protects that.",
       "required_commands": []
     },
     "publish-mcp.yml": {
       "gates_merges": false,
+      "required_contexts": [],
       "why": "publishes registry metadata after a release exists. Nothing about a pull request.",
       "required_commands": []
     },
     "commitlore-preserve.yml": {
       "gates_merges": false,
+      "required_contexts": [],
       "why": "runs on `pull_request_target: closed` and only when merged. It preserves records after the fact; there is nothing left to block.",
       "required_commands": []
     }

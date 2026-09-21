@@ -166,7 +166,16 @@ class Refusals(unittest.TestCase):
         """A required JOB says nothing about its STEPS; deleting a step leaves the job green."""
         self._policy(required_commands=["python3 Scripts/nothing-runs-this.py"])
         problems = self._check(FLOW)
-        self.assertTrue(any("no step runs" in p for p in problems), problems)
+        self.assertTrue(any("no step in any merge-gating workflow runs" in p for p in problems),
+                        problems)
+
+    def test_a_command_declared_as_one_workflows_own_that_it_does_not_run_fails(self):
+        """The per-workflow half of the same rule. The top-level list may be satisfied by EITHER
+        gate, so only this one says a named owner still carries what it declared."""
+        self._policy(workflows={"ci.yml": {"gates_merges": True, "why": "the audited one",
+                                           "required_commands": ["python3 Scripts/absent.py"]}})
+        problems = self._check(FLOW)
+        self.assertTrue(any("ci.yml: no step runs" in p for p in problems), problems)
 
 
 class TheBodyGateMustRerunWhenTheBodyChanges(unittest.TestCase):
@@ -224,16 +233,50 @@ class AgainstTheRealWorkflow(unittest.TestCase):
     def test_the_repositorys_own_workflow_passes(self):
         self.assertEqual(guard.check(), [])
 
-    def test_the_real_workflow_rebuilds_when_the_body_is_edited(self):
-        text = open(guard.WORKFLOW, encoding="utf-8").read()
-        self.assertIn("edited", text)
-        self.assertIn("--text", text, "if the body step is gone this assertion is about nothing")
+    def test_whichever_workflow_reads_the_body_rebuilds_when_it_is_edited(self):
+        """Aimed at the file that reads the body rather than at `ci.yml` by name.
 
-    def test_the_canon_citation_job_is_actually_required(self):
-        """Named rather than left to the general rule, because this is the job that was omitted."""
+        It used to assert `--text` was in `ci.yml`, with a message saying the assertion would be
+        about nothing if the body step were gone. The step moved to `pr-policy.yml` on 2026-09-21
+        and that message came true -- which is the whole subject of this guard, arriving in its
+        own suite for the second time.
+        """
+        readers = []
+        for name in sorted(guard.policy()["workflows"]):
+            body = open(os.path.join(guard.WORKFLOW_DIR, name), encoding="utf-8").read()
+            runnable = guard.executable(body)
+            # `pull_request:` as well as `--text`: `canon-issue.yml` reads an ISSUE body on the
+            # `issues` event, where there is no `edited` type to subscribe to and no merge to
+            # block. The rule is about a body a merge waits on.
+            if "--text" not in runnable or "pull_request:" not in runnable:
+                continue
+            readers.append(name)
+            self.assertRegex(body, r"(?m)^\s*types:\s*\[[^\]]*\bedited\b", name)
+        self.assertEqual(readers, ["pr-policy.yml"],
+                         "no workflow reads the pull request body, so this case checks nothing")
+
+    def test_the_body_check_lives_in_the_workflow_that_now_owns_it(self):
+        """This job used to be `canon-citations-in-the-pull-request` in `ci.yml`, and this case
+        used to assert it was in `build.needs`. It moved to `pr-policy.yml` on 2026-09-21 and
+        became a required CONTEXT of its own, so asserting it is still a job here would fail --
+        and repairing that by deleting the case would leave the move unchecked. The property is
+        the same one: the body check exists somewhere the merge waits on."""
+        ci = open(guard.WORKFLOW, encoding="utf-8").read()
+        self.assertNotIn("canon-citations-in-the-pull-request", ci,
+                         "a copy left behind is the duplicate run this split removes")
+        entry = guard.policy()["workflows"]["pr-policy.yml"]
+        self.assertTrue(entry["gates_merges"])
+        self.assertEqual(entry["required_contexts"], ["pr-policy"])
+        body = open(os.path.join(guard.WORKFLOW_DIR, "pr-policy.yml"), encoding="utf-8").read()
+        names, _ = guard.jobs_and_needs(body)
+        self.assertIn("pr-policy", names)
+
+    def test_the_classifier_is_a_job_and_the_gate_waits_on_it(self):
+        """`classify` decides whether this event needs code validation. `build` outside its
+        `needs` is a gate that cannot see the decision it is conditioned on."""
         names, needs = guard.jobs_and_needs(open(guard.WORKFLOW, encoding="utf-8").read())
-        self.assertIn("canon-citations-in-the-pull-request", names)
-        self.assertIn("canon-citations-in-the-pull-request", needs)
+        self.assertIn("classify", names)
+        self.assertIn("classify", needs)
 
     def test_the_guards_run_once_and_are_required(self):
         """The whole point of splitting them out: one job runs them, and `build` looks at it."""
@@ -294,11 +337,30 @@ class WorkflowDeclarations(unittest.TestCase):
         problems = self._run({"thing.yml": {"why": "because"}})
         self.assertTrue(any("needs `gates_merges` and a `why`" in p for p in problems), problems)
 
-    def test_a_second_workflow_claiming_to_gate_fails(self):
-        """Only `ci.yml` is audited, so another file saying it gates is a claim nobody checks."""
+    def test_a_second_workflow_claiming_to_gate_with_nothing_behind_it_fails(self):
+        """A second gate has been allowed since 2026-09-21, when the body check became a required
+        context of its own. What it may not be is a sentence: this file said it gated merges and
+        the rule used to refuse it outright, which is not a rule that survives a real second gate.
+        Now it must name the contexts the ruleset requires and own at least one command."""
         self._write("other.yml")
         problems = self._run({"other.yml": {"gates_merges": True, "why": "claims to"}})
-        self.assertTrue(any("only audits ci.yml" in p for p in problems), problems)
+        self.assertTrue(any("names no `required_contexts`" in p for p in problems), problems)
+        self.assertTrue(any("owns no `required_commands`" in p for p in problems), problems)
+
+    def test_a_second_gate_naming_a_context_no_job_publishes_fails(self):
+        self._write("other.yml", "jobs:\n  real-job:\n    steps:\n      - run: python3 x.py\n")
+        problems = self._run({"other.yml": {"gates_merges": True, "why": "it does",
+                                            "required_contexts": ["typo-job"],
+                                            "required_commands": ["python3 x.py"]}})
+        self.assertTrue(any("is not a job in this workflow" in p for p in problems), problems)
+
+    def test_a_second_gate_that_names_its_contexts_and_commands_passes(self):
+        """The control for the three cases above: without it they pass on a rule that refuses
+        every second gate, which is the rule they replaced."""
+        self._write("other.yml", "jobs:\n  real-job:\n    steps:\n      - run: python3 x.py\n")
+        self.assertEqual(self._run({"other.yml": {"gates_merges": True, "why": "it does",
+                                                  "required_contexts": ["real-job"],
+                                                  "required_commands": ["python3 x.py"]}}), [])
 
     def test_a_declared_command_that_no_step_runs_fails(self):
         self._write("thing.yml", "jobs:\n  a:\n    steps: []\n")
@@ -415,6 +477,195 @@ class SeamsAreDerivedNotListed(unittest.TestCase):
                 env=dict(os.environ, LPM_CI_WORKFLOW=path))
             self.assertEqual(proc.returncode, 1, (proc.stdout + proc.stderr)[:300])
             self.assertIn("LPM_LABELSET_CENSUS", proc.stdout + proc.stderr)
+
+
+class TheMigrationsOwnMutations(unittest.TestCase):
+    """The 2026-09-21 split, driven at a COPY of the real tree with one thing broken at a time.
+
+    The split moved the pull request body check out of `ci.yml` into `pr-policy.yml`, made
+    `pr-policy` a required context beside build/compile/test, and made every code job wait on a
+    classifier so a title edit stops restarting a macOS test run. Each of those moves has a way of
+    being wrong that leaves every check green, and the sweep that proved this guard catches them
+    was a throwaway script whose output lived only in a transcript. A control measured once and
+    discarded is a control nobody has; these are that sweep, committed.
+
+    They run against copies because the mutation is the point: the real files are never written.
+    """
+
+    REAL_WORKFLOWS = os.path.join(REPO, ".github", "workflows")
+    REAL_POLICY = os.path.join(REPO, "docs", "canon", "CI-GATE.json")
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.workflows = os.path.join(self.dir, "workflows")
+        shutil.copytree(self.REAL_WORKFLOWS, self.workflows)
+        self.policy_path = os.path.join(self.dir, "CI-GATE.json")
+        shutil.copy(self.REAL_POLICY, self.policy_path)
+        self.saved = (guard.WORKFLOW_DIR, guard.POLICY_PATH)
+        guard.WORKFLOW_DIR, guard.POLICY_PATH = self.workflows, self.policy_path
+
+        def restore():
+            guard.WORKFLOW_DIR, guard.POLICY_PATH = self.saved
+        self.addCleanup(restore)
+
+    def _path(self, name):
+        return os.path.join(self.workflows, name)
+
+    def _edit(self, name, old, new, count=1):
+        """Rewrite one workflow, refusing a mutation that did not land.
+
+        A `replace` whose needle has drifted is a no-op, and a no-op mutation makes the case pass
+        for the reason the control passes -- the shape these cases exist to refuse.
+        """
+        with open(self._path(name), encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertEqual(text.count(old), count,
+                         f"{name}: the anchor for this mutation is not there {count} time(s)")
+        with open(self._path(name), "w", encoding="utf-8") as handle:
+            handle.write(text.replace(old, new))
+
+    def _append_step(self, name, run):
+        with open(self._path(name), "a", encoding="utf-8") as handle:
+            handle.write(f"\n      - run: {run}\n")
+
+    def _repolicy(self, mutate):
+        with open(self.policy_path, encoding="utf-8") as handle:
+            rules = json.load(handle)
+        mutate(rules)
+        with open(self.policy_path, "w", encoding="utf-8") as handle:
+            json.dump(rules, handle)
+
+    def _check(self):
+        return guard.check(self._path("ci.yml"))
+
+    def _refuses(self, needle):
+        problems = self._check()
+        self.assertTrue(any(needle in p for p in problems),
+                        f"expected a problem mentioning {needle!r}; got {problems}")
+
+    # ---- the control -------------------------------------------------------------------------
+    def test_the_unmutated_copy_passes(self):
+        """Without this every case below passes on a guard that refuses everything."""
+        self.assertEqual(self._check(), [])
+
+    # ---- the commands that moved ---------------------------------------------------------------
+    def test_deleting_the_moved_changed_command_from_its_new_owner_fails(self):
+        """G01. The destination, not the origin: after a move, deleting the check is an edit to
+        `pr-policy.yml`, and a rule still aimed at `ci.yml` would call that clean."""
+        self._edit("pr-policy.yml",
+                   "run: python3 Scripts/check-canon-citations.py --changed pr-changed.txt",
+                   "run: true")
+        self._refuses("check-canon-citations.py --changed")
+
+    def test_deleting_the_moved_body_command_from_its_new_owner_fails(self):
+        """The `--text` invocation, pinned by its line continuation. The continuation is why the
+        ratcheted entry survived the move instead of being dropped with the old job."""
+        self._edit("pr-policy.yml",
+                   "python3 Scripts/check-canon-citations.py \\\n            --text pr-body.md",
+                   "true \\\n            --text pr-body.md")
+        self._refuses("Scripts/check-canon-citations.py \\")
+
+    def test_a_relocation_between_two_gates_passes(self):
+        """G03a, and the reason the rule searches a UNION. Moving the coverage gate from `ci.yml`
+        to `pr-policy.yml` changes which gate runs it and not whether a merge waits on it. A rule
+        that failed here would be repaired by deleting the entry -- and the list may only grow,
+        so that repair removes the requirement outright."""
+        self._edit("ci.yml", "run: bash Scripts/ci-coverage-gate.sh", "run: true")
+        self._append_step("pr-policy.yml", "bash Scripts/ci-coverage-gate.sh")
+        self.assertEqual(self._check(), [])
+
+    def test_deleting_the_coverage_gate_from_both_gates_fails(self):
+        """G03b. The same edit as above without the destination: a move with nowhere to move to."""
+        self._edit("ci.yml", "run: bash Scripts/ci-coverage-gate.sh", "run: true")
+        self._refuses("bash Scripts/ci-coverage-gate.sh")
+
+    def test_parking_a_gate_command_in_a_workflow_that_gates_nothing_fails(self):
+        """G03c. `maintenance.yml` declares `gates_merges: false`; a check that runs there can go
+        red with the merge permitted, so relocating into it is a deletion with a receipt."""
+        self._edit("ci.yml", "run: bash Scripts/ci-coverage-gate.sh", "run: true")
+        self._append_step("maintenance.yml", "bash Scripts/ci-coverage-gate.sh")
+        self._refuses("bash Scripts/ci-coverage-gate.sh")
+
+    def test_a_command_left_only_in_a_comment_fails(self):
+        """The near-miss this guard's `executable()` exists for: the string is still in the file,
+        and nothing runs it. A substring search over raw YAML reports the old owner as still
+        running commands its comments merely describe."""
+        self._edit("ci.yml",
+                   "          python3 Scripts/run-repo-guards.py > guard-run.log 2>&1 || status=$?",
+                   "          # python3 Scripts/run-repo-guards.py > guard-run.log 2>&1")
+        self._refuses("python3 Scripts/run-repo-guards.py")
+
+    def test_deleting_the_classifier_from_the_workflow_that_owns_it_fails(self):
+        """The classifier is what keeps a metadata edit from restarting the code jobs. Deleting
+        the step while the job-level conditions still read its output leaves those conditions
+        reading an empty string -- which is not `'true'`, so the code gates never run."""
+        self._edit("ci.yml",
+                   "python3 Scripts/classify-pull-request-event.py",
+                   "true #", count=1)
+        self._refuses("classify-pull-request-event.py")
+
+    # ---- the topology ---------------------------------------------------------------------------
+    def test_a_code_job_dropped_from_the_aggregate_fails(self):
+        """G02. The defect this whole guard exists for, at the job the migration touched most."""
+        self._edit("ci.yml",
+                   "needs: [classify, guards, compile, test, formula]",
+                   "needs: [classify, guards, compile, formula]")
+        self._refuses("`test` is in no required gate")
+
+    # ---- the declaration itself -----------------------------------------------------------------
+    def test_demoting_the_second_gate_fails(self):
+        """`gates_merges: false` on `pr-policy.yml` is how the migration would be undone on paper
+        while the file still sits there looking like a gate: its commands stop counting, because
+        a workflow that gates nothing is not where a required check may live."""
+        self._repolicy(lambda r: r["workflows"]["pr-policy.yml"].update({"gates_merges": False}))
+        self._refuses("check-canon-citations.py --changed")
+
+    def test_a_required_context_naming_no_job_fails(self):
+        """A context nothing publishes is a merge that waits forever, or a rule aimed at nothing.
+        Both look identical from inside this repository, which is why the name is checked against
+        the file rather than against the ruleset."""
+        self._repolicy(lambda r: r["workflows"]["pr-policy.yml"].update(
+            {"required_contexts": ["pr-polcy"]}))
+        self._refuses("is not a job in this workflow")
+
+    def test_a_second_gate_naming_no_required_context_fails(self):
+        self._repolicy(lambda r: r["workflows"]["pr-policy.yml"].update({"required_contexts": []}))
+        self._refuses("names no `required_contexts`")
+
+    def test_a_second_gate_owning_no_required_command_fails(self):
+        """Without this an empty list is a gate that can be emptied one step at a time."""
+        self._repolicy(lambda r: r["workflows"]["pr-policy.yml"].update({"required_commands": []}))
+        self._refuses("owns no `required_commands`")
+
+    def test_no_workflow_gating_at_all_fails(self):
+        """The vacuity case. With an empty gating set the command search runs over an empty
+        haystack and every entry is missing, so the guard must refuse the DECLARATION rather than
+        report a clean repository with no gates."""
+        def demote(rules):
+            for entry in rules["workflows"].values():
+                entry["gates_merges"] = False
+        self._repolicy(demote)
+        self._refuses("no workflow declares `gates_merges`")
+
+    # ---- the events and the seams ---------------------------------------------------------------
+    def test_the_body_gate_losing_edited_fails(self):
+        """The body check moved, and so did the reason it needs `edited`: open a compliant pull
+        request, let it go green, edit the citations out. Aiming this rule at `ci.yml` alone would
+        now pass, because `ci.yml` no longer reads the body."""
+        self._edit("pr-policy.yml",
+                   "types: [opened, synchronize, reopened, edited]",
+                   "types: [opened, synchronize, reopened]")
+        self._refuses("does not list `edited`")
+
+    def test_a_seam_set_in_the_second_gate_fails(self):
+        """A pull request runs its own copy of `pr-policy.yml` too. Before the split this rule
+        only looked at `ci.yml`, so the new gate was a place to lower a bar unwatched."""
+        self._edit("pr-policy.yml",
+                   "  pr-policy:\n    runs-on: ubuntu-latest\n",
+                   "  pr-policy:\n    env:\n      LPM_COVERAGE_MIN_LINE: \"0\"\n"
+                   "    runs-on: ubuntu-latest\n")
+        self._refuses("LPM_COVERAGE_MIN_LINE")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,38 @@ Start here:
 - Comment on the issue before starting if the issue has ambiguity about scope or acceptance criteria.
 - Keep each PR narrow. One issue, one behavioral change, one verification story.
 
+## Who does what
+
+**You do not need to run every repository-wide check locally before opening a pull request.**
+Run the checks that are relevant to your change, and write down in the description exactly what you
+ran, what it printed, and what you could not verify. "I did not run this, and here is why" is a
+usable answer; presenting something unverified as verified is not.
+
+| | |
+|---|---|
+| **You** | the change, the tests that cover it, the evidence you can actually produce, and an honest list of what you could not |
+| **CI** | the full applicable regression suite, the coverage floors, and every repository guard — before anything merges |
+| **Maintainers** | approving workflow runs on a first-time contribution, repository configuration, live Logic verification you have no way to do, and attributing CI failures that are not yours |
+
+Open a **draft** pull request when the remaining verification needs a maintainer — a live Logic
+observation, a release dry run, a permission you do not have. That is what drafts are for.
+
+### Local evidence, by kind of change
+
+| Change | What to prepare locally | Who finally verifies it |
+|---|---|---|
+| Ordinary Markdown and examples | `git diff --check`; a factual claim still needs whatever evidence backs it | normal CI and review — no blanket Logic install requirement |
+| Package or build declarations | the relevant build, `swift package describe` for a product change, and a consumer smoke build where one applies | the existing full regression suite and guards, in CI |
+| Narrow parser or validation behaviour | the targeted test and a relevant build | CI regression and coverage |
+| Shared state, routing or safety | focused evidence; the full local suite when that is feasible for you | CI, plus focused review of the evidence |
+| Logic-facing readback or write | focused tests and whatever observation you can make — say so if you have no live access | live evidence, coordinated before acceptance rather than before you open a draft |
+| CI or workflow changes | the guard and condition tests for what you touched, and any lint you can run | how the checks actually behave on a representative Actions run, plus existing CI |
+
+A small contribution is meant to stay small. [#944](https://github.com/MongLong0214/logic-pro-mcp/issues/944)
+is the shape: a product declaration, the documentation around it, `swift package describe`, and a
+build from a consumer package are the relevant local evidence for it. A full local regression run is
+not a precondition for submitting that.
+
 ## Citing Logic's own data
 
 A change that states a fact about Logic cites Logic. `docs/canon/README.md` is the design; this is
@@ -59,17 +91,6 @@ Avoid these unless the issue explicitly asks for them:
 - Broad rewrites across multiple channel/router surfaces
 - Claims that something is "verified" without independent readback evidence
 
-## Do I Need Logic Pro?
-
-| Work type | Logic Pro required? | Expected verification |
-|-----------|---------------------|-----------------------|
-| Docs-only changes | No | `git diff --check` |
-| Unit tests, parser tests, schema tests | No | `swift test --filter <testName>` and relevant full-suite evidence when practical |
-| CLI text or non-Logic validation | No | Focused tests plus `swift build` |
-| MCP resource contract changes | Usually no | Focused resource tests and JSON envelope assertions |
-| Channel routing or write/readback changes | Yes for final evidence | Unit tests plus live Logic Pro evidence |
-| Release, installer, signing, Homebrew | No Logic needed, but maintainer review required | Release workflow or documented dry-run evidence |
-
 ## Development Loop
 
 ```bash
@@ -77,9 +98,14 @@ git clone https://github.com/MongLong0214/logic-pro-mcp.git
 cd logic-pro-mcp
 
 swift build              # debug
-swift test               # 2169 unit + integration tests on the current source tree
+swift test               # the unit and integration suite on the current source tree
 swift build -c release   # release binary at .build/release/LogicProMCP
 ```
+
+The suite is large and grows with every change, so this guide does not quote a test count — one
+written down here is wrong by the following week, and a number nobody re-measures is the kind of
+claim this project asks contributors not to make. `swift test 2>&1 | tail -5` reports what the
+current tree actually ran.
 
 For a faster local iteration:
 
@@ -120,7 +146,7 @@ Sources/LogicProMCP/
 ├── Server/            LogicProServer + ServerConfig
 └── Utilities/         DestructivePolicy, AppleScriptSafety, Logger, PermissionChecker
 
-Tests/LogicProMCPTests/  2169 tests across the Swift test target on the current source tree
+Tests/LogicProMCPTests/  the Swift test target
 Scripts/                 install / uninstall / live E2E / Scripter JS
 docs/                    public setup, API, troubleshooting, README media, and public issue PRDs/tickets
 artifacts/               generated local artifacts; only explicitly published fixtures belong in git
@@ -167,30 +193,28 @@ git switch -c test/note-sequence-parser-invalid-channel
 git switch -c fix/permission-summary-automation-copy
 ```
 
-## Verification Matrix
+## Before you ask for review
 
-| Change | Minimum local evidence |
-|--------|------------------------|
-| Markdown/docs only | `git diff --check` |
-| Python scripts | `python3 -m py_compile <script>` |
-| Swift parser/validation tests | `swift test --filter <testName>` |
-| Public MCP envelope/resource changes | Focused tests plus JSON assertions |
-| Shared routing/state changes | `swift test --no-parallel` |
-| Logic-facing write/readback changes | Focused tests, full suite, and live Logic Pro evidence |
+The local-evidence table above is the whole pre-submission obligation. What follows is not a list
+of commands to run before submitting — it is what a change of a particular kind still needs before
+it can be merged, and most of it is CI's job or a maintainer's.
 
-If you cannot run a required gate, say so in the PR and explain why. Do not mark unverified live behavior as verified.
+- New behaviour is covered by at least one test.
+- CI holds the coverage floors (`region >= 70%`, `line >= 78%`). You do not have to measure them
+  locally; a high-risk Logic-facing change aims at roughly 90% line coverage on the surface it
+  touches, or explains what live evidence stands in for direct measurement.
+- Public API change → a `CHANGELOG.md` entry under `[Unreleased]`; a new MCP tool also needs README
+  and `docs/API.md`.
+- New dependency → say why, in the description.
+- Security-sensitive change → update `SECURITY.md`.
+- Logic-facing write or readback change → update `docs/API.md`, `docs/TROUBLESHOOTING.md` and
+  `CHANGELOG.md` when the public behaviour or the live evidence changes.
+- Release version change → leave published install URLs pinned to the existing stable tag until a
+  real release exists. Publishing bumps `ServerConfig`, the manifest, the Formula, the installer
+  default, the tests, README, SETUP, API and CHANGELOG together, and that is maintainer work.
 
-## Pull Request Checklist
-
-- [ ] `swift build` clean
-- [ ] `swift test` green (all 2169 tests on the current source tree)
-- [ ] New behavior covered by at least one unit test
-- [ ] Changed production code keeps the global coverage floor green (`region >=70%`, `line >=78%`); high-risk Logic-facing changes target about 90% line coverage on the touched surface or document the live/manual evidence that substitutes for direct measurement
-- [ ] Public API change → `CHANGELOG.md` entry under `[Unreleased]`; new MCP tools also require README and `docs/API.md` updates
-- [ ] New dependency → justification in PR description
-- [ ] Security-sensitive change → update `SECURITY.md`
-- [ ] Logic-facing write/readback change → update `docs/API.md`, `docs/TROUBLESHOOTING.md`, and `CHANGELOG.md` when public behavior or live evidence changes
-- [ ] Release version change → keep published install URLs pinned to the existing stable tag until a real release exists; when publishing, bump `ServerConfig`, manifest, Formula, installer default, tests, README, SETUP, API, and CHANGELOG together
+If a gate is one you cannot run, say so in the description and say why. Do not mark unverified live
+behaviour as verified.
 
 ## Security Reports
 
