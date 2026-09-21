@@ -21,6 +21,89 @@ private func issue529Positions(of fragment: String, in script: String) -> [Strin
     return positions
 }
 
+private func issue529TransportSource() throws -> String {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    return try String(
+        contentsOf: repositoryRoot.appendingPathComponent(
+            "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+        ),
+        encoding: .utf8
+    )
+}
+
+private func issue529SentinelPrefixes(
+    capturedBy patterns: [String],
+    from source: String
+) throws -> Set<String> {
+    let sourceRange = NSRange(source.startIndex..<source.endIndex, in: source)
+    var sentinels = Set<String>()
+    for pattern in patterns {
+        let expression = try NSRegularExpression(pattern: pattern)
+        for match in expression.matches(in: source, range: sourceRange) {
+            let captureRange = try #require(Range(match.range(at: 1), in: source))
+            sentinels.insert(String(source[captureRange]))
+        }
+    }
+    return sentinels
+}
+
+/// Reads the actual result-flow `return` literals from the generated script. It intentionally does
+/// not carry a second list of sentinels: adding a new script result changes this set automatically.
+private func issue529EmittedDialogResultSentinels(from script: String) throws -> Set<String> {
+    let resultFlowStart = try #require(script.range(
+        of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)"
+    ))
+    let resultFlow = issue529StrippedOfAppleScriptComments(String(script[resultFlowStart.lowerBound...]))
+    return try issue529SentinelPrefixes(
+        capturedBy: [#"(?m)\breturn\s+\"([A-Z][A-Z_]+)"#],
+        from: resultFlow
+    )
+}
+
+/// The literal head of every result-flow `return`, i.e. everything up to the first interpolation.
+/// The prefix set above stops at the first `[A-Z_]` run, which is the right granularity for
+/// comparing two *sets of names* but is not a value the script ever emits: every
+/// `DIALOG_INPUT_ISSUED` return carries a second segment (`: SELECT_ALL_ARMED` /
+/// `: POSITION_INPUT_ARMED`) that the classifier's `hasPrefix` arms include. Feeding the bare first
+/// token to the classifier therefore probes a string production never produces, and it answered
+/// `.unexpectedResult` for exactly that reason. Probe with what is emitted.
+private func issue529EmittedDialogResultLiterals(from script: String) throws -> Set<String> {
+    let resultFlowStart = try #require(script.range(
+        of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)"
+    ))
+    let resultFlow = issue529StrippedOfAppleScriptComments(String(script[resultFlowStart.lowerBound...]))
+    return try issue529SentinelPrefixes(
+        capturedBy: [#"(?m)\breturn\s+\"([A-Z][A-Z_]+[^\"]*)\""#],
+        from: resultFlow
+    )
+}
+
+/// Reads the classifier's own `switch` arms. The patterns describe Swift's four match syntaxes in
+/// this method, while every sentinel value is captured from production code rather than listed here.
+private func issue529ClassifierMatchedDialogResultSentinels() throws -> Set<String> {
+    let source = try issue529TransportSource()
+    let classifierStart = try #require(source.range(
+        of: "static func classifyGotoPositionDialogResult("
+    ))
+    let afterClassifier = source[classifierStart.lowerBound...]
+    let classifierEnd = try #require(afterClassifier.range(
+        of: "\n    private enum GotoPositionDialogRouteResult"
+    ))
+    let classifier = String(afterClassifier[..<classifierEnd.lowerBound])
+    return try issue529SentinelPrefixes(
+        capturedBy: [
+            #"(?m)^\s*case\s+\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*case\s+let\s+value\s+where\s+value\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*case\s+let\s+value\s+where\s+value\s*==\s*\"([A-Z][A-Z_]+)"#,
+            #"(?m)^\s*\|\|\s*value\.hasPrefix\(\"([A-Z][A-Z_]+)"#,
+        ],
+        from: classifier
+    )
+}
+
 /// AppleScript accepts both classic carriage-return and Unix line-feed source. Treat a line
 /// comment as ending at a line terminator, not at one chosen encoding of it.
 private func issue529IsAppleScriptLineTerminator(_ character: Character) -> Bool {
@@ -1198,6 +1281,79 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["menu_state"] as? String) == "could_not_be_closed")
     }
 
+    @Test("menu-close diagnostic identifies menu actuation rather than a position write")
+    func menuCloseDiagnosticNamesMenuActuation() {
+        for (result, expectedLabel) in [
+            (
+                "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation (OPEN)",
+                "menu_could_not_be_closed_menu_actuation_attempted_true"
+            ),
+            (
+                "MENU_PICK_FAILED: menu cleanup was not observed (OPEN)",
+                "menu_could_not_be_closed_menu_actuation_attempted_false"
+            ),
+        ] {
+            let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+                "{\"result\":\"\(result)\"}"
+            )
+            #expect(classification.diagnosticLabel == expectedLabel)
+        }
+    }
+
+    @Test("an unparsed dialog result is terminal and cannot release another position route")
+    func unexpectedDialogResultDoesNotFallThroughToRetryableRoute() async throws {
+        // Mutation this rejects: restore `.unexpectedResult` as an observed dialog-safe result.
+        // One character wrong in a script sentinel establishes no menu/dialog state, so the slider
+        // and every later fallback must remain withheld.
+        let malformedSentinel = "DIALOG_APPEARANCE_UNREADABL3"
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            "{\"result\":\"\(malformedSentinel)\"}"
+        )
+        #expect(classification == .failure(.unexpectedResult))
+        #expect(classification.requiresUnsafeUIRefusal)
+
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in .success("{\"result\":\"\(malformedSentinel)\"}") }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String) == "unexpected_result")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("generated dialog result sentinels and classifier sentinels remain in lockstep")
+    func generatedDialogResultSentinelsMatchClassifierSentinels() throws {
+        let emitted = try issue529EmittedDialogResultSentinels(
+            from: AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        )
+        let matched = try issue529ClassifierMatchedDialogResultSentinels()
+
+        #expect(!emitted.isEmpty)
+        #expect(emitted == matched, "emitted=\(emitted.sorted()) matched=\(matched.sorted())")
+
+        let literals = try issue529EmittedDialogResultLiterals(
+            from: AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        )
+        #expect(literals.count >= emitted.count)
+        for literal in literals {
+            let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+                "{\"result\":\"\(literal)\"}"
+            )
+            #expect(classification != .failure(.unexpectedResult),
+                    "the script emits \(literal) but the classifier does not match it")
+        }
+    }
+
     @Test("a post-click menu close failure records menu navigation, not a position write")
     func postClickMenuCloseFailureRefusesBeforePositionWrite() async throws {
         let sliderWrites = Issue529Counter()
@@ -1235,6 +1391,8 @@ struct Issue529MenuValidationTests {
 
         let envelope = try #require(issue529Envelope(result))
         #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String)
+            == "menu_could_not_be_closed_menu_actuation_attempted_true")
         #expect(try #require(envelope["menu_actuation_attempted"] as? Bool))
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
         #expect(HonestContract.isFallbackUnsafeStateC(result.message))
@@ -2291,17 +2449,26 @@ struct Issue529MenuValidationTests {
         #expect(ledgerHandler.contains("ledgerPath & \".tmp.XXXXXX\""))
     }
 
-    @Test("JSON-wrapped disabled and not-ready sentinels still refuse the dialog route")
+    @Test("JSON-wrapped disabled and script-emitted preexisting sentinels refuse the dialog route")
     func jsonWrappedExistingSentinelsRefuseDialogRoute() {
         let disabled = AccessibilityChannel.classifyGotoPositionDialogResult(
             #"{"result":"MENU_DISABLED"}"#
         )
-        let notReady = AccessibilityChannel.classifyGotoPositionDialogResult(
-            #"{"result":"DIALOG_NOT_READY"}"#
+        let preexisting = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click"}"#
         )
 
         #expect(disabled == .failure(.menuDisabled))
-        #expect(notReady == .failure(.dialogNotReady))
+        #expect(preexisting == .failure(.dialogPreexisting))
+
+        // This was a classifier-only legacy sentinel. The script does not emit it, so it must not
+        // survive outside the generator/classifier parity set; it now takes the terminal unparsed
+        // result path instead of silently permitting a later fallback.
+        let staleNotReady = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"DIALOG_NOT_READY"}"#
+        )
+        #expect(staleNotReady == .failure(.unexpectedResult))
+        #expect(staleNotReady.requiresUnsafeUIRefusal)
     }
 
     @Test("only JSON-wrapped OK counts as driving the dialog route")
