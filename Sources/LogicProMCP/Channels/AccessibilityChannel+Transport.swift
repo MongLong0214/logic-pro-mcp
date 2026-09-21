@@ -2183,7 +2183,12 @@ extension AccessibilityChannel {
             case menuDisabled
             case menuValidationUnreadable(menuActuationAttempted: Bool)
             case menuPickFailed
-            case menuCouldNotBeClosed(writeAttempted: Bool)
+            /// `reconciledMenuClosed` is written by the parent-owned reconciliation pass, never by
+            /// the parser: the script reports what it observed, and the pass that runs afterwards
+            /// reports what it observed. Keeping them in one case rather than adding a sibling case
+            /// is deliberate -- `requiresUnsafeUIRefusal` matches this case whatever its payload,
+            /// so a reconciled closure cannot quietly release the safety refusal.
+            case menuCouldNotBeClosed(writeAttempted: Bool, reconciledMenuClosed: Bool)
             case dialogPreexisting
             case dialogPreexistenceUnreadable
             case dialogNotReady
@@ -2213,7 +2218,7 @@ extension AccessibilityChannel {
             case .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
                 return "menu_validation_unreadable"
             case .failure(.menuPickFailed): return "menu_pick_failed"
-            case let .failure(.menuCouldNotBeClosed(writeAttempted)):
+            case let .failure(.menuCouldNotBeClosed(writeAttempted, _)):
                 return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
             case .failure(.dialogPreexisting): return "dialog_preexisting"
             case .failure(.dialogPreexistenceUnreadable): return "dialog_preexistence_unreadable"
@@ -2415,8 +2420,16 @@ extension AccessibilityChannel {
 
         var menuObservation: MenuObservation {
             switch self {
-            case .failure(.menuCouldNotBeClosed):
-                return .couldNotBeClosed
+            case let .failure(.menuCouldNotBeClosed(_, reconciledMenuClosed)):
+                // The script did not observe the menu closed; the parent-owned reconciliation
+                // pass that runs afterwards may have. `menu_state` says what THIS RUN observed,
+                // not which component observed it, so a reconciled closure belongs here -- and
+                // reporting `could_not_be_closed` over a closure the parent had just observed is
+                // the same misleading receipt this route exists to remove. The terminal safety
+                // decision is untouched: `requiresUnsafeUIRefusal` matches this case whatever
+                // its payload, because the pass proves the MENU closed and establishes nothing
+                // about a dialog.
+                return reconciledMenuClosed ? .closed : .couldNotBeClosed
             case .failure(.menuNotFound), .failure(.menuStateUnreadable), .failure(.menuDisabled),
                  .failure(.menuValidationUnreadable(menuActuationAttempted: _)):
                 return .closed
@@ -2439,7 +2452,7 @@ extension AccessibilityChannel {
                 // The generated script writes the flag it observed after that statement, so preserve
                 // that fact rather than manufacturing a constant in the receipt.
                 return menuActuationAttempted
-            case let .failure(.menuCouldNotBeClosed(writeAttempted)):
+            case let .failure(.menuCouldNotBeClosed(writeAttempted, _)):
                 return writeAttempted
             default:
                 return false
@@ -2451,7 +2464,8 @@ extension AccessibilityChannel {
         /// exactly that case; the generated dialog script must not send a blind Escape on an
         /// unreadable focus read.
         var requiresPostActuationMenuReconciliation: Bool {
-            if case .failure(.menuCouldNotBeClosed(writeAttempted: true)) = self { return true }
+            if case .failure(.menuCouldNotBeClosed(writeAttempted: true, reconciledMenuClosed: false))
+                = self { return true }
             return false
         }
     }
@@ -2506,7 +2520,10 @@ extension AccessibilityChannel {
                 return .failure(.menuCouldNotBeClosed(
                     writeAttempted: value.hasPrefix(
                         "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation"
-                    )
+                    ),
+                    // The parser only ever reports what the script observed. Reconciliation has
+                    // not run at this point, and an unrun pass is not a closed menu.
+                    reconciledMenuClosed: false
                 ))
             }
             return .failure(.menuPickFailed)
@@ -2607,7 +2624,17 @@ extension AccessibilityChannel {
                     // own a Go To Position dialog when one of these normal results is returned.
                     // Using its READY snapshot here would let the dialog half swallow the needed
                     // Escape, so this is explicitly the menu-only case rather than a missing path.
-                    _ = await reconcileAfterExecutionFailure(.provablyPreLeaf)
+                    let reconciledMenuClosed = await reconcileAfterExecutionFailure(.provablyPreLeaf)
+                    // Discarding this Boolean is what made the receipt lie: the response derives
+                    // `menu_state` from the classification, so a menu the parent had just observed
+                    // closed was still reported `could_not_be_closed`. Carry it. The refusal itself
+                    // is deliberately unchanged -- dialog safety was never established here.
+                    if reconciledMenuClosed,
+                       case let .failure(.menuCouldNotBeClosed(writeAttempted, _)) = classification {
+                        return .failed(.failure(.menuCouldNotBeClosed(
+                            writeAttempted: writeAttempted, reconciledMenuClosed: true
+                        )))
+                    }
                 }
                 return .failed(classification)
             }

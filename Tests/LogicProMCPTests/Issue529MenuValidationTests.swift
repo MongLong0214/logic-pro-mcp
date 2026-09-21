@@ -679,11 +679,32 @@ struct Issue529MenuValidationTests {
                 "the generated script may not contain an undeclared menu-cleanup refusal")
         #expect(entryCleanup < entryRefusal)
         #expect(menuStateObservations.contains { escape < $0 })
+        // r-941round7 recorded that passing `.provablyPreLeaf` to the reconciler is correct ONLY
+        // while every such refusal precedes the leaf click, and that the suite catches a fifth site
+        // added after the click POSITIONALLY. Round 9 replaced the positional pair with a count, so
+        // the only remaining check on `emittedBeforeLeafClick` was the flag asserting itself: move
+        // an interpolation after the leaf click, leave its Boolean true, and the count, the
+        // containment and the flag are all still satisfied. Measure the position instead.
+        let leafClick = try issue529Position(
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 "
+                + "of menu bar item barName of menu bar 1",
+            in: generatedScript
+        )
         for site in sites {
             #expect(site.emittedBeforeLeafClick,
                     "the declared menu-cleanup refusal site \(site.identifier) must be pre-leaf")
             #expect(generatedScript.contains(site.appleScript),
                     "the generated script must include the refusal text declared by \(site.identifier)")
+            let marker = try issue529Position(
+                of: "-- MENU_CLEANUP_REFUSAL_SITE: \(site.identifier)", in: generatedScript
+            )
+            let placement = marker < leafClick ? "before" : "after"
+            #expect(site.emittedBeforeLeafClick == (marker < leafClick),
+                    """
+                    \(site.identifier) declares emittedBeforeLeafClick=\
+                    \(site.emittedBeforeLeafClick) but the generated script places it \
+                    \(placement) the leaf click
+                    """)
         }
     }
 
@@ -1218,6 +1239,46 @@ struct Issue529MenuValidationTests {
                 "the pre-leaf menu-cleanup refusal must use the menu-only reconciliation path")
         #expect(!script.contains(snapshotPath),
                 "the pre-leaf menu-cleanup refusal must not pass its READY snapshot to dialog cleanup")
+        #expect(sliderWrites.value == 0)
+        // The reconciler above observed CLOSED. Discarding that Boolean left `menu_state` reporting
+        // the script's `could_not_be_closed` over a closure the parent had just observed — the same
+        // misleading diagnostic this route exists to remove, rebuilt one layer up.
+        #expect(try #require(envelope["menu_state"] as? String) == "closed",
+                "a reconciliation that observed the menu closed must reach menu_state")
+        // Stated beside it deliberately: reporting the menu closed must not soften the refusal.
+        // This pass proves the MENU closed and establishes nothing about a dialog.
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    }
+
+    /// The control for the assertion above. Without it, `menuObservation` could return `.closed` for
+    /// every `menuCouldNotBeClosed` and both tests would still be green — a reconciled closure and a
+    /// reconciliation that observed nothing would become indistinguishable in the receipt.
+    @Test("a reconciliation that did not observe closure still reports could_not_be_closed")
+    func unreconciledPostClickMenuCloseFailureStillSaysSo() async throws {
+        let sliderWrites = Issue529Counter()
+        let reconciliationCalls = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(
+                sliderWrites: sliderWrites,
+                executeAppleScript: { _ in
+                    reconciliationCalls.bump()
+                    return .success(#"{"result":"OPEN"}"#)
+                }
+            ),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_PICK_FAILED: menu cleanup was not observed after menu actuation (UNREADABLE)"}"#)
+            }
+        )
+        let envelope = try #require(issue529Envelope(result))
+        #expect(reconciliationCalls.value == 1,
+                "the same post-actuation path must be exercised, or this is not a control")
+        #expect(try #require(envelope["menu_state"] as? String) == "could_not_be_closed")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(sliderWrites.value == 0)
     }
 
