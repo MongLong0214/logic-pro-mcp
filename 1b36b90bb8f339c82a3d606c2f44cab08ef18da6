@@ -1,0 +1,69 @@
+Limit: the two points' positions and values were NOT read; Logic's undo label names the operation Logic believes it performed and no surface measured vends a point
+Limit: the AXValue on 오토메이션 값 is a single sample with no control, because this host has no control surface so mixer.set_volume refuses and the field is not settable; its ratio to AXMaxValue is 90/127 and that reading is unverified
+Limit: ko-KR only, one project, one track, one region; only one of the seven leaves was actuated
+Ruled-out: assembling the canon references from a locale variable | the checker cannot resolve an interpolated reference, and splitting the scheme to hide them from it would be worse than having none
+Ruled-out: comparing the undo label before and after | a second run of the same leaf writes the identical label, so that comparison read a working leaf as dead; the run is bracketed by Logic's own undo instead
+Warn: a menu item that is enabled and clickable may be a submenu PARENT, and clicking it looks exactly like clicking a dead command. Check for a `globalMenuItemCall:` identifier before concluding a route does nothing -- that mistake is what made the 2026-09-15 record read a wall
+Warn: the undo entry has its own shipped string (`...#und`) and is not the leaf's title: the leaf says 오토메이션 포인트, the undo entry says 트랙 오토메이션 포인트
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-884submenuleaf
+Provenance: inherited 86ca91454827c9d0ad562caa9d004e14fd2b61c9
+
+Limit: the undo label establishes only that Logic registered the operation bearing its shipped name; it does not establish a count, a position or a value of any automation data
+Limit: the paired census is bounded to this arrange window at depth 14; the element totals (711 view-off, 719 view-on, 543 in an earlier different project) are readings of the project on screen, not constants of Logic
+Ruled-out: superseding the 2026-09-15 record silently | the schema has one field for it, so the record names which claims are displaced and which were not re-measured and are not contradicted
+Ruled-out: typing the Korean undo wrapper into the script | Logic ships the composition as a format string under `Undo %@`, so the wrapper is resolved and substituted rather than hard-coding one language's word order into a test about localized labels
+Warn: the reverify's precondition counts selected AXLayoutItems whose AXHelp contains the region string, and MIDI NOTES carry that string too -- three of four matches in one census were notes. They were unselected so the count was right, but a selected note would be counted as a region
+Warn: the parent-click mutation exits 2 on the unclean-state check, not on the label comparison: an open menu is caught before the labels are compared, so that mutation does NOT exercise the disagreement path. Use a mutation that dismisses the menu without actuating to test exit 1
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-884round2
+Provenance: inherited ee2ce227624b7cc4e0f1d5b7f9a4d1a4e2d8172b
+
+Limit: Round 2 of the independent review of PR #946 returned BLOCK with five blockers; the record was rewritten from live re-measurement rather than from edited prose
+Limit: the region precondition recognises MIDI regions only; an audio region is reported absent and the script exits 2, a refusal rather than a false pass
+Ruled-out: dropping the Supersedes link, on the ground that the old record's conclusion was bounded to routes it measured | every load-bearing reading of that record was re-measured instead, which earns the supersession rather than retiring readings nobody checked
+Warn: AppleScript keystroke inside a tell block addressed to a process is delivered to the FRONTMOST application, not to the process named in the tell block. Drive Logic's undo by clicking the menu item
+Warn: An AXMenu total counts menu objects that exist, not menus that are open. Use CGWindowList layer > 0 for the on-screen reading
+Warn: Korean strings vended by Logic's AX interface are not uniformly normalized, so byte equality against a typed literal can report a difference between two identical texts
+Warn: Comparisons of one AX reading against another are deliberately left unnormalized, because a normalization change between two states would be a real difference in the reading
+Blast: local
+Undo: easy
+Certainty: firm
+Record-Id: r-946round2
+Evidence: docs/observations/2026-09-21-the-parameter-popup-help-reports-automation-data.json
+Evidence: Scripts/observations/derive-automation-census-difference.py
+Provenance: inherited 8c6681b7feac4c14dab42cff57ed788928b1ac50
+
+Limit: nothing here observes live Logic; the live half of the re-verifier confirms only an undo-operation label and performs no automation readback, so the record's partial verdict stands
+Ruled-out: keep the python constants as the expected values | the record and the checker were then free to drift apart, which is the second copy of the truth this defect is made of; the record is loaded and compared instead
+Warn: a mutation that quietly fails to apply reads as a surviving mutant: load_snapshot() returns a tuple, and a mutation treating it as a dict edited nothing and reported exit 0. Report the number of edits each mutation made
+Warn: do not edit an evidence census to make a number reproduce -- the censuses are the input, and a number that cannot be reproduced is a finding
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: the committed censuses' live provenance was not re-observed; this repairs the derivation over the readings as committed
+Record-Id: r-946derivation
+Provenance: inherited 95f0e8c6b95ccee3275f47ee75607097a005ab04
+
+Limit: every mutant the delegated worker wrote mutates data, so no data mutant could witness a predicate whose neutering leaves the data untouched
+Ruled-out: swapping two readings' item_1 labels to preserve group sizes | swapping changes group membership, so the census equality comparison rejects it and the predicate still has no witness
+Ruled-out: keeping M7 and M8 as the item_1 reconciliation witnesses | with the predicate replaced by a constant True they both still exit 1, so what rejects them is the collapsed grouping, not the comparison
+Warn: mutate the derivation CODE, not only the census data, before believing this selftest covers a predicate: C1 and C4 both survived a selftest whose seven data mutants all reported KILLED
+Warn: M11 must relabel EVERY applied-state reading to the same string; any forgery that moves a state between undo-stack groups is rejected by the census comparison instead and stops discriminating the predicate
+Blast: local
+Undo: easy
+Certainty: firm
+Unverified: nothing here observes live Logic; the censuses are consumed exactly as committed
+Record-Id: r-946harnesswitness
+Follows: r-946derivation
+Provenance: inherited 10057b7ad7d05e258862e156db5ddb308dbed312
+
+Limit: this pull request closes no issue, so the table gets no ahead-of-GitHub exemption here at all and every row must match what GitHub reports now
+Ruled-out: leaving this branch's roadmap table untouched because the change opens and closes no issue | the staleness is already on main, so merging without the block leaves the weekly scheduled run failing for a reason no pull request was ever shown
+Warn: check-roadmap-blockers-cite-measurements.py reports a different OPEN-row count per branch for the same block: 22 on #948, 23 on #949, 24 here. The differences are exactly which of #896, #943 and #945 that branch may mark closed early, not drift
+Record-Id: r-roadmapnoclose
+Provenance: inherited c2f4a6db779d3ab1de8e7da4aa401a5e37825345
