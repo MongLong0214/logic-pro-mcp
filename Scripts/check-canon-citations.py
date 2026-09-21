@@ -1236,26 +1236,76 @@ def logic_facing(changed):
 
 
 
-def check_text(path: str, changed_paths=None, *, require_changed: bool = False) -> int:
-    """Validate the canonical citations in a pull request or issue body.
+#: STABLE DIAGNOSTIC CODES, emitted by `--format json` and keyed on by the advisory issue bot.
+#:
+#: There is ONE evaluation and two renderings of it. The bot does not parse this file's stderr --
+#: that was the shape the old `canon-issue.yml` had, and it is why a corpus failure and a missing
+#: citation reached a contributor as the same sentence accusing them of an uncited claim. Adding a
+#: code is additive. Changing what an existing one MEANS is a breaking change for that workflow.
+MISSING_DECLARATION = "missing_declaration"
+HIDDEN_DECLARATION = "hidden_declaration"
+DECLARATION_QUOTES_CORPUS = "declaration_quotes_corpus"
+LOGIC_FACING_OPT_OUT = "logic_facing_opt_out"
+INVALID_REFERENCE = "invalid_reference"
+MISSING_QUOTED_VALUE = "missing_quoted_value"
+UNRELATED_BINDING = "unrelated_binding"
+UNPROVED_EXCEPTIONS = "unproved_exceptions"
+EMPTY_CHANGED_LIST = "empty_changed_list"
+INPUT_UNREADABLE = "input_unreadable"
+CHECKER_ERROR = "checker_error"
+
+#: SATISFIED means the evidence-format requirements are met, not that anything about Logic was
+#: verified. ACTIONABLE means the author can fix a named problem. ERROR means the evaluation did
+#: not finish -- a corpus, a file or the checker itself -- and says nothing about the author.
+SATISFIED = "satisfied"
+ACTIONABLE = "actionable"
+ERROR = "error"
+
+#: 0 and 1 are what every caller before this saw and are unchanged. ERROR is 2, and it is still
+#: NONZERO on purpose: `pr-policy.yml` runs this as a required check, and a check that could not
+#: evaluate has not passed. Advisory issue intake is the only place the distinction softens
+#: anything, and that softening is in the bot's wording, not in an exit code.
+EXIT_FOR = {SATISFIED: 0, ACTIONABLE: 1, ERROR: 2}
+
+
+class Diagnosis:
+    """What one evaluation of a body found: a category, and findings that carry a stable code."""
+
+    def __init__(self, category: str, findings=None, references: int = 0):
+        self.category = category
+        self.findings = list(findings or [])
+        self.references = references
+
+    def as_dict(self) -> dict:
+        return {
+            "category": self.category,
+            "references": self.references,
+            "diagnostics": [{"code": code, "message": message}
+                            for code, message in self.findings],
+        }
+
+
+def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = False,
+                  label: str = "<body>") -> Diagnosis:
+    """Evaluate a pull request or issue body and return what was found.
 
     The tree-wide check cannot see this text -- a pull request body is not a file in the tree, and
     that is exactly where the rule was named and not enforced. `docs/canon/README.md` says every
     artefact this repository produces cites Logic or says it cannot; without this, "every artefact"
     meant "every file", and the two documents a change is actually reviewed through were exempt.
-    """
-    with open(path, "r", encoding="utf-8") as handle:
-        body = handle.read()
 
+    Raising is how this reports that it could not evaluate. `check_text` turns that into ERROR;
+    nothing here returns SATISFIED for a lookup that did not happen.
+    """
     if require_changed and not changed_paths:
-        print(f"{path}: the list of changed files is empty, so whether this change may opt out "
-              f"cannot be derived.\n"
-              f"  A pull request changes something. An empty list means the diff command failed, "
-              f"and the CI step's\n"
-              f"  `||` fallback turns that into a file with nothing in it -- which used to REOPEN "
-              f"the opt-out for a\n"
-              f"  change that edits Logic-facing paths. Fail closed instead.", file=sys.stderr)
-        return 1
+        return Diagnosis(ACTIONABLE, [(EMPTY_CHANGED_LIST, (
+            f"{label}: the list of changed files is empty, so whether this change may opt out "
+            f"cannot be derived.\n"
+            f"  A pull request changes something. An empty list means the diff command failed, "
+            f"and the CI step's\n"
+            f"  `||` fallback turns that into a file with nothing in it -- which used to REOPEN "
+            f"the opt-out for a\n"
+            f"  change that edits Logic-facing paths. Fail closed instead."))])
 
     touched = logic_facing(changed_paths)
     # The exceptions NARROW that set, so the opt-out below can rest on them -- and rule 15 is what
@@ -1273,19 +1323,19 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
         proof: list = []
         check_exceptions_state_no_fact(proof)
         if proof:
-            print(f"{path}: the Logic-facing exceptions are not proved, so nothing here may narrow "
-                  f"what counts as a claim about Logic:", file=sys.stderr)
-            for line in proof:
-                print(f"  {line}", file=sys.stderr)
-            return 1
+            detail = "\n".join(f"  {line}" for line in proof)
+            return Diagnosis(ACTIONABLE, [(UNPROVED_EXCEPTIONS, (
+                f"{label}: the Logic-facing exceptions are not proved, so nothing here may narrow "
+                f"what counts as a claim about Logic:\n{detail}"))])
+
     references = canon.find_refs(body)
     if not references:
         if touched:
-            print(f"{path}: no canonical reference, and this change may not opt out: it edits "
-                  f"{len(touched)} file(s)\n  whose contents are claims about Logic, first "
-                  f"{touched[0]}.\n"
-                  f"  Cite what those claims rest on. See docs/canon/README.md.", file=sys.stderr)
-            return 1
+            return Diagnosis(ACTIONABLE, [(LOGIC_FACING_OPT_OUT, (
+                f"{label}: no canonical reference, and this change may not opt out: it edits "
+                f"{len(touched)} file(s)\n  whose contents are claims about Logic, first "
+                f"{touched[0]}.\n"
+                f"  Cite what those claims rest on. See docs/canon/README.md."))])
         if NO_FACT_OPT_OUT in _visible(body):
             # ...unless the body QUOTES something citable. The opt-out says "this states no fact
             # about Logic", and a body carrying a string Logic ships is stating one. This is the
@@ -1293,26 +1343,37 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
             # derive the opt-out from -- and it tightens the pull request path for free.
             quoted = _citable_strings_in(body)
             if quoted:
-                print(f"{path}: says {NO_FACT_OPT_OUT!r} and quotes {len(quoted)} string(s) the "
-                      f"corpus holds, first {quoted[0][:50]!r}.\n"
-                      f"  A body that quotes a string Logic ships is stating a fact about Logic. "
-                      f"Cite it.", file=sys.stderr)
-                return 1
-            print(f"{path}: no citation, and it says so: {NO_FACT_OPT_OUT!r}")
-            return 0
-        print(f"{path}: no canonical reference, and no opt-out.\n"
-              f"  Cite what this rests on, or write the sentence {NO_FACT_OPT_OUT!r} with the\n"
-              f"  reason -- outside any code block or HTML comment. See docs/canon/README.md.",
-              file=sys.stderr)
-        return 1
+                return Diagnosis(ACTIONABLE, [(DECLARATION_QUOTES_CORPUS, (
+                    f"{label}: says {NO_FACT_OPT_OUT!r} and quotes {len(quoted)} string(s) the "
+                    f"corpus holds, first {quoted[0][:50]!r}.\n"
+                    f"  A body that quotes a string Logic ships is stating a fact about Logic. "
+                    f"Cite it."))])
+            return Diagnosis(SATISFIED)
+        # WHICH of the two is wrong decides what to say. A declaration typed into a code fence or
+        # an HTML comment is a contributor who followed the instruction and got the rendering
+        # wrong, and telling them "no opt-out" sends them to write a sentence they already wrote.
+        # `_visible()` is NOT relaxed to accept it -- three earlier bypasses came out of that -- so
+        # the repair is to name the place it is hiding.
+        if NO_FACT_OPT_OUT in body:
+            return Diagnosis(ACTIONABLE, [(HIDDEN_DECLARATION, (
+                f"{label}: the sentence {NO_FACT_OPT_OUT!r} is in this text, but only inside a "
+                f"code block or an\n"
+                f"  HTML comment, and those are deliberately not read -- a declaration that "
+                f"renders as an example\n"
+                f"  is not a declaration. Move it into ordinary visible prose, with the reason.")
+            )])
+        return Diagnosis(ACTIONABLE, [(MISSING_DECLARATION, (
+            f"{label}: no canonical reference, and no opt-out.\n"
+            f"  Cite what this rests on, or write the sentence {NO_FACT_OPT_OUT!r} with the\n"
+            f"  reason -- outside any code block or HTML comment. See docs/canon/README.md."))])
 
-    failures = []
+    findings = []
     for ref_text in references:
         try:
             ref = canon.CanonRef.parse(ref_text)
             canon.resolve_offline(ref)
         except canon.CanonError as exc:
-            failures.append(f"{path}: {exc}")
+            findings.append((INVALID_REFERENCE, f"{label}: {exc}"))
 
     # A reference is only half of a citation. The value it resolves to must be in the text too, or
     # the reader cannot tell what was claimed -- and the digest check has nothing to compare.
@@ -1326,9 +1387,9 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
         table = canon.load_index(ref.source)
         del table
         if not _quotes_the_value(folded, ref, committed):
-            failures.append(
-                f"{path}: {ref} appears without the value it resolves to. A reference alone is a "
-                f"key anybody can type; the citation is the reference AND the value.")
+            findings.append((MISSING_QUOTED_VALUE, (
+                f"{label}: {ref} appears without the value it resolves to. A reference alone is a "
+                f"key anybody can type; the citation is the reference AND the value.")))
 
     # A CITATION MUST BEAR ON WHAT CHANGED. Until 2026-09-19 any resolving reference satisfied this
     # rule: paste the Install.strings reference and `설치` on its own line, change two Logic-facing
@@ -1340,23 +1401,64 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False) 
     # post-change contents. A `derivedFrom` satisfies it by construction, which is the common case;
     # a document that quotes a value it is writing about satisfies it too. Both pull request bodies
     # this branch descends from bind 2 of 2 references under it, measured before it was written.
-    if touched and references and not failures:
+    if touched and references and not findings:
         relevant = _citation_bears_on(references, body, changed_paths)
         if not relevant:
-            failures.append(
-                f"{path}: cites {len(references)} reference(s) and none of them bears on anything "
+            findings.append((UNRELATED_BINDING, (
+                f"{label}: cites {len(references)} reference(s) and none of them bears on anything "
                 f"this change touches. A citation that could sit on any pull request is not "
                 f"evidence for THIS one -- cite the row the change rests on, or say what the "
                 f"cited row has to do with the files being changed by quoting its value where "
-                f"they use it.")
+                f"they use it.")))
 
-    if failures:
-        print(f"{path}: {len(failures)} failure(s)", file=sys.stderr)
-        for failure in failures:
-            print(f"  {failure}", file=sys.stderr)
-        return 1
-    print(f"{path}: {len(references)} citation(s) resolved")
-    return 0
+    if findings:
+        return Diagnosis(ACTIONABLE, findings, references=len(references))
+    return Diagnosis(SATISFIED, references=len(references))
+
+
+def check_text(path: str, changed_paths=None, *, require_changed: bool = False,
+               as_json: bool = False) -> int:
+    """Render one evaluation of a body, as prose or as JSON, and return its exit status.
+
+    ONE evaluation, two renderings. `canon-issue.yml` used to read this function's stderr and turn
+    whatever it found into a sentence addressed to the author -- so a corpus that would not load
+    reached a first-time contributor as an accusation that they had cited nothing. The bot now
+    reads `--format json` and keys on the stable codes above; nothing downstream parses prose.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            body = handle.read()
+    except OSError as exc:
+        diagnosis = Diagnosis(ERROR, [(INPUT_UNREADABLE, f"{path}: {exc}")])
+    else:
+        try:
+            diagnosis = diagnose_text(body, changed_paths,
+                                      require_changed=require_changed, label=path)
+        except (canon.CanonError, CanonWaiverError, CitableScanFailed, OSError) as exc:
+            # The evaluation did not finish. That is not the author's doing and must not be
+            # reported as though it were -- but it is not a pass either, so the status is nonzero.
+            diagnosis = Diagnosis(ERROR, [(CHECKER_ERROR, (
+                f"{path}: this check could not evaluate the text: {type(exc).__name__}: {exc}\n"
+                f"  Nothing about the body is being asserted. This is a repository-side "
+                f"failure."))])
+
+    if as_json:
+        json.dump(diagnosis.as_dict(), sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return EXIT_FOR[diagnosis.category]
+
+    if diagnosis.category == SATISFIED:
+        if diagnosis.references:
+            print(f"{path}: {diagnosis.references} citation(s) resolved")
+        else:
+            print(f"{path}: no citation, and it says so: {NO_FACT_OPT_OUT!r}")
+        return EXIT_FOR[SATISFIED]
+
+    if len(diagnosis.findings) > 1:
+        print(f"{path}: {len(diagnosis.findings)} failure(s)", file=sys.stderr)
+    for _code, message in diagnosis.findings:
+        print(message, file=sys.stderr)
+    return EXIT_FOR[diagnosis.category]
 
 
 #: Shortest quoted run worth testing. Below this a fragment hits the corpus by coincidence.
@@ -1508,29 +1610,77 @@ def _unquoted(text: str) -> str:
     return ""
 
 
-def _changed_from_argv():
-    """The changed-file list for the tree-wide run, or None when it was not given.
+USAGE = ("usage: check-canon-citations.py [--changed <file>]\n"
+         "       check-canon-citations.py --text <file> [--changed <file>] [--format text|json]")
 
-    None means "do not check which files the change touches", which is the behaviour every run
-    before this had. It is not a default that weakens anything silently: `--changed` is what CI
-    passes, and a local run without it says less rather than passing something wrong.
+
+class UsageError(Exception):
+    """The command line did not say what it meant, so nothing is evaluated."""
+
+
+def _usage(message: str) -> int:
+    """Refuse, loudly, with the ERROR status.
+
+    EVERY argument form below used to be POSITIONAL: `--text` had to be argv[1], `--changed` had
+    to be argv[3], and the whole `--changed` clause was ignored unless argc was exactly 5. Adding
+    `--format` to that shape would have made `--text b.md --format json --changed c.txt` run with
+    NO file list -- which is the mode where a change that edits Logic-facing paths may opt out.
+    A dropped flag has to be an error rather than a quieter check.
     """
-    if "--changed" in sys.argv:
-        index = sys.argv.index("--changed")
-        if index + 1 < len(sys.argv):
-            with open(sys.argv[index + 1], "r", encoding="utf-8") as handle:
-                return [line.strip() for line in handle if line.strip()]
-    return None
+    print(f"check-canon-citations: {message}\n{USAGE}", file=sys.stderr)
+    return EXIT_FOR[ERROR]
+
+
+def _read_list(path: str) -> list:
+    with open(path, "r", encoding="utf-8") as handle:
+        return [line.strip() for line in handle if line.strip()]
+
+
+def _parse_argv(argv: list) -> dict:
+    """The options in `argv`, or `UsageError`. No option is consumed by position."""
+    options = {"text": None, "changed": None, "format": "text"}
+    rest = list(argv)
+    positional = []
+    while rest:
+        token = rest.pop(0)
+        if token in ("--text", "--changed", "--format"):
+            key = token[2:]
+            if not rest:
+                raise UsageError(f"{token} needs a value")
+            if options[key] is not None and key != "format":
+                raise UsageError(f"{token} given twice")
+            options[key] = rest.pop(0)
+        elif token.startswith("-"):
+            raise UsageError(f"unknown option {token}")
+        else:
+            positional.append(token)
+    if positional:
+        raise UsageError(f"unexpected argument {positional[0]!r}")
+    if options["format"] not in ("text", "json"):
+        raise UsageError(f"--format takes text or json, not {options['format']!r}")
+    if options["format"] == "json" and options["text"] is None:
+        raise UsageError("--format applies to --text; the tree-wide run has no JSON rendering")
+    return options
 
 
 def main() -> int:
-    if len(sys.argv) >= 3 and sys.argv[1] == "--text":
+    try:
+        options = _parse_argv(sys.argv[1:])
+    except UsageError as exc:
+        return _usage(str(exc))
+    except OSError as exc:
+        return _usage(f"cannot read the changed-file list: {exc}")
+
+    if options["text"] is not None:
         changed, required = [], False
-        if len(sys.argv) == 5 and sys.argv[3] == "--changed":
+        if options["changed"] is not None:
             required = True
-            with open(sys.argv[4], "r", encoding="utf-8") as handle:
-                changed = [line.strip() for line in handle if line.strip()]
-        return check_text(sys.argv[2], changed, require_changed=required)
+            try:
+                changed = _read_list(options["changed"])
+            except OSError as exc:
+                return _usage(f"cannot read the changed-file list: {exc}")
+        return check_text(options["text"], changed, require_changed=required,
+                          as_json=options["format"] == "json")
 
     failures: list = []
 
@@ -1554,7 +1704,12 @@ def main() -> int:
     check_every_json_is_a_record_or_declared(failures)
     check_labelsets_are_logic_facing(failures)
     check_exceptions_state_no_fact(failures)
-    changed = _changed_from_argv()
+    # None means "do not check which files the change touches", which is the behaviour every run
+    # before `--changed` existed had. It is not a default that weakens anything silently: CI passes
+    # the list, and a local run without it says less rather than passing something wrong. What is
+    # forbidden is reaching that weaker mode BY ACCIDENT, which is why `_parse_argv` refuses a
+    # `--changed` with nothing after it instead of behaving like a run that never asked.
+    changed = None if options["changed"] is None else _read_list(options["changed"])
     references = check_references(failures)
     without_canon = load_without_canon()
     records = observation_records()
