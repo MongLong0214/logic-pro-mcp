@@ -1,0 +1,27 @@
+Limit: the envelope key write_attempted is a server-wide public receipt field, 61 sites across twelve unrelated subsystems, so #943's rename stops at the dialog route's internal payload label
+Limit: every DIALOG_INPUT_ISSUED emission carries a second segment the classifier's hasPrefix arms include, so a bare first token is not a value production ever emits
+Ruled-out: renaming the envelope key write_attempted to match the new enum label | it is a wire-protocol change to a field twelve unrelated subsystems emit rather than the dialog route's internal payload label that #943 asked about
+Ruled-out: probing the classifier with the bare sentinel prefix set | it probes a string that cannot occur, and answered .unexpectedResult for exactly that reason
+Ruled-out: keeping the classifier-only DIALOG_NOT_READY arm | the generated script never emits it, so a regression test pinning it to .unexpectedResult replaces it
+Warn: the full suite is red under parallel load on this path and it is not this branch: baseline eadb5f4a had 20 distinct failing tests to this tree's 4, and the 4 are a subset. Run a failing suite in isolation before attributing it
+Warn: a delegated sandboxed worker cannot build Swift here — SwiftPM's manifest sandbox refuses under its sandbox-exec, so its mutation exit codes are build failures before test discovery, not kills
+Warn: an insertion mutant whose replacement contains its anchor cannot be counted by subtracting anchor occurrences; count the replacement instead or the harness reports zero edits
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: no live Logic drive; the dialog route was exercised only through the generated script text and the classifier
+Record-Id: r-943945parity
+Provenance: inherited 9e0c11058dad01ef402622eb089e1bec6864a4d2
+
+Limit: maintenance.yml's pull_request trigger is path-filtered to docs/roadmap/**, docs/adr/** and the guard scripts, so a pull request closing an issue without touching the table never runs the table check on the branch; it merges green and the next weekly scheduled run fails on main
+Ruled-out: writing docs/observations/<date>-<slug>.json for the #941 cache measurement from that pull request's description | those readings would be copied from prose rather than taken, and a record is what somebody measured, so the roadmap row cites #941 and states that the readings were not landed here
+Warn: roadmap-table-matches-github.py's --pr-body takes the body TEXT, not a path. Passing a path makes the closing-keyword scan find no Closes #N, so the rows a pull request is entitled to mark closed early are reported as drift and a correct table fails
+Record-Id: r-roadmapstale
+Provenance: inherited 6bfcc385a90f75a303c848acd1d028753714641c
+
+Limit: menuPickFailed deliberately stays on the observed side of performedDialogSafetyObservation: its one reachable bare emission site is after the script observed cleanupState CLOSED and strictly before the leaf click. A MENU_PICK_FAILED return added after the leaf click makes that wrong
+Ruled-out: adding .malformedPayload to the old false list and leaving the shape alone | it closes this instance and leaves the mechanism that produced it, which the review had already aimed at the next case
+Warn: a top-level Bool == Bool inside #expect passes unconditionally on this toolchain, so a table of expected booleans written that way measures nothing; assert the position with #expect(flag) and #expect(!flag). Measured here: the mutant that flips .malformedPayload walked straight through the == form
+Warn: sliderWrites == 0 cannot fail for a claim that the slider stays withheld, because gotoPositionViaBarSlider never writes the bar/beat slider on any path. The discriminator in these cases is safe_to_retry
+Record-Id: r-948malformed
+Provenance: inherited 354a2c24188dcd456fc279d7ff9b0eb186cfc618
