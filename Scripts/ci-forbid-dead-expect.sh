@@ -204,6 +204,13 @@ def parenthesized_comparison(operand):
     return False
 
 def top_level_equality_in_expression(expression):
+    # A relational operator yields Bool exactly as `==` does, and the scanner used
+    # to recognise only `==`/`!=`. Measured: `#expect(site.flag == (marker < leaf))`
+    # passed this lint while `#expect(true == false)` was caught, because the
+    # parenthesised operand's Bool-ness went unrecognised and no operand looked
+    # Boolean. `<=`/`>=` are matched before `<`/`>` so the two-character forms are
+    # not split, and `->` is excluded so a closure's return arrow is not read as a
+    # comparison.
     depth, index = 0, 0
     found_equality = False
     while index < len(expression):
@@ -216,7 +223,10 @@ def top_level_equality_in_expression(expression):
             # `(condition == value ? enumA : enumB)` returns the enum, not
             # the Boolean condition. Optional casts are handled separately.
             return False
-        elif depth == 0 and expression.startswith(('==', '!='), index):
+        elif depth == 0 and expression.startswith(('==', '!=', '<=', '>='), index):
+            found_equality = True
+            index += 1
+        elif depth == 0 and char in '<>' and not expression.startswith('->', index - 1):
             found_equality = True
         index += 1
     return found_equality

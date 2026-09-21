@@ -698,12 +698,18 @@ struct Issue529MenuValidationTests {
             let marker = try issue529Position(
                 of: "-- MENU_CLEANUP_REFUSAL_SITE: \(site.identifier)", in: generatedScript
             )
-            let placement = marker < leafClick ? "before" : "after"
-            #expect(site.emittedBeforeLeafClick == (marker < leafClick),
+            // Written as `site.emittedBeforeLeafClick == (marker < leafClick)` this proved
+            // nothing: a top-level `Bool == Bool` inside `#expect` passes unconditionally on
+            // this toolchain, which is the hazard this file already records below. Measured:
+            // with the comparison inverted to `marker > leafClick`, so every site compares
+            // `true == false`, the filtered suite still exited 0 with 56 passed. The flag is
+            // already pinned to `true` by the expectation above, so the position is asserted
+            // on its own and both halves can now fail.
+            #expect(marker < leafClick,
                     """
                     \(site.identifier) declares emittedBeforeLeafClick=\
                     \(site.emittedBeforeLeafClick) but the generated script places it \
-                    \(placement) the leaf click
+                    after the leaf click
                     """)
         }
     }
