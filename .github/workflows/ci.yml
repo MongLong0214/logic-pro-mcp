@@ -67,9 +67,25 @@ jobs:
   # head commit and open the merge. Publishing under a name that is not a required context leaves
   # the code run's verdicts exactly where they were.
   #
-  # It also decides nothing on its own behalf: if this job fails, the expressions below see an
-  # empty output, every gated job publishes its non-canonical name, and the required contexts are
-  # simply absent for that commit. Absent is not satisfied.
+  # MEASURED 2026-09-21, and not what the author expected: a job GitHub SKIPS does not have its
+  # `name:` expression evaluated at all. Run 35569321799 (a `pull_request` `edited` on #952)
+  # published five check runs named with the RAW EXPRESSION BODY --
+  # `needs.classify.outputs.code_validation_required == 'true' && 'test' || 'test (not a code gate
+  # - metadata-only edit)'` and its four siblings -- each `skipped`. Run 35569251102, the code run
+  # on the same head `bd1745b7` where these jobs actually executed, published `compile`, `test`,
+  # `guards` and `formula`. So the expression evaluates when the job runs and is left verbatim when
+  # it does not, and the safety argument survives BOTH readings: evaluated, the name is the
+  # parenthesised one; unevaluated, it is the expression itself; neither is `compile` or `test`,
+  # and branch protection matches a context by exact name. The parenthesised branch is the one a
+  # human is meant to read, and on current GitHub behaviour a human never sees it.
+  #
+  # Do not "simplify" this to a plain string because the pretty half never appears in the UI. The
+  # plain string IS the canonical name, and publishing `skipped` under it is the whole hazard.
+  #
+  # It also decides nothing on its own behalf: if this job fails, its dependents are skipped for
+  # want of a satisfied `needs`, they publish under a name that is not a required context by the
+  # same mechanism, and the required contexts are simply absent for that commit. Absent is not
+  # satisfied.
   classify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -115,7 +131,8 @@ jobs:
     # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
     # check run that is not a required context, so the verdict the code run left on this commit
     # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied.
+    # skipped required check as satisfied. What GitHub actually published for both branches of
+    # this expression is measured above `classify`; read it before rewriting this line.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -160,7 +177,8 @@ jobs:
     # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
     # check run that is not a required context, so the verdict the code run left on this commit
     # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied.
+    # skipped required check as satisfied. What GitHub actually published for both branches of
+    # this expression is measured above `classify`; read it before rewriting this line.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -204,7 +222,8 @@ jobs:
     # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
     # check run that is not a required context, so the verdict the code run left on this commit
     # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied.
+    # skipped required check as satisfied. What GitHub actually published for both branches of
+    # this expression is measured above `classify`; read it before rewriting this line.
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -261,7 +280,8 @@ jobs:
     # above is the half that makes the skip safe: on a metadata-only edit this job publishes a
     # check run that is not a required context, so the verdict the code run left on this commit
     # stands. Skipping under the canonical name would publish `skipped`, and GitHub counts a
-    # skipped required check as satisfied.
+    # skipped required check as satisfied. What GitHub actually published for both branches of
+    # this expression is measured above `classify`; read it before rewriting this line.
     runs-on: macos-15
     timeout-minutes: 60
     steps:
