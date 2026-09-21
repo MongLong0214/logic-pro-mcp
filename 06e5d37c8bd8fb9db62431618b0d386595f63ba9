@@ -1,0 +1,42 @@
+Limit: A job skipped by an `if:` still publishes a check run under its job name, and GitHub counts a `skipped` required check as SATISFIED.
+Limit: Retargeting arrives as `pull_request.edited` with `changes.base` and there is no separate event for it, so `edited` could not be deleted from the trigger.
+Limit: The workflow-level `concurrency.group` is evaluated before any job runs, so it cannot consult the classifier and had to repeat a conservative approximation of the same rule.
+Limit: `check-canon-citations.py` ratchets the top-level `required_commands` of `docs/canon/CI-GATE.json` to GROW only, so the two canon command entries could not be deleted when the body check moved.
+Ruled-out: putting `!cancelled()` on the gated jobs | it turns a cancelled run's jobs into `skipped`, which is the very thing being avoided
+Ruled-out: building a relocation-declaration mechanism | it would itself need a ratchet
+Warn: The order mattered: the ruleset was re-read from the API AFTER the PUT and the delta confirmed to be that one added context, and only then did the duplicate job come out of ci.yml. An HTTP success without readback is not evidence.
+Warn: The guard's per-file rules had stopped reading the file the guard was pointed at, so `LPM_CI_WORKFLOW` stopped meaning anything and three cases went green while measuring the unmutated file beside the mutated one.
+Blast: system
+Undo: costly
+Certainty: firm
+Unverified: no Actions run has yet exercised a real metadata-only edit against the new names: the display-name protection is argued from GitHub's documented behaviour and not yet measured on this repository
+Record-Id: r-skippedissatisfied
+Provenance: inherited 2cb3bb09918a6b42e20d5a03939fb40754b1aa73
+
+Warn: A job GitHub SKIPS does not have its `name:` expression evaluated at all -- measured 2026-09-21, run 35569321799 published the raw expression body as the check-run name while run 35569251102 published `compile`, `test`, `guards` and `formula` for the same jobs on the same head. The parenthesised name this workflow writes is never displayed. Do not rewrite the expression to a plain string on the strength of the pretty half never appearing: the plain string IS the canonical name.
+Warn: The safety argument now rests on both readings rather than on the one the author intended: whichever way GitHub treats the expression, the published name is not `compile` or `test`, and branch protection matches a context by exact name.
+Blast: system
+Undo: easy
+Certainty: firm
+Unverified: every run cited is a same-repository pull request, so none of it is evidence about forks
+Record-Id: r-skipnameraw
+Follows: r-skippedissatisfied
+Provenance: inherited 514a4b4a2752b98f8d7d1cc07bef681a210598c6
+
+Warn: The concurrency group and `classify` are two statements of one rule and they are NOT identical: an expression cannot enumerate an object's keys, so the group names title, body and base one at a time while the classifier asks whether `changes` contains only title and body. They agree on every payload GitHub documents; an undocumented key would be `code` to the classifier and `metadata` here. Growing `METADATA_KEYS` means editing the expression too.
+Warn: The previous case for this asserted that substrings appeared in the group. A substring is not a decision -- the expression could return the two domains the wrong way round and every one of those assertions would still hold. The case now evaluates the expression.
+Blast: module
+Undo: easy
+Certainty: firm
+Unverified: the divergence on an undocumented `changes` key is argued from GitHub's documented payload rather than observed, because no such payload can be produced
+Record-Id: r-groupevaluated
+Follows: r-skipnameraw
+Provenance: inherited e7949a40f454976ce6e7f23deadee54a3b6f5a2a
+
+Warn: The Status column of docs/adr/README.md is a closed vocabulary, not prose: Scripts/adr-index-matches-github.py holds UNFINISHED = ("In Implementation", "Proposed", "Draft", "Accepted") and refuses any of those four against a CLOSED issue. Read that tuple before editing a row.
+Warn: `Shipped` would also have cleared the guard and would have been false. #293 closed with a non-completion disposition -- its remaining work moved to #302 -- so the guard being green is not evidence the word is right.
+Blast: module
+Undo: easy
+Certainty: firm
+Record-Id: r-adrstatusvocab
+Provenance: inherited 3b1c360ae0888cab049e80ad9d46637fc3095122
