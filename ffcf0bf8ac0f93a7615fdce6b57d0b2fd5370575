@@ -1,0 +1,12 @@
+Limit: No pull request has been driven through this on GitHub. That `--refuse-unvalidated-edit` turns the `pr-policy` required context RED, and that a red `pr-policy` blocks the merge, are read from the ruleset readback in CI-GATE.json and GitHub's documented semantics -- not observed. The first retarget of a real pull request is what would demonstrate it.
+Limit: That removing `edited` from ci.yml stops the newest-suite refusal on a live merge is INFERRED from the mechanism #960 measured, not watched. #960 measured the block on #959; nobody has watched a description edit merge cleanly after this change.
+Ruled-out: key the new refusal on `changes.base` alone | with `edited` gone from ci.yml a retarget is no longer the only unvalidated shape -- ANY future editable field reaches no code gate, so a base-only test would let an unknown key inherit the exemption by saying nothing. `review_edit()` calls `classify()` so one rule has one authority.
+Ruled-out: delete `classify` and the display-name switching from ci.yml now that neither can fire | they are the apparatus that makes re-subscribing `edited` survivable. Without them the obvious re-subscription publishes `compile: skipped` over a real verdict, and GitHub counts a skipped required check as satisfied. A test case pins the trigger list instead.
+Ruled-out: honouring 95b71cf7's `Ruled-out: dropping `edited` from ci.yml` and keeping the subscription | that record's stated premise expired. The body check no longer lives in ci.yml -- #950 moved it to pr-policy.yml (06e5d37c), which subscribes to `edited` itself and has been a required context since 2026-09-21 -- so a description edited after the gate went green is still re-read, by the workflow that now owns that job.
+Warn: `ci.yml`'s concurrency group is back to ONE domain. Re-subscribing `edited` there means restoring the two domains WITH it -- a re-subscription that leaves the group as it is brings back the cancellation of a running macOS job by a description edit, which #950 already paid to fix. Both halves are pinned by cases in test_pull_request_event_classifier.py.
+Warn: `pr-policy.yml` is now the ONLY gate subscribed to `edited`. Dropping it from that trigger leaves a retarget reaching no gate at all -- a worse defect than the one #960 reports, and one that breaks no other case. test_the_body_gate_still_hears_edited is what fails.
+Blast: system
+Undo: costly
+Certainty: firm
+Record-Id: r-960editedout
+Provenance: inherited 23503eead208c8730dce43fd21611e4695cef1cd
