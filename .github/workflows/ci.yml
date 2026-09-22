@@ -5,19 +5,28 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    # `edited` is NOT in the default set (opened, synchronize, reopened), and it is subscribed for
-    # ONE reason: RETARGETING a pull request arrives as `edited` -- there is no separate event for
-    # it -- and a change that now merges into a different branch has not been validated against the
-    # branch it now merges into.
+    # `edited` IS DELIBERATELY ABSENT, and this is the default set. It was subscribed until
+    # 2026-09-22 for one reason -- RETARGETING a pull request arrives as `edited`, there is no
+    # separate event for it, and a change that now merges into a different branch has not been
+    # validated against the branch it now merges into. `classify` below made that subscription
+    # cheap. #960 measured that it was not safe:
     #
-    # It used to be here for the pull request BODY check as well. That check is
-    # `.github/workflows/pr-policy.yml` now and `pr-policy` is a required context in its own right
-    # (added to ruleset 19060230 and re-read from the API on 2026-09-21), so editing a description
-    # re-runs that workflow and not this one.
+    #   a metadata-only run publishes no check run under `build`, `compile` or `test` -- that is
+    #   what the renaming below is for -- but it still creates a check SUITE, and the ruleset reads
+    #   the NEWEST suite for an app. On #959 every tool reported the three contexts green while
+    #   `PUT /pulls/959/merge` answered `3 of 4 required status checks are expected`. `gh run
+    #   rerun` did not clear it (a rerun makes no newer suite); closing and reopening did.
     #
-    # What stops a title edit from restarting a macOS test job is `classify` below, not this list:
-    # an event filter cannot tell a retarget from a typo fix, because both are `edited`.
-    types: [opened, synchronize, reopened, edited]
+    # So editing a description cost a close-and-reopen or a second 30-minute macOS run, which is
+    # the friction this repository removed `edited` to end. The retarget is still caught, by
+    # `pr-policy.yml` -- required, subscribed to `edited`, fifteen seconds long -- which runs
+    # `Scripts/classify-pull-request-event.py --refuse-unvalidated-edit` and goes RED for any
+    # `edited` that is not a title or body change. A retarget then cannot merge on this workflow's
+    # stale verdict, because the required body context is red until a push or a reopen revalidates.
+    #
+    # `Scripts/test_pull_request_event_classifier.py` pins this list. Re-adding `edited` here
+    # without re-opening #960 is the change that case exists to stop.
+    types: [opened, synchronize, reopened]
 
 # Least privilege: the build job only reads the repo. Declaring the scope here
 # (release.yml / publish-mcp.yml already pin theirs) drops the default token
@@ -26,30 +35,18 @@ permissions:
   contents: read
 
 concurrency:
-  # TWO cancellation domains, because a description edit cancelling a running macOS test job is the
-  # defect this workflow was carrying. This expression is evaluated before any job runs, so it
-  # cannot call `classify` and has to repeat the conservative half of the same rule itself: a run
-  # enters the metadata domain only when the payload positively says a title or a body changed AND
-  # says nothing about the base. A push and a retarget are code runs and share the code domain, so
-  # a newer commit still supersedes an older run of itself. Erring the other way would put a run
-  # that DOES validate code in a domain a later typo fix can cancel.
+  # ONE domain again, as of 2026-09-22. It carried two -- `-metadata` and `-code` -- so that a
+  # description edit could not cancel the macOS test job already running for the same pull request.
+  # That expression restated `classify`'s rule a second time, in a language that cannot enumerate
+  # an object's keys, which is why it had to name `title`, `body` and `base` one at a time and why
+  # the two could disagree on a payload GitHub has not documented.
   #
-  # It is NOT identical to `classify`, and the difference is worth naming rather than papering
-  # over. The classifier asks "does `changes` contain ONLY title and body?"; an expression cannot
-  # enumerate an object's keys, so this asks after each known key by name instead. On every
-  # payload GitHub documents for `edited` -- `changes` carries `title`, `body` and `base` and
-  # nothing else -- the two agree, and `Scripts/test_pull_request_event_classifier.py` evaluates
-  # this very string against every one of those payloads to say so. An `edited`
-  # carrying some key GitHub does not document today would be `code` to the classifier and
-  # `metadata` here. That residue fails in the safe direction -- such a run could be cancelled by a
-  # later description edit, and a cancelled check is not a satisfied one, so the merge stays
-  # blocked and the run has to be retriggered -- but it is a divergence, not a guarantee. Growing
-  # `METADATA_KEYS` means editing this expression too, and a case fails if only one of them moves.
-  group: >-
-    ${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'pull_request' &&
-    github.event.action == 'edited' && github.event.changes.base == null &&
-    (github.event.changes.title != null || github.event.changes.body != null)) && 'metadata' ||
-    'code' }}
+  # It is gone because its input is gone: this workflow no longer subscribes to `edited` (see the
+  # trigger above and #960), so no run reaching this expression is a description edit, and every
+  # run in the group is a code run that a newer code run should supersede. Restoring `edited` means
+  # restoring the two domains WITH it; a re-subscription that leaves this expression as it is
+  # brings back the cancellation this repository already paid to fix.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # The DEFAULT shell for a `run:` block is `bash -e {0}` -- no `pipefail`. So `a | tee log` reports
@@ -70,6 +67,14 @@ jobs:
   # and `code` for everything else, including an `edited` carrying `changes.base` (a retarget),
   # an `edited` with no `changes` at all, and an `edited` naming a key the script has not been
   # taught. A future editable field must not inherit the exemption by saying nothing.
+  #
+  # SINCE 2026-09-22 THIS ANSWERS `code` FOR EVERY EVENT THIS WORKFLOW RECEIVES. The trigger above
+  # no longer lists `edited`, so the only shape it exempts cannot arrive, and the conditions and
+  # renamings below never take their skipped branch. They are kept rather than deleted because
+  # they are the apparatus that makes re-subscribing `edited` survivable at all: without them the
+  # obvious re-subscription publishes `compile: skipped` over a real verdict, which GitHub counts
+  # as satisfied. Deleting them would leave the next person to rediscover that, and #952 is what
+  # rediscovering it cost. The same decision is written down in the script's own docstring.
   #
   # THE JOBS BELOW CHANGE THEIR NAME AND NOT ONLY THEIR CONDITION, and that is the whole safety
   # argument. A job skipped by an `if:` still publishes a check run under its own name, and GitHub

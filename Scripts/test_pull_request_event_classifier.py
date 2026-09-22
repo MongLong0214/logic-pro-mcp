@@ -11,6 +11,13 @@ So these cases read `.github/workflows/ci.yml` and assert that every job whose n
 context, or which the required context depends on, carries BOTH the condition and a non-canonical
 display name for the skipped case.
 
+Since #960 there is a third half, and it is where the rule now BITES. `ci.yml` no longer subscribes
+to `edited`, because a metadata-only run of it still creates a check suite and the ruleset reads
+the newest suite for an app -- so a description edit made the three code contexts read as
+`expected` and refused the merge. The retarget that subscription existed for is refused instead by
+`review_edit()`, which `pr-policy.yml` runs as `--refuse-unvalidated-edit`. `RetargetRefusal` below
+measures both sides of that: the decision, and the fact that the body gate actually calls it.
+
 Comment lines are stripped before any of that is matched. A rule about what a workflow RUNS that a
 comment can satisfy is a rule about prose.
 """
@@ -38,100 +45,6 @@ CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 #: The jobs the branch ruleset requires, plus the ones the required aggregate depends on. Every one
 #: of them must be unable to publish its canonical name for a metadata-only edit.
 GATED_JOBS = ("guards", "compile", "test", "formula", "build")
-
-_TOKEN = re.compile(r"\s*(\(|\)|&&|\|\||==|!=|'(?:[^']|'')*'|[A-Za-z_][\w.\-]*)")
-
-
-def _resolve(path, context):
-    """`github.event.changes.base` against a context dict. A missing step is null, as on Actions."""
-    value = context
-    for step in path.split("."):
-        if not isinstance(value, dict) or step not in value:
-            return None
-        value = value[step]
-    return value
-
-
-def evaluate_expression(text, context):
-    """Evaluate the `${{ ... }}` segments of a workflow string the way Actions does.
-
-    Deliberately small and deliberately not `eval`. It covers exactly the grammar `ci.yml`'s
-    concurrency group uses -- `&&`, `||`, `==`, `!=`, parentheses, single-quoted strings, `null`,
-    `true`/`false` and context paths -- and raises on anything else rather than guessing, because a
-    silent mis-parse would make the case it serves pass for the wrong reason. `&&` and `||` return
-    an OPERAND, not a boolean, which is what makes `cond && 'a' || 'b'` work at all; falsy is
-    `null`, `false`, `''` and `0`.
-    """
-    def segment(expression):
-        expression = expression.strip()
-        tokens, position = [], 0
-        while position < len(expression):
-            match = _TOKEN.match(expression, position)
-            if not match:
-                raise ValueError(f"cannot tokenise at {expression[position:position + 20]!r}")
-            tokens.append(match.group(1))
-            position = match.end()
-        tokens.append(None)
-        index = [0]
-
-        def peek():
-            return tokens[index[0]]
-
-        def take():
-            token = tokens[index[0]]
-            index[0] += 1
-            return token
-
-        def truthy(value):
-            return value not in (None, False, "", 0)
-
-        def primary():
-            token = take()
-            if token == "(":
-                value = disjunction()
-                if take() != ")":
-                    raise ValueError("unbalanced parenthesis")
-                return value
-            if token is None:
-                raise ValueError("expression ended early")
-            if token.startswith("'"):
-                return token[1:-1].replace("''", "'")
-            if token == "null":
-                return None
-            if token in ("true", "false"):
-                return token == "true"
-            return _resolve(token, context)
-
-        def comparison():
-            left = primary()
-            while peek() in ("==", "!="):
-                operator = take()
-                right = primary()
-                left = (left == right) if operator == "==" else (left != right)
-            return left
-
-        def conjunction():
-            left = comparison()
-            while peek() == "&&":
-                take()
-                right = comparison()
-                left = right if truthy(left) else left
-            return left
-
-        def disjunction():
-            left = conjunction()
-            while peek() == "||":
-                take()
-                right = conjunction()
-                left = left if truthy(left) else right
-            return left
-
-        value = disjunction()
-        if peek() is not None:
-            raise ValueError(f"trailing tokens: {tokens[index[0]:]}")
-        return "" if value is None else str(value)
-
-    return re.sub(r"\$\{\{(.*?)\}\}", lambda m: segment(m.group(1)), text, flags=re.S)
 
 #: The contexts the branch ruleset requires (re-read from the API 2026-09-21). A name a skipped job
 #: could publish must never be one of these.
@@ -172,11 +85,12 @@ def job_blocks(text: str) -> dict:
     return {name: "\n".join(lines) for name, lines in blocks.items()}
 
 
-def run_classifier(event_name, payload):
+def run_classifier(event_name, payload, argv=()):
     """Drive the ENTRY POINT, not `classify()`, at a payload written to a real file.
 
     A case that only calls `classify()` leaves `main()` free to print anything; the workflow reads
-    stdout, so stdout is what has to be measured.
+    stdout and, for `--refuse-unvalidated-edit`, the EXIT STATUS, so both are what have to be
+    measured. `argv` is the command line `pr-policy.yml` or `ci.yml` passes.
     """
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
         if payload is not None:
@@ -185,7 +99,8 @@ def run_classifier(event_name, payload):
     try:
         environment = dict(os.environ, GITHUB_EVENT_NAME=event_name, GITHUB_EVENT_PATH=path)
         finished = subprocess.run(
-            [sys.executable, os.path.join(REPO, "Scripts", "classify-pull-request-event.py")],
+            [sys.executable, os.path.join(REPO, "Scripts", "classify-pull-request-event.py"),
+             *argv],
             capture_output=True, text=True, env=environment)
         return finished.returncode, finished.stdout.strip()
     finally:
@@ -351,91 +266,159 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIsNotNone(group, "ci.yml has no concurrency group")
         return " ".join(group.group(1).split())
 
-    def _domain(self, context):
-        """Which cancellation domain `ci.yml` puts this event in -- by evaluating its expression.
-
-        The previous version of this case asserted that certain substrings appeared in the group.
-        A substring is not a decision: the expression could compare `changes.base` against the
-        wrong thing, or return the two domains the wrong way round, and every one of those
-        assertions would still have held. `evaluate_expression` reads the same string GitHub reads.
-        """
-        rendered = evaluate_expression(self._concurrency_group(), context)
-        self.assertTrue(rendered.endswith(("-metadata", "-code")),
-                        f"the group did not resolve to a domain: {rendered!r}")
-        return rendered.rsplit("-", 1)[1]
-
-    @staticmethod
-    def _context(payload, event_name="pull_request", ref="refs/pull/1/merge"):
-        return {"github": {"workflow": "CI", "ref": ref,
-                           "event_name": event_name, "event": payload}}
-
-    def test_the_group_expression_and_the_classifier_agree_on_every_payload_github_sends(self):
-        # E02 and E10. The workflow-level group cannot call the classifier -- it is evaluated
-        # before any job runs -- so it states the same rule a second time, which is the shape that
-        # drifts. `changes` on `edited` is documented to carry only `title`, `body` and `base`, so
-        # these are the whole space, and the two authorities must not disagree anywhere in it.
-        cases = [
-            {"action": "edited", "changes": {"title": {"from": "a"}}},
-            {"action": "edited", "changes": {"body": {"from": "a"}}},
-            {"action": "edited", "changes": {"title": {"from": "a"}, "body": {"from": "b"}}},
-            {"action": "edited", "changes": {"base": {"ref": {"from": "main"}}}},
-            {"action": "edited",
-             "changes": {"title": {"from": "a"}, "base": {"ref": {"from": "main"}}}},
-            {"action": "edited", "changes": {}},
-            {"action": "edited"},
-            {"action": "synchronize"},
-            {"action": "opened"},
-        ]
-        for payload in cases:
-            label = ",".join(sorted(payload.get("changes") or {})) or payload["action"]
-            with self.subTest(changes=label):
-                decision = classifier.classify("pull_request", payload)
-                expected = "metadata" if decision == classifier.METADATA_ONLY else "code"
-                self.assertEqual(self._domain(self._context(payload)), expected,
-                                 f"the classifier says {decision!r}")
-
-    def test_a_push_is_a_code_run(self):
-        # Not a `pull_request` at all. The group must not read `changes` off an event that has none
-        # and land a push in the metadata domain, where a later description edit could cancel it.
-        self.assertEqual(
-            self._domain(self._context({}, event_name="push", ref="refs/heads/main")), "code")
-
-    def test_an_event_that_is_not_a_pull_request_is_code_even_when_it_carries_changes(self):
-        # This payload cannot reach `ci.yml` today -- it triggers on `push` and `pull_request` and
-        # nothing else -- and that is exactly why the case exists. Without it, deleting
-        # `github.event_name == 'pull_request'` from the group changes no outcome any other case
-        # measures (measured: that mutation left the suite green), so the clause would be a guard
-        # nothing can catch being removed. The clause is what keeps the rule correct for whatever
-        # trigger is added next, and this is the payload that says so.
-        carries_changes = {"action": "edited", "changes": {"title": {"from": "a"}}}
-        self.assertEqual(
-            self._domain(self._context(carries_changes, event_name="issues")), "code")
-
-    def test_the_group_expression_names_every_key_the_classifier_knows(self):
-        # The expression cannot ask "does `changes` contain ONLY these keys?" -- GitHub expressions
-        # cannot enumerate an object's keys -- so it names them one at a time. That makes growing
-        # `METADATA_KEYS` a change in two places, and this is what fails when somebody grows it in
-        # one. The residue is stated in `ci.yml`: an `edited` carrying a key GitHub does not
-        # document today is `code` to the classifier and `metadata` to the expression. That one
-        # cannot be closed from inside an expression, only watched.
-        expression = self._concurrency_group()
-        for key in sorted(classifier.METADATA_KEYS) + ["base"]:
-            with self.subTest(key=key):
-                self.assertIn(f"github.event.changes.{key}", expression)
-
     def test_the_body_check_is_no_longer_in_the_code_workflow(self):
         # It moved to the separately required `pr-policy` context. Leaving a copy here is what made
         # a description edit restart a macOS test job.
         self.assertNotIn("--text", self.executable)
         self.assertNotIn("canon-citations-in-the-pull-request", self.executable)
 
-    def test_edited_is_still_subscribed_because_a_retarget_arrives_that_way(self):
-        # Deleting `edited` is the obvious "simplification" and it loses E06 outright: a pull
-        # request retargeted onto main would keep the verdicts it earned against its old base.
+    def test_the_code_workflow_does_not_subscribe_to_edited(self):
+        # The inverse of the case that stood here until 2026-09-22, and the reason is #960: a run
+        # of this workflow on an `edited` publishes no check run under `build`, `compile` or
+        # `test`, but it still creates a check SUITE, and the ruleset reads the newest suite for an
+        # app -- so the three contexts read as `expected` again and the merge was refused until a
+        # close-and-reopen. E06 did not go away with the subscription; it moved to `pr-policy.yml`,
+        # and the two cases below are what hold it there.
         trigger = re.search(r"^\s*types:\s*\[([^\]]*)\]", self.executable, re.M)
         self.assertIsNotNone(trigger)
         listed = {item.strip() for item in trigger.group(1).split(",") if item.strip()}
-        self.assertEqual(listed, {"opened", "synchronize", "reopened", "edited"})
+        self.assertEqual(listed, {"opened", "synchronize", "reopened"})
+
+    def test_the_concurrency_group_no_longer_carries_a_metadata_domain(self):
+        # It carried `-metadata` and `-code` so that a description edit could not cancel a running
+        # macOS job. With `edited` unsubscribed no run reaching this expression is a description
+        # edit, so every run in the group is a code run and a newer one should supersede an older.
+        # What this case refuses is the half-change: `edited` back in the trigger with the single
+        # domain left here would restore the cancellation the two domains were built to stop.
+        group = self._concurrency_group()
+        self.assertNotIn("metadata", group)
+        self.assertNotIn("github.event.changes", group)
+        self.assertIn("github.workflow", group)
+        self.assertIn("github.ref", group)
+
+
+class RetargetRefusal(unittest.TestCase):
+    """E06 after #960: the code gates do not hear an `edited`, so `pr-policy` refuses it."""
+
+    POLICY = os.path.join(REPO, ".github", "workflows", "pr-policy.yml")
+
+    def test_an_edit_that_is_only_title_or_body_is_allowed(self):
+        for changes in ({"title": {"from": "x"}},
+                        {"body": {"from": "x"}},
+                        {"title": {"from": "x"}, "body": {"from": "y"}}):
+            with self.subTest(changes=sorted(changes)):
+                self.assertEqual(
+                    classifier.review_edit("pull_request",
+                                           {"action": "edited", "changes": changes}),
+                    classifier.ALLOW)
+
+    def test_a_retarget_is_refused(self):
+        for changes in ({"base": {"ref": {"from": "dev"}}},
+                        {"base": {"ref": {"from": "dev"}}, "title": {"from": "x"}}):
+            with self.subTest(changes=sorted(changes)):
+                self.assertEqual(
+                    classifier.review_edit("pull_request",
+                                           {"action": "edited", "changes": changes}),
+                    classifier.REFUSE)
+
+    def test_an_unknown_changes_key_is_refused_too(self):
+        # The same reason the classifier refuses to exempt it. An editable field nobody has taught
+        # this code about may change what the pull request MEANS, and with `edited` gone from
+        # `ci.yml` nothing else will look at it.
+        self.assertEqual(
+            classifier.review_edit("pull_request",
+                                   {"action": "edited", "changes": {"milestone": {"from": None}}}),
+            classifier.REFUSE)
+
+    def test_what_cannot_be_read_is_refused(self):
+        for event_name, event in (("pull_request", None),
+                                  ("pull_request", []),
+                                  ("pull_request", "edited"),
+                                  ("pull_request", {"action": "edited"}),
+                                  ("pull_request", {"action": "edited", "changes": {}}),
+                                  ("", {"action": "edited", "changes": {"base": {}}}),
+                                  ("issues", {"action": "edited"})):
+            with self.subTest(event_name=event_name, event=event):
+                self.assertEqual(classifier.review_edit(event_name, event), classifier.REFUSE)
+
+    def test_the_events_the_code_gates_do_hear_are_allowed(self):
+        # `pr-policy.yml` runs on these too, and refusing them would make every pull request red.
+        for action in ("opened", "synchronize", "reopened"):
+            with self.subTest(action=action):
+                self.assertEqual(
+                    classifier.review_edit("pull_request", {"action": action}), classifier.ALLOW)
+
+    def test_the_exit_status_is_what_the_workflow_reads(self):
+        # A red required check is the whole mechanism: `review_edit` returning REFUSE with exit 0
+        # would leave the retarget merging on a stale verdict, and no assertion about the string
+        # would notice.
+        allowed = run_classifier("pull_request", {"action": "edited",
+                                                  "changes": {"title": {"from": "x"}}},
+                                 argv=[classifier.REFUSE_FLAG])
+        self.assertEqual(allowed[0], 0)
+        self.assertEqual(allowed[1].splitlines()[0], classifier.ALLOW)
+        refused = run_classifier("pull_request",
+                                 {"action": "edited", "changes": {"base": {"ref": {"from": "d"}}}},
+                                 argv=[classifier.REFUSE_FLAG])
+        self.assertEqual(refused[0], 1)
+        self.assertEqual(refused[1].splitlines()[0], classifier.REFUSE)
+        self.assertIn("::error::", refused[1])
+        self.assertIn("#960", refused[1])
+
+    def test_the_refusal_echoes_no_part_of_the_title_or_the_body(self):
+        # An annotation is a rendering surface and both strings are attacker-controlled.
+        hostile = "$(touch /tmp/pwned); `id`; <script>alert(1)</script>"
+        code, out = run_classifier("pull_request", {
+            "action": "edited",
+            "changes": {"base": {"ref": {"from": hostile}}, "title": {"from": hostile}},
+            "pull_request": {"title": hostile, "body": hostile}},
+            argv=[classifier.REFUSE_FLAG])
+        self.assertEqual(code, 1)
+        self.assertNotIn("pwned", out)
+        self.assertNotIn("<script>", out)
+
+    def test_an_unreadable_payload_refuses_rather_than_allowing(self):
+        environment = dict(os.environ, GITHUB_EVENT_NAME="pull_request",
+                           GITHUB_EVENT_PATH="/nonexistent/event.json")
+        finished = subprocess.run(
+            [sys.executable, os.path.join(REPO, "Scripts", "classify-pull-request-event.py"),
+             classifier.REFUSE_FLAG],
+            capture_output=True, text=True, env=environment)
+        self.assertEqual(finished.returncode, 1)
+        self.assertEqual(finished.stdout.splitlines()[0], classifier.REFUSE)
+
+    def test_an_unknown_flag_is_a_usage_error_and_not_a_decision(self):
+        # A typo in the workflow's command line must not become a step that passes. Exit 2 is not
+        # 0, and `pr-policy.yml` runs this with no `continue-on-error`.
+        code, out = run_classifier("pull_request", {"action": "edited"}, argv=["--refuse"])
+        self.assertEqual(code, 2)
+        self.assertNotIn(classifier.ALLOW, out)
+
+    def setUp(self):
+        with open(self.POLICY, "r", encoding="utf-8") as handle:
+            self.policy = "\n".join(executable_lines(handle.read()))
+
+    def test_the_body_gate_still_hears_edited(self):
+        # The rule is only enforced where the event arrives, and after #960 this is the only gate
+        # that receives one. Dropping `edited` HERE too would leave a retarget reaching no gate at
+        # all, which is a worse defect than the one #960 reports and would break no other case.
+        trigger = re.search(r"^\s*types:\s*\[([^\]]*)\]", self.policy, re.M)
+        self.assertIsNotNone(trigger)
+        listed = {item.strip() for item in trigger.group(1).split(",") if item.strip()}
+        self.assertIn("edited", listed)
+
+    def test_the_body_gate_runs_the_refusal_unconditionally(self):
+        # The half a `review_edit()` assertion cannot see: the decision is worth nothing if no
+        # workflow asks for it, and worth nothing if the step that asks cannot fail the job.
+        steps = re.split(r"(?m)^      - ", self.policy)[1:]
+        invocation = f"Scripts/classify-pull-request-event.py {classifier.REFUSE_FLAG}"
+        running = [step for step in steps if invocation in step]
+        self.assertEqual(len(running), 1, f"`pr-policy.yml` runs {invocation!r} {len(running)}x")
+        step = running[0]
+        # `continue-on-error` makes a failed step a green job, and an `if:` is a switch a later
+        # edit can leave off. Either one turns the merge block back into a notice.
+        self.assertNotIn("continue-on-error", step)
+        self.assertNotRegex(step, r"(?m)^        if:")
 
 
 if __name__ == "__main__":

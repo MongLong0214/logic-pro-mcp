@@ -9,13 +9,14 @@
     "bash Scripts/ci-coverage-gate.sh",
     "python3 Scripts/classify-pull-request-event.py",
     "python3 Scripts/run-helper-suites.py",
-    "python3 Scripts/run-repo-guards.py"
+    "python3 Scripts/run-repo-guards.py",
+    "python3 Scripts/classify-pull-request-event.py --refuse-unvalidated-edit"
   ],
   "workflows": {
     "ci.yml": {
       "gates_merges": true,
       "required_contexts": ["build", "compile", "test"],
-      "why": "the code gate. `build` aggregates every other job here through `needs`, and this is the workflow whose jobs are audited against that list. Its `pull_request` trigger keeps `edited` because RETARGETING arrives as `edited`; `classify` is what stops a title or body edit from restarting a macOS compile and test run, and it does so by changing those jobs' DISPLAY NAMES as well as their conditions -- a job skipped under its canonical name would publish `skipped`, which GitHub counts as a satisfied required check.",
+      "why": "the code gate. `build` aggregates every other job here through `needs`, and this is the workflow whose jobs are audited against that list. Its `pull_request` trigger is the DEFAULT set -- opened, synchronize, reopened -- as of 2026-09-22: `edited` came out under #960, because a metadata-only run of this workflow still creates a check SUITE and the ruleset reads the newest suite for an app, so editing a description made build, compile and test read as `expected` again and refused the merge. The retarget that subscription existed for is refused by pr-policy.yml instead. `classify` and the display-name switching on the gated jobs stay and can no longer fire: they are what makes re-subscribing `edited` survivable, because a job skipped under its canonical name publishes `skipped`, which GitHub counts as a satisfied required check.",
       "required_commands": [
         "python3 Scripts/classify-pull-request-event.py"
       ]
@@ -23,10 +24,11 @@
     "pr-policy.yml": {
       "gates_merges": true,
       "required_contexts": ["pr-policy"],
-      "why": "the pull-request BODY check, split out of ci.yml on 2026-09-18 so that editing a description re-runs this and not a macOS test job. `gates_merges` is TRUE as of 2026-09-21, when `pr-policy` was added to the `required_status_checks` rule of ruleset 19060230 beside build, compile and test (integration_id 15368 each, strict left true, bypass_actors left empty) and the ruleset was re-read from the API to confirm the delta was that one added context. The duplicate job in ci.yml came out only after that readback -- removing it first would have deleted the merge block and left a green check that stopped nothing. This field states what the ruleset was observed to hold; no guard in this repository queries the API, and none should on a contributor's run.",
+      "why": "the pull-request BODY check, split out of ci.yml on 2026-09-18 so that editing a description re-runs this and not a macOS test job. `gates_merges` is TRUE as of 2026-09-21, when `pr-policy` was added to the `required_status_checks` rule of ruleset 19060230 beside build, compile and test (integration_id 15368 each, strict left true, bypass_actors left empty) and the ruleset was re-read from the API to confirm the delta was that one added context. The duplicate job in ci.yml came out only after that readback -- removing it first would have deleted the merge block and left a green check that stopped nothing. This field states what the ruleset was observed to hold; no guard in this repository queries the API, and none should on a contributor's run. Since 2026-09-22 it also carries the retarget refusal: it is the only gate subscribed to `edited`, and `--refuse-unvalidated-edit` turns this required context RED for any edit that is not a title or body change, which holds the merge until a push or a reopen puts the code gates over the pull request as it now is.",
       "required_commands": [
         "python3 Scripts/check-canon-citations.py --changed pr-changed.txt",
-        "--text pr-body.md --changed pr-changed.txt"
+        "--text pr-body.md --changed pr-changed.txt",
+        "python3 Scripts/classify-pull-request-event.py --refuse-unvalidated-edit"
       ]
     },
     "maintenance.yml": {

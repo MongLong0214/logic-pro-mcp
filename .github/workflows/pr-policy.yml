@@ -1,18 +1,35 @@
 name: PR policy
 
-# The pull request BODY, checked on its own schedule.
+# The pull request BODY, checked on its own schedule -- and, since 2026-09-22, the only gate that
+# subscribes to `edited` at all.
 #
 # WHY IT IS A SEPARATE WORKFLOW
 # -----------------------------
 # The body gate needs `edited`, because the defect it exists for is: open a compliant pull request,
 # let it go green, then edit the citations out. `edited` is not in the default event set, so
-# `ci.yml` lists it -- and `build` refuses a dependency whose result is `skipped`, so narrowing it
-# with an `if:` on compile and test would turn the only required context red on every edit. The
-# result is that changing a pull request's DESCRIPTION restarts a 23-minute macOS test job and
-# cancels the one already running, because the two share a concurrency group.
+# `ci.yml` listed it too -- and `build` refuses a dependency whose result is `skipped`, so
+# narrowing it with an `if:` on compile and test would turn the only required context red on every
+# edit. The result was that changing a pull request's DESCRIPTION restarted a 23-minute macOS test
+# job and cancelled the one already running, because the two shared a concurrency group.
 #
 # So the body check gets its own workflow, its own concurrency group, and its own required
-# context. Editing a description then re-runs this and nothing else.
+# context. Editing a description re-runs this and nothing else.
+#
+# AND IT NOW CARRIES THE RETARGET REFUSAL
+# ---------------------------------------
+# `ci.yml` kept `edited` after the body check moved, for the one shape only `edited` delivers: a
+# RETARGET, which changes what the pull request merges into. #960 measured what that cost. A
+# metadata-only run of `ci.yml` published no check run under `build`, `compile` or `test`, but it
+# still created a check SUITE, and the ruleset reads the newest suite for an app -- so a typo fix
+# in a description made the three code contexts read as `expected` again and refused the merge
+# until a close-and-reopen or a second 30-minute macOS run.
+#
+# `edited` therefore came out of `ci.yml`, and the retarget is caught HERE instead, by the first
+# step below. This workflow is required, subscribes to `edited`, and takes about fifteen seconds;
+# it cannot revalidate the code, and it does not try to. It REFUSES: any `edited` that is not a
+# title or body change makes `pr-policy` red, and a red required context blocks the merge until a
+# push or a reopen puts the code gates back over the pull request as it now is. The rule did not
+# move -- it is still `Scripts/classify-pull-request-event.py` -- only the enforcement site did.
 #
 # THIS IS THE ONLY COPY NOW
 # -------------------------
@@ -51,8 +68,8 @@ on:
   pull_request:
     branches: [main]
     # `edited` fires on a body or title change AND on a base change. The second is not cosmetic --
-    # retargeting a pull request changes what it merges into -- which is why the code CI keeps its
-    # own trigger rather than this workflow standing in for it.
+    # retargeting a pull request changes what it merges into -- and since #960 this workflow is the
+    # only gate that hears about it, which is what the first step below exists to answer.
     types: [opened, synchronize, reopened, edited]
 
 permissions:
@@ -78,6 +95,19 @@ jobs:
           # `check-canon-citations.py` compares its waiver lists against `git merge-base`, and
           # fails outright under CI when it cannot read one.
           fetch-depth: 0
+
+      - name: An edit that is not a title or a body change has not been validated as code
+        # FIRST, before anything reads the body: if this event changed what the pull request
+        # MERGES INTO, what the body says is the smaller question. `ci.yml` no longer subscribes
+        # to `edited` (#960), so a retarget reaches no code gate at all; this step is where it is
+        # refused, and a red `pr-policy` is what holds the merge until a push or a reopen runs
+        # them again.
+        #
+        # The payload is read from `GITHUB_EVENT_PATH` by the script. Nothing from the title or
+        # the body is interpolated into this shell, and the script echoes no part of either.
+        # Every non-zero status fails this step, including the usage exit: a step that could not
+        # decide must not report that it decided.
+        run: python3 Scripts/classify-pull-request-event.py --refuse-unvalidated-edit
 
       - name: Read the body and the complete list of changed files
         # REST with `--paginate`, not `gh pr view --json files`. That form returns the first page
@@ -145,3 +175,6 @@ jobs:
           echo "::notice::LOGIC-FACING.json lists those prefixes), whatever the body says."
           echo "::notice::Editing the description re-runs THIS workflow only; no compile or test"
           echo "::notice::job is restarted, and no code verdict already on this commit changes."
+          echo "::notice::It does not block the merge either -- it did until #960, because the"
+          echo "::notice::code workflow also ran on the edit and its newer check suite reported"
+          echo "::notice::none of the three code contexts. That workflow no longer runs on an edit."
