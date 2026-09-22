@@ -8,10 +8,242 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-- Fixed: plug-in and Mixer operations on a Logic running in Spanish, French, Italian or Chinese. With a plug-in editor open, `project.save` no longer refuses with `unsupported_state` as if the editor were a blocking dialog; `plugins.set_param_verified` no longer fails with `window_open_failed` (Italian, Chinese) or `incomplete_inventory` (French, Spanish); and on a French or Spanish Logic `plugins.get_inventory` finds the docked Mixer instead of returning State B `mixer_not_visible`. An insert slot's bypass toggle is recognised by its label in all ten supported languages. Measured live in all ten on Logic 12.3. (#977)
-- Changed: `mixer.set_volume` and `mixer.set_pan` land on the whole raw position nearest the request instead of the nearest ~10-raw detent. After the detent loop, a fine phase of at most one detent (10 writes) writes `AXValue`, which moved Logic's track-header slider one raw unit toward the written value on the tested host (Logic 12.3.1, en-US, volume and pan, both directions), and reads back each step. New receipt fields `fine_steps` (accepted `AXValue` write calls, not necessarily movement) and `reached_exact`. A write that is ignored keeps the previous detent result; a write that moves the slider further from the target stops the phase and returns State B `readback_mismatch` with `reason_detail`, without restoring it. `write_method` stays `ax_increment_decrement`, naming the detent path, for compatibility. (#973)
-- Added: `AXPluginInstanceIdentity.census(pluginName:identifierPrefix:)`, a public read-only census for a host application to find its own plug-in instances: Mixer strips whose insert slot names the plug-in (ordinal, name, slot positions; prefix-tolerant because Logic truncates the slot label) and the `kAXIdentifier` each open editor window advertises. Value data only; an empty read, a partial strip read (`stripsReadWhole == false`) and a failed windows read (thrown `CensusError`) are three distinguishable outcomes. A strip is a candidate, not an identification: the slot label is truncated, so every plug-in sharing the name's stem matches, and the window's identifier is the identity. A read that fails while reading strips or classifying their inserts (children, role, insert name) makes the strip read partial rather than a strip that hosts nothing, each window says whether its identifier walk was whole (`identifierReadWhole`), and an empty `identifierPrefix` throws. Measured on Logic Pro 12.3.1 with the Mixer docked, and on 12.3 in all ten languages. (#972)
-- Added: `LogicProMCPKit` library product, so a host application can link the `LogicProMCP` target as a SwiftPM dependency (no runtime behavior and no access level changes; no source file is touched, and the executable is unchanged. `Package.resolved` moves with it: CI's toolchain resolves 25 pins instead of 9 once the package vends a library). (#944)
+(No unreleased changes yet.)
+
+---
+
+## [3.17.0] — 2026-09-25
+
+177 commits and 68 pull requests since v3.16.0. Written caller-facing: guard scripts, CI, test
+infrastructure, live harnesses and roadmap work are excluded because a caller cannot observe them.
+Where a change stated a limit, the limit is carried into the entry rather than dropped.
+
+### Breaking
+
+- **`edit.undo` no longer reports a success it cannot prove.** It routed `[.midiKeyCommands,
+  .cgEvent]` and the MIDI rung sent CC 30 on channel 16 — a controller number that does nothing
+  unless the operator bound it inside Controller Assignments, which this product can neither create
+  nor enumerate. A send-only channel succeeds at the wire, so the `.cgEvent` rung that would have
+  posted a real Cmd+Z was never reached: two inserted plug-ins survived two `logic_edit undo` calls,
+  each answering `success: true`. Accessibility now leads. The Edit-menu entry is pressed and read
+  back — State A when the entry named before the press is not the entry named after, so the stack
+  demonstrably moved; State B `noop_unobservable` when the two names match, because Logic can
+  legitimately word two entries the same way and this surface cannot separate a pop from a no-op;
+  and a refusal with `write_attempted: false` when the entry is disabled. The row is identified by
+  its **shortcut**, not its wording: with an empty stack Logic writes `Can't Undo`, and a prefix
+  match landed on `Undo History…`, which opens a window instead of undoing anything. A host that has
+  remapped Cmd+Z matches no row and is refused rather than having a different row pressed for it.
+  (#864)
+- **`transport.goto_position`'s `menu_state` is a reading, not a constant.** The unsafe-UI refusal
+  printed the literal `could_not_be_closed` for every classification that reaches it, including
+  three the script returns only after its own cleanup answered `CLOSED`. It is derived now:
+  `could_not_be_closed` only where a cleanup ran and did not close, `closed` where the script proved
+  it, `unobserved` otherwise. A consumer switching on the old value was switching on something that
+  was always the same. No safety changed — `safe_to_retry`, `fallback_unsafe` and `write_attempted`
+  are untouched on every path. (#921, #925)
+- **The MCU health line no longer renders the staleness age.** `channels[].detail` counted live
+  seconds (`feedback stale (8s)`, then `(13s)` four seconds later), which is the same fact as the
+  machine field `last_feedback_at` and was the only field still moving after the health projection.
+  The word stays; the integer is gone. Staleness is also evaluated **once per payload** now:
+  `mcu.feedback_stale` and the clause in `channels[].detail` came from two separate cache reads, so
+  feedback arriving between them could put `detail: "…feedback stale"` beside `feedback_stale:
+  false` in one document, with neither field wrong at the instant it was taken. (#849, #851, #859)
+- **`--qualify` and `--verify-promotion` are gone from the CLI usage text.** Their implementation had
+  already been retired; typing either printed `Unknown option`. A help text that promises a flag
+  which does not exist is a lie a user meets. (#816)
+
+### Added
+
+- **`system.setup_control_surface` — the precondition every MCU operation was missing.** Logic ships
+  with **no** control surface installed, and until one is it discards every MCU message this server
+  sends, while `system health` reported the MCU channel ready because that flag is set by any
+  inbound traffic rather than by a handshake reply. Measured 2026-09-15 on ko-KR Logic 12.3 (6674):
+  `track.set_automation` returned State C `channels_exhausted`; with the device installed and both
+  ports bound it returns State B, and the track's mixer automation button visibly changes mode. The
+  operation drives that install consent-gated and without a mouse, through the Setup window's own
+  menu bar, with its twelve labels derived from Apple's own localization rows rather than
+  translated. Three earlier routes each looked like a wall and are recorded as such — the window's
+  only plain `AXButton` advertises `AXPress`, returns success and does nothing, and rewriting the
+  preference file teaches Logic the port *names* without installing a device. (#884)
+- **`logic_mixer.insert_plugin` accepts `configuration`**, naming the channel configuration to pick
+  (`Mono`, `Mono->Stereo`, `Stereo`, …). It is honoured **only** when the strip actually offers it: a
+  requested value the strip lacks fails closed rather than falling back to the preference or to a
+  lone entry, because handing a caller a channel layout they did not ask for is the same harm the
+  refusal exists to prevent, arrived at from the other direction. Measured on a previously
+  unreachable mono strip, where Gain offers `["Mono", "Mono->Stereo"]` and neither is the preferred
+  `Stereo`. (#871)
+- **A `LogicProMCPKit` library product**, so a host application can link the `LogicProMCP` target as
+  a SwiftPM dependency instead of driving the server as a separate stdio process. No runtime
+  behavior and no access level changed, no source file is touched, and the executable is unchanged;
+  the product is named `LogicProMCPKit` because a library sharing the executable's name is reported
+  by SwiftPM as "ignoring duplicate product" and silently dropped. **v3.17.0 is the first release
+  carrying it** — `from: "3.16.0"` resolves a package that does not contain it. The reachable public
+  surface is `PluginInspector` and its data types plus the Library inventory data model; the AX
+  readers, channels, state cache and dispatchers stay internal. (#944)
+- **`AXPluginInstanceIdentity.census(pluginName:identifierPrefix:)` — a read-only census for a host
+  application to find its own plug-in instances**, reachable through `LogicProMCPKit`: the Mixer
+  strips whose insert slot names the plug-in (ordinal, name, slot positions) and the `kAXIdentifier`
+  each open editor window advertises. An empty read, a partial strip read (`stripsReadWhole ==
+  false`) and a failed windows read (thrown `CensusError`) are three distinguishable outcomes. A
+  strip is a **candidate, not an identification**: Logic truncates the slot label, so every plug-in
+  sharing the name's stem matches, and the window's identifier is the identity. A read that fails
+  while reading strips or classifying their inserts (children, role, insert name) makes the strip
+  read partial rather than a strip hosting nothing, each window says whether its identifier walk was
+  whole (`identifierReadWhole`), and an empty `identifierPrefix` throws. Measured on Logic 12.3.1
+  with the Mixer docked, and on 12.3 in all ten languages; on 12.3 every strip's `name` read `nil`.
+  (#972)
+
+### Changed
+
+- **`mixer.set_volume` and `mixer.set_pan` land on the raw position nearest the request**, not the
+  nearest ~10-raw detent. After the detent loop, a fine phase of at most one detent (10 writes)
+  writes `AXValue`, which moved Logic's track-header slider one raw unit toward the written value on
+  the tested host (Logic 12.3.1, en-US, volume and pan, both directions), and reads back each step.
+  New receipt fields `fine_steps` (accepted `AXValue` write calls, not necessarily movement) and
+  `reached_exact`. A write that is ignored keeps the detent result; a write that moves the slider
+  further from the target stops the phase and returns State B `readback_mismatch` with
+  `reason_detail`, without restoring it. `write_method` stays `ax_increment_decrement` for
+  compatibility. (#973)
+
+### Fixed
+
+- **MCU feedback was decoded from the wrong bytes, and almost nothing survived it.** The port is
+  created `MIDIDestinationCreateWithProtocol(…, ._1_0, …)`, so CoreMIDI delivers MIDI 1.0 messages
+  wrapped in 32-bit UMP words; the callback sliced those words' little-endian **memory image** and
+  handed it to a byte-stream parser, which reverses every message. Measured live against a Logic
+  with a Mackie surface bound (12.3/6674): Logic sent 161 packets, the shipped read produced 8
+  events — all channel pressure, all misvalued — and a correct read produces 112. All 20 control
+  changes, all 73 note-ons and all 11 fader positions were discarded, including the master fader
+  echo. That is what `echo_timeout_500ms` was: a decode failure, not a missing message. (#736)
+- **MCU display writes never reached the parser.** The UMP converter skipped SysEx7 whole, so the
+  one channel on which the surface says *what* it is controlling, by name, was counted as "not read"
+  and dropped — 49 SysEx frames in the startup burst, all of them. Through the shipped path:
+  `rx_frames` 111 → 160, `sysex_frames` 0 → 49. A message still open when a packet ends, and a
+  continuation whose start this packet never saw, are counted rather than emitted; a packet that
+  lies about its own length is refused rather than clamped. (#856)
+- **`insert_plugin` refused plug-ins that were sitting right there on a mono strip.** Every
+  configured menu path ended in the channel configuration, hardcoded as `Stereo` / `스테레오`, and a
+  mono strip's Compressor submenu offers exactly `["Mono"]`. The preference is honoured when the
+  strip offers it, a leaf menu with exactly one item is taken because there is no choice in it, and
+  several configurations with none preferred still refuses rather than choosing a channel layout on
+  the operator's behalf. A success reports `menu_leaf_chosen`; a failure now names which step failed
+  instead of answering "plugin menu selection failed" for all three. (#855)
+- **`observed_track_type` answers from the channel strip.** v3.16.0 made it `unknown` everywhere
+  because the track header carries no type signal at any depth. The inspector channel strip does
+  separate two kinds: an Input slot names an audio track, and the absence of Output/Send/Audio
+  Effect slots together with an Assign control names an external MIDI track. A MIDI Effect slot names
+  an instrument **family** — a drummer track shows the same one — so that case still answers
+  `unknown` with the reason written down rather than guessed. Measured on `en` only; the label sets
+  ship with empty variants elsewhere, so on another locale the answer stays `unknown` instead of
+  matching a neighbouring control and producing a confident wrong type. (#766)
+- **A closed menu's `enabled` reading is a stale validation cache, and the `goto_position` refusal
+  reported it as certain.** macOS only revalidates a menu item's `AXEnabled` while its own menu is
+  open, so a read taken behind the entry guard's required CLOSED state returns whatever the last
+  validation wrote — closing every document could leave the leaf reading disabled after a new
+  project had made it actuatable again. The disabled branch now forces one bounded revalidation
+  pass: one menu-bar click, confirmed observed as selected, then the leaf re-read while the menu is
+  genuinely open. A pass that could not open the menu says `MENU_VALIDATION_UNREADABLE` instead of
+  reusing `MENU_DISABLED`, because nothing was validated in that case. (#941)
+- **A typed refusal the router walked past now reaches the caller.** When `ChannelRouter` walks past
+  a channel that declined with a typed refusal, that refusal is carried onto the answering channel's
+  envelope instead of going to a DEBUG log: `track.set_arm`'s accessibility rung saying "track 0 is
+  exclusively selected, but Logic could not be confirmed frontmost … the key was NOT posted" used to
+  be replaced by the next channel's vaguer answer. Additive only — state, `verified` and every field
+  the answering channel wrote are untouched, and State C envelopes are never decorated with another
+  channel's story. (#922)
+- **The dialog route's receipt named a write that never happened**, and an unparsed script result
+  released the bar-slider fallback as though the dialog route had cleanly declined. The payload the
+  `menuCouldNotBeClosed` receipt labelled `write_attempted` actually carries whether the menu leaf
+  was actuated, and is now `menu_actuation_attempted`; `.unexpectedResult` is terminal, because an
+  unparsed result is the absence of a dialog-safety observation rather than an observation that
+  nothing happened. The envelope key `write_attempted` — 61 sites across twelve unrelated subsystems
+  — is deliberately untouched. (#943, #945)
+- **The record-arm key-command setup typed English into every Logic.** The command name goes into
+  the Key Commands filter, which is a live search, so an English name typed into a Korean Logic
+  collapses the list to nothing and the setup reported "could not find the command" having never had
+  a chance. It types Apple's own spelling now, from a generated projection resolved offline against
+  the pinned corpus: each value is the label whose case-folded digest equals the digest Apple's row
+  is pinned to in that locale. A host reporting a bare `zh` types the English canonical rather than
+  being answered Simplified without being told. (#924)
+- **The plug-in window's Open button is a toggle**, and `insert_plugin` leaves that window open — so
+  pressing Open after an insert **closes** it, and the run reported "not found", the same sentence a
+  missing slot, a wrong label and an unreadable strip all produce. (#852)
+- **Region bar parsing was four hand-written patterns for a sentence Apple ships in ten languages.**
+  Each arrived the day somebody hit its absence — the Japanese one after a region returned
+  `startBar: -1, endBar: -1`. One derivation from Apple's own row now covers all ten, including
+  German's number-inflected unit (`1 Takt ` beside `2 Takte `), and the near-twin chord-group
+  sentence is refused by all ten rather than matched by accident. (#909)
+- **`logic_plugins.set_eq_band_verified` failed at the finish line.** Every failure stopped exactly
+  one step past the value it had reached — `-5.1 dB` for a requested `-5.0` — because the target was
+  rendered `-5` while Logic always shows the decimal, and the reached test was exact string match.
+  Two renderings of the same number now compare as the same reading; the unit must still match
+  exactly (`400 Hz` and `400 dB` are different readings) and a rendering with no number (`Off`) is
+  still compared as a string. The failure envelope now carries `requested_display` too, so a run
+  that stops beside its target says what it was comparing against. (#292)
+- **A client that stopped draining stdout could park the whole server.** Measured on the release
+  binary with stdout on a FIFO nobody reads: 1539 of 1539 samples inside `writeAll` → `Darwin.write`
+  on the serial write queue, process alive and answering nothing. The wait is bounded, and a closed
+  descriptor is kept apart from a slow reader. (#683)
+- **A qualification subprocess read could take the whole process down.**
+  `FileHandle.availableData` raises an Objective-C exception that a Swift `catch` cannot see, so it
+  unwound past the handler, past `defer`, and out of the process. Four readers move to
+  `read(upToCount:)`; two of them sat inside a `readabilityHandler` where the same exception skipped
+  `group.leave()` and would have hung rather than crashed. (#843)
+- **Plug-in and Mixer operations failed on a Logic running in Spanish, French, Italian or
+  Chinese.** Three shared locators matched Logic in fewer than ten languages. With a plug-in editor
+  open, `project.save` refused with `unsupported_state` as if the editor were a blocking dialog;
+  `plugins.set_param_verified` failed with `window_open_failed` (Italian, Chinese) or
+  `incomplete_inventory` (French, Spanish); and on a French or Spanish Logic `plugins.get_inventory`
+  returned State B `mixer_not_visible` beside a docked Mixer. An insert slot's bypass toggle is now
+  recognised by its label in all ten supported languages. Measured live in all ten on Logic 12.3.
+  (#977)
+
+### Localization
+
+- Two label sets that reached two languages now reach ten, and both had been failing to match for
+  their own reason: one carried a Korean sentence plus the English word `read`, leaving Korean
+  itself uncovered, and the other carried an ellipsis Apple ships in no locale for that string.
+  (#892)
+- Three Event List columns are derived from Apple's own rows rather than hand-written — `M` is `M`
+  in nine locales and `静音` in zh_CN; `Position` is `ポジション` in ja, not `位置`. No nib in
+  Logic.framework mentions the Event List (159 scanned), so the columns are titled in code from
+  Logic's own `Localizable.strings`, which is what makes the row identifiable offline. 137 of 195
+  label sets now name an Apple row, each proved per locale. (#939)
+- A Latin-script Logic label in a shipped Python helper was invisible to the guard that reads them:
+  it matched CJK characters, and five of the ten languages Logic ships write their interface in
+  Latin script, so `Bouncen` or `Abbrechen` passed. The question is now whether the literal is a
+  value Apple ships in **any** locale, proved offline against the committed absence sets. (#919)
+
+### Support
+
+- **Logic 11 is not supported, and it never was.** `minimumSupportedLogicVersion` is `12.0.1` and the
+  doctor's `logic.version_support` check has failed below it the whole time — the issue, three
+  comments and a roadmap row called the question open while the code had already answered it. What
+  was genuinely missing is evidence: no case had ever fed the floor a Logic 11 version. Five now do,
+  through the check a user actually runs. The five versions are constructed rather than read off
+  running installs, so what is measured is the comparison, not Logic 11's behaviour. (#908)
+
+### Honestly deferred
+
+- **The MCP registry record has been nine releases behind, and this release is what demonstrates the
+  repair.** `publish-mcp.yml` ran on `release: [published]`; every release since v3.7.4 is created
+  by `github-actions[bot]`, and GitHub does not start workflow runs from events a `GITHUB_TOKEN`
+  created, so that trigger had never fired — the workflow's whole run history is three manual runs
+  on 2026-06-23, which is exactly where the registry stopped at 3.7.1. It is now invoked from the
+  tag-triggered release workflow, downstream of the step that downloads the published assets and
+  installs them on two macOS versions. That it **reaches** the registry is not yet observed. (#918)
+- **ADR-001's release gate was retired rather than finished.** Its seven `release.yml` steps all sat
+  behind a repository variable that is set nowhere, so restoring them changed what a release does by
+  nothing at all; the verifier they pinned was thousands of lines behind its own tree, and its
+  Phase-B evidence could not satisfy its own shape rule (`isError == true` for a case the rule
+  required to be `false`). The qualification subsystem landed without it, with the unsatisfiable
+  rule fixed and the evidence bound to the SHA-256 of its record. The CLI flags that advertised the
+  retired system are gone, above. (#284, #373)
+- **The Event List readback is measured, not exposed.** Three of the eleven proofs its provider
+  requires were observed live — selected-region identity, column identity binding, and count
+  semantics, with eight columns resolved by name and the written notes returning with pitch,
+  velocity, channel, position and length. The other eight proofs are recorded as limits, and the
+  provider stays unqualified until they are taken. (#302, #293)
 
 ---
 
