@@ -1,0 +1,50 @@
+Limit: a body naming several records passes when any one of them accepts, and the refusals of the others are not reported
+Record-Id: r-229ad499a40d
+Provenance: inherited 16c3c7746ad4fdf5b6bf8e2fd4289e2f907c43c1
+
+Limit: raw HTML elements such as <pre> are not parsed, so a record or opt-out sentence inside one still counts as visible prose
+Limit: by CommonMark's rules, not by any GitHub rendering measured here, text indented four columns after a blank line inside a list item is hidden although GitHub shows it as prose
+Warn: the record route now loads check-observation-records.py when a body names a record, so a change to that validator's refusals changes which records this route accepts
+Warn: the trailing triple-backtick regex still runs after the line pass and can hide a backtick form on the parser's behalf; the fence-indentation mutant survived until a tilde twin was added, so give a new backtick form a tilde twin
+Record-Id: r-ed03288edc58
+Provenance: inherited ac507ac8e9fee8473b801fde3eaed09a947dae23
+
+Limit: measured through GitHub's renderer on 2026-09-24, three forms it shows as prose are hidden here: a list item's paragraph indented four columns after a blank line, and text after a fence GitHub closes where its list item or its quote ends
+Record-Id: r-107d9b396882
+Provenance: inherited 88b895f7dad6f39ff41ef90aa35487efad5acc54
+
+Limit: a footnote is hidden even when the body refers to it and GitHub shows it at the foot of the page
+Limit: everything after a raw <pre is hidden, even one quoted in backticks, and so is everything after a comment an HTML block leaves open, although later raw HTML can close that comment and GitHub then shows what follows
+Limit: a link target and the inside of an HTML tag, attributes included, are read as prose although a reader is not shown them as text
+Limit: the block parser models cmark-gfm as measured through gh api markdown on 2026-09-24; a differential over 2400 generated bodies found no line it shows that GitHub hides, which is a sample and not a proof
+Ruled-out: keeping the three forms GitHub shows as prose hidden on the side of refusing | the round-2 review called that an availability regression, and the new parser shows them as GitHub does
+Ruled-out: keeping the triple-backtick regex after the block pass as a safety net | it hid backtick forms on the parser's behalf, and a round-1 mutant survived because of it
+Ruled-out: hiding everything after an inline comment opener that nothing closes | GitHub shows that text literally
+Warn: a structural mistake in _shown_blocks can flip a fence's parity and show code as prose, which is worse than the hiding it meant to do; give a change there a witness rendered through GitHub and rerun a mutation sweep, because only the text-level hiding in _visible may over-hide safely
+Warn: the record route loads check-observation-records.py when a body names a record, so a change to that validator's refusals changes which records this route accepts
+Record-Id: r-1671309dab17
+Supersedes: r-107d9b396882
+Supersedes: r-ed03288edc58
+Provenance: inherited 1e43095424f29dfdbad36ef5c43f4fce6b0c4e68
+
+Limit: a link definition is hidden even when a link uses it, so a record named only as a reference-style link's target is refused; the target of an inline link is still read as prose
+Limit: two lines that read as a definition are hidden although GitHub shows them: a bare target holding an unmatched closing parenthesis, and a definition line after a setext underline under a paragraph of definitions only
+Limit: the differential over 1800 generated bodies with definition lines, seeds 11 to 13, found no definition shown here that GitHub hides, which is a sample and not a proof
+Ruled-out: reading a definition's target when a visible link uses its label | a label inside inline code is no link and this parser does not model code spans, so every definition is hidden instead
+Ruled-out: reading prose after a closed pre and a referenced footnote in this change | following a raw pre to its close and a footnote to its reference needs inline HTML and reference modelling, and each would be a new place to show what GitHub hides
+Ruled-out: stripping HTML tags from the text in this change | every one of the 39 fuzz bypasses was a token inside a tag, which the guide already states, and widening what is hidden while closing a blocker has produced the next blocker before
+Warn: _LINK_DEFINITION may hide more than GitHub but never less; each of its parts has a witness rendered through GitHub and a mutant that the witness kills, so a change to it needs both again
+Warn: table blocks have their own kind so that no definition is taken off them, and the kind != "html" test is what still hides a comment in a table row; a change to the kinds has to keep both
+Record-Id: r-b4adfbb661b5
+Provenance: inherited e9833880a3d660b9d72f598a61482e16f1b21e98
+
+Limit: the delimiter rule was measured for 17 delimiter shapes, each followed once by an indented line and once by a tag line and a fence, through gh api markdown on 2026-09-24; other shapes rest on the differential's sample
+Warn: _TABLE_DELIMITER admits any indentation after its optional pipe, so the _indent(rest) < 4 test is what keeps an indented delimiter row out; and only a dash with a space after it starts a list item, which is why the test reads item.group(4) and not the bare match
+Record-Id: r-0eb396888213
+Provenance: inherited f67d86cb62743e8b03168d71b1d96c5cb7cd3999
+
+Limit: a definition is hidden here in three shapes GitHub shows, all on the side of refusing: a bare target holding an unmatched closing parenthesis, a definition after a setext underline under definitions only, and a definition after the first on a lazy continuation line that begins with a space or a tab; the record on e9833880 named the first two
+Limit: the differential over 2400 generated bodies with definition lines, seeds 11 to 14, found no token shown here that GitHub hides outside a tag; of the 187 definition tokens hidden here that GitHub puts in its output, 172 are only in the href or title of a definition a link uses and 15 are the lazy-line shape
+Ruled-out: teaching the parser which lines are lazy so the lazy-line shape is shown | the parser does not keep which lines are lazy, and teaching it would be a new place to show what GitHub hides, for a case that only refuses
+Record-Id: r-24c67be8de33
+Provenance: inherited 8f4c25c267d94803aa5e8712bc0c9849bc1c6d4e
