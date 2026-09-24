@@ -1022,7 +1022,9 @@ _RAW_PRE = re.compile(r"<pre(?=[\s/>]|\Z)", re.I)
 #: start of a paragraph and shows nothing of them, whether a link uses one or not. Measured: the
 #: target and the title may each be on the next line, and a title with more text after it is no
 #: title -- on the target's line that undoes the definition, on a line of its own it leaves that
-#: line as prose.
+#: line as prose. It hides three shapes GitHub shows, all on the side of refusing: a bare target
+#: holding an unmatched `)`, a definition after a setext underline under definitions only, and a
+#: definition after the first on a lazy continuation line that begins with a space or a tab.
 _LINK_DEFINITION = re.compile(
     r""" *\[(?!\s*\])(?:[^\\\[\]]|\\.)*\]: *(?:\n *)?(?:<[^<>\n]*>|[^ \n]+)"""
     r"""(?:(?=[ \n]) *(?:\n *)?(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?"""
