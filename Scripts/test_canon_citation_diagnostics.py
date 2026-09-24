@@ -438,5 +438,175 @@ class TheTwoRenderingsAgree(unittest.TestCase):
         self.assertIn("--format applies to --text", stderr)
 
 
+
+#: A record on main that declares `canon_not_applicable`, and the one file its `depends` names.
+BEHAVIOURAL_RECORD = ("docs/observations/2026-09-15-an-auxiliary-window-steals-the-track-menu-"
+                      "and-that-is-the-sweep-only-failure.json")
+BEHAVIOURAL_DEPENDS = "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift"
+
+#: A real schema-3 record that CITES instead. It is evidence about a label, not a behaviour.
+CITING_RECORD = ("docs/observations/2026-09-14-a-korean-input-source-silently-breaks-every-key-"
+                 "command-operation.json")
+
+#: A string the pinned corpus holds, measured with `_citable_strings_in` on 2026-09-24.
+CITABLE = "Metronome"
+
+
+class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
+    """A Logic-facing change whose evidence is behaviour may name the record that holds it.
+
+    The label citation is not faked for this: a citation establishes what a label SAYS, and a
+    change that rests on what an element DOES has no row to cite. The record category for that is
+    rule 13's `canon_not_applicable`, and each case below pins one of the conditions under which a
+    named record is allowed to stand in for the citation.
+    """
+
+    def diagnose(self, body, changed, root=REPO):
+        fixture = BodyFixture(self, body, changed)
+        status, stdout, _ = run(["--text", fixture.body, "--changed", fixture.changed,
+                                 "--format", "json"], root=root)
+        return status, json.loads(stdout)
+
+    def assertRefused(self, status, result, because):
+        self.assertEqual(status, 1)
+        self.assertEqual(result["category"], "actionable")
+        self.assertEqual(codes(json.dumps(result)), ["behavioural_record_refused"])
+        self.assertIn(because, result["diagnostics"][0]["message"])
+        self.assertEqual(result["records"], [])
+
+    def test_a_record_this_change_writes_about_code_it_changes_satisfies_the_body(self):
+        status, result = self.diagnose(
+            f"The evidence is {BEHAVIOURAL_RECORD}, which measures what the menu does.\n",
+            [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+        self.assertEqual(status, 0)
+        self.assertEqual(result["category"], "satisfied")
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["records"], [BEHAVIOURAL_RECORD])
+
+    def test_inline_backticks_and_a_link_are_visible(self):
+        for body in (f"Evidence: `{BEHAVIOURAL_RECORD}`.\n",
+                     f"Evidence: [the record]({BEHAVIOURAL_RECORD}).\n"):
+            with self.subTest(body):
+                status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+                self.assertEqual(status, 0)
+                self.assertEqual(result["records"], [BEHAVIOURAL_RECORD])
+
+    def test_the_prose_rendering_names_the_record_and_not_the_opt_out(self):
+        fixture = BodyFixture(self, f"Evidence: {BEHAVIOURAL_RECORD}.\n",
+                              [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+        status, stdout, _ = run(["--text", fixture.body, "--changed", fixture.changed])
+        self.assertEqual(status, 0)
+        self.assertIn("behavioural record", stdout)
+        self.assertIn(BEHAVIOURAL_RECORD, stdout)
+        self.assertNotIn(NO_FACT, stdout)
+
+    def test_a_record_this_change_does_not_write_is_refused(self):
+        status, result = self.diagnose(f"Evidence: {BEHAVIOURAL_RECORD}.\n",
+                                       [BEHAVIOURAL_DEPENDS])
+        self.assertRefused(status, result, "not in this change's file list")
+
+    def test_a_record_about_code_this_change_does_not_touch_is_refused(self):
+        status, result = self.diagnose(f"Evidence: {BEHAVIOURAL_RECORD}.\n",
+                                       [BEHAVIOURAL_RECORD, LOGIC_FACING_SAMPLE])
+        self.assertRefused(status, result, "none of its `depends`")
+
+    def test_a_record_named_only_where_a_reader_does_not_see_it_is_not_named(self):
+        for body in (f"Evidence below.\n```\n{BEHAVIOURAL_RECORD}\n```\n",
+                     f"Evidence below.\n<!-- {BEHAVIOURAL_RECORD} -->\n"):
+            with self.subTest(body):
+                status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+                self.assertEqual(status, 1)
+                self.assertEqual(codes(json.dumps(result)), ["logic_facing_opt_out"])
+
+    def test_a_record_that_cites_instead_of_declaring_is_refused(self):
+        status, result = self.diagnose(f"Evidence: {CITING_RECORD}.\n",
+                                       [CITING_RECORD, BEHAVIOURAL_DEPENDS])
+        self.assertRefused(status, result, "carries no `canon_not_applicable`")
+
+    def test_a_record_that_does_not_exist_is_refused(self):
+        missing = "docs/observations/2026-09-24-no-such-record.json"
+        status, result = self.diagnose(f"Evidence: {missing}.\n",
+                                       [missing, BEHAVIOURAL_DEPENDS])
+        self.assertRefused(status, result, "no observation record exists")
+
+    def test_a_body_quoting_a_string_logic_ships_is_refused(self):
+        status, result = self.diagnose(
+            f"Evidence: {BEHAVIOURAL_RECORD}. The `{CITABLE}` button moves.\n",
+            [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+        self.assertRefused(status, result, repr(CITABLE))
+
+    def tree_with_record(self, name, record):
+        """A root whose `docs/observations/` holds one more record, symlinked like the trees above.
+
+        `REPO` comes from `abspath(__file__)` without resolving symlinks, so the checker reads this
+        tree's observations and the real everything else.
+        """
+        root = tempfile.mkdtemp(prefix="canon-behavioural-")
+        self.addCleanup(shutil.rmtree, root, True)
+        for entry in os.listdir(REPO):
+            if entry != "docs":
+                os.symlink(os.path.join(REPO, entry), os.path.join(root, entry))
+        os.makedirs(os.path.join(root, "docs", "observations"))
+        for entry in os.listdir(os.path.join(REPO, "docs")):
+            if entry != "observations":
+                os.symlink(os.path.join(REPO, "docs", entry), os.path.join(root, "docs", entry))
+        for entry in os.listdir(os.path.join(REPO, "docs", "observations")):
+            os.symlink(os.path.join(REPO, "docs", "observations", entry),
+                       os.path.join(root, "docs", "observations", entry))
+        with open(os.path.join(root, "docs", "observations", name), "w",
+                  encoding="utf-8") as handle:
+            json.dump(record, handle)
+        return root
+
+    def fixture_record(self, reading):
+        return {
+            "schema": 3,
+            "question": "Does the track menu open after an auxiliary window closes?",
+            "observations": [{"reading": reading}],
+            "canon_not_applicable": {"reason": "A claim about behaviour, not a shipped string."},
+            "depends": [f"{BEHAVIOURAL_DEPENDS}:someSymbol"],
+        }
+
+    def test_a_declaration_rule_13_refuses_is_refused(self):
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        root = self.tree_with_record(name, self.fixture_record(CITABLE))
+        status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
+                                       root=root)
+        self.assertRefused(status, result, "rule 13")
+
+    def test_a_record_below_schema_3_is_refused(self):
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        record = dict(self.fixture_record("the menu opened only after the window was closed"),
+                      schema=2)
+        root = self.tree_with_record(name, record)
+        status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
+                                       root=root)
+        self.assertRefused(status, result, "schema 2")
+
+    def test_a_record_that_depends_only_on_a_record_is_refused(self):
+        """A record is not the code it is evidence for, even when this change writes both."""
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        record = dict(self.fixture_record("the menu opened only after the window was closed"),
+                      depends=[rel])
+        root = self.tree_with_record(name, record)
+        status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
+                                       root=root)
+        self.assertRefused(status, result, "none of its `depends`")
+
+    def test_the_same_fixture_without_the_citable_reading_is_satisfied(self):
+        """The control. Without it the case above passes for any reason the fixture tree fails."""
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        root = self.tree_with_record(
+            name, self.fixture_record("the menu opened only after the window was closed"))
+        status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
+                                       root=root)
+        self.assertEqual(status, 0)
+        self.assertEqual(result["records"], [rel])
+
+
 if __name__ == "__main__":
     unittest.main()

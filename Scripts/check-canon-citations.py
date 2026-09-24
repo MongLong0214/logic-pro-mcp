@@ -40,7 +40,8 @@ WHAT IT REFUSES
  10  an index or absence file whose bytes are not the bytes `build` wrote, or an index row whose
       value is in no absence set -- a row whose value is not in the corpus was not taken from it
  11  a pull request body that neither cites nor may opt out (the opt-out is refused for a change
-      touching a Logic-facing path, and is not read from a code block or an HTML comment)
+      touching a Logic-facing path, and is not read from a code block or an HTML comment); such
+      a change may instead name a `canon_not_applicable` record it writes, bound to code it changes
 
 WHAT IT DOES NOT CHECK, STATED RATHER THAN IMPLIED
 --------------------------------------------------
@@ -1081,6 +1082,7 @@ INVALID_REFERENCE = "invalid_reference"
 MISSING_QUOTED_VALUE = "missing_quoted_value"
 UNRELATED_BINDING = "unrelated_binding"
 UNPROVED_EXCEPTIONS = "unproved_exceptions"
+BEHAVIOURAL_RECORD_REFUSED = "behavioural_record_refused"
 EMPTY_CHANGED_LIST = "empty_changed_list"
 INPUT_UNREADABLE = "input_unreadable"
 CHECKER_ERROR = "checker_error"
@@ -1102,15 +1104,19 @@ EXIT_FOR = {SATISFIED: 0, ACTIONABLE: 1, ERROR: 2}
 class Diagnosis:
     """What one evaluation of a body found: a category, and findings that carry a stable code."""
 
-    def __init__(self, category: str, findings=None, references: int = 0):
+    def __init__(self, category: str, findings=None, references: int = 0, records=None):
         self.category = category
         self.findings = list(findings or [])
         self.references = references
+        #: The behavioural records that satisfied a Logic-facing body with no citation. Empty for
+        #: every other outcome, including every issue body.
+        self.records = list(records or [])
 
     def as_dict(self) -> dict:
         return {
             "category": self.category,
             "references": self.references,
+            "records": list(self.records),
             "diagnostics": [{"code": code, "message": message}
                             for code, message in self.findings],
         }
@@ -1155,6 +1161,86 @@ def _require_readable_index(ref) -> None:
         canon.load_index(ref.source)
     except canon.CanonError as exc:
         raise CanonIndexUnavailable(f"{path} could not be read: {exc}") from exc
+
+
+#: A record path as a body names it: in prose, in inline backticks, or as a link target. Read only
+#: from `_visible(body)` -- a record named in a fence or an HTML comment is an example, not a claim.
+_RECORD_NAMED = re.compile(r"(?<![\w.-])docs/observations/[\w.-]+\.json")
+
+OBSERVATIONS_PREFIX = "docs/observations/"
+
+
+def _why_record_refused(rel: str, changed: set, quoted: list):
+    """The first condition a named behavioural record fails, or None when it accepts the body.
+
+    A change whose evidence is BEHAVIOURAL -- what an element does, not what a string says -- has
+    no row of Apple's data to cite, and faking a label citation for it is the perfunctory evidence
+    this axis exists to end. The record category for that claim already exists (rule 13), so the
+    body may rest on one. Each condition closes a way to borrow somebody else's evidence: a record
+    this change does not write, a record that is not the category, a declaration rule 13 refuses,
+    a record about code this change does not touch, and a body that quotes a string Logic ships
+    while claiming nothing it says is a label.
+    """
+    if rel not in changed:
+        return ("it is not in this change's file list. The record has to be written or edited by "
+                "the change it is evidence for.")
+    path = os.path.join(REPO, rel)
+    if path not in observation_records():
+        return (f"no observation record exists at that path in this tree. Records are "
+                f"date-prefixed files under {OBSERVATIONS_PREFIX}.")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            record = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return f"it does not parse as JSON: {exc}"
+    if not isinstance(record, dict):
+        return "it is not a JSON object."
+    schema = record.get("schema", 1)
+    if not isinstance(schema, int) or schema < 3:
+        return f"it is at schema {schema!r}; a behavioural record is schema 3."
+    if "canon_not_applicable" not in record:
+        return ("it carries no `canon_not_applicable`. A record that cites or proves absence is "
+                "evidence about a label; cite that label here instead.")
+    failures: list = []
+    check_not_applicable(rel, record, canon.load_manifest(), failures)
+    if failures:
+        return f"rule 13 refuses its declaration: {failures[0]}"
+    depends = record.get("depends")
+    code_paths = [entry.split(":", 1)[0] for entry in (depends if isinstance(depends, list) else [])
+                  if isinstance(entry, str)]
+    if not any(path_ in changed and not path_.startswith(OBSERVATIONS_PREFIX)
+               for path_ in code_paths):
+        return (f"none of its `depends` {code_paths} is changed here. A behavioural record is "
+                f"evidence for the code it depends on, and this change touches none of it.")
+    if quoted:
+        return (f"the body quotes {len(quoted)} string(s) the corpus holds, first "
+                f"{quoted[0][:50]!r}. A body quoting a string Logic ships is stating a label fact, "
+                f"and a label fact is cited, not carried by a behavioural record.")
+    return None
+
+
+def _behavioural_records(body: str, changed_paths, touched: list, label: str):
+    """A Diagnosis when the visible body names observation records, else None."""
+    named = sorted(set(_RECORD_NAMED.findall(_visible(body))))
+    if not named:
+        return None
+    changed = set(changed_paths or [])
+    quoted = _citable_strings_in(body)
+    accepted, refused = [], []
+    for rel in named:
+        why = _why_record_refused(rel, changed, quoted)
+        if why is None:
+            accepted.append(rel)
+        else:
+            refused.append(f"  {rel}: {why}")
+    if accepted:
+        return Diagnosis(SATISFIED, records=accepted)
+    detail = "\n".join(refused)
+    return Diagnosis(ACTIONABLE, [(BEHAVIOURAL_RECORD_REFUSED, (
+        f"{label}: no canonical reference, and none of the {len(named)} behavioural record(s) "
+        f"this body names carries it. This change edits {len(touched)} Logic-facing file(s), "
+        f"first {touched[0]}.\n{detail}\n"
+        f"  See docs/canon/README.md."))])
 
 
 def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = False,
@@ -1203,11 +1289,16 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
     references = canon.find_refs(body)
     if not references:
         if touched:
+            behavioural = _behavioural_records(body, changed_paths, touched, label)
+            if behavioural is not None:
+                return behavioural
             return Diagnosis(ACTIONABLE, [(LOGIC_FACING_OPT_OUT, (
                 f"{label}: no canonical reference, and this change may not opt out: it edits "
                 f"{len(touched)} file(s)\n  whose contents are claims about Logic, first "
                 f"{touched[0]}.\n"
-                f"  Cite what those claims rest on. See docs/canon/README.md."))])
+                f"  Cite what those claims rest on. See docs/canon/README.md. A change whose "
+                f"evidence is behaviour, not a string, may instead name the schema-3 "
+                f"`canon_not_applicable` record it adds."))])
         if NO_FACT_OPT_OUT in _visible(body):
             # ...unless the body QUOTES something citable. The opt-out says "this states no fact
             # about Logic", and a body carrying a string Logic ships is stating one. This is the
@@ -1336,6 +1427,9 @@ def check_text(path: str, changed_paths=None, *, require_changed: bool = False,
     if diagnosis.category == SATISFIED:
         if diagnosis.references:
             print(f"{path}: {diagnosis.references} citation(s) resolved")
+        elif diagnosis.records:
+            print(f"{path}: no citation; satisfied by the behavioural record(s) "
+                  f"{', '.join(diagnosis.records)}")
         else:
             print(f"{path}: no citation, and it says so: {NO_FACT_OPT_OUT!r}")
         return EXIT_FOR[SATISFIED]

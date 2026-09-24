@@ -66,6 +66,10 @@ quoting a value the index cannot check.
 under *The opt-out*, with the reason. It is refused for a change that edits a Logic-facing path,
 because what a change touches decides that, not what it says about itself.
 
+**If your change rests on what Logic does rather than a string it ships**, name the
+`canon_not_applicable` record it adds under `docs/observations/`; the conditions are in
+`docs/canon/README.md` under *If you are opening an issue or a pull request*.
+
 
 ## Prerequisites
 
