@@ -1,0 +1,13 @@
+Limit: the moved-away latch needs the fine phase's own read of the write; if that read fails too, nothing was observed and the result stays State B readback_unavailable
+Warn: in Swift Testing, #expect((x as? String)?.contains(s) == true) recorded no issue when x was nil in this suite; take the value with try #require before asserting on a method of it
+Record-Id: r-4ca706e40972
+Provenance: inherited ceba133defdfdc04670d7c30aed31b547a6782d4
+
+Limit: the wait removes the one cause measured, Logic binding the MCU ports; any other change to the header between the first capture and the last still fails the-header-is-back
+Warn: Logic draws a surface-bank bar on the track header once it binds this server's MCU ports and removes it when the server exits, so a header capture taken before registeredAsDevice turns true differs from every later one with no write involved
+Record-Id: r-8f1c36c77b9d
+Provenance: inherited db6b2f89426614165871ed071f96eb9f06635bdc
+
+Warn: a request for a rail cannot tell equality from rounding, because 0 and 1 are equal under both; the witness for reached_exact on a normalized slider is a request that clamps to a rail it rounds to, such as 0.9 reaching 1.0
+Record-Id: r-3eae754f232e
+Provenance: inherited 5c44623bd8d39c9635f12fa9f533f996af5edf41
