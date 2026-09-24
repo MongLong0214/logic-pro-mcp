@@ -543,6 +543,11 @@ def hidden_forms(text):
         f'[record]: /x "a\\" {text}"\n',
         # A comment in a table row.
         f"| a |\n|---|\n| <!-- {text} --> |\n",
+        # A table whose delimiter row starts with a dash, then code under it; and a delimiter row
+        # indented four spaces, which is text, so what follows is not a table's row.
+        f"Evidence: a | b\n---|---\n    {text}\n",
+        f"Evidence:\n    ---\n<span>\n```\n{text}\n```\n",
+        f"[record]: <{text}>\n    ---\n",
     )
 
 
@@ -593,6 +598,9 @@ def visible_forms(text):
         f"[record]: /x (a(the record is {text})\n",
         f"[record]: <x\nthe record is {text}, see>\n",
         f'[record]: <x <y>\n"the record is {text}"\n',
+        # A delimiter row indented four spaces, or one a list item starts, makes no table.
+        f"Evidence: a | b\n    ---|---\n    the record is {text}\n",
+        f"Evidence: a | b\n- | -\n    the record is {text}\n",
     )
 
 

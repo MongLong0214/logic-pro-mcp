@@ -1118,9 +1118,12 @@ def _shown_blocks(text: str) -> list:
             if _indent(rest) >= 4:
                 continue
             leaf = None
-        if (all_matched and leaf == "para" and "-" in rest and _TABLE_DELIMITER.match(rest)
-                and not _LIST_ITEM.match(rest) and not _SETEXT.match(rest)
-                and _cells(rest) == _cells(header)):
+        # Measured: a delimiter row indented four spaces is text, and `---|---` is one although a
+        # dash starts it, because only a dash with a space after it starts a list item.
+        item = _LIST_ITEM.match(rest)
+        if (all_matched and leaf == "para" and "-" in rest and _indent(rest) < 4
+                and _TABLE_DELIMITER.match(rest) and not (item and item.group(4))
+                and not _SETEXT.match(rest) and _cells(rest) == _cells(header)):
             leaf = "table"
             shown[-1][0] = "table"
             continue
