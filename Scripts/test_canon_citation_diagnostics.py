@@ -111,6 +111,23 @@ class WhatTheStructuredResultSays(unittest.TestCase):
         self.assertEqual([entry["code"] for entry in result["diagnostics"]],
                          ["hidden_declaration"])
 
+    def test_a_declaration_in_any_code_block_is_the_same_diagnosis(self):
+        """Every form GitHub renders as code, not only the closed backtick fence (review of #975)."""
+        for body in hidden_forms(f"This change {NO_FACT}: packaging only."):
+            with self.subTest(body):
+                status, result = self.diagnose(body)
+                self.assertEqual(status, 1)
+                self.assertEqual([entry["code"] for entry in result["diagnostics"]],
+                                 ["hidden_declaration"])
+
+    def test_a_declaration_in_prose_beside_a_code_block_is_satisfied(self):
+        """The control for the case above."""
+        for body in visible_forms(f"that this change {NO_FACT}: packaging only"):
+            with self.subTest(body):
+                status, result = self.diagnose(body)
+                self.assertEqual(status, 0)
+                self.assertEqual(result["category"], "satisfied")
+
     def test_a_logic_facing_change_may_not_declare_its_way_out(self):
         status, result = self.diagnose(f"This change {NO_FACT}.\n", [LOGIC_FACING_SAMPLE])
         self.assertEqual(status, 1)
@@ -452,6 +469,41 @@ CITING_RECORD = ("docs/observations/2026-09-14-a-korean-input-source-silently-br
 CITABLE = "Metronome"
 
 
+def hidden_forms(text):
+    """Bodies in which GitHub renders `text` only as code or not at all."""
+    return (
+        f"Evidence below.\n```\n{text}\n```\n",
+        f"Evidence below.\n<!-- {text} -->\n",
+        f"Evidence below.\n<!-- {text}\n",
+        f"Evidence below.\n~~~\n{text}\n~~~\n",
+        f"Evidence below.\n```\n{text}\n",
+        f"Evidence below.\n````\n```\n{text}\n````\n",
+        f"Evidence below.\n\n    {text}\n",
+        f"Evidence below.\n\n\t{text}\n",
+        f"## Evidence\n    {text}\n",
+        f"Evidence below.\n> ~~~\n> {text}\n> ~~~\n",
+        f"Evidence below.\n>     {text}\n",
+        f"- evidence\n\n  ```\n  {text}\n  ```\n",
+        f"- evidence\n    ```\n    {text}\n    ```\n",
+        f"- evidence\n    ~~~\n    {text}\n    ~~~\n",
+        f"Evidence below.\n```\n> ```\n{text}\n```\n",
+        f"Evidence below.\n```\n    ```\n{text}\n```\n",
+    )
+
+
+def visible_forms(text):
+    """Bodies in which GitHub renders `text` as prose, each next to a form above."""
+    return (
+        f"Evidence:\n```\nexample\n```\nThe record is {text}.\n",
+        f"Evidence:\n~~~\nexample\n~~~\nThe record is {text}.\n",
+        f"Evidence:\n<!-- note -->\nThe record is {text}.\n",
+        f"The record is\n    {text}\nand it measures the menu.\n",
+        f"- evidence\n    - the record is {text}\n",
+        f"> The record is {text}.\n",
+        f"```inline``` and the record is {text}.\n",
+    )
+
+
 class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
     """A Logic-facing change whose evidence is behaviour may name the record that holds it.
 
@@ -511,12 +563,19 @@ class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
         self.assertRefused(status, result, "none of its `depends`")
 
     def test_a_record_named_only_where_a_reader_does_not_see_it_is_not_named(self):
-        for body in (f"Evidence below.\n```\n{BEHAVIOURAL_RECORD}\n```\n",
-                     f"Evidence below.\n<!-- {BEHAVIOURAL_RECORD} -->\n"):
+        for body in hidden_forms(BEHAVIOURAL_RECORD):
             with self.subTest(body):
                 status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
                 self.assertEqual(status, 1)
                 self.assertEqual(codes(json.dumps(result)), ["logic_facing_opt_out"])
+
+    def test_a_record_in_prose_around_those_forms_is_named(self):
+        """The control. Without it the case above passes for a checker that reads nothing."""
+        for body in visible_forms(BEHAVIOURAL_RECORD):
+            with self.subTest(body):
+                status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+                self.assertEqual(status, 0)
+                self.assertEqual(result["records"], [BEHAVIOURAL_RECORD])
 
     def test_a_record_that_cites_instead_of_declaring_is_refused(self):
         status, result = self.diagnose(f"Evidence: {CITING_RECORD}.\n",
@@ -558,14 +617,20 @@ class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
             json.dump(record, handle)
         return root
 
-    def fixture_record(self, reading):
-        return {
-            "schema": 3,
-            "question": "Does the track menu open after an auxiliary window closes?",
-            "observations": [{"reading": reading}],
-            "canon_not_applicable": {"reason": "A claim about behaviour, not a shipped string."},
-            "depends": [f"{BEHAVIOURAL_DEPENDS}:someSymbol"],
-        }
+    def fixture_record(self, reading, name="2026-09-24-fixture-behavioural-record.json"):
+        """The real behavioural record with one reading added, under a new name.
+
+        Built from a record the validator accepts, so a refusal below is the condition the case
+        names. A hand-written record refused by the validator for a missing key would make every
+        refusal pass and the control fail.
+        """
+        with open(os.path.join(REPO, BEHAVIOURAL_RECORD), encoding="utf-8") as handle:
+            record = json.load(handle)
+        record["id"] = name[: -len(".json")]
+        record["date"] = name[:10]
+        first, *rest = record["observations"]
+        record["observations"] = [dict(first, reading=reading), *rest]
+        return record
 
     def test_a_declaration_rule_13_refuses_is_refused(self):
         name = "2026-09-24-fixture-behavioural-record.json"
@@ -595,6 +660,33 @@ class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
         status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
                                        root=root)
         self.assertRefused(status, result, "none of its `depends`")
+
+    def test_a_record_that_depends_only_on_a_document_is_refused(self):
+        """A document is not code, even when this change writes it and edits code besides."""
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        for document in ("docs/roadmap/README.md", LOGIC_FACING_SAMPLE):
+            with self.subTest(document):
+                record = dict(self.fixture_record("the menu opened only after the window was "
+                                                  "closed"), depends=[document])
+                root = self.tree_with_record(name, record)
+                status, result = self.diagnose(f"Evidence: {rel}.\n",
+                                               [rel, document, BEHAVIOURAL_DEPENDS], root=root)
+                self.assertRefused(status, result, "none of its `depends`")
+
+    def test_a_record_the_validator_refuses_is_refused(self):
+        name = "2026-09-24-fixture-behavioural-record.json"
+        rel = f"docs/observations/{name}"
+        base = self.fixture_record("the menu opened only after the window was closed")
+        for change, because in (({"schema": 4}, "schema is 4"),
+                                ({"depends": [f"{BEHAVIOURAL_DEPENDS}:noSuchSymbolAnywhere"]},
+                                 "noSuchSymbolAnywhere")):
+            with self.subTest(change):
+                root = self.tree_with_record(name, dict(base, **change))
+                status, result = self.diagnose(f"Evidence: {rel}.\n", [rel, BEHAVIOURAL_DEPENDS],
+                                               root=root)
+                self.assertRefused(status, result, "check-observation-records.py refuses it")
+                self.assertIn(because, result["diagnostics"][0]["message"])
 
     def test_the_same_fixture_without_the_citable_reading_is_satisfied(self):
         """The control. Without it the case above passes for any reason the fixture tree fails."""

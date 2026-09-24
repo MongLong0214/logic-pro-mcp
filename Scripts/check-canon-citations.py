@@ -41,7 +41,8 @@ WHAT IT REFUSES
       value is in no absence set -- a row whose value is not in the corpus was not taken from it
  11  a pull request body that neither cites nor may opt out (the opt-out is refused for a change
       touching a Logic-facing path, and is not read from a code block or an HTML comment); such
-      a change may instead name a `canon_not_applicable` record it writes, bound to code it changes
+      a change may instead name a `canon_not_applicable` record it writes, bound to Logic-facing
+      code it changes
 
 WHAT IT DOES NOT CHECK, STATED RATHER THAN IMPLIED
 --------------------------------------------------
@@ -980,14 +981,77 @@ def check_labelsets_are_logic_facing(failures: list) -> None:
                         f"otherwise use the opt-out.")
 
 
-def _visible(body: str) -> str:
-    """The body with fenced code blocks and HTML comments removed.
+#: A fence as GitHub opens one. A backtick fence's info string cannot hold a backtick: "```x```" on
+#: one line is an inline span, not a fence.
+_FENCE_OPEN = re.compile(r"(`{3,}|~{3,})(.*)$")
+_QUOTE_MARKER = re.compile(r" {0,3}> ?")
+#: Lines after which an indented line cannot be a paragraph's continuation, so it opens code.
+_ENDS_A_BLOCK = re.compile(r"#{1,6}(?:\s|$)|(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,}|=+\s*)$")
 
-    The opt-out sentence is a promise to a reader. Text a reader does not see cannot carry it, and
-    both hiding places were used against this check before it did this.
+
+def _without_code_blocks(text: str) -> str:
+    """`text` with every line GitHub renders as a code block blanked.
+
+    Only closed triple-backtick fences used to be removed, so a record named in a `~~~` fence, an
+    unclosed fence or an indented block counted as named in prose (review of #975). Every doubt
+    resolves toward hiding, because a line hidden wrongly costs a refusal the contributor can read
+    and a line shown wrongly is a way past the check. By CommonMark's rules, not by a rendering
+    measured here, two places are hidden that GitHub shows as prose: text indented four or more
+    columns after a blank line inside a list item, and text after a fence that GitHub closes where
+    its list item or quote ends.
     """
-    without_comments = re.sub(r"<!--.*?-->", " ", body, flags=re.S)
-    return re.sub(r"```.*?```", " ", without_comments, flags=re.S)
+    kept = []
+    fence = None
+    block_start, in_indented, last_depth = True, False, 0
+    for raw in text.expandtabs(4).split("\n"):
+        depth, line = 0, raw
+        while (marker := _QUOTE_MARKER.match(line)):
+            depth, line = depth + 1, line[marker.end():]
+        if depth != last_depth:
+            block_start, last_depth = True, depth
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if fence is not None:
+            depth_open, char, length, indent_open = fence
+            if (depth == depth_open and indent <= max(3, indent_open)
+                    and re.fullmatch(re.escape(char) + "{%d,}" % length, stripped)):
+                fence, block_start = None, True
+            kept.append("")
+            continue
+        opened = _FENCE_OPEN.match(line.lstrip(" "))
+        if opened and not (opened.group(1)[0] == "`" and "`" in opened.group(2)):
+            # Opened at any indentation, although GitHub opens one at three columns at most: a
+            # deeper one is either code already or a fence inside a list item.
+            fence = (depth, opened.group(1)[0], len(opened.group(1)), indent)
+            kept.append("")
+            continue
+        if not stripped:
+            block_start = True
+            kept.append("")
+            continue
+        if indent >= 4 and (block_start or in_indented):
+            in_indented = True
+            kept.append("")
+            continue
+        in_indented = False
+        block_start = indent < 4 and bool(_ENDS_A_BLOCK.match(stripped))
+        kept.append(raw)
+    return "\n".join(kept)
+
+
+def _visible(body: str) -> str:
+    """The body with code blocks and HTML comments removed.
+
+    The opt-out sentence is a promise to a reader, and a named record is a claim to one. Text a
+    reader does not see, or sees as an example, cannot carry either, and both hiding places were
+    used against this check before it did this. An unclosed comment hides everything after it.
+    Raw HTML elements such as `<pre>` are not parsed.
+    """
+    text = re.sub(r"<!--.*?-->", " ", body.replace("\r\n", "\n").replace("\r", "\n"), flags=re.S)
+    unclosed = text.find("<!--")
+    if unclosed != -1:
+        text = text[:unclosed]
+    return re.sub(r"```.*?```", " ", _without_code_blocks(text), flags=re.S)
 
 
 def logic_facing_exceptions() -> set:
@@ -1170,7 +1234,22 @@ _RECORD_NAMED = re.compile(r"(?<![\w.-])docs/observations/[\w.-]+\.json")
 OBSERVATIONS_PREFIX = "docs/observations/"
 
 
-def _why_record_refused(rel: str, changed: set, quoted: list):
+def _observation_validator():
+    """`check-observation-records.py`, loaded from this tree the way `logic_canon` is.
+
+    Loaded when a body names a record rather than at import, so a checker run that never reaches
+    the record route does not depend on it. Without it this route restated the record schema and
+    passed records the validator refuses, a schema 4 one and one whose `depends` symbol does not
+    exist (review of #975).
+    """
+    path = os.path.join(REPO, "Scripts", "check-observation-records.py")
+    spec = importlib.util.spec_from_file_location("observation_records_for_guard", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _why_record_refused(rel: str, changed: set, touched: set, quoted: list):
     """The first condition a named behavioural record fails, or None when it accepts the body.
 
     A change whose evidence is BEHAVIOURAL -- what an element does, not what a string says -- has
@@ -1180,6 +1259,10 @@ def _why_record_refused(rel: str, changed: set, quoted: list):
     this change does not write, a record that is not the category, a declaration rule 13 refuses,
     a record about code this change does not touch, and a body that quotes a string Logic ships
     while claiming nothing it says is a label.
+
+    The code has to be a Logic-facing file outside `docs/`, because the record stands in for the
+    citation that file's change owes. Any changed path used to count, so a record depending on the
+    roadmap let a change that edits no code through (review of #975).
     """
     if rel not in changed:
         return ("it is not in this change's file list. The record has to be written or edited by "
@@ -1188,6 +1271,9 @@ def _why_record_refused(rel: str, changed: set, quoted: list):
     if path not in observation_records():
         return (f"no observation record exists at that path in this tree. Records are "
                 f"date-prefixed files under {OBSERVATIONS_PREFIX}.")
+    refusals = _observation_validator().check(path)
+    if refusals:
+        return f"check-observation-records.py refuses it: {refusals[0]}"
     try:
         with open(path, "r", encoding="utf-8") as handle:
             record = json.load(handle)
@@ -1208,10 +1294,10 @@ def _why_record_refused(rel: str, changed: set, quoted: list):
     depends = record.get("depends")
     code_paths = [entry.split(":", 1)[0] for entry in (depends if isinstance(depends, list) else [])
                   if isinstance(entry, str)]
-    if not any(path_ in changed and not path_.startswith(OBSERVATIONS_PREFIX)
-               for path_ in code_paths):
-        return (f"none of its `depends` {code_paths} is changed here. A behavioural record is "
-                f"evidence for the code it depends on, and this change touches none of it.")
+    if not any(path_ in touched and not path_.startswith("docs/") for path_ in code_paths):
+        return (f"none of its `depends` {code_paths} is Logic-facing code this change edits, "
+                f"outside docs/. A behavioural record is evidence for the code it depends on, "
+                f"and this change touches none of it.")
     if quoted:
         return (f"the body quotes {len(quoted)} string(s) the corpus holds, first "
                 f"{quoted[0][:50]!r}. A body quoting a string Logic ships is stating a label fact, "
@@ -1228,7 +1314,7 @@ def _behavioural_records(body: str, changed_paths, touched: list, label: str):
     quoted = _citable_strings_in(body)
     accepted, refused = [], []
     for rel in named:
-        why = _why_record_refused(rel, changed, quoted)
+        why = _why_record_refused(rel, changed, set(touched), quoted)
         if why is None:
             accepted.append(rel)
         else:
@@ -1323,7 +1409,10 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
                 f"code block or an\n"
                 f"  HTML comment, and those are deliberately not read -- a declaration that "
                 f"renders as an example\n"
-                f"  is not a declaration. Move it into ordinary visible prose, with the reason.")
+                f"  is not a declaration. A fence of backticks or tildes, closed or not, and text "
+                f"indented four\n"
+                f"  columns after a blank line are code blocks. Move it into ordinary visible "
+                f"prose, with the reason.")
             )])
         return Diagnosis(ACTIONABLE, [(MISSING_DECLARATION, (
             f"{label}: no canonical reference, and no opt-out.\n"

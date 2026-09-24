@@ -53,14 +53,17 @@ form below is what a pull request is gated on.
   alone is a string you typed.
 * Stating nothing about Logic: the sentence `This pull request body states no fact about Logic`
   (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence inside a
-  fenced code block or an HTML comment is deliberately not read, and the checker says so by name.
+  code block or an HTML comment is deliberately not read, and the checker says so by name. A code
+  block is a fence of backticks or tildes, closed or not, or text indented four columns after a
+  blank line, including inside a list item; an unclosed comment hides everything after it.
 * A change that touches a Logic-facing path cannot use the opt-out, whatever its description says.
   The prefixes are in `LOGIC-FACING.json` and the check derives this from the files, not the words.
 * Resting on Logic's BEHAVIOUR rather than a string it ships: name, in visible prose, the
   `docs/observations/<name>.json` record that holds the measurement. It stands in for a citation
-  only when this change adds or edits it, it is a schema 3 record declaring `canon_not_applicable`
-  that rule 13 accepts, one of its `depends` is code this change also edits, and the body quotes
-  no string the corpus holds. Do not paste a label citation instead: a label citation establishes
+  only when this change adds or edits it, `check-observation-records.py` accepts it, it is a
+  schema 3 record declaring `canon_not_applicable` that rule 13 accepts, one of its `depends` is a
+  Logic-facing file outside `docs/` that this change also edits, and the body quotes no string the
+  corpus holds. Do not paste a label citation instead: a label citation establishes
   what a label says, not what an element does when it is driven.
 
 **What the checker establishes.** That a reference resolves against bytes committed to this
@@ -352,8 +355,9 @@ It is refused in two cases, both derived rather than declared:
 - the change edits a **Logic-facing path** (`Sources/LogicProMCP/{Accessibility,HostParameters,Channels}/`,
   `docs/{observations,locale,canon}/`, `Scripts/livekit/`) — what a change says about itself does
   not decide whether it states a fact about Logic; what it touches does;
-- the sentence appears only inside a fenced code block or an HTML comment. Text a reader does not
-  see cannot carry a promise, and both hiding places were used against this check before it looked.
+- the sentence appears only inside a code block or an HTML comment. Text a reader does not see,
+  or sees as an example, cannot carry a promise, and both hiding places were used against this
+  check before it looked.
 
 A Logic-facing change that has nothing to cite because its evidence is behaviour does not need the
 opt-out: it names the `canon_not_applicable` record it adds, under the conditions given in *If you
