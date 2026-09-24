@@ -52,10 +52,13 @@ form below is what a pull request is gated on.
   Both halves are required. A reference alone does not say what you claimed it says, and a value
   alone is a string you typed.
 * Stating nothing about Logic: the sentence `This pull request body states no fact about Logic`
-  (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence inside a
-  code block or an HTML comment is deliberately not read, and the checker says so by name. A code
-  block is a fence of backticks or tildes, closed or not, or text indented four columns after a
-  blank line, including inside a list item; an unclosed comment hides everything after it.
+  (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence a
+  reader is shown only as code, or not at all, is deliberately not read, and the checker says so by
+  name. Not read: a code block (a fence of backticks or tildes, closed or not, a list item's own line
+  included, and text GitHub indents as code), an HTML comment, a footnote, and a raw `<pre>`. The
+  check follows quotes and list items as GitHub does, and where it is unsure it hides: everything
+  after a `<pre>` is hidden, even one quoted in backticks, and so is everything after a comment an
+  HTML block leaves open. A link's target and the inside of an HTML tag are read.
 * A change that touches a Logic-facing path cannot use the opt-out, whatever its description says.
   The prefixes are in `LOGIC-FACING.json` and the check derives this from the files, not the words.
 * Resting on Logic's BEHAVIOUR rather than a string it ships: name, in visible prose, the
@@ -355,9 +358,9 @@ It is refused in two cases, both derived rather than declared:
 - the change edits a **Logic-facing path** (`Sources/LogicProMCP/{Accessibility,HostParameters,Channels}/`,
   `docs/{observations,locale,canon}/`, `Scripts/livekit/`) — what a change says about itself does
   not decide whether it states a fact about Logic; what it touches does;
-- the sentence appears only inside a code block or an HTML comment. Text a reader does not see,
-  or sees as an example, cannot carry a promise, and both hiding places were used against this
-  check before it looked.
+- the sentence appears only where a reader is not shown it as prose: a code block, an HTML
+  comment, a footnote or a `<pre>`. Text a reader does not see, or sees as an example, cannot carry
+  a promise, and code blocks and comments were both used against this check before it looked.
 
 A Logic-facing change that has nothing to cite because its evidence is behaviour does not need the
 opt-out: it names the `canon_not_applicable` record it adds, under the conditions given in *If you

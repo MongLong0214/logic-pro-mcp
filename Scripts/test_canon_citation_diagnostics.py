@@ -470,7 +470,11 @@ CITABLE = "Metronome"
 
 
 def hidden_forms(text):
-    """Bodies in which GitHub renders `text` only as code or not at all."""
+    """Bodies in which GitHub renders `text` only as code or not at all.
+
+    Each was rendered through GitHub's renderer (`gh api markdown`, mode gfm) on 2026-09-24, and
+    so was each form in `visible_forms()`.
+    """
     return (
         f"Evidence below.\n```\n{text}\n```\n",
         f"Evidence below.\n<!-- {text} -->\n",
@@ -488,6 +492,40 @@ def hidden_forms(text):
         f"- evidence\n    ~~~\n    {text}\n    ~~~\n",
         f"Evidence below.\n```\n> ```\n{text}\n```\n",
         f"Evidence below.\n```\n    ```\n{text}\n```\n",
+        # A fence opened on a list item's own line, which the first line parser missed and then
+        # read the closer as an opener (review of #975, round 2).
+        f"- ```\n  {text}\n  ```\n",
+        f"- ~~~\n  {text}\n  ~~~\n",
+        f"1. ```\n   {text}\n   ```\n",
+        f"1. ~~~\n   {text}\n   ~~~\n",
+        # Its closer on a line the list item does not reach: that line opens a new fence.
+        f"- ```\n  example\n```\n{text}\n```\n",
+        # Raw `<pre>`, closed, unclosed and inside a sentence (review of #975, round 2).
+        f"Evidence below.\n<pre>{text}</pre>\n",
+        f"Evidence below.\n\n<pre>\n{text}\n",
+        f"Evidence: <pre>{text}</pre> here.\n",
+        # A footnote nothing refers to, which GitHub drops.
+        f"Evidence below.\n\n[^note]: {text}\n",
+        # An HTML block holds a fence line, so the next fence line opens rather than closes.
+        f"<div>\n```\n\n```\n{text}\n",
+        # A line indented under a table is code, not a continuation.
+        f"| a | b |\n|---|---|\n    {text}\n",
+        # A comment an HTML block leaves open runs to the end of the page.
+        f"<div>\n<!--\n</div>\n\n{text}\n",
+        # A browser reads `<?` in raw HTML as a comment.
+        f"<div>\n<?note {text} ?>\n</div>\n",
+        # A tag alone on its line opens an HTML block where a quote's paragraph is not continued.
+        f"> Evidence\n<span>\n```\n\n```\n{text}\n",
+        # An HTML block interrupts a paragraph, and one whose end is on a later line ends there.
+        f"Evidence below.\n<div>\n```\n\n```\n{text}\n",
+        f"<!--\nnote\n-->\n```\n{text}\n```\n",
+        # A list item that begins blank ends at the next blank line, and one whose marker is
+        # followed by five spaces or more opens indented code.
+        f"-\n\n    {text}\n",
+        f"-     {text}\n",
+        # A comment or a processing instruction inside a sentence.
+        f"Evidence <!-- {text} --> below.\n",
+        f"Evidence <?note {text} ?> below.\n",
     )
 
 
@@ -501,6 +539,24 @@ def visible_forms(text):
         f"- evidence\n    - the record is {text}\n",
         f"> The record is {text}.\n",
         f"```inline``` and the record is {text}.\n",
+        # Hidden by the parser at 88b895f7, which did not follow a list item's or a quote's extent.
+        f"- evidence\n\n    the record is {text}\n",
+        f"- item\n  ```\n  code\nThe record is {text}.\n",
+        f"> ```\n> code\nThe record is {text}.\n",
+        f"- ```\n  example\n  ```\nThe record is {text}.\n",
+        f"- ~~~\n  example\n  ~~~\nThe record is {text}.\n",
+        f"<div>\n```\n</div>\n\nThe record is {text}.\n",
+        f"| a | b |\n|---|---|\n\nThe record is {text}.\n",
+        # A closed comment hides itself and nothing after it, inline and in an HTML block.
+        f"Evidence <!-- note --> and the record is {text}.\n",
+        f"<div>\n<!-- note -->\nThe record is {text}.\n</div>\n",
+        # Neither an ordered item starting at 2 nor a table whose delimiter row counts other cells
+        # interrupts a paragraph, and a line no quote marker opens continues the quoted paragraph.
+        f"Evidence:\n2. ```\n   the record is {text}\n   ```\n",
+        f"Evidence: a | b\n|---|\n    the record is {text}\n",
+        f"> The record is\n    {text}\n",
+        # An inline `<!--` nothing closes is text, and GitHub shows it.
+        f"Evidence <!-- and the record is {text}.\n",
     )
 
 
@@ -576,21 +632,6 @@ class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
                 status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
                 self.assertEqual(status, 0)
                 self.assertEqual(result["records"], [BEHAVIOURAL_RECORD])
-
-    def test_three_forms_github_shows_as_prose_are_hidden_on_the_side_of_refusing(self):
-        """Measured through GitHub's renderer on 2026-09-24: each renders the record as prose.
-
-        Pinned so that a change which starts reading them does so on purpose. The parser leaves
-        them hidden because following a list item's or a quote's extent is more states that could
-        show code as prose, and a hidden line costs only a refusal the contributor can read.
-        """
-        for body in (f"- evidence\n\n    the record is {BEHAVIOURAL_RECORD}\n",
-                     f"- item\n  ```\n  code\nThe record is {BEHAVIOURAL_RECORD}.\n",
-                     f"> ```\n> code\nThe record is {BEHAVIOURAL_RECORD}.\n"):
-            with self.subTest(body):
-                status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
-                self.assertEqual(status, 1)
-                self.assertEqual(codes(json.dumps(result)), ["logic_facing_opt_out"])
 
     def test_a_record_that_cites_instead_of_declaring_is_refused(self):
         status, result = self.diagnose(f"Evidence: {CITING_RECORD}.\n",

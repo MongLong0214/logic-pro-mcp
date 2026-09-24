@@ -981,77 +981,243 @@ def check_labelsets_are_logic_facing(failures: list) -> None:
                         f"otherwise use the opt-out.")
 
 
-#: A fence as GitHub opens one. A backtick fence's info string cannot hold a backtick: "```x```" on
-#: one line is an inline span, not a fence.
-_FENCE_OPEN = re.compile(r"(`{3,}|~{3,})(.*)$")
-_QUOTE_MARKER = re.compile(r" {0,3}> ?")
-#: Lines after which an indented line cannot be a paragraph's continuation, so it opens code.
-_ENDS_A_BLOCK = re.compile(r"#{1,6}(?:\s|$)|(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,}|=+\s*)$")
+#: How GitHub's renderer (cmark-gfm) divides a body into blocks, as far as that decides what a
+#: reader is shown. Tabs are expanded to four columns first, so every pattern here sees spaces.
+_QUOTE = re.compile(r" {0,3}> ?")
+_LIST_ITEM = re.compile(r"( {0,3})([-+*]|(\d{1,9})[.)])( *)(.*)$")
+_FOOTNOTE = re.compile(r" {0,3}\[\^[^\]\s]+\]: *")
+_THEMATIC = re.compile(r" {0,3}(?:(?:\* *){3,}|(?:- *){3,}|(?:_ *){3,})$")
+_ATX = re.compile(r" {0,3}#{1,6}(?: |$)")
+_SETEXT = re.compile(r" {0,3}(?:=+|-+) *$")
+_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)$")
+_TABLE_DELIMITER = re.compile(r" {0,3}\|? *:?-+:? *(?:\| *:?-+:? *)*\|? *$")
+_BLOCK_TAGS = (
+    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|"
+    "dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|"
+    "hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|"
+    "search|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul")
+_ATTRIBUTE = r"""(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)"""
+#: The HTML blocks that can interrupt a paragraph, each with what ends it (None: a blank line). A
+#: fence inside one is HTML, not a fence.
+_HTML_BLOCKS = (
+    (re.compile(r" {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)", re.I),
+     re.compile(r"</(?:pre|script|style|textarea)>", re.I)),
+    (re.compile(r" {0,3}<!--"), re.compile(r"-->")),
+    (re.compile(r" {0,3}<\?"), re.compile(r"\?>")),
+    (re.compile(r" {0,3}<![A-Z]"), re.compile(r">")),
+    (re.compile(r" {0,3}<!\[CDATA\["), re.compile(r"\]\]>")),
+    (re.compile(r" {0,3}</?(?:%s)(?:\s|/?>|$)" % _BLOCK_TAGS, re.I), None),
+)
+#: A complete tag alone on its line opens an HTML block too, except inside a paragraph. Measured:
+#: a closing `</pre>` or `</textarea>` is one, although CommonMark's text excludes it.
+_HTML_BLOCK_ANY_TAG = re.compile(
+    r" {0,3}(?:<[A-Za-z][\w-]*%s*\s*/?>|</[A-Za-z][\w-]*\s*>)\s*$" % _ATTRIBUTE)
+#: What a browser shows nothing of in raw HTML: a comment, and `<?`, `<!` or `</` without a letter,
+#: which it reads as a comment ending at the next `>`.
+_RAW_HIDDEN = re.compile(r"<!--.*?-->|<(?:\?|!(?!--)|/(?![A-Za-z]))[^>]*(?:>|\Z)", re.S)
+#: The same in Markdown text, where each has to be complete to be HTML at all.
+_INLINE_HIDDEN = re.compile(r"<!--.*?-->|<\?.*?\?>|<![A-Z][^>]*>|<!\[CDATA\[.*?\]\]>", re.S)
+_RAW_PRE = re.compile(r"<pre(?=[\s/>]|\Z)", re.I)
 
 
-def _without_code_blocks(text: str) -> str:
-    """`text` with every line GitHub renders as a code block blanked.
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
 
-    Only closed triple-backtick fences used to be removed, so a record named in a `~~~` fence, an
-    unclosed fence or an indented block counted as named in prose (review of #975). Every doubt
-    resolves toward hiding, because a line hidden wrongly costs a refusal the contributor can read
-    and a line shown wrongly is a way past the check. Three places are hidden that GitHub shows as
-    prose, measured through its renderer (`gh api markdown`, gfm) on 2026-09-24: text indented four
-    or more columns after a blank line inside a list item, and text after a fence that GitHub
-    closes where its list item or its quote ends.
+
+def _opens_fence(rest: str):
+    fence = _FENCE.match(rest)
+    if fence and not (fence.group(1)[0] == "`" and "`" in fence.group(2)):
+        return fence.group(1)[0], len(fence.group(1))
+    return None
+
+
+def _opens_html(rest: str, *, in_paragraph: bool):
+    """What ends the HTML block `rest` opens, None for a blank line, or False when it opens none."""
+    for start, end in _HTML_BLOCKS:
+        if start.match(rest):
+            return end
+    if not in_paragraph and _HTML_BLOCK_ANY_TAG.match(rest):
+        return None
+    return False
+
+
+def _interrupts_paragraph(rest: str) -> bool:
+    if _indent(rest) >= 4:
+        return False
+    return bool(_opens_fence(rest) or _ATX.match(rest) or _THEMATIC.match(rest)
+                or _FOOTNOTE.match(rest) or _opens_html(rest, in_paragraph=True) is not False)
+
+
+def _cells(row: str) -> int:
+    row = row.strip()
+    row = row[1:] if row.startswith("|") else row
+    row = row[:-1] if row.endswith("|") and not row.endswith("\\|") else row
+    return len(re.split(r"(?<!\\)\|", row))
+
+
+def _shown_blocks(text: str) -> list:
+    """The blocks of `text` a reader is shown as text, in order: [kind, lines], kind "text" or "html".
+
+    Code is left out, and so is a footnote, which GitHub drops when nothing refers to it. Quotes,
+    list items and footnotes are followed as GitHub follows them, because they decide where a
+    fence opens and where it closes: a fence opened on a list item's own line, or closed by a line
+    its list item does not reach, was read the wrong way round when only indentation was counted.
     """
-    kept = []
-    fence = None
-    block_start, in_indented, last_depth = True, False, 0
-    for raw in text.expandtabs(4).split("\n"):
-        depth, line = 0, raw
-        while (marker := _QUOTE_MARKER.match(line)):
-            depth, line = depth + 1, line[marker.end():]
-        if depth != last_depth:
-            block_start, last_depth = True, depth
-        indent = len(line) - len(line.lstrip(" "))
-        stripped = line.strip()
-        if fence is not None:
-            depth_open, char, length, indent_open = fence
-            if (depth == depth_open and indent <= max(3, indent_open)
-                    and re.fullmatch(re.escape(char) + "{%d,}" % length, stripped)):
-                fence, block_start = None, True
-            kept.append("")
+    shown = []
+    stack = []  # open containers, outermost first: [kind, width, began_blank]
+    leaf = None  # None, "para", "table", "code", ("fence", char, length) or ("html", end)
+    header = ""  # a paragraph's last line, which a delimiter row under it makes a table header
+
+    def start(kind: str, rest: str) -> None:
+        shown.append([kind, [rest], any(entry[0] == "^" for entry in stack)])
+
+    for line in text.split("\n"):
+        rest, matched = line, 0
+        for container in stack:
+            kind, width = container[0], container[1]
+            if kind == ">":
+                quote = _QUOTE.match(rest)
+                if not quote:
+                    break
+                rest = rest[quote.end():]
+            elif not rest.strip():
+                if container[2]:
+                    break  # a list item may begin with one blank line, not two
+                rest = ""
+            elif _indent(rest) >= width:
+                rest, container[2] = rest[width:], False
+            else:
+                break
+            matched += 1
+        all_matched = matched == len(stack)
+        if all_matched and isinstance(leaf, tuple) and leaf[0] == "fence":
+            if re.fullmatch(r" {0,3}%s{%d,} *" % (re.escape(leaf[1]), leaf[2]), rest):
+                leaf = None
             continue
-        opened = _FENCE_OPEN.match(line.lstrip(" "))
-        if opened and not (opened.group(1)[0] == "`" and "`" in opened.group(2)):
-            # Opened at any indentation, although GitHub opens one at three columns at most: a
-            # deeper one is either code already or a fence inside a list item.
-            fence = (depth, opened.group(1)[0], len(opened.group(1)), indent)
-            kept.append("")
+        if all_matched and isinstance(leaf, tuple) and leaf[0] == "html":
+            if leaf[1] is None and not rest.strip():
+                leaf = None
+                continue
+            if leaf[1] is not None and leaf[1].search(rest):
+                leaf = None
+            shown[-1][1].append(rest)
             continue
-        if not stripped:
-            block_start = True
-            kept.append("")
+        if all_matched and leaf == "code":
+            if _indent(rest) >= 4:
+                continue
+            leaf = None
+        if (all_matched and leaf == "para" and "-" in rest and _TABLE_DELIMITER.match(rest)
+                and not _LIST_ITEM.match(rest) and not _SETEXT.match(rest)
+                and _cells(rest) == _cells(header)):
+            leaf = "table"
             continue
-        if indent >= 4 and (block_start or in_indented):
-            in_indented = True
-            kept.append("")
+
+        interrupting = all_matched and leaf == "para"
+        started = []
+        while _indent(rest) < 4:
+            quote = _QUOTE.match(rest)
+            if quote:
+                started.append([">", 0, False])
+                rest, interrupting = rest[quote.end():], False
+                continue
+            footnote = _FOOTNOTE.match(rest)
+            if footnote:
+                started.append(["^", 4, False])
+                rest, interrupting = rest[footnote.end():], False
+                continue
+            item = _LIST_ITEM.match(rest)
+            if not item or _THEMATIC.match(rest) or not (item.group(4) or not item.group(5)):
+                break
+            blank = not item.group(5)
+            if interrupting and (blank or (item.group(3) and int(item.group(3)) != 1)):
+                break
+            marker, spaces = len(item.group(1)) + len(item.group(2)), len(item.group(4))
+            if blank:
+                width, rest = marker + 1, ""
+            elif spaces >= 5:
+                width, rest = marker + 1, rest[marker + 1:]
+            else:
+                width, rest = marker + spaces, rest[marker + spaces:]
+            started.append(["-", width, blank])
+            interrupting = False
+        if started:
+            stack, leaf = stack[:matched] + started, None
+        elif not all_matched:
+            if (leaf == "para" and rest.strip() and not _interrupts_paragraph(rest)
+                    and _opens_html(rest, in_paragraph=False) is False):
+                shown[-1][1].append(rest)
+                header = rest
+                continue  # a lazy continuation line: the containers stay open
+            stack, leaf = stack[:matched], None
+
+        if not rest.strip():
+            if leaf in ("para", "table"):
+                leaf = None
             continue
-        in_indented = False
-        block_start = indent < 4 and bool(_ENDS_A_BLOCK.match(stripped))
-        kept.append(raw)
-    return "\n".join(kept)
+        if leaf == "para":
+            if _SETEXT.match(rest):
+                leaf = None
+                continue
+            if not _interrupts_paragraph(rest):
+                shown[-1][1].append(rest)
+                header = rest
+                continue
+            leaf = None
+        in_table, leaf = leaf == "table", None
+        if _indent(rest) >= 4:
+            leaf = "code"
+            continue
+        fence = _opens_fence(rest)
+        if fence:
+            leaf = ("fence",) + fence
+            continue
+        end = _opens_html(rest, in_paragraph=False)
+        if end is not False:
+            if end is None or not end.search(rest):
+                leaf = ("html", end)
+            start("html", rest)
+            continue
+        start("text", rest)
+        if _ATX.match(rest) or _THEMATIC.match(rest):
+            leaf = None
+        elif in_table:
+            leaf = "table"  # a row is read on its own, and nothing continues it
+        else:
+            leaf, header = "para", rest
+    return [[kind, lines] for kind, lines, footnote in shown if not footnote]
 
 
 def _visible(body: str) -> str:
-    """The body with code blocks and HTML comments removed.
+    """The body as a reader is shown it: code blocks, `<pre>`, comments and footnotes left out.
 
     The opt-out sentence is a promise to a reader, and a named record is a claim to one. Text a
     reader does not see, or sees as an example, cannot carry either, and both hiding places were
-    used against this check before it did this. An unclosed comment hides everything after it.
-    Raw HTML elements such as `<pre>` are not parsed.
+    used against this check before it did this. Every doubt resolves toward hiding, because a line
+    hidden wrongly costs a refusal the contributor can read and a line shown wrongly is a way past
+    the check: everything after a raw `<pre>` is hidden, even one quoted in backticks, and so is
+    everything after a comment raw HTML leaves open. A link target and an HTML attribute are read
+    as text.
     """
-    text = re.sub(r"<!--.*?-->", " ", body.replace("\r\n", "\n").replace("\r", "\n"), flags=re.S)
-    unclosed = text.find("<!--")
-    if unclosed != -1:
-        text = text[:unclosed]
-    return re.sub(r"```.*?```", " ", _without_code_blocks(text), flags=re.S)
+    text = body.replace("\r\n", "\n").replace("\r", "\n").expandtabs(4)
+    kept = []
+    for kind, lines in _shown_blocks(text):
+        raw, stop = "\n".join(lines), False
+        if kind == "html":
+            raw = _RAW_HIDDEN.sub(" ", raw)
+            # A comment raw HTML leaves open runs on until later raw HTML closes it, and this
+            # does not follow it that far: everything after it is hidden.
+            leaked = raw.find("<!--")
+            if leaked != -1:
+                raw, stop = raw[:leaked], True
+        pre = _RAW_PRE.search(raw)
+        if pre:
+            raw, stop = raw[:pre.start()], True
+        if kind == "text":
+            raw = _INLINE_HIDDEN.sub(" ", raw)
+        kept.append(raw)
+        if stop:
+            break
+    return "\n".join(kept)
 
 
 def logic_facing_exceptions() -> set:
@@ -1228,7 +1394,8 @@ def _require_readable_index(ref) -> None:
 
 
 #: A record path as a body names it: in prose, in inline backticks, or as a link target. Read only
-#: from `_visible(body)` -- a record named in a fence or an HTML comment is an example, not a claim.
+#: from `_visible(body)` -- a record named in a code block, a `<pre>`, a comment or a footnote is
+#: an example or an aside, not a claim.
 _RECORD_NAMED = re.compile(r"(?<![\w.-])docs/observations/[\w.-]+\.json")
 
 OBSERVATIONS_PREFIX = "docs/observations/"
@@ -1398,21 +1565,23 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
                     f"  A body that quotes a string Logic ships is stating a fact about Logic. "
                     f"Cite it."))])
             return Diagnosis(SATISFIED)
-        # WHICH of the two is wrong decides what to say. A declaration typed into a code fence or
+        # WHICH of the two is wrong decides what to say. A declaration typed into a code block or
         # an HTML comment is a contributor who followed the instruction and got the rendering
         # wrong, and telling them "no opt-out" sends them to write a sentence they already wrote.
         # `_visible()` is NOT relaxed to accept it -- three earlier bypasses came out of that -- so
         # the repair is to name the place it is hiding.
         if NO_FACT_OPT_OUT in body:
             return Diagnosis(ACTIONABLE, [(HIDDEN_DECLARATION, (
-                f"{label}: the sentence {NO_FACT_OPT_OUT!r} is in this text, but only inside a "
-                f"code block or an\n"
-                f"  HTML comment, and those are deliberately not read -- a declaration that "
-                f"renders as an example\n"
-                f"  is not a declaration. A fence of backticks or tildes, closed or not, and text "
-                f"indented four\n"
-                f"  columns after a blank line are code blocks. Move it into ordinary visible "
-                f"prose, with the reason.")
+                f"{label}: the sentence {NO_FACT_OPT_OUT!r} is in this text, but only where a "
+                f"reader is not shown\n"
+                f"  it as prose, and that is deliberately not read -- a declaration that renders "
+                f"as an example is\n"
+                f"  not a declaration. Not read: a code block (a fence of backticks or tildes, "
+                f"closed or not, also\n"
+                f"  on a list item's own line, and text indented as code), an HTML comment, a "
+                f"footnote, and a\n"
+                f"  `<pre>` with everything after it. Move it into ordinary visible prose, with "
+                f"the reason.")
             )])
         return Diagnosis(ACTIONABLE, [(MISSING_DECLARATION, (
             f"{label}: no canonical reference, and no opt-out.\n"
