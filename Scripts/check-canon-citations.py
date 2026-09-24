@@ -1018,6 +1018,15 @@ _RAW_HIDDEN = re.compile(r"<!--.*?-->|<(?:\?|!(?!--)|/(?![A-Za-z]))[^>]*(?:>|\Z)
 #: The same in Markdown text, where each has to be complete to be HTML at all.
 _INLINE_HIDDEN = re.compile(r"<!--.*?-->|<\?.*?\?>|<![A-Z][^>]*>|<!\[CDATA\[.*?\]\]>", re.S)
 _RAW_PRE = re.compile(r"<pre(?=[\s/>]|\Z)", re.I)
+#: A link reference definition, `[label]: target "title"`. GitHub takes any number of them off the
+#: start of a paragraph and shows nothing of them, whether a link uses one or not. Measured: the
+#: target and the title may each be on the next line, and a title with more text after it is no
+#: title -- on the target's line that undoes the definition, on a line of its own it leaves that
+#: line as prose.
+_LINK_DEFINITION = re.compile(
+    r""" *\[(?!\s*\])(?:[^\\\[\]]|\\.)*\]: *(?:\n *)?(?:<[^<>\n]*>|[^ \n]+)"""
+    r"""(?:(?=[ \n]) *(?:\n *)?(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?"""
+    r""" *(?:\n|\Z)""", re.S)
 
 
 def _indent(line: str) -> int:
@@ -1056,7 +1065,10 @@ def _cells(row: str) -> int:
 
 
 def _shown_blocks(text: str) -> list:
-    """The blocks of `text` a reader is shown as text, in order: [kind, lines], kind "text" or "html".
+    """The blocks of `text` a reader is shown as text, in order: [kind, lines].
+
+    The kind is "html", "table" for a table's rows and for its header with the lines above it, or
+    "text". A link definition at the start of "text" is not shown; GitHub reads none in a table.
 
     Code is left out, and so is a footnote, which GitHub drops when nothing refers to it. Quotes,
     list items and footnotes are followed as GitHub follows them, because they decide where a
@@ -1110,6 +1122,7 @@ def _shown_blocks(text: str) -> list:
                 and not _LIST_ITEM.match(rest) and not _SETEXT.match(rest)
                 and _cells(rest) == _cells(header)):
             leaf = "table"
+            shown[-1][0] = "table"
             continue
 
         interrupting = all_matched and leaf == "para"
@@ -1177,7 +1190,7 @@ def _shown_blocks(text: str) -> list:
                 leaf = ("html", end)
             start("html", rest)
             continue
-        start("text", rest)
+        start("table" if in_table else "text", rest)
         if _ATX.match(rest) or _THEMATIC.match(rest):
             leaf = None
         elif in_table:
@@ -1188,20 +1201,24 @@ def _shown_blocks(text: str) -> list:
 
 
 def _visible(body: str) -> str:
-    """The body as a reader is shown it: code blocks, `<pre>`, comments and footnotes left out.
+    """The body as a reader is shown it: code, `<pre>`, comments, footnotes and link definitions out.
 
     The opt-out sentence is a promise to a reader, and a named record is a claim to one. Text a
     reader does not see, or sees as an example, cannot carry either, and both hiding places were
     used against this check before it did this. Every doubt resolves toward hiding, because a line
     hidden wrongly costs a refusal the contributor can read and a line shown wrongly is a way past
     the check: everything after a raw `<pre>` is hidden, even one quoted in backticks, and so is
-    everything after a comment raw HTML leaves open. A link target and an HTML attribute are read
-    as text.
+    everything after a comment raw HTML leaves open, and a link definition is hidden even when a
+    link uses it. A link target written inline and an HTML attribute are read as text.
     """
     text = body.replace("\r\n", "\n").replace("\r", "\n").expandtabs(4)
     kept = []
     for kind, lines in _shown_blocks(text):
         raw, stop = "\n".join(lines), False
+        definition = _LINK_DEFINITION.match(raw) if kind == "text" else None
+        while definition:
+            raw = raw[definition.end():]
+            definition = _LINK_DEFINITION.match(raw)
         if kind == "html":
             raw = _RAW_HIDDEN.sub(" ", raw)
             # A comment raw HTML leaves open runs on until later raw HTML closes it, and this
@@ -1212,7 +1229,7 @@ def _visible(body: str) -> str:
         pre = _RAW_PRE.search(raw)
         if pre:
             raw, stop = raw[:pre.start()], True
-        if kind == "text":
+        if kind != "html":
             raw = _INLINE_HIDDEN.sub(" ", raw)
         kept.append(raw)
         if stop:
@@ -1394,8 +1411,8 @@ def _require_readable_index(ref) -> None:
 
 
 #: A record path as a body names it: in prose, in inline backticks, or as a link target. Read only
-#: from `_visible(body)` -- a record named in a code block, a `<pre>`, a comment or a footnote is
-#: an example or an aside, not a claim.
+#: from `_visible(body)` -- a record named in a code block, a `<pre>`, a comment, a footnote or a
+#: link definition is an example or an aside, not a claim.
 _RECORD_NAMED = re.compile(r"(?<![\w.-])docs/observations/[\w.-]+\.json")
 
 OBSERVATIONS_PREFIX = "docs/observations/"
@@ -1579,9 +1596,10 @@ def diagnose_text(body: str, changed_paths=None, *, require_changed: bool = Fals
                 f"  not a declaration. Not read: a code block (a fence of backticks or tildes, "
                 f"closed or not, also\n"
                 f"  on a list item's own line, and text indented as code), an HTML comment, a "
-                f"footnote, and a\n"
-                f"  `<pre>` with everything after it. Move it into ordinary visible prose, with "
-                f"the reason.")
+                f"footnote, a link\n"
+                f"  definition, and a `<pre>` with everything after it. Move it into ordinary "
+                f"visible prose, with\n"
+                f"  the reason.")
             )])
         return Diagnosis(ACTIONABLE, [(MISSING_DECLARATION, (
             f"{label}: no canonical reference, and no opt-out.\n"

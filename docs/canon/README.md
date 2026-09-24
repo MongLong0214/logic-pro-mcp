@@ -55,14 +55,17 @@ form below is what a pull request is gated on.
   (`This issue body` on an issue), and the reason. It has to be visible prose — a sentence a
   reader is shown only as code, or not at all, is deliberately not read, and the checker says so by
   name. Not read: a code block (a fence of backticks or tildes, closed or not, a list item's own line
-  included, and text GitHub indents as code), an HTML comment, a footnote, and a raw `<pre>`. The
-  check follows quotes and list items as GitHub does, and where it is unsure it hides: everything
-  after a `<pre>` is hidden, even one quoted in backticks, and so is everything after a comment an
-  HTML block leaves open. A link's target and the inside of an HTML tag are read.
+  included, and text GitHub indents as code), an HTML comment, a footnote, a link definition
+  (`[label]: target "title"`, whether a link uses it or not), and a raw `<pre>`. The check follows
+  quotes and list items as GitHub does, and where it is unsure it hides: everything after a `<pre>`
+  is hidden, even one quoted in backticks, and so is everything after a comment an HTML block
+  leaves open. The target of an inline link and the inside of an HTML tag are read.
 * A change that touches a Logic-facing path cannot use the opt-out, whatever its description says.
   The prefixes are in `LOGIC-FACING.json` and the check derives this from the files, not the words.
 * Resting on Logic's BEHAVIOUR rather than a string it ships: name, in visible prose, the
-  `docs/observations/<name>.json` record that holds the measurement. It stands in for a citation
+  `docs/observations/<name>.json` record that holds the measurement. The places the opt-out is not
+  read are not read here either, so a record named only as a link definition's target does not
+  count; write the path in the text or as an inline link. It stands in for a citation
   only when this change adds or edits it, `check-observation-records.py` accepts it, it is a
   schema 3 record declaring `canon_not_applicable` that rule 13 accepts, one of its `depends` is a
   Logic-facing file outside `docs/` that this change also edits, and the body quotes no string the
@@ -359,8 +362,9 @@ It is refused in two cases, both derived rather than declared:
   `docs/{observations,locale,canon}/`, `Scripts/livekit/`) — what a change says about itself does
   not decide whether it states a fact about Logic; what it touches does;
 - the sentence appears only where a reader is not shown it as prose: a code block, an HTML
-  comment, a footnote or a `<pre>`. Text a reader does not see, or sees as an example, cannot carry
-  a promise, and code blocks and comments were both used against this check before it looked.
+  comment, a footnote, a link definition or a `<pre>`. Text a reader does not see, or sees as an
+  example, cannot carry a promise, and code blocks and comments were both used against this check
+  before it looked.
 
 A Logic-facing change that has nothing to cite because its evidence is behaviour does not need the
 opt-out: it names the `canon_not_applicable` record it adds, under the conditions given in *If you

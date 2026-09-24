@@ -526,6 +526,23 @@ def hidden_forms(text):
         # A comment or a processing instruction inside a sentence.
         f"Evidence <!-- {text} --> below.\n",
         f"Evidence <?note {text} ?> below.\n",
+        # A link definition at the start of a paragraph, as its target or its title, whether a link
+        # uses it or not; its target or title may be on the next line and its label span two.
+        f"[record]: <{text}>\n",
+        f"Evidence below.\n\n[record]: /x \"{text}\"\n",
+        f"[record]: /x\n'{text}'\n",
+        f"[a]: /x\n[record]: /y ({text})\n",
+        f"[the\nrecord]:\n<{text}>\n",
+        f"> [record]: <{text}>  \n",
+        f"- [record]: <{text}>\n",
+        f"# Evidence\n[record]: <{text}>\n",
+        f"[used]: <{text}>\n\nEvidence: [the record][used].\n",
+        f"Evidence below.\n\n   [record]: <{text}>\n",
+        f"[re\\]cord]: <{text}>\n",
+        f'[record]: /x\u00a0y "{text}"\n',
+        f'[record]: /x "a\\" {text}"\n',
+        # A comment in a table row.
+        f"| a |\n|---|\n| <!-- {text} --> |\n",
     )
 
 
@@ -557,6 +574,25 @@ def visible_forms(text):
         f"> The record is\n    {text}\n",
         # An inline `<!--` nothing closes is text, and GitHub shows it.
         f"Evidence <!-- and the record is {text}.\n",
+        # Not link definitions: a title with more text after it, a line after the definition, one
+        # that would interrupt a paragraph, a space before the colon, a blank label, and any in a
+        # table.
+        f"[record]: /x \"t\" and the record is {text}.\n",
+        f"[record]: /x\n\"t\" and the record is {text}.\n",
+        f"[record]: /x\nThe record is {text}.\n",
+        f"Evidence:\n[record]: the record is {text}\n",
+        f"[record] : the record is {text}\n",
+        f'[ ]: /x "the record is {text}"\n',
+        f"[record]: /x \"{text}\"\n|---|\n",
+        f"| a |\n|---|\n[record]: /x \"{text}\"\n",
+        # Nor a label holding a bracket, a title not set apart from its target, a parenthesized
+        # title holding a parenthesis, or an angle-bracketed target running over a line or
+        # holding a `<`.
+        f'[re[cord]: /x "the record is {text}"\n',
+        f'[record]: x"t and the record is {text}"\n',
+        f"[record]: /x (a(the record is {text})\n",
+        f"[record]: <x\nthe record is {text}, see>\n",
+        f'[record]: <x <y>\n"the record is {text}"\n',
     )
 
 
