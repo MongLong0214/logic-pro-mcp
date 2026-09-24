@@ -995,10 +995,10 @@ def _without_code_blocks(text: str) -> str:
     Only closed triple-backtick fences used to be removed, so a record named in a `~~~` fence, an
     unclosed fence or an indented block counted as named in prose (review of #975). Every doubt
     resolves toward hiding, because a line hidden wrongly costs a refusal the contributor can read
-    and a line shown wrongly is a way past the check. By CommonMark's rules, not by a rendering
-    measured here, two places are hidden that GitHub shows as prose: text indented four or more
-    columns after a blank line inside a list item, and text after a fence that GitHub closes where
-    its list item or quote ends.
+    and a line shown wrongly is a way past the check. Three places are hidden that GitHub shows as
+    prose, measured through its renderer (`gh api markdown`, gfm) on 2026-09-24: text indented four
+    or more columns after a blank line inside a list item, and text after a fence that GitHub
+    closes where its list item or its quote ends.
     """
     kept = []
     fence = None

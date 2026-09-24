@@ -577,6 +577,21 @@ class ABehaviouralRecordInPlaceOfACitation(unittest.TestCase):
                 self.assertEqual(status, 0)
                 self.assertEqual(result["records"], [BEHAVIOURAL_RECORD])
 
+    def test_three_forms_github_shows_as_prose_are_hidden_on_the_side_of_refusing(self):
+        """Measured through GitHub's renderer on 2026-09-24: each renders the record as prose.
+
+        Pinned so that a change which starts reading them does so on purpose. The parser leaves
+        them hidden because following a list item's or a quote's extent is more states that could
+        show code as prose, and a hidden line costs only a refusal the contributor can read.
+        """
+        for body in (f"- evidence\n\n    the record is {BEHAVIOURAL_RECORD}\n",
+                     f"- item\n  ```\n  code\nThe record is {BEHAVIOURAL_RECORD}.\n",
+                     f"> ```\n> code\nThe record is {BEHAVIOURAL_RECORD}.\n"):
+            with self.subTest(body):
+                status, result = self.diagnose(body, [BEHAVIOURAL_RECORD, BEHAVIOURAL_DEPENDS])
+                self.assertEqual(status, 1)
+                self.assertEqual(codes(json.dumps(result)), ["logic_facing_opt_out"])
+
     def test_a_record_that_cites_instead_of_declaring_is_refused(self):
         status, result = self.diagnose(f"Evidence: {CITING_RECORD}.\n",
                                        [CITING_RECORD, BEHAVIOURAL_DEPENDS])
