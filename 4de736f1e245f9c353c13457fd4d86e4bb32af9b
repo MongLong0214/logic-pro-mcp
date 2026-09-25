@@ -1,0 +1,7 @@
+Limit: these two tests still run only on a maintainer's machine: ci.yml's test job and release.yml have no release binary when swift test runs, and release-stable.sh runs them against whatever release binary the tree last built (#985)
+Limit: which mutating operations pass on a write cycle moves between runs (mixer.set_volume in one, mixer.set_pan in the next); the assertion is non-empty, not a fixed set
+Ruled-out: widening PromotionGate to credit .verifiedWriteCycle in this fix | it changes what a release may promote on and what R-SEM counts; filed as #984 for a #373 decision
+Ruled-out: reordering release-stable.sh to build release before swift test | every release would then require a live, permissioned Logic on the cutting machine, a policy change; filed as #985
+Warn: the 'fixtures drive a fake transport' exit-code comment is copied at 12 sites; a fixture that drives the real binary must derive its expected exit code from the attestation, not copy exitCode == 1
+Record-Id: r-3a771966aa7e
+Provenance: inherited ac5870262fc0a5cba422f0a78c46a35baea47b54
