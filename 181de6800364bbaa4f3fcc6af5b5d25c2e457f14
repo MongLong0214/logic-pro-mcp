@@ -1,0 +1,17 @@
+Limit: the ten-locale census the #972 row cites is a table in #976's conversation, not a committed record; it ran on a5225d86, whose product sources equal this head
+Ruled-out: committing the census under docs/observations | it measures the two readers #977 already recorded live in all ten locales, and a new record would repeat that result with its own host, receipts and ledger entry
+Record-Id: r-659970064c03
+Provenance: inherited 3d37ac745dd5a1008be83297358bb96c0abfd0f3
+
+Limit: the failure branches cannot be induced live; they rest on failures injected through both children seams plus seven mutants, and the ten-language live run shows only that healthy trees still read whole; AUv3 remote views are not measured
+Ruled-out: dropping the stem direction of slotNameMatches (R-972-02) | the contributor's measured consumer passes SN8K against the truncated slot label SN8KExtens; the match stays and is documented as a candidate, with the window identifier as the identity
+Ruled-out: making getChildren-based stripEnumeration and audioPluginInsertSlots status-preserving here | that widens shared readers while fixing a blocker; the census uses children: overloads and the shared gap is #982
+Warn: Strip.name is nil on every strip read on Logic 12.3 (6674) in all ten languages; a join on strip name holds only where names were measured (12.3.1)
+Record-Id: r-dc1120f1186c
+Provenance: inherited add3fb8c0f7444e9d5ed2949f25574f8782adb8c
+
+Limit: only insert-slot classification runs under the noting runtime; the live run in ten languages shows only that healthy trees note no failure, and the failure paths rest on fixtures and five mutants
+Ruled-out: re-checking each classifier read (role, children, grandchild text, frame) inside the facade | it restates the classifier's logic in a second place; a runtime that notes failures under the classifier sees every read it makes
+Warn: under the noting runtime the classifier sees the status-preserving seam's answer; a test runtime whose two seams disagree changes what it classifies, so a fixture failing a read must fail it through both seams
+Record-Id: r-38ab4644a568
+Provenance: inherited 7b5ef9fe05b06d5e9bacd2537c0baf1409c5bcff
