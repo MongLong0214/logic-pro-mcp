@@ -1,0 +1,28 @@
+Limit: Swift containsNormalized folds with lowercased(), narrower than casefold; no ledger label uses contains today, so a future one would be credited more than Swift matches
+Limit: folded_entries is still not count-verified; predates this change and is reported, not widened
+Ruled-out: folding case into fold_for_near_miss or normalize | one set would answer two questions and forgive decoration or spelling no LabelSet forgives
+Ruled-out: str.lower() as the offline fold | disagrees with Swift caseInsensitiveCompare on straße, final sigma and ligatures; casefold agrees
+Warn: an absence-backed check must say which fold its question needs: exact for bytes, folded for near misses, casefold for LabelSet matching; the wrong one is silent
+Record-Id: r-ba7ac27052d2
+Provenance: inherited c8309dda3b9a166fbf1f9c689860e25838d9ef38
+
+Limit: a string added to the ledger after the last build reads as unshipped until the next build on a machine with Logic, even one Apple ships byte for byte
+Limit: other guards still read the 32-bit absence set for presence; predates this change and is reported, not changed
+Ruled-out: a case-folded 32-bit absence set read for presence | a prefix collision credits a string that differs by spelling; the reviewer reproduced one
+Ruled-out: keeping the exact absence-set path beside the safe lookup | the same collision passes through it, so the reproduction would still credit
+Warn: a presence question goes to a pinned full digest (index, value index or ledger index), never to an absence set
+Record-Id: r-abdb57404929
+Provenance: inherited 39d062b77f5f9a068c206a3b3e897b403aff6b4b
+
+Limit: five cells moved back to unmeasured on a corpus finding (Logic no-break Pro in de/es/fr/ko, Audio no-break Units in es); what the running Logic displays there was not read
+Ruled-out: storing the full SHA-256 of each folded string in the ledger | still a digest, and the strings are already committed in ui-labels.json, so the row can be the string and the read a string comparison
+Ruled-out: keeping normalize inside fold_case to mirror the trim of the non-strict match modes | exact_strict trims nothing and no mode trims an interior no-break space, so that credit cannot be made for every mode the ledger certifies
+Warn: fold_case is not normalize; digest and short_digest normalize their input, so routing a ledger row through either restores the no-break-space credit
+Record-Id: r-f3ce8e8e5a13
+Provenance: inherited c40ea14d6888a5aeb3aa83d4c71b6191f013f28a
+
+Limit: like the absence counts, this raises a ledger forgery from two consistent edits to three; nothing offline makes it impossible
+Ruled-out: a single total row count for the ledger | an added row in one locale and a removed one in another cancel, and the locale is where a credit lands
+Ruled-out: refusing ledger growth against the base like the ratchets | the ledger grows legitimately when a label is added; the count is the third consistent edit a forgery needs
+Record-Id: r-224fe66dad67
+Provenance: inherited 062b542573fadc60bdc875987b015aae7010e152
