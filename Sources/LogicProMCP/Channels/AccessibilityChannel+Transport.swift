@@ -979,7 +979,8 @@ extension AccessibilityChannel {
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
         executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
         reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil,
-        createDialogIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger? = DialogIssuanceLedger.create
+        createDialogIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger? = DialogIssuanceLedger.create,
+        dialogExecutionLockPath: String = AccessibilityChannel.goToPositionDialogExecutionLockPath
     ) async -> ChannelResult {
         var requestedPosition: String? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -1049,7 +1050,7 @@ extension AccessibilityChannel {
         // `executeDialogScript` is the unit-test-only protocol seam. Production callers use the
         // runtime executor and therefore always take the cross-process ownership lock.
         let dialogExecutionLock = executeDialogScript == nil
-            ? GoToPositionDialogExecutionLock.acquire()
+            ? GoToPositionDialogExecutionLock.acquire(path: dialogExecutionLockPath)
             : nil
         guard executeDialogScript != nil || dialogExecutionLock != nil else {
             return .error(HonestContract.encodeStateC(
@@ -1232,6 +1233,14 @@ extension AccessibilityChannel {
         return text
     }
 
+    /// Every server process of this user shares this one file; that sharing is what makes the lock
+    /// cross-process. A test that reaches the lock passes its own path instead, because any holder of
+    /// this file -- another checkout's test run, or a running server -- refuses the test's call.
+    static var goToPositionDialogExecutionLockPath: String {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("logic-pro-mcp-goto-position-dialog.lock").path
+    }
+
     /// Cross-process ownership for the absence → leaf → appearance transition. The advisory POSIX
     /// lock cannot be re-entered by a second MCP server process and the kernel releases it if the
     /// owner exits, so a dead server cannot leave a stale dialog-ownership claim behind.
@@ -1242,9 +1251,7 @@ extension AccessibilityChannel {
             self.fileDescriptor = fileDescriptor
         }
 
-        static func acquire() -> GoToPositionDialogExecutionLock? {
-            let path = FileManager.default.temporaryDirectory
-                .appendingPathComponent("logic-pro-mcp-goto-position-dialog.lock").path
+        static func acquire(path: String) -> GoToPositionDialogExecutionLock? {
             let descriptor = open(path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
             guard descriptor >= 0 else { return nil }
             guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
