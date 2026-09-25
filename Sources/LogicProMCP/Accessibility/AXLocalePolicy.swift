@@ -1635,8 +1635,8 @@ enum AXLocalePolicy {
         canonical: "control bar",
         variants: ["컨트롤 막대", "コントロールバー", "Steuerungsleiste", "Barra de controles", "Barre des commandes", "Barra di controllo", "Barra de Controle", "控制条", "控制列"],
         rationale: "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Control%20Bar%23acc#value"
+            + " Extended on 2026-09-16 to every locale Logic ships from the `Control Bar#acc` row. Re-derived on 2026-09-25 (#979) from `StrTabBtnLabel|||Control Bar`, because a Portuguese Logic read live describes the control bar as `Barra de Controles`, the value of that row, where `Control Bar#acc` says `Barra de Controle`. Portuguese carries no member of its own: `Barra de Controles` equals the Spanish member ignoring case, which is how this label is matched, and a second spelling differing only by case is what check-probe-product-drift.py refuses. `Barra de Controle`, the Portuguese value of `Control Bar#acc`, stays a member: it matched before the re-derivation, which moved a citation and was not to narrow what matches, and no reading shows the string cannot appear. Read live in all ten locales, the control bar's description equals this row in each (docs/observations/2026-09-25-979-<locale>-main-window-areas-by-row.json). Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTabBtnLabel%7C%7C%7CControl%20Bar#value"
     )
 
     static let barSliderLabel = LabelSet(
@@ -1999,8 +1999,8 @@ enum AXLocalePolicy {
         canonical: "inspector",
         variants: ["인스펙터", "インスペクタ", "Informationen", "Inspecteur", "Inspetor", "检查器", "檢閱器"],
         rationale: "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Inspector%23acc#value"
+            + " Extended on 2026-09-16 to every locale Logic ships from the `Inspector#acc` row. Re-derived on 2026-09-25 (#979) from `StrViewBtns|||Inspector`: read live in all ten locales, the Inspector's description equals this row in each, while `Inspector#acc` is lowercase in Italian (`inspector` against the `Inspector` Logic shows). The plain `Inspector` row carries the same ten values; it is not cited because the plain-key namespace was refuted for these areas in the same run, by a German Library described `Bibliothek` where the plain `Library` row says `Mediathek` (docs/observations/2026-09-25-979-<locale>-main-window-areas-by-row.json). Matching ignores case, so no Italian match changes. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrViewBtns%7C%7C%7CInspector#value"
     )
 
     /// Mixer container id/desc/title exact match (normalized lowercase equality).
@@ -2008,8 +2008,8 @@ enum AXLocalePolicy {
         canonical: "mixer",
         variants: ["믹서", "ミキサー", "Mezclador", "Table de mixage", "混音器"],
         rationale: "Identifies the mixer container by exact normalized name; read-only classifier."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Mixer%23acc#value"
+            + " Extended on 2026-09-16 to every locale Logic ships from the `Mixer#acc` row. Re-derived on 2026-09-25 (#979) from `StrTabBtnLabel|||Mixer`: read live in all ten locales, the Mixer's description equals this row in each, while `Mixer#acc` is lowercase in Italian (`mixer` against the `Mixer` Logic shows). The plain `Mixer` and `StrViewBtns|||Mixer` rows carry the same ten values, so the Mixer's own readings cannot choose between the three; the namespace chooses. In the same run every main-window area with a `StrTabBtnLabel` row (Tracks, Control Bar, Library, Mixer) equalled that row in all ten locales, the `#acc` namespace was refuted by spelling in Portuguese (`Barra de Controles`, not `Barra de Controle`), and the plain-key namespace in German (`Bibliothek`, not `Mediathek`) (docs/observations/2026-09-25-979-<locale>-main-window-areas-by-row.json). Matching ignores case, so no Italian match changes. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/StrTabBtnLabel%7C%7C%7CMixer#value"
     )
 
     /// Slider type hints (mutually exclusive groups in `sliderText`).
