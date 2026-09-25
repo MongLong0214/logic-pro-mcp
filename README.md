@@ -231,14 +231,14 @@ targets: [
 import LogicProMCP
 ```
 
-**`v3.17.0` is the floor, and a lower one does not work.** Every tag up to and including `v3.16.0` predates this product, and `from:` resolves the highest matching tag — so `from: "3.16.0"` resolves `v3.16.0` itself and fails. Measured 2026-09-22 with a consumer package written exactly that way:
+**Declare `from: "3.17.0"` — it is the floor that guarantees the product.** Every tag up to and including `v3.16.0` predates it, and `from:` accepts anything up to the next major, so a lower floor can resolve, or stay pinned at, a tag without it. Before `v3.17.0` was tagged, `from: "3.16.0"` resolved `v3.16.0` itself and failed — measured 2026-09-22 with a consumer package written exactly that way:
 
 ```text
 error: 'consumer': product 'LogicProMCPKit' required by package 'consumer' target 'Consumer'
 not found in package 'logic-pro-mcp'.
 ```
 
-Before `v3.17.0` is published, `branch: "main"` is the form that resolves; after it, the version form above is preferred.
+After the tag, a fresh resolve of `from: "3.16.0"` takes the newest matching 3.x tag, but a `Package.resolved` already pinned to `3.16.0` keeps it until `swift package update`. Before `v3.17.0` is published, `branch: "main"` is the form that resolves; after it, the version form above is preferred.
 
 The product name is `LogicProMCPKit`; the module you import is `LogicProMCP`. A library product cannot share the executable's name: SwiftPM accepts such a manifest but reports "ignoring duplicate product" and drops the library.
 

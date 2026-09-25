@@ -77,7 +77,9 @@ Where a change stated a limit, the limit is carried into the entry rather than d
   behavior and no access level changed, no source file is touched, and the executable is unchanged;
   the product is named `LogicProMCPKit` because a library sharing the executable's name is reported
   by SwiftPM as "ignoring duplicate product" and silently dropped. **v3.17.0 is the first release
-  carrying it** — `from: "3.16.0"` resolves a package that does not contain it. The reachable public
+  carrying it**, so declare `from: "3.17.0"`: a lower floor can resolve, or stay pinned at, a tag
+  without the product — before publication `from: "3.16.0"` resolved v3.16.0 and failed (measured
+  2026-09-22). The reachable public
   surface is `PluginInspector` and its data types plus the Library inventory data model; the AX
   readers, channels, state cache and dispatchers stay internal. (#944)
 - **`AXPluginInstanceIdentity.census(pluginName:identifierPrefix:)` — a read-only census for a host
@@ -164,7 +166,8 @@ Where a change stated a limit, the limit is carried into the entry rather than d
   a chance. It types Apple's own spelling now, from a generated projection resolved offline against
   the pinned corpus: each value is the label whose case-folded digest equals the digest Apple's row
   is pinned to in that locale. A host reporting a bare `zh` types the English canonical rather than
-  being answered Simplified without being told. (#924)
+  being answered Simplified without being told. Ten locales by derivation: the setup has been run
+  live only on a Korean Logic. (#924)
 - **The plug-in window's Open button is a toggle**, and `insert_plugin` leaves that window open — so
   pressing Open after an insert **closes** it, and the run reported "not found", the same sentence a
   missing slot, a wrong label and an unreadable strip all produce. (#852)
@@ -172,7 +175,9 @@ Where a change stated a limit, the limit is carried into the entry rather than d
   Each arrived the day somebody hit its absence — the Japanese one after a region returned
   `startBar: -1, endBar: -1`. One derivation from Apple's own row now covers all ten, including
   German's number-inflected unit (`1 Takt ` beside `2 Takte `), and the near-twin chord-group
-  sentence is refused by all ten rather than matched by accident. (#909)
+  sentence is refused by all ten rather than matched by accident. Four of the ten have a live
+  reading; the other six are built from Apple's template and checked against that template, which
+  proves the transform is total, not that a Spanish Logic renders the sentence. (#909)
 - **`logic_plugins.set_eq_band_verified` failed at the finish line.** Every failure stopped exactly
   one step past the value it had reached — `-5.1 dB` for a requested `-5.0` — because the target was
   rendered `-5` while Logic always shows the decimal, and the reached test was exact string match.
@@ -186,9 +191,13 @@ Where a change stated a limit, the limit is carried into the entry rather than d
   descriptor is kept apart from a slow reader. (#683)
 - **A qualification subprocess read could take the whole process down.**
   `FileHandle.availableData` raises an Objective-C exception that a Swift `catch` cannot see, so it
-  unwound past the handler, past `defer`, and out of the process. Four readers move to
-  `read(upToCount:)`; two of them sat inside a `readabilityHandler` where the same exception skipped
-  `group.leave()` and would have hung rather than crashed. (#843)
+  unwound past the handler, past `defer`, and out of the process. The qualification transport's two
+  readers now use POSIX `read(2)`, which returns what is available and reports failure as a return
+  value; `read(upToCount:)` was tried first and turned a 27-second green run into a 45-second
+  `timeout:handshake`, because it waits for the count and a handshake frame never fills it. Two more
+  drains in `BoundedProcessRunner` sat inside a `readabilityHandler`, where the same exception skipped
+  `group.leave()` and would have hung rather than crashed; they move to `read(upToCount:)` and treat a
+  failed read as end of file, so the group is always released. (#843)
 - **Plug-in and Mixer operations failed on a Logic running in Spanish, French, Italian or
   Chinese.** Three shared locators matched Logic in fewer than ten languages. With a plug-in editor
   open, `project.save` refused with `unsupported_state` as if the editor were a blocking dialog;
@@ -200,15 +209,19 @@ Where a change stated a limit, the limit is carried into the entry rather than d
 
 ### Localization
 
-- Two label sets that reached two languages now reach ten, and both had been failing to match for
-  their own reason: one carried a Korean sentence plus the English word `read`, leaving Korean
-  itself uncovered, and the other carried an ellipsis Apple ships in no locale for that string.
-  (#892)
+- Two label sets that reached two languages now carry Apple's value in all ten, and both had been
+  failing to match for their own reason: one carried a Korean sentence plus the English word `read`,
+  leaving Korean itself uncovered, and the other carried an ellipsis Apple ships in no locale for that
+  string. The second, Navigate > Set Locators, still matches by exact menu-item name, and whether the
+  menu renders an ellipsis in the eight newly covered languages has not been read live — if it does,
+  those eight still miss. (#892)
 - Three Event List columns are derived from Apple's own rows rather than hand-written — `M` is `M`
   in nine locales and `静音` in zh_CN; `Position` is `ポジション` in ja, not `位置`. No nib in
   Logic.framework mentions the Event List (159 scanned), so the columns are titled in code from
-  Logic's own `Localizable.strings`, which is what makes the row identifiable offline. 137 of 195
-  label sets now name an Apple row, each proved per locale. (#939)
+  Logic's own `Localizable.strings`, which is what makes the row identifiable offline. At this
+  release 139 of 195 label sets name an Apple row and carry that row's values in every locale the
+  corpus holds — checked offline against Apple's shipped strings, not read off a running Logic.
+  (#939)
 - A Latin-script Logic label in a shipped Python helper was invisible to the guard that reads them:
   it matched CJK characters, and five of the ten languages Logic ships write their interface in
   Latin script, so `Bouncen` or `Abbrechen` passed. The question is now whether the literal is a
