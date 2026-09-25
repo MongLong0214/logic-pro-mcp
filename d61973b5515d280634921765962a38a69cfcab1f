@@ -1,0 +1,31 @@
+Limit: Nothing in this commit re-measures the behaviour the release notes describe. Each entry is read out of the merged history and out of the commit body of the change it names; the measurements it quotes were taken on the dates those records carry, and this commit carries them forward rather than repeating them.
+Limit: That `from: "3.17.0"` resolves the LogicProMCPKit product is NOT observed and cannot be until the tag exists. What is observed, and stays in the README verbatim, is the counterexample: a consumer written `from: "3.16.0"` fails with `product 'LogicProMCPKit' ... not found in package 'logic-pro-mcp'`.
+Limit: `Formula/logic-pro-mcp.rb` names 3.17.0 and still carries v3.16.0's sha256, because v3.17.0 is not published and there is no hash to copy. `ci-verify-formula-sha.sh` answers NOT COMPARED for this state rather than passing it; the hash follows the published release in its own commit, as it did for #775.
+Ruled-out: honouring e51439fc's `Ruled-out: writing from: "3.17.0"` and leaving the README's LogicProMCPKit snippet on `branch: "main"` | that record's premise was that no version had been committed to, and this commit commits to 3.17.0 in ServerConfig, the Formula, manifest.json, server.json and the changelog heading. The snippet is now on the same footing as the five other version references here, and the branch form would have left the README calling v3.17.0 the published stable release in one paragraph and pointing library consumers at main in the next.
+Ruled-out: renaming the changelog heading on its own and bumping the packaging artefacts in a follow-up | a dated release heading with no tag behind it claims a release that did not happen, and VersionConsistencyTests refuses exactly that, so the branch would have failed rather than the claim landing
+Ruled-out: publishing the tag first and letting the version references follow it | release.yml builds the artifact from the tag, so a tag pushed ahead of the bump would publish a binary whose serverVersion says 3.16.0 under a v3.17.0 release, and release-stable.sh refuses to tag a tree whose HEAD is not origin/main
+Warn: `server.json` is the file v3.16.0's cut did not touch, which is why check-registry-metadata-matches-the-release.py exists: v3.16.0 shipped with both `.version` and `distribution.release` still saying 3.15.0 and nothing noticed. Write it with `Scripts/sync-server-json-version.py <version>`, which writes both fields or neither, and let the guard confirm it names the Formula's version.
+Warn: No tool, resource or template moves in this release: manifest.json stays at 10 tools / 18 resources / 12 templates, and `system.setup_control_surface` is a new OPERATION under an existing tool. A cut that changes those counts has more files to move than these thirteen.
+Blast: system
+Undo: permanent
+Certainty: firm
+Record-Id: r-317cut
+Provenance: inherited b092790c4c13d3606d75dad2a1a9934cd44c720b
+
+Limit: the sweep read every Limit trailer of the commits these notes cite, not their body prose; thirteen of the cited issues' commits carry no Limit trailer, so those entries rest on whatever body prose was read
+Ruled-out: amending the release cut commit | the next review round diffs from the round-1 head and checks ancestry, which a force-push breaks
+Ruled-out: rewording the README's Published stable lines before the tag | VersionConsistencyTests pins those exact strings and the v3.16.0 cut (e83ccf72) wrote them the same way; they are early only for the release script's run between merge and tag
+Warn: a release-note entry that summarises a commit drops its Limit trailers; before an entry says ten languages, read the Limit lines of the commit it names -- #892, #909 and #924 read as ten where their commits said derived or unread, and #939 quoted a count that had moved
+Record-Id: r-3aafa3c74e53
+Provenance: inherited fc5bdf1e21b1fec7667031771710632c387c6833
+
+Limit: docs/API.md still names v3.15.0 as the published stable release in a summary paragraph no test reads; it is routed to its own issue rather than rewritten in this cut
+Ruled-out: keeping Published stable and flipping it after the tag | the tagged tree is what ships in the tarball, and a later commit cannot change what that tree says
+Warn: a test that pins a version by pinning an availability sentence forces every cut to claim publication before its tag and Homebrew before its hash; pin the version, not the claim
+Record-Id: r-2bb242af4f5e
+Provenance: inherited e97d573801356f2a4281dd6213429f864c76054e
+
+Limit: the tag-pinned installer URLs still 404 between the merge and the tag; that window is the release script's test run on main, and no tree can carry a URL to its own tag that already resolves
+Ruled-out: pointing the installer at the previous tag until the release exists | the tagged tree ships in the tarball and would tell every v3.17.0 user to install v3.16.0
+Record-Id: r-d91b6198e26a
+Provenance: inherited 508a3c4684ed5bb350181b4fd066b7f590b1ff1e
