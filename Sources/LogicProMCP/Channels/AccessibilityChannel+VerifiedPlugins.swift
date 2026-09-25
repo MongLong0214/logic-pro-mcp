@@ -325,8 +325,32 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// The actions the menu-click reveal takes outside its AX runtime. Production by default. A
+    /// test injects all four, so the reveal's branches after an actuation (#982) run without
+    /// activating, keying or raising the running Logic.
+    struct MenuClickActuators: Sendable {
+        let activateLogic: @Sendable () -> Bool
+        let postKeyEvent: @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool
+        let pressEscape: @Sendable () -> Void
+        let raiseMixerWindow: @Sendable () -> Bool
+
+        static let production = Self(
+            activateLogic: { ProcessUtils.Runtime.production.activateLogicPro() },
+            postKeyEvent: { CGEventChannel.Runtime.production.postKeyEvent($0, $1, $2) },
+            pressEscape: { AXMouseHelper.pressEscape() },
+            raiseMixerWindow: { forceMixerWindowFront() }
+        )
+    }
+
     static func ensureMixerAreaVisibleForInventory(
         runtime: AXLogicProElements.Runtime
+    ) async -> (mixer: AXUIElement?, result: MixerRevealResult) {
+        await ensureMixerAreaVisibleForInventory(runtime: runtime, actuators: .production)
+    }
+
+    static func ensureMixerAreaVisibleForInventory(
+        runtime: AXLogicProElements.Runtime,
+        actuators: MenuClickActuators
     ) async -> (mixer: AXUIElement?, result: MixerRevealResult) {
         if let found = mixerWithoutReveal(runtime: runtime) {
             return found
@@ -355,14 +379,15 @@ extension AccessibilityChannel {
                 mixerChildrenUnread: true
             ))
         }
-        _ = ProcessUtils.Runtime.production.activateLogicPro()
+        _ = actuators.activateLogic()
 
         // Strategy 1 (preferred): AX menu-click, with retry.
         let menuAttempt = await clickTopLevelMenuItemViaAXMenuClick(
             candidates: [AXLocalePolicy.showMixerMenuPath],
             runtime: runtime,
             maxEnabledRetries: 2,
-            focusBetweenAttempts: false
+            focusBetweenAttempts: false,
+            actuators: actuators
         )
         var itemFound = menuAttempt.itemFound
         var menuClicked = menuAttempt.clicked
@@ -391,7 +416,7 @@ extension AccessibilityChannel {
         // Strategy 2 (fallback): cgevent key-7 (View > Show Mixer default key).
         var keySent = false
         if let pid = runtime.logicProPID(),
-           CGEventChannel.Runtime.production.postKeyEvent(7, [], pid) {
+           actuators.postKeyEvent(7, [], pid) {
             keySent = true
             strategies.append("cgevent_x")
             let polled = await pollMixerAreaVisible(runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs)
@@ -421,7 +446,8 @@ extension AccessibilityChannel {
             candidates: [AXLocalePolicy.showMixerMenuPath],
             runtime: runtime,
             maxEnabledRetries: 1,
-            focusBetweenAttempts: true
+            focusBetweenAttempts: true,
+            actuators: actuators
         )
         itemFound = itemFound || menuRetry.itemFound
         if menuRetry.clicked {
@@ -4019,11 +4045,12 @@ extension AccessibilityChannel {
         candidates: [AXLocalePolicy.MenuPath],
         runtime: AXLogicProElements.Runtime,
         maxEnabledRetries: Int,
-        focusBetweenAttempts: Bool
+        focusBetweenAttempts: Bool,
+        actuators: MenuClickActuators = .production
     ) async -> (itemFound: Bool, clicked: Bool, enabledRetries: Int) {
         var itemFound = false
         for attempt in 0..<maxEnabledRetries {
-            _ = ProcessUtils.Runtime.production.activateLogicPro()
+            _ = actuators.activateLogic()
             for candidate in candidates {
                 guard let barItem = menuBarItem(matching: candidate.bar, runtime: runtime) else {
                     continue
@@ -4040,14 +4067,14 @@ extension AccessibilityChannel {
                     under: barItem,
                     runtime: runtime.ax
                 ) else {
-                    AXMouseHelper.pressEscape()
+                    actuators.pressEscape()
                     continue
                 }
                 itemFound = true
 
                 if let enabled: Bool = AXHelpers.getAttribute(item, kAXEnabledAttribute, runtime: runtime.ax),
                    enabled == false {
-                    AXMouseHelper.pressEscape()
+                    actuators.pressEscape()
                     continue
                 }
 
@@ -4061,11 +4088,11 @@ extension AccessibilityChannel {
                 if AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
                     return (true, true, attempt)
                 }
-                AXMouseHelper.pressEscape()
+                actuators.pressEscape()
             }
 
             if focusBetweenAttempts {
-                _ = forceMixerWindowFront()
+                _ = actuators.raiseMixerWindow()
             }
             try? await Task.sleep(for: .milliseconds(250))
         }

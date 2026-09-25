@@ -60,8 +60,9 @@ extension Issue982UnreadChildrenTests {
 
     // MARK: - get_inventory does not reveal over an unread Mixer
 
-    /// The inventory's reveal up to the point where it would actuate. Past it, a test would press
-    /// View > Show Mixer or post key 7 to the running Logic.
+    /// The inventory's reveal up to the point where it would actuate. Past it, the production reveal
+    /// would press View > Show Mixer or post key 7 to the running Logic; a test that goes further
+    /// injects `MenuClickActuators`, as the tests below do.
     static let revealWithoutActuating: AccessibilityChannel.MixerRevealAction = { runtime in
         if let found = AccessibilityChannel.mixerWithoutReveal(runtime: runtime) { return found }
         Issue.record("the reveal would actuate")
@@ -122,6 +123,96 @@ extension Issue982UnreadChildrenTests {
         let polled = await AccessibilityChannel.pollMixerAreaVisible(runtime: runtime, timeoutMs: 2_500)
         #expect(polled.childrenUnread, "\(polled)")
         #expect(failingReads.value == readsPerLookup, "the poll looked more than once")
+    }
+
+    // MARK: - The reveal after it has actuated
+
+    /// What the reveal would have done to the running Logic. Nothing here reaches it.
+    final class RecordedActuations: @unchecked Sendable {
+        var activations = 0
+        var keys: [(key: CGKeyCode, pid: pid_t)] = []
+        /// Activations, Escapes and window raises after key 7. The menu retry that follows the
+        /// key starts with an activation, so a nonzero count means the reveal went on.
+        var actuationsAfterKey = 0
+    }
+
+    static func actuators(
+        _ recorded: RecordedActuations, onKey: @escaping @Sendable () -> Void
+    ) -> AccessibilityChannel.MenuClickActuators {
+        AccessibilityChannel.MenuClickActuators(
+            activateLogic: {
+                if !recorded.keys.isEmpty { recorded.actuationsAfterKey += 1 }
+                recorded.activations += 1
+                return true
+            },
+            postKeyEvent: { key, _, pid in
+                recorded.keys.append((key, pid))
+                onKey()
+                return true
+            },
+            pressEscape: { if !recorded.keys.isEmpty { recorded.actuationsAfterKey += 1 } },
+            raiseMixerWindow: {
+                if !recorded.keys.isEmpty { recorded.actuationsAfterKey += 1 }
+                return true
+            }
+        )
+    }
+
+    /// The Mixer is not showing, and key 7 brings it up with children that do not read. The fixture
+    /// has no menu bar, so the menu strategy finds nothing and the key is what reveals it.
+    static func revealByKey(_ unread: UnreadMixer)
+        -> (f: Fixture, runtime: AXLogicProElements.Runtime, actuators: AccessibilityChannel.MenuClickActuators,
+            recorded: RecordedActuations)
+    {
+        let (f, failing) = unread.fixture()
+        let builder = f.builder, window = f.window, mixer = f.mixerPath[0]
+        let inspector = builder.element(9850)
+        builder.setChildren(window, [inspector])
+        let recorded = RecordedActuations()
+        let actuators = Self.actuators(recorded) { builder.setChildren(window, [inspector, mixer]) }
+        return (f, Self.runtime(f, failing: failing), actuators, recorded)
+    }
+
+    /// After an actuation, the reveal returns on an unread Mixer and reports what it did. It does
+    /// not go on to the menu retry, which could toggle the Mixer closed.
+    @Test(arguments: unidentified)
+    func anUnreadMixerAfterTheKeyEndsTheReveal(_ unread: UnreadMixer) async throws {
+        let (f, runtime, actuators, recorded) = Self.revealByKey(unread)
+        #expect(AccessibilityChannel.mixerWithoutReveal(runtime: runtime) == nil,
+                "control: no Mixer before the reveal")
+
+        let revealed = await AccessibilityChannel.ensureMixerAreaVisibleForInventory(
+            runtime: runtime, actuators: actuators)
+        #expect(revealed.mixer == nil)
+        #expect(revealed.result.mixerChildrenUnread)
+        #expect(revealed.result.attempted)
+        #expect(revealed.result.keySent)
+        #expect(!revealed.result.menuClicked)
+        #expect(!revealed.result.mixerVisible)
+        #expect(revealed.result.strategies == ["cgevent_x"])
+        #expect(recorded.keys.map(\.key) == [7])
+        #expect(recorded.keys.map(\.pid) == [4242])
+        #expect(recorded.activations > 0, "control: the actuators are the ones the reveal called")
+        #expect(recorded.actuationsAfterKey == 0, "the reveal went on after the Mixer was found unread")
+        #expect(f.builder.actionCalls.isEmpty)
+    }
+
+    /// The same reveal through `get_inventory`: the receipt says the Mixer did not read and that the
+    /// reveal ran, and names the strategy.
+    @Test(arguments: unidentified)
+    func getInventoryReportsTheRevealThatFoundAnUnreadMixer(_ unread: UnreadMixer) async throws {
+        let (_, runtime, actuators, recorded) = Self.revealByKey(unread)
+        let obj = try Self.object(await AccessibilityChannel.defaultGetPluginInventory(
+            params: ["track": "0"], runtime: runtime,
+            revealMixer: { await AccessibilityChannel.ensureMixerAreaVisibleForInventory(runtime: $0, actuators: actuators) }))
+        #expect(obj["state"] as? String == "B")
+        #expect(obj["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
+        #expect(obj["what_was_observed"] as? String == "the mixer's children did not read")
+        #expect(try #require(obj["mixer_reveal_attempted"] as? Bool))
+        #expect(obj["mixer_reveal_strategies"] as? [String] == ["cgevent_x"])
+        #expect(try #require(obj["what_was_attempted"] as? String).hasPrefix("reveal the mixer"))
+        #expect(recorded.keys.map(\.key) == [7])
+        #expect(recorded.actuationsAfterKey == 0)
     }
 
     // MARK: - Census
