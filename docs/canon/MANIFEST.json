@@ -62,6 +62,39 @@
     "ledger/casefold.tsv": "e5e03c414bd03b04fbeb9f9bd0fa25b396ffcb916f45396750c4d4cd3e55547d"
   },
   "extractor_version": 2,
+  "ledger_casefold_entries": {
+    "madsp": {
+      "-": 16
+    },
+    "nibstrings": {
+      "en": 96
+    },
+    "quickhelp": {
+      "de": 41,
+      "en": 61,
+      "es": 41,
+      "fr": 4,
+      "it": 61,
+      "ja": 56,
+      "ko": 63,
+      "pt": 61,
+      "zh_CN": 30,
+      "zh_TW": 61
+    },
+    "strings": {
+      "-": 2,
+      "de": 150,
+      "en": 175,
+      "es": 150,
+      "fr": 145,
+      "it": 149,
+      "ja": 162,
+      "ko": 169,
+      "pt": 154,
+      "zh_CN": 133,
+      "zh_TW": 133
+    }
+  },
   "logic": {
     "app": "Logic Pro",
     "build": "6674",

@@ -471,6 +471,39 @@ class TheLoadBearingComparisons(unittest.TestCase):
         finally:
             canon.LEDGER_DIR = saved
 
+    def test_an_added_ledger_row_is_refused_even_with_its_digest_rewritten(self):
+        # The third review of #991: append a German `trim` row, re-pin the file's digest, and
+        # `verify_artifacts` has nothing to say. The declared count is what still disagrees.
+        saved, canon.LEDGER_DIR = canon.LEDGER_DIR, self.tmp
+        try:
+            rows = {("t", "de", "mixer"), ("t", "de", "position"), ("t", "ko", "a-value")}
+            canon.write_ledger_casefold(rows)
+            manifest = {"artifacts": canon.artifact_digests(),
+                        "ledger_casefold_entries": canon.ledger_counts(rows)}
+            self.assertEqual(manifest["ledger_casefold_entries"], {"t": {"de": 2, "ko": 1}})
+            self.assertEqual(canon.verify_ledger_counts(manifest), [])
+            with open(canon.ledger_casefold_path(), "a", encoding="utf-8") as handle:
+                handle.write('t\tde\t"trim"\n')
+            manifest["artifacts"] = canon.artifact_digests()
+            self.assertEqual(canon.verify_artifacts(manifest), [])
+            problems = canon.verify_ledger_counts(manifest)
+            self.assertTrue(any("3 row(s) for t/de" in p and "declares 2" in p for p in problems),
+                            problems)
+            # A row in a locale nobody declared, a source nobody declared, and no block at all.
+            for declared in ({"t": {"de": 3}}, {}, None):
+                broken = dict(manifest)
+                if declared is None:
+                    del broken["ledger_casefold_entries"]
+                else:
+                    broken["ledger_casefold_entries"] = declared
+                self.assertNotEqual(canon.verify_ledger_counts(broken), [], declared)
+        finally:
+            canon.LEDGER_DIR = saved
+
+    def test_the_committed_ledger_matches_its_declared_counts(self):
+        with open(os.path.join(canon.CANON_DIR, "MANIFEST.json"), encoding="utf-8") as handle:
+            self.assertEqual(canon.verify_ledger_counts(json.load(handle)), [])
+
     def test_a_malformed_percent_escape_raises_rather_than_decoding_to_something(self):
         with self.assertRaises(canon.CanonRefError):
             canon._pct_decode("%ZZ")

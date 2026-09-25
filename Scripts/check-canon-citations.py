@@ -1958,6 +1958,7 @@ def main() -> int:
 
     failures.extend(canon.verify_artifacts(manifest))
     failures.extend(canon.verify_absence_counts(manifest))
+    failures.extend(canon.verify_ledger_counts(manifest))
     failures.extend(canon.verify_index_against_absence())
     check_build_agrees_with_the_ledger(manifest, failures)
     check_waivers_only_shrink(failures)

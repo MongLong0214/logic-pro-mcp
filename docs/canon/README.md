@@ -252,7 +252,10 @@ strings are already committed in the ledger, so nothing is disclosed, and the re
 comparison with no digest in it. `ships_up_to_case` reads it, for the ledger's coverage and for the
 observation ratchet. It forgives case and nothing else: `Mixer:` does not ship, and neither does
 `Logic Pro` where Apple ships `Logic\u00a0Pro`, because `fold_case` is not `normalize` and Foundation
-does not equate a no-break space with a space. A string added to the ledger after the last build is not in the file and reads as unshipped
+does not equate a no-break space with a space. `MANIFEST.json` declares the file's rows per source and locale
+under `ledger_casefold_entries`, and `verify_ledger_counts` refuses a row nobody declared: an added
+row is the forgery that matters for a file read for presence, and re-pinning its digest does not
+make it pass. A string added to the ledger after the last build is not in the file and reads as unshipped
 until the next build. The error is in the safe direction: coverage is understated, never invented.
 
 It REFUSES, and what makes that possible is a table rather than a judgement.

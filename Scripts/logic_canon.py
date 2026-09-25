@@ -1382,6 +1382,48 @@ def write_ledger_casefold(rows) -> int:
     return len(unique)
 
 
+def ledger_counts(rows) -> dict:
+    """Rows per source and locale, the shape `MANIFEST.json` declares them in."""
+    counts: dict = {}
+    for source, locale, _text in set(rows):
+        by_locale = counts.setdefault(source, {})
+        by_locale[locale] = by_locale.get(locale, 0) + 1
+    return {source: dict(sorted(by_locale.items())) for source, by_locale in sorted(counts.items())}
+
+
+def verify_ledger_counts(manifest: dict) -> list:
+    """The ledger index holds the rows, per source and locale, that `MANIFEST.json` declares.
+
+    It is read for PRESENCE, so the edit that matters is an ADDED row: one line makes a string
+    Apple does not ship read as `derived`. `verify_artifacts` catches that against a manifest
+    nobody also edited; the review of #991 added a German `trim` row, rewrote the pinned digest to
+    match, and both checks returned nothing. The count is the third edit that forgery needs, the
+    same trade `verify_absence_counts` makes for the absence sets, and a declaration that is
+    missing is reported rather than skipped.
+    """
+    declared = manifest.get("ledger_casefold_entries")
+    if not isinstance(declared, dict):
+        return ["docs/canon/MANIFEST.json declares no `ledger_casefold_entries`, so nothing checks "
+                "that rows were not added to ledger/casefold.tsv. Rebuild."]
+    try:
+        found = ledger_counts(load_ledger_casefold())
+    except CanonError as exc:
+        return [f"ledger/casefold.tsv: {exc}"]
+    problems = []
+    for source in sorted(set(declared) | set(found)):
+        want_by_locale = declared.get(source) or {}
+        have_by_locale = found.get(source) or {}
+        for locale in sorted(set(want_by_locale) | set(have_by_locale)):
+            want, have = want_by_locale.get(locale), have_by_locale.get(locale, 0)
+            if want == have:
+                continue
+            stated = "declares no count" if want is None else f"declares {want}"
+            problems.append(
+                f"ledger/casefold.tsv holds {have} row(s) for {source}/{locale} and MANIFEST.json "
+                f"{stated}. An added row credits a string Apple does not ship.")
+    return problems
+
+
 def ships_up_to_case(source: str, locale: str, text: str) -> bool:
     """Whether `build` found `text` in this corpus and locale, ignoring case and nothing else.
 
@@ -2132,8 +2174,9 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
     kept = set()
     if os.path.exists(ledger_casefold_path()):
         kept = {row for row in load_ledger_casefold() if row[0] not in values_by_locale_by_source}
-    write_ledger_casefold(kept | ledger_casefold_rows(raw_by_locale_by_source,
-                                                      ledger_strings(repo)))
+    ledger_rows = kept | ledger_casefold_rows(raw_by_locale_by_source, ledger_strings(repo))
+    write_ledger_casefold(ledger_rows)
+    manifest["ledger_casefold_entries"] = ledger_counts(ledger_rows)
 
     manifest["artifacts"] = artifact_digests()
     os.makedirs(CANON_DIR, exist_ok=True)
