@@ -117,6 +117,8 @@ check time   (needs nothing)   resolve a citation against what was committed
 | `MANIFEST.json` | the exact Logic build, a digest over every byte of every corpus file, and the (source, locale) list every absence proof searches. That list may only GROW |
 | `index/<source>.tsv` | key → digest, for keys something in this repository actually cites |
 | `absence/<source>.<locale>.u32` | the sorted 32-bit digest prefixes of **every** value in that corpus |
+| `absence/<source>.<locale>.folded.u32` | the same, over each value with decoration removed — the near-miss question below |
+| `ledger/casefold.tsv` | source, locale and the case-folded string itself, for each label-ledger string Apple ships up to case, found by string comparison at build time — whether a LabelSet member is shipped the way the product matches it (#981) |
 | `WITHOUT-CANON.json` | records written before the rule. May only shrink. |
 | `PROSE-NUMBERS.json` | numbers this README may state that no artifact and no record carries, and why each has none. May only shrink |
 | `NOT-A-RECORD.json` | files under `docs/observations/` that are not observation records. May only shrink |
@@ -237,6 +239,24 @@ values with decoration removed — ellipsis, colon, bullet, dash, underscore, ev
 names the string to `locate`. Case is deliberately NOT folded: runtime matching is
 case-insensitive, so `Go To Position` against Logic's `Go to Position` still matches on screen and
 is not this defect. Folding case made the check fire 33 times, of which 3 were real.
+
+Case is the opposite question, and it is not answered from an absence set. `locale_labels.py`
+asks whether Apple ships a LabelSet's member in a locale, and every match mode the ledger records
+ignores case, so asking in bytes read `mixer` as unshipped in German, where Logic ships `Mixer`
+and the product matches it (#981). That is a question about PRESENCE, and a 32-bit prefix answers
+presence wrongly on a collision: `sample8454` and `sample21529` share one, so a set holding the
+first says the second ships, and a wider digest only lowers that rate. So `build` compares every
+string in `docs/locale/ui-labels.json` with the corpus it has just extracted, after `fold_case` on
+both sides, and `ledger/casefold.tsv` holds each string it found, folded and JSON-quoted. Those
+strings are already committed in the ledger, so nothing is disclosed, and the read is a string
+comparison with no digest in it. `ships_up_to_case` reads it, for the ledger's coverage and for the
+observation ratchet. It forgives case and nothing else: `Mixer:` does not ship, and neither does
+`Logic Pro` where Apple ships `Logic\u00a0Pro`, because `fold_case` is not `normalize` and Foundation
+does not equate a no-break space with a space. `MANIFEST.json` declares the file's rows per source and locale
+under `ledger_casefold_entries`, and `verify_ledger_counts` refuses a row nobody declared: an added
+row is the forgery that matters for a file read for presence, and re-pinning its digest does not
+make it pass. A string added to the ledger after the last build is not in the file and reads as unshipped
+until the next build. The error is in the safe direction: coverage is understated, never invented.
 
 It REFUSES, and what makes that possible is a table rather than a judgement.
 `DECORATION-RULES.json` says which trailing punctuation each KIND of control may carry that Logic's

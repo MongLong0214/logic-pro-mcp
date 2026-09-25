@@ -18,6 +18,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "/Applications/Logic Pro.app"
@@ -131,6 +132,85 @@ class AbsenceSet(unittest.TestCase):
                 self.assertTrue(canon.is_absent("t", "ko", "a string nothing wrote"))
             finally:
                 canon.ABSENCE_DIR = saved
+
+    def test_the_ledger_index_forgives_case_and_nothing_else(self):
+        # #981: the question a LabelSet asks. `Straße`/`STRASSE` is Unicode case folding, which is
+        # what Foundation's `caseInsensitiveCompare` does; the colon and the dropped letter are not.
+        import tempfile
+        # The corpus is raw, as the extractor returns it. `Trim\u00a0`, `Logic\u00a0Pro` and `Pan `
+        # are spellings Logic 12.3 ships; `normalize` would fold each onto the plain-space form,
+        # and the review of #991 found two credits that rested on that fold.
+        corpus = {"t": {"de": {"Mixer", "Straße", "Trim\u00a0", "Logic\u00a0Pro", "Pan "}}}
+        wanted = {"mixer", "MIXER", "strasse", "STRASSE", "Mixer", "Mixer:", "mixr", "Mix er",
+                  "trim", "TRIM\u00a0", "Logic Pro", "logic\u00a0pro", "pan", "Pan "}
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = canon.LEDGER_DIR
+            canon.LEDGER_DIR = tmp
+            try:
+                canon.write_ledger_casefold(canon.ledger_casefold_rows(corpus, wanted))
+                for same in ("Mixer", "mixer", "MIXER", "strasse", "STRASSE",
+                             "TRIM\u00a0", "logic\u00a0pro", "Pan "):
+                    self.assertTrue(canon.ships_up_to_case("t", "de", same), same)
+                for other in ("Mixer:", "mixr", "Mix er", "trim", "Logic Pro", "pan"):
+                    self.assertFalse(canon.ships_up_to_case("t", "de", other), other)
+                self.assertFalse(canon.ships_up_to_case("t", "fr", "mixer"))
+                self.assertFalse(canon.ships_up_to_case("u", "de", "mixer"))
+            finally:
+                canon.LEDGER_DIR = saved
+
+    def test_a_string_whose_prefix_collides_with_a_shipped_one_is_not_credited(self):
+        # The review of #991 found these two: different strings, one 32-bit prefix. The absence
+        # set cannot tell them apart, which is safe for an absence claim and wrong for a credit.
+        shipped, colliding = "sample8454", "sample21529"
+        self.assertEqual(canon._u32(canon.fold_case(shipped)), canon._u32(canon.fold_case(colliding)))
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            saved_ledger, saved_absence = canon.LEDGER_DIR, canon.ABSENCE_DIR
+            canon.LEDGER_DIR = canon.ABSENCE_DIR = tmp
+            try:
+                canon.write_absence("t", "de", [shipped])
+                self.assertFalse(canon.is_absent("t", "de", colliding))   # the set is fooled
+                canon.write_ledger_casefold(canon.ledger_casefold_rows(
+                    {"t": {"de": {shipped}}}, {shipped, colliding}))
+                self.assertTrue(canon.ships_up_to_case("t", "de", shipped))
+                self.assertFalse(canon.ships_up_to_case("t", "de", colliding))
+            finally:
+                canon.LEDGER_DIR, canon.ABSENCE_DIR = saved_ledger, saved_absence
+
+    def test_the_ledger_index_answers_without_any_digest(self):
+        # The second review of #991 forced a collision of the 48-bit `short_digest` the ledger
+        # stored then, and a spelling difference was credited. The row is the string now, so a
+        # digest that answers the same for everything cannot change what the ledger says.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = canon.LEDGER_DIR
+            canon.LEDGER_DIR = tmp
+            try:
+                canon.write_ledger_casefold(canon.ledger_casefold_rows(
+                    {"t": {"de": {"Mixer"}}}, {"mixer", "Mischer"}))
+                with mock.patch.object(canon, "digest", lambda text: "0" * 64), \
+                        mock.patch.object(canon, "short_digest", lambda text: "0" * 12), \
+                        mock.patch.object(canon, "_u32", lambda text: 0):
+                    self.assertTrue(canon.ships_up_to_case("t", "de", "mixer"))
+                    self.assertFalse(canon.ships_up_to_case("t", "de", "Mischer"))
+            finally:
+                canon.LEDGER_DIR = saved
+
+    def test_a_missing_or_malformed_ledger_index_raises_rather_than_answering(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = canon.LEDGER_DIR
+            canon.LEDGER_DIR = tmp
+            try:
+                with self.assertRaises(canon.CanonError):
+                    canon.ships_up_to_case("t", "de", "mixer")
+                for line in ("t\tde\n", "t\tde\tmixer\n", "t\tde\t[\"mixer\"]\n"):
+                    with open(canon.ledger_casefold_path(), "w", encoding="utf-8") as handle:
+                        handle.write(line)
+                    with self.assertRaises(canon.CanonError, msg=line):
+                        canon.ships_up_to_case("t", "de", "mixer")
+            finally:
+                canon.LEDGER_DIR = saved
 
     def test_an_absence_set_that_does_not_exist_refuses_rather_than_answering(self):
         import tempfile
@@ -350,6 +430,79 @@ class TheLoadBearingComparisons(unittest.TestCase):
             self.assertTrue(any("lost entries" in p for p in problems), problems)
         finally:
             canon.ABSENCE_DIR = saved
+
+    def test_an_absence_set_with_no_declared_count_is_refused(self):
+        # The review of #991 deleted `strings.absence_entries.de` from a copy of the manifest, and
+        # nothing noticed: the check read only the counts that were there.
+        saved, canon.ABSENCE_DIR = canon.ABSENCE_DIR, self.tmp
+        try:
+            canon.write_absence("t", "ko", ["a-value"])
+            canon.write_absence("t", "de", ["a-value"])
+            canon.write_absence("t", "de", ["a-value"], folded=True)
+            full = {"sources": {"t": {"locales": ["de", "ko"],
+                                      "absence_entries": {"de": 1, "ko": 1}}}}
+            with mock.patch.dict(canon.EXTRACTORS, {"t": None}):
+                self.assertEqual(canon.verify_absence_counts(full), [])
+                for manifest, missing in (
+                        ({"sources": {"t": {"absence_entries": {"ko": 1}}}}, "t.de"),
+                        ({"sources": {"t": {}}}, "t.de"),
+                        ({"sources": {}}, "t.ko"),
+                        ({"sources": {"t": {"locales": ["fr"], "absence_entries": {"de": 1, "ko": 1}}}},
+                         "t.fr")):
+                    problems = canon.verify_absence_counts(manifest)
+                    self.assertTrue(any(f"absence/{missing}.u32 has no count" in p
+                                        for p in problems), (manifest, problems))
+        finally:
+            canon.ABSENCE_DIR = saved
+
+    def test_the_ledger_index_is_pinned_like_the_index_and_absence_sets(self):
+        # Read for PRESENCE, so an added row is the forgery that matters: it would make a string
+        # Apple does not ship read as `derived`. The artifact digests are what catch that edit.
+        saved, canon.LEDGER_DIR = canon.LEDGER_DIR, self.tmp
+        try:
+            canon.write_ledger_casefold({("t", "ko", "a-value")})
+            pinned = canon.artifact_digests()
+            path = os.path.relpath(canon.ledger_casefold_path(), canon.CANON_DIR)
+            self.assertIn(path, pinned)
+            with open(canon.ledger_casefold_path(), "a", encoding="utf-8") as handle:
+                handle.write('t\tko\t"forged"\n')
+            problems = canon.verify_artifacts({"artifacts": pinned})
+            self.assertTrue(any(path in p and "does not match" in p for p in problems), problems)
+        finally:
+            canon.LEDGER_DIR = saved
+
+    def test_an_added_ledger_row_is_refused_even_with_its_digest_rewritten(self):
+        # The third review of #991: append a German `trim` row, re-pin the file's digest, and
+        # `verify_artifacts` has nothing to say. The declared count is what still disagrees.
+        saved, canon.LEDGER_DIR = canon.LEDGER_DIR, self.tmp
+        try:
+            rows = {("t", "de", "mixer"), ("t", "de", "position"), ("t", "ko", "a-value")}
+            canon.write_ledger_casefold(rows)
+            manifest = {"artifacts": canon.artifact_digests(),
+                        "ledger_casefold_entries": canon.ledger_counts(rows)}
+            self.assertEqual(manifest["ledger_casefold_entries"], {"t": {"de": 2, "ko": 1}})
+            self.assertEqual(canon.verify_ledger_counts(manifest), [])
+            with open(canon.ledger_casefold_path(), "a", encoding="utf-8") as handle:
+                handle.write('t\tde\t"trim"\n')
+            manifest["artifacts"] = canon.artifact_digests()
+            self.assertEqual(canon.verify_artifacts(manifest), [])
+            problems = canon.verify_ledger_counts(manifest)
+            self.assertTrue(any("3 row(s) for t/de" in p and "declares 2" in p for p in problems),
+                            problems)
+            # A row in a locale nobody declared, a source nobody declared, and no block at all.
+            for declared in ({"t": {"de": 3}}, {}, None):
+                broken = dict(manifest)
+                if declared is None:
+                    del broken["ledger_casefold_entries"]
+                else:
+                    broken["ledger_casefold_entries"] = declared
+                self.assertNotEqual(canon.verify_ledger_counts(broken), [], declared)
+        finally:
+            canon.LEDGER_DIR = saved
+
+    def test_the_committed_ledger_matches_its_declared_counts(self):
+        with open(os.path.join(canon.CANON_DIR, "MANIFEST.json"), encoding="utf-8") as handle:
+            self.assertEqual(canon.verify_ledger_counts(json.load(handle)), [])
 
     def test_a_malformed_percent_escape_raises_rather_than_decoding_to_something(self):
         with self.assertRaises(canon.CanonRefError):

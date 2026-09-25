@@ -325,10 +325,10 @@ def _locale_code(locale: str) -> str:
 
 
 def _apple_ships(entry: dict, locale: str) -> bool:
-    """Whether Apple's own corpus holds one of this label's strings in this locale.
+    """Whether Apple's own corpus holds one of this label's strings in this locale, up to case.
 
-    Offline: `docs/canon/absence/` is committed. A repository without the canon axis gets False
-    for everything, which leaves the old behaviour exactly as it was.
+    Offline: `docs/canon/ledger/` is committed. A repository without the canon axis gets False for
+    everything, which leaves the old behaviour exactly as it was.
     """
     if "canon" not in _CANON_CACHE:
         try:
@@ -369,15 +369,15 @@ def _apple_ships(entry: dict, locale: str) -> bool:
                 continue
             if text in composed:
                 return True
-            try:
-                if not canon.is_absent(source, code, text):
-                    return True
-            except canon.CanonError:
-                # A corpus this source does not carry for this locale. `continue` is right: the
-                # NEXT source may carry it, and the locale check above already skipped sources
-                # whose manifest does not list it. What is NOT right is swallowing every
-                # exception, which is how a mistyped locale code read as "Apple ships nothing".
-                continue
+            # Up to case, because that is how every match mode the ledger records compares. Asked
+            # byte for byte, `mixer` read as unshipped in German, where Logic's row is `Mixer` and
+            # the product matches it (#981). Decoration still counts: `Mixer:` is not `mixer`.
+            # Not the absence set: that answers presence through a 32-bit prefix, and a collision
+            # credited a string Apple does not ship. This is `build`'s string comparison, pinned.
+            # A missing or malformed ledger file raises rather than reading as "Apple ships
+            # nothing", the way a mistyped locale code once did here.
+            if canon.ships_up_to_case(source, code, text):
+                return True
     return False
 
 
