@@ -62,11 +62,14 @@ struct QualificationReaderShutdownTests {
         try session.start()
         // The script has to have started its holder before shutdown begins timing it. The first
         // exec of a freshly written script took longer than the grace on this host, and the case
-        // then measured a forced exit instead of a reader.
-        let started = Date()
-        while !FileManager.default.fileExists(atPath: pidFile.path), Date().timeIntervalSince(started) < 10 {
+        // then measured a forced exit instead of a reader. Bounded by polls, not the clock: load
+        // only lengthens each poll.
+        var polls = 0
+        while !FileManager.default.fileExists(atPath: pidFile.path), polls < 1_000 {
             usleep(10_000)
+            polls += 1
         }
+        try #require(FileManager.default.fileExists(atPath: pidFile.path), "the holder never started")
         defer {
             if let text = try? String(contentsOf: pidFile, encoding: .utf8),
                let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
