@@ -1,0 +1,7 @@
+Limit: the reconciliation tests give the reconciler a canned answer and never run the generated menu-only script; no live Logic run reached any of the twelve refusals
+Limit: the eight State B sites run the pass, but the fallback-suppression receipt has no menu_state, so a menu the pass closed is not reported there (#999)
+Ruled-out: reconciling the fourteen dialog-side post-leaf returns in this change | a Go To Position dialog or an unidentified window may still be up there, and an Escape that reaches a modal dialog cancels it; whether the loop may run there is a decision on #942
+Ruled-out: routing the post-leaf menu refusal through the READY snapshot path | its dialog half never answers CLOSED, so the menu Escape would never run
+Warn: a new post-leaf return belongs in postLeafCleanupSites in protocol order; the parser's menu-only case matches only a site's exact rendered refusal, so rewording it in the script text turns a menu refusal back into the dialog case
+Record-Id: r-2893a1f8fb4f
+Provenance: inherited 4ed74d2ae347eca2d2612c3b1abc9a6aaaf90d06
