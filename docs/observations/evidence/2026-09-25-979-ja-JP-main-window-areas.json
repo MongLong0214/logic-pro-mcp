@@ -1,0 +1,515 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ja-JP",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "table": {
+  "lproj": "ja",
+  "sha256": "350ff89a98310f28c180aad207061f44642dd42689b8a51ff32a4197d98b0d31",
+  "rows": 10029
+ },
+ "candidates": {
+  "Control Bar": {
+   "#acc": {
+    "key": "Control Bar#acc",
+    "value": "コントロールバー"
+   },
+   "plain": {
+    "key": "Control Bar",
+    "value": null
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Control Bar",
+    "value": "コントロールバー"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Control Bar",
+    "value": null
+   }
+  },
+  "Inspector": {
+   "#acc": {
+    "key": "Inspector#acc",
+    "value": "インスペクタ"
+   },
+   "plain": {
+    "key": "Inspector",
+    "value": "インスペクタ"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Inspector",
+    "value": null
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Inspector",
+    "value": "インスペクタ"
+   }
+  },
+  "Library": {
+   "#acc": {
+    "key": "Library#acc",
+    "value": "ライブラリ"
+   },
+   "plain": {
+    "key": "Library",
+    "value": "ライブラリ"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Library",
+    "value": "ライブラリ"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Library",
+    "value": "ライブラリ"
+   }
+  },
+  "Mixer": {
+   "#acc": {
+    "key": "Mixer#acc",
+    "value": "ミキサー"
+   },
+   "plain": {
+    "key": "Mixer",
+    "value": "ミキサー"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Mixer",
+    "value": "ミキサー"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Mixer",
+    "value": "ミキサー"
+   }
+  },
+  "Tracks": {
+   "#acc": {
+    "key": "Tracks#acc",
+    "value": null
+   },
+   "plain": {
+    "key": "Tracks",
+    "value": "トラック"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Tracks",
+    "value": "トラック"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Tracks",
+    "value": null
+   }
+  }
+ },
+ "readings": [
+  {
+   "area": "Control Bar",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#5",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "コントロールバー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Control Bar#acc",
+    "StrTabBtnLabel|||Control Bar"
+   ]
+  },
+  {
+   "area": "Control Bar",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#5/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "コントロールバー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Control Bar#acc",
+    "StrTabBtnLabel|||Control Bar"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#12",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "ライブラリ",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Library",
+    "Library#acc",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Inspector",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#13",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "インスペクタ",
+   "equal": [
+    "#acc",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Inspector",
+    "Inspector#acc",
+    "StrToolbItemName|||Inspector",
+    "StrViewBtns|||Inspector"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#17",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "ミキサー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Mixer",
+    "Mixer#acc",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Inspector",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#6",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "インスペクタ",
+   "equal": [
+    "#acc",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Inspector",
+    "Inspector#acc",
+    "StrToolbItemName|||Inspector",
+    "StrViewBtns|||Inspector"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#7",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "ライブラリ",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Library",
+    "Library#acc",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#7/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "ライブラリ",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Library",
+    "Library#acc",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#8",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "トラック",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Track",
+    "StrTabBtnLabel|||Tracks",
+    "TRACK",
+    "Track",
+    "Track#mti",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#8/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "トラック",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Track",
+    "StrTabBtnLabel|||Tracks",
+    "TRACK",
+    "Track",
+    "Track#mti",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#8/AXGroup#1",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "トラック",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Track",
+    "StrTabBtnLabel|||Tracks",
+    "TRACK",
+    "Track",
+    "Track#mti",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#9",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "ミキサー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Mixer",
+    "Mixer#acc",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#9/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "ミキサー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Mixer",
+    "Mixer#acc",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - トラック",
+   "path": "AXWindow#1/AXGroup#9/AXLayoutArea#1",
+   "depth": 2,
+   "role": "AXLayoutArea",
+   "description": "ミキサー",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Mixer",
+    "Mixer#acc",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  }
+ ],
+ "shapes": {
+  "AXCheckBox": {
+   "#acc": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  },
+  "AXGroup": {
+   "#acc": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Control Bar",
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer",
+     "Tracks"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Control Bar",
+     "Library",
+     "Mixer",
+     "Tracks"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  },
+  "AXLayoutArea": {
+   "#acc": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  }
+ },
+ "unexplained_depth_1_descriptions": [],
+ "read_errors": [],
+ "window_titles": [
+  null,
+  "lpm-locator-probe - トラック"
+ ],
+ "areas_read": [
+  "Control Bar",
+  "Inspector",
+  "Library",
+  "Mixer",
+  "Tracks"
+ ]
+}

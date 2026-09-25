@@ -1,0 +1,331 @@
+{
+  "id": "2026-09-25-979-ko-KR-main-window-areas-by-row",
+  "date": "2026-09-25",
+  "schema": 3,
+  "subject": "The main window's area containers (Tracks, Control Bar, Inspector, Library, Mixer): which row of Logic.framework's Localizable.strings each one's description equals",
+  "question": "On a ko-KR Logic, which of each area's candidate rows -- `<area>#acc`, the plain key, `StrTabBtnLabel|||<area>`, `StrViewBtns|||<area>` -- does the area container's AXDescription equal exactly?",
+  "verdict": "works",
+  "issues": [
+    979
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_979_area_description_rows.py <out.json>",
+    "expected": "exits 0 on a ko-KR Logic; the AXGroup verdicts carry StrTabBtnLabel and StrViewBtns as consistent, and the descriptions quoted in observations recur",
+    "cost": "~1 min; needs Logic relaunched in ko-KR (`defaults write com.apple.logic10 AppleLanguages -array ko`) on a project whose main window shows Tracks, the Control Bar, the Inspector, the Library and the docked Mixer. Nothing is pressed or written"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:mixerNamedElement",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:controlBarGroupLabel",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:mixerInspectorContext"
+  ],
+  "evidence": [
+    "evidence/2026-09-25-979-ko-KR-main-window-areas.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Control%20Bar%23acc#value",
+      "value": "컨트롤 막대",
+      "used_for": "the #acc candidate for the Control Bar area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTabBtnLabel%7C%7C%7CControl%20Bar#value",
+      "value": "컨트롤 막대",
+      "used_for": "the StrTabBtnLabel candidate for the Control Bar area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Inspector%23acc#value",
+      "value": "인스펙터",
+      "used_for": "the #acc candidate for the Inspector area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Inspector#value",
+      "value": "인스펙터",
+      "used_for": "the plain candidate for the Inspector area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrViewBtns%7C%7C%7CInspector#value",
+      "value": "인스펙터",
+      "used_for": "the StrViewBtns candidate for the Inspector area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Library%23acc#value",
+      "value": "라이브러리",
+      "used_for": "the #acc candidate for the Library area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Library#value",
+      "value": "라이브러리",
+      "used_for": "the plain candidate for the Library area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTabBtnLabel%7C%7C%7CLibrary#value",
+      "value": "라이브러리",
+      "used_for": "the StrTabBtnLabel candidate for the Library area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrViewBtns%7C%7C%7CLibrary#value",
+      "value": "라이브러리",
+      "used_for": "the StrViewBtns candidate for the Library area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Tracks#value",
+      "value": "트랙",
+      "used_for": "the plain candidate for the Tracks area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTabBtnLabel%7C%7C%7CTracks#value",
+      "value": "트랙",
+      "used_for": "the StrTabBtnLabel candidate for the Tracks area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Mixer%23acc#value",
+      "value": "믹서",
+      "used_for": "the #acc candidate for the Mixer area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/Mixer#value",
+      "value": "믹서",
+      "used_for": "the plain candidate for the Mixer area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrTabBtnLabel%7C%7C%7CMixer#value",
+      "value": "믹서",
+      "used_for": "the StrTabBtnLabel candidate for the Mixer area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/ko/StrViewBtns%7C%7C%7CMixer#value",
+      "value": "믹서",
+      "used_for": "the StrViewBtns candidate for the Mixer area's description; it equals the reading exactly",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "Logic relaunched after `defaults write com.apple.logic10 AppleLanguages -array ko` on a disposable project with the Library, Inspector and Mixer shown, then read by Scripts/livekit/live_979_area_description_rows.py, added in this change. Its probe, Scripts/livekit/ax_979_area_rows_probe.swift, reads role, AXDescription, AXTitle and AXIdentifier of every element within two levels of each window and keeps the raw AXError of any failed read. The candidate rows are read from the installed Logic.framework's own Localizable.strings for this locale at run time, not from this repository's pinned index. A description is credited to an area when it equals one of that area's candidates ignoring case, and is then compared with each candidate exactly; every other key carrying the same string is listed in the evidence. All ten locales were read in one sequence on the same project, one relaunch each, and Logic was returned to Korean afterwards. Nothing was pressed or written.",
+  "observations": [
+    {
+      "what": "the Control Bar area's container",
+      "role": "AXGroup",
+      "path": "AXWindow#1/AXGroup#5",
+      "description": "컨트롤 막대",
+      "rows": {
+        "#acc": "컨트롤 막대",
+        "StrTabBtnLabel": "컨트롤 막대"
+      },
+      "equal": [
+        "#acc",
+        "StrTabBtnLabel"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "the Inspector area's container",
+      "role": "AXGroup",
+      "path": "AXWindow#1/AXGroup#6",
+      "description": "인스펙터",
+      "rows": {
+        "#acc": "인스펙터",
+        "plain": "인스펙터",
+        "StrViewBtns": "인스펙터"
+      },
+      "equal": [
+        "#acc",
+        "StrViewBtns",
+        "plain"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "the Library area's container",
+      "role": "AXGroup",
+      "path": "AXWindow#1/AXGroup#7",
+      "description": "라이브러리",
+      "rows": {
+        "#acc": "라이브러리",
+        "plain": "라이브러리",
+        "StrTabBtnLabel": "라이브러리",
+        "StrViewBtns": "라이브러리"
+      },
+      "equal": [
+        "#acc",
+        "StrTabBtnLabel",
+        "StrViewBtns",
+        "plain"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "the Tracks area's container",
+      "role": "AXGroup",
+      "path": "AXWindow#1/AXGroup#8",
+      "description": "트랙",
+      "rows": {
+        "plain": "트랙",
+        "StrTabBtnLabel": "트랙"
+      },
+      "equal": [
+        "StrTabBtnLabel",
+        "plain"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "the Mixer area's container",
+      "role": "AXGroup",
+      "path": "AXWindow#1/AXGroup#9",
+      "description": "믹서",
+      "rows": {
+        "#acc": "믹서",
+        "plain": "믹서",
+        "StrTabBtnLabel": "믹서",
+        "StrViewBtns": "믹서"
+      },
+      "equal": [
+        "#acc",
+        "StrTabBtnLabel",
+        "StrViewBtns",
+        "plain"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "the Mixer area's container",
+      "role": "AXLayoutArea",
+      "path": "AXWindow#1/AXGroup#9/AXLayoutArea#1",
+      "description": "믹서",
+      "rows": {
+        "#acc": "믹서",
+        "plain": "믹서",
+        "StrTabBtnLabel": "믹서",
+        "StrViewBtns": "믹서"
+      },
+      "equal": [
+        "#acc",
+        "StrTabBtnLabel",
+        "StrViewBtns",
+        "plain"
+      ],
+      "equal_ignoring_case_only": []
+    },
+    {
+      "what": "each key shape judged against every AXGroup reading of an area it has a row for, compared exactly",
+      "shapes": {
+        "#acc": {
+          "verdict": "consistent",
+          "areas_tested": [
+            "Control Bar",
+            "Inspector",
+            "Library",
+            "Mixer"
+          ],
+          "refuted_at": []
+        },
+        "plain": {
+          "verdict": "consistent",
+          "areas_tested": [
+            "Inspector",
+            "Library",
+            "Mixer",
+            "Tracks"
+          ],
+          "refuted_at": []
+        },
+        "StrTabBtnLabel": {
+          "verdict": "consistent",
+          "areas_tested": [
+            "Control Bar",
+            "Library",
+            "Mixer",
+            "Tracks"
+          ],
+          "refuted_at": []
+        },
+        "StrViewBtns": {
+          "verdict": "consistent",
+          "areas_tested": [
+            "Inspector",
+            "Library",
+            "Mixer"
+          ],
+          "refuted_at": []
+        }
+      }
+    }
+  ],
+  "conclusion": "On a ko-KR Logic each area container's description equals its StrTabBtnLabel row where it has one (Tracks, Control Bar, Library, Mixer) and StrViewBtns|||Inspector for the Inspector; the Mixer's strip container carries the same string as its group. Every shape agrees with every reading here, so this locale separates none of them.",
+  "limits": [
+    "One host: Logic 12.3 (6674) on macOS 26.3 (25D125), one project. Other builds are not measured here.",
+    "A string equality, not a code path: the harness does not observe which key Logic looks up. A build that rendered the same string from another key would read the same.",
+    "For the Mixer, the StrTabBtnLabel, StrViewBtns and plain rows carry the same value in all ten locales, so no Mixer reading chooses among them. The choice rests on the other areas: the plain-key shape is refuted by the German Library and the #acc shape by the Portuguese Control Bar, while StrTabBtnLabel holds wherever it has a row.",
+    "Only elements within two levels of a window were read. The Library's AXBrowser, which libraryPanelLabel matches, sits deeper and is not covered; neither are track-header buttons or menus.",
+    "The Control Bar's view buttons (AXCheckBox) carry the same names and are judged separately in the evidence; no label set in this change addresses them.",
+    "No product path was driven here. Matching ignores case, and #977's records drove the Mixer and plug-in paths in all ten locales on the same build."
+  ],
+  "supersedes": null
+}
