@@ -1303,6 +1303,86 @@ extension AccessibilityChannel {
         .issuanceLedger,
     ]
 
+    /// #942. Every post-leaf return that closes the Go To Position dialog and then the menu before
+    /// its own result. The script reaches the menu refusal only after it observed the dialog
+    /// CLOSED, so the Swift caller can reconcile the menu alone; the dialog refusal carries no
+    /// such observation and is not reconciled. Declared once, like `MenuCleanupRefusalSite`, so
+    /// the twelve sites cannot drift apart in wording or in what they close first.
+    struct PostLeafCleanupSite: Sendable {
+        let identifier: String
+        /// The result the site reports, up to the refusal text. The parser classifies on it.
+        let resultPrefix: String
+
+        static let dialogRefusal = ": dialog cleanup was not observed"
+        static let menuRefusal = ": menu cleanup was not observed"
+
+        static let leafClickError = Self(
+            identifier: "leaf_click_error", resultPrefix: "DIALOG_ACTUATION_ISSUED"
+        )
+        static let dialogNotReady = Self(
+            identifier: "dialog_not_ready", resultPrefix: "DIALOG_ACTUATION_ISSUED"
+        )
+        static let selectAllLedger = Self(
+            identifier: "select_all_ledger", resultPrefix: "DIALOG_SUBMISSION_NOT_ISSUED"
+        )
+        static let selectAllFocus = Self(
+            identifier: "select_all_focus", resultPrefix: "DIALOG_SUBMISSION_NOT_ISSUED"
+        )
+        static let selectAllError = Self(
+            identifier: "select_all_error", resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"
+        )
+        static let positionLedger = Self(
+            identifier: "position_ledger", resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"
+        )
+        static let positionFocus = Self(
+            identifier: "position_focus", resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"
+        )
+        static let positionError = Self(
+            identifier: "position_error", resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"
+        )
+        static let returnLedger = Self(
+            identifier: "return_ledger", resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"
+        )
+        static let returnFocus = Self(
+            identifier: "return_focus", resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"
+        )
+        static let returnError = Self(
+            identifier: "return_error", resultPrefix: "DIALOG_SUBMISSION_ISSUED"
+        )
+        static let postReturnState = Self(
+            identifier: "post_return_state", resultPrefix: "DIALOG_SUBMISSION_ISSUED"
+        )
+
+        var appleScript: String {
+            """
+            -- POST_LEAF_CLEANUP_SITE: \(identifier)
+            set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
+            if dialogCleanupState is not "CLOSED" then
+                return "\(resultPrefix)\(Self.dialogRefusal) (" & dialogCleanupState & ")"
+            end if
+            set cleanupState to my dismissOpenMenu(logicProcess, true)
+            if cleanupState is not "CLOSED" then
+                return "\(resultPrefix)\(Self.menuRefusal)" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+            end if
+            """
+        }
+    }
+
+    static let postLeafCleanupSites = [
+        PostLeafCleanupSite.leafClickError,
+        .dialogNotReady,
+        .selectAllLedger,
+        .selectAllFocus,
+        .selectAllError,
+        .positionLedger,
+        .positionFocus,
+        .positionError,
+        .returnLedger,
+        .returnFocus,
+        .returnError,
+        .postReturnState,
+    ]
+
     /// The script is internal so the menu-validation regression tests can assert the
     /// exact generated AppleScript ordering without invoking Logic Pro.
     static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
@@ -1882,14 +1962,7 @@ extension AccessibilityChannel {
                     set dialogActuationIssued to true
                     click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1
                 on error errMsg
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_ACTUATION_ISSUED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.leafClickError.appleScript)
                     return "DIALOG_ACTUATION_ISSUED: " & errMsg
                 end try
                 -- Wait up to 3s for a new exact modal dialog to appear before typing. The
@@ -1923,14 +1996,7 @@ extension AccessibilityChannel {
                 if not dialogReady then
                     if dialogAppearanceUnidentified then return "DIALOG_UNIDENTIFIED_NEW_WINDOW"
                     if dialogAppearanceUnreadable then return "DIALOG_APPEARANCE_UNREADABLE"
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_ACTUATION_ISSUED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.dialogNotReady.appleScript)
                     return "DIALOG_ACTUATION_ISSUED: dialog did not become ready"
                 end if
             end tell
@@ -1939,14 +2005,7 @@ extension AccessibilityChannel {
             -- it may have reached an unknown target rather than advertising a clean retry.
             try
                 if not my recordDialogIssuance("SELECT_ALL_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.selectAllLedger.appleScript)
                     return "DIALOG_SUBMISSION_NOT_ISSUED: could not persist Cmd+A issuance"
                 end if
                 -- The durable marker precedes the irreversible key. Re-read global application
@@ -1954,67 +2013,32 @@ extension AccessibilityChannel {
                 -- frontmost while this run was preparing the receipt.
                 set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.selectAllFocus.appleScript)
                     return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogFocusState & ")"
                 end if
                 keystroke "a" using command down
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.selectAllError.appleScript)
                 return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: Cmd+A may have been sent (" & errMsg & ")"
             end try
 
             try
                 if not my recordDialogIssuance("POSITION_INPUT_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.positionLedger.appleScript)
                     return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: could not persist position input issuance"
                 end if
                 -- Re-read focus after persisting this input marker and immediately before the
                 -- global position text, not merely after the preceding Cmd+A.
                 set dialogTypingFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogTypingFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                    if dialogCleanupState is not "CLOSED" then
-                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                    end if
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                    end if
+                    \(PostLeafCleanupSite.positionFocus.appleScript)
                     return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: observed Go To Position dialog was not focused before typing (" & dialogTypingFocusState & ")"
                 end if
                 keystroke "\(position)"
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.positionError.appleScript)
                 return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (" & errMsg & ")"
             end try
 
@@ -2022,56 +2046,28 @@ extension AccessibilityChannel {
             -- Return submission boundary, so a timeout or nonzero child exit after either point is
             -- conservatively reported rather than releasing another actuator.
             if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.returnLedger.appleScript)
                 return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: could not persist Return issuance"
             end if
             -- Return is global too. The focused Logic dialog must still be the global keyboard
             -- owner after its durable marker is written and immediately before submission.
             set dialogReturnFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
             if dialogReturnFocusState is not "FOCUSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.returnFocus.appleScript)
                 return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: observed Go To Position dialog was not focused before Return (" & dialogReturnFocusState & ")"
             end if
             try
                 keystroke return
                 delay 0.2
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.returnError.appleScript)
                 return "DIALOG_SUBMISSION_ISSUED: Return may have been sent (" & errMsg & ")"
             end try
             -- A normal Return reply is not proof Logic consumed it. Observe this exact modal before
             -- returning OK; if it survived, clean it only after recording the submission boundary.
             set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogPostReturnState is not "CLOSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
-                if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
-                end if
-                set cleanupState to my dismissOpenMenu(logicProcess, true)
-                if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
-                end if
+                \(PostLeafCleanupSite.postReturnState.appleScript)
                 return "DIALOG_SUBMISSION_ISSUED: dialog was not observed closed after Return"
             end if
         end tell
@@ -2177,6 +2173,19 @@ extension AccessibilityChannel {
             case indeterminate
         }
 
+        /// What a post-leaf result says of its two cleanups (#942). Each declared
+        /// `PostLeafCleanupSite` closes the dialog first and the menu second, so a menu that was
+        /// not observed closed comes after a dialog that was.
+        enum PostLeafCleanup: Equatable {
+            case observedClosed
+            /// The dialog was not observed closed, or the result does not say which cleanup failed.
+            case dialogNotObservedClosed
+            /// The dialog was observed closed and the menu was not. `reconciledMenuClosed` is
+            /// written by the parent-owned reconciliation pass, never by the parser, as on
+            /// `menuCouldNotBeClosed`.
+            case menuNotObservedClosed(reconciledMenuClosed: Bool)
+        }
+
         enum Failure: Equatable {
             case menuNotFound
             case menuStateUnreadable
@@ -2193,10 +2202,10 @@ extension AccessibilityChannel {
             case dialogPreexistenceUnreadable
             case dialogUnidentifiedNewWindow
             case dialogAppearanceUnreadable
-            case dialogActuationIssued(cleanupObservedClosed: Bool)
-            case dialogSubmissionNotIssued(cleanupObservedClosed: Bool)
-            case dialogInputIssued(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
-            case dialogSubmissionIssued(cleanupObservedClosed: Bool)
+            case dialogActuationIssued(cleanup: PostLeafCleanup)
+            case dialogSubmissionNotIssued(cleanup: PostLeafCleanup)
+            case dialogInputIssued(issuance: DialogIssuanceStage, cleanup: PostLeafCleanup)
+            case dialogSubmissionIssued(cleanup: PostLeafCleanup)
             case executionFailed(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
             case malformedPayload
             /// An unparsed script result is the absence of a dialog-safety observation, not an
@@ -2226,14 +2235,14 @@ extension AccessibilityChannel {
             case .failure(.dialogPreexistenceUnreadable): return "dialog_preexistence_unreadable"
             case .failure(.dialogUnidentifiedNewWindow): return "dialog_unidentified_new_window"
             case .failure(.dialogAppearanceUnreadable): return "dialog_appearance_unreadable"
-            case let .failure(.dialogActuationIssued(closed)):
-                return "dialog_actuation_issued_cleanup_closed_\(closed)"
-            case let .failure(.dialogSubmissionNotIssued(closed)):
-                return "dialog_submission_not_issued_cleanup_closed_\(closed)"
-            case let .failure(.dialogInputIssued(issuance, closed)):
-                return "dialog_input_issued_\(issuance.rawValue)_cleanup_closed_\(closed)"
-            case let .failure(.dialogSubmissionIssued(closed)):
-                return "dialog_submission_issued_cleanup_closed_\(closed)"
+            case let .failure(.dialogActuationIssued(cleanup)):
+                return "dialog_actuation_issued_cleanup_closed_\(cleanup == .observedClosed)"
+            case let .failure(.dialogSubmissionNotIssued(cleanup)):
+                return "dialog_submission_not_issued_cleanup_closed_\(cleanup == .observedClosed)"
+            case let .failure(.dialogInputIssued(issuance, cleanup)):
+                return "dialog_input_issued_\(issuance.rawValue)_cleanup_closed_\(cleanup == .observedClosed)"
+            case let .failure(.dialogSubmissionIssued(cleanup)):
+                return "dialog_submission_issued_cleanup_closed_\(cleanup == .observedClosed)"
             case let .failure(.executionFailed(issuance, closed)):
                 return "execution_failed_issuance_\(issuance.rawValue)_cleanup_closed_\(closed)"
             case .failure(.malformedPayload): return "malformed_payload"
@@ -2325,8 +2334,10 @@ extension AccessibilityChannel {
                  .failure(.dialogPreexistenceUnreadable),
                  .failure(.dialogUnidentifiedNewWindow),
                  .failure(.dialogAppearanceUnreadable),
-                 .failure(.dialogActuationIssued(cleanupObservedClosed: false)),
-                 .failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)),
+                 .failure(.dialogActuationIssued(cleanup: .dialogNotObservedClosed)),
+                 .failure(.dialogActuationIssued(cleanup: .menuNotObservedClosed)),
+                 .failure(.dialogSubmissionNotIssued(cleanup: .dialogNotObservedClosed)),
+                 .failure(.dialogSubmissionNotIssued(cleanup: .menuNotObservedClosed)),
                  .failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: false)):
                 return true
             default:
@@ -2387,15 +2398,44 @@ extension AccessibilityChannel {
         }
 
         var cleanupObservedClosed: Bool {
-            switch self {
-            case let .failure(.dialogActuationIssued(cleanupObservedClosed)),
-                 let .failure(.dialogSubmissionNotIssued(cleanupObservedClosed)),
-                 let .failure(.dialogInputIssued(issuance: _, cleanupObservedClosed: cleanupObservedClosed)),
-                 let .failure(.dialogSubmissionIssued(cleanupObservedClosed)),
-                 let .failure(.executionFailed(issuance: _, cleanupObservedClosed)):
+            if let postLeafCleanup { return postLeafCleanup == .observedClosed }
+            if case let .failure(.executionFailed(issuance: _, cleanupObservedClosed)) = self {
                 return cleanupObservedClosed
+            }
+            return false
+        }
+
+        var postLeafCleanup: PostLeafCleanup? {
+            switch self {
+            case let .failure(.dialogActuationIssued(cleanup)),
+                 let .failure(.dialogSubmissionNotIssued(cleanup)),
+                 let .failure(.dialogInputIssued(issuance: _, cleanup: cleanup)),
+                 let .failure(.dialogSubmissionIssued(cleanup)):
+                return cleanup
             default:
-                return false
+                return nil
+            }
+        }
+
+        /// The same result after the reconciliation pass observed the menu closed. Only the two
+        /// shapes that pass runs for change; the refusal each one reaches does not.
+        func withReconciledMenuClosed() -> Self {
+            let reconciled = PostLeafCleanup.menuNotObservedClosed(reconciledMenuClosed: true)
+            switch self {
+            case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
+                return .failure(.menuCouldNotBeClosed(
+                    menuActuationAttempted: menuActuationAttempted, reconciledMenuClosed: true
+                ))
+            case .failure(.dialogActuationIssued(.menuNotObservedClosed)):
+                return .failure(.dialogActuationIssued(cleanup: reconciled))
+            case .failure(.dialogSubmissionNotIssued(.menuNotObservedClosed)):
+                return .failure(.dialogSubmissionNotIssued(cleanup: reconciled))
+            case let .failure(.dialogInputIssued(issuance, .menuNotObservedClosed)):
+                return .failure(.dialogInputIssued(issuance: issuance, cleanup: reconciled))
+            case .failure(.dialogSubmissionIssued(.menuNotObservedClosed)):
+                return .failure(.dialogSubmissionIssued(cleanup: reconciled))
+            default:
+                return self
             }
         }
 
@@ -2437,6 +2477,12 @@ extension AccessibilityChannel {
         }
 
         var menuObservation: MenuObservation {
+            if case let .menuNotObservedClosed(reconciledMenuClosed)? = postLeafCleanup {
+                // #942. The script observed the dialog closed and then ran the menu cleanup, which
+                // did not observe the menu closed: the case `couldNotBeClosed` names. The same
+                // reconciliation pass as below may have observed it closed since.
+                return reconciledMenuClosed ? .closed : .couldNotBeClosed
+            }
             switch self {
             case let .failure(.menuCouldNotBeClosed(_, reconciledMenuClosed)):
                 // The script did not observe the menu closed; the parent-owned reconciliation
@@ -2480,10 +2526,11 @@ extension AccessibilityChannel {
         /// A normal script reply can still report a post-actuation menu cleanup that was not
         /// observed closed. Re-run the parent-owned, independently observation-gated menu loop for
         /// exactly that case; the generated dialog script must not send a blind Escape on an
-        /// unreadable focus read.
+        /// unreadable focus read. A post-leaf site's menu refusal (#942) is that case too.
         var requiresPostActuationMenuReconciliation: Bool {
             if case .failure(.menuCouldNotBeClosed(menuActuationAttempted: true, reconciledMenuClosed: false))
                 = self { return true }
+            if case .menuNotObservedClosed(reconciledMenuClosed: false)? = postLeafCleanup { return true }
             return false
         }
     }
@@ -2550,33 +2597,46 @@ extension AccessibilityChannel {
         case let value where value.hasPrefix("DIALOG_APPEARANCE_UNREADABLE"):
             return .failure(.dialogAppearanceUnreadable)
         case let value where value.hasPrefix("DIALOG_ACTUATION_ISSUED"):
+            // A closed dialog is insufficient if a menu cleanup remained unreadable. Both surfaces
+            // must be observed closed before this known pre-Return path can fall through to a
+            // later position route.
             return .failure(.dialogActuationIssued(
-                // A closed dialog is insufficient if a menu cleanup remained unreadable. Both
-                // surfaces must be observed closed before this known pre-Return path can fall
-                // through to a later position route.
-                cleanupObservedClosed: !value.contains("cleanup was not observed")
+                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_ACTUATION_ISSUED")
             ))
         case let value where value.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
             return .failure(.dialogSubmissionNotIssued(
-                cleanupObservedClosed: !value.contains("cleanup was not observed")
+                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_SUBMISSION_NOT_ISSUED")
             ))
         case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"):
             return .failure(.dialogInputIssued(
                 issuance: .selectAllArmed,
-                cleanupObservedClosed: !value.contains("cleanup was not observed")
+                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED")
             ))
         case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"):
             return .failure(.dialogInputIssued(
                 issuance: .positionInputArmed,
-                cleanupObservedClosed: !value.contains("cleanup was not observed")
+                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED")
             ))
         case let value where value.hasPrefix("DIALOG_SUBMISSION_ISSUED"):
             return .failure(.dialogSubmissionIssued(
-                cleanupObservedClosed: !value.contains("cleanup was not observed")
+                cleanup: postLeafCleanup(value, resultPrefix: "DIALOG_SUBMISSION_ISSUED")
             ))
         default:
             return .failure(.unexpectedResult)
         }
+    }
+
+    /// Only the exact menu refusal a `PostLeafCleanupSite` emits is the menu-only case. Any other
+    /// "cleanup was not observed" stays the dialog case, which is what every such result meant
+    /// before #942 told the two apart.
+    private static func postLeafCleanup(
+        _ value: String, resultPrefix: String
+    ) -> GotoPositionDialogResultClassification.PostLeafCleanup {
+        if value.hasPrefix(resultPrefix + PostLeafCleanupSite.menuRefusal) {
+            // The parser reports only what the script observed; reconciliation has not run.
+            return .menuNotObservedClosed(reconciledMenuClosed: false)
+        }
+        return value.contains("cleanup was not observed") ? .dialogNotObservedClosed : .observedClosed
     }
 
     private enum GotoPositionDialogRouteResult {
@@ -2584,11 +2644,13 @@ extension AccessibilityChannel {
         case failed(GotoPositionDialogResultClassification)
     }
 
-    /// The absence of a path is not one state. A known pre-leaf refusal may use menu-only
-    /// reconciliation; a dead child without a readable snapshot must first observe whether a Go To
-    /// Position dialog remains, but cannot safely cancel an unowned one.
+    /// The absence of a path is not one state. A result that leaves no dialog for this run to own
+    /// may use menu-only reconciliation; a dead child without a readable snapshot must first
+    /// observe whether a Go To Position dialog remains, but cannot safely cancel an unowned one.
     private enum DialogFailureReconciliation: Sendable {
-        case provablyPreLeaf
+        /// A declared pre-leaf refusal, which precedes any dialog, or a post-leaf site's menu
+        /// refusal, which the script returns only after it observed the dialog CLOSED (#942).
+        case menuOnly
         case snapshot(path: String)
         case unknown
     }
@@ -2636,20 +2698,18 @@ extension AccessibilityChannel {
                 ))
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
-                    // The declared menu-cleanup refusal sites are all pre-leaf, so this run cannot
-                    // own a Go To Position dialog when one of these normal results is returned.
-                    // Using its READY snapshot here would let the dialog half swallow the needed
-                    // Escape, so this is explicitly the menu-only case rather than a missing path.
-                    let reconciledMenuClosed = await reconcileAfterExecutionFailure(.provablyPreLeaf)
+                    // No dialog is left for this run to own. A declared menu-cleanup refusal site
+                    // is pre-leaf; a post-leaf site returns its menu refusal only after the script
+                    // observed the dialog CLOSED (#942). The READY snapshot would route the pass
+                    // into the dialog half, which never answers CLOSED, so the menu would never be
+                    // reconciled. This is explicitly the menu-only case rather than a missing path.
+                    let reconciledMenuClosed = await reconcileAfterExecutionFailure(.menuOnly)
                     // Discarding this Boolean is what made the receipt lie: the response derives
                     // `menu_state` from the classification, so a menu the parent had just observed
                     // closed was still reported `could_not_be_closed`. Carry it. The refusal itself
-                    // is deliberately unchanged -- dialog safety was never established here.
-                    if reconciledMenuClosed,
-                       case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)) = classification {
-                        return .failed(.failure(.menuCouldNotBeClosed(
-                            menuActuationAttempted: menuActuationAttempted, reconciledMenuClosed: true
-                        )))
+                    // is deliberately unchanged -- the pass establishes nothing about a dialog.
+                    if reconciledMenuClosed {
+                        return .failed(classification.withReconciledMenuClosed())
                     }
                 }
                 return .failed(classification)
@@ -2760,7 +2820,7 @@ extension AccessibilityChannel {
     /// not describe a modal dialog, so a post-timeout `CLOSED` menu cannot authorise another route
     /// while an unobserved dialog remains on screen. A READY snapshot permits owned-dialog cleanup;
     /// an unknown snapshot state only observes and refuses if a dialog is present; the separate
-    /// provably-pre-leaf state is the sole menu-only path.
+    /// `menuOnly` state is the sole menu-only path.
     private static func observeAndClearStrayGoToPositionUI(
         reconciliation: DialogFailureReconciliation,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
@@ -2768,7 +2828,7 @@ extension AccessibilityChannel {
         let preLeafWindowSnapshotPath: String?
         let requiresUnownedDialogObservation: Bool
         switch reconciliation {
-        case .provablyPreLeaf:
+        case .menuOnly:
             preLeafWindowSnapshotPath = nil
             requiresUnownedDialogObservation = false
         case let .snapshot(path):
