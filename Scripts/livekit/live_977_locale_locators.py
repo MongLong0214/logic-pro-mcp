@@ -87,7 +87,10 @@ for driver in drivers.values():
 tracks = (drivers["new"].resource("logic://tracks") or {}).get("data") or []
 info = (drivers["new"].resource("logic://project/info") or {}).get("data") or {}
 path = (info.get("filePath") or "").strip()
-step("tracks", {"tracks": [(t.get("name"), t.get("id")) for t in tracks], "project": path})
+# The full path goes to `project_expected_path` below; the committed evidence keeps only the
+# project's name, because the path names the operator's home directory.
+step("tracks", {"tracks": [(t.get("name"), t.get("id")) for t in tracks],
+                "project": os.path.basename(path.rstrip("/"))})
 track = tracks[0]["id"] if tracks else 0
 
 inventory = {label: step(f"get_inventory/{label}", trim(

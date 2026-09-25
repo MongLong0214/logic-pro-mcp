@@ -56,11 +56,23 @@ be mutated`; after, `caught check-probe-product-drift.py <- test_probe_product_d
 No seam was added. The self-test already points this at a fixture by copying it there, and an
 environment variable that re-aims a guard is a way to switch one off.
 """
+import importlib.util
 import os
 import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Every anchor below is searched in CODE, never in a comment: a comment that quotes the rule is not
+# the rule. Measured 2026-09-25: restoring the old `.labels.contains` comparison while leaving the
+# new call in a comment beside it answered clean. The stripper is the one the typechecker guard
+# already uses, loaded from beside this file so the self-test's copied tree resolves it too.
+_spec = importlib.util.spec_from_file_location(
+    "typechecker_literals",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "check-typechecker-heavy-literals.py"))
+_literals = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_literals)
+strip_swift_comments = _literals.strip_swift_comments
 
 # Comparisons that carry the USER's data rather than policy vocabulary. These must stay exact, and
 # they are named so that adding one is a deliberate act rather than a side effect.
@@ -109,10 +121,10 @@ def drift_problems(root: str = None) -> list:
             problems.append(f"cannot read {os.path.relpath(path, root)}: {exc}")
             return ""
 
-    probe = read(probe_path)
-    policy = read(policy_path)
-    product = read(product_path)
-    writer = read(writer_path)
+    probe = strip_swift_comments(read(probe_path))
+    policy = strip_swift_comments(read(policy_path))
+    product = strip_swift_comments(read(product_path))
+    writer = strip_swift_comments(read(writer_path))
 
     # 1. The product's rule is what the probe must mirror. If the product stops folding, this check
     #    is describing a rule that no longer exists and must be revisited rather than silently kept.

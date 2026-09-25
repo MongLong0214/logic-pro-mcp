@@ -20,6 +20,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = "Scripts/check-probe-product-drift.py"
+STRIPPER = "Scripts/check-typechecker-heavy-literals.py"
 PROBE = "Scripts/livekit/ax_plugin_menu_probe.swift"
 POLICY = "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
 PRODUCT = "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift"
@@ -62,6 +63,13 @@ CASES = [
     ("the product stops folding, so the rule the probe mirrors is gone",
      PRODUCT, "mixerNamedElement.containsNormalized($0)", "mixerNamedElement.labels.contains($0)",
      "no longer matches through"),
+    # The same regression with the new call kept in a comment beside it. The guard used to search
+    # the whole file, comments included, and answered clean.
+    ("the product stops folding and a comment still quotes the old call",
+     PRODUCT, "return candidates.contains { AXLocalePolicy.mixerNamedElement.containsNormalized($0) }",
+     "return candidates.contains { AXLocalePolicy.mixerNamedElement.labels.contains($0) }"
+     " // was AXLocalePolicy.mixerNamedElement.containsNormalized($0)",
+     "no longer matches through"),
     ("the product's normalize stops lowercasing",
      POLICY, ".whitespacesAndNewlines)\n                .lowercased()\n                .split",
      ".whitespacesAndNewlines)\n                .split",
@@ -97,7 +105,7 @@ def main():
         tree = os.path.join(tmp, "tree")
         # Only the files the guard reads; copying the repository would be slow and would drag in
         # build products the guard never looks at.
-        for relative in (GUARD, PROBE, POLICY, PRODUCT, WRITER):
+        for relative in (GUARD, STRIPPER, PROBE, POLICY, PRODUCT, WRITER):
             destination = os.path.join(tree, relative)
             os.makedirs(os.path.dirname(destination), exist_ok=True)
             shutil.copy(os.path.join(ROOT, relative), destination)
