@@ -32,6 +32,24 @@ The new project is discarded when Logic quits for the next language. At the end 
 language is restored and Logic relaunched on the locale-campaign fixture, confirmed by the arrange
 window's title rather than by the setting written.
 
+WHAT IS PHOTOGRAPHED, AND WHERE
+-------------------------------
+In German, the language #883 reported, the run also records the screen, and around each create it
+captures the track-header rail and asserts that the rail's pixels changed: a created track is a new
+header row, seen without any AX read. Only German, because the rail is located by its AXDescription,
+which Logic localizes, and the locator has a measured German spelling but none for es, fr, it, pt
+or either Chinese. Guessing one would be the defect #883 is about, in the harness.
+
+WHICH CHECKS NAME A MUTATION
+----------------------------
+The three checks this fix governs name the change that turns them red: `AXLocalePolicy.swift` as
+it was on 8c09e586, before this fix. Spanish `project.new` leaving no sheet depends on `Crear` in
+`createButton`. The German drummer's State A and its one inserted track depend on the U+0020
+spelling of its leaf: without it the create finds no leaf and falls back to a key command, which
+returns State B and inserts nothing. That fallback leaves no sheet, so the drummer's no-sheet check
+names no mutation. The other checks name none either. A Spanish create that fails after a sheet was
+left up is reading that sheet, which the named check has already caught.
+
 WHY THE LANGUAGE CHECK IS APPLE'S STRING
 ----------------------------------------
 Whether Logic really came up in the requested language is read off the arrange window's title,
@@ -78,6 +96,21 @@ LOCALES = [("en", "en"), ("ko", "ko"), ("ja", "ja"), ("de", "de"), ("es", "es"),
            ("it", "it"), ("pt", "pt-BR"), ("zh_CN", "zh-CN"), ("zh_TW", "zh-TW")]
 
 OPS = ["create_instrument", "create_drummer", "create_external_midi", "create_audio"]
+
+#: The language the rail is photographed in. See WHAT IS PHOTOGRAPHED, AND WHERE.
+VISUAL_LOCALE = "de"
+
+_DRUMMER = ("the drummer LabelSet without its U+0020 German spelling, as AXLocalePolicy.swift was "
+            "on 8c09e586: no German leaf matches, and the key-command fallback inserts no track")
+
+#: check tag -> the change that turns that check red. See WHICH CHECKS NAME A MUTATION.
+MUTATIONS = {
+    "883/es/project-new-leaves-no-sheet":
+        "createButton without `Crear`, as AXLocalePolicy.swift was on 8c09e586: the Spanish "
+        "sheet's button matches nothing and the sheet is left up",
+    "883/de/create_drummer/envelope-is-state-a": _DRUMMER,
+    "883/de/create_drummer/exactly-one-track-was-inserted-and-the-response-names-it": _DRUMMER,
+}
 
 WT = sys.argv[1] if len(sys.argv) > 1 else ""
 HEAD = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -317,6 +350,8 @@ for lproj, code in LOCALES:
     launched = launch()
     time.sleep(4)
 
+    visual = lproj == VISUAL_LOCALE
+    rec = ev.record_screen(seconds=120) if visual else None
     d = E.Driver()
     tracks(d)  # the first read of a new server can answer before the rail is read at all
     created = d.tool("logic_project", "new", {})
@@ -331,16 +366,28 @@ for lproj, code in LOCALES:
     if not ok_lang:
         summary[lproj] = "no new project in this language"
         d.close()
+        ev.stop_recording(rec)
         continue
     blocking = blocking_counts()
     ev.check(f"{tag}/project-new-leaves-no-sheet", blocking == (0, 0),
              "System Events reports no sheet and no dialog after project.new",
-             f"sheets_and_dialogs={blocking!r}", None)
+             f"sheets_and_dialogs={blocking!r}", MUTATIONS.get(f"{tag}/project-new-leaves-no-sheet"))
     ev.note(f"{tag}/track-menu", {"bar": bar, "titles": track_menu_titles(bar)})
+
+    rail = rail_subject = None
+    if visual:
+        # Located only now: before project.new there is no rail to find.
+        rail, rail_subject = ev.located_band("Tracks header")
+        ev.check(f"{tag}/precondition-the-track-header-rail-was-located",
+                 rail is not None and bool(rail_subject),
+                 "the track-header rail, located by the AXDescription it carries",
+                 f"band={rail!r} subject={rail_subject!r}", None)
+    window = f" - {suffix}"
 
     results = []
     for op in OPS:
         before = tracks(d)
+        pre = ev.shot(f"{tag}/{op}/before", settle_region=rail, window_title=window) if rail else None
         body = d.tool("logic_tracks", op)
         time.sleep(2.0)
         blocking = blocking_counts()
@@ -348,6 +395,11 @@ for lproj, code in LOCALES:
         named = body.get("observed_track_name")
         after = settled_after(d, before, named)
         new = inserted_track(before, after)
+        if pre:
+            post = ev.shot(f"{tag}/{op}/after", settle_region=rail, window_title=window)
+            ev.visual(f"{tag}/{op}/the-rail-gains-a-row", pre["file"], post["file"], rail,
+                      subject=rail_subject, expect_change=True,
+                      why="a created track is a new header row on screen, read off pixels, not AX")
         brief = {k: body.get(k) for k in ("state", "verified", "reason", "error", "failure_stage",
                                           "menu_clicked", "method", "observed_track_name",
                                           "observed_track_type", "track_type_verification_source",
@@ -356,7 +408,8 @@ for lproj, code in LOCALES:
         ev.note(f"{tag}/{op}/response", {"body": body})
         ev.check(f"{tag}/{op}/envelope-is-state-a",
                  body.get("state") == "A" and body.get("verified") is True,
-                 "State A with verified true", f"{brief!r}", None)
+                 "State A with verified true", f"{brief!r}",
+                 MUTATIONS.get(f"{tag}/{op}/envelope-is-state-a"))
         ev.check(f"{tag}/{op}/no-sheet-or-dialog-is-left", blocking == (0, 0),
                  "System Events reports no sheet and no dialog after the call",
                  f"sheets_and_dialogs={blocking!r}", None)
@@ -364,7 +417,8 @@ for lproj, code in LOCALES:
                  new is not None and named == new.get("name"),
                  "one track inserted in the readback, and the response's observed_track_name is its name",
                  f"before={[t.get('name') for t in before]!r} after={[t.get('name') for t in after]!r} "
-                 f"inserted={None if new is None else new.get('name')!r} named={named!r}", None)
+                 f"inserted={None if new is None else new.get('name')!r} named={named!r}",
+                 MUTATIONS.get(f"{tag}/{op}/exactly-one-track-was-inserted-and-the-response-names-it"))
         results.append(brief)
         if blocking != (0, 0):
             # A sheet left up blocks every later call; the next result would be a reading of it.
@@ -372,6 +426,7 @@ for lproj, code in LOCALES:
                                             "sheets_and_dialogs": blocking})
             break
     d.close()
+    ev.stop_recording(rec)
     summary[lproj] = results
 
 # ---- restore the language this machine had, and confirm it from the window title ----
