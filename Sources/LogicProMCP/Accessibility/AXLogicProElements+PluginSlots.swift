@@ -3,12 +3,15 @@ import Foundation
 
 
 extension AXLogicProElements {
+    /// The occupied inserts of `strip`, or nil when the strip's children did not read (#982).
+    /// An empty list is a strip whose chain was read and holds nothing.
     static func pluginSlots(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [PluginSlotState] {
+    ) -> [PluginSlotState]? {
+        guard let children = childrenIfRead(strip, runtime: runtime) else { return nil }
         var plugins: [PluginSlotState] = []
-        for child in AXHelpers.getChildren(strip, runtime: runtime) {
+        for child in children {
             guard let name = occupiedPluginSlotName(child, runtime: runtime) else {
                 continue
             }

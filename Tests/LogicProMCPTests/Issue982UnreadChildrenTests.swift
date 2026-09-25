@@ -145,6 +145,40 @@ struct Issue982UnreadChildrenTests {
         #expect(result.message == AccessibilityChannel.mixerChildrenUnreadMessage)
     }
 
+    static func object(_ result: ChannelResult) throws -> [String: Any] {
+        try #require(result.isSuccess, "\(result.message)")
+        return try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+    }
+
+    static func strips(_ result: ChannelResult) throws -> [[String: Any]] {
+        try #require(result.isSuccess, "\(result.message)")
+        let strips = try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [[String: Any]])
+        try #require(strips.count == 2)
+        return strips
+    }
+
+    /// A Mixer that reads, with one strip that does not. Both readers used to publish that strip's
+    /// chain as `plugins: []` with `plugins_source: "ax"`, which the model defines as a chain that
+    /// was inspected and is empty.
+    @Test func mixerReadersDoNotCertifyAnUnreadStripsChainAsEmpty() throws {
+        let f = Self.fixture()
+        let whole = try Self.strips(AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f)))
+        #expect(whole[0]["plugins_source"] as? String == "ax", "control: the chain reads")
+        let wholePlugins = try #require(whole[0]["plugins"] as? [[String: Any]])
+        #expect(wholePlugins.map { $0["name"] as? String } == ["Compressor"])
+
+        let unread = Self.runtime(f, failing: f.strips[0])
+        let state = try Self.strips(AccessibilityChannel.defaultGetMixerState(runtime: unread))
+        #expect(state[0]["plugins_source"] == nil)
+        #expect(state[0]["plugins_read_error"] as? String == AccessibilityChannel.stripChildrenUnreadMessage)
+        #expect(state[1]["plugins_source"] as? String == "ax", "the strip that read keeps its provenance")
+        #expect(state[1]["plugins_read_error"] == nil)
+
+        let strip = try Self.object(AccessibilityChannel.defaultGetChannelStrip(params: ["index": "0"], runtime: unread))
+        #expect(strip["plugins_source"] == nil)
+        #expect(strip["plugins_read_error"] as? String == AccessibilityChannel.stripChildrenUnreadMessage)
+    }
+
     /// The insert snapshot the verified insert diffs against. A strip whose children did not read
     /// used to snapshot as a strip hosting nothing.
     @Test func fullStripInventoryDoesNotSnapshotAnUnreadStripAsEmpty() {

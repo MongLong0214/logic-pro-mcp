@@ -10,6 +10,8 @@ extension AccessibilityChannel {
     /// strip list, or an index as out of range, would state an absence that was never observed.
     static let mixerChildrenUnreadMessage =
         "The mixer's channel strips could not be read, so they are unknown, not absent. Retry the read."
+    /// The same for one strip's insert chain, carried in `plugins_read_error`.
+    static let stripChildrenUnreadMessage = "the strip's children did not read"
 
     static func defaultGetMixerState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
@@ -33,8 +35,7 @@ extension AccessibilityChannel {
                 volume: volume,
                 pan: pan
             )
-            state.plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax)
-            state.pluginsSource = "ax"
+            readPluginChain(of: strip, into: &state, runtime: runtime)
             // #291: `output` has been on this model since it was written and nothing ever set it, so
             // `logic://mixer` published a field that was always null. It is read now; `nil` still
             // means "not identified", never "routed nowhere".
@@ -43,6 +44,19 @@ extension AccessibilityChannel {
             channelStrips.append(state)
         }
         return encodeResult(channelStrips)
+    }
+
+    /// `plugins_source: "ax"` says the chain was read and an empty list is an honest empty chain,
+    /// so a strip whose children did not read gets no source and says why (#982).
+    private static func readPluginChain(
+        of strip: AXUIElement, into state: inout ChannelStripState, runtime: AXLogicProElements.Runtime
+    ) {
+        if let plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax) {
+            state.plugins = plugins
+            state.pluginsSource = "ax"
+        } else {
+            state.pluginsReadError = stripChildrenUnreadMessage
+        }
     }
 
     static func defaultGetChannelStrip(
@@ -70,8 +84,7 @@ extension AccessibilityChannel {
             ?? 0.0
 
         var state = ChannelStripState(trackIndex: index, volume: volume, pan: pan)
-        state.plugins = AXLogicProElements.pluginSlots(in: strip, runtime: runtime.ax)
-        state.pluginsSource = "ax"
+        readPluginChain(of: strip, into: &state, runtime: runtime)
         state.output = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax)
         state.input = AXLogicProElements.inputSlotSource(in: strip, runtime: runtime.ax)
         return encodeResult(state)

@@ -61,6 +61,9 @@ private final class LiveFixture: @unchecked Sendable {
     let controlsCheckboxPressCount: MutableBox<Int>
     let controlsViewMenuPressCount: MutableBox<Int>
     let editorViewMenuPressCount: MutableBox<Int>
+    /// Every attribute write and action that reached the two handlers, in order, as
+    /// (element id, attribute or action name). The counters above cover named elements only.
+    let axActions = MutableBox<[(element: Int, name: String)]>([])
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -451,7 +454,8 @@ private final class LiveFixture: @unchecked Sendable {
                         : [controlsViewMenu]
                     )
             },
-            setAttributeHandler: { [b] el, attribute, value in
+            setAttributeHandler: { [b, axActions] el, attribute, value in
+                axActions.value.append((b.elementID(el), attribute))
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(pluginWindow),
                    attribute == (kAXMainAttribute as String) || attribute == (kAXFocusedAttribute as String),
@@ -492,7 +496,8 @@ private final class LiveFixture: @unchecked Sendable {
                 }
                 return true
             },
-            performActionHandler: { [b] el, action in
+            performActionHandler: { [b, axActions] el, action in
+                axActions.value.append((b.elementID(el), action))
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(arrangeWindow),
                    action == (kAXRaiseAction as String) {
@@ -3202,6 +3207,13 @@ func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) as
     #expect(obj["what_was_observed"] as? String
         == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
     #expect(fixture.currentSliderValue == 51, "no write may occur when the chain was not read")
+    // Every AX action before the refusal. Step 6 selects the track before Step 7 reads the
+    // inventory, as it does ahead of every inventory refusal on this path, so the selection is the
+    // one action; no plug-in window is opened and no parameter is written.
+    let header = try #require(AXLogicProElements.findTrackHeader(at: 0, runtime: fixture.runtime))
+    let actions = fixture.axActions.value
+    #expect(actions.map(\.name) == [kAXPressAction as String], "\(actions)")
+    #expect(actions.map(\.element) == [fixture.builder.elementID(header)])
 }
 
 // MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)
