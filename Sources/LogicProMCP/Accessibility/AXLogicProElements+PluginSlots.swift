@@ -58,11 +58,13 @@ extension AXLogicProElements {
     /// slot — empty, occupied-readable, occupied-unreadable — keeps its
     /// physical position; only non-slot children (fader / pan / sends / I/O)
     /// are skipped, which never shifts a slot index relative to other slots.
+    ///
+    /// Nil when the strip's children did not read (#982). That is not a strip with no inserts.
     static func audioPluginInsertSlots(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [PluginInsertSlot] {
-        audioPluginInsertSlots(children: AXHelpers.getChildren(strip, runtime: runtime), runtime: runtime)
+    ) -> [PluginInsertSlot]? {
+        childrenIfRead(strip, runtime: runtime).map { audioPluginInsertSlots(children: $0, runtime: runtime) }
     }
 
     /// The same enumeration over a strip's children the caller already read, so a caller that reads

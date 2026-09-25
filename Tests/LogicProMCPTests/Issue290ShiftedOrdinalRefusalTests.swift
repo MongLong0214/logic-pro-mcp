@@ -49,10 +49,10 @@ struct Issue290ShiftedOrdinalRefusalTests {
     }
 
     @Test("the enumeration reports the child it could not read")
-    func enumerationCountsTheUnreadableChild() {
+    func enumerationCountsTheUnreadableChild() throws {
         let builder = FakeAXRuntimeBuilder()
         let (mixer, runtime) = mixerWithUnreadableChild(builder, id: 29_000, readableStrips: 3)
-        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+        let enumeration = try #require(AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime))
         #expect(enumeration.strips.count == 3)
         #expect(enumeration.unreadableChildren == 1)
     }

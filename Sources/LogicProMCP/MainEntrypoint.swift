@@ -634,10 +634,10 @@ enum MainEntrypoint {
             // at all. A survivor count of zero means the site is selecting by index, which is this
             // issue's sentence written literally.
             let mixerArea = AXLogicProElements.getMixerArea()
-            let strips = mixerArea.map {
+            let strips = mixerArea.flatMap {
                 AXLogicProElements.mixerChannelStrips(in: $0, runtime: ax)
-            } ?? []
-            if let strip = strips.first {
+            }
+            if let strip = strips?.first {
                 let sliders = AXHelpers.findAllDescendants(
                     of: strip, role: "AXSlider", maxDepth: 4, runtime: ax)
                 // The ADOPTED predicate, not the one it replaced. `findVolumeFader` resolves
@@ -655,8 +655,11 @@ enum MainEntrypoint {
                        sliders.count,
                        sliders.filter { AXLogicProElements.sliderText($0, runtime: ax).isPanControl }.count)
             } else {
+                // #982: a Mixer whose children did not read is not a Mixer with no strips.
                 results.append(["site": "AXLogicProElements.findVolumeFader/.findPanControl",
-                                "unreachable": "no mixer channel strip in this UI state"])
+                                "unreachable": mixerArea != nil && strips == nil
+                                    ? "the mixer's children did not read in this UI state"
+                                    : "no mixer channel strip in this UI state"])
             }
 
             // Does the discriminated sibling accessor resolve, and is its answer the same element

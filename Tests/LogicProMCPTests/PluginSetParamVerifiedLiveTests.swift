@@ -79,6 +79,9 @@ private final class LiveFixture: @unchecked Sendable {
         duplicateTrackNameAt: Int? = nil,
         pluginSlotNamesByTrack: [Int: [Int: String]] = [:],
         emptyInsertChain: Bool = false,
+        // #982: the children read of the Mixer, or of the target strip, fails through both seams.
+        mixerChildrenUnread: Bool = false,
+        targetStripChildrenUnread: Bool = false,
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
         sliderWriteBehavior: SliderWriteBehavior = .direct,
@@ -213,9 +216,18 @@ private final class LiveFixture: @unchecked Sendable {
             }
             strips.append(strip)
         }
-        b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
-        b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+        if mixerChildrenUnread {
+            // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its
+            // strip children, so it never returns one whose children did not read.
+            b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+        } else {
+            b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+            b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+        }
         b.setChildren(mixer, strips)
+        let unreadChildrenOf: AXUIElement? = mixerChildrenUnread
+            ? mixer : (targetStripChildrenUnread ? strips[track] : nil)
 
         // --- Arrange window holds both the headers group and the mixer. ---
         b.setAttribute(arrangeWindow, kAXRoleAttribute as String, kAXWindowRole as String)
@@ -389,6 +401,9 @@ private final class LiveFixture: @unchecked Sendable {
                 return nil
             },
             childrenHandler: { element in
+                if let unreadChildrenOf, CFEqual(element, unreadChildrenOf) {
+                    return []
+                }
                 if CFEqual(element, pluginWindow),
                    let pending = pendingPluginWindowChildren.value,
                    Date() >= pending.settlesAt {
@@ -404,6 +419,9 @@ private final class LiveFixture: @unchecked Sendable {
                 // The status-preserving censuses read through this seam rather
                 // than `childrenHandler`; advance the same realistic view-settle
                 // state before serving either read path.
+                if let unreadChildrenOf, CFEqual(element, unreadChildrenOf) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 if CFEqual(element, pluginWindow),
                    let pending = pendingPluginWindowChildren.value,
                    Date() >= pending.settlesAt {
@@ -3166,6 +3184,24 @@ private func namedEQBandParams(
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "incomplete_inventory")
     #expect(!((obj["write_attempted"] as? Bool)!))
+}
+
+// MARK: - #982 unread children are refused as unread, not as an absent track
+
+@Test(arguments: [true, false])
+func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) async {
+    // Before #982 an unread Mixer read as one with no strips ("track index 0 is not present") and
+    // an unread strip as one with no inserts ("insert 6 ... out of range").
+    let fixture = LiveFixture(
+        beforeValue: 51, mixerChildrenUnread: mixerUnread, targetStripChildrenUnread: !mixerUnread)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "incomplete_inventory")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(obj["what_was_observed"] as? String
+        == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
+    #expect(fixture.currentSliderValue == 51, "no write may occur when the chain was not read")
 }
 
 // MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)

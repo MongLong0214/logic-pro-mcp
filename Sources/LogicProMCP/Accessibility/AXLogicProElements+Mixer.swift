@@ -173,8 +173,8 @@ extension AXLogicProElements {
 
     /// Find a volume fader for a specific track index within the mixer.
     static func findFader(trackIndex: Int, runtime: Runtime = .production) -> AXUIElement? {
-        guard let mixer = getMixerArea(runtime: runtime) else { return nil }
-        let strips = mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard let mixer = getMixerArea(runtime: runtime),
+              let strips = mixerChannelStrips(in: mixer, runtime: runtime.ax) else { return nil }
         guard trackIndex >= 0 && trackIndex < strips.count else { return nil }
         let strip = strips[trackIndex]
         return findVolumeFader(in: strip, runtime: runtime.ax)
@@ -182,8 +182,8 @@ extension AXLogicProElements {
 
     /// Find the pan knob for a track in the mixer.
     static func findPanKnob(trackIndex: Int, runtime: Runtime = .production) -> AXUIElement? {
-        guard let mixer = getMixerArea(runtime: runtime) else { return nil }
-        let strips = mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard let mixer = getMixerArea(runtime: runtime),
+              let strips = mixerChannelStrips(in: mixer, runtime: runtime.ax) else { return nil }
         guard trackIndex >= 0 && trackIndex < strips.count else { return nil }
         let strip = strips[trackIndex]
         return findPanControl(in: strip, runtime: runtime.ax)
@@ -284,11 +284,13 @@ extension AXLogicProElements {
         }
     }
 
+    /// The Mixer's strips, or nil when its children did not read (#982). Nil is not a Mixer with
+    /// no strips: a reader reports it as unknown and a mutating caller refuses.
     static func mixerChannelStrips(
         in mixer: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [AXUIElement] {
-        stripEnumeration(in: mixer, runtime: runtime).strips
+    ) -> [AXUIElement]? {
+        stripEnumeration(in: mixer, runtime: runtime)?.strips
     }
 
     /// The strips, but only when the enumeration read EVERY child (#290).
@@ -306,8 +308,8 @@ extension AXLogicProElements {
         in mixer: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> (strips: [AXUIElement], unreadableChildren: Int)? {
-        let enumeration = stripEnumeration(in: mixer, runtime: runtime)
-        guard enumeration.unreadableChildren == 0 else { return nil }
+        guard let enumeration = stripEnumeration(in: mixer, runtime: runtime),
+              enumeration.unreadableChildren == 0 else { return nil }
         return enumeration
     }
 
@@ -318,11 +320,26 @@ extension AXLogicProElements {
     /// strip 1 — a wrong-target write that no downstream readback can catch, because the readback
     /// reads the same shifted list. The count is returned so a mutating caller can refuse instead of
     /// addressing a list it cannot trust. A read-only caller may still use the strips.
+    ///
+    /// Nil when the Mixer's own children did not read (#982). `getChildren` answers that failure
+    /// with [], which this function used to enumerate as a Mixer with no strips and zero unreadable
+    /// children: a complete read of nothing.
     static func stripEnumeration(
         in mixer: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> (strips: [AXUIElement], unreadableChildren: Int) {
-        stripEnumeration(children: AXHelpers.getChildren(mixer, runtime: runtime), runtime: runtime)
+    ) -> (strips: [AXUIElement], unreadableChildren: Int)? {
+        childrenIfRead(mixer, runtime: runtime).map { stripEnumeration(children: $0, runtime: runtime) }
+    }
+
+    /// An element's children, or nil when they did not read (#982). -25205 and -25212 are answers
+    /// that the element has no children, so they read as []; any other failure is unknown, not
+    /// empty.
+    static func childrenIfRead(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case let .success(children): return children
+        case let .failure(error) where error.isDefinitiveAbsence: return []
+        case .failure: return nil
+        }
     }
 
     /// The same enumeration over children the caller already read, so a caller that reads them with

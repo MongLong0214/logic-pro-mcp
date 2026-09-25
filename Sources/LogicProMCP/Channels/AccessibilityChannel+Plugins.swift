@@ -101,7 +101,16 @@ extension AccessibilityChannel {
         // later strip moves down one — a request for track 0 then inserts into physical strip 1, and
         // no readback catches it because the readback reads the same shifted list. Resolve exactly,
         // or refuse.
-        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        // #982: a Mixer whose children did not read is refused for that reason, not reported as a
+        // Mixer too small for the requested track.
+        guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "refusing insert_plugin: the mixer's children did not read, so no strip can be "
+                    + "addressed. They are unknown, not absent.",
+                extras: ["track": track, "mixer_children_unread": true, "write_attempted": false]
+            ))
+        }
         guard enumeration.unreadableChildren == 0 else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
@@ -126,7 +135,15 @@ extension AccessibilityChannel {
             ))
         }
         let strip = strips[track]
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: runtime.ax)
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: runtime.ax) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "refusing insert_plugin: the strip's children did not read, so its insert slots "
+                    + "are unknown, not absent.",
+                extras: ["track": track, "slot": slotIndex, "strip_children_unread": true,
+                         "write_attempted": false]
+            ))
+        }
         guard slotIndex < slots.count else {
             // #234 — a zero-slot strip names the insert_section_not_enumerable
             // condition (retaining visible_slots:0); an out-of-range index on a
@@ -243,9 +260,9 @@ extension AccessibilityChannel {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {
             if let mixer = AXLogicProElements.getMixerArea(runtime: runtime) {
-                let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
-                if track < strips.count {
-                    let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+                if let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax),
+                   track < strips.count,
+                   let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) {
                     if slot < slots.count, let name = slots[slot].name {
                         return name
                     }

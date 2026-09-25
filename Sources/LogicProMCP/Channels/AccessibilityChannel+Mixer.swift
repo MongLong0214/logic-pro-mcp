@@ -6,11 +6,18 @@ import Foundation
 extension AccessibilityChannel {
     // MARK: - Mixer
 
+    /// #982: a Mixer whose children did not read has strips nobody saw. Reporting it as an empty
+    /// strip list, or an index as out of range, would state an absence that was never observed.
+    static let mixerChildrenUnreadMessage =
+        "The mixer's channel strips could not be read, so they are unknown, not absent. Retry the read."
+
     static func defaultGetMixerState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
             return .error("Cannot locate mixer — is it visible?")
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+            return .error(mixerChildrenUnreadMessage)
+        }
         var channelStrips: [ChannelStripState] = []
 
         for (index, strip) in strips.enumerated() {
@@ -48,7 +55,9 @@ extension AccessibilityChannel {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
             return .error("Cannot locate mixer — is it visible?")
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+            return .error(mixerChildrenUnreadMessage)
+        }
         guard index >= 0 && index < strips.count else {
             return .error("Channel strip index \(index) out of range")
         }

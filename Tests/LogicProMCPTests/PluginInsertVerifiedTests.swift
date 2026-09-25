@@ -68,8 +68,12 @@ private func addMenuItem(
     return item
 }
 
+/// #982: whose children read fails, through both seams, as production fails it.
+private enum UnreadChildren { case mixer, strip }
+
 private func makeMixerFixture(
     _ b: FakeAXRuntimeBuilder,
+    unreadChildren: UnreadChildren? = nil,
     stripChildren: (FakeAXRuntimeBuilder) -> [AXUIElement]
 ) -> AXLogicProElements.Runtime {
     let app = b.element(900)
@@ -83,7 +87,21 @@ private func makeMixerFixture(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
-    return b.makeLogicRuntime(appElement: app)
+    guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
+    if unreadChildren == .mixer {
+        // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its strip
+        // children, so it never returns one whose children did not read.
+        b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    }
+    let failing = unreadChildren == .mixer ? mixer : strip
+    return b.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { CFEqual($0, failing) ? [] : nil },
+        childrenResultHandler: {
+            CFEqual($0, failing) ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+        },
+        setAttributeHandler: nil, performActionHandler: nil)
 }
 
 /// A driver that records its inputs and returns a canned outcome. Used to verify
@@ -488,6 +506,22 @@ private func insertParams(
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)
     #expect(obj["error"] as? String == "incomplete_inventory")
     #expect(!((obj["write_attempted"] as? Bool)!))
+}
+
+// MARK: - #982: children that did not read are refused as such
+
+@Test(arguments: [true, false])
+func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool) async throws {
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b, unreadChildren: mixerUnread ? .mixer : .strip) { b in
+        [addEmptySlot(b, 9825)]
+    }
+    let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "incomplete_inventory")
+    #expect(obj["write_attempted"] as? Bool == false)
+    let observed = try #require(obj["what_was_observed"] as? String)
+    #expect(observed == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
 }
 
 @Test func testVerifiedDiffSnapshotRefusesUnreadableSlots() async {
@@ -1558,7 +1592,7 @@ private final class AXPressRecorder: @unchecked Sendable {
     b.setChildren(mixer, [ghost, stripA, stripB])
 
     let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
-    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+    let enumeration = try #require(AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime))
 
     // The filter still yields two strips, but they are NOT at the ordinals the caller means: the
     // caller's "strip 0" is physically the second child here.
@@ -1577,7 +1611,7 @@ private final class AXPressRecorder: @unchecked Sendable {
     b.setChildren(mixer, [stripA, stripB])
 
     let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
-    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+    let enumeration = try #require(AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime))
 
     // The positive twin: a healthy mixer must not be refused, or the guard would block every write.
     #expect(enumeration.strips.count == 2)

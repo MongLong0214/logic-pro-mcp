@@ -192,7 +192,23 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // #982: children that did not read are unknown. Before, they read as a Mixer with no strips
+        // ("track index is not present") or a strip with no inserts.
+        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+            return .success(HonestContract.encodeV2StateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "track": track,
+                    "plugins_source": "ax",
+                    "plugins_fetched_at": fetchedAt,
+                    "plugins_unknown_reason": "ax_subtree_unreadable",
+                    "what_was_attempted": "read insert chain inventory for track \(track)",
+                    "what_was_observed": "the mixer's children did not read",
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
         guard track < strips.count else {
             return .success(HonestContract.encodeV2StateB(
                 reason: .readbackUnavailable,
@@ -209,7 +225,21 @@ extension AccessibilityChannel {
             ))
         }
 
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
+            return .success(HonestContract.encodeV2StateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "track": track,
+                    "plugins_source": "ax",
+                    "plugins_fetched_at": fetchedAt,
+                    "plugins_unknown_reason": "ax_subtree_unreadable",
+                    "what_was_attempted": "read insert chain inventory for track \(track)",
+                    "what_was_observed": "the mixer strip for track \(track) was located but its children did not read",
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
         // #234 honesty gate — a visible insert section always exposes at least the
         // empty append row, so an enumeration of ZERO slots means the strip could
         // not be read (12.3 mixer AX-layout drift, or a strip type without an insert
@@ -1139,11 +1169,15 @@ extension AccessibilityChannel {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
             return .error(incompleteInventoryStateC(operation, identity, "mixer area was not locatable"))
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+            return .error(incompleteInventoryStateC(operation, identity, "the mixer's children did not read"))
+        }
         guard track < strips.count else {
             return .error(incompleteInventoryStateC(operation, identity, "track index \(track) is not present in the visible mixer"))
         }
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
+            return .error(incompleteInventoryStateC(operation, identity, "the strip's children did not read"))
+        }
         let inventory = pluginInventoryItems(for: slots)
         guard inventory.complete else {
             return .error(incompleteInventoryStateC(operation, identity, "one or more insert slots are unreadable (complete:false)"))
@@ -2764,11 +2798,11 @@ extension AccessibilityChannel {
         originalSlot: AXUIElement,
         runtime: AXLogicProElements.Runtime
     ) -> Bool {
-        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return false }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
-        guard track >= 0, track < strips.count else { return false }
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
-        guard slots.indices.contains(insert), slots[insert].occupied,
+        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime),
+              let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax),
+              track >= 0, track < strips.count,
+              let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax),
+              slots.indices.contains(insert), slots[insert].occupied,
               slots[insert].readStatus == .occupiedReadable,
               let observedName = slots[insert].name,
               VerifiedPluginCatalog.pluginID(forObservedName: observedName) == pluginID else {
@@ -3315,21 +3349,30 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
-        guard track < strips.count else {
-            return .error(HonestContract.encodeV2StateC(
+        // #982: children that did not read are refused as such, not as a missing track or an empty
+        // chain.
+        func childrenUnread(_ observed: String) -> ChannelResult {
+            .error(HonestContract.encodeV2StateC(
                 error: .incompleteInventory,
                 extras: [
                     "operation": operation,
                     "target_identity": identity,
                     "what_was_attempted": "read insert inventory before inserting",
-                    "what_was_observed": "track index \(track) is not present in the visible mixer",
+                    "what_was_observed": observed,
                     "safe_to_retry": true,
                     "write_attempted": false,
                 ]
             ))
         }
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
+            return childrenUnread("the mixer's children did not read")
+        }
+        guard track < strips.count else {
+            return childrenUnread("track index \(track) is not present in the visible mixer")
+        }
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
+            return childrenUnread("the strip's children did not read")
+        }
         let built = pluginInventoryItems(for: slots)
         guard built.complete else {
             return .error(HonestContract.encodeV2StateC(
@@ -4102,11 +4145,13 @@ extension AccessibilityChannel {
         // Strips are addressed by ordinal, so a child whose role could not be read moves every
         // later strip down one and turns a request for track N into an act on physical strip N+1.
         // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
-        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
-        guard enumeration.unreadableChildren == 0 else { return nil }
+        guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax),
+              enumeration.unreadableChildren == 0 else { return nil }
         let strips = enumeration.strips
         guard track >= 0, track < strips.count else { return nil }
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
+            return nil
+        }
         // #234 — a zero-slot result on this mid-flight re-resolution means the
         // insert section became non-enumerable after the pre-insert snapshot
         // (insert_section_not_enumerable semantics, per slotAddressingFailureDetail).
@@ -4669,12 +4714,13 @@ extension AccessibilityChannel {
         // Strips are addressed by ordinal, so a child whose role could not be read moves every
         // later strip down one and turns a request for track N into an act on physical strip N+1.
         // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
-        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
-        guard enumeration.unreadableChildren == 0 else { return nil }
+        guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax),
+              enumeration.unreadableChildren == 0 else { return nil }
         let strips = enumeration.strips
         guard track < strips.count else { return nil }
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
-        guard !slots.contains(where: { $0.readStatus == .occupiedUnreadable }) else {
+        // #982: a strip whose children did not read is not an empty chain.
+        guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax),
+              !slots.contains(where: { $0.readStatus == .occupiedUnreadable }) else {
             return nil
         }
         var result: [Int: InventoryEntry] = [:]
