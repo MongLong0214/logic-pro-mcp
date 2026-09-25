@@ -325,7 +325,7 @@ def _locale_code(locale: str) -> str:
 
 
 def _apple_ships(entry: dict, locale: str) -> bool:
-    """Whether Apple's own corpus holds one of this label's strings in this locale.
+    """Whether Apple's own corpus holds one of this label's strings in this locale, up to case.
 
     Offline: `docs/canon/absence/` is committed. A repository without the canon axis gets False
     for everything, which leaves the old behaviour exactly as it was.
@@ -369,8 +369,11 @@ def _apple_ships(entry: dict, locale: str) -> bool:
                 continue
             if text in composed:
                 return True
+            # Asked up to case, because that is how every match mode the ledger records compares.
+            # Byte-exact, `mixer` read as unshipped in German, where Logic's row is `Mixer` and the
+            # product matches it (#981). Decoration still counts: `Mixer:` is not `mixer`.
             try:
-                if not canon.is_absent(source, code, text):
+                if not canon.is_absent_ignoring_case(source, code, text):
                     return True
             except canon.CanonError:
                 # A corpus this source does not carry for this locale. `continue` is right: the

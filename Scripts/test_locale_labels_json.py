@@ -1224,19 +1224,40 @@ def main():
     if _canon is None:
         case("the canon module loads so the handler can be driven", False, "no canon module")
     else:
-        _real = _canon.is_absent
+        _real = _canon.is_absent_ignoring_case
         def _boom(*_args, **_kwargs):
             raise TypeError("not a corpus problem")
-        _canon.is_absent = _boom
+        _canon.is_absent_ignoring_case = _boom
         try:
             labels._apple_ships(_chinese, "zh-CN")
             swallowed = True
         except TypeError:
             swallowed = False
         finally:
-            _canon.is_absent = _real
+            _canon.is_absent_ignoring_case = _real
         case("a programming error is not read as Apple shipping nothing", not swallowed,
              "a bare except swallowed a TypeError and answered False")
+
+    # #981. `_apple_ships` compared bytes, and every match mode the ledger records ignores case, so a
+    # member equal to Apple's row up to case read as unshipped. `mixerNamedElement`'s canonical is
+    # `mixer` and a German Logic ships `Mixer`. The control comes first and in the same run: if the
+    # German corpus ever carried `mixer` byte for byte, the case below would pass without saying
+    # anything about case.
+    if _canon is not None:
+        _de = [source for source, block in (_canon.load_manifest().get("sources") or {}).items()
+               if "de" in (block.get("locales") or [])]
+        case("the German corpus does not carry `mixer` byte for byte, so the next case is about case",
+             bool(_de) and all(_canon.is_absent(source, "de", "mixer") for source in _de),
+             f"de sources {_de}: `mixer` is present exactly, or no German corpus was found")
+        case("a member Apple ships only in another case reads as shipped",
+             labels._apple_ships({"canonical": "mixer", "variants": []}, "de-DE"),
+             "`mixer` read as unshipped in de-DE, where Logic ships `Mixer`")
+        # Only case is forgiven. Decoration, a missing letter and a different word are all still
+        # strings Apple does not ship.
+        for _other in ("Mixer:", "mixr", "Mischer"):
+            case(f"{_other!r} differs from Apple's row by more than case and reads as unshipped",
+                 not labels._apple_ships({"canonical": _other, "variants": []}, "de-DE"),
+                 f"{_other!r} read as shipped in de-DE")
 
     if failures:
         for f in failures:

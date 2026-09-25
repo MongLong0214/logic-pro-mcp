@@ -184,7 +184,7 @@ _DECORATION = "\u2026...:：·•\t\n\r \u00a0\u3000-–—_"
 
 
 def fold_for_near_miss(text: str) -> str:
-    """`normalize`, then case-folded with decoration and whitespace removed.
+    """`normalize`, with decoration and whitespace removed. Case is kept; see below.
 
     NOT a canon comparison and never used as one. `absent` proves a BYTE STRING is not in the
     corpus, and that is exactly true and quietly useless on its own: `Input Port:` is absent and
@@ -208,6 +208,22 @@ def fold_for_near_miss(text: str) -> str:
     # exactly that spelling to pass an absence claim for a label Logic ships.
     return "".join(ch for ch in normalize(text)
                    if ch not in _DECORATION and unicodedata.category(ch) != "Cf")
+
+
+def fold_case(text: str) -> str:
+    """`normalize`, then Unicode case folding. The comparison a LabelSet makes, and only that.
+
+    Every match mode the ledger certifies ignores case: `caseInsensitiveCompare` for `exact` and
+    `exact_strict`, `.caseInsensitive` for `prefix` and `contains`. Measured 2026-09-25 against
+    Foundation on this Mac: `caseInsensitiveCompare` agrees with `str.casefold` on `straße`/`STRASSE`,
+    a final sigma and the `fi` ligature, where `str.lower` does not. So asking the corpus "does Apple
+    ship this, as the product would match it" means folding both sides this way.
+
+    It is not `fold_for_near_miss`. That one keeps case and drops decoration, because it answers
+    whether an ABSENCE claim is a typo; this one keeps decoration and drops case, because it answers
+    whether a MEMBER is a string Apple ships. `Mixer:` is still not `mixer`.
+    """
+    return normalize(text).casefold()
 
 
 def short_digest(text: str) -> str:
@@ -1272,6 +1288,19 @@ def folded_path(source: str, locale: str) -> str:
     return os.path.join(ABSENCE_DIR, f"{source}.{locale}.folded.u32")
 
 
+def casefold_path(source: str, locale: str) -> str:
+    """Beside the absence set, over `fold_case`. Same format; the question a LabelSet asks."""
+    return os.path.join(ABSENCE_DIR, f"{source}.{locale}.casefold.u32")
+
+
+def _absence_file(source: str, locale: str, folded: bool, casefold: bool) -> str:
+    if folded and casefold:
+        raise CanonError("an absence set is folded for near misses or case-folded, not both")
+    if casefold:
+        return casefold_path(source, locale)
+    return folded_path(source, locale) if folded else absence_path(source, locale)
+
+
 def load_index(source: str) -> dict[tuple[str, str, str, str], str]:
     """The committed key->digest table for one source.
 
@@ -1314,16 +1343,19 @@ def write_index(source: str, rows: dict[tuple[str, str, str, str], str]) -> None
                          f"{rows[(unit, locale, key, field)]}\n")
 
 
-def write_absence(source: str, locale: str, values, *, folded: bool = False) -> int:
+def write_absence(source: str, locale: str, values, *, folded: bool = False,
+                  casefold: bool = False) -> int:
     """Write the sorted 32-bit digest prefixes of every value seen. Returns how many were kept.
 
     `folded` writes the same structure over `fold_for_near_miss` instead, which is how `absent`
     can say "and nothing in the corpus differs from this only by decoration" without Logic.
+    `casefold` writes it over `fold_case`, which is how `locale_labels.py` asks whether a member
+    is shipped in the form the product matches it (#981).
     """
     os.makedirs(ABSENCE_DIR, exist_ok=True)
-    key = fold_for_near_miss if folded else (lambda v: v)
+    path = _absence_file(source, locale, folded, casefold)
+    key = fold_for_near_miss if folded else fold_case if casefold else (lambda v: v)
     unique = sorted({_u32(key(value)) for value in values if value})
-    path = folded_path(source, locale) if folded else absence_path(source, locale)
     with open(path, "wb") as handle:
         handle.write(b"LCA1")
         handle.write(struct.pack(">I", len(unique)))
@@ -1342,8 +1374,9 @@ def write_absence(source: str, locale: str, values, *, folded: bool = False) -> 
 _ABSENCE_CACHE: dict = {}
 
 
-def load_absence(source: str, locale: str, *, folded: bool = False) -> list[int]:
-    path = folded_path(source, locale) if folded else absence_path(source, locale)
+def load_absence(source: str, locale: str, *, folded: bool = False,
+                 casefold: bool = False) -> list[int]:
+    path = _absence_file(source, locale, folded, casefold)
     try:
         stamp = os.stat(path)
         key = (path, stamp.st_size, stamp.st_mtime_ns)
@@ -1399,6 +1432,21 @@ def is_absent(source: str, locale: str, text: str) -> bool:
     """
     table = load_absence(source, locale)
     needle = _u32(text)
+    position = bisect.bisect_left(table, needle)
+    return not (position < len(table) and table[position] == needle)
+
+
+def is_absent_ignoring_case(source: str, locale: str, text: str) -> bool:
+    """`is_absent`, asked the way a LabelSet matches: nothing in the corpus equals `text` up to case.
+
+    The byte-exact question understated coverage. `mixerNamedElement`'s canonical is `mixer`, a
+    German Logic ships the row capitalised, and every matcher the product has ignores case -- so
+    the label matched in de-DE while this corpus said Apple ships nothing for it (#981). Only case
+    is forgiven: a string that differs from every shipped value in any other way is still absent.
+    The collision asymmetry is the same as `is_absent`'s, over the case-folded set.
+    """
+    table = load_absence(source, locale, casefold=True)
+    needle = _u32(fold_case(text))
     position = bisect.bisect_left(table, needle)
     return not (position < len(table) and table[position] == needle)
 
@@ -1834,10 +1882,11 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                     f"every absence claim over it false, so this stops the build rather than "
                     f"shrinking. Nothing has been written.")
         paths = corpus_files(app, source)
-        absence_counts, folded_counts = {}, {}
+        absence_counts, folded_counts, casefold_counts = {}, {}, {}
         for locale, values in sorted(values_by_locale.items()):
             absence_counts[locale] = write_absence(source, locale, values)
             folded_counts[locale] = write_absence(source, locale, values, folded=True)
+            casefold_counts[locale] = write_absence(source, locale, values, casefold=True)
         manifest["sources"][source] = {
             "files": len(paths),
             "entries": entries,
@@ -1845,6 +1894,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             "locales": sorted(values_by_locale),
             "absence_entries": absence_counts,
             "folded_entries": folded_counts,
+            "casefold_entries": casefold_counts,
             "absence_false_positive": {
                 locale: round(absence_false_positive(count), 12)
                 for locale, count in absence_counts.items()},
@@ -2067,19 +2117,23 @@ def verify_absence_counts(manifest: dict) -> list:
     It is not a cryptographic control and nothing offline can be. It makes the forgery need three
     consistent edits -- the binary set, its digest, and a number a reviewer reads -- instead of two.
     """
+    # The case-folded set is read in the other direction -- a value found there makes a label
+    # `derived` -- so an entry ADDED to it is the forgery that matters, and a count catches that too.
     problems = []
     for source, block in (manifest.get("sources") or {}).items():
-        for locale, declared in (block.get("absence_entries") or {}).items():
-            try:
-                found = len(load_absence(source, locale))
-            except CanonError as exc:
-                problems.append(f"absence/{source}.{locale}.u32: {exc}")
-                continue
-            if found != declared:
-                problems.append(
-                    f"absence/{source}.{locale}.u32 holds {found} entries and MANIFEST.json "
-                    f"declares {declared}. A set that lost entries proves strings absent that "
-                    f"Logic ships.")
+        for field, casefold, suffix in (("absence_entries", False, "u32"),
+                                        ("casefold_entries", True, "casefold.u32")):
+            for locale, declared in (block.get(field) or {}).items():
+                try:
+                    found = len(load_absence(source, locale, casefold=casefold))
+                except CanonError as exc:
+                    problems.append(f"absence/{source}.{locale}.{suffix}: {exc}")
+                    continue
+                if found != declared:
+                    problems.append(
+                        f"absence/{source}.{locale}.{suffix} holds {found} entries and "
+                        f"MANIFEST.json declares {declared}. A set that lost entries proves strings "
+                        f"absent that Logic ships; one that gained them credits strings it does not.")
     return problems
 
 

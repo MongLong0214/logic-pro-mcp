@@ -132,6 +132,28 @@ class AbsenceSet(unittest.TestCase):
             finally:
                 canon.ABSENCE_DIR = saved
 
+    def test_the_case_folded_set_forgives_case_and_nothing_else(self):
+        # #981: the question a LabelSet asks. `Straße`/`STRASSE` is Unicode case folding, which is
+        # what Foundation's `caseInsensitiveCompare` does; the colon and the dropped letter are not.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = canon.ABSENCE_DIR
+            canon.ABSENCE_DIR = tmp
+            try:
+                canon.write_absence("t", "de", ["Mixer", "Straße"])
+                canon.write_absence("t", "de", ["Mixer", "Straße"], casefold=True)
+                for same in ("Mixer", "mixer", "MIXER", "strasse", "STRASSE"):
+                    self.assertFalse(canon.is_absent_ignoring_case("t", "de", same), same)
+                for other in ("Mixer:", "mixr", "Mix er"):
+                    self.assertTrue(canon.is_absent_ignoring_case("t", "de", other), other)
+                # The byte-exact question is unchanged beside it.
+                self.assertTrue(canon.is_absent("t", "de", "mixer"))
+                self.assertFalse(canon.is_absent("t", "de", "Mixer"))
+                with self.assertRaises(canon.CanonError):
+                    canon.write_absence("t", "de", ["x"], folded=True, casefold=True)
+            finally:
+                canon.ABSENCE_DIR = saved
+
     def test_an_absence_set_that_does_not_exist_refuses_rather_than_answering(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -348,6 +370,25 @@ class TheLoadBearingComparisons(unittest.TestCase):
                              + b"".join(struct.pack(">I", x) for x in table))
             problems = canon.verify_absence_counts(manifest)
             self.assertTrue(any("lost entries" in p for p in problems), problems)
+        finally:
+            canon.ABSENCE_DIR = saved
+
+    def test_a_case_folded_set_that_gained_an_entry_is_refused(self):
+        # Read for PRESENCE by `locale_labels.py`, so the forgery that matters is an added entry:
+        # it would make a string Apple does not ship read as `derived`.
+        import struct
+        saved, canon.ABSENCE_DIR = canon.ABSENCE_DIR, self.tmp
+        try:
+            canon.write_absence("t", "ko", ["a-value", "b-value"], casefold=True)
+            manifest = {"sources": {"t": {"casefold_entries": {"ko": 2}}}}
+            self.assertEqual(canon.verify_absence_counts(manifest), [])
+            table = sorted(canon.load_absence("t", "ko", casefold=True)
+                           + [canon._u32(canon.fold_case("forged"))])
+            with open(canon.casefold_path("t", "ko"), "wb") as handle:
+                handle.write(b"LCA1" + struct.pack(">I", len(table))
+                             + b"".join(struct.pack(">I", x) for x in table))
+            problems = canon.verify_absence_counts(manifest)
+            self.assertTrue(any("casefold.u32 holds 3" in p for p in problems), problems)
         finally:
             canon.ABSENCE_DIR = saved
 

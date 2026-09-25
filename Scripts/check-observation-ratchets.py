@@ -42,7 +42,7 @@ SURFACES = os.path.join(OBS, "SURFACES.md")
 
 
 def _derivable_variants(repo: str) -> set:
-    """Every variant Apple's own corpus holds, so the ledger does not ask for a reading of one.
+    """Every variant Apple's own corpus holds up to case, so the ledger does not ask for a reading of one.
 
     Offline: `docs/canon/absence/` is committed, so this needs no Logic. A variant absent from
     every corpus is unchanged -- still debt, still needing somebody to have seen it.
@@ -83,9 +83,11 @@ def _derivable_variants(repo: str) -> set:
             if variant in composed:
                 out.add(variant)
                 continue
+            # Up to case, as `locale_labels.py` asks it for coverage (#981): one question read
+            # two ways would call a variant Apple's in the ledger and debt here.
             for src, loc in corpora:
                 try:
-                    if not canon.is_absent(src, loc, variant):
+                    if not canon.is_absent_ignoring_case(src, loc, variant):
                         out.add(variant)
                         break
                 except Exception:

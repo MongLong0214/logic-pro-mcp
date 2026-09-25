@@ -178,16 +178,16 @@
    "rationale": "Marks an external-MIDI strip's controller-assignment rows; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "audioPluginSlotLabel": {
@@ -260,7 +260,7 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -277,16 +277,16 @@
    "rationale": "Classifies the track-header automation mode as Latch; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "automationModeOff": {
@@ -310,7 +310,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "automationModeRead": {
@@ -321,16 +321,16 @@
    "rationale": "Classifies the track-header automation mode as Read; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "automationModeTouch": {
@@ -341,16 +341,16 @@
    "rationale": "Classifies the track-header automation mode as Touch; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "automationModeTrim": {
@@ -361,16 +361,16 @@
    "rationale": "Classifies the track-header automation mode as Trim; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "automationModeWrite": {
@@ -381,16 +381,16 @@
    "rationale": "Classifies the track-header automation mode as Write; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "barSliderLabel": {
@@ -668,7 +668,7 @@
    "rationale": "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows.",
    "match": "exact_strict",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -1446,7 +1446,7 @@
    "rationale": "Identifies the control bar's display-mode AXPopUpButton by description. Read live 2026-09-14 on a Korean Logic 12.3; it is the control that decides how many position components the Playhead Position group exposes.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -2076,10 +2076,10 @@
    "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it.",
    "match": "exact_strict",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -2661,16 +2661,16 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -2707,16 +2707,16 @@
    ],
    "match": "prefix",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "keyCommandsWindowTitle": {
@@ -2789,7 +2789,7 @@
    "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists).",
    "match": "exact_strict",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -2815,10 +2815,10 @@
    "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -2975,16 +2975,16 @@
    "rationale": "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "midiFileMenuItem": {
@@ -3147,16 +3147,16 @@
    "rationale": "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "mixerInspectorContext": {
@@ -3173,11 +3173,11 @@
    "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
@@ -3667,8 +3667,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "okButton": {
@@ -3816,16 +3816,16 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "playheadPositionFieldLabel": {
@@ -3836,16 +3836,16 @@
    "rationale": "Identifies the playhead position text field description; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "playheadPositionGroupLabel": {
@@ -3936,7 +3936,7 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -4230,8 +4230,8 @@
     "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
    }
@@ -4344,13 +4344,13 @@
    "rationale": "Absent from every canonical corpus, so measured rather than derived. Korean read off a live plug-in menu; the remaining locales are unmeasured. Carried as a LabelSet so the gap is countable instead of living in a hard-coded `||`.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
@@ -4374,7 +4374,7 @@
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
@@ -4465,16 +4465,16 @@
    "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -4712,16 +4712,16 @@
    "rationale": "Distinguishes the Choose-Project picker window from a real project; read-only classifier.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "recordArmKeyCommandName": {
@@ -4792,10 +4792,10 @@
    "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -4816,13 +4816,13 @@
    "rationale": "Classifies a region as audio content; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
@@ -4838,16 +4838,16 @@
    "rationale": "Classifies a region as drummer/session-player content; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "regionKindMidi": {
@@ -4856,16 +4856,16 @@
    "rationale": "Classifies a region as MIDI content; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "renameTrackMenuItem": {
@@ -5095,7 +5095,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "setLocatorsMenuItem": {
@@ -5346,12 +5346,12 @@
     "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "measured",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "de-DE": "2026-09-12-de-DE-arrange-menus-census"
@@ -5371,14 +5371,14 @@
    "rationale": "Classifies a slider as a send control; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
     "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
     "zh-TW": "unmeasured"
    }
@@ -5427,8 +5427,8 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "sliderZoomHint": {
@@ -5439,16 +5439,16 @@
    "rationale": "Classifies a slider as a zoom control; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -5636,7 +5636,7 @@
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
-    "pt-BR": "unmeasured",
+    "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
@@ -5995,12 +5995,12 @@
    "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
@@ -6053,13 +6053,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "toPlayheadMenuItem": {
@@ -6169,10 +6169,10 @@
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
     "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-regions-census",
@@ -6393,13 +6393,13 @@
    "rationale": "Classifies an audio track by header aggregate; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
@@ -6411,16 +6411,16 @@
    "rationale": "Classifies an aux track; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "trackTypeBus": {
@@ -6437,7 +6437,7 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -6452,14 +6452,14 @@
    "rationale": "Classifies a drummer track; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
     "zh-TW": "unmeasured"
    }
@@ -6472,16 +6472,16 @@
    "rationale": "Classifies an external-MIDI track; read-only classifier.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "trackTypeGMDevice": {
@@ -6490,7 +6490,7 @@
    "rationale": "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only.",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
@@ -6513,8 +6513,8 @@
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
     "es-ES": "unmeasured",
     "fr-FR": "derived",
     "it-IT": "unmeasured",
@@ -6534,7 +6534,7 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -6591,13 +6591,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "transportContainerMetadata": {
@@ -6610,16 +6610,16 @@
    "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
    "match": "exact",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "transportCountInControl": {
@@ -6663,13 +6663,13 @@
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "unmeasured",
+    "de-DE": "derived",
     "es-ES": "derived",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "transportKeywordFalseFriends": {
@@ -6690,16 +6690,16 @@
    "rationale": "Negative guard: labels carrying a transport keyword that are not transport ",
    "match": "contains",
    "coverage": {
-    "en-US": "unmeasured",
+    "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
     "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "zh-TW": "derived"
    }
   },
   "transportMetronomeControl": {
@@ -6774,7 +6774,7 @@
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
     "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "fr-FR": "derived",
     "it-IT": "unmeasured",
     "pt-BR": "unmeasured",
     "zh-CN": "unmeasured",

@@ -432,6 +432,30 @@ def main():
               m and int(m.group(1)) == len(real[key]),
               f"report {m.group(1) if m else '?'} vs ratchet {len(real[key])}")
 
+    # 16b. #981: a variant Apple ships only in another case is Apple's, the same way the ledger's
+    #      coverage reads it. The fixture carries its own canon axis -- the module, a manifest and
+    #      a German set holding `Mixer` -- because a tree without one answers "nothing derivable".
+    #      `Mixer` is the control that the axis loaded at all; `mixr` is the control that only case
+    #      is forgiven.
+    import shutil
+    croot = _tree({"L": _label(["Mixer", "mixer", "mixr"])}, [], {})
+    (croot / "Scripts").mkdir()
+    shutil.copy(GUARD.parent / "logic_canon.py", croot / "Scripts" / "logic_canon.py")
+    cspec = importlib.util.spec_from_file_location("canon_for_fixture", croot / "Scripts" / "logic_canon.py")
+    fixture_canon = importlib.util.module_from_spec(cspec)
+    cspec.loader.exec_module(fixture_canon)
+    fixture_canon.write_absence("t", "de", ["Mixer"])
+    fixture_canon.write_absence("t", "de", ["Mixer"], casefold=True)
+    (croot / "docs" / "canon" / "MANIFEST.json").write_text(
+        json.dumps({"sources": {"t": {"locales": ["de"]}}}), encoding="utf-8")
+    undocumented = set(guard.live_state(str(croot))["undocumented_variants"])
+    check("the fixture's canon axis loaded: a variant Apple ships byte for byte is not debt",
+          "L\u2192Mixer" not in undocumented, sorted(undocumented))
+    check("a variant Apple ships only in another case is not debt either",
+          "L\u2192mixer" not in undocumented, sorted(undocumented))
+    check("a variant differing by more than case is still debt",
+          "L\u2192mixr" in undocumented, sorted(undocumented))
+
     # 17. The real repository is within its sets right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)
     check("repository is clean", proc.returncode == 0, proc.stdout.strip()[:300])
