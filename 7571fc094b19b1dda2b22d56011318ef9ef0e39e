@@ -1,0 +1,33 @@
+Limit: the MainEntrypoint census reads production AX with no seam, so its new unread wording has no unit test
+Limit: no live Logic reading; a failed children read on the running Mixer was not reproduced, only modelled as .cannotComplete through both seams
+Ruled-out: returning [] with an unread flag beside it | every existing caller already treats [] as a readable answer, so a caller that ignores the flag keeps the bug silently; nil makes each caller decide at compile time
+Ruled-out: refusing the #290 ordinal shift in the same change | mixerChannelStrips still drops unreadable-role children for its 10 callers; widening that would refuse requests for a different reason than this issue
+Warn: a new caller of stripEnumeration, mixerChannelStrips or audioPluginInsertSlots must treat nil as unknown and never coalesce it to []. An unread-Mixer fixture must locate the Mixer by identifier, because getMixerArea's candidate scan reads its children and never returns an unread one
+Record-Id: r-a0110bf63eac
+Provenance: inherited 019f7b728e8c24c5ddcfed3a01cafd5baceb90ca
+
+Limit: the LiveFixture recorder sees actions through the runtime seam only; selectTrackViaAX steps 1-2 call AXUIElementSetAttributeValue directly and fail on fake elements
+Ruled-out: keeping plugins_source "ax" on an unread strip and adding the read error beside it | a reader that checks only the source keeps believing the empty chain
+Ruled-out: moving set_param_verified's inventory read ahead of its track selection in this change | it reorders every inventory refusal on that path, not only the #982 ones; the PR claim was narrowed instead
+Warn: set_param_verified presses the track header (Step 6) before every inventory refusal, including the #982 ones; a claim that it refuses before any AX action is false
+Record-Id: r-2a0e2a47374b
+Provenance: inherited f542d21de8524d531bb399bae064fb01a5390f70
+
+Limit: after a reveal strategy has actuated, the early return on an unread Mixer has no unit test; the strategies act through production runtimes
+Limit: a failed read in an unnamed element above the Mixer, such as the window's content group, still gives notFound
+Ruled-out: noting a failed read only at the Mixer-named container itself | Logic 12.3 puts an unnamed group between the outer Mixer group and the layout area, and a failed read there left the strips unread too
+Ruled-out: treating any failed read in the window as a possible Mixer | get_inventory would stop revealing a Mixer that is not showing whenever an unrelated element fails to read, which is unmeasured
+Ruled-out: letting get_inventory reveal over an unread Mixer | the Mixer may already be showing, and View > Show Mixer or key 7 may toggle it closed
+Warn: supersedes r-a0110bf63eac's warning: unread-Mixer fixtures no longer need the identifier; drive get_inventory over one with Issue982UnreadChildrenTests.revealWithoutActuating so a regression cannot actuate Logic
+Record-Id: r-28fe6f546ea7
+Provenance: inherited 560054a644e3875133e397f90d32ffd78f46fa8b
+
+Ruled-out: bounding the unread-Mixer poll by elapsed time | the repository guard refuses wall-clock reads in tests (#804), and load unrelated to the code can break a time bound
+Record-Id: r-9d4a0ceb3316
+Provenance: inherited f9d762328168205fc823c6978719c082ffc20996
+
+Limit: the reveal witnesses have no menu bar, so the unread returns after the View > Show Mixer click and its retry are still unwitnessed; only the key-7 branch is
+Ruled-out: injecting only the activation and key 7 into the Mixer reveal | the menu retry calls forceMixerWindowFront and pressEscape through production, so a reveal that went on past an unread Mixer would act on the running Logic from a unit test
+Warn: a new production action in the Mixer reveal or in clickTopLevelMenuItemViaAXMenuClick belongs in MenuClickActuators; a direct production call there is reached by the unit tests
+Record-Id: r-32e3e604f160
+Provenance: inherited b8a9d7d2797fc45c15c56dfe8e1851f1bf44a08e
