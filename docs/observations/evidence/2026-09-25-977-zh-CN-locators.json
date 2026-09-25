@@ -1,0 +1,762 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "zh-CN",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "new_binary": "LogicProMCP-977-wip",
+ "control_binary": "LogicProMCP-976-ec388223",
+ "steps": [
+  {
+   "step": "probe/close-leftover-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "probe/initial",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "zh-Hans"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "文件",
+     "编辑",
+     "轨道",
+     "浏览",
+     "录音",
+     "混音"
+    ],
+    "mixer_areas": [
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 时间标尺",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 标头",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "tracks",
+   "result": {
+    "tracks": [
+     [
+      "Absolute Zero",
+      0
+     ]
+    ],
+    "project": "/Users/isaac/Music/Logic/lpm-locator-probe.logicx"
+   }
+  },
+  {
+   "step": "get_inventory/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_26CFB1D3-9C23-4BC2-B363-A521F7667967",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_BE30993B-CEDC-42B5-8D45-7412B78A7BF3",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "get_inventory/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_843F41CE-20A2-4F42-B28C-7D5F16D3740E",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_8EC40E14-7B44-4823-A71F-3BA97B7F0B6D",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "compressor_insert",
+   "result": {
+    "insert": 0
+   }
+  },
+  {
+   "step": "probe/press-open",
+   "result": {
+    "pressed": {
+     "description": "打开",
+     "path": "open",
+     "role": "AXButton"
+    },
+    "status": 0
+   }
+  },
+  {
+   "step": "probe/editor-open",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "zh-Hans"
+    ],
+    "dialogs": [
+     {
+      "children": [
+       {
+        "description": "关闭",
+        "help": "“关闭”按钮. 关闭插件窗口。 ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "工具栏",
+        "help": "“显示/隐藏”按钮. 显示或隐藏插件窗口标头。 ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "链接",
+        "help": "“链接”按钮. 在“单个”模式（紫色）中，当前所选插件会在一个插件窗口中显示。在“多个”模式（黄色）中，每个插入插槽可打开一个插件窗口（会在选择另一个轨道时更新）。 ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": ""
+       },
+       {
+        "description": "旁通",
+        "help": "“插件开/关”按钮. 点按以打开或关闭插件。处于关闭的位置时，插件会被旁通而不影响轨道。 ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": " "
+       },
+       {
+        "description": "比较",
+        "help": "“比较”按钮. 比较所选插件设置的当前状态与上一个保存版本的状态。 ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": "比较"
+       },
+       {
+        "help": "“自动增益”按钮：. “关闭”按钮会停止所有自动增益补偿。0 dB 和 -12 dB 按钮补偿由压缩造成的音量减少。 ",
+        "identifier": "_NS:200",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "OFF"
+       },
+       {
+        "help": "“自动增益”按钮：. “关闭”按钮会停止所有自动增益补偿。0 dB 和 -12 dB 按钮补偿由压缩造成的音量减少。 ",
+        "identifier": "_NS:196",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "0 dB"
+       },
+       {
+        "help": "“自动增益”按钮：. “关闭”按钮会停止所有自动增益补偿。0 dB 和 -12 dB 按钮补偿由压缩造成的音量减少。 ",
+        "identifier": "_NS:192",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "-12 dB"
+       },
+       {
+        "help": "“自动释音”按钮：. 让释音时间根据音频素材动态调整。 ",
+        "identifier": "_NS:187",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "AUTO"
+       },
+       {
+        "help": "“侧链”和“输出”按钮：. 查看“侧链”或“输出”参数。 ",
+        "identifier": "_NS:181",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Output"
+       },
+       {
+        "help": "“侧链”和“输出”按钮：. 查看“侧链”或“输出”参数。 ",
+        "identifier": "_NS:177",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Side Chain"
+       },
+       {
+        "help": "Opto：. 光纤压缩器以其快速的瞬变响应和非线性释音处理而出名。其音调十分纯净，非常适合于声乐和吉他。 ",
+        "identifier": "_NS:147",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage Opto"
+       },
+       {
+        "help": "FET：. 场效应晶体管压缩器的特点是快速的瞬变响应。它们能够产生纯净或者更温暖的音调（尤其是中音范围），并可在瞬变中生成“碎声”音调。 ",
+        "identifier": "_NS:143",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage FET"
+       },
+       {
+        "help": "VCA：. 电压控制放大器压缩器能对传入的瞬变作出慢速或快速的响应。它们易于生成纯净的音调，可很好地适配低音吉他和低频信号。 ",
+        "identifier": "_NS:139",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage VCA"
+       },
+       {
+        "help": "VCA：. 电压控制放大器压缩器能对传入的瞬变作出慢速或快速的响应。它们易于生成纯净的音调，可很好地适配低音吉他和低频信号。 ",
+        "identifier": "_NS:135",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Classic VCA"
+       },
+       {
+        "help": "FET：. 场效应晶体管压缩器的特点是快速的瞬变响应。它们能够产生纯净或者更温暖的音调（尤其是中音范围），并可在瞬变中生成“碎声”音调。 ",
+        "identifier": "_NS:131",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio FET"
+       },
+       {
+        "help": "VCA：. 电压控制放大器压缩器能对传入的瞬变作出慢速或快速的响应。它们易于生成纯净的音调，可很好地适配低音吉他和低频信号。 ",
+        "identifier": "_NS:127",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio VCA"
+       },
+       {
+        "help": "Platinum Digital：. 一种听起来纯净的压缩类型，其瞬变响应较快。适用于各种来源。 ",
+        "identifier": "_NS:123",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Platinum Digital"
+       },
+       {
+        "help": "“增益降低”指示器/图形：. 点按指示器或图形按钮来更改实时压缩量显示。 ",
+        "identifier": "_NS:115",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Graph"
+       },
+       {
+        "help": "“增益降低”指示器/图形：. 点按指示器或图形按钮来更改实时压缩量显示。 ",
+        "identifier": "_NS:105",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Meter"
+       }
+      ],
+      "has_close_button": true,
+      "path": "/AXWindow",
+      "role": "AXWindow",
+      "subrole": "AXDialog",
+      "title": "Absolute Zero"
+     }
+    ],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "文件",
+     "编辑",
+     "轨道",
+     "浏览",
+     "录音",
+     "混音"
+    ],
+    "mixer_areas": [
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 时间标尺",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 标头",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "save_with_editor_open/control",
+   "result": {
+    "state": "C",
+    "success": false,
+    "error": "unsupported_state",
+    "hint": "Refusing project.save: a blocking Logic dialog/sheet is present (Absolute Zero). Dismiss the \"Absolute Zero\" dialog (press Escape or its Cancel/close control), then retry.",
+    "dialog_title": "Absolute Zero"
+   }
+  },
+  {
+   "step": "save_with_editor_open/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true
+   }
+  },
+  {
+   "step": "probe/close-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "set_param_verified/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "observed_normalized": 0.5
+   }
+  },
+  {
+   "step": "probe/after-set_param/new",
+   "result": {
+    "dialogs": []
+   }
+  },
+  {
+   "step": "set_param_verified/control",
+   "result": {
+    "state": "C",
+    "success": false,
+    "verified": false,
+    "error": "window_open_failed",
+    "what_was_observed": "no open plugin window titled 'Absolute Zero' exposes the 'Threshold' control, and one could not be opened"
+   }
+  },
+  {
+   "step": "probe/after-set_param/control",
+   "result": {
+    "dialogs": [
+     "Absolute Zero"
+    ]
+   }
+  },
+  {
+   "step": "probe/cleanup/control",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "probe/final",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "zh-Hans"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "文件",
+     "编辑",
+     "轨道",
+     "浏览",
+     "录音",
+     "混音"
+    ],
+    "mixer_areas": [
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 时间标尺",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "轨道 标头",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "混音器",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "旁通",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "打开",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "列表",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  }
+ ],
+ "checks": {
+  "compressor found by plugin id": true,
+  "inventory State A": true,
+  "save with an editor open State A": true,
+  "set_param_verified State A": true,
+  "probe saw one open editor": true,
+  "probe saw an occupied slot": true,
+  "probe saw a Mixer area holding strips": true
+ }
+}

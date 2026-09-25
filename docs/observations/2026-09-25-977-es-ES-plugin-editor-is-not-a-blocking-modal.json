@@ -1,0 +1,194 @@
+{
+  "id": "2026-09-25-977-es-ES-plugin-editor-is-not-a-blocking-modal",
+  "date": "2026-09-25",
+  "schema": 3,
+  "subject": "An open Compressor editor: the label on its bypass toggle, and whether the product treats the window as a plug-in editor or as a blocking modal",
+  "question": "With a plug-in editor open on a es-ES Logic, does project.save go ahead (State A) rather than refuse on a blocking dialog, and what does the editor's bypass toggle carry as its description?",
+  "verdict": "works",
+  "issues": [
+    977
+  ],
+  "surface": "plugin.window",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "es-ES",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_977_locale_locators.py <copied-release-binary> <out.json> [<control-binary>]",
+    "expected": "exits 0 with every check PASS on a es-ES Logic; the evidence's probe rows carry the strings quoted in observations",
+    "cost": "~3 min per locale after `swift build -c release --product LogicProMCP`; needs Logic relaunched in es-ES (`defaults write com.apple.logic10 AppleLanguages -array es`) on a disposable project whose first track holds a Compressor on insert 0, the Mixer docked, no editor open, and nobody using the Mac"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements.swift:isPluginEditorWindow",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginEditorBypassControl"
+  ],
+  "evidence": [
+    "evidence/2026-09-25-977-es-ES-locators.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/es/bypass#value",
+      "value": "desactivar",
+      "used_for": "the editor's bypass toggle, which AXLocalePolicy.pluginEditorBypassControl matches exactly to tell an editor from a modal",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "Release build of the working tree whose Sources/ tree is 50c52b8df05f (binary sha256 4ec371bf65f8...), copied out of .build and run from the copy; control: release build of ec388223, the head of pull request 976, which carries these locators as they stood before this change (binary sha256 ad33286f77b7...). Driven by Scripts/livekit/live_977_locale_locators.py, added in this change, after `defaults write com.apple.logic10 AppleLanguages -array es` and a relaunch on a disposable project whose first track holds a Compressor on insert 0 and whose Mixer is docked. Scripts/livekit/ax_977_locator_probe.swift reads the tree STRUCTURALLY -- a Mixer area is a container holding AXLayoutItem children, an occupied slot is an AXGroup whose direct children are [AXCheckBox, AXButton, AXButton], an editor is an AXDialog -- so a label the product gets wrong cannot hide the element. The product was then driven through the paths the locators gate: logic_plugins get_inventory on track 0, logic_project save with the editor the probe opened (by pressing the first occupied slot's first AXButton), and logic_plugins set_param_verified on the Compressor's threshold (normalized, duplicate_applyback), each by both builds in the same run. The Compressor was addressed by plugin id logic.stock.effect.compressor, never by its localized name. Before this run the same readings were taken in all ten locales by an uncommitted predecessor of the harness, which differed only in finding the Compressor by name; they agreed with these.",
+  "observations": [
+    {
+      "what": "the open editor, found structurally",
+      "locale": "es-ES",
+      "window": {
+        "role": "AXWindow",
+        "subrole": "AXDialog",
+        "title": "Absolute Zero",
+        "path": "/AXWindow",
+        "has_close_button": true
+      },
+      "direct_toggles": [
+        {
+          "role": "AXButton",
+          "description": "cerrar",
+          "title": "",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "description": "barra de herramientas",
+          "title": "",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXCheckBox",
+          "description": "enlace",
+          "title": "",
+          "path": "/AXWindow/AXCheckBox"
+        },
+        {
+          "role": "AXCheckBox",
+          "description": "desactivar",
+          "title": " ",
+          "path": "/AXWindow/AXCheckBox"
+        },
+        {
+          "role": "AXCheckBox",
+          "description": "comparar",
+          "title": "Comparar",
+          "path": "/AXWindow/AXCheckBox"
+        },
+        {
+          "role": "AXButton",
+          "title": "OFF",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "0 dB",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "-12 dB",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "AUTO",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Output",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Side Chain",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Vintage Opto",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Vintage FET",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Vintage VCA",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Classic VCA",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Studio FET",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Studio VCA",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Platinum Digital",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Graph",
+          "path": "/AXWindow/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "title": "Meter",
+          "path": "/AXWindow/AXButton"
+        }
+      ]
+    },
+    {
+      "what": "the editor's bypass toggle",
+      "locale": "es-ES",
+      "role": "AXCheckBox",
+      "description": "desactivar",
+      "title": " ",
+      "path": "/AXWindow/AXCheckBox"
+    },
+    {
+      "what": "project.save with the editor open",
+      "fixed_build": {
+        "state": "A",
+        "success": true,
+        "verified": true
+      },
+      "control_build": {
+        "state": "C",
+        "success": false,
+        "error": "unsupported_state",
+        "hint": "Refusing project.save: a blocking Logic dialog/sheet is present (Absolute Zero). Dismiss the \"Absolute Zero\" dialog (press Escape or its Cancel/close control), then retry."
+      }
+    }
+  ],
+  "conclusion": "On a es-ES Logic the editor's bypass toggle is an AXCheckBox whose description is 'desactivar', the value Apple ships at MAToolKit's bypass row for this language. With that editor open the fixed build saved the project in State A. The control build refused the save with unsupported_state, naming the editor as a blocking dialog: its set did not hold this spelling.",
+  "limits": [
+    "One host: Logic 12.3 (6674) on macOS 26.3 (25D125), one disposable project, one Compressor. Other builds are not measured here.",
+    "The control is the pre-change build of the same code line, not a release; a failure it shows is attributed to the locators because the new build differs from it in Sources/ only by this change, and that attribution is an inference from the diff rather than something the run isolates.",
+    "The toggle was read while the editor was key, where it is an AXCheckBox. It becomes an AXButton when the window is not key; the product accepts both roles, and only the AXCheckBox reading is taken here.",
+    "Only the Compressor's editor was opened. Other plug-ins share MAToolKit's window chrome, which is the reason one row serves them all, but none of them was read."
+  ],
+  "supersedes": null
+}

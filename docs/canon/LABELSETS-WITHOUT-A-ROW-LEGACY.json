@@ -89,16 +89,6 @@
       "candidate": "3 candidate(s)",
       "members": 2
     },
-    "pluginBypassControl": {
-      "verdict": "ambiguous",
-      "candidate": "4 candidate(s)",
-      "members": 3
-    },
-    "pluginOpenOrListControl": {
-      "verdict": "namespace",
-      "candidate": "Localizable.strings StrToolbItemName|||Lists via StrToolbItemName",
-      "members": 5
-    },
     "pluginWindowControlsViewMenuItem": {
       "verdict": "ambiguous",
       "candidate": "6 candidate(s)",

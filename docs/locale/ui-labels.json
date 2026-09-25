@@ -3195,18 +3195,108 @@
     "混音器"
    ],
    "rationale": "Identifies the mixer container by exact normalized name; read-only classifier.",
+   "provenance": {
+    "믹서": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "믹서",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
+     "record": "2026-09-25-977-ko-KR-mixer-area-by-description",
+     "role": "AXLayoutArea"
+    },
+    "ミキサー": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "ミキサー",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
+     "record": "2026-09-25-977-ja-JP-mixer-area-by-description",
+     "role": "AXLayoutArea"
+    },
+    "Mezclador": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "es-ES",
+     "match": "exact",
+     "observed": "Mezclador",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
+     "record": "2026-09-25-977-es-ES-mixer-area-by-description",
+     "role": "AXLayoutArea"
+    },
+    "Table de mixage": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "fr-FR",
+     "match": "exact",
+     "observed": "Table de mixage",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
+     "record": "2026-09-25-977-fr-FR-mixer-area-by-description",
+     "role": "AXLayoutArea"
+    },
+    "混音器": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "match": "exact",
+     "observed": "混音器",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
+     "record": "2026-09-25-977-zh-CN-mixer-area-by-description",
+     "role": "AXLayoutArea"
+    }
+   },
+   "roles": [
+    "AXLayoutArea",
+    "AXGroup",
+    "AXScrollArea"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "derived",
-    "de-DE": "unmeasured",
-    "es-ES": "derived",
-    "fr-FR": "derived",
-    "it-IT": "derived",
-    "pt-BR": "derived",
-    "zh-CN": "derived",
-    "zh-TW": "derived"
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured",
+    "es-ES": "measured",
+    "fr-FR": "measured",
+    "it-IT": "measured",
+    "pt-BR": "measured",
+    "zh-CN": "measured",
+    "zh-TW": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-25-977-en-US-mixer-area-by-description",
+    "de-DE": "2026-09-25-977-de-DE-mixer-area-by-description",
+    "it-IT": "2026-09-25-977-it-IT-mixer-area-by-description",
+    "pt-BR": "2026-09-25-977-pt-BR-mixer-area-by-description",
+    "zh-TW": "2026-09-25-977-zh-TW-mixer-area-by-description"
+   },
+   "coverage_roles": {
+    "en-US": "AXLayoutArea",
+    "de-DE": "AXLayoutArea",
+    "it-IT": "AXLayoutArea",
+    "pt-BR": "AXLayoutArea",
+    "zh-TW": "AXLayoutArea"
+   },
+   "coverage_attributes": {
+    "en-US": "description",
+    "de-DE": "description",
+    "it-IT": "description",
+    "pt-BR": "description",
+    "zh-TW": "description"
+   },
+   "coverage_paths": {
+    "en-US": "/AXWindow/AXGroup/AXLayoutArea",
+    "de-DE": "/AXWindow/AXGroup/AXLayoutArea",
+    "it-IT": "/AXWindow/AXGroup/AXLayoutArea",
+    "pt-BR": "/AXWindow/AXGroup/AXLayoutArea",
+    "zh-TW": "/AXWindow/AXGroup/AXLayoutArea"
    }
   },
   "moveMenuItem": {
@@ -3859,37 +3949,266 @@
    "canonical": "bypass",
    "variants": [
     "바이패스",
-    "バイパス"
+    "バイパス",
+    "Umgehen",
+    "desactivar",
+    "inactif",
+    "ignora",
+    "旁通",
+    "略過"
    ],
-   "rationale": "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's bypass checkbox.",
+   "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in ko-KR (바이패스), de-DE (Umgehen) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
+    "바이패스": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "contains",
+     "observed": "바이패스",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-ko-KR-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
     "バイパス": {
-     "attribute": "title",
-     "date": "2026-09-05",
+     "attribute": "description",
+     "date": "2026-09-25",
      "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
      "locale": "ja-JP",
      "match": "contains",
-     "observed": "すべてのコントロールサーフェスをバイパス",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
-     "role": "AXMenuItem"
+     "observed": "バイパス",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-ja-JP-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "Umgehen": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "match": "contains",
+     "observed": "Umgehen",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-de-DE-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "desactivar": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "es-ES",
+     "match": "contains",
+     "observed": "desactivar",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-es-ES-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "inactif": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "fr-FR",
+     "match": "contains",
+     "observed": "inactif",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-fr-FR-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "ignora": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "it-IT",
+     "match": "contains",
+     "observed": "ignora",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-it-IT-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "旁通": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "match": "contains",
+     "observed": "旁通",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-zh-CN-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
+    },
+    "略過": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "zh-TW",
+     "match": "contains",
+     "observed": "略過",
+     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+     "record": "2026-09-25-977-zh-TW-insert-slot-bypass-and-open",
+     "role": "AXCheckBox"
     }
    },
    "roles": [
     "AXCheckBox",
-    "AXMenuItem"
+    "AXButton"
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
+    "en-US": "measured",
+    "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "derived",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "de-DE": "measured",
+    "es-ES": "measured",
+    "fr-FR": "measured",
+    "it-IT": "measured",
+    "pt-BR": "measured",
+    "zh-CN": "measured",
+    "zh-TW": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-25-977-en-US-insert-slot-bypass-and-open",
+    "pt-BR": "2026-09-25-977-pt-BR-insert-slot-bypass-and-open"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox",
+    "pt-BR": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description",
+    "pt-BR": "description"
+   },
+   "coverage_paths": {
+    "en-US": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+    "pt-BR": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox"
+   }
+  },
+  "pluginEditorBypassControl": {
+   "canonical": "bypass",
+   "variants": [
+    "바이패스",
+    "バイパス",
+    "desactivar",
+    "inactif",
+    "ignora",
+    "旁通",
+    "略過"
+   ],
+   "rationale": "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in ko-KR (바이패스), de-DE (Bypass) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "provenance": {
+    "바이패스": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "match": "exact",
+     "observed": "바이패스",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-ko-KR-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "バイパス": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "ja-JP",
+     "match": "exact",
+     "observed": "バイパス",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-ja-JP-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "desactivar": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "es-ES",
+     "match": "exact",
+     "observed": "desactivar",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-es-ES-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "inactif": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "fr-FR",
+     "match": "exact",
+     "observed": "inactif",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-fr-FR-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "ignora": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "it-IT",
+     "match": "exact",
+     "observed": "ignora",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-it-IT-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "旁通": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "match": "exact",
+     "observed": "旁通",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-zh-CN-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    },
+    "略過": {
+     "attribute": "description",
+     "date": "2026-09-25",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "zh-TW",
+     "match": "exact",
+     "observed": "略過",
+     "path_contains": "/AXWindow/AXCheckBox",
+     "record": "2026-09-25-977-zh-TW-plugin-editor-is-not-a-blocking-modal",
+     "role": "AXCheckBox"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXButton"
+   ],
+   "match": "exact",
+   "coverage": {
+    "en-US": "measured",
+    "ko-KR": "measured",
+    "ja-JP": "measured",
+    "de-DE": "measured",
+    "es-ES": "measured",
+    "fr-FR": "measured",
+    "it-IT": "measured",
+    "pt-BR": "measured",
+    "zh-CN": "measured",
+    "zh-TW": "measured"
+   },
+   "coverage_records": {
+    "en-US": "2026-09-25-977-en-US-plugin-editor-is-not-a-blocking-modal",
+    "de-DE": "2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal",
+    "pt-BR": "2026-09-25-977-pt-BR-plugin-editor-is-not-a-blocking-modal"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox",
+    "de-DE": "AXCheckBox",
+    "pt-BR": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description",
+    "de-DE": "description",
+    "pt-BR": "description"
+   },
+   "coverage_paths": {
+    "en-US": "/AXWindow/AXCheckBox",
+    "de-DE": "/AXWindow/AXCheckBox",
+    "pt-BR": "/AXWindow/AXCheckBox"
    }
   },
   "pluginFormatDualMono": {
@@ -4035,55 +4354,6 @@
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
-   }
-  },
-  "pluginOpenOrListControl": {
-   "canonical": "open",
-   "variants": [
-    "열기",
-    "list",
-    "목록",
-    "開く"
-   ],
-   "rationale": "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button.",
-   "provenance": {
-    "list": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "match": "contains",
-     "observed": "Tempoliste einblenden",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "role": "AXMenuItem"
-    },
-    "開く": {
-     "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ja-JP",
-     "match": "contains",
-     "observed": "開く…",
-     "record": "2026-09-05-ja-JP-arrange-menus-census",
-     "role": "AXMenuItem"
-    }
-   },
-   "roles": [
-    "AXButton",
-    "AXMenuItem"
-   ],
-   "match": "contains",
-   "coverage": {
-    "en-US": "derived",
-    "ko-KR": "derived",
-    "ja-JP": "measured",
-    "de-DE": "measured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
    }
   },
   "pluginSlotListControl": {

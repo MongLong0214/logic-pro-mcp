@@ -1,0 +1,749 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "ko-KR",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "new_binary": "LogicProMCP-977-wip",
+ "control_binary": "LogicProMCP-976-ec388223",
+ "steps": [
+  {
+   "step": "probe/close-leftover-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "probe/initial",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "ko"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "파일",
+     "편집",
+     "트랙",
+     "탐색",
+     "녹음",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 시간 눈금자",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 헤더",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "tracks",
+   "result": {
+    "tracks": [
+     [
+      "Absolute Zero",
+      0
+     ]
+    ],
+    "project": "/Users/isaac/Music/Logic/lpm-locator-probe.logicx"
+   }
+  },
+  {
+   "step": "get_inventory/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_1BC88D2D-0746-468D-9E76-08D431C15FD5",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_5AD3FEC9-E697-4690-84BC-0863E6E98795",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "get_inventory/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_EDB736BD-27F0-45D9-A6F5-5238BFC7467D",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_67B29B15-311C-4826-8BE5-18B1F764C8F6",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "compressor_insert",
+   "result": {
+    "insert": 0
+   }
+  },
+  {
+   "step": "probe/press-open",
+   "result": {
+    "pressed": {
+     "description": "열기",
+     "path": "open",
+     "role": "AXButton"
+    },
+    "status": 0
+   }
+  },
+  {
+   "step": "probe/editor-open",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "ko"
+    ],
+    "dialogs": [
+     {
+      "children": [
+       {
+        "description": "닫기",
+        "help": "닫기 버튼. 플러그인 윈도우를 닫습니다. ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "도구 막대",
+        "help": "보기/가리기 버튼. 플러그인 윈도우 헤더를 보거나 가립니다. ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "링크",
+        "help": "링크 버튼. 단일 모드(보라색)에서는 하나의 플러그인 윈도우가 현재 선택된 플러그인을 표시합니다. 다중 모드(노란색)에서는 인서트 슬롯당 하나의 플러그인 윈도우를 열 수 있습니다(다른 트랙을 선택할 때 업데이트됨). ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": ""
+       },
+       {
+        "description": "바이패스",
+        "help": "플러그인 켬/끔 버튼. 클릭하여 플러그인을 켜거나 끕니다. 끔 위치에서 플러그인은 우회되어 트랙에 영향을 미치지 않습니다. ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": " "
+       },
+       {
+        "description": "비교",
+        "help": "비교 버튼. 선택한 플러그인 설정의 현재 상태와, 마지막으로 저장된 버전을 비교합니다. ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": "비교"
+       },
+       {
+        "help": "Auto Gain 버튼. Off 버튼은 AutoGain 보정을 정지합니다. 0dB 및 -12dB 버튼은 컴프레션으로 인한 볼륨 감소를 보정합니다. ",
+        "identifier": "_NS:200",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "OFF"
+       },
+       {
+        "help": "Auto Gain 버튼. Off 버튼은 AutoGain 보정을 정지합니다. 0dB 및 -12dB 버튼은 컴프레션으로 인한 볼륨 감소를 보정합니다. ",
+        "identifier": "_NS:196",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "0 dB"
+       },
+       {
+        "help": "Auto Gain 버튼. Off 버튼은 AutoGain 보정을 정지합니다. 0dB 및 -12dB 버튼은 컴프레션으로 인한 볼륨 감소를 보정합니다. ",
+        "identifier": "_NS:192",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "-12 dB"
+       },
+       {
+        "help": "Auto Release 버튼. 릴리즈 타임을 오디오 자료에 맞게 동적으로 조절합니다. ",
+        "identifier": "_NS:187",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "AUTO"
+       },
+       {
+        "help": "Side Chain 및 Output 버튼. Side Chain이나 Output 파라미터를 봅니다. ",
+        "identifier": "_NS:181",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Output"
+       },
+       {
+        "help": "Side Chain 및 Output 버튼. Side Chain이나 Output 파라미터를 봅니다. ",
+        "identifier": "_NS:177",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Side Chain"
+       },
+       {
+        "help": "Opto. 옵티컬 컴프레서는 빠른 트랜지언트 응답과 논-리니어 릴리즈 처리가 특징입니다. 이 컴프레서는 매우 깨끗하며 보컬과 기타에 이상적입니다. ",
+        "identifier": "_NS:147",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage Opto"
+       },
+       {
+        "help": "FET. 빠른 트랜지언트 응답으로 잘 알려진 Field Effect Transistor 컴프레서입니다. 깨끗한 톤이나 따뜻한 톤(특히 미드레인지)을 제공할 수 있으며 트랜지언트에서 ‘크런치’한 톤을 가미할 수 있습니다. ",
+        "identifier": "_NS:143",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage FET"
+       },
+       {
+        "help": "VCA. 전압 제어 앰프(Voltage Controlled Amplifier) 컴프레서는 입력 트랜지언트에 빠르거나 느리게 반응할 수 있습니다. 깨끗한 톤을 내는 경향이 있으며 베이스 기타와 낮은 주파수 신호에 적합합니다. ",
+        "identifier": "_NS:139",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage VCA"
+       },
+       {
+        "help": "VCA. 전압 제어 앰프(Voltage Controlled Amplifier) 컴프레서는 입력 트랜지언트에 빠르거나 느리게 반응할 수 있습니다. 깨끗한 톤을 내는 경향이 있으며 베이스 기타와 낮은 주파수 신호에 적합합니다. ",
+        "identifier": "_NS:135",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Classic VCA"
+       },
+       {
+        "help": "FET. 빠른 트랜지언트 응답으로 잘 알려진 Field Effect Transistor 컴프레서입니다. 깨끗한 톤이나 따뜻한 톤(특히 미드레인지)을 제공할 수 있으며 트랜지언트에서 ‘크런치’한 톤을 가미할 수 있습니다. ",
+        "identifier": "_NS:131",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio FET"
+       },
+       {
+        "help": "VCA. 전압 제어 앰프(Voltage Controlled Amplifier) 컴프레서는 입력 트랜지언트에 빠르거나 느리게 반응할 수 있습니다. 깨끗한 톤을 내는 경향이 있으며 베이스 기타와 낮은 주파수 신호에 적합합니다. ",
+        "identifier": "_NS:127",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio VCA"
+       },
+       {
+        "help": "Platinum Digital. 트랜지언트 응답이 빠른 깨끗한 사운드의 컴프레션 유형입니다. 다양한 소스에서 사용할 수 있습니다. ",
+        "identifier": "_NS:123",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Platinum Digital"
+       },
+       {
+        "help": "게인 감소 측정기/그래프. Meter나 Graph 버튼을 클릭하여 실시간 컴프레션 양 표시를 변경합니다. ",
+        "identifier": "_NS:115",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Graph"
+       },
+       {
+        "help": "게인 감소 측정기/그래프. Meter나 Graph 버튼을 클릭하여 실시간 컴프레션 양 표시를 변경합니다. ",
+        "identifier": "_NS:105",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Meter"
+       }
+      ],
+      "has_close_button": true,
+      "path": "/AXWindow",
+      "role": "AXWindow",
+      "subrole": "AXDialog",
+      "title": "Absolute Zero"
+     }
+    ],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "파일",
+     "편집",
+     "트랙",
+     "탐색",
+     "녹음",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 시간 눈금자",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 헤더",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "save_with_editor_open/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true
+   }
+  },
+  {
+   "step": "save_with_editor_open/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true
+   }
+  },
+  {
+   "step": "probe/close-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "set_param_verified/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "observed_normalized": 0.5
+   }
+  },
+  {
+   "step": "probe/after-set_param/new",
+   "result": {
+    "dialogs": []
+   }
+  },
+  {
+   "step": "set_param_verified/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "observed_normalized": 0.45
+   }
+  },
+  {
+   "step": "probe/after-set_param/control",
+   "result": {
+    "dialogs": []
+   }
+  },
+  {
+   "step": "probe/final",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "ko"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "파일",
+     "편집",
+     "트랙",
+     "탐색",
+     "녹음",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 시간 눈금자",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "트랙 헤더",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "믹서",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "바이패스",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "열기",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "목록",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  }
+ ],
+ "checks": {
+  "compressor found by plugin id": true,
+  "inventory State A": true,
+  "save with an editor open State A": true,
+  "set_param_verified State A": true,
+  "probe saw one open editor": true,
+  "probe saw an occupied slot": true,
+  "probe saw a Mixer area holding strips": true
+ }
+}

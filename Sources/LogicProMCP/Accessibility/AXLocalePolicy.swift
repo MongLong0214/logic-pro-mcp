@@ -2034,16 +2034,37 @@ enum AXLocalePolicy {
         rationale: "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider."
     )
 
-    /// Plugin-slot child control locators.
+    /// The insert slot's BYPASS toggle -- the child `AXCheckBox` of an occupied slot's `AXGroup`.
+    ///
+    /// Not the same row as the plug-in editor's bypass (`pluginEditorBypassControl`). Measured
+    /// 2026-09-25 on Logic 12.3 (6674) by reading the raw `AXDescription` of both toggles on one
+    /// Compressor insert: ko-KR `바이패스` and `바이패스`, de-DE `Umgehen` here and `Bypass` in the
+    /// editor, fr-FR `inactif` and `inactif`. The slot's siblings read `geöffnet`/`ouvrir` and
+    /// `Liste`/`liste`, which are MAGUI's `open` and `list` -- the rows `pluginSlotOpenControl` and
+    /// `pluginSlotListControl` already cite -- and French rules out Logic.framework's `Bypass`,
+    /// whose French is `Ignorer`. So this is MAGUI's `bypass`.
     static let pluginBypassControl = LabelSet(
         canonical: "bypass",
-        variants: ["바이패스", "バイパス"],
-        rationale: "Locates a plugin-slot bypass control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's bypass checkbox."
+        variants: ["바이패스", "バイパス", "Umgehen", "desactivar", "inactif", "ignora", "旁通", "略過"],
+        rationale: "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in ko-KR (바이패스), de-DE (Umgehen) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAGUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/bypass#value"
     )
-    static let pluginOpenOrListControl = LabelSet(
-        canonical: "open",
-        variants: ["열기", "list", "목록", "開く"],
-        rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists). Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at an insert slot's open button."
+
+    /// The plug-in EDITOR window's bypass toggle -- a direct child of the editor's `AXDialog`.
+    ///
+    /// This label is what tells an open editor from a blocking modal (`isPluginEditorWindow`,
+    /// #234/#381) and what `pluginEditorWindows` selects on, and neither has a structural fallback.
+    /// Measured 2026-09-25 (see `pluginBypassControl`): de-DE `Bypass`, fr-FR `inactif`, ko-KR
+    /// `바이패스`. The header's other toggles read lowercase `vergleichen` (de) and `lien`/`comparer`
+    /// (fr); only MAToolKit's lowercase `compare`/`link` rows hold those strings, so the header --
+    /// and its bypass -- is MAToolKit's. MAToolKitHighLevel carries a `bypass` row with the same ten
+    /// values, so the choice between the two changes no member. German `Bypass` and Portuguese
+    /// `bypass` are the canonical under the case-insensitive match and are not repeated.
+    static let pluginEditorBypassControl = LabelSet(
+        canonical: "bypass",
+        variants: ["바이패스", "バイパス", "desactivar", "inactif", "ignora", "旁通", "略過"],
+        rationale: "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in ko-KR (바이패스), de-DE (Bypass) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/bypass#value"
     )
 
     /// The insert slot's OPEN control, ranked ahead of its list control.
@@ -2960,7 +2981,7 @@ enum AXLocalePolicy {
         sliderVolumeHint,
         sliderPanHint,
         pluginBypassControl,
-        pluginOpenOrListControl,
+        pluginEditorBypassControl,
         pluginSlotOpenControl,
         pluginSlotListControl,
         menuActionNameFragment,

@@ -109,9 +109,11 @@ DESCRIPTION_READ_SUCCEEDED = {"success_with_value", "success_without_value"}
 # This policy LabelSet names the View surface in measured locales. It is passed to the raw witness
 # rather than spelling a second, unmaintained candidate array here.
 VIEW_LABELS = E.label_set("viewMenuBar")
-# As in #301, this is a combined Open-or-List policy. It cannot safely choose between two AXButtons,
-# so the action selector remains the only measured Korean Open label above.
-OPEN_OR_LIST_LABELS = E.label_set("pluginOpenOrListControl")
+# As in #301, this is the slot's open and list labels together. It cannot safely choose between two
+# AXButtons, so the action selector remains the only measured Korean Open label above. The two sets are
+# the product's own (#977 removed the three-language `pluginOpenOrListControl` they subsumed).
+OPEN_OR_LIST_LABELS = ((E.label_set("pluginSlotOpenControl") or [])
+                       + (E.label_set("pluginSlotListControl") or [])) or None
 
 
 def finish(code=1):

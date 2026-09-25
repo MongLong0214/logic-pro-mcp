@@ -29,7 +29,10 @@ WRITER = "Sources/LogicProMCP/HostParameters/ControlsViewBooleanParameterWriter.
 CASES = [
     ("the fold is dropped — the original defect, restored",
      PROBE, "trimmed(text).lowercased()", "trimmed(text)",
-     "no longer trims-then-lowercases"),
+     "no longer trims, lowercases and collapses whitespace"),
+    ("the probe stops collapsing whitespace, which the product's normalize still does",
+     PROBE, '\n        .split(whereSeparator: { $0.isWhitespace })\n        .joined(separator: " ")', "",
+     "no longer trims, lowercases and collapses whitespace"),
     ("a caller compares a label set with .contains instead of folding",
      PROBE,
      "matchesPolicyLabel(descriptionText($0), anyOf: viewLabels)",
@@ -53,9 +56,16 @@ CASES = [
      'canonical: "mixer",\n        variants: [',
      'canonical: "mixer",\n        variants: ["Mixer", ',
      "differ only by case"),
+    # #977: the product used to lowercase the candidate and test exact membership in `.labels`,
+    # which never matched a derived member that kept Apple's capitals (`Table de mixage`). The
+    # regression is going back to that shape, so that is the mutant.
     ("the product stops folding, so the rule the probe mirrors is gone",
-     PRODUCT, ".whitespacesAndNewlines).lowercased()", ".whitespacesAndNewlines)",
-     "no longer trims-then-lowercases before comparing"),
+     PRODUCT, "mixerNamedElement.containsNormalized($0)", "mixerNamedElement.labels.contains($0)",
+     "no longer matches through"),
+    ("the product's normalize stops lowercasing",
+     POLICY, ".whitespacesAndNewlines)\n                .lowercased()\n                .split",
+     ".whitespacesAndNewlines)\n                .split",
+     "LabelSet.normalize no longer"),
     # --- the role clause, added 2026-09-11 with #852 ---------------------------------------------
     ("the probe cannot see AXCheckBox — #852 exactly as it stood",
      PROBE, '    "AXCheckBox",\n    "AXSlider",', '    "AXSlider",',

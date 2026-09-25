@@ -33,8 +33,12 @@ struct Issue60LocalePhase4Tests {
             ("sliderZoomHint", AXLocalePolicy.sliderZoomHint.labels, ["zoom", "확대"]),
             ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨", "ボリューム"]),
             ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン"]),
-            ("pluginBypassControl", AXLocalePolicy.pluginBypassControl.labels, ["bypass", "바이패스", "バイパス"]),
-            ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl.labels, ["open", "열기", "list", "목록", "開く"]),
+            // Extended 2026-09-25 (#977) from the two rows these LabelSets now name in `derivedFrom`:
+            // MAGUI `bypass` at the insert slot, MAToolKit `bypass` in the editor window. They differ
+            // only in German -- `Umgehen` at the slot and `Bypass` in the editor, both read off a
+            // running de-DE Logic -- which is why one set could not be both.
+            ("pluginBypassControl", AXLocalePolicy.pluginBypassControl.labels, ["bypass", "바이패스", "バイパス", "Umgehen", "desactivar", "inactif", "ignora", "旁通", "略過"]),
+            ("pluginEditorBypassControl", AXLocalePolicy.pluginEditorBypassControl.labels, ["bypass", "바이패스", "バイパス", "desactivar", "inactif", "ignora", "旁通", "略過"]),
             // Extended 2026-09-18 (#892) from the row this LabelSet now names in `derivedFrom`.
             // Apple's `Read` is `Read` in nine locales and `읽기` in exactly one, so the English
             // word this set already carried left KOREAN uncovered -- the single case that neither
@@ -119,7 +123,7 @@ struct Issue60LocalePhase4Tests {
             ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint),
             ("sliderPanHint", AXLocalePolicy.sliderPanHint),
             ("pluginBypassControl", AXLocalePolicy.pluginBypassControl),
-            ("pluginOpenOrListControl", AXLocalePolicy.pluginOpenOrListControl),
+            ("pluginEditorBypassControl", AXLocalePolicy.pluginEditorBypassControl),
             ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel),
             ("sendOrIOControlLabel", AXLocalePolicy.sendOrIOControlLabel),
             ("headerPanHint", AXLocalePolicy.headerPanHint),
@@ -183,12 +187,14 @@ struct Issue60LocalePhase4Tests {
         #expect(AXLocalePolicy.regionKindDrummer.containsAny(in: "세션 플레이어 리전"))
     }
 
-    @Test("mixerNamedElement exact-equality semantics (normalized lowercase)")
+    @Test("mixerNamedElement exact-equality semantics (normalized on both sides)")
     func mixerNamedElementExact() {
-        // Mirrors the call site: candidate is trimmed + lowercased, then == label.
-        #expect(AXLocalePolicy.mixerNamedElement.labels.contains("mixer"))
-        #expect(AXLocalePolicy.mixerNamedElement.labels.contains("믹서"))
-        #expect(!AXLocalePolicy.mixerNamedElement.labels.contains("mixer area"))
+        // Mirrors the call site, which asks `containsNormalized` (#977): the member keeps Apple's
+        // capitals, so a lowercased candidate tested against `.labels` never found `Table de mixage`.
+        #expect(AXLocalePolicy.mixerNamedElement.containsNormalized(" Mixer "))
+        #expect(AXLocalePolicy.mixerNamedElement.containsNormalized("믹서"))
+        #expect(AXLocalePolicy.mixerNamedElement.containsNormalized("table  de mixage"))
+        #expect(!AXLocalePolicy.mixerNamedElement.containsNormalized("mixer area"))
     }
 
     @Test("trackContent normalized-exact bags: explicit vs generic do not overlap")

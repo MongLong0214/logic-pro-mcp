@@ -262,8 +262,10 @@ extension AXLogicProElements {
             AXHelpers.getDescription(element, runtime: runtime),
             AXHelpers.getTitle(element, runtime: runtime)
         ]
-        return candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .contains { AXLocalePolicy.mixerNamedElement.labels.contains($0) }
+        // `containsNormalized`, not a lowercased reading against `.labels`: the derived members keep
+        // Apple's capitals, so `table de mixage` never equalled `Table de mixage` and the Mixer was
+        // not found at all on a French or Spanish Logic (#977).
+        return candidates.contains { AXLocalePolicy.mixerNamedElement.containsNormalized($0) }
     }
 
     private static func hasDirectChannelStripChildren(

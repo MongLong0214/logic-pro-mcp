@@ -450,6 +450,8 @@ func trimmed(_ text: String) -> String {
 /// `bass`.
 func normalizedPolicyLabel(_ text: String) -> String {
     trimmed(text).lowercased()
+        .split(whereSeparator: { $0.isWhitespace })
+        .joined(separator: " ")
 }
 
 /// Whether an observed string is one of a policy label set's members.

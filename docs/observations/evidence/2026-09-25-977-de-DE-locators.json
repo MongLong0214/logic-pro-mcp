@@ -1,0 +1,749 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "de-DE",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "new_binary": "LogicProMCP-977-wip",
+ "control_binary": "LogicProMCP-976-ec388223",
+ "steps": [
+  {
+   "step": "probe/close-leftover-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "probe/initial",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "de"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "Ablage",
+     "Bearbeiten",
+     "Spur",
+     "Navigieren",
+     "Aufnahme",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Zeitskala",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Titel",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "tracks",
+   "result": {
+    "tracks": [
+     [
+      "Absolute Zero",
+      0
+     ]
+    ],
+    "project": "/Users/isaac/Music/Logic/lpm-locator-probe.logicx"
+   }
+  },
+  {
+   "step": "get_inventory/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_D6271644-DC3A-4D85-B6C6-8B643D9DBBDA",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_D69243BB-4B64-4770-8F25-31D0C35F97F8",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "get_inventory/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "plugins": [
+     {
+      "bypassed": false,
+      "insert": 0,
+      "name": "Compressor",
+      "occupied": true,
+      "plugin_id": "logic.stock.effect.compressor",
+      "plugin_insert_ref": "ins_E261ADA8-3A73-4953-831A-21FC281864D8",
+      "read_status": "ok"
+     },
+     {
+      "bypassed": false,
+      "insert": 1,
+      "name": "Drum Machine Designer",
+      "occupied": true,
+      "plugin_id": null,
+      "plugin_insert_ref": "ins_3EA398F3-9BD4-4657-879B-EB82E8CE958A",
+      "read_status": "ok"
+     }
+    ],
+    "plugins_unknown_reason": null,
+    "complete": true
+   }
+  },
+  {
+   "step": "compressor_insert",
+   "result": {
+    "insert": 0
+   }
+  },
+  {
+   "step": "probe/press-open",
+   "result": {
+    "pressed": {
+     "description": "geöffnet",
+     "path": "open",
+     "role": "AXButton"
+    },
+    "status": 0
+   }
+  },
+  {
+   "step": "probe/editor-open",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "de"
+    ],
+    "dialogs": [
+     {
+      "children": [
+       {
+        "description": "Schließen",
+        "help": "Taste „Schließen“. Schließe das Plug-in-Fenster. ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "Symbolleiste",
+        "help": "Taste „Ein-/Ausblenden“. Blende den Header im Plug-in-Fenster ein oder aus. ",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": ""
+       },
+       {
+        "description": "Link",
+        "help": "Taste „Link“. Im Single-Modus (violett) zeigt ein Fenster das aktuell ausgewählte Plug-in. Im Modus „Multi“ (gelb) kann ein Plug-in-Fenster pro Insert-Slot geöffnet werden (bzw. wird aktualisiert, wenn eine andere Spur ausgewählt wird). ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": ""
+       },
+       {
+        "description": "Bypass",
+        "help": "Taste „Plug-in Ein/Aus. Klicke hier, um das Plug-in zu aktivieren oder zu deaktivieren. Das Plug-in wird in der deaktivierten Position umgangen, sodass es keinen Einfluss auf die Spur hat. ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": " "
+       },
+       {
+        "description": "vergleichen",
+        "help": "Taste „Vergleichen“. Vergleicht den aktuellen Status der ausgewählten Plug-in-Einstellung mit der zuletzt gesicherten Version. ",
+        "path": "/AXWindow/AXCheckBox",
+        "role": "AXCheckBox",
+        "title": "Vergleichen"
+       },
+       {
+        "help": "Tasten für „Auto Gain“. Die Taste „Off“ beendet die Autopegel-Kompensation. Mit den Tasten „0 dB“ und „-12 dB“ kannst du durch Kompression hervorgerufene Lautstärkereduzierungen ausgleichen. ",
+        "identifier": "_NS:200",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "OFF"
+       },
+       {
+        "help": "Tasten für „Auto Gain“. Die Taste „Off“ beendet die Autopegel-Kompensation. Mit den Tasten „0 dB“ und „-12 dB“ kannst du durch Kompression hervorgerufene Lautstärkereduzierungen ausgleichen. ",
+        "identifier": "_NS:196",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "0 dB"
+       },
+       {
+        "help": "Tasten für „Auto Gain“. Die Taste „Off“ beendet die Autopegel-Kompensation. Mit den Tasten „0 dB“ und „-12 dB“ kannst du durch Kompression hervorgerufene Lautstärkereduzierungen ausgleichen. ",
+        "identifier": "_NS:192",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "-12 dB"
+       },
+       {
+        "help": "Taste „Auto Release“. Passt die Release-Zeit dynamisch an das Audiomaterial an. ",
+        "identifier": "_NS:187",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "AUTO"
+       },
+       {
+        "help": "Taste „Sidechain“ und Taste „Output“. Blende die Parameter für „Sidechain“ oder „Output“ ein. ",
+        "identifier": "_NS:181",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Output"
+       },
+       {
+        "help": "Taste „Sidechain“ und Taste „Output“. Blende die Parameter für „Sidechain“ oder „Output“ ein. ",
+        "identifier": "_NS:177",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Side Chain"
+       },
+       {
+        "help": "Opto. Optische Kompressoren (Opto-Kompressoren) sind bekannt für ihr schnelles Einschwingverhalten und die nichtlineare Release-Regelung. Sie erzeugen sehr reine Töne und sind ideal für Gesang und Gitarre. ",
+        "identifier": "_NS:147",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage Opto"
+       },
+       {
+        "help": "FET. FET-Kompressoren (Field Effect Transistor) sind bekannt für schnelles Einschwingverhalten. Sie können einen reinen Ton oder einen wärmeren Mischton (besonders in den Mitten) erzeugen und bei den Transienten so verändert werden, dass der Ton etwas „knackiger“ klingt. ",
+        "identifier": "_NS:143",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage FET"
+       },
+       {
+        "help": "VCA. VCA-Kompressoren (Voltage Controlled Amplifier) können langsam oder schnell auf eingehende Transienten reagieren. Sie tendieren zu einem reinen Ton und sind für Bassgitarren und niedrigfrequente Signale gut geeignet. ",
+        "identifier": "_NS:139",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Vintage VCA"
+       },
+       {
+        "help": "VCA. VCA-Kompressoren (Voltage Controlled Amplifier) können langsam oder schnell auf eingehende Transienten reagieren. Sie tendieren zu einem reinen Ton und sind für Bassgitarren und niedrigfrequente Signale gut geeignet. ",
+        "identifier": "_NS:135",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Classic VCA"
+       },
+       {
+        "help": "FET. FET-Kompressoren (Field Effect Transistor) sind bekannt für schnelles Einschwingverhalten. Sie können einen reinen Ton oder einen wärmeren Mischton (besonders in den Mitten) erzeugen und bei den Transienten so verändert werden, dass der Ton etwas „knackiger“ klingt. ",
+        "identifier": "_NS:131",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio FET"
+       },
+       {
+        "help": "VCA. VCA-Kompressoren (Voltage Controlled Amplifier) können langsam oder schnell auf eingehende Transienten reagieren. Sie tendieren zu einem reinen Ton und sind für Bassgitarren und niedrigfrequente Signale gut geeignet. ",
+        "identifier": "_NS:127",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Studio VCA"
+       },
+       {
+        "help": "Platinum Digital. Ein reiner Kompressionstyp mit schnellem Einschwingverhalten. Er kann mit zahlreichen Quellen verwendet werden. ",
+        "identifier": "_NS:123",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Platinum Digital"
+       },
+       {
+        "help": "Pegelanzeige/Kurve „Gain Reduction“. Klicke entweder auf die Taste „Meter“ oder „Graph“, um die Anzeige des Grads der Echtzeitkompression zu ändern. ",
+        "identifier": "_NS:115",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Graph"
+       },
+       {
+        "help": "Pegelanzeige/Kurve „Gain Reduction“. Klicke entweder auf die Taste „Meter“ oder „Graph“, um die Anzeige des Grads der Echtzeitkompression zu ändern. ",
+        "identifier": "_NS:105",
+        "path": "/AXWindow/AXButton",
+        "role": "AXButton",
+        "title": "Meter"
+       }
+      ],
+      "has_close_button": true,
+      "path": "/AXWindow",
+      "role": "AXWindow",
+      "subrole": "AXDialog",
+      "title": "Absolute Zero"
+     }
+    ],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "Ablage",
+     "Bearbeiten",
+     "Spur",
+     "Navigieren",
+     "Aufnahme",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Zeitskala",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Titel",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  },
+  {
+   "step": "save_with_editor_open/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true
+   }
+  },
+  {
+   "step": "save_with_editor_open/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true
+   }
+  },
+  {
+   "step": "probe/close-editors",
+   "result": {
+    "closed": [
+     0
+    ]
+   }
+  },
+  {
+   "step": "set_param_verified/new",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "observed_normalized": 0.5
+   }
+  },
+  {
+   "step": "probe/after-set_param/new",
+   "result": {
+    "dialogs": []
+   }
+  },
+  {
+   "step": "set_param_verified/control",
+   "result": {
+    "state": "A",
+    "success": true,
+    "verified": true,
+    "observed_normalized": 0.45
+   }
+  },
+  {
+   "step": "probe/after-set_param/control",
+   "result": {
+    "dialogs": []
+   }
+  },
+  {
+   "step": "probe/final",
+   "result": {
+    "acted": {},
+    "action": "",
+    "apple_languages": [
+     "de"
+    ],
+    "dialogs": [],
+    "menubar": [
+     "Apple",
+     "Logic Pro",
+     "Ablage",
+     "Bearbeiten",
+     "Spur",
+     "Navigieren",
+     "Aufnahme",
+     "Mix"
+    ],
+    "mixer_areas": [
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 2,
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Zeitskala",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXLayoutArea",
+      "role": "AXLayoutArea"
+     },
+     {
+      "description": "Spuren Titel",
+      "help": "",
+      "layout_items": 1,
+      "path": "/AXWindow/AXGroup/AXGroup/AXSplitGroup/AXSplitGroup/AXScrollArea/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "description": "Mixer",
+      "help": "",
+      "layout_items": 3,
+      "path": "/AXWindow/AXGroup/AXLayoutArea",
+      "role": "AXLayoutArea"
+     }
+    ],
+    "occupied_slots": [
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXList/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Compressor",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     },
+     {
+      "children": [
+       {
+        "description": "Umgehen",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
+        "role": "AXCheckBox"
+       },
+       {
+        "description": "geöffnet",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       },
+       {
+        "description": "Liste",
+        "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton",
+        "role": "AXButton"
+       }
+      ],
+      "description": "Drum Machine Designer",
+      "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "role": "AXGroup"
+     }
+    ],
+    "trusted": true
+   }
+  }
+ ],
+ "checks": {
+  "compressor found by plugin id": true,
+  "inventory State A": true,
+  "save with an editor open State A": true,
+  "set_param_verified State A": true,
+  "probe saw one open editor": true,
+  "probe saw an occupied slot": true,
+  "probe saw a Mixer area holding strips": true
+ }
+}

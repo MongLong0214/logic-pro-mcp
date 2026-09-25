@@ -992,7 +992,10 @@ AX_REGION_LABELS = {
                       "Spuren Titel"],
     "Tracks": ["트랙", "トラック", "Spuren"],
     "Library": ["라이브러리", "ライブラリ", "Bibliothek"],
-    "Mixer": ["믹서", "ミキサー"],
+    # es, fr and zh measured 2026-09-25 as the docked Mixer's AXLayoutArea description (#977,
+    # `evidence/2026-09-25-977-<locale>-locators.json`). Italian and Portuguese show `Mixer`, which
+    # the key already is.
+    "Mixer": ["믹서", "ミキサー", "Mezclador", "Table de mixage", "混音器"],
     "Inspector": ["인스펙터", "インスペクタ", "Informationen"],
     # German, measured 2026-09-12 off `evidence/2026-09-12-de-DE-navigation-free.census.json`
     # (#876). Each spelling was read from an element whose role can carry the band this locator

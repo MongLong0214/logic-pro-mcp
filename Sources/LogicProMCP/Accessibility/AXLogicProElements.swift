@@ -738,9 +738,12 @@ enum AXLogicProElements {
     /// relying on conjunct 2. Honesty note: the premise that genuine modals carry
     /// no `kAXCloseButtonAttribute` is live-verified only for the #234 editor
     /// dumps, NOT for every modal class — conjunct 2 is treated as a narrowing
-    /// guard, and the exact bypass label carries the discrimination. Unverified
-    /// locales still fail conjunct 3 → stay blocking (fail-closed). Follows the
-    /// `isKeyboardLayoutOverlayWindow` exclusion precedent.
+    /// guard, and the exact bypass label carries the discrimination. The label is
+    /// `pluginEditorBypassControl`, MAToolKit's `bypass` row in all ten languages
+    /// (#977): until then it carried en/ko/ja only, so an open editor was a
+    /// blocking modal on a French, Spanish, Italian or Chinese Logic. A label
+    /// outside that row still fails conjunct 3 → stays blocking (fail-closed).
+    /// Follows the `isKeyboardLayoutOverlayWindow` exclusion precedent.
     static func isPluginEditorWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -769,7 +772,7 @@ enum AXLogicProElements {
             return role == (kAXCheckBoxRole as String) || role == (kAXButtonRole as String)
         }
         return directToggles.contains { child in
-            hasExactLabel(child, matching: AXLocalePolicy.pluginBypassControl, runtime: runtime)
+            hasExactLabel(child, matching: AXLocalePolicy.pluginEditorBypassControl, runtime: runtime)
         }
     }
 

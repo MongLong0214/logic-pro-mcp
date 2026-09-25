@@ -122,7 +122,8 @@ extension AXLogicProElements {
         }
         let hasOpenOrMenu = children.contains { child in
             let text = elementSearchText(child, runtime: runtime)
-            return AXLocalePolicy.pluginOpenOrListControl.containsAny(in: text)
+            return AXLocalePolicy.pluginSlotOpenControl.containsAny(in: text)
+                || AXLocalePolicy.pluginSlotListControl.containsAny(in: text)
         }
         if hasBypass && hasOpenOrMenu {
             return true
@@ -688,7 +689,7 @@ extension AXLogicProElements {
                 || child.role == (kAXButtonRole as String) {
                 switch hasExactLabelResult(
                     child.element,
-                    matching: AXLocalePolicy.pluginBypassControl,
+                    matching: AXLocalePolicy.pluginEditorBypassControl,
                     runtime: runtime.ax
                 ) {
                 case let .success(matches):

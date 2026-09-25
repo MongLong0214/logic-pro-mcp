@@ -50,7 +50,36 @@ def measured_os():
 # Logic's UI language, mapped onto the spellings the locale axis uses. The axis is the list in
 # `docs/locale/ui-labels.json`, and `check-observation-records.py` compares `host.locale` against it
 # EXACTLY, so a value outside it is credited to no locale at all.
-_LOGIC_LANGUAGE_TO_AXIS = {"en": "en-US", "ko": "ko-KR", "ja": "ja-JP", "de": "de-DE"}
+#
+# Read FROM the axis rather than typed beside it. The typed table held en, ko, ja and de -- the
+# languages somebody had run by then -- so a record taken on a Spanish, French, Italian, Portuguese
+# or Chinese Logic declared `es`, `it` or `zh-Hans`, and the guard refused a real reading (#977).
+UI_LABELS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "docs", "locale", "ui-labels.json")
+
+# Chinese is one language with two axis locales. Logic's language list names them by SCRIPT
+# (`zh-Hans`, `zh-Hant`), so the language alone cannot say which.
+_CHINESE_SCRIPTS = {"hans": "zh-CN", "hant": "zh-TW"}
+
+
+def axis_locales():
+    try:
+        with open(UI_LABELS, encoding="utf-8") as fh:
+            return list(json.load(fh).get("supported_locales") or [])
+    except (OSError, ValueError):
+        return []
+
+
+def axis_locale(language, axis):
+    """The axis locale a Logic language id names, or None when it names none or several."""
+    if language in axis:
+        return language
+    base, _, rest = language.partition("-")
+    base = base.lower()
+    if base == "zh":
+        return _CHINESE_SCRIPTS.get(rest.lower())
+    matches = [a for a in axis if a.split("-")[0].lower() == base]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _logic_ui_language():
@@ -81,7 +110,7 @@ def measured_locale():
     """
     language = _logic_ui_language()
     if language:
-        mapped = _LOGIC_LANGUAGE_TO_AXIS.get(language.split("-")[0].lower())
+        mapped = axis_locale(language, axis_locales())
         # An unmapped language is returned verbatim rather than forced onto the axis: the guard
         # then refuses the record, which is what should happen when Logic is in a language the
         # label sets do not carry.

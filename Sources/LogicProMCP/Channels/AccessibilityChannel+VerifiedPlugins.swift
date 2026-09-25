@@ -2798,9 +2798,6 @@ extension AccessibilityChannel {
             if AXLocalePolicy.pluginSlotListControl.containsAny(in: text) {
                 return (1, button)
             }
-            if AXLocalePolicy.pluginOpenOrListControl.containsAny(in: text) {
-                return (1, button)
-            }
             return (2, button)
         }
         .sorted { lhs, rhs in lhs.rank < rhs.rank }

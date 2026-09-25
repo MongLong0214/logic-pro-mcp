@@ -80,10 +80,12 @@ BAND_PARAMETERS = [
 # that must be present and the property that must hold of every slider; do not assert a total that
 # was arrived at by arithmetic rather than by counting what came back.
 
-# `pluginOpenOrListControl` is intentionally a combined LabelSet (`open` AND `list`). It is useful
-# for documenting the slot's known controls, but unsafe as an action selector because `목록` is also
-# an AXButton. The one safe action label observed here is the Korean `열기` above.
-OPEN_OR_LIST_LABELS = E.label_set("pluginOpenOrListControl")
+# The slot's open and list labels together (`pluginSlotOpenControl` + `pluginSlotListControl`; #977
+# removed the three-language `pluginOpenOrListControl` they subsumed). Useful for documenting the
+# slot's known controls, but unsafe as an action selector because `목록` is also an AXButton. The one
+# safe action label observed here is the Korean `열기` above.
+OPEN_OR_LIST_LABELS = ((E.label_set("pluginSlotOpenControl") or [])
+                       + (E.label_set("pluginSlotListControl") or [])) or None
 BYPASS_LABELS = E.label_set("pluginBypassControl")
 
 

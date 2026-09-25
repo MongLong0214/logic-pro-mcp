@@ -1,0 +1,144 @@
+{
+  "id": "2026-09-25-977-it-IT-insert-slot-bypass-and-open",
+  "date": "2026-09-25",
+  "schema": 3,
+  "subject": "An occupied insert slot in the docked Mixer: the labels on its bypass and open controls, and whether the product reads the plug-in on it and opens it",
+  "question": "On a it-IT Logic, what descriptions do an occupied insert slot's bypass and open controls carry, and does the product read the Compressor on that slot and write one of its parameters through the editor it opens from the slot?",
+  "verdict": "works",
+  "issues": [
+    977
+  ],
+  "surface": "mixer.inserts",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "it-IT",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "harness",
+    "command": "python3 Scripts/livekit/live_977_locale_locators.py <copied-release-binary> <out.json> [<control-binary>]",
+    "expected": "exits 0 with every check PASS on a it-IT Logic; the evidence's probe rows carry the strings quoted in observations",
+    "cost": "~3 min per locale after `swift build -c release --product LogicProMCP`; needs Logic relaunched in it-IT (`defaults write com.apple.logic10 AppleLanguages -array it`) on a disposable project whose first track holds a Compressor on insert 0, the Mixer docked, no editor open, and nobody using the Mac"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+PluginSlots.swift:isOccupiedPluginSlotElement",
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginBypassControl",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:rankedPluginSlotOpenControls"
+  ],
+  "evidence": [
+    "evidence/2026-09-25-977-it-IT-locators.json"
+  ],
+  "canon": [
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAGUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/bypass#value",
+      "value": "ignora",
+      "used_for": "the slot's bypass toggle, which AXLocalePolicy.pluginBypassControl matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/Contents%2FFrameworks%2FMAGUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/open#value",
+      "value": "apri",
+      "used_for": "the slot's open control, which AXLocalePolicy.pluginSlotOpenControl matches",
+      "binding": {
+        "kind": "record",
+        "field": "observations"
+      }
+    }
+  ],
+  "method": "Release build of the working tree whose Sources/ tree is 50c52b8df05f (binary sha256 4ec371bf65f8...), copied out of .build and run from the copy; control: release build of ec388223, the head of pull request 976, which carries these locators as they stood before this change (binary sha256 ad33286f77b7...). Driven by Scripts/livekit/live_977_locale_locators.py, added in this change, after `defaults write com.apple.logic10 AppleLanguages -array it` and a relaunch on a disposable project whose first track holds a Compressor on insert 0 and whose Mixer is docked. Scripts/livekit/ax_977_locator_probe.swift reads the tree STRUCTURALLY -- a Mixer area is a container holding AXLayoutItem children, an occupied slot is an AXGroup whose direct children are [AXCheckBox, AXButton, AXButton], an editor is an AXDialog -- so a label the product gets wrong cannot hide the element. The product was then driven through the paths the locators gate: logic_plugins get_inventory on track 0, logic_project save with the editor the probe opened (by pressing the first occupied slot's first AXButton), and logic_plugins set_param_verified on the Compressor's threshold (normalized, duplicate_applyback), each by both builds in the same run. The Compressor was addressed by plugin id logic.stock.effect.compressor, never by its localized name. Before this run the same readings were taken in all ten locales by an uncommitted predecessor of the harness, which differed only in finding the Compressor by name; they agreed with these.",
+  "observations": [
+    {
+      "what": "the first occupied slot in the docked Mixer, found structurally",
+      "locale": "it-IT",
+      "slot_path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup",
+      "controls": [
+        {
+          "role": "AXCheckBox",
+          "description": "ignora",
+          "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox"
+        },
+        {
+          "role": "AXButton",
+          "description": "apri",
+          "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton"
+        },
+        {
+          "role": "AXButton",
+          "description": "elenco",
+          "path": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXButton"
+        }
+      ],
+      "occupied_slots_seen": 4,
+      "in_docked_mixer": 2
+    },
+    {
+      "what": "get_inventory on track 0",
+      "fixed_build": {
+        "state": "A",
+        "success": true,
+        "verified": true,
+        "plugins_unknown_reason": null,
+        "plugins": [
+          {
+            "insert": 0,
+            "plugin_id": "logic.stock.effect.compressor",
+            "occupied": true
+          },
+          {
+            "insert": 1,
+            "plugin_id": null,
+            "occupied": true
+          }
+        ]
+      },
+      "control_build": {
+        "state": "A",
+        "success": true,
+        "verified": true,
+        "plugins_unknown_reason": null,
+        "plugins": [
+          {
+            "insert": 0,
+            "plugin_id": "logic.stock.effect.compressor",
+            "occupied": true
+          },
+          {
+            "insert": 1,
+            "plugin_id": null,
+            "occupied": true
+          }
+        ]
+      }
+    },
+    {
+      "what": "set_param_verified on the Compressor's threshold, normalized",
+      "fixed_build": {
+        "state": "A",
+        "success": true,
+        "verified": true,
+        "observed_normalized": 0.5
+      },
+      "control_build": {
+        "state": "C",
+        "success": false,
+        "verified": false,
+        "error": "window_open_failed",
+        "what_was_observed": "no open plugin window titled 'Absolute Zero' exposes the 'Threshold' control, and one could not be opened"
+      }
+    }
+  ],
+  "conclusion": "On a it-IT Logic the occupied slot's controls carry 'ignora' (bypass, AXCheckBox) and 'apri' (open, AXButton), the values Apple ships at MAGUI's bypass and open rows. The fixed build read the Compressor at insert 0 in State A and wrote its threshold, reading back 0.5.",
+  "limits": [
+    "One host: Logic 12.3 (6674) on macOS 26.3 (25D125), one disposable project, one Compressor. Other builds are not measured here.",
+    "The control is the pre-change build of the same code line, not a release; a failure it shows is attributed to the locators because the new build differs from it in Sources/ only by this change, and that attribution is an inference from the diff rather than something the run isolates.",
+    "The slot here has the [AXCheckBox, AXButton, AXButton] shape, which the product also recognises structurally without any label. This run therefore shows the labels Logic carries and that the product works with them; it does not isolate the label path. The unit suite covers the shape only the labels can recognise.",
+    "The bypass control was an AXCheckBox throughout, so the rule that an AXButton bypass is never ranked as the slot's open control is not exercised live here.",
+    "Where the control build failed, it failed at the Mixer area or at the editor, not at the slot; its slot reading is not separately measured."
+  ],
+  "supersedes": null
+}
