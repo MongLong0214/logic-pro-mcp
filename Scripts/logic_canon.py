@@ -184,7 +184,7 @@ _DECORATION = "\u2026...:：·•\t\n\r \u00a0\u3000-–—_"
 
 
 def fold_for_near_miss(text: str) -> str:
-    """`normalize`, then case-folded with decoration and whitespace removed.
+    """`normalize`, with decoration and whitespace removed. Case is kept; see below.
 
     NOT a canon comparison and never used as one. `absent` proves a BYTE STRING is not in the
     corpus, and that is exactly true and quietly useless on its own: `Input Port:` is absent and
@@ -208,6 +208,30 @@ def fold_for_near_miss(text: str) -> str:
     # exactly that spelling to pass an absence claim for a label Logic ships.
     return "".join(ch for ch in normalize(text)
                    if ch not in _DECORATION and unicodedata.category(ch) != "Cf")
+
+
+def fold_case(text: str) -> str:
+    """NFC, then Unicode case folding. Case, and nothing else.
+
+    Every match mode the ledger certifies ignores case: `caseInsensitiveCompare` for `exact` and
+    `exact_strict`, `.caseInsensitive` for `prefix` and `contains`. Measured 2026-09-25 against
+    Foundation on this Mac: `caseInsensitiveCompare` agrees with `str.casefold` on `straße`/`STRASSE`,
+    a final sigma and the `fi` ligature, where `str.lower` does not. So asking the corpus "does Apple
+    ship this, as the product would match it" means folding both sides this way.
+
+    It is not `fold_for_near_miss`. That one keeps case and drops decoration, because it answers
+    whether an ABSENCE claim is a typo; this one keeps decoration and drops case, because it answers
+    whether a MEMBER is a string Apple ships. `Mixer:` is still not `mixer`.
+
+    It is not `normalize` either, though it was until the review of #991. `normalize` turns a
+    no-break space into a space and strips the ends, and neither of those is case: French `trim`
+    was credited from a shipped `Trim\u00a0`, and Korean `live loop 그리드 보기/가리기` from
+    `Live\u00a0Loop 그리드 보기/가리기`. The non-strict match modes do trim both sides, so the first
+    of those would match at runtime; `exact_strict` trims nothing, and a credit the ledger cannot
+    make for every mode it certifies is one it does not make. NFC stays, because Foundation
+    compares canonically equivalent strings as equal and the corpus reaches us in both forms.
+    """
+    return unicodedata.normalize("NFC", text).casefold()
 
 
 def short_digest(text: str) -> str:
@@ -1267,6 +1291,149 @@ def write_value_index(source: str, rows) -> int:
     return len(unique)
 
 
+LEDGER_DIR = os.path.join(CANON_DIR, "ledger")
+
+
+def ledger_casefold_path() -> str:
+    """`source <TAB> locale <TAB> "fold"` for every label-ledger string Apple ships up to case.
+
+    #981. `docs/locale/ui-labels.json` credits a label in a locale when Apple ships one of its
+    strings there, and every LabelSet matches ignoring case, so the ledger asks up to case. That is
+    a PRESENCE question, the direction a digest answers only as well as its width: a 32-bit absence
+    set credited `sample21529` from a shipped `sample8454`, and the 48-bit `short_digest` that
+    replaced it was refused by the next review for the same reason at a smaller rate. So the row
+    holds the folded string itself, JSON-quoted, and the read is a string comparison. Nothing is
+    disclosed by that: every string here is already in `ui-labels.json`, and `build` writes one
+    only after comparing it with the corpus it has just extracted. A string added to the ledger
+    after the last build is not here, and reads as not shipped until the next build: understated,
+    never invented.
+    """
+    return os.path.join(LEDGER_DIR, "casefold.tsv")
+
+
+def ledger_strings(repo: str = REPO) -> set[str]:
+    """Every string the label ledger asks the corpus about: each label's canonical and variants."""
+    with open(os.path.join(repo, "docs", "locale", "ui-labels.json"), encoding="utf-8") as handle:
+        labels = json.load(handle).get("labels") or {}
+    return {text for entry in labels.values()
+            for text in [entry.get("canonical")] + list(entry.get("variants") or []) if text}
+
+
+def ledger_casefold_rows(values_by_locale_by_source: dict, wanted) -> set[tuple[str, str, str]]:
+    """The rows `build` pins: each wanted string whose `fold_case` equals a shipped value's.
+
+    The values are the corpus's own, as the extractor returns them and before `normalize`, which
+    would fold a no-break space and the ends into the comparison. The comparison is between
+    strings, and so is the row.
+    """
+    folded = {fold_case(text) for text in wanted}
+    rows = set()
+    for source, by_locale in values_by_locale_by_source.items():
+        for locale, values in by_locale.items():
+            shipped = {fold_case(value) for value in values}
+            rows.update((source, locale, text) for text in folded & shipped)
+    return rows
+
+
+_LEDGER_CACHE: dict = {}
+
+
+def load_ledger_casefold() -> set[tuple[str, str, str]]:
+    path = ledger_casefold_path()
+    if not os.path.exists(path):
+        raise CanonError(
+            f"{path} does not exist, so no label string is known to ship up to case. Run "
+            f"Scripts/logic_canon.py build on a machine with Logic.")
+    stamp = os.stat(path)
+    key = (path, stamp.st_size, stamp.st_mtime_ns)
+    if key in _LEDGER_CACHE:
+        return _LEDGER_CACHE[key]
+    out = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for number, line in enumerate(handle, 1):
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 3:
+                raise CanonError(f"{path}:{number}: expected 3 tab-separated fields, "
+                                 f"got {len(parts)}")
+            try:
+                text = json.loads(parts[2])
+            except ValueError:
+                text = None
+            if not isinstance(text, str):
+                raise CanonError(f"{path}:{number}: the third field is not a JSON string")
+            out.add((parts[0], parts[1], text))
+    _LEDGER_CACHE[key] = out
+    return out
+
+
+def write_ledger_casefold(rows) -> int:
+    os.makedirs(LEDGER_DIR, exist_ok=True)
+    unique = sorted(set(rows))
+    with open(ledger_casefold_path(), "w", encoding="utf-8") as handle:
+        handle.write("# source\tlocale\tfold_case(value), JSON-quoted\n")
+        handle.write("# Generated by Scripts/logic_canon.py build: the label-ledger strings Apple\n"
+                     "# ships in this corpus and locale, compared up to case against the corpus\n"
+                     "# itself. Do not hand-edit.\n")
+        for source, locale, text in unique:
+            handle.write(f"{source}\t{locale}\t{json.dumps(text, ensure_ascii=False)}\n")
+    return len(unique)
+
+
+def ledger_counts(rows) -> dict:
+    """Rows per source and locale, the shape `MANIFEST.json` declares them in."""
+    counts: dict = {}
+    for source, locale, _text in set(rows):
+        by_locale = counts.setdefault(source, {})
+        by_locale[locale] = by_locale.get(locale, 0) + 1
+    return {source: dict(sorted(by_locale.items())) for source, by_locale in sorted(counts.items())}
+
+
+def verify_ledger_counts(manifest: dict) -> list:
+    """The ledger index holds the rows, per source and locale, that `MANIFEST.json` declares.
+
+    It is read for PRESENCE, so the edit that matters is an ADDED row: one line makes a string
+    Apple does not ship read as `derived`. `verify_artifacts` catches that against a manifest
+    nobody also edited; the review of #991 added a German `trim` row, rewrote the pinned digest to
+    match, and both checks returned nothing. The count is the third edit that forgery needs, the
+    same trade `verify_absence_counts` makes for the absence sets, and a declaration that is
+    missing is reported rather than skipped.
+    """
+    declared = manifest.get("ledger_casefold_entries")
+    if not isinstance(declared, dict):
+        return ["docs/canon/MANIFEST.json declares no `ledger_casefold_entries`, so nothing checks "
+                "that rows were not added to ledger/casefold.tsv. Rebuild."]
+    try:
+        found = ledger_counts(load_ledger_casefold())
+    except CanonError as exc:
+        return [f"ledger/casefold.tsv: {exc}"]
+    problems = []
+    for source in sorted(set(declared) | set(found)):
+        want_by_locale = declared.get(source) or {}
+        have_by_locale = found.get(source) or {}
+        for locale in sorted(set(want_by_locale) | set(have_by_locale)):
+            want, have = want_by_locale.get(locale), have_by_locale.get(locale, 0)
+            if want == have:
+                continue
+            stated = "declares no count" if want is None else f"declares {want}"
+            problems.append(
+                f"ledger/casefold.tsv holds {have} row(s) for {source}/{locale} and MANIFEST.json "
+                f"{stated}. An added row credits a string Apple does not ship.")
+    return problems
+
+
+def ships_up_to_case(source: str, locale: str, text: str) -> bool:
+    """Whether `build` found `text` in this corpus and locale, ignoring case and nothing else.
+
+    `mixerNamedElement`'s canonical is `mixer`, a German Logic ships the row capitalised, and every
+    matcher the product has ignores case, so the label matched in de-DE while the byte-exact
+    absence set said Apple ships nothing for it (#981). `Mixer:` and `mixr` still do not ship.
+    """
+    return (source, locale, fold_case(text)) in load_ledger_casefold()
+
+
 def folded_path(source: str, locale: str) -> str:
     """Beside the absence set, over `fold_for_near_miss`. Same format, different question."""
     return os.path.join(ABSENCE_DIR, f"{source}.{locale}.folded.u32")
@@ -1800,10 +1967,12 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
     by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
     folded_by_source: dict[str, dict[tuple[str, str, str, str], str]] = {}
     values_by_locale_by_source: dict[str, dict[str, set]] = {}
+    raw_by_locale_by_source: dict[str, dict[str, set]] = {}
 
     for source in sources:
         extractor = EXTRACTORS[source]
         values_by_locale: dict[str, set[str]] = {}
+        raw_by_locale: dict[str, set[str]] = {}
         rows: dict[tuple[str, str, str, str], str] = {}
         folded_rows: dict[tuple[str, str, str, str], str] = {}
         entries = 0
@@ -1811,6 +1980,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
             entries += 1
             folded = normalize(value)
             values_by_locale.setdefault(locale, set()).add(folded)
+            raw_by_locale.setdefault(locale, set()).add(value)
             rows[(unit, locale, key, field)] = short_digest(value)
             folded_rows[(unit, locale, key, field)] = short_digest(normalize(value).casefold())
         if source == "quickhelp" and EXPECTED_LOCALES:
@@ -1852,6 +2022,7 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
         by_source[source] = rows
         folded_by_source[source] = folded_rows
         values_by_locale_by_source[source] = values_by_locale
+        raw_by_locale_by_source[source] = raw_by_locale
 
     if refresh_citations:
         # Rows a citation in ANOTHER source pins here, because one row can span two sources.
@@ -1997,6 +2168,16 @@ def build(app: str, *, sources: list[str], refresh_citations: bool, repo: str = 
                 f"nothing is written. This check lives here rather than in a test because a test "
                 f"that needs Logic runs nowhere that gates anything.")
 
+    # The label ledger's strings, asked up to case (#981). Rows for a source this run did not
+    # extract are kept; the ones it did extract are replaced, so a string Apple stopped shipping
+    # leaves with the rebuild that saw it go.
+    kept = set()
+    if os.path.exists(ledger_casefold_path()):
+        kept = {row for row in load_ledger_casefold() if row[0] not in values_by_locale_by_source}
+    ledger_rows = kept | ledger_casefold_rows(raw_by_locale_by_source, ledger_strings(repo))
+    write_ledger_casefold(ledger_rows)
+    manifest["ledger_casefold_entries"] = ledger_counts(ledger_rows)
+
     manifest["artifacts"] = artifact_digests()
     os.makedirs(CANON_DIR, exist_ok=True)
     with open(MANIFEST_PATH, "w", encoding="utf-8") as handle:
@@ -2043,9 +2224,9 @@ def verify_quickhelp_aliases(app: str) -> dict:
 
 
 def artifact_digests() -> dict:
-    """sha256 of every committed index and absence file, keyed by path relative to docs/canon."""
+    """sha256 of every committed index, absence and ledger file, keyed by path relative to docs/canon."""
     out = {}
-    for directory in (INDEX_DIR, ABSENCE_DIR):
+    for directory in (INDEX_DIR, ABSENCE_DIR, LEDGER_DIR):
         if not os.path.isdir(directory):
             continue
         for name in sorted(os.listdir(directory)):
@@ -2066,9 +2247,29 @@ def verify_absence_counts(manifest: dict) -> list:
 
     It is not a cryptographic control and nothing offline can be. It makes the forgery need three
     consistent edits -- the binary set, its digest, and a number a reviewer reads -- instead of two.
+
+    Every exact set on disk, and every locale a source lists, needs a count. The loop below reads
+    only the counts that are declared, so deleting a declaration used to delete its check: the
+    review of #991 removed `strings.absence_entries.de` from a copy of the manifest and this, and
+    `verify_artifacts` with it, returned nothing.
     """
-    problems = []
-    for source, block in (manifest.get("sources") or {}).items():
+    sources = manifest.get("sources") or {}
+    required = set()
+    if os.path.isdir(ABSENCE_DIR):
+        for name in os.listdir(ABSENCE_DIR):
+            # `<source>.<locale>.u32`. A folded set has a third dot, and `translated.en.u32` is
+            # not a source's absence set; neither is counted here.
+            match = re.fullmatch(r"([^.]+)\.([^.]+)\.u32", name)
+            if match and match.group(1) in EXTRACTORS:
+                required.add(match.groups())
+    for source, block in sources.items():
+        required.update((source, locale) for locale in (block.get("locales") or []))
+    problems = [
+        f"absence/{source}.{locale}.u32 has no count in MANIFEST.json, so nothing checks that it "
+        f"did not lose entries."
+        for source, locale in sorted(required)
+        if locale not in ((sources.get(source) or {}).get("absence_entries") or {})]
+    for source, block in sources.items():
         for locale, declared in (block.get("absence_entries") or {}).items():
             try:
                 found = len(load_absence(source, locale))
