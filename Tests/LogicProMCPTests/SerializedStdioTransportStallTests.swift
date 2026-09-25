@@ -34,7 +34,6 @@ struct SerializedStdioTransportStallTests {
     @Test("a reader that stopped draining is OutputStalled, and the suite does not hang")
     func aStalledReaderIsReportedRatherThanWaitedOnForever() {
         let p = Self.fullPipe()
-        defer { close(p.read); close(p.write) }
         let transport = SerializedStdioTransport(input: p.read, output: p.write, writeDeadline: 0.2)
 
         // The send is raced against a bound. Without one, DELETING the deadline does not fail this
@@ -55,6 +54,15 @@ struct SerializedStdioTransportStallTests {
             }
         }
         #expect(outcome == "stalled")
+
+        // The transport's queued block polls and writes the descriptor number it captured, and it is
+        // done with that number only once `send` has returned. When the bound fires first the block
+        // may not even have started, and closing the pipe then hands the number to whatever this
+        // process opens next: a regular file polls writable, so the frame lands in it (#995). So the
+        // pipe closes only after `send` returned, and is leaked otherwise.
+        guard outcome != "unbounded" else { return }
+        close(p.read)
+        close(p.write)
     }
 
     /// Runs `body` and answers `"unbounded"` if it has not finished within `seconds`.
@@ -242,11 +250,12 @@ struct SerializedStdioTransportStallTests {
     func ordinaryTrafficIsUnaffected() async throws {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        defer { close(fds[0]); close(fds[1]) }
         // Immutable copies: the closures below run concurrently and cannot capture the `var`.
         let readEnd = fds[0]
         let writeEnd = fds[1]
+        let readerReturned = Counter()
         let drained = Thread {
+            defer { readerReturned.bump() }
             var buf = [UInt8](repeating: 0, count: 65536)
             while true {
                 let n = buf.withUnsafeMutableBytes { Darwin.read(readEnd, $0.baseAddress, $0.count) }
@@ -264,6 +273,16 @@ struct SerializedStdioTransportStallTests {
             try await transport.send(Data(String(repeating: "\(i % 10)", count: 4096).utf8))
         }
         #expect(reports.value == 0)
+
+        // The reader may still be draining the last frames when the sends return, and closing the
+        // read end under it hands the number to whatever this process opens next (#995, the #947
+        // class). The write end is free once every send has returned; closing it gives the reader its
+        // EOF, and the read end closes after the reader has returned. If it does not return, the read
+        // end is leaked.
+        close(writeEnd)
+        for _ in 0..<600 where readerReturned.value == 0 { try await Task.sleep(nanoseconds: 5_000_000) }
+        guard readerReturned.value == 1 else { return }
+        close(readEnd)
     }
 
     /// The watchdog's own case: a write that is still going when the deadline passes reports WHILE
@@ -274,7 +293,6 @@ struct SerializedStdioTransportStallTests {
     func theMidFrameWatchdogFiresDuringTheStall() {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        defer { close(fds[0]); close(fds[1]) }
         let readEnd = fds[0]
 
         // The report has to arrive WHILE the write is stuck. Counting it after `send` returns is
@@ -288,7 +306,9 @@ struct SerializedStdioTransportStallTests {
 
         // A reader that sleeps first, so the write blocks mid-frame past the deadline and then
         // completes. 256KB is comfortably past a pipe buffer.
+        let readerReturned = DispatchSemaphore(value: 0)
         let late = Thread {
+            defer { readerReturned.signal() }
             Thread.sleep(forTimeInterval: 3.0)
             var buf = [UInt8](repeating: 0, count: 65536)
             while true {
@@ -307,7 +327,18 @@ struct SerializedStdioTransportStallTests {
         // The reader wakes at 3s; a report seen before then happened while the write was blocked.
         #expect(reported.wait(timeout: .now() + 2.0) == .success,
                 "no stall report arrived while the write was still blocked")
-        #expect(sent.wait(timeout: .now() + 10.0) == .success, "the frame never completed")
+        let frameCompleted = sent.wait(timeout: .now() + 10.0) == .success
+        #expect(frameCompleted, "the frame never completed")
+
+        // Each end has a late user: the transport's queued write holds the write end until `send`
+        // returns, and the reader thread reads the read end until it sees EOF. Closing either under
+        // its user hands the number to whatever this process opens next (#995, the #947 class). The
+        // write end closes once the frame is out, which gives the reader its EOF; the read end closes
+        // once the reader has returned. An end whose user may still come back is leaked.
+        guard frameCompleted else { return }
+        close(fds[1])
+        guard readerReturned.wait(timeout: .now() + 10.0) == .success else { return }
+        close(fds[0])
     }
 
     /// Criterion 3 of the ticket, which had no test. After a frame is refused, what reached the pipe
