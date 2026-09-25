@@ -2042,11 +2042,12 @@ enum AXLocalePolicy {
     /// editor, fr-FR `inactif` and `inactif`. The slot's siblings read `geöffnet`/`ouvrir` and
     /// `Liste`/`liste`, which are MAGUI's `open` and `list` -- the rows `pluginSlotOpenControl` and
     /// `pluginSlotListControl` already cite -- and French rules out Logic.framework's `Bypass`,
-    /// whose French is `Ignorer`. So this is MAGUI's `bypass`.
+    /// whose French is `Ignorer`. So this is MAGUI's `bypass`. Those three chose the row; #977 then
+    /// read the toggle in all ten locales, and every reading is that row's value.
     static let pluginBypassControl = LabelSet(
         canonical: "bypass",
         variants: ["바이패스", "バイパス", "Umgehen", "desactivar", "inactif", "ignora", "旁通", "略過"],
-        rationale: "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in ko-KR (바이패스), de-DE (Umgehen) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+        rationale: "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-insert-slot-bypass-and-open.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAGUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/bypass#value"
     )
 
@@ -2059,11 +2060,12 @@ enum AXLocalePolicy {
     /// (fr); only MAToolKit's lowercase `compare`/`link` rows hold those strings, so the header --
     /// and its bypass -- is MAToolKit's. MAToolKitHighLevel carries a `bypass` row with the same ten
     /// values, so the choice between the two changes no member. German `Bypass` and Portuguese
-    /// `bypass` are the canonical under the case-insensitive match and are not repeated.
+    /// `bypass` are the canonical under the case-insensitive match and are not repeated. #977 then
+    /// read this toggle in all ten locales, and every reading is that row's value.
     static let pluginEditorBypassControl = LabelSet(
         canonical: "bypass",
         variants: ["바이패스", "バイパス", "desactivar", "inactif", "ignora", "旁通", "略過"],
-        rationale: "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in ko-KR (바이패스), de-DE (Bypass) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+        rationale: "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-plugin-editor-is-not-a-blocking-modal.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAToolKit.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/bypass#value"
     )
 

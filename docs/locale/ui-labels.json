@@ -4059,7 +4059,7 @@
     "旁通",
     "略過"
    ],
-   "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in ko-KR (바이패스), de-DE (Umgehen) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-insert-slot-bypass-and-open.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
     "바이패스": {
      "attribute": "description",
@@ -4195,7 +4195,7 @@
     "旁通",
     "略過"
    ],
-   "rationale": "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in ko-KR (바이패스), de-DE (Bypass) and fr-FR (inactif); the other seven are the same row's values (#977). Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "rationale": "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-plugin-editor-is-not-a-blocking-modal.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
     "바이패스": {
      "attribute": "description",
