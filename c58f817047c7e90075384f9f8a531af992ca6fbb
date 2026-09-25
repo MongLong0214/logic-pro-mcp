@@ -1,0 +1,7 @@
+Limit: no committed test fails if the readers go back to a global queue; the saturation measurement (6.0 s timeout on a queue, 3.0 s return on threads) is recorded in the commit and PR, not in the suite
+Ruled-out: capturing the raw descriptor and letting read(2) on the closed number fail with EBADF | the closed number can be reused by the next open in the process, so a looping reader would silently read another file's bytes
+Ruled-out: raising the test's grace further | no grace helps a reader block that never gets a pool thread, and each held case already waits the grace out once
+Ruled-out: committing the pool-saturation test | it holds the process-wide dispatch pool, so every other test in a parallel run would starve while it ran
+Warn: never close a descriptor another thread may still read; stop the reader and let the owner close it after the reader returns. A reader that blocks for the server's lifetime belongs on its own thread, not on a global queue
+Record-Id: r-b3c98e938aa5
+Provenance: inherited 8b0552d2af147c8be212c7bd9fc0cd5c349750b2
