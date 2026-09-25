@@ -1994,11 +1994,11 @@ struct QualificationRunnerTests {
         // Read-only only, and the reason is scope rather than impossibility. This used to say a
         // mutating operation "cannot reach `passed` at all today". That stopped being true when
         // Phase B started promoting on a mutation/restore record, and a blind review found the
-        // sentence still sitting here: `#expect(!creditedMutating.isEmpty)` below requires a
-        // mutating operation to be `.passed` AND semantically read back (`PromotionGate
-        // .operationIsLiveCredited`), and it passes on a live run. Listing mutating operations here
-        // would still be listing the Phase-B gap rather than Phase A's, which is why this filter
-        // stays as it is.
+        // sentence still sitting here: the `phaseBPasses` expectation below requires a mutating
+        // operation to be `.passed` on a recorded write cycle, and it passes on a live run. That is
+        // a pass, not credit -- `PromotionGate.operationIsLiveCredited` credits `.semanticReadback`
+        // alone (#984). Listing mutating operations here would still be listing the Phase-B gap
+        // rather than Phase A's, which is why this filter stays as it is.
         let readOnlyShort = readOnly
             .filter { $0.status != .passed }
             .map { "\($0.operationID)=\($0.status.rawValue)" }
