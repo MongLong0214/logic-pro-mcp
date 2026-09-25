@@ -1832,7 +1832,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 113)   // #448 registered tracks.sort_verified
+        #expect(result.catalog?.operationCount == 114)   // #884 registered system.setup_control_surface
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1842,7 +1842,7 @@ struct QualificationRunnerTests {
         let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 90)
+        #expect(mutating.count == 91)
         #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
@@ -2094,13 +2094,24 @@ struct QualificationRunnerTests {
         // A live run that credits nothing would satisfy every line above, so the run has to have
         // produced credit at all. This is the same positive control the other live harnesses carry.
         //
-        // And it has to be credit for a MUTATING operation. `credited` includes read-only semantic
-        // credit, which a run with every Phase-B recipe removed still earns, so `!credited.isEmpty`
-        // on its own cannot tell a working Phase B from an absent one -- the same vacuity as the
-        // `allSatisfy` above, one level out.
+        // `credited` includes read-only semantic credit, which a run with every Phase-B recipe
+        // removed still earns, so `!credited.isEmpty` on its own cannot tell a working Phase B from
+        // an absent one -- the same vacuity as the `allSatisfy` above, one level out.
         #expect(!credited.isEmpty)
-        let creditedMutating = credited.intersection(Set(mutating.map(\.operationID)))
-        #expect(!creditedMutating.isEmpty)
+        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. It is not
+        // mutating CREDIT, which cannot exist: a mutating operation passes only on a cycle, a pass
+        // on a cycle is filed `.verifiedWriteCycle` (`QualificationOperationResult.verificationKind`),
+        // and `PromotionGate.operationIsLiveCredited` credits `.semanticReadback` alone. The first
+        // version asserted mutating credit, had never run against a live Logic, and failed on every
+        // run once it did (2026-09-25, v3.17.0 preflight: credited=21, none of them mutating).
+        let phaseBPasses = mutating.filter {
+            $0.status == .passed && $0.verificationKind == .verifiedWriteCycle
+        }
+        #expect(
+            !phaseBPasses.isEmpty,
+            "no mutating operation passed on a recorded write cycle, so Phase B did nothing this run"
+        )
+        print("phase-b passes: \(phaseBPasses.map(\.operationID).sorted().joined(separator: ", "))")
     }
 
     /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
@@ -2171,10 +2182,13 @@ struct QualificationRunnerTests {
         })
         let responsePayload = try #require(response["payload"] as? String)
 
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        #expect(qualification.exitCode == 1)
+        // `--qualify` exits non-zero exactly when a case FAILED (its own test is
+        // `qualifyExitCodeReportsWhetherAnythingFailed`). This fixture's operation results come from
+        // the REAL release binary, not a fake that fails by construction, and `transport.play`
+        // passes on its Phase B recipe against a live Logic, so the code this run owes is whatever
+        // its own attestation says rather than a fixed 1 -- which it failed with on 2026-09-25.
+        let anyCaseFailed = attestation.cases.contains { $0.status == .failed }
+        #expect(qualification.exitCode == (anyCaseFailed ? 1 : 0))
         // The fault env engaged nothing: the release binary emitted the normal
         // typed zero-write refusal, never the injected readback_unavailable fault.
         #expect(!responsePayload.contains("readback_unavailable"))
