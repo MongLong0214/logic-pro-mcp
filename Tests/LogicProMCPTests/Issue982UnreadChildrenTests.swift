@@ -155,16 +155,19 @@ struct Issue982UnreadChildrenTests {
 
     /// The children read of `failing` fails through both seams with `status`.
     static func runtime(
-        _ f: Fixture, failing: AXUIElement? = nil, status: AXError = .cannotComplete
+        _ f: Fixture, failing: AXUIElement? = nil, status: AXError = .cannotComplete,
+        failingReads: MutableBox<Int>? = nil
     ) -> AXLogicProElements.Runtime {
         f.builder.makeLogicRuntime(
             appElement: f.app,
             childrenHandler: { element in
                 guard let failing, CFEqual(element, failing) else { return nil }
+                failingReads?.value += 1
                 return []
             },
             childrenResultHandler: { element in
                 guard let failing, CFEqual(element, failing) else { return nil }
+                failingReads?.value += 1
                 return .failure(AXHelpers.AXStatusError(raw: status.rawValue))
             },
             setAttributeHandler: nil, performActionHandler: nil)

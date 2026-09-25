@@ -94,7 +94,8 @@ extension Issue982UnreadChildrenTests {
     @Test(arguments: unidentified)
     func theRevealStopsAtAnUnreadMixer(_ unread: UnreadMixer) async throws {
         let (f, failing) = unread.fixture()
-        let runtime = Self.runtime(f, failing: failing)
+        let failingReads = MutableBox(0)
+        let runtime = Self.runtime(f, failing: failing, failingReads: failingReads)
         let first = try #require(AccessibilityChannel.mixerWithoutReveal(runtime: runtime),
                                  "nil lets View > Show Mixer or key 7 run over a Mixer that may be showing")
         #expect(first.mixer == nil)
@@ -108,13 +109,19 @@ extension Issue982UnreadChildrenTests {
         #expect(revealed.result.strategies.isEmpty)
         #expect(f.builder.actionCalls.isEmpty)
 
-        // After a reveal, the poll ends at once on an unread Mixer: it is there, so waiting for it
-        // to appear cannot help, and the next strategy could hide it again.
-        let clock = ContinuousClock()
-        let start = clock.now
+        // After a reveal, the poll ends on its first look at an unread Mixer: it is there, so
+        // waiting for it to appear cannot help, and the next strategy could toggle it closed.
+        // Counted rather than timed (#804): one lookup reads the failing element a fixed number
+        // of times, and a poll that kept going to its 2.5 s deadline would read it about 25 times
+        // that. Load can only make that loop turn fewer times, never make one look into two.
+        failingReads.value = 0
+        _ = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        let readsPerLookup = failingReads.value
+        #expect(readsPerLookup > 0, "control: a lookup reads the failing element")
+        failingReads.value = 0
         let polled = await AccessibilityChannel.pollMixerAreaVisible(runtime: runtime, timeoutMs: 2_500)
         #expect(polled.childrenUnread, "\(polled)")
-        #expect(clock.now - start < .seconds(1))
+        #expect(failingReads.value == readsPerLookup, "the poll looked more than once")
     }
 
     // MARK: - Census
