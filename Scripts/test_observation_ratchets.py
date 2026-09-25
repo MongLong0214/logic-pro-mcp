@@ -434,9 +434,10 @@ def main():
 
     # 16b. #981: a variant Apple ships only in another case is Apple's, the same way the ledger's
     #      coverage reads it. The fixture carries its own canon axis -- the module, a manifest and
-    #      a German set holding `Mixer` -- because a tree without one answers "nothing derivable".
-    #      `Mixer` is the control that the axis loaded at all; `mixr` is the control that only case
-    #      is forgiven.
+    #      the ledger index `build` would write for a German corpus holding `Mixer` -- because a
+    #      tree without one answers "nothing derivable". `Mixer` is the control that the axis
+    #      loaded at all; `mixr` is the control that only case is forgiven. The absence set is
+    #      made to hold `mixr` as well: a guard that took credit from it would pass `mixr` too.
     import shutil
     croot = _tree({"L": _label(["Mixer", "mixer", "mixr"])}, [], {})
     (croot / "Scripts").mkdir()
@@ -444,8 +445,9 @@ def main():
     cspec = importlib.util.spec_from_file_location("canon_for_fixture", croot / "Scripts" / "logic_canon.py")
     fixture_canon = importlib.util.module_from_spec(cspec)
     cspec.loader.exec_module(fixture_canon)
-    fixture_canon.write_absence("t", "de", ["Mixer"])
-    fixture_canon.write_absence("t", "de", ["Mixer"], casefold=True)
+    fixture_canon.write_absence("t", "de", ["Mixer", "mixr"])
+    fixture_canon.write_ledger_casefold(fixture_canon.ledger_casefold_rows(
+        {"t": {"de": {"Mixer"}}}, fixture_canon.ledger_strings(str(croot))))
     (croot / "docs" / "canon" / "MANIFEST.json").write_text(
         json.dumps({"sources": {"t": {"locales": ["de"]}}}), encoding="utf-8")
     undocumented = set(guard.live_state(str(croot))["undocumented_variants"])

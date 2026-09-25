@@ -1224,17 +1224,17 @@ def main():
     if _canon is None:
         case("the canon module loads so the handler can be driven", False, "no canon module")
     else:
-        _real = _canon.is_absent_ignoring_case
+        _real = _canon.ships_up_to_case
         def _boom(*_args, **_kwargs):
             raise TypeError("not a corpus problem")
-        _canon.is_absent_ignoring_case = _boom
+        _canon.ships_up_to_case = _boom
         try:
             labels._apple_ships(_chinese, "zh-CN")
             swallowed = True
         except TypeError:
             swallowed = False
         finally:
-            _canon.is_absent_ignoring_case = _real
+            _canon.ships_up_to_case = _real
         case("a programming error is not read as Apple shipping nothing", not swallowed,
              "a bare except swallowed a TypeError and answered False")
 
@@ -1258,6 +1258,33 @@ def main():
             case(f"{_other!r} differs from Apple's row by more than case and reads as unshipped",
                  not labels._apple_ships({"canonical": _other, "variants": []}, "de-DE"),
                  f"{_other!r} read as shipped in de-DE")
+        # The credit comes from `build`'s pinned string comparison, never from the absence set:
+        # a 32-bit prefix answers presence wrongly on a collision, which the review of #991
+        # reproduced. With the absence set made to say "present" for everything, a string Apple
+        # does not ship must still read as unshipped.
+        _real_absent = _canon.is_absent
+        _canon.is_absent = lambda *_a, **_k: False
+        try:
+            _credited = labels._apple_ships({"canonical": "Mischer", "variants": []}, "de-DE")
+        finally:
+            _canon.is_absent = _real_absent
+        case("a credit is not read from the 32-bit absence set", not _credited,
+             "`Mischer` read as shipped once the absence set said everything is present")
+        # Unreadable is not absent: without the ledger index the answer is an error, not
+        # "Apple ships nothing".
+        import tempfile as _tempfile
+        with _tempfile.TemporaryDirectory() as _empty:
+            _saved = _canon.LEDGER_DIR
+            _canon.LEDGER_DIR = _empty
+            try:
+                labels._apple_ships({"canonical": "mixer", "variants": []}, "de-DE")
+                _raised = False
+            except _canon.CanonError:
+                _raised = True
+            finally:
+                _canon.LEDGER_DIR = _saved
+        case("a missing ledger index raises rather than reading as Apple shipping nothing",
+             _raised, "`_apple_ships` answered without docs/canon/ledger/casefold.tsv")
 
     if failures:
         for f in failures:

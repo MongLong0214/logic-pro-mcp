@@ -44,7 +44,7 @@ SURFACES = os.path.join(OBS, "SURFACES.md")
 def _derivable_variants(repo: str) -> set:
     """Every variant Apple's own corpus holds up to case, so the ledger does not ask for a reading of one.
 
-    Offline: `docs/canon/absence/` is committed, so this needs no Logic. A variant absent from
+    Offline: `docs/canon/ledger/` is committed, so this needs no Logic. A variant absent from
     every corpus is unchanged -- still debt, still needing somebody to have seen it.
     """
     import importlib.util
@@ -87,7 +87,7 @@ def _derivable_variants(repo: str) -> set:
             # two ways would call a variant Apple's in the ledger and debt here.
             for src, loc in corpora:
                 try:
-                    if not canon.is_absent_ignoring_case(src, loc, variant):
+                    if canon.ships_up_to_case(src, loc, variant):
                         out.add(variant)
                         break
                 except Exception:
