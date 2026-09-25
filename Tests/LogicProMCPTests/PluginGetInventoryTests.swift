@@ -134,6 +134,7 @@ private enum UnreadChildren { case mixer, strip }
 private func makeMixerFixture(
     _ b: FakeAXRuntimeBuilder,
     unreadChildren: UnreadChildren? = nil,
+    mixerByIdentifier: Bool = false,
     stripChildren: (FakeAXRuntimeBuilder) -> [AXUIElement]
 ) -> AXLogicProElements.Runtime {
     let app = b.element(700)
@@ -148,9 +149,8 @@ private func makeMixerFixture(
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
     guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
-    if unreadChildren == .mixer {
-        // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its strip
-        // children, so it never returns one whose children did not read.
+    if unreadChildren == .mixer, mixerByIdentifier {
+        // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
         b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
         b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     }
@@ -261,14 +261,20 @@ private func makeMixerFixture(
 
 // MARK: - #982: children that did not read are unknown, not absent
 
-@Test(arguments: [true, false])
-func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool) async throws {
+@Test(arguments: [(true, true), (true, false), (false, false)])
+func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixerByIdentifier: Bool) async throws {
     let b = FakeAXRuntimeBuilder()
-    let runtime = makeMixerFixture(b, unreadChildren: mixerUnread ? .mixer : .strip) { b in
+    let runtime = makeMixerFixture(
+        b, unreadChildren: mixerUnread ? .mixer : .strip, mixerByIdentifier: mixerByIdentifier
+    ) { b in
         [addEmptySlot(b, 9820)]
     }
 
-    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
+    // The reveal stops before it would actuate: a regression that made it reveal would otherwise
+    // press View > Show Mixer or post key 7 to the running Logic.
+    let result = await AccessibilityChannel.defaultGetPluginInventory(
+        params: ["track": "0"], runtime: runtime,
+        revealMixer: Issue982UnreadChildrenTests.revealWithoutActuating)
     #expect(result.isSuccess) // State B is success:true, verified:false
     let obj = decodeObject(result.message)
     #expect(obj["state"] as? String == "B")

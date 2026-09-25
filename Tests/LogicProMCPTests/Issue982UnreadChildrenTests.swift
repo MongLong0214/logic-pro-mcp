@@ -12,25 +12,46 @@ import Testing
 /// every failing case here fails both.
 @Suite("Issue #982 — a failed children read is not an empty Mixer or an empty insert chain")
 struct Issue982UnreadChildrenTests {
+    /// How the Mixer is found. Logic 12.2 and 12.3 give it no identifier, so `getMixerArea` finds
+    /// it as a Mixer-named container with strip children (#234). Older builds carry
+    /// `AXIdentifier="Mixer"`.
+    enum Layout: String, CaseIterable, CustomStringConvertible {
+        /// window > AXGroup(id Mixer) > strips
+        case identified
+        /// window > AXGroup(desc Mixer) > AXLayoutArea(desc Mixer) > strips
+        case logic122
+        /// window > AXGroup(desc Mixer) > [toolbar AXGroup(desc Mixer), AXGroup > AXLayoutArea(desc Mixer) > strips]
+        case logic123
+
+        var description: String { rawValue }
+    }
+
     struct Fixture {
         let builder: FakeAXRuntimeBuilder
         let app: AXUIElement
+        let window: AXUIElement
+        /// The element whose children are the strips.
         let mixer: AXUIElement
+        /// Every element from the outermost Mixer-named container down to `mixer`. A failed
+        /// children read at any of them hides the strips.
+        let mixerPath: [AXUIElement]
         let strips: [AXUIElement]
+        /// 12.3's Mixer toolbar, a Mixer-named sibling of the strips' branch.
+        let toolbar: AXUIElement?
+        /// The Inspector's own two-strip Mixer. It always reads, and it must never be taken for
+        /// the Mixer.
+        let inspectorMixer: AXUIElement
     }
 
-    /// Two strips. The first hosts one occupied insert and an empty slot, the second one empty slot.
-    static func fixture() -> Fixture {
+    /// Two strips. The first hosts one occupied insert and an empty slot, the second one empty
+    /// slot. The window also holds the Inspector with its two-strip Mixer, as Logic's does; with
+    /// `mixerShowing: false` it holds only the Inspector.
+    static func fixture(_ layout: Layout = .identified, mixerShowing: Bool = true) -> Fixture {
         let b = FakeAXRuntimeBuilder()
         let app = b.element(9820)
         let window = b.element(9821)
-        let mixer = b.element(9822)
         b.setAttribute(app, kAXMainWindowAttribute as String, window)
-        b.setChildren(window, [mixer])
-        // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its strip
-        // children, so it never returns one whose children did not read.
-        b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
-        b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+
         let first = b.element(9830)
         let second = b.element(9831)
         for strip in [first, second] {
@@ -38,8 +59,75 @@ struct Issue982UnreadChildrenTests {
         }
         b.setChildren(first, [occupiedSlot(b, 9840, name: "Compressor"), emptySlot(b, 9841)])
         b.setChildren(second, [emptySlot(b, 9842)])
+
+        let mixer = b.element(9822)
         b.setChildren(mixer, [first, second])
-        return Fixture(builder: b, app: app, mixer: mixer, strips: [first, second])
+        var mixerPath: [AXUIElement] = [mixer]
+        var toolbar: AXUIElement?
+        if layout == .identified {
+            b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+        } else {
+            b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+            b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+            let outer = b.element(9823)
+            b.setAttribute(outer, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(outer, kAXDescriptionAttribute as String, "Mixer")
+            if layout == .logic122 {
+                b.setChildren(outer, [mixer])
+                mixerPath = [outer, mixer]
+            } else {
+                let bar = b.element(9824)
+                let barButton = b.element(9825)
+                b.setAttribute(bar, kAXRoleAttribute as String, kAXGroupRole as String)
+                b.setAttribute(bar, kAXDescriptionAttribute as String, "Mixer")
+                b.setAttribute(barButton, kAXRoleAttribute as String, kAXButtonRole as String)
+                b.setChildren(bar, [barButton])
+                let content = b.element(9826)
+                b.setAttribute(content, kAXRoleAttribute as String, kAXGroupRole as String)
+                b.setChildren(content, [mixer])
+                b.setChildren(outer, [bar, content])
+                mixerPath = [outer, content, mixer]
+                toolbar = bar
+            }
+        }
+
+        let inspector = b.element(9850)
+        let inspectorWrapper = b.element(9851)
+        let inspectorMixer = b.element(9852)
+        b.setAttribute(inspector, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(inspector, kAXDescriptionAttribute as String, "Inspector")
+        b.setAttribute(inspectorWrapper, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(inspectorWrapper, kAXDescriptionAttribute as String, "Mixer")
+        b.setAttribute(inspectorMixer, kAXRoleAttribute as String, "AXLayoutArea")
+        b.setAttribute(inspectorMixer, kAXDescriptionAttribute as String, "Mixer")
+        let inspectorStrips = [b.element(9853), b.element(9854)]
+        for strip in inspectorStrips {
+            b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        }
+        b.setChildren(inspectorMixer, inspectorStrips)
+        b.setChildren(inspectorWrapper, [inspectorMixer])
+        b.setChildren(inspector, [inspectorWrapper])
+
+        b.setChildren(window, mixerShowing ? [inspector, mixerPath[0]] : [inspector])
+        return Fixture(builder: b, app: app, window: window, mixer: mixer, mixerPath: mixerPath,
+                       strips: [first, second], toolbar: toolbar, inspectorMixer: inspectorMixer)
+    }
+
+    /// One case per element whose failed children read hides the strips, in every layout.
+    struct UnreadMixer: CustomStringConvertible, Sendable {
+        let layout: Layout
+        let depth: Int
+        var description: String { "\(layout) depth \(depth)" }
+
+        static let all: [UnreadMixer] = Layout.allCases.flatMap { layout in
+            Issue982UnreadChildrenTests.fixture(layout).mixerPath.indices.map { UnreadMixer(layout: layout, depth: $0) }
+        }
+
+        func fixture() -> (Fixture, failing: AXUIElement) {
+            let f = Issue982UnreadChildrenTests.fixture(layout)
+            return (f, f.mixerPath[depth])
+        }
     }
 
     static func emptySlot(_ b: FakeAXRuntimeBuilder, _ id: Int) -> AXUIElement {
@@ -124,23 +212,27 @@ struct Issue982UnreadChildrenTests {
 
     // MARK: - Readers report unknown
 
-    @Test func mixerStateDoesNotReportAnUnreadMixerAsEmpty() throws {
-        let f = Self.fixture()
-        let whole = AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f))
-        #expect(whole.isSuccess, "control: the fixture reads as a Mixer")
+    /// In 12.2 and 12.3 an unread Mixer used to be "Cannot locate mixer": the lookup found the
+    /// Mixer by reading its strips and dropped it when they did not read.
+    @Test(arguments: UnreadMixer.all)
+    func mixerStateDoesNotReportAnUnreadMixerAsEmpty(_ unread: UnreadMixer) throws {
+        let (f, failing) = unread.fixture()
+        let whole = try Self.strips(AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f)))
+        #expect(whole[0]["plugins_source"] as? String == "ax", "control: the fixture reads as this Mixer")
 
-        let result = AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f, failing: f.mixer))
+        let result = AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f, failing: failing))
         #expect(!result.isSuccess)
         #expect(result.message == AccessibilityChannel.mixerChildrenUnreadMessage)
     }
 
-    @Test func channelStripDoesNotReportAnUnreadMixerAsOutOfRange() {
-        let f = Self.fixture()
+    @Test(arguments: UnreadMixer.all)
+    func channelStripDoesNotReportAnUnreadMixerAsOutOfRange(_ unread: UnreadMixer) {
+        let (f, failing) = unread.fixture()
         let whole = AccessibilityChannel.defaultGetChannelStrip(params: ["index": "1"], runtime: Self.runtime(f))
         #expect(whole.isSuccess, "control: strip 1 exists")
 
         let result = AccessibilityChannel.defaultGetChannelStrip(
-            params: ["index": "1"], runtime: Self.runtime(f, failing: f.mixer))
+            params: ["index": "1"], runtime: Self.runtime(f, failing: failing))
         #expect(!result.isSuccess)
         #expect(result.message == AccessibilityChannel.mixerChildrenUnreadMessage)
     }
@@ -181,13 +273,16 @@ struct Issue982UnreadChildrenTests {
 
     /// The insert snapshot the verified insert diffs against. A strip whose children did not read
     /// used to snapshot as a strip hosting nothing.
-    @Test func fullStripInventoryDoesNotSnapshotAnUnreadStripAsEmpty() {
-        let f = Self.fixture()
+    @Test(arguments: Layout.allCases)
+    func fullStripInventoryDoesNotSnapshotAnUnreadStripAsEmpty(_ layout: Layout) {
+        let f = Self.fixture(layout)
         let whole = AccessibilityChannel.fullStripInventory(track: 0, runtime: Self.runtime(f))
         #expect(whole?.count == 1, "control: one occupied insert")
 
         #expect(AccessibilityChannel.fullStripInventory(track: 0, runtime: Self.runtime(f, failing: f.strips[0])) == nil)
-        #expect(AccessibilityChannel.fullStripInventory(track: 0, runtime: Self.runtime(f, failing: f.mixer)) == nil)
+        for failing in f.mixerPath {
+            #expect(AccessibilityChannel.fullStripInventory(track: 0, runtime: Self.runtime(f, failing: failing)) == nil)
+        }
     }
 
     // MARK: - insert_plugin refuses for the reason
@@ -206,18 +301,22 @@ struct Issue982UnreadChildrenTests {
     /// without writing. Before #982 an unread Mixer reached the ordinal check as a Mixer with
     /// `visible_strips: 0`, and an unread strip reached the slot check as a strip whose insert
     /// section is not enumerable.
-    @Test func insertPluginRefusesAnUnreadMixerOrStripForThatReason() async {
-        let control = Self.fixture()
+    @Test(arguments: UnreadMixer.all)
+    func insertPluginRefusesAnUnreadMixerForThatReason(_ unread: UnreadMixer) async {
+        let control = unread.fixture().0
         let whole = await Self.insertPlugin(Self.runtime(control))
         #expect(whole.message.contains("slot_occupied"), "control: the fixture reaches the slot")
 
-        let mixerFixture = Self.fixture()
-        let mixer = await Self.insertPlugin(Self.runtime(mixerFixture, failing: mixerFixture.mixer))
+        let (f, failing) = unread.fixture()
+        let mixer = await Self.insertPlugin(Self.runtime(f, failing: failing))
         #expect(!mixer.isSuccess)
-        #expect(mixer.message.contains("\"mixer_children_unread\":true"))
+        #expect(mixer.message.contains("\"mixer_children_unread\":true"), "\(mixer.message)")
         #expect(!mixer.message.contains("visible_strips"))
-        #expect(mixerFixture.builder.actionCalls.isEmpty)
+        #expect(!mixer.message.contains("Cannot locate"))
+        #expect(f.builder.actionCalls.isEmpty)
+    }
 
+    @Test func insertPluginRefusesAnUnreadStripForThatReason() async {
         let stripFixture = Self.fixture()
         let strip = await Self.insertPlugin(Self.runtime(stripFixture, failing: stripFixture.strips[0]))
         #expect(!strip.isSuccess)

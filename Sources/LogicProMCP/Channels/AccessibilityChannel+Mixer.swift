@@ -14,8 +14,9 @@ extension AccessibilityChannel {
     static let stripChildrenUnreadMessage = "the strip's children did not read"
 
     static func defaultGetMixerState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
-            return .error("Cannot locate mixer — is it visible?")
+        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        guard let mixer = lookup.mixer else {
+            return .error(lookup.childrenUnread ? mixerChildrenUnreadMessage : "Cannot locate mixer — is it visible?")
         }
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
             return .error(mixerChildrenUnreadMessage)
@@ -66,8 +67,9 @@ extension AccessibilityChannel {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
-        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
-            return .error("Cannot locate mixer — is it visible?")
+        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        guard let mixer = lookup.mixer else {
+            return .error(lookup.childrenUnread ? mixerChildrenUnreadMessage : "Cannot locate mixer — is it visible?")
         }
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
             return .error(mixerChildrenUnreadMessage)

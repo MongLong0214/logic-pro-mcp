@@ -84,6 +84,7 @@ private final class LiveFixture: @unchecked Sendable {
         emptyInsertChain: Bool = false,
         // #982: the children read of the Mixer, or of the target strip, fails through both seams.
         mixerChildrenUnread: Bool = false,
+        mixerByIdentifier: Bool = false,
         targetStripChildrenUnread: Bool = false,
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
@@ -219,9 +220,8 @@ private final class LiveFixture: @unchecked Sendable {
             }
             strips.append(strip)
         }
-        if mixerChildrenUnread {
-            // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its
-            // strip children, so it never returns one whose children did not read.
+        if mixerChildrenUnread, mixerByIdentifier {
+            // The older shape. Logic 12.2 and 12.3 show the layout area below, with no identifier.
             b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
             b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
         } else {
@@ -3193,12 +3193,13 @@ private func namedEQBandParams(
 
 // MARK: - #982 unread children are refused as unread, not as an absent track
 
-@Test(arguments: [true, false])
-func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) async throws {
+@Test(arguments: [(true, true), (true, false), (false, false)])
+func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool, mixerByIdentifier: Bool) async throws {
     // Before #982 an unread Mixer read as one with no strips ("track index 0 is not present") and
     // an unread strip as one with no inserts ("insert 6 ... out of range").
     let fixture = LiveFixture(
-        beforeValue: 51, mixerChildrenUnread: mixerUnread, targetStripChildrenUnread: !mixerUnread)
+        beforeValue: 51, mixerChildrenUnread: mixerUnread, mixerByIdentifier: mixerByIdentifier,
+        targetStripChildrenUnread: !mixerUnread)
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "C")

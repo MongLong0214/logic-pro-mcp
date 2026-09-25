@@ -74,6 +74,7 @@ private enum UnreadChildren { case mixer, strip }
 private func makeMixerFixture(
     _ b: FakeAXRuntimeBuilder,
     unreadChildren: UnreadChildren? = nil,
+    mixerByIdentifier: Bool = false,
     stripChildren: (FakeAXRuntimeBuilder) -> [AXUIElement]
 ) -> AXLogicProElements.Runtime {
     let app = b.element(900)
@@ -88,9 +89,8 @@ private func makeMixerFixture(
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
     guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
-    if unreadChildren == .mixer {
-        // Located by identifier: `getMixerArea`'s other path finds a Mixer by reading its strip
-        // children, so it never returns one whose children did not read.
+    if unreadChildren == .mixer, mixerByIdentifier {
+        // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
         b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
         b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
     }
@@ -510,10 +510,12 @@ private func insertParams(
 
 // MARK: - #982: children that did not read are refused as such
 
-@Test(arguments: [true, false])
-func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool) async throws {
+@Test(arguments: [(true, true), (true, false), (false, false)])
+func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool, mixerByIdentifier: Bool) async throws {
     let b = FakeAXRuntimeBuilder()
-    let runtime = makeMixerFixture(b, unreadChildren: mixerUnread ? .mixer : .strip) { b in
+    let runtime = makeMixerFixture(
+        b, unreadChildren: mixerUnread ? .mixer : .strip, mixerByIdentifier: mixerByIdentifier
+    ) { b in
         [addEmptySlot(b, 9825)]
     }
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)

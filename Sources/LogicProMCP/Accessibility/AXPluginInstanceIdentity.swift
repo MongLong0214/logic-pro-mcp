@@ -167,14 +167,17 @@ public enum AXPluginInstanceIdentity {
             if case let .success(windows) = read { axWindowCount = windows?.count }
         }
         let mainWindowFound = AXLogicProElements.mainWindow(runtime: runtime) != nil
-        let mixer = AXLogicProElements.getMixerArea(runtime: runtime)
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        let mixer = mixerLookup.mixer
 
         // Children are read with their status: `getChildren` answers a failed
         // read with [], which would report a Mixer or strip it could not see as
         // one that hosts nothing.
         var strips: [Strip] = []
         var readWhole = false
-        var mixerChildrenUnreadable = false
+        // #982: a Mixer-named container whose children did not read is reported as unreadable,
+        // not as a Mixer that was not found.
+        var mixerChildrenUnreadable = mixerLookup.childrenUnread
         if let mixer {
             if let children = AXLogicProElements.childrenIfRead(mixer, runtime: runtime.ax) {
                 let enumeration = AXLogicProElements.stripEnumeration(children: children, runtime: runtime.ax)
@@ -230,10 +233,10 @@ public enum AXPluginInstanceIdentity {
             note = "app-root-nil"
         } else if !mainWindowFound {
             note = "main-window-nil"
-        } else if mixer == nil {
-            note = "mixer-not-found"
         } else if mixerChildrenUnreadable {
             note = "mixer-children-unreadable"
+        } else if mixer == nil {
+            note = "mixer-not-found"
         } else {
             note = "no-hosting-strips"
         }

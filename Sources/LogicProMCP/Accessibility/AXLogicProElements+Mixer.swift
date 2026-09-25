@@ -5,21 +5,45 @@ import Foundation
 extension AXLogicProElements {
     // MARK: - Mixer
 
-    /// Find the mixer area.
+    /// What looking for the Mixer found (#982). A children read that failed at or inside a
+    /// Mixer-named container outside the Inspector may have hidden the Mixer's strips, so when no
+    /// readable Mixer stands beside it the answer is `childrenUnread`, not `notFound`.
+    enum MixerAreaLookup {
+        case found(AXUIElement)
+        case childrenUnread
+        case notFound
+
+        var mixer: AXUIElement? {
+            if case let .found(mixer) = self { return mixer }
+            return nil
+        }
+
+        var childrenUnread: Bool {
+            if case .childrenUnread = self { return true }
+            return false
+        }
+    }
+
+    /// Find the mixer area. Nil folds `childrenUnread` into `notFound`; a caller that reports why
+    /// the Mixer is missing asks `mixerAreaLookup` instead.
     static func getMixerArea(runtime: Runtime = .production) -> AXUIElement? {
-        guard let window = mainWindow(runtime: runtime) else { return nil }
+        mixerAreaLookup(runtime: runtime).mixer
+    }
+
+    static func mixerAreaLookup(runtime: Runtime = .production) -> MixerAreaLookup {
+        guard let window = mainWindow(runtime: runtime) else { return .notFound }
 
         // Legacy/test-path lookup. Older Logic builds and existing fake AX
         // trees expose the mixer with AXIdentifier="Mixer".
         if let mixer = AXHelpers.findDescendant(
             of: window, role: kAXGroupRole, identifier: "Mixer", runtime: runtime.ax
         ) {
-            return mixer
+            return .found(mixer)
         }
         if let mixer = AXHelpers.findDescendant(
             of: window, role: kAXScrollAreaRole, identifier: "Mixer", runtime: runtime.ax
         ) {
-            return mixer
+            return .found(mixer)
         }
 
         // #234: Logic Pro 12.2 exposes the visible bottom Mixer as:
@@ -29,13 +53,16 @@ extension AXLogicProElements {
         // Do not fall back to the Inspector's small two-strip "믹서" area; that
         // would make a full mixer read silently return only selected-track +
         // output strips.
-        return mixerAreaCandidates(in: window, runtime: runtime.ax)
+        let scan = mixerAreaCandidates(in: window, runtime: runtime.ax)
+        let best = scan.candidates
             .sorted { lhs, rhs in
                 if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
                 return lhs.totalChildCount > rhs.totalChildCount
             }
             .first?
             .element
+        if let best { return .found(best) }
+        return scan.sawUnreadMixerContainer ? .childrenUnread : .notFound
     }
 
     /// #107: the per-track volume fader inside the track HEADER (an AXSlider
@@ -198,16 +225,19 @@ extension AXLogicProElements {
     private static func mixerAreaCandidates(
         in root: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [MixerAreaCandidate] {
+    ) -> (candidates: [MixerAreaCandidate], sawUnreadMixerContainer: Bool) {
         var candidates: [MixerAreaCandidate] = []
+        var sawUnreadMixerContainer = false
         collectMixerAreaCandidates(
             root,
             runtime: runtime,
             depth: 0,
             ancestorIsInspector: false,
-            into: &candidates
+            ancestorIsMixer: false,
+            into: &candidates,
+            sawUnreadMixerContainer: &sawUnreadMixerContainer
         )
-        return candidates
+        return (candidates, sawUnreadMixerContainer)
     }
 
     private static func collectMixerAreaCandidates(
@@ -215,33 +245,49 @@ extension AXLogicProElements {
         runtime: AXHelpers.Runtime,
         depth: Int,
         ancestorIsInspector: Bool,
-        into candidates: inout [MixerAreaCandidate]
+        ancestorIsMixer: Bool,
+        into candidates: inout [MixerAreaCandidate],
+        sawUnreadMixerContainer: inout Bool
     ) {
         guard depth <= 12 else { return }
 
         let text = elementSearchText(element, runtime: runtime)
         let isInspector = ancestorIsInspector
             || AXLocalePolicy.mixerInspectorContext.containsAny(in: text)
-
-        if !isInspector,
-           isMixerNamedElement(element, runtime: runtime),
-           isMixerContainerRole(AXHelpers.getRole(element, runtime: runtime)),
-           hasDirectChannelStripChildren(element, runtime: runtime) {
-            let strips = channelStripLayoutItems(in: element, runtime: runtime)
-            candidates.append(MixerAreaCandidate(
-                element: element,
-                stripCount: strips.count,
-                totalChildCount: AXHelpers.getChildren(element, runtime: runtime).count
-            ))
+        let isMixerContainer = !isInspector
+            && isMixerNamedElement(element, runtime: runtime)
+            && isMixerContainerRole(AXHelpers.getRole(element, runtime: runtime))
+        // Read once, with its status (#982). `getChildren` answers a failed read with [], which
+        // made a Mixer whose children did not read look like a container with no strips. A failed
+        // read inside a Mixer-named container outside the Inspector (12.3 puts an unnamed group
+        // between its outer group and the layout area) hides strips that may be there.
+        guard let children = childrenIfRead(element, runtime: runtime) else {
+            if !isInspector, ancestorIsMixer || isMixerContainer {
+                sawUnreadMixerContainer = true
+            }
+            return
         }
 
-        for child in AXHelpers.getChildren(element, runtime: runtime) {
+        if isMixerContainer {
+            let strips = channelStripLayoutItems(children, runtime: runtime)
+            if !strips.isEmpty {
+                candidates.append(MixerAreaCandidate(
+                    element: element,
+                    stripCount: strips.count,
+                    totalChildCount: children.count
+                ))
+            }
+        }
+
+        for child in children {
             collectMixerAreaCandidates(
                 child,
                 runtime: runtime,
                 depth: depth + 1,
                 ancestorIsInspector: isInspector,
-                into: &candidates
+                ancestorIsMixer: !isInspector && (ancestorIsMixer || isMixerContainer),
+                into: &candidates,
+                sawUnreadMixerContainer: &sawUnreadMixerContainer
             )
         }
     }
@@ -268,18 +314,11 @@ extension AXLogicProElements {
         return candidates.contains { AXLocalePolicy.mixerNamedElement.containsNormalized($0) }
     }
 
-    private static func hasDirectChannelStripChildren(
-        _ element: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> Bool {
-        !channelStripLayoutItems(in: element, runtime: runtime).isEmpty
-    }
-
     private static func channelStripLayoutItems(
-        in element: AXUIElement,
+        _ children: [AXUIElement],
         runtime: AXHelpers.Runtime
     ) -> [AXUIElement] {
-        AXHelpers.getChildren(element, runtime: runtime).filter {
+        children.filter {
             (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXLayoutItemRole as String)
         }
     }

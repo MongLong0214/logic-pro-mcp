@@ -89,8 +89,9 @@ extension AccessibilityChannel {
                 extras: ["requested_plugin_name": requestedPluginName]
             ))
         }
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
         guard let app = AXLogicProElements.appRoot(runtime: runtime),
-              let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
+              mixerLookup.mixer != nil || mixerLookup.childrenUnread else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: "Cannot locate visible mixer for insert_plugin"
@@ -102,8 +103,9 @@ extension AccessibilityChannel {
         // no readback catches it because the readback reads the same shifted list. Resolve exactly,
         // or refuse.
         // #982: a Mixer whose children did not read is refused for that reason, not reported as a
-        // Mixer too small for the requested track.
-        guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
+        // Mixer too small for the requested track or as no Mixer at all.
+        guard let mixer = mixerLookup.mixer,
+              let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: "refusing insert_plugin: the mixer's children did not read, so no strip can be "

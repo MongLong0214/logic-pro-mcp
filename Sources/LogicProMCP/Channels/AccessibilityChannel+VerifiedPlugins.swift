@@ -33,6 +33,10 @@ extension AccessibilityChannel {
         let menuClicked: Bool
         let keySent: Bool
         let mixerVisible: Bool
+        /// A Mixer-named container was found but its children did not read (#982). The reveal
+        /// stops there: the Mixer may already be showing, and View > Show Mixer or key 7 could
+        /// hide it again.
+        var mixerChildrenUnread = false
 
         static let alreadyVisible = MixerRevealResult(
             attempted: false,
@@ -42,6 +46,17 @@ extension AccessibilityChannel {
             menuClicked: false,
             keySent: false,
             mixerVisible: true
+        )
+
+        static let childrenUnreadBeforeReveal = MixerRevealResult(
+            attempted: false,
+            alreadyVisible: false,
+            strategies: [],
+            menuItemFound: false,
+            menuClicked: false,
+            keySent: false,
+            mixerVisible: false,
+            mixerChildrenUnread: true
         )
     }
 
@@ -167,7 +182,29 @@ extension AccessibilityChannel {
         // State B `readback_unavailable` rather than a fabricated empty chain.
         let ensuredMixer = await revealMixer(runtime)
         let reveal = ensuredMixer.result
+        // #982: children that did not read are unknown. Before, they read as no Mixer at all, as a
+        // Mixer with no strips ("track index is not present") or as a strip with no inserts.
+        func mixerChildrenUnread() -> ChannelResult {
+            .success(HonestContract.encodeV2StateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "track": track,
+                    "plugins_source": "ax",
+                    "plugins_fetched_at": fetchedAt,
+                    "plugins_unknown_reason": "ax_subtree_unreadable",
+                    "mixer_reveal_attempted": reveal.attempted,
+                    "mixer_reveal_strategies": reveal.strategies,
+                    "what_was_attempted": reveal.attempted
+                        ? "reveal the mixer, then read insert chain inventory for track \(track)"
+                        : "read insert chain inventory for track \(track)",
+                    "what_was_observed": "the mixer's children did not read",
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
         guard let mixer = ensuredMixer.mixer else {
+            if reveal.mixerChildrenUnread { return mixerChildrenUnread() }
             return .success(HonestContract.encodeV2StateB(
                 reason: .readbackUnavailable,
                 extras: [
@@ -192,22 +229,8 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        // #982: children that did not read are unknown. Before, they read as a Mixer with no strips
-        // ("track index is not present") or a strip with no inserts.
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
-            return .success(HonestContract.encodeV2StateB(
-                reason: .readbackUnavailable,
-                extras: [
-                    "operation": operation,
-                    "track": track,
-                    "plugins_source": "ax",
-                    "plugins_fetched_at": fetchedAt,
-                    "plugins_unknown_reason": "ax_subtree_unreadable",
-                    "what_was_attempted": "read insert chain inventory for track \(track)",
-                    "what_was_observed": "the mixer's children did not read",
-                    "safe_to_retry": true,
-                ]
-            ))
+            return mixerChildrenUnread()
         }
         guard track < strips.count else {
             return .success(HonestContract.encodeV2StateB(
@@ -286,11 +309,27 @@ extension AccessibilityChannel {
     /// `mixer_not_visible` even when the reveal eventually succeeded.
     static let mixerRevealPollTimeoutMs = 2_500
 
-    private static func ensureMixerAreaVisibleForInventory(
+    /// The reveal's first step, which actuates nothing: the Mixer when it is found, or the unread
+    /// result when a Mixer-named container's children did not read (#982). Nil means no Mixer was
+    /// found, and only then may a reveal run.
+    static func mixerWithoutReveal(
+        runtime: AXLogicProElements.Runtime
+    ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
+        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        if let mixer = lookup.mixer {
+            return (mixer, .alreadyVisible)
+        }
+        if lookup.childrenUnread {
+            return (nil, .childrenUnreadBeforeReveal)
+        }
+        return nil
+    }
+
+    static func ensureMixerAreaVisibleForInventory(
         runtime: AXLogicProElements.Runtime
     ) async -> (mixer: AXUIElement?, result: MixerRevealResult) {
-        if let mixer = AXLogicProElements.getMixerArea(runtime: runtime) {
-            return (mixer, .alreadyVisible)
+        if let found = mixerWithoutReveal(runtime: runtime) {
+            return found
         }
 
         // #142 — reveal-reliability hardening. The deterministic AX menu-click
@@ -302,6 +341,20 @@ extension AccessibilityChannel {
         // after key-7 in case the keypress shifted focus enough for the menu to
         // resolve. `strategies` honestly records every distinct path tried.
         var strategies: [String] = []
+        func unreadAfterReveal(
+            itemFound: Bool, menuClicked: Bool, keySent: Bool
+        ) -> (mixer: AXUIElement?, result: MixerRevealResult) {
+            (nil, MixerRevealResult(
+                attempted: true,
+                alreadyVisible: false,
+                strategies: strategies,
+                menuItemFound: itemFound,
+                menuClicked: menuClicked,
+                keySent: keySent,
+                mixerVisible: false,
+                mixerChildrenUnread: true
+            ))
+        }
         _ = ProcessUtils.Runtime.production.activateLogicPro()
 
         // Strategy 1 (preferred): AX menu-click, with retry.
@@ -315,9 +368,11 @@ extension AccessibilityChannel {
         var menuClicked = menuAttempt.clicked
         if menuAttempt.clicked {
             strategies.append("ax_menu_view_show_mixer")
-            if let mixer = await pollMixerAreaVisible(
-                runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs
-            ) {
+            let polled = await pollMixerAreaVisible(runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs)
+            if polled.childrenUnread {
+                return unreadAfterReveal(itemFound: itemFound, menuClicked: true, keySent: false)
+            }
+            if let mixer = polled.mixer {
                 return (
                     mixer,
                     MixerRevealResult(
@@ -339,9 +394,11 @@ extension AccessibilityChannel {
            CGEventChannel.Runtime.production.postKeyEvent(7, [], pid) {
             keySent = true
             strategies.append("cgevent_x")
-            if let mixer = await pollMixerAreaVisible(
-                runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs
-            ) {
+            let polled = await pollMixerAreaVisible(runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs)
+            if polled.childrenUnread {
+                return unreadAfterReveal(itemFound: itemFound, menuClicked: menuClicked, keySent: true)
+            }
+            if let mixer = polled.mixer {
                 return (
                     mixer,
                     MixerRevealResult(
@@ -372,9 +429,11 @@ extension AccessibilityChannel {
             if !strategies.contains("ax_menu_view_show_mixer_retry") {
                 strategies.append("ax_menu_view_show_mixer_retry")
             }
-            if let mixer = await pollMixerAreaVisible(
-                runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs
-            ) {
+            let polled = await pollMixerAreaVisible(runtime: runtime, timeoutMs: mixerRevealPollTimeoutMs)
+            if polled.childrenUnread {
+                return unreadAfterReveal(itemFound: itemFound, menuClicked: true, keySent: keySent)
+            }
+            if let mixer = polled.mixer {
                 return (
                     mixer,
                     MixerRevealResult(
@@ -404,18 +463,21 @@ extension AccessibilityChannel {
         )
     }
 
-    private static func pollMixerAreaVisible(
+    /// Polls until the Mixer is found or its children fail to read. An unread Mixer ends the poll
+    /// at once (#982): it is present, so waiting for it to appear cannot help.
+    static func pollMixerAreaVisible(
         runtime: AXLogicProElements.Runtime,
         timeoutMs: Int
-    ) async -> AXUIElement? {
+    ) async -> AXLogicProElements.MixerAreaLookup {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         repeat {
-            if let mixer = AXLogicProElements.getMixerArea(runtime: runtime) {
-                return mixer
+            let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+            if lookup.mixer != nil || lookup.childrenUnread {
+                return lookup
             }
             try? await Task.sleep(for: .milliseconds(100))
         } while Date() < deadline
-        return nil
+        return .notFound
     }
 
     // MARK: - Shared validation inputs
@@ -1166,8 +1228,12 @@ extension AccessibilityChannel {
         // Step 7 — inventory complete + slot occupied at `insert` (reuse the
         // drift-safe enumerator; an unreadable chain or an empty target slot
         // means there is no plugin to write into).
-        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
-            return .error(incompleteInventoryStateC(operation, identity, "mixer area was not locatable"))
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        guard let mixer = mixerLookup.mixer else {
+            return .error(incompleteInventoryStateC(
+                operation, identity,
+                mixerLookup.childrenUnread ? "the mixer's children did not read" : "mixer area was not locatable"
+            ))
         }
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
             return .error(incompleteInventoryStateC(operation, identity, "the mixer's children did not read"))
@@ -3336,22 +3402,9 @@ extension AccessibilityChannel {
 
         // Step 5 — inventory must be complete + slot must be verified-empty
         // before an insert is even considered (R3/R7, AC5).
-        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .incompleteInventory,
-                extras: [
-                    "operation": operation,
-                    "target_identity": identity,
-                    "what_was_attempted": "read insert inventory before inserting",
-                    "what_was_observed": "mixer area was not locatable",
-                    "safe_to_retry": true,
-                    "write_attempted": false,
-                ]
-            ))
-        }
-        // #982: children that did not read are refused as such, not as a missing track or an empty
-        // chain.
-        func childrenUnread(_ observed: String) -> ChannelResult {
+        // #982: children that did not read are refused as such, not as a missing Mixer, a missing
+        // track or an empty chain.
+        func refuseBeforeInsert(_ observed: String) -> ChannelResult {
             .error(HonestContract.encodeV2StateC(
                 error: .incompleteInventory,
                 extras: [
@@ -3364,14 +3417,20 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        guard let mixer = mixerLookup.mixer else {
+            return refuseBeforeInsert(
+                mixerLookup.childrenUnread ? "the mixer's children did not read" : "mixer area was not locatable"
+            )
+        }
         guard let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax) else {
-            return childrenUnread("the mixer's children did not read")
+            return refuseBeforeInsert("the mixer's children did not read")
         }
         guard track < strips.count else {
-            return childrenUnread("track index \(track) is not present in the visible mixer")
+            return refuseBeforeInsert("track index \(track) is not present in the visible mixer")
         }
         guard let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax) else {
-            return childrenUnread("the strip's children did not read")
+            return refuseBeforeInsert("the strip's children did not read")
         }
         let built = pluginInventoryItems(for: slots)
         guard built.complete else {
