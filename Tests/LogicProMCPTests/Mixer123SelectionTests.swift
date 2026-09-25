@@ -69,12 +69,12 @@ struct Mixer123SelectionTests {
         let fixture = make123MixerFixture(stripCount: 3, firstStrip: strip, builder: builder)
 
         let mixer = try #require(AXLogicProElements.getMixerArea(runtime: fixture.runtime))
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: fixture.runtime.ax)
+        let strips = try #require(AXLogicProElements.mixerChannelStrips(in: mixer, runtime: fixture.runtime.ax))
         #expect(strips.count == 3)
         let firstStrip = try #require(strips.first)
         #expect(CFEqual(firstStrip, strip))
 
-        let slots = AXLogicProElements.audioPluginInsertSlots(in: firstStrip, runtime: fixture.runtime.ax)
+        let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: firstStrip, runtime: fixture.runtime.ax))
 
         #expect(slots.count == 2)
         #expect(slots.map(\.index) == [0, 1])

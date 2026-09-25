@@ -167,22 +167,25 @@ public enum AXPluginInstanceIdentity {
             if case let .success(windows) = read { axWindowCount = windows?.count }
         }
         let mainWindowFound = AXLogicProElements.mainWindow(runtime: runtime) != nil
-        let mixer = AXLogicProElements.getMixerArea(runtime: runtime)
+        let mixerLookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        let mixer = mixerLookup.mixer
 
         // Children are read with their status: `getChildren` answers a failed
         // read with [], which would report a Mixer or strip it could not see as
         // one that hosts nothing.
         var strips: [Strip] = []
         var readWhole = false
-        var mixerChildrenUnreadable = false
+        // #982: a Mixer-named container whose children did not read is reported as unreadable,
+        // not as a Mixer that was not found.
+        var mixerChildrenUnreadable = mixerLookup.childrenUnread
         if let mixer {
-            if let children = readChildren(mixer, runtime: runtime.ax) {
+            if let children = AXLogicProElements.childrenIfRead(mixer, runtime: runtime.ax) {
                 let enumeration = AXLogicProElements.stripEnumeration(children: children, runtime: runtime.ax)
                 readWhole = enumeration.unreadableChildren == 0
                 let failedSlotReads = FailedReads()
                 let slotRuntime = noting(failedSlotReads, over: runtime.ax)
                 for (index, strip) in enumeration.strips.enumerated() {
-                    guard let stripChildren = readChildren(strip, runtime: runtime.ax) else {
+                    guard let stripChildren = AXLogicProElements.childrenIfRead(strip, runtime: runtime.ax) else {
                         readWhole = false
                         continue
                     }
@@ -230,10 +233,10 @@ public enum AXPluginInstanceIdentity {
             note = "app-root-nil"
         } else if !mainWindowFound {
             note = "main-window-nil"
-        } else if mixer == nil {
-            note = "mixer-not-found"
         } else if mixerChildrenUnreadable {
             note = "mixer-children-unreadable"
+        } else if mixer == nil {
+            note = "mixer-not-found"
         } else {
             note = "no-hosting-strips"
         }
@@ -275,7 +278,7 @@ public enum AXPluginInstanceIdentity {
     /// children, because they were not looked at.
     static func firstIdentifier(in root: AXUIElement, prefix: String, maxDepth: Int,
                                 runtime: AXHelpers.Runtime) -> (identifier: String?, readWhole: Bool) {
-        guard let children = readChildren(root, runtime: runtime) else { return (nil, false) }
+        guard let children = AXLogicProElements.childrenIfRead(root, runtime: runtime) else { return (nil, false) }
         guard maxDepth > 0 else { return (nil, children.isEmpty) }
         var readWhole = true
         for child in children {
@@ -351,15 +354,5 @@ public enum AXPluginInstanceIdentity {
             attributeValueResult: attribute,
             performActionResult: base.performActionResult
         )
-    }
-
-    /// An element's children, or nil when the read failed. -25205 and -25212 are
-    /// answers (the element has no children), not failures.
-    private static func readChildren(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
-        switch AXHelpers.childrenResult(element, runtime: runtime) {
-        case let .success(children): return children
-        case let .failure(error) where error.isDefinitiveAbsence: return []
-        case .failure: return nil
-        }
     }
 }

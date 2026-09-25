@@ -63,7 +63,7 @@ private func addFramedButton(
 
 // MARK: - AC12: physical index preserved across an unreadable occupied slot
 
-@Test func testInsertSlotsPreservePhysicalIndexAcrossUnreadableOccupied() {
+@Test func testInsertSlotsPreservePhysicalIndexAcrossUnreadableOccupied() throws {
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(500)
     let occ0 = addOccupiedSlot(builder, 501, name: "Gain")
@@ -71,7 +71,7 @@ private func addFramedButton(
     let occ2 = addOccupiedSlot(builder, 503, name: "Compressor")
     builder.setChildren(strip, [occ0, unread1, occ2])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
 
     #expect(slots.count == 3, "the unreadable occupied slot must NOT be dropped")
     #expect(slots[0].index == 0)
@@ -91,13 +91,13 @@ private func addFramedButton(
 
 // MARK: - empty vs occupied classification
 
-@Test func testEmptySlotIsWriteSafe() {
+@Test func testEmptySlotIsWriteSafe() throws {
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(520)
     let empty = addEmptySlot(builder, 521)
     builder.setChildren(strip, [empty])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
     #expect(slots.count == 1)
     #expect(slots[0].readStatus == .empty)
     #expect(slots[0].isEmpty)
@@ -105,7 +105,7 @@ private func addFramedButton(
     #expect(slots[0].name == nil)
 }
 
-@Test func testNonSlotChildrenDoNotConsumeAnIndex() {
+@Test func testNonSlotChildrenDoNotConsumeAnIndex() throws {
     // A fader/pan between recognised slots must not shift slot indices.
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(540)
@@ -114,7 +114,7 @@ private func addFramedButton(
     let occ = addOccupiedSlot(builder, 543, name: "Channel EQ")
     builder.setChildren(strip, [fader, empty, occ])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
     #expect(slots.count == 2, "fader is not an insert slot")
     #expect(slots[0].readStatus == .empty && slots[0].index == 0)
     #expect(slots[1].readStatus == .occupiedReadable && slots[1].index == 1 && slots[1].name == "Channel EQ")
@@ -122,7 +122,7 @@ private func addFramedButton(
 
 // MARK: - mixed inventory (AC12 full scenario)
 
-@Test func testMixedReadableEmptyUnreadableSequence() {
+@Test func testMixedReadableEmptyUnreadableSequence() throws {
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(560)
     let occReadable = addOccupiedSlot(builder, 561, name: "Noise Gate")
@@ -130,13 +130,13 @@ private func addFramedButton(
     let occUnreadable = addOccupiedSlot(builder, 563, name: nil)
     builder.setChildren(strip, [occReadable, empty, occUnreadable])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
     #expect(slots.map(\.readStatus) == [.occupiedReadable, .empty, .occupiedUnreadable])
     #expect(slots.map(\.index) == [0, 1, 2])
     #expect(!(slots[2].isEmpty), "an unreadable slot is never treated as the empty slot")
 }
 
-@Test func testLanguageNeutralEmptySlotClusterIsRecognizedByGeometry() {
+@Test func testLanguageNeutralEmptySlotClusterIsRecognizedByGeometry() throws {
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(580)
     let output = addFramedButton(builder, 581, y: 560, description: "Ausgang")
@@ -148,21 +148,21 @@ private func addFramedButton(
     let input = addFramedButton(builder, 587, y: 420, description: "Eingang")
     builder.setChildren(strip, [output, send, slot0, slot1, slot2, slot3, input])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
 
     #expect(slots.count == 4)
     #expect(slots.map(\.index) == [0, 1, 2, 3])
     #expect(slots.allSatisfy { $0.isEmpty })
 }
 
-@Test func testLanguageNeutralGeometryDoesNotPromoteSingleButtonOrPhantomStub() {
+@Test func testLanguageNeutralGeometryDoesNotPromoteSingleButtonOrPhantomStub() throws {
     let builder = FakeAXRuntimeBuilder()
     let strip = builder.element(590)
     let settings = addFramedButton(builder, 591, y: 500, description: "Einstellungen")
     let phantom = addFramedButton(builder, 592, y: 470, width: 58, height: 9)
     builder.setChildren(strip, [settings, phantom])
 
-    let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
+    let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime()))
 
     #expect(slots.isEmpty)
 }

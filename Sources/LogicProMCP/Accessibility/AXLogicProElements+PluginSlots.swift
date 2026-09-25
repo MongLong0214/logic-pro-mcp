@@ -3,12 +3,15 @@ import Foundation
 
 
 extension AXLogicProElements {
+    /// The occupied inserts of `strip`, or nil when the strip's children did not read (#982).
+    /// An empty list is a strip whose chain was read and holds nothing.
     static func pluginSlots(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [PluginSlotState] {
+    ) -> [PluginSlotState]? {
+        guard let children = childrenIfRead(strip, runtime: runtime) else { return nil }
         var plugins: [PluginSlotState] = []
-        for child in AXHelpers.getChildren(strip, runtime: runtime) {
+        for child in children {
             guard let name = occupiedPluginSlotName(child, runtime: runtime) else {
                 continue
             }
@@ -58,11 +61,13 @@ extension AXLogicProElements {
     /// slot — empty, occupied-readable, occupied-unreadable — keeps its
     /// physical position; only non-slot children (fader / pan / sends / I/O)
     /// are skipped, which never shifts a slot index relative to other slots.
+    ///
+    /// Nil when the strip's children did not read (#982). That is not a strip with no inserts.
     static func audioPluginInsertSlots(
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
-    ) -> [PluginInsertSlot] {
-        audioPluginInsertSlots(children: AXHelpers.getChildren(strip, runtime: runtime), runtime: runtime)
+    ) -> [PluginInsertSlot]? {
+        childrenIfRead(strip, runtime: runtime).map { audioPluginInsertSlots(children: $0, runtime: runtime) }
     }
 
     /// The same enumeration over a strip's children the caller already read, so a caller that reads

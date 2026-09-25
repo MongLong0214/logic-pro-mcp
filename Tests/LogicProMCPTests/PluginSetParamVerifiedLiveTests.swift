@@ -61,6 +61,9 @@ private final class LiveFixture: @unchecked Sendable {
     let controlsCheckboxPressCount: MutableBox<Int>
     let controlsViewMenuPressCount: MutableBox<Int>
     let editorViewMenuPressCount: MutableBox<Int>
+    /// Every attribute write and action that reached the two handlers, in order, as
+    /// (element id, attribute or action name). The counters above cover named elements only.
+    let axActions = MutableBox<[(element: Int, name: String)]>([])
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -79,6 +82,10 @@ private final class LiveFixture: @unchecked Sendable {
         duplicateTrackNameAt: Int? = nil,
         pluginSlotNamesByTrack: [Int: [Int: String]] = [:],
         emptyInsertChain: Bool = false,
+        // #982: the children read of the Mixer, or of the target strip, fails through both seams.
+        mixerChildrenUnread: Bool = false,
+        mixerByIdentifier: Bool = false,
+        targetStripChildrenUnread: Bool = false,
         pluginWindowRejectsDirectDemotion: Bool = false,
         slotPressReturnsFalse: Bool = false,
         sliderWriteBehavior: SliderWriteBehavior = .direct,
@@ -213,9 +220,17 @@ private final class LiveFixture: @unchecked Sendable {
             }
             strips.append(strip)
         }
-        b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
-        b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+        if mixerChildrenUnread, mixerByIdentifier {
+            // The older shape. Logic 12.2 and 12.3 show the layout area below, with no identifier.
+            b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+        } else {
+            b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+            b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+        }
         b.setChildren(mixer, strips)
+        let unreadChildrenOf: AXUIElement? = mixerChildrenUnread
+            ? mixer : (targetStripChildrenUnread ? strips[track] : nil)
 
         // --- Arrange window holds both the headers group and the mixer. ---
         b.setAttribute(arrangeWindow, kAXRoleAttribute as String, kAXWindowRole as String)
@@ -389,6 +404,9 @@ private final class LiveFixture: @unchecked Sendable {
                 return nil
             },
             childrenHandler: { element in
+                if let unreadChildrenOf, CFEqual(element, unreadChildrenOf) {
+                    return []
+                }
                 if CFEqual(element, pluginWindow),
                    let pending = pendingPluginWindowChildren.value,
                    Date() >= pending.settlesAt {
@@ -404,6 +422,9 @@ private final class LiveFixture: @unchecked Sendable {
                 // The status-preserving censuses read through this seam rather
                 // than `childrenHandler`; advance the same realistic view-settle
                 // state before serving either read path.
+                if let unreadChildrenOf, CFEqual(element, unreadChildrenOf) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 if CFEqual(element, pluginWindow),
                    let pending = pendingPluginWindowChildren.value,
                    Date() >= pending.settlesAt {
@@ -433,7 +454,8 @@ private final class LiveFixture: @unchecked Sendable {
                         : [controlsViewMenu]
                     )
             },
-            setAttributeHandler: { [b] el, attribute, value in
+            setAttributeHandler: { [b, axActions] el, attribute, value in
+                axActions.value.append((b.elementID(el), attribute))
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(pluginWindow),
                    attribute == (kAXMainAttribute as String) || attribute == (kAXFocusedAttribute as String),
@@ -474,7 +496,8 @@ private final class LiveFixture: @unchecked Sendable {
                 }
                 return true
             },
-            performActionHandler: { [b] el, action in
+            performActionHandler: { [b, axActions] el, action in
+                axActions.value.append((b.elementID(el), action))
                 if pluginWindowRejectsDirectDemotion,
                    b.elementID(el) == b.elementID(arrangeWindow),
                    action == (kAXRaiseAction as String) {
@@ -3166,6 +3189,32 @@ private func namedEQBandParams(
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "incomplete_inventory")
     #expect(!((obj["write_attempted"] as? Bool)!))
+}
+
+// MARK: - #982 unread children are refused as unread, not as an absent track
+
+@Test(arguments: [(true, true), (true, false), (false, false)])
+func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool, mixerByIdentifier: Bool) async throws {
+    // Before #982 an unread Mixer read as one with no strips ("track index 0 is not present") and
+    // an unread strip as one with no inserts ("insert 6 ... out of range").
+    let fixture = LiveFixture(
+        beforeValue: 51, mixerChildrenUnread: mixerUnread, mixerByIdentifier: mixerByIdentifier,
+        targetStripChildrenUnread: !mixerUnread)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "incomplete_inventory")
+    #expect(!(try #require(obj["write_attempted"] as? Bool)))
+    #expect(obj["what_was_observed"] as? String
+        == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
+    #expect(fixture.currentSliderValue == 51, "no write may occur when the chain was not read")
+    // Every AX action before the refusal. Step 6 selects the track before Step 7 reads the
+    // inventory, as it does ahead of every inventory refusal on this path, so the selection is the
+    // one action; no plug-in window is opened and no parameter is written.
+    let header = try #require(AXLogicProElements.findTrackHeader(at: 0, runtime: fixture.runtime))
+    let actions = fixture.axActions.value
+    #expect(actions.map(\.name) == [kAXPressAction as String], "\(actions)")
+    #expect(actions.map(\.element) == [fixture.builder.elementID(header)])
 }
 
 // MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)

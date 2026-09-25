@@ -128,8 +128,13 @@ private func addOccupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String?
 }
 
 /// Build a single-strip mixer fixture and return the logic runtime + app.
+/// #982: whose children read fails, through both seams, as production fails it.
+private enum UnreadChildren { case mixer, strip }
+
 private func makeMixerFixture(
     _ b: FakeAXRuntimeBuilder,
+    unreadChildren: UnreadChildren? = nil,
+    mixerByIdentifier: Bool = false,
     stripChildren: (FakeAXRuntimeBuilder) -> [AXUIElement]
 ) -> AXLogicProElements.Runtime {
     let app = b.element(700)
@@ -143,7 +148,20 @@ private func makeMixerFixture(
     b.setChildren(mixer, [strip])
     b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     b.setChildren(strip, stripChildren(b))
-    return b.makeLogicRuntime(appElement: app)
+    guard let unreadChildren else { return b.makeLogicRuntime(appElement: app) }
+    if unreadChildren == .mixer, mixerByIdentifier {
+        // The older shape. Logic 12.2 and 12.3 show the layout area above, with no identifier.
+        b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    }
+    let failing = unreadChildren == .mixer ? mixer : strip
+    return b.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { CFEqual($0, failing) ? [] : nil },
+        childrenResultHandler: {
+            CFEqual($0, failing) ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+        },
+        setAttributeHandler: nil, performActionHandler: nil)
 }
 
 @Test func testGetInventoryMixedSequencePreservesPhysicalIndex() async {
@@ -239,6 +257,33 @@ private func makeMixerFixture(
     #expect(obj["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
     #expect(obj["hc_schema"] as? Int == 2)
     #expect(obj["plugins"] == nil, "State B carries no plugins array")
+}
+
+// MARK: - #982: children that did not read are unknown, not absent
+
+@Test(arguments: [(true, true), (true, false), (false, false)])
+func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixerByIdentifier: Bool) async throws {
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(
+        b, unreadChildren: mixerUnread ? .mixer : .strip, mixerByIdentifier: mixerByIdentifier
+    ) { b in
+        [addEmptySlot(b, 9820)]
+    }
+
+    // The reveal stops before it would actuate: a regression that made it reveal would otherwise
+    // press View > Show Mixer or post key 7 to the running Logic.
+    let result = await AccessibilityChannel.defaultGetPluginInventory(
+        params: ["track": "0"], runtime: runtime,
+        revealMixer: Issue982UnreadChildrenTests.revealWithoutActuating)
+    #expect(result.isSuccess) // State B is success:true, verified:false
+    let obj = decodeObject(result.message)
+    #expect(obj["state"] as? String == "B")
+    #expect(obj["reason"] as? String == "readback_unavailable")
+    #expect(obj["plugins_unknown_reason"] as? String == "ax_subtree_unreadable")
+    let observed = try #require(obj["what_was_observed"] as? String)
+    #expect(observed.contains(mixerUnread ? "the mixer's children did not read" : "its children did not read"))
+    #expect(!observed.contains("is not present"), "a Mixer nobody saw is not one without the track")
+    #expect(!observed.contains("0 enumerable"), "a strip nobody saw is not one without inserts")
 }
 
 @Test func testGetInventoryRejectsMissingTrack() async {

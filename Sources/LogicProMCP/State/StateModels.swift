@@ -148,6 +148,8 @@ struct ChannelStripState: Sendable, Codable {
     /// and an empty array is an honest empty chain. `nil` means older payload
     /// or no plugin-read path was available.
     var pluginsSource: String?
+    /// Why the chain was not read when a read was attempted, for example a strip whose children
+    /// did not read (#982). `plugins` is then empty because nobody saw it, not because it is.
     var pluginsReadError: String?
 
     enum CodingKeys: String, CodingKey {
