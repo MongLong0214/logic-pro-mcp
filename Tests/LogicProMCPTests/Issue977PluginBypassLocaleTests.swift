@@ -9,8 +9,11 @@ import Testing
 /// bundle spells it -- de `Bypass` with its capital, fr `Table de mixage` -- rather than a policy
 /// member, because the defect was a member that equalled the row only after folding. The values are
 /// the rows the three LabelSets cite (MAToolKit `bypass`, MAGUI `bypass`/`open`, Logic.framework
-/// `Mixer#acc`), read from Logic 12.3 (6674), and all ten were read live on 2026-09-25
-/// (`docs/observations/2026-09-25-977-*`). Italian shows `Mixer` where `Mixer#acc` reads `mixer`.
+/// `Mixer#acc`), read from Logic 12.3 (6674) -- bundle values, not AX readings. The live readings
+/// taken on 2026-09-25 in all ten locales (`docs/observations/2026-09-25-977-*`) equal these with
+/// one exception: an Italian Logic shows the Mixer as `Mixer` where `Mixer#acc` reads `mixer`. That
+/// spelling is not a separate case here because `Mixer` already runs through the same comparison
+/// for en, de and pt.
 struct ShippedLocaleLabels: Sendable, CustomTestStringConvertible {
     let locale: String
     let editorBypass: String
