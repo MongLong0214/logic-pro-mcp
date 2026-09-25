@@ -120,12 +120,18 @@ struct Issue440TransportFrontmostTests {
         // Mutation this rejects: replace `isFrontmost: isFrontmost` in
         // `gotoPositionViaBarSlider`'s FrontmostGate call with a non-injected false answer. The
         // route then refuses before this runtime's dialog seam and these assertions fail.
+        // This call reaches the dialog lock. The production lock file is shared with every server and
+        // test run of this user, and any holder of it would refuse this call (#994).
+        let lockPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logic-pro-mcp-issue440-\(UUID().uuidString).lock").path
+        defer { try? FileManager.default.removeItem(atPath: lockPath) }
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "1"],
             runtime: unusableAXRuntime(dialogScriptExecutions: dialogScriptExecutions),
             isFrontmost: { frontmostReadings.bump(); return true },
             activateLogic: { activations.bump(); return true },
-            sleepMicros: { _ in }
+            sleepMicros: { _ in },
+            dialogExecutionLockPath: lockPath
         )
 
         // The AX tree is empty, so this fails further along — but NOT at the gate, and without
