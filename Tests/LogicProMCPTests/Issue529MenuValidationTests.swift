@@ -762,7 +762,7 @@ struct Issue529MenuValidationTests {
                 "the generated script may not contain an undeclared menu-cleanup refusal")
         #expect(entryCleanup < entryRefusal)
         #expect(menuStateObservations.contains { escape < $0 })
-        // r-941round7 recorded that passing `.provablyPreLeaf` to the reconciler is correct ONLY
+        // r-941round7 recorded that passing `.provablyPreLeaf` (now `.menuOnly`) to the reconciler is correct ONLY
         // while every such refusal precedes the leaf click, and that the suite catches a fifth site
         // added after the click POSITIONALLY. Round 9 replaced the positional pair with a count, so
         // the only remaining check on `emittedBeforeLeafClick` was the flag asserting itself: move
@@ -1388,12 +1388,16 @@ struct Issue529MenuValidationTests {
             (.failure(.dialogPreexistenceUnreadable), true),
             (.failure(.dialogUnidentifiedNewWindow), true),
             (.failure(.dialogAppearanceUnreadable), true),
-            (.failure(.dialogActuationIssued(cleanupObservedClosed: false)), true),
-            (.failure(.dialogActuationIssued(cleanupObservedClosed: true)), false),
-            (.failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)), true),
-            (.failure(.dialogSubmissionNotIssued(cleanupObservedClosed: true)), false),
-            (.failure(.dialogInputIssued(issuance: .returnArmed, cleanupObservedClosed: false)), false),
-            (.failure(.dialogSubmissionIssued(cleanupObservedClosed: false)), false),
+            (.failure(.dialogActuationIssued(cleanup: .dialogNotObservedClosed)), true),
+            (.failure(.dialogActuationIssued(cleanup: .menuNotObservedClosed(reconciledMenuClosed: false))), true),
+            (.failure(.dialogActuationIssued(cleanup: .menuNotObservedClosed(reconciledMenuClosed: true))), true),
+            (.failure(.dialogActuationIssued(cleanup: .observedClosed)), false),
+            (.failure(.dialogSubmissionNotIssued(cleanup: .dialogNotObservedClosed)), true),
+            (.failure(.dialogSubmissionNotIssued(cleanup: .menuNotObservedClosed(reconciledMenuClosed: false))), true),
+            (.failure(.dialogSubmissionNotIssued(cleanup: .menuNotObservedClosed(reconciledMenuClosed: true))), true),
+            (.failure(.dialogSubmissionNotIssued(cleanup: .observedClosed)), false),
+            (.failure(.dialogInputIssued(issuance: .returnArmed, cleanup: .dialogNotObservedClosed)), false),
+            (.failure(.dialogSubmissionIssued(cleanup: .dialogNotObservedClosed)), false),
             (.failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: false)), true),
             (.failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: true)), false),
             (.failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: false)), false),
@@ -1530,7 +1534,7 @@ struct Issue529MenuValidationTests {
 
     @Test("a leaf click that may have opened an unidentified dialog never releases CGEvent")
     func leafActuationFailureAfterOpeningDialogDoesNotRouteToCGEvent() async throws {
-        // Mutation this rejects: remove the `dialogActuationIssued(cleanupObservedClosed: false)`
+        // Mutation this rejects: remove the `dialogActuationIssued(cleanup: .dialogNotObservedClosed)`
         // unsafe-UI classification. The fixture is the leaf's AX error after the total-window
         // observation saw a new, unidentifiable dialog. Its reply must remain terminal: reaching
         // CGEvent would post `/`, the position text, and Return into that still-open dialog.
@@ -2950,18 +2954,13 @@ func writeScriptRefusesAnUnidentifiedNewWindowBeforeDismissingAnything() throws 
     // Order is part of the contract, not decoration. The refusal must come BEFORE
     // `dismissOpenGoToPositionDialog`, or the script would cancel the window it just declined to identify
     // — which is the same wrong-target cancellation the reconciler was fixed to avoid.
-    let source = try String(
-        contentsOfFile: #filePath.replacingOccurrences(
-            of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
-            with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
-        ),
-        encoding: .utf8
-    )
+    // The generated script, not the Swift source: since #942 the dismissal is emitted from
+    // `PostLeafCleanupSite`, which the source declares above the script it is interpolated into.
+    let source = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
     // Scope to the not-ready block. An earlier dismissal exists in the leaf-click `on error` handler,
     // which is a different case and legitimately dismisses first.
-    let scriptStart = try #require(source.range(of: "                if not dialogReady then"))
-    let scriptEnd = try #require(source.range(of: "    struct DialogIssuanceLedger"))
-    let script = String(source[scriptStart.lowerBound..<scriptEnd.lowerBound])
+    let scriptStart = try #require(source.range(of: "if not dialogReady then"))
+    let script = String(source[scriptStart.lowerBound...])
 
     let unidentifiedRefusal = try issue529Position(
         of: "if dialogAppearanceUnidentified then return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\"", in: script
@@ -2978,16 +2977,11 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
     // assignment leaves `dialogAppearanceUnidentified` false, bypasses the terminal return below,
     // and turns a newly opened unknown-title window into a clean actuation failure. Keep the
     // APPEARED observation, assignment, terminal return, and no-dismissal order load-bearing.
-    let source = try String(
-        contentsOfFile: #filePath.replacingOccurrences(
-            of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
-            with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
-        ),
-        encoding: .utf8
-    )
-    let pollStart = try #require(source.range(of: "                repeat 30 times"))
-    let scriptEnd = try #require(source.range(of: "    struct DialogIssuanceLedger"))
-    let script = String(source[pollStart.lowerBound..<scriptEnd.lowerBound])
+    // The generated script, not the Swift source: since #942 the dismissal is emitted from
+    // `PostLeafCleanupSite`, which the source declares above the script it is interpolated into.
+    let source = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+    let pollStart = try #require(source.range(of: "set dialogReady to false"))
+    let script = String(source[pollStart.lowerBound...])
     let totalWindowObservation = try issue529Position(
         of: "set newWindowState to my newWindowAppearedSince(logicProcess, preLeafGoToPositionWindowCount)",
         in: script
@@ -3010,4 +3004,201 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
     #expect(appearedGuard < appearedAssignment)
     #expect(appearedAssignment < unidentifiedRefusal)
     #expect(unidentifiedRefusal < dialogDismissal)
+}
+
+/// #942. Twelve post-leaf returns closed the Go To Position dialog and then the menu, and a menu
+/// that was not observed closed there was never reconciled: the parser folded it into the dialog
+/// case, and the only reconciliation it could have reached was the snapshot path, whose dialog half
+/// never answers CLOSED. The reconciliation fixtures below return a canned answer without running
+/// the generated script (r-941round7), so what they establish about the pass is structural: which
+/// path it was given and what the receipt does with its answer.
+@Suite struct Issue942PostLeafMenuReconciliationTests {
+    typealias Site = AccessibilityChannel.PostLeafCleanupSite
+
+    static let sites = AccessibilityChannel.postLeafCleanupSites
+
+    static func site(_ identifier: String) throws -> Site {
+        try #require(sites.first { $0.identifier == identifier })
+    }
+
+    /// A result carrying `value`, encoded the way the script channel encodes one.
+    static func scriptOutput(_ value: String) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: ["result": value])
+        return try #require(String(data: data, encoding: .utf8))
+    }
+
+    static func menuRefusal(_ site: Site) -> String {
+        "\(site.resultPrefix)\(Site.menuRefusal) after menu actuation (UNREADABLE)"
+    }
+
+    static func dialogRefusal(_ site: Site) -> String {
+        "\(site.resultPrefix)\(Site.dialogRefusal) (UNREADABLE)"
+    }
+
+    /// The four sites, under two prefixes, whose refusal is the State C unsafe-UI receipt, which
+    /// carries `menu_state`. The other eight may have issued global input and end in the State B
+    /// fallback-suppression receipt, which carries no `menu_state`.
+    static func refusesAsStateC(_ site: Site) -> Bool {
+        site.resultPrefix == "DIALOG_ACTUATION_ISSUED" || site.resultPrefix == "DIALOG_SUBMISSION_NOT_ISSUED"
+    }
+
+    @Test("declared post-leaf cleanup sites correspond exactly to the generated script")
+    func declaredSitesCorrespondToTheGeneratedScript() throws {
+        let generatedScript = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 942)
+        let script = issue529StrippedOfAppleScriptComments(generatedScript)
+        #expect(Self.sites.count == 12)
+        #expect(Set(Self.sites.map(\.identifier)).count == Self.sites.count)
+        // Every dialog cleanup and every menu refusal in the script is a declared one, so a
+        // thirteenth inline copy cannot reintroduce the unreconciled shape.
+        #expect(issue529Positions(
+            of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog",
+            in: script
+        ).count == Self.sites.count)
+        #expect(issue529Positions(of: "menu cleanup was not observed", in: script).count
+            == Self.sites.count + AccessibilityChannel.menuCleanupRefusalSites.count)
+        let leafClick = try issue529Position(
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 "
+                + "of menu bar item barName of menu bar 1",
+            in: generatedScript
+        )
+        for site in Self.sites {
+            #expect(generatedScript.contains(site.appleScript), "\(site.identifier)")
+            let marker = try issue529Position(
+                of: "-- POST_LEAF_CLEANUP_SITE: \(site.identifier)", in: generatedScript
+            )
+            #expect(marker > leafClick, "\(site.identifier) is declared post-leaf")
+        }
+    }
+
+    /// The sites appear in the script in the order the protocol reaches them, which is the order
+    /// `postLeafCleanupSites` declares. Two sites swapped in the script would each report the
+    /// other's stage, such as `POSITION_INPUT_ARMED` after only Select All was sent, and the other
+    /// tests here would still pass: each site is still rendered once and after the leaf click.
+    @Test func theSitesAppearInTheOrderTheyAreDeclared() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 942)
+        let inScriptOrder = try Self.sites
+            .map { site in
+                (try issue529Position(of: "-- POST_LEAF_CLEANUP_SITE: \(site.identifier)\n", in: script),
+                 site.identifier)
+            }
+            .sorted { $0.0 < $1.0 }
+            .map { $0.1 }
+        #expect(inScriptOrder == Self.sites.map(\.identifier))
+    }
+
+    /// Binds each declared prefix to the parser: a prefix the parser does not classify would fall
+    /// to another arm and never reach the menu-only case.
+    @Test(arguments: AccessibilityChannel.postLeafCleanupSites.map(\.identifier))
+    func eachSitesRefusalsParseToTheCleanupTheyName(_ identifier: String) throws {
+        let site = try Self.site(identifier)
+        let menu = AccessibilityChannel.classifyGotoPositionDialogResult(
+            try Self.scriptOutput(Self.menuRefusal(site)))
+        #expect(menu.postLeafCleanup == .menuNotObservedClosed(reconciledMenuClosed: false))
+        #expect(menu.requiresPostActuationMenuReconciliation)
+        let dialog = AccessibilityChannel.classifyGotoPositionDialogResult(
+            try Self.scriptOutput(Self.dialogRefusal(site)))
+        #expect(dialog.postLeafCleanup == .dialogNotObservedClosed)
+        #expect(!dialog.requiresPostActuationMenuReconciliation)
+        // The route outcome keeps its spelling: the script did not observe both closed.
+        #expect(menu.diagnosticLabel == dialog.diagnosticLabel)
+        #expect(menu.diagnosticLabel.hasSuffix("_cleanup_closed_false"))
+    }
+
+    /// The menu cleanup can press Escape. Each site settles the dialog first and returns its
+    /// refusal before the menu cleanup, so that Escape is never sent while the Go To Position
+    /// dialog may still be open. Whether it may be is the question #942 leaves open.
+    @Test(arguments: AccessibilityChannel.postLeafCleanupSites.map(\.identifier))
+    func eachSiteSettlesTheDialogBeforeTheMenu(_ identifier: String) throws {
+        let script = try Self.site(identifier).appleScript
+        let dialogCleanup = try issue529Position(of: "my dismissOpenGoToPositionDialog(", in: script)
+        let dialogRefusal = try issue529Position(of: Site.dialogRefusal, in: script)
+        let dialogGuardEnd = try issue529Position(of: "end if", in: script)
+        let menuCleanup = try issue529Position(of: "my dismissOpenMenu(", in: script)
+        let menuRefusal = try issue529Position(of: Site.menuRefusal, in: script)
+        #expect(dialogCleanup < dialogRefusal)
+        #expect(dialogRefusal < dialogGuardEnd)
+        #expect(dialogGuardEnd < menuCleanup)
+        #expect(menuCleanup < menuRefusal)
+    }
+
+    @Test func onlyTheExactMenuRefusalIsTheMenuOnlyCase() throws {
+        let other = AccessibilityChannel.classifyGotoPositionDialogResult(
+            try Self.scriptOutput("DIALOG_SUBMISSION_ISSUED: the menu cleanup was not observed (OPEN)"))
+        #expect(other.postLeafCleanup == .dialogNotObservedClosed)
+        let closed = AccessibilityChannel.classifyGotoPositionDialogResult(
+            try Self.scriptOutput("DIALOG_ACTUATION_ISSUED: dialog did not become ready"))
+        #expect(closed.postLeafCleanup == .observedClosed)
+        #expect(!closed.requiresPostActuationMenuReconciliation)
+    }
+
+    /// Runs the route on one site's menu refusal with a READY snapshot on the ledger, so a pass
+    /// handed the snapshot path would carry it in its script.
+    static func runMenuRefusal(
+        _ site: Site, reconcilerAnswer: String, result: String? = nil
+    ) async throws -> (envelope: [String: Any], calls: Int, script: String?, snapshotPath: String, sliderWrites: Int) {
+        let sliderWrites = Issue529Counter()
+        let calls = Issue529Counter()
+        let reconciliationScript = Issue529StringBox()
+        let ledger = try #require(AccessibilityChannel.DialogIssuanceLedger.create())
+        defer { ledger.remove() }
+        try "READY\n0\n5".write(to: ledger.preLeafWindowSnapshotURL, atomically: true, encoding: .utf8)
+        let snapshotPath = try #require(ledger.preLeafWindowSnapshotPath)
+        let output = try scriptOutput(result ?? menuRefusal(site))
+        let routed = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "942"],
+            runtime: issue529SliderRuntime(
+                sliderWrites: sliderWrites,
+                executeAppleScript: { script in
+                    reconciliationScript.set(script)
+                    calls.bump()
+                    return .success(#"{"result":"\#(reconcilerAnswer)"}"#)
+                }
+            ),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in .success(output) },
+            createDialogIssuanceLedger: { ledger }
+        )
+        let envelope = try #require(issue529Envelope(routed))
+        return (envelope, calls.value, reconciliationScript.value, snapshotPath, sliderWrites.value)
+    }
+
+    @Test(arguments: AccessibilityChannel.postLeafCleanupSites.map(\.identifier), [true, false])
+    func aPostLeafMenuRefusalIsReconciledMenuOnly(_ identifier: String, reconcilerObservedClosed: Bool) async throws {
+        let site = try Self.site(identifier)
+        let run = try await Self.runMenuRefusal(
+            site, reconcilerAnswer: reconcilerObservedClosed ? "CLOSED" : "OPEN")
+        #expect(run.calls == 1, "the menu refusal must enter the parent-owned reconciler")
+        let script = try #require(run.script)
+        #expect(script.contains("if \"\" is not \"\" then"), "the pass must be the menu-only path")
+        #expect(!script.contains(run.snapshotPath), "the snapshot path never reaches the menu loop")
+        #expect(run.sliderWrites == 0)
+        // Reconciling the menu changes what the receipt says about it, never the refusal.
+        #expect(try #require(run.envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(run.envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(run.envelope["dialog_route_outcome"] as? String).hasSuffix("_cleanup_closed_false"))
+        if Self.refusesAsStateC(site) {
+            #expect(try #require(run.envelope["state"] as? String) == "C")
+            #expect(try #require(run.envelope["menu_state"] as? String)
+                == (reconcilerObservedClosed ? "closed" : "could_not_be_closed"))
+        } else {
+            #expect(try #require(run.envelope["state"] as? String) == "B")
+        }
+    }
+
+    /// The control: a dialog that was not observed closed is not the menu-only case, so it is not
+    /// reconciled here and its receipt still says nothing about the menu.
+    @Test(arguments: AccessibilityChannel.postLeafCleanupSites.map(\.identifier))
+    func aPostLeafDialogRefusalIsNotReconciled(_ identifier: String) async throws {
+        let site = try Self.site(identifier)
+        let run = try await Self.runMenuRefusal(
+            site, reconcilerAnswer: "CLOSED", result: Self.dialogRefusal(site))
+        #expect(run.calls == 0)
+        #expect(run.sliderWrites == 0)
+        #expect(try #require(run.envelope["fallback_unsafe"] as? Bool))
+        if Self.refusesAsStateC(site) {
+            #expect(try #require(run.envelope["menu_state"] as? String) == "unobserved")
+        }
+    }
 }
