@@ -61,9 +61,11 @@
       "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
       "2026-09-15-the-automation-lane-is-legible-and-inert",
       "2026-09-15-the-korean-project-chooser-names-itself",
-      "2026-09-15-the-setup-windows-own-menu-installs-the-surface"
+      "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+      "2026-09-23-972-en-US-plugin-instance-identity"
     ],
     "records_from_a_superseded_build": [
+      "2026-09-23-972-en-US-plugin-instance-identity",
       "2026-09-23-973-en-US-header-mixer-fine-axvalue"
     ],
     "records_without_evidence": [
@@ -784,25 +786,11 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-09-19",
-      "members": [
-        "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
-        "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
-        "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
-        "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
-        "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
-        "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
-        "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
-        "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
-      ],
-      "reason": "Eight records recovered from #882 when its qualification half was held back. Each carries a `reverify.kind: \"manual\"` with a real command, and each is manual for a reason a script cannot reach on somebody else's machine: two need Logic relaunched under a different AppleLanguages (de) or a different keyboard input source, three need a FRESHLY STARTED server or a specific window layout that a test run would have to create by closing the operator's windows, one needs consent for an operation that writes a key command, and two read a menu that must be open. Scripting any of them means shipping a script whose job is to rearrange somebody's session.\n\nThis raise lists EXACTLY the eight this change adds. The control-surface install record that a previous raise named is already in `allowed` and is not being added here -- a raise that keeps naming it pre-authorises a gap nobody is deciding about in this change."
-    },
-    "records_from_a_superseded_build": {
       "date": "2026-09-24",
       "members": [
-        "2026-09-23-973-en-US-header-mixer-fine-axvalue"
+        "2026-09-23-972-en-US-plugin-instance-identity"
       ],
-      "reason": "The #973 fine-phase record was measured on Logic 12.3.1 (6682, en-US), which is NEWER than the 12.3 (6674) that LOGIC-BUILD declares, so this ratchet reads it as another build's record; it is not an obsolete one. The same harness was then run on the declared 12.3 (6674, ko-KR) and every write landed on the whole raw position nearest the request, so the behaviour this record carries is not specific to the newer build. This raise lists exactly the one record this change adds."
+      "reason": "#976: the plug-in instance identity record (#972) reverifies by hand. Its subject is a host application's own AUv3 view setting kAXIdentifier on its root and a docked Mixer with N instances open; no livekit harness in this repository can stage that, so the reverify block carries the manual command, the expected counts and the cost. Registered by the contributor in the same commit as the record; the eight members of the previous raise are in the base and are no longer growth."
     },
     "records_without_evidence": {
       "date": "2026-09-19",
@@ -1322,6 +1310,13 @@
         "undoPluginInsertMenuItem"
       ],
       "reason": "#892: the ledger asks about zh-TW for the first time. The ratchet treats every member of a key the base has never seen as growth, deliberately -- a branch that adds an axis pre-populated with its own gaps is what that rule exists to stop. These gaps were always there; nothing was asking. What is NOT new is most of the answer: 111 of 167 labels are already `derived` in zh-TW from Apple's own rows, so the column arrives mostly filled. The comment on SUPPORTED_LOCALES used to predict the opposite and was written before the canon axis existed. The 55 listed here are labels whose row is ambiguous, whose row does not exist, or which are lowercase containment fragments that were never whole labels."
+    },
+    "records_from_a_superseded_build": {
+      "date": "2026-09-24",
+      "members": [
+        "2026-09-23-972-en-US-plugin-instance-identity"
+      ],
+      "reason": "#976: the record's host is Logic Pro 12.3.1 (6682), the desk it was measured on, while LOGIC-BUILD.json declares the corpus build. The record measures accessibility-tree behaviour (host-set identifiers, window titles, strip reachability, slot label truncation) and carries canon_not_applicable, so no label reading from the newer build enters the corpus; the host block states the drift rather than hiding it, as #974 does for its record."
     }
   },
   "schema": 2,

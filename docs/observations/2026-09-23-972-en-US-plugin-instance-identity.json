@@ -1,0 +1,47 @@
+{
+  "id": "2026-09-23-972-en-US-plugin-instance-identity",
+  "date": "2026-09-23",
+  "schema": 3,
+  "subject": "Identifying a host's own plug-in instances across Mixer strips and editor windows through the accessibility tree",
+  "question": "Can a read-only walk of the docked Mixer and the open plug-in editor windows join a plug-in's instances to the strips that host them, using the kAXIdentifier the plug-in's own view sets, without any action on Logic?",
+  "verdict": "works",
+  "issues": [972],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3.1",
+    "build": "6682",
+    "locale": "en-US",
+    "os": "macOS 26.6.2 (25G83)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "link LogicProMCPKit from a host application that sets kAXIdentifier <prefix><instance-id> on its AUv3 view root; open a project with the Mixer docked (X) and N instances with their editor windows open; call AXPluginInstanceIdentity.census(pluginName:identifierPrefix:) from an unsandboxed process with Accessibility granted",
+    "expected": "strips.count == N with stripsReadWhole true, windows.count == N, every window carrying an identifier with the prefix, and each window title equal to the hosting strip's name",
+    "cost": "~5 min with the consumer application installed; needs Logic in front with a disposable project and Accessibility granted to the reading process"
+  },
+  "depends": ["Sources/LogicProMCP/Accessibility/AXPluginInstanceIdentity.swift:census"],
+  "evidence": ["evidence/2026-09-23-972-en-US-plugin-instance-identity.receipts.json"],
+  "method": "The consumer application (an AUv3 host, SN8K) linked the LogicProMCPKit product pinned at e01c8e8c and called the census every 2 s from an unsandboxed container process with Accessibility granted, on the operator's desk: Logic Pro 12.3.1 with a 23-track project, the Mixer docked in the main window (X) with the header set to All, six instances of the plug-in on six non-contiguous strips, and all six editor windows open. The consumer's own trace recorded the census summary, the join, and the six resulting bindings; the plug-in's view stamped kAXIdentifier sn8k.instance:<instance-uuid> on its root. Separately, a direct accessibility walk from a trusted shell process read each editor window's title and identifiers, each occupied insert slot's description, and the Mixer's layout items in both layouts (docked, and as a standalone window). Track and project names were read to decide but were not recorded; the receipts carry instance uuids, ordinals, channels and counts only.",
+  "canon_not_applicable": {
+    "reason": "This record measures accessibility-tree behaviour (which window carries a host-set identifier, what an editor window's title equals, where the Mixer's strips are reachable, and how a slot label is truncated), not a string shipped in Logic's canonical data."
+  },
+  "observations": [
+    {"what": "census on the operator's desk, Mixer docked, six instances, six windows open", "strips": 6, "windows": 6, "identifiers": 6, "stripsReadWhole": true, "mixerFound": true},
+    {"what": "editor windows whose kAXIdentifier carried the host's prefix", "count": 6, "of": 6},
+    {"what": "editor windows whose AX title equalled the hosting strip's name field", "count": 6, "of": 6},
+    {"what": "bindings formed from the join, one per instance", "count": 6, "anchors": 1, "offset": 0},
+    {"what": "occupied insert slots labelled with the AU component name truncated to ten characters", "count": 6, "of": 6},
+    {"what": "Mixer strips found by getMixerArea, by layout", "rows": [{"layout": "docked (X)", "mixerFound": true, "strips": 6}, {"layout": "standalone window (Cmd+2)", "mixerFound": false, "strips": 0}]},
+    {"what": "kAXErrorCannotComplete on the first windows read after a Logic start, recovered by one re-read", "status": -25204, "reread_ms": 200}
+  ],
+  "conclusion": "On this host a read-only census joined all six plug-in instances to their strips: 6 of 6 editor windows carried the host-set identifier, 6 of 6 window titles equalled the hosting strip's name, and 6 bindings formed at offset 0 from 1 anchor. The Mixer's strips were reachable only with the Mixer docked; the standalone Mixer window reported mixerFound false. Insert slots carried the component name truncated to ten characters (6 of 6). A -25204 on the first windows read recovered after one 200 ms re-read.",
+  "limits": [
+    "One host: Logic Pro 12.3.1 build 6682, macOS 26.6.2, UI language en-US, one project, one plug-in (SN8K, an AUv3). Other plug-in formats, other hosts of the library, and the other nine declared locales are not measured here.",
+    "The window title equalling the track name is an observed behaviour of 12.3.1; the join by title is the caller's, and two tracks with the same name are the caller's ambiguity to refuse, not this record's finding.",
+    "Reads were issued from an unsandboxed process. A sandboxed process gets kAXErrorCannotComplete on every read of another application while AXIsProcessTrusted() is true; that failure mode was measured on the same desk and is why the consumer runs unsandboxed.",
+    "The standalone Mixer window was found by a direct walk of all windows but not by getMixerArea; this record does not verify a locator for it.",
+    "The six formed lines are the consumer's trace, not this library's output; the census itself returned the counts in the first observation, and the receipts carry uuids and ordinals only, with no track names."
+  ],
+  "supersedes": null
+}

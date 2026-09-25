@@ -62,8 +62,16 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> [PluginInsertSlot] {
+        audioPluginInsertSlots(children: AXHelpers.getChildren(strip, runtime: runtime), runtime: runtime)
+    }
+
+    /// The same enumeration over a strip's children the caller already read, so a caller that reads
+    /// them with `childrenResult` can tell a failed read from a strip with no inserts (#972).
+    static func audioPluginInsertSlots(
+        children: [AXUIElement],
+        runtime: AXHelpers.Runtime = .production
+    ) -> [PluginInsertSlot] {
         var slots: [PluginInsertSlot] = []
-        let children = AXHelpers.getChildren(strip, runtime: runtime)
         for (offset, child) in children.enumerated() {
             if isEmptyAudioPluginSlot(child, siblings: children, offset: offset, runtime: runtime) {
                 slots.append(PluginInsertSlot(

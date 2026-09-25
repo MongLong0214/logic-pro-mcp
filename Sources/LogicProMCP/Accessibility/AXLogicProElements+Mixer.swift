@@ -322,7 +322,15 @@ extension AXLogicProElements {
         in mixer: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> (strips: [AXUIElement], unreadableChildren: Int) {
-        let children = AXHelpers.getChildren(mixer, runtime: runtime)
+        stripEnumeration(children: AXHelpers.getChildren(mixer, runtime: runtime), runtime: runtime)
+    }
+
+    /// The same enumeration over children the caller already read, so a caller that reads them with
+    /// `childrenResult` can tell a failed read from a Mixer with no strips (#972).
+    static func stripEnumeration(
+        children: [AXUIElement],
+        runtime: AXHelpers.Runtime = .production
+    ) -> (strips: [AXUIElement], unreadableChildren: Int) {
         var unreadable = 0
         var layoutItems: [AXUIElement] = []
         for child in children {

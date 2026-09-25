@@ -1,0 +1,26 @@
+{
+ "source": "the consumer's own trace (SN8K.app bridge, HopTracer stage ax_witness), read off the operator's desk; uuids are the plug-in's own instance identifiers and carry no track or project name",
+ "consumer": "SN8K.app 0.x (AUv3 host application) linking LogicProMCPKit pinned at e01c8e8c on the sn8k/library-product lineage; the census walked through AXPluginInstanceIdentity.census(pluginName: \"SN8K\", identifierPrefix: \"sn8k.instance:\") every 2 s",
+ "reads_from": "an unsandboxed container application (com.trojantech.SN8K), not the AUv3 extension; Accessibility granted",
+ "logic_project": "23 audio tracks, Mixer docked in the main window (X), header All, six SN8K instances on six non-contiguous strips, six editor windows open",
+ "census_summary_line": {"ts_local": "2026-09-22 14:07", "line": "census ok strips=6 windows=6 uuids=6 whole=true trusted=true mixer=true", "read_by": "maintainer of the consumer, from the operator's desk"},
+ "pass_line": {"ts_local": "2026-09-22 14:07", "line": "pass snapshot-change+first-healthy candidates=6 live=6 present=6 windows=6 strips=6 (present and window identifier sets equal)", "read_by": "maintainer of the consumer, from the operator's desk"},
+ "formed_lines": [
+  {"ts": 1790109891.203555, "channel": 5, "strip_ordinal": 5, "uuid": "78DBA503-90B3-4519-B658-B3E7DB3DDB4A", "map": "by-name/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"},
+  {"ts": 1790109891.203555, "channel": 8, "strip_ordinal": 8, "uuid": "12EFE6C6-5A4A-4F34-B170-78239573146C", "map": "by-name+offset/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"},
+  {"ts": 1790109891.203555, "channel": 9, "strip_ordinal": 9, "uuid": "C7F14907-39E3-4C42-BEC4-841E1D7CCF87", "map": "by-name+offset/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"},
+  {"ts": 1790109892.20392, "channel": 6, "strip_ordinal": 6, "uuid": "25F6C285-AB5C-4B8A-9DAF-EB410AEC2D21", "map": "by-name+offset/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"},
+  {"ts": 1790109898.203929, "channel": 12, "strip_ordinal": 12, "uuid": "AFFC7124-CADD-47B7-841B-3D22DA75C651", "map": "by-name+offset/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"},
+  {"ts": 1790109905.702907, "channel": 15, "strip_ordinal": 15, "uuid": "2F6095EF-144D-475E-8161-99BC12507651", "map": "by-name+offset/6 offset=0 anchors=1 unresolved=0", "join": "title-exact"}
+ ],
+ "identifier_probe": {"ts_local": "2026-09-22 12:1x", "method": "direct AX walk of each AXDialog window from a trusted shell process", "result": "six editor windows, each carrying exactly one descendant kAXIdentifier with the sn8k.instance: prefix, two hits per window (the hosting view and the controller view carry the same string)", "identifiers_seen": ["CD1D6E81", "CBD9981F", "8023031F", "76B30055", "5B6C4D0E", "402D745B"], "note": "8-character prefixes of the uuids as stamped at that time; the six above are the restored instance uuids stamped after the fix to the view side"},
+ "window_titles": {"observation": "the AX title of every editor window equalled the hosting strip's name field to the character, including a 41-character track name; no plug-in name suffix", "names_recorded": false},
+ "slot_labels": {"observation": "an occupied insert slot whose Audio Unit component is named SN8KExtension carries the AX description SN8KExtens", "count_seen": 6},
+ "mixer_layout": [
+  {"layout": "Mixer docked in the main window (X)", "ts_local": "2026-09-21 21:11 and 2026-09-22 14:07", "census_line": "strips=6 windows=6 uuids=6 whole=true trusted=true pid=45639 axwindows=8 main=true mixer=true"},
+  {"layout": "Mixer as a standalone window (Cmd+2), Tracks window separate", "ts_local": "2026-09-21 18:00", "census_line": "strips=0 windows=0 uuids=0 whole=false trusted=true pid=24700 axwindows=3 main=true mixer=false note=mixer-not-found", "note": "getMixerArea walks down from the arrange window and does not search a separate Mixer window; a direct AX walk of all windows found the AXLayoutArea described Mixer with 43 AXLayoutItem strips in the standalone window"}
+ ],
+ "read_failures_seen": [
+  {"status": -25204, "when": "the first app-level AXWindows read after Logic starts, and once on the pluginEditorWindows read during a Logic relaunch", "handling": "one 200 ms re-read for that status only; surfaced as retried=cannotComplete on the summary line; a failed editor-window read was surfaced as a census-error line, never as windows=0"}
+ ]
+}

@@ -209,6 +209,8 @@ See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for
 
 The package also exposes the `LogicProMCP` target as a library product named `LogicProMCPKit` (#944), so a Swift application can link the same code the server runs instead of driving the server as a separate stdio process. It changes no runtime behavior and no access level: not one `public`, `internal` or `private` modifier moved, no MCP tool or resource was added, and the server and its executables are byte-for-byte the same code. What the pull request touches besides `Package.swift` is `Package.resolved` — CI's toolchain resolves a larger transitive graph once the package vends a library — and this file, `CHANGELOG.md` and the roadmap.
 
+A read-only census for plug-in hosts (#972): `AXPluginInstanceIdentity.census(pluginName:identifierPrefix:)` returns an `AXSnapshot` of the Mixer strips whose insert slot names the plug-in (ordinal, name, slot positions) and of the open plug-in editor windows (title, and the first `kAXIdentifier` under the given prefix), plus diagnostics saying what was found. It composes the existing Accessibility readers and issues no actions. Three outcomes are distinguishable: an empty snapshot with a note, a partial strip read (`stripsReadWhole` is false, so ordinals are not trustworthy), and a failed editor-window read, which throws `CensusError.windowsReadFailed` instead of returning zero windows. Measured on Logic Pro 12.3.1 with the Mixer docked in the main window (X); a standalone Mixer window is not found by the current locator.
+
 ### Dependency setup
 
 ```swift
