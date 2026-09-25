@@ -273,11 +273,10 @@ struct SerializedStdioTransportStallTests {
         }
         drained.start()
         let reports = Counter()
-        let original = SerializedStdioTransport.reportMidFrameStall
-        SerializedStdioTransport.reportMidFrameStall = { _, _ in reports.bump() }
-        defer { SerializedStdioTransport.reportMidFrameStall = original }
-
-        let transport = SerializedStdioTransport(input: STDIN_FILENO, output: writeEnd, writeDeadline: 5)
+        let transport = SerializedStdioTransport(
+            input: STDIN_FILENO, output: writeEnd, writeDeadline: 5,
+            reportMidFrameStall: { _, _ in reports.bump() }
+        )
         var failure: (any Error)?
         do {
             for i in 0..<200 {
@@ -313,10 +312,9 @@ struct SerializedStdioTransportStallTests {
         // satisfied by an implementation that reports afterwards — which is the shape this replaced,
         // so the test would not have told the two apart. The sink signals, and the test waits for
         // that signal BEFORE the send completes. Found by review 2026-09-09.
+        // The sink belongs to this transport. A process-wide sink swapped per test lost this
+        // report whenever the test above restored stderr while this one waited (#1003).
         let reported = DispatchSemaphore(value: 0)
-        let original = SerializedStdioTransport.reportMidFrameStall
-        SerializedStdioTransport.reportMidFrameStall = { _, _ in reported.signal() }
-        defer { SerializedStdioTransport.reportMidFrameStall = original }
 
         // A reader that sleeps first, so the write blocks mid-frame past the deadline and then
         // completes. 256KB is comfortably past a pipe buffer.
@@ -332,7 +330,10 @@ struct SerializedStdioTransportStallTests {
         }
         late.start()
 
-        let transport = SerializedStdioTransport(input: STDIN_FILENO, output: fds[1], writeDeadline: 0.3)
+        let transport = SerializedStdioTransport(
+            input: STDIN_FILENO, output: fds[1], writeDeadline: 0.3,
+            reportMidFrameStall: { _, _ in reported.signal() }
+        )
         let sent = DispatchSemaphore(value: 0)
         Task.detached {
             try? await transport.send(Data(String(repeating: "z", count: 262_144).utf8))
