@@ -1,0 +1,10 @@
+Limit: Only Italian separates Mixer#acc from the plain Mixer row: the live description equals the plain row exactly and Mixer#acc only up to case; the product matches either way because it ignores case
+Ruled-out: extending observation_host's hand-typed Logic-language table to the missing locales | a table typed by hand drifts from the axis; deriving it from ui-labels.json picks up a locale added to the axis automatically
+Ruled-out: re-deriving mixerNamedElement from a different Italian row in this change | the Mixer#acc citation predates #977 and Italian cannot say which of several Mixer rows feeds the description
+Ruled-out: widening the case-exact _apple_ships check in locale_labels.py to close the de-DE gap | that widens a shared definition while fixing a blocker; the gap closes with a live record and provenance instead
+Record-Id: r-25651cddec3e
+Provenance: inherited 0a34413072bc2590abcbdb7857b312a478a6aba5
+
+Ruled-out: re-running the ten-locale sweep to regenerate the evidence without the local project path | the harness now writes only the basename, the in-place edit is that same transformation, and every other byte of each evidence file is unchanged
+Record-Id: r-a4243bb1e930
+Provenance: inherited 203783c741238f8bd1d913dea96052143c9db1bc
