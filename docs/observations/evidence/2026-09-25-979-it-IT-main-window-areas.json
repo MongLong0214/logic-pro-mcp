@@ -1,0 +1,560 @@
+{
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "it-IT",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "table": {
+  "lproj": "it",
+  "sha256": "20052fc1bf56efb870a6672fb0e641d7a45779740e9ccb145c199efe3e537cb5",
+  "rows": 10029
+ },
+ "candidates": {
+  "Control Bar": {
+   "#acc": {
+    "key": "Control Bar#acc",
+    "value": "Barra di controllo"
+   },
+   "plain": {
+    "key": "Control Bar",
+    "value": null
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Control Bar",
+    "value": "Barra di controllo"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Control Bar",
+    "value": null
+   }
+  },
+  "Inspector": {
+   "#acc": {
+    "key": "Inspector#acc",
+    "value": "inspector"
+   },
+   "plain": {
+    "key": "Inspector",
+    "value": "Inspector"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Inspector",
+    "value": null
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Inspector",
+    "value": "Inspector"
+   }
+  },
+  "Library": {
+   "#acc": {
+    "key": "Library#acc",
+    "value": "libreria"
+   },
+   "plain": {
+    "key": "Library",
+    "value": "Libreria"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Library",
+    "value": "Libreria"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Library",
+    "value": "Libreria"
+   }
+  },
+  "Mixer": {
+   "#acc": {
+    "key": "Mixer#acc",
+    "value": "mixer"
+   },
+   "plain": {
+    "key": "Mixer",
+    "value": "Mixer"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Mixer",
+    "value": "Mixer"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Mixer",
+    "value": "Mixer"
+   }
+  },
+  "Tracks": {
+   "#acc": {
+    "key": "Tracks#acc",
+    "value": null
+   },
+   "plain": {
+    "key": "Tracks",
+    "value": "Tracce"
+   },
+   "StrTabBtnLabel": {
+    "key": "StrTabBtnLabel|||Tracks",
+    "value": "Tracce"
+   },
+   "StrViewBtns": {
+    "key": "StrViewBtns|||Tracks",
+    "value": null
+   }
+  }
+ },
+ "readings": [
+  {
+   "area": "Control Bar",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#5",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "Barra di controllo",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Control Bar#acc",
+    "StrTabBtnLabel|||Control Bar"
+   ]
+  },
+  {
+   "area": "Control Bar",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#5/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "Barra di controllo",
+   "equal": [
+    "#acc",
+    "StrTabBtnLabel"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "Control Bar#acc",
+    "StrTabBtnLabel|||Control Bar"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#12",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "Libreria",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Library",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Inspector",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#13",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "Inspector",
+   "equal": [
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Inspector",
+    "StrToolbItemName|||Inspector",
+    "StrViewBtns|||Inspector"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#5/AXCheckBox#17",
+   "depth": 2,
+   "role": "AXCheckBox",
+   "description": "Mixer",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Mixer",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Inspector",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#6",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "Inspector",
+   "equal": [
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Inspector",
+    "StrToolbItemName|||Inspector",
+    "StrViewBtns|||Inspector"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#7",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "Libreria",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Library",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Library",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#7/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "Libreria",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Library",
+    "StrTabBtnLabel|||Library",
+    "StrViewBtns|||Library"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#8",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "Tracce",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Tracks",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#8/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "Tracce",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Tracks",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Tracks",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#8/AXGroup#1",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "Tracce",
+   "equal": [
+    "StrTabBtnLabel",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [],
+   "every_key_with_this_value": [
+    "StrTabBtnLabel|||Tracks",
+    "Tracks"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#9",
+   "depth": 1,
+   "role": "AXGroup",
+   "description": "Mixer",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Mixer",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#9/AXGroup#0",
+   "depth": 2,
+   "role": "AXGroup",
+   "description": "Mixer",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Mixer",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  },
+  {
+   "area": "Mixer",
+   "window": "lpm-locator-probe - Tracce",
+   "path": "AXWindow#1/AXGroup#9/AXLayoutArea#1",
+   "depth": 2,
+   "role": "AXLayoutArea",
+   "description": "Mixer",
+   "equal": [
+    "StrTabBtnLabel",
+    "StrViewBtns",
+    "plain"
+   ],
+   "equal_ignoring_case_only": [
+    "#acc"
+   ],
+   "every_key_with_this_value": [
+    "Mixer",
+    "StrTabBtnLabel|||Mixer",
+    "StrViewBtns|||Mixer"
+   ]
+  }
+ ],
+ "shapes": {
+  "AXCheckBox": {
+   "#acc": {
+    "verdict": "refuted",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": [
+     {
+      "area": "Library",
+      "path": "AXWindow#1/AXGroup#5/AXCheckBox#12",
+      "reading": "Libreria",
+      "row": "libreria"
+     },
+     {
+      "area": "Inspector",
+      "path": "AXWindow#1/AXGroup#5/AXCheckBox#13",
+      "reading": "Inspector",
+      "row": "inspector"
+     },
+     {
+      "area": "Mixer",
+      "path": "AXWindow#1/AXGroup#5/AXCheckBox#17",
+      "reading": "Mixer",
+      "row": "mixer"
+     }
+    ]
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  },
+  "AXGroup": {
+   "#acc": {
+    "verdict": "refuted",
+    "areas_tested": [
+     "Control Bar",
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": [
+     {
+      "area": "Inspector",
+      "path": "AXWindow#1/AXGroup#6",
+      "reading": "Inspector",
+      "row": "inspector"
+     },
+     {
+      "area": "Library",
+      "path": "AXWindow#1/AXGroup#7",
+      "reading": "Libreria",
+      "row": "libreria"
+     },
+     {
+      "area": "Library",
+      "path": "AXWindow#1/AXGroup#7/AXGroup#0",
+      "reading": "Libreria",
+      "row": "libreria"
+     },
+     {
+      "area": "Mixer",
+      "path": "AXWindow#1/AXGroup#9",
+      "reading": "Mixer",
+      "row": "mixer"
+     },
+     {
+      "area": "Mixer",
+      "path": "AXWindow#1/AXGroup#9/AXGroup#0",
+      "reading": "Mixer",
+      "row": "mixer"
+     }
+    ]
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer",
+     "Tracks"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Control Bar",
+     "Library",
+     "Mixer",
+     "Tracks"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Inspector",
+     "Library",
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  },
+  "AXLayoutArea": {
+   "#acc": {
+    "verdict": "refuted",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": [
+     {
+      "area": "Mixer",
+      "path": "AXWindow#1/AXGroup#9/AXLayoutArea#1",
+      "reading": "Mixer",
+      "row": "mixer"
+     }
+    ]
+   },
+   "plain": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrTabBtnLabel": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   },
+   "StrViewBtns": {
+    "verdict": "consistent",
+    "areas_tested": [
+     "Mixer"
+    ],
+    "refuted_at": []
+   }
+  }
+ },
+ "unexplained_depth_1_descriptions": [],
+ "read_errors": [],
+ "window_titles": [
+  null,
+  "lpm-locator-probe - Tracce"
+ ],
+ "areas_read": [
+  "Control Bar",
+  "Inspector",
+  "Library",
+  "Mixer",
+  "Tracks"
+ ]
+}

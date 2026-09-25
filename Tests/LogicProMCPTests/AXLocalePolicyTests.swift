@@ -665,6 +665,13 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.controlBarGroupLabel.matches("コントロールバー", mode: .exactStrict))
         #expect(!AXLocalePolicy.controlBarGroupLabel.matches("transport", mode: .exactStrict))
 
+        // #979 moved the citation to `StrTabBtnLabel|||Control Bar`. Portuguese Logic was read
+        // describing the control bar with that row's `Barra de Controles`, which this label reaches
+        // through the Spanish member ignoring case. The old row's `Barra de Controle` matched before
+        // the move and has to keep matching: the re-derivation changed a citation, not what matches.
+        #expect(AXLocalePolicy.controlBarGroupLabel.matches("Barra de Controles", mode: .exactStrict))
+        #expect(AXLocalePolicy.controlBarGroupLabel.matches("Barra de Controle", mode: .exactStrict))
+
         #expect(AXLocalePolicy.barSliderLabel.matches("bar", mode: .exactStrict))
         #expect(AXLocalePolicy.barSliderLabel.matches("마디", mode: .exactStrict))
 
