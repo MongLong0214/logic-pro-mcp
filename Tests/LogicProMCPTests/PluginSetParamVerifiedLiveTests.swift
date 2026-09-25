@@ -3189,7 +3189,7 @@ private func namedEQBandParams(
 // MARK: - #982 unread children are refused as unread, not as an absent track
 
 @Test(arguments: [true, false])
-func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) async {
+func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) async throws {
     // Before #982 an unread Mixer read as one with no strips ("track index 0 is not present") and
     // an unread strip as one with no inserts ("insert 6 ... out of range").
     let fixture = LiveFixture(
@@ -3198,7 +3198,7 @@ func testUnreadChildrenAreIncompleteInventoryForThatReason(mixerUnread: Bool) as
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "incomplete_inventory")
-    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(!(try #require(obj["write_attempted"] as? Bool)))
     #expect(obj["what_was_observed"] as? String
         == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
     #expect(fixture.currentSliderValue == 51, "no write may occur when the chain was not read")

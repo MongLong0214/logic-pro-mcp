@@ -519,7 +519,7 @@ func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool) async th
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "incomplete_inventory")
-    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(!(try #require(obj["write_attempted"] as? Bool)))
     let observed = try #require(obj["what_was_observed"] as? String)
     #expect(observed == (mixerUnread ? "the mixer's children did not read" : "the strip's children did not read"))
 }

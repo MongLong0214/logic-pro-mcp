@@ -111,14 +111,15 @@ struct Issue982UnreadChildrenTests {
 
     /// -25205 and -25212 are answers that the element has no children, not failures.
     @Test(arguments: [AXError.attributeUnsupported, AXError.noValue])
-    func aDefinitiveAbsenceIsAnEmptyList(_ status: AXError) {
+    func aDefinitiveAbsenceIsAnEmptyList(_ status: AXError) throws {
         let f = Self.fixture()
         let mixerRuntime = Self.runtime(f, failing: f.mixer, status: status).ax
-        let enumeration = AXLogicProElements.stripEnumeration(in: f.mixer, runtime: mixerRuntime)
-        #expect(enumeration?.strips.isEmpty == true)
-        #expect(enumeration?.unreadableChildren == 0)
+        let enumeration = try #require(AXLogicProElements.stripEnumeration(in: f.mixer, runtime: mixerRuntime))
+        #expect(enumeration.strips.isEmpty)
+        #expect(enumeration.unreadableChildren == 0)
         let stripRuntime = Self.runtime(f, failing: f.strips[0], status: status).ax
-        #expect(AXLogicProElements.audioPluginInsertSlots(in: f.strips[0], runtime: stripRuntime)?.isEmpty == true)
+        let slots = try #require(AXLogicProElements.audioPluginInsertSlots(in: f.strips[0], runtime: stripRuntime))
+        #expect(slots.isEmpty)
     }
 
     // MARK: - Readers report unknown
