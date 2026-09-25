@@ -4414,7 +4414,7 @@ private struct RPCResponse<Result: Decodable>: Decodable {
 }
 
 
-/// One `read(2)` on a file handle, without Foundation's exceptions and without its blocking.
+/// One `read(2)` on a descriptor, without Foundation's exceptions and without its blocking.
 ///
 /// #843. Two Foundation APIs were tried here and both are wrong for a pipe carrying small frames:
 ///
@@ -4429,18 +4429,69 @@ private struct RPCResponse<Result: Decodable>: Decodable {
 /// POSIX `read` has both properties: it returns whatever is available, and it reports failure
 /// through the return value rather than by unwinding. `EINTR` is retried; anything else is an
 /// error the caller can route. Zero bytes means end of file, exactly as an empty `Data` did.
-private func readAvailable(_ handle: FileHandle, upTo limit: Int = 64 * 1024) throws -> Data {
+///
+/// #947. The descriptor comes in as a number, read from its `FileHandle` once before any reader
+/// starts, because `fileDescriptor` raises the same uncatchable exception on a closed handle, and
+/// the shutdown path used to close these handles under a running reader. `stop` replaces that
+/// close. It becomes readable when shutdown gives up waiting for end of file, and `poll(2)` waits
+/// on it beside the stream, so the reader leaves without anyone closing its descriptor. Closing it
+/// would not be safe even without the exception: the number goes back to the process and the next
+/// `open` can receive it, and a reader still looping would then read another file's bytes.
+private func readAvailable(_ descriptor: Int32, stop: Int32, upTo limit: Int = 64 * 1024) throws -> Data {
     var buffer = [UInt8](repeating: 0, count: limit)
     while true {
-        let n = buffer.withUnsafeMutableBytes { Darwin.read(handle.fileDescriptor, $0.baseAddress, limit) }
+        var ready = [
+            pollfd(fd: stop, events: Int16(POLLIN), revents: 0),
+            pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0),
+        ]
+        if poll(&ready, 2, -1) < 0 {
+            if errno == EINTR { continue }
+            throw QualificationTransportError.malformedFrame("poll failed on fd \(descriptor): errno \(errno)")
+        }
+        // Stop first: a writer that never pauses keeps the stream readable, and a reader that
+        // looked at the stream first would never see the stop.
+        if ready[0].revents != 0 {
+            throw QualificationTransportError.malformedFrame(
+                "read on fd \(descriptor) stopped at shutdown before end of file")
+        }
+        let n = buffer.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, limit) }
         if n >= 0 { return Data(buffer.prefix(n)) }
         if errno == EINTR { continue }
-        throw QualificationTransportError.malformedFrame(
-            "read failed on fd \(handle.fileDescriptor): errno \(errno)")
+        throw QualificationTransportError.malformedFrame("read failed on fd \(descriptor): errno \(errno)")
     }
 }
 
-private final class QualificationSubprocessSession: @unchecked Sendable {
+/// #947. How shutdown stops the pipe readers without closing their descriptors: a pipe of its own.
+/// One byte written makes its read end readable, and nothing ever reads that byte, so every reader
+/// polling it sees the stop, however late it looks.
+private final class QualificationReaderStop: @unchecked Sendable {
+    let descriptor: Int32
+    private let writeEnd: Int32
+
+    init() throws {
+        var ends: [Int32] = [-1, -1]
+        guard pipe(&ends) == 0 else {
+            throw QualificationTransportError.launchFailed("reader stop pipe: errno \(errno)")
+        }
+        // Not the child's to inherit. Its own pipes are the only descriptors it should hold.
+        _ = fcntl(ends[0], F_SETFD, FD_CLOEXEC)
+        _ = fcntl(ends[1], F_SETFD, FD_CLOEXEC)
+        descriptor = ends[0]
+        writeEnd = ends[1]
+    }
+
+    func stop() {
+        var byte: UInt8 = 1
+        _ = Darwin.write(writeEnd, &byte, 1)
+    }
+
+    deinit {
+        Darwin.close(descriptor)
+        Darwin.close(writeEnd)
+    }
+}
+
+final class QualificationSubprocessSession: @unchecked Sendable {
     struct ShutdownOutcome {
         let status: Int32
         let forced: Bool
@@ -4456,6 +4507,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
     private let frames = QualificationFrameQueue()
     private let stderr = QualificationStderrBuffer()
     private let readers = DispatchGroup()
+    private var readerStop: QualificationReaderStop?
     private let exit = QualificationProcessExit()
     private let stateLock = NSLock()
     private var started = false
@@ -4497,6 +4549,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         process.standardInput = inputPipe
         process.standardOutput = outputPipe
         process.standardError = errorPipe
+        let stop = try QualificationReaderStop()
         exit.start(process)
         do {
             try process.run()
@@ -4507,8 +4560,9 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         }
         stateLock.lock()
         started = true
+        readerStop = stop
         stateLock.unlock()
-        startReaders()
+        startReaders(stop: stop)
     }
 
     private func verifyExecutableIdentity() throws {
@@ -4569,6 +4623,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             return shutdownOutcome
         }
         let didStart = started
+        let stop = readerStop
         stateLock.unlock()
         guard didStart else { return ShutdownOutcome(status: 0, forced: false) }
 
@@ -4585,8 +4640,9 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             }
         }
         if readers.wait(timeout: .now() + shutdownGrace) == .timedOut {
-            try? outputPipe.fileHandleForReading.close()
-            try? errorPipe.fileHandleForReading.close()
+            // A process the server started can still hold the pipes open, so end of file may
+            // never come. The readers are stopped, not closed under (#947, `readAvailable`).
+            stop?.stop()
             guard readers.wait(timeout: .now() + shutdownGrace) == .success else {
                 throw QualificationTransportError.shutdownTimeout
             }
@@ -4634,15 +4690,25 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         }
     }
 
-    private func startReaders() {
+    private func startReaders(stop: QualificationReaderStop) {
+        // Each reader holds its handle, and the handle owns the descriptor, which stays open
+        // until the last reader is done with it (#947).
+        //
+        // Each reader is a thread of its own, not a block on a global queue. A reader blocks for
+        // as long as the server lives, and a block queued behind a saturated pool does not start,
+        // so it never polls the stop either. Measured with the readers on global queues and the
+        // test's 3 s grace: shutdown returned after 3.0 s with a free pool and timed out after
+        // 6.0 s with a saturated one. On threads it returned after 3.0 s in both.
         let output = outputPipe.fileHandleForReading
+        let outputDescriptor = output.fileDescriptor
         readers.enter()
-        DispatchQueue.global(qos: .userInitiated).async { [frames, readers] in
+        startReaderThread(named: "stdout", qualityOfService: .userInitiated) { [frames, readers, output, stop] in
             defer { readers.leave() }
+            defer { withExtendedLifetime(output) {} }
             var pending = Data()
             do {
                 while true {
-                    let chunk = try readAvailable(output)
+                    let chunk = try readAvailable(outputDescriptor, stop: stop.descriptor)
                     guard !chunk.isEmpty else { break }
                     pending.append(chunk)
                     while let newline = pending.firstIndex(of: 0x0A) {
@@ -4667,15 +4733,17 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         }
 
         let error = errorPipe.fileHandleForReading
+        let errorDescriptor = error.fileDescriptor
         readers.enter()
-        DispatchQueue.global(qos: .utility).async { [stderr, readers] in
+        startReaderThread(named: "stderr", qualityOfService: .utility) { [stderr, readers, error, stop] in
             defer { readers.leave() }
+            defer { withExtendedLifetime(error) {} }
             // The stdout reader at least LOOKED like it handled a bad descriptor. This one had no
             // `do`/`catch` at all. A stderr read that fails is not fatal to the run — the
             // diagnostic is truncated, not the transport — so it is recorded and the loop ends.
             do {
                 while true {
-                    let chunk = try readAvailable(error)
+                    let chunk = try readAvailable(errorDescriptor, stop: stop.descriptor)
                     guard !chunk.isEmpty else { break }
                     stderr.append(chunk)
                 }
@@ -4684,6 +4752,17 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
                     "\n[qualification-transport] stderr capture ended early: \(error)\n".utf8))
             }
         }
+    }
+
+    private func startReaderThread(
+        named name: String,
+        qualityOfService: QualityOfService,
+        _ body: @escaping @Sendable () -> Void
+    ) {
+        let thread = Thread(block: body)
+        thread.name = "logic-pro-mcp.qualification.\(name)"
+        thread.qualityOfService = qualityOfService
+        thread.start()
     }
 }
 
