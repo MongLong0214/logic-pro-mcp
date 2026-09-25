@@ -1,6 +1,6 @@
 # API Reference
 
-Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 12 resource templates. The published stable release is v3.15.0, which corrects the `logic_audio.recommend_eq` loudness-gate contract, makes `logic_system.refresh_cache` report `refreshed: true` only after an actual cache advance, refuses ambiguous AX selections and unprovable verified plug-in writes, and adds `logic_plugins.set_eq_band_verified`, unflagged spectrum/EQ analysis, and mixer detent receipts. It builds on v3.14.0's ambiguity-refusing AX locator resolution (#628) and per-operation qualification evidence (#373, #284), v3.13.0's coordinate-free plugin-insert leaf selection (#425) and audit-resource blocking-modal parity (#437), and v3.12.0's generated read-only operation catalog (`logic://system/operations`) as the 12th template, the coordinate-free actuation campaign, consent-gated record-arm key-command auto-setup (`system.setup_arm_key`), ADR-002/003/004/005 kernel behavior on by default, and the Homebrew bounce/export packaging fix (#427). It keeps the v3.9.0 MCP capability additions (resource subscriptions, workflow prompts, and per-tool `outputSchema` / `structuredContent`), the v3.9.2 verified plugin closed-window fix, v3.10.0 desktop/Creator Studio targeting, and the v3.11.0 Doctor, tempo, Bounce, region, marker, native toggle, and help-category fixes. `logic_midi` send-only successes and `logic_tracks.arm_only` return Honest Contract JSON envelopes (BREAKING response shape — see CHANGELOG).
+Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 12 resource templates. What each release changed, including every breaking response shape, is in [CHANGELOG.md](../CHANGELOG.md); this page describes the surface, not its history.
 
 Use tools for actions. Use resources for state. Treat every mutating result as one of:
 
@@ -216,7 +216,7 @@ Send-only success responses return an Honest Contract State B JSON envelope beca
 
 `create_virtual_port` reuses same-name/same-mode ports. Reusing a name across modes fails closed with State C `port_unavailable` and includes `port_name`, `existing_mode`, and `requested_mode`.
 
-No MIDI read-back command is shipped in v3.12.0: `read_selection_notes` and `record_sequence verify_notes` remain deferred.
+No MIDI read-back command is shipped: `read_selection_notes` and `record_sequence verify_notes` remain deferred.
 
 ### `logic_edit`
 
