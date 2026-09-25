@@ -1,0 +1,7 @@
+Limit: no other test reaching the shared lock is measured, not proven: the full suite passed with another process holding the shared file for the whole run, which covers this suite on this machine, not tests added later
+Ruled-out: racing the gate against the first call in a task group | leaving a task group waits for every child, so a waiter nobody wakes keeps the group open and the test hangs where it did
+Ruled-out: a clock timeout on the wait | guard #804 forbids clock reads in tests, and the first call's return is an exact signal that nothing will enter
+Ruled-out: a task-local override for the lock path | the route takes its other seams as parameters, and a task-local reaches the call invisibly through Task inheritance
+Warn: a new test that reaches the dialog lock (isFrontmost true, no executeDialogScript) must pass its own dialogExecutionLockPath, or any server or test run holding the shared file refuses it
+Record-Id: r-efbf6961a6f3
+Provenance: inherited a667e791f3c51bb5750d21719c965fd218227cdd
