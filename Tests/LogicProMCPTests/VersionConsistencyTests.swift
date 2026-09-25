@@ -101,8 +101,10 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     let requiredCurrentVersionReferences = [
         "stable-v\(version)-",
         "[v\(version)](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(version))",
-        "The current published stable release is `v\(version)`",
-        "**Published stable**: `v\(version)`",
+        // The version, not an availability claim: the cut lands on main before its tag exists, and
+        // Homebrew follows only once a later commit copies the published tarball's sha256.
+        "The current stable line is `v\(version)`",
+        "**Current stable**: `v\(version)`",
         "/v\(version)/Scripts/install.sh",
         "stable release (`v\(version)`)",
     ]
