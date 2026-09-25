@@ -59,7 +59,7 @@
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "bc5ca31723a2455ef5334e36026b2f8432f6dd7184a226f01c39d9676dc068eb",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "e5e03c414bd03b04fbeb9f9bd0fa25b396ffcb916f45396750c4d4cd3e55547d"
+    "ledger/casefold.tsv": "7c9b00ce6b5b3c4bf3deab1cb1ec13488bc92615c532a5c9d1bd67563056811c"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -85,7 +85,7 @@
       "-": 2,
       "de": 150,
       "en": 175,
-      "es": 150,
+      "es": 151,
       "fr": 145,
       "it": 149,
       "ja": 162,
