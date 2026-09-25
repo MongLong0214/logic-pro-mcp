@@ -18,6 +18,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "/Applications/Logic Pro.app"
@@ -136,16 +137,21 @@ class AbsenceSet(unittest.TestCase):
         # #981: the question a LabelSet asks. `Straße`/`STRASSE` is Unicode case folding, which is
         # what Foundation's `caseInsensitiveCompare` does; the colon and the dropped letter are not.
         import tempfile
-        corpus = {"t": {"de": {canon.normalize(v) for v in ("Mixer", "Straße")}}}
-        wanted = {"mixer", "MIXER", "strasse", "STRASSE", "Mixer", "Mixer:", "mixr", "Mix er"}
+        # The corpus is raw, as the extractor returns it. `Trim\u00a0`, `Logic\u00a0Pro` and `Pan `
+        # are spellings Logic 12.3 ships; `normalize` would fold each onto the plain-space form,
+        # and the review of #991 found two credits that rested on that fold.
+        corpus = {"t": {"de": {"Mixer", "Straße", "Trim\u00a0", "Logic\u00a0Pro", "Pan "}}}
+        wanted = {"mixer", "MIXER", "strasse", "STRASSE", "Mixer", "Mixer:", "mixr", "Mix er",
+                  "trim", "TRIM\u00a0", "Logic Pro", "logic\u00a0pro", "pan", "Pan "}
         with tempfile.TemporaryDirectory() as tmp:
             saved = canon.LEDGER_DIR
             canon.LEDGER_DIR = tmp
             try:
                 canon.write_ledger_casefold(canon.ledger_casefold_rows(corpus, wanted))
-                for same in ("Mixer", "mixer", "MIXER", "strasse", "STRASSE"):
+                for same in ("Mixer", "mixer", "MIXER", "strasse", "STRASSE",
+                             "TRIM\u00a0", "logic\u00a0pro", "Pan "):
                     self.assertTrue(canon.ships_up_to_case("t", "de", same), same)
-                for other in ("Mixer:", "mixr", "Mix er"):
+                for other in ("Mixer:", "mixr", "Mix er", "trim", "Logic Pro", "pan"):
                     self.assertFalse(canon.ships_up_to_case("t", "de", other), other)
                 self.assertFalse(canon.ships_up_to_case("t", "fr", "mixer"))
                 self.assertFalse(canon.ships_up_to_case("u", "de", "mixer"))
@@ -171,6 +177,25 @@ class AbsenceSet(unittest.TestCase):
             finally:
                 canon.LEDGER_DIR, canon.ABSENCE_DIR = saved_ledger, saved_absence
 
+    def test_the_ledger_index_answers_without_any_digest(self):
+        # The second review of #991 forced a collision of the 48-bit `short_digest` the ledger
+        # stored then, and a spelling difference was credited. The row is the string now, so a
+        # digest that answers the same for everything cannot change what the ledger says.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = canon.LEDGER_DIR
+            canon.LEDGER_DIR = tmp
+            try:
+                canon.write_ledger_casefold(canon.ledger_casefold_rows(
+                    {"t": {"de": {"Mixer"}}}, {"mixer", "Mischer"}))
+                with mock.patch.object(canon, "digest", lambda text: "0" * 64), \
+                        mock.patch.object(canon, "short_digest", lambda text: "0" * 12), \
+                        mock.patch.object(canon, "_u32", lambda text: 0):
+                    self.assertTrue(canon.ships_up_to_case("t", "de", "mixer"))
+                    self.assertFalse(canon.ships_up_to_case("t", "de", "Mischer"))
+            finally:
+                canon.LEDGER_DIR = saved
+
     def test_a_missing_or_malformed_ledger_index_raises_rather_than_answering(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -179,10 +204,11 @@ class AbsenceSet(unittest.TestCase):
             try:
                 with self.assertRaises(canon.CanonError):
                     canon.ships_up_to_case("t", "de", "mixer")
-                with open(canon.ledger_casefold_path(), "w", encoding="utf-8") as handle:
-                    handle.write("t\tde\n")
-                with self.assertRaises(canon.CanonError):
-                    canon.ships_up_to_case("t", "de", "mixer")
+                for line in ("t\tde\n", "t\tde\tmixer\n", "t\tde\t[\"mixer\"]\n"):
+                    with open(canon.ledger_casefold_path(), "w", encoding="utf-8") as handle:
+                        handle.write(line)
+                    with self.assertRaises(canon.CanonError, msg=line):
+                        canon.ships_up_to_case("t", "de", "mixer")
             finally:
                 canon.LEDGER_DIR = saved
 
@@ -405,17 +431,41 @@ class TheLoadBearingComparisons(unittest.TestCase):
         finally:
             canon.ABSENCE_DIR = saved
 
+    def test_an_absence_set_with_no_declared_count_is_refused(self):
+        # The review of #991 deleted `strings.absence_entries.de` from a copy of the manifest, and
+        # nothing noticed: the check read only the counts that were there.
+        saved, canon.ABSENCE_DIR = canon.ABSENCE_DIR, self.tmp
+        try:
+            canon.write_absence("t", "ko", ["a-value"])
+            canon.write_absence("t", "de", ["a-value"])
+            canon.write_absence("t", "de", ["a-value"], folded=True)
+            full = {"sources": {"t": {"locales": ["de", "ko"],
+                                      "absence_entries": {"de": 1, "ko": 1}}}}
+            with mock.patch.dict(canon.EXTRACTORS, {"t": None}):
+                self.assertEqual(canon.verify_absence_counts(full), [])
+                for manifest, missing in (
+                        ({"sources": {"t": {"absence_entries": {"ko": 1}}}}, "t.de"),
+                        ({"sources": {"t": {}}}, "t.de"),
+                        ({"sources": {}}, "t.ko"),
+                        ({"sources": {"t": {"locales": ["fr"], "absence_entries": {"de": 1, "ko": 1}}}},
+                         "t.fr")):
+                    problems = canon.verify_absence_counts(manifest)
+                    self.assertTrue(any(f"absence/{missing}.u32 has no count" in p
+                                        for p in problems), (manifest, problems))
+        finally:
+            canon.ABSENCE_DIR = saved
+
     def test_the_ledger_index_is_pinned_like_the_index_and_absence_sets(self):
         # Read for PRESENCE, so an added row is the forgery that matters: it would make a string
         # Apple does not ship read as `derived`. The artifact digests are what catch that edit.
         saved, canon.LEDGER_DIR = canon.LEDGER_DIR, self.tmp
         try:
-            canon.write_ledger_casefold({("t", "ko", canon.short_digest("a-value"))})
+            canon.write_ledger_casefold({("t", "ko", "a-value")})
             pinned = canon.artifact_digests()
             path = os.path.relpath(canon.ledger_casefold_path(), canon.CANON_DIR)
             self.assertIn(path, pinned)
             with open(canon.ledger_casefold_path(), "a", encoding="utf-8") as handle:
-                handle.write(f"t\tko\t{canon.short_digest('forged')}\n")
+                handle.write('t\tko\t"forged"\n')
             problems = canon.verify_artifacts({"artifacts": pinned})
             self.assertTrue(any(path in p and "does not match" in p for p in problems), problems)
         finally:
