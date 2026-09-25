@@ -152,13 +152,22 @@ struct SerializedStdioTransportStallTests {
     /// first thing that opens a file takes the number back and the test then measures a live fd.
     /// That is how the first version of this case failed — it reported a stall on a descriptor that
     /// had already been recycled.
+    ///
+    /// Calling it directly is not enough on its own, because the other tests in this process run in
+    /// parallel and open descriptors of their own: one of them can take the number between the
+    /// `close` and the `poll`, which then answers ready (#995, measured on main at load). So the
+    /// number closed here is the process's highest. Descriptors are handed out lowest-free first,
+    /// and a concurrent opener reaches the top only when every number below it is in use.
     @Test("a closed descriptor is EBADF through POLLNVAL, not a stall")
-    func aClosedDescriptorIsEBADFThroughPOLLNVAL() {
+    func aClosedDescriptorIsEBADFThroughPOLLNVAL() throws {
         var fds: [Int32] = [0, 0]
         #expect(pipe(&fds) == 0)
-        let closed = fds[1]
+        let top = getdtablesize() - 1
+        let closed = fcntl(fds[1], F_DUPFD, top)
         close(fds[0])
         close(fds[1])
+        try #require(closed == top, "the highest descriptor number was already in use")
+        close(closed)
         let verdict = SerializedStdioTransport.waitUntilWritable(closed, deadline: 0.2)
         #expect(verdict == .failed(EBADF))
     }
@@ -269,20 +278,25 @@ struct SerializedStdioTransportStallTests {
         defer { SerializedStdioTransport.reportMidFrameStall = original }
 
         let transport = SerializedStdioTransport(input: STDIN_FILENO, output: writeEnd, writeDeadline: 5)
-        for i in 0..<200 {
-            try await transport.send(Data(String(repeating: "\(i % 10)", count: 4096).utf8))
+        var failure: (any Error)?
+        do {
+            for i in 0..<200 {
+                try await transport.send(Data(String(repeating: "\(i % 10)", count: 4096).utf8))
+            }
+        } catch {
+            failure = error
         }
         #expect(reports.value == 0)
 
         // The reader may still be draining the last frames when the sends return, and closing the
         // read end under it hands the number to whatever this process opens next (#995, the #947
-        // class). The write end is free once every send has returned; closing it gives the reader its
-        // EOF, and the read end closes after the reader has returned. If it does not return, the read
-        // end is leaked.
+        // class). The write end is free once the last send has returned, by throwing or not; closing
+        // it gives the reader its EOF, and the read end closes after the reader has returned. If it
+        // does not return, the read end is leaked.
         close(writeEnd)
         for _ in 0..<600 where readerReturned.value == 0 { try await Task.sleep(nanoseconds: 5_000_000) }
-        guard readerReturned.value == 1 else { return }
-        close(readEnd)
+        if readerReturned.value == 1 { close(readEnd) }
+        if let failure { throw failure }
     }
 
     /// The watchdog's own case: a write that is still going when the deadline passes reports WHILE
