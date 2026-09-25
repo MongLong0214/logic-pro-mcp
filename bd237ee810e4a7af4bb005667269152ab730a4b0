@@ -1,0 +1,14 @@
+Limit: For the Mixer the StrTabBtnLabel, StrViewBtns and plain rows are identical in all ten locales; the citation is chosen by the namespace evidence of the other areas, not by any Mixer reading
+Limit: Two levels below each window only: libraryPanelLabel's Library browser and the other sets still citing #acc rows (trackMuteButton, pluginWindowEditorViewMenuItem, the Step Input Keyboard pair) were not re-read
+Ruled-out: re-deriving mixerNamedElement from the plain Mixer row | a German Library reads Bibliothek where the plain Library row says Mediathek, so the plain-key namespace does not feed these descriptions; the Mixer row only coincides
+Ruled-out: keeping Mixer#acc on a 'Logic capitalises #acc' reading | a Portuguese control bar reads Barra de Controles (StrTabBtnLabel) where Control Bar#acc says Barra de Controle, a spelling difference no capitalisation makes
+Ruled-out: adding Barra de Controles as a Portuguese member | it equals the Spanish member ignoring case, which is how the label matches, and check-probe-product-drift.py refuses case-only duplicates
+Warn: Portuguese finds the control bar only through the Spanish member Barra de controles; removing or re-spelling that member breaks Portuguese, and no Spanish reading would show it
+Record-Id: r-ec32faf59c84
+Provenance: inherited ce58f95f05b7f6c943519c915ad311bf43f637a1
+
+Limit: the restored member was not re-read on a Portuguese Logic; it is a member the base already carried, proved here by the Swift matcher test only
+Ruled-out: dropping Barra de Controle because no Logic was read showing it | not having read a string is not evidence it cannot appear, and it is Logic's own Portuguese value of Control Bar#acc
+Warn: a member that matched before a re-derivation stays unless a reading shows it wrong; an unread string is not a reason to drop it
+Record-Id: r-913fea9ac5cf
+Provenance: inherited 6039adf4c531baa4e75996fac901e43ca789a6e4
