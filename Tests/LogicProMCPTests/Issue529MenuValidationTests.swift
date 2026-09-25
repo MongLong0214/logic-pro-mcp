@@ -404,19 +404,31 @@ private actor Issue529DialogFixtureChannel: Channel {
 
 private actor Issue529DialogLockGate {
     private var started = false
-    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var finishedWithoutEntering = false
+    private var startWaiter: CheckedContinuation<Bool, Never>?
     private var releaseRequested = false
     private var releaseWaiter: CheckedContinuation<Void, Never>?
 
     func entered() {
         started = true
-        startWaiter?.resume()
+        startWaiter?.resume(returning: true)
         startWaiter = nil
     }
 
-    func waitUntilEntered() async {
+    /// A first call refused before its script never calls `entered()`, so a waiter that listened only
+    /// for that would wait forever (#994). The call's return wakes the waiter instead.
+    func finished() {
         guard !started else { return }
-        await withCheckedContinuation { startWaiter = $0 }
+        finishedWithoutEntering = true
+        startWaiter?.resume(returning: false)
+        startWaiter = nil
+    }
+
+    /// True once the first call is inside its script; false if it returned without getting there.
+    func waitUntilEnteredOrFinished() async -> Bool {
+        if started { return true }
+        if finishedWithoutEntering { return false }
+        return await withCheckedContinuation { startWaiter = $0 }
     }
 
     func waitForRelease() async {
@@ -2241,17 +2253,36 @@ struct Issue529MenuValidationTests {
             }
         )
 
-        async let first = AccessibilityChannel.gotoPositionViaBarSlider(
-            params: ["bar": "529"], runtime: firstRuntime,
-            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in }
-        )
-        await gate.waitUntilEntered()
+        // The production lock file is shared with every server and test run of this user, and any
+        // holder of it refuses the first call (#994). Both calls here contend for a file nothing
+        // else opens.
+        let lockPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logic-pro-mcp-issue529-\(UUID().uuidString).lock").path
+        defer { try? FileManager.default.removeItem(atPath: lockPath) }
+
+        let first = Task {
+            let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+                params: ["bar": "529"], runtime: firstRuntime,
+                isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in },
+                dialogExecutionLockPath: lockPath
+            )
+            await gate.finished()
+            return result
+        }
+        guard await gate.waitUntilEnteredOrFinished() else {
+            let refused = await first.value
+            Issue.record("the first call returned without reaching its script: \(refused.message)")
+            return
+        }
         let contender = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "530"], runtime: contenderRuntime,
-            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in }
+            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in },
+            dialogExecutionLockPath: lockPath
         )
         await gate.release()
-        _ = await first
+        // The first call reached its script and returned the script's answer, not a lock refusal.
+        let firstEnvelope = try #require(issue529Envelope(await first.value))
+        #expect(try #require(firstEnvelope["dialog_route_outcome"] as? String) == "menu_not_found")
 
         let contenderEnvelope = try #require(issue529Envelope(contender))
         #expect(!contender.isSuccess)
