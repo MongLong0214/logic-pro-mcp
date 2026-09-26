@@ -1,0 +1,163 @@
+{
+  "schema": 3,
+  "id": "2026-09-26-ko-KR-insert-refusal-closes-its-plugin-menu",
+  "date": "2026-09-26",
+  "subject": "the plug-in menu an insert_plugin refusal leaves on screen, before and after the #1016 change",
+  "question": "After insert_plugin presses a slot and then refuses, is a Logic window at or above the pop-up menu level still on screen, and does the response say what became of it?",
+  "verdict": "works",
+  "surface": "mixer.inserts",
+  "issues": [
+    1016
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/probe_1016_refusal_leaves_no_menu.py <worktree> <full-40-char-head> <candidate-binary> <control-binary>",
+    "expected": "every candidate refusal is leaf_not_offered_by_this_strip with plugin_popup_menu_state dismissed and no Logic window at or above the pop-up menu level afterwards; at least one control refusal leaves such a window open; slot 0 is read free after every sample",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, a running Logic with a project whose mixer shows a free insert slot 0, and two release binaries (the change and its parent); inserts nothing and switches no language; about two minutes"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Plugins.swift:livePluginPopupMenuCleaner",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:pluginPopupMenuStateFields"
+  ],
+  "evidence": [
+    "evidence/2026-09-26-ko-KR-insert-refusal-menu-probe-1016.json"
+  ],
+  "method": "The probe read the product's logic://mixer for strips with a free insert slot 0 and took the first, track 1 of the lpm-locale-campaign fixture in Korean. Six samples alternated control then candidate on that track. Each started its binary's MCP server and asked logic_mixer.insert_plugin for Gain at slot 0 with configuration 'lpm-1016-no-such-layout', which no strip offers, so the slot is pressed, the plug-in menu opens, the Gain submenu is walked and the request is refused. Immediately after the response the probe listed Logic-owned on-screen windows at or above CGWindowLevelForKey(kCGPopUpMenuWindowLevelKey); that list is menus_open_after_response. Anything found was then closed with System Events Escapes and listed again, and the mixer was read back to confirm slot 0 was still free. The candidate was built from b6f90f7a (sha256 34bd13ab...); the control from ff00ff9a, its parent (sha256 0fb1566c...). Nothing was changed by hand.",
+  "observations": [
+    {
+      "binary": "control",
+      "sample": 0,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip"
+      },
+      "menus_open_after_response": [
+        {
+          "layer": 101,
+          "bounds": {
+            "X": 738,
+            "Height": 527,
+            "Y": 547,
+            "Width": 230
+          }
+        }
+      ],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    },
+    {
+      "binary": "candidate",
+      "sample": 0,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip",
+        "plugin_popup_menu_state": "dismissed"
+      },
+      "menus_open_after_response": [],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    },
+    {
+      "binary": "control",
+      "sample": 1,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip"
+      },
+      "menus_open_after_response": [
+        {
+          "layer": 101,
+          "bounds": {
+            "X": 738,
+            "Height": 527,
+            "Y": 547,
+            "Width": 230
+          }
+        }
+      ],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    },
+    {
+      "binary": "candidate",
+      "sample": 1,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip",
+        "plugin_popup_menu_state": "dismissed"
+      },
+      "menus_open_after_response": [],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    },
+    {
+      "binary": "control",
+      "sample": 2,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip"
+      },
+      "menus_open_after_response": [
+        {
+          "layer": 101,
+          "bounds": {
+            "X": 738,
+            "Height": 527,
+            "Y": 547,
+            "Width": 230
+          }
+        }
+      ],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    },
+    {
+      "binary": "candidate",
+      "sample": 2,
+      "track": 1,
+      "requested_configuration": "lpm-1016-no-such-layout",
+      "response": {
+        "state": "C",
+        "error": "ax_write_failed",
+        "menu_failure": "leaf_not_offered_by_this_strip",
+        "plugin_popup_menu_state": "dismissed"
+      },
+      "menus_open_after_response": [],
+      "menus_open_after_harness_escape": [],
+      "slot_zero_still_free": true
+    }
+  ],
+  "conclusion": "On this host the parent's refusal left one Logic window at layer 101 (230 by 527 points) open after all three of its refusals, and its response said nothing about it. The candidate's three refusals each reported plugin_popup_menu_state dismissed, and the probe read no Logic window at or above the pop-up menu level after any of them. The same reading that saw the control's menu saw none after the candidate, so the clean readings are not a blind instrument.",
+  "limits": [
+    "Only the leaf_not_offered_by_this_strip refusal was driven here. root_menu_not_found goes through the same cleanup call; the #993 locale sweep at the same head read plugin_popup_menu_state dismissed and no open menu after it in zh_TW, but that run's control never refused, so it has no same-run control for that branch.",
+    "The product counts windows at exactly the pop-up menu level (101). The layer-102 window recorded in #1016's report did not appear in this run, so whether the candidate leaves one open, or reports no_popup_observed over one, was not measured.",
+    "window_count_unavailable and could_not_be_dismissed were driven only by unit tests with a fixture window list, never against a running Logic.",
+    "One Logic installation, one project, Korean only; the refusal and the cleanup read no localized label, which is why one language was driven."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "The record measures window-server behaviour (whether a Logic window at the pop-up menu level remains after a refusal) and the product's own response fields; it quotes no string Logic ships."
+  }
+}
