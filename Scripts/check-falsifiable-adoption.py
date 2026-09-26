@@ -55,7 +55,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Three raises in two days is not churn: each names the harness that made the number true. This one
 # was a MERGE conflict, both sides having raised the same constant for different harnesses, and the
 # resolution is the union rather than either side.
-FLOOR = 23
+# 23 -> 24 on 2026-09-27: live_965_inspect_session_reports_the_cached_population, whose five
+# counterexamples are each the state its check exists to refuse -- a second issuer's references, a
+# report that counted no strips, an association claimed complete, a refusal that wrote, a new window.
+FLOOR = 24
 _FALSIFIABLE_PARAMETERS = (
     "tag", "predicate", "observation", "counterexample", "expected", "mutation", "modal_snapshot",
 )
