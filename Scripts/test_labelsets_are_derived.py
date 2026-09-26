@@ -67,6 +67,18 @@ class TheGuardCatchesWhatItNames(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertGreater(checked, 0, "no LabelSet names a row, so the guard checked nothing")
 
+    def test_a_unicode_escape_is_read_as_its_character(self):
+        """#993 -- fr's `Audio Units:` row has U+00A0 before the colon, and the only member that
+        covers fr is written `Audio Units\\u{00A0}:`. Read as eight characters, fr was reported as a
+        language the product cannot work in. Driven through check(), with the member spelled as
+        the old reader saw it as the case that must refuse."""
+        member = '"Audio Units\\u{00A0}:"'
+        failures, _ = guard.check(_source(), canon)
+        self.assertFalse([f for f in failures if "pluginMenuAudioUnitsManufacturerItem" in f], failures)
+        refused = self._mutated(member, '"Audio Units\\\\u{00A0}:"')
+        self.assertTrue(any("pluginMenuAudioUnitsManufacturerItem" in f and "'fr'" in f for f in refused),
+                        refused)
+
     def _mutated(self, old, new):
         source = _source()
         self.assertIn(old, source, "the mutation did not apply, so this case proves nothing")

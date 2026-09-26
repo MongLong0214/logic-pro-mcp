@@ -479,16 +479,22 @@ enum AXLocalePolicy {
 
     static let controlSurfaceNewMenuButton = LabelSet(
         canonical: "New",
-        variants: ["신규", "新規", "Neu", "Nuevo", "Nouveau", "Nuovo", "Novo", "新建", "新增"],
+        variants: ["신규", "新規", "Neu", "Nueva", "Nouveau", "Nuovo", "Novo", "新建", "新增"],
         rationale: "The Setup window's OWN menu button -- an AXMenuButton with subrole AXSegment carrying this string in AXDescription, not AXTitle, and living inside the window rather than in the application menu bar. An earlier probe enumerated only the menu bar and the window's AXButtons and concluded no install route existed; it was reading the wrong two places. ko-KR read live 2026-09-15. English canonical unmeasured on this host."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
-        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/New%23mti#value"
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."
+            + " Re-derived on 2026-09-26 from Apple's `New` row instead of `New#mti`: a Spanish Logic 12.3 draws this button `Nueva`, which is the `New` row's Spanish value, while `New#mti` has `Nuevo`, and with `Nuevo` the Setup route found no button in Spanish (#1004). The two rows agree in the other nine locales, and the button was read live in all ten.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/New#value"
     )
 
+    /// The German appears TWICE, and the two differ only in the character before the ellipsis. The
+    /// first is Apple's row, with U+00A0 there. The Setup window's `New` menu does not draw it that
+    /// way: its AXTitle on a German Logic 12.3 read 2026-09-26 is `Installieren\u{0020}…`, with
+    /// U+0020. The match is exact, so with only the row the install route found no item in German
+    /// (#1004). The row stays, because it is what `derivedFrom` cites and what the offline check pins.
     static let controlSurfaceInstallMenuItem = LabelSet(
         canonical: "Install…",
-        variants: ["설치…", "インストール…", "Installieren …", "Instalar…", "Installer…", "Installa…", "安装…", "安裝⋯"],
-        rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. English canonical unmeasured on this host."
+        variants: ["설치…", "インストール…", "Installieren …", "Installieren …", "Instalar…", "Installer…", "Installa…", "安装…", "安裝⋯"],
+        rationale: "First item of the Setup window's `New` menu, beside `Scan All Models` and `Automatic Installation`. ko-KR `설치…` read live 2026-09-15 with siblings `모든 모델 스캔` and `자동 설치`. de-DE read live 2026-09-26 as `Installieren\\u{0020}…` (U+0020), where Apple's row has U+00A0; both are carried. English canonical unmeasured on this host."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Install%E2%80%A6#value"
     )
@@ -608,10 +614,18 @@ enum AXLocalePolicy {
     /// space in some locales and a NO-BREAK SPACE in Korean. Keep the measured
     /// product label in locale policy rather than scattering a literal through
     /// the export driver.
+    ///
+    /// `Logic\u{00A0}Pro` is carried beside the row because that is what the window draws: its
+    /// AXTitle read 2026-09-26 on Logic 12.3 has U+00A0 in de-DE, es-ES, fr-FR and ko-KR alike (#993).
+    /// `progressWindowTitleMatches` folds whitespace before matching, so it matches that title
+    /// without the variant; the variant makes the set itself hold the drawn spelling, so a caller that matches the
+    /// set directly does not depend on that fold. The row stays, because it is what `derivedFrom`
+    /// cites and what the offline check pins.
     static let stemExportProgressWindowTitle = LabelSet(
         canonical: "Logic Pro",
-        variants: [],
+        variants: ["Logic\u{00A0}Pro"],
         rationale: "Measured on the live Korean progress dialog on 2026-09-02 as `Logic\\u{00A0}Pro`; whitespace is normalized only for this product-title rendering."
+            + " Read again 2026-09-26 in de-DE, es-ES, fr-FR and ko-KR: every one draws `Logic\\u{00A0}Pro` (U+00A0), which is now a member beside the row."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Logic%20Pro#value"
     )
@@ -1443,6 +1457,23 @@ enum AXLocalePolicy {
         rationale: "Derived from Apple's `Audio Units` across the ten locales Logic ships; only zh_CN and zh_TW differ (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Audio%20Units#value"
+    )
+
+    /// The plug-in menu's Audio Units entry in a language where Logic does not make it a submenu.
+    ///
+    /// Logic draws this part of the menu from Apple's `Audio Units:` row followed by a manufacturer,
+    /// and splits that path on the ASCII colon. Nine languages' rows carry one, so they draw an
+    /// `Audio Units` item (`pluginMenuAudioUnits`) with a submenu per manufacturer -- the French
+    /// row `Audio Units\u{00A0}:` is why its item is drawn `Audio Units ` with a trailing space.
+    /// zh_TW's row is `音訊單元：` with a FULL-WIDTH colon, so nothing splits: a zh_TW Logic 12.3
+    /// drew `音訊單元：Apple`, `音訊單元：iZotope` and `音訊單元：Native Instruments` as flat items
+    /// on 2026-09-26, and no `音訊單元` item at all. So this set is matched as a PREFIX, and only
+    /// the row's own values are in it.
+    static let pluginMenuAudioUnitsManufacturerItem = LabelSet(
+        canonical: "Audio Units:",
+        variants: ["Audio Units\u{00A0}:", "音频单元:", "音訊單元："],
+        rationale: "Derived from Apple's `Audio Units:` row across the ten locales Logic ships (Logic 12.3 build 6674): en, ko, ja, de, es, it and pt are `Audio Units:`, fr is `Audio Units` U+00A0 `:`, zh_CN `音频单元:` and zh_TW `音訊單元：` with U+FF1A. The zh_TW plug-in menu was read live on 2026-09-26 by Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py: its tail was the three manufacturer items with this prefix and no Audio Units item, which is what left the product unable to recognise the menu there. Checked offline by Scripts/check-labelsets-are-derived.py.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Audio%20Units%3A#value"
     )
 
     /// The plug-in menu's Utility category.
@@ -2952,6 +2983,7 @@ enum AXLocalePolicy {
         pluginFormatMonoToStereo,
         pluginFormatDualMono,
         pluginMenuAudioUnits,
+        pluginMenuAudioUnitsManufacturerItem,
         pluginMenuUtility,
         transportPlayControl,
         transportRecordControl,

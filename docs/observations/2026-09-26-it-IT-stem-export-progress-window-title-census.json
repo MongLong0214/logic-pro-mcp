@@ -1,0 +1,73 @@
+{
+ "schema": 3,
+ "id": "2026-09-26-it-IT-stem-export-progress-window-title-census",
+ "date": "2026-09-26",
+ "subject": "The title of the window Logic shows while it exports every track as audio files, as drawn (it-IT)",
+ "question": "Which characters does the AXTitle of the stem-export progress window carry in it-IT?",
+ "verdict": "works",
+ "surface": "project.export",
+ "issues": [
+  993
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "it-IT",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "/usr/bin/python3 Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py . <out.json> <scratch-dir> it",
+  "expected": "the stemExportProgressWindowTitle reading for it carries the title_scalars in this record's row; a different sequence means Logic changed how it draws the item and the LabelSet wants re-reading",
+  "cost": "needs Logic with the lpm-locale-campaign fixture; switches Logic's language, relaunches it, and restores Korean at the end; about one minute per language"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:stemExportProgressWindowTitle"
+ ],
+ "method": "File, Export, All Tracks as Audio Files, each found by its LabelSet with spaces folded for navigation only. The destination was set to a scratch directory through the Go to Folder sheet and read back, and the panel's Export button was pressed. Three seconds later every window was read; a separate watcher polled window titles every 20 ms for ten seconds. The export was then cancelled with Command-period sent to Logic as a key event, the windows were read again, and the scratch directory was removed. The row below is the one AXDialog present during the export and absent after the cancel, with its AXTitle as read and every scalar of it.",
+ "observations": [
+  {
+   "surface": "project.export",
+   "path": "AXWindow[Logic Pro]",
+   "role": "AXWindow",
+   "subrole": "AXDialog",
+   "title": "Logic Pro",
+   "title_scalars": [
+    "U+004C",
+    "U+006F",
+    "U+0067",
+    "U+0069",
+    "U+0063",
+    "U+0020",
+    "U+0050",
+    "U+0072",
+    "U+006F"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-26-it-IT-nbsp-labels-as-drawn.json"
+ ],
+ "conclusion": "The drawn title carries exactly the scalars of Apple's own row for this language (U+004C U+006F U+0067 U+0069 U+0063 U+0020 U+0050 U+0072 U+006F).",
+ "limits": [
+  "One build of Logic and one language: Logic Pro 12.3 (6674) on macOS 26.3 (25D125) in it-IT. Another build may draw another space.",
+  "The title is read through AX. That is what the product matches against; it says nothing about how the glyphs look on screen.",
+  "One reading, not a rate. The item was read once in this run."
+ ],
+ "supersedes": null,
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/it/Logic%20Pro#value",
+   "value": "Logic Pro",
+   "used_for": "Apple's own row for this item in it, which stemExportProgressWindowTitle derives from; the drawn title has the same scalars",
+   "binding": {
+    "kind": "record"
+   }
+  }
+ ]
+}

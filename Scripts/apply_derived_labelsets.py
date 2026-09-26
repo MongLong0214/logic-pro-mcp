@@ -80,8 +80,17 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _unescape(text: str) -> str:
-    return text.replace('\\"', '"').replace("\\\\", "\\")
+def _swift_literals():
+    spec = importlib.util.spec_from_file_location(
+        "locale_labels_for_apply", os.path.join(REPO, "Scripts", "locale_labels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# The same reader check-labelsets-are-derived.py and ui-labels.json decode with; a copy that undid
+# only `\"` and `\\` read `\u{00A0}` as eight characters (#993).
+_unescape = _swift_literals()._unescape
 
 
 def rewrite(source: str, canon, report) -> tuple:

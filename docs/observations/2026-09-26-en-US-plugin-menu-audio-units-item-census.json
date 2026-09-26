@@ -1,0 +1,75 @@
+{
+ "schema": 3,
+ "id": "2026-09-26-en-US-plugin-menu-audio-units-item-census",
+ "date": "2026-09-26",
+ "subject": "The Audio Units item of a mixer insert slot's plug-in menu, as drawn (en-US)",
+ "question": "Which characters does the AXTitle of the plug-in menu's Audio Units item carry in en-US?",
+ "verdict": "works",
+ "surface": "mixer.inserts",
+ "issues": [
+  993
+ ],
+ "host": {
+  "app": "Logic Pro",
+  "version": "12.3",
+  "build": "6674",
+  "locale": "en-US",
+  "os": "macOS 26.3 (25D125)"
+ },
+ "reverify": {
+  "kind": "script",
+  "command": "/usr/bin/python3 Scripts/livekit/probe_993_1004_nbsp_labels_as_drawn.py . <out.json> <scratch-dir> en",
+  "expected": "the pluginMenuAudioUnits reading for en carries the title_scalars in this record's row; a different sequence means Logic changed how it draws the item and the LabelSet wants re-reading",
+  "cost": "needs Logic with the lpm-locale-campaign fixture; switches Logic's language, relaunches it, and restores Korean at the end; about one minute per language"
+ },
+ "depends": [
+  "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift:pluginMenuAudioUnits"
+ ],
+ "method": "An empty insert slot was found by its AXDescription, which is Apple's MAMixer `audio plug-in` row for this language read from the installed bundle, and pressed. The popup menu was read from under the slot or one of its nearest six ancestors, then closed with AXCancel. The row below is the menu item whose folded title matches the Audio Units label, with its AXTitle as read and every scalar of it. No plug-in was inserted.",
+ "observations": [
+  {
+   "surface": "mixer.inserts",
+   "path": "AXButton{audio plug-in}/AXMenu/AXMenuItem[Audio Units]",
+   "role": "AXMenuItem",
+   "subrole": null,
+   "title": "Audio Units",
+   "title_scalars": [
+    "U+0041",
+    "U+0075",
+    "U+0064",
+    "U+0069",
+    "U+006F",
+    "U+0020",
+    "U+0055",
+    "U+006E",
+    "U+0069",
+    "U+0074",
+    "U+0073"
+   ],
+   "description": null,
+   "help": null,
+   "value": null,
+   "identifier": null
+  }
+ ],
+ "evidence": [
+  "evidence/2026-09-26-en-US-nbsp-labels-as-drawn.json"
+ ],
+ "conclusion": "The drawn title carries exactly the scalars of Apple's own row for this language (U+0041 U+0075 U+0064 U+0069 U+006F U+0020 U+0055 U+006E U+0069 U+0074 U+0073).",
+ "limits": [
+  "One build of Logic and one language: Logic Pro 12.3 (6674) on macOS 26.3 (25D125) in en-US. Another build may draw another space.",
+  "The title is read through AX. That is what the product matches against; it says nothing about how the glyphs look on screen.",
+  "One reading, not a rate. The item was read once in this run."
+ ],
+ "supersedes": null,
+ "canon": [
+  {
+   "ref": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Audio%20Units#value",
+   "value": "Audio Units",
+   "used_for": "Apple's own row for this item in en, which pluginMenuAudioUnits derives from; the drawn title has the same scalars",
+   "binding": {
+    "kind": "record"
+   }
+  }
+ ]
+}
