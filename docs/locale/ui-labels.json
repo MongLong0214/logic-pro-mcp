@@ -2569,7 +2569,10 @@
    "variants": [
     "팬",
     "밸런스",
-    "パン"
+    "パン",
+    "Panning",
+    "声像",
+    "相位"
    ],
    "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
    "roles": [
@@ -3265,7 +3268,12 @@
    "canonical": "tempo",
    "variants": [
     "템포",
-    "Tempo-Informationen"
+    "Tempo-Informationen",
+    "テンポ",
+    "Ritmo",
+    "Andamento",
+    "速度",
+    "拍速"
    ],
    "rationale": "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it.",
    "match": "exact",
@@ -3278,7 +3286,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -4922,7 +4930,14 @@
     "Project or Section...",
     "프로젝트 또는 섹션...",
     "プロジェクトまたは選択範囲…",
-    "Projekt oder Abschnitt …"
+    "Projekt oder Abschnitt …",
+    "Projekt oder Abschnitt …",
+    "Proyecto o sección…",
+    "Projet ou section…",
+    "Progetto o sezione…",
+    "Projeto ou Seção…",
+    "项目或部分…",
+    "計畫案或段落⋯"
    ],
    "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
@@ -4966,12 +4981,12 @@
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    },
    "coverage_records": {
     "en-US": "2026-09-05-en-US-arrange-menus-census"
@@ -5602,7 +5617,9 @@
     "panning",
     "패닝",
     "밸런스",
-    "パン"
+    "パン",
+    "声像",
+    "相位"
    ],
    "rationale": "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
    "provenance": {
@@ -5669,7 +5686,9 @@
    "variants": [
     "fader",
     "볼륨",
-    "ボリューム"
+    "ボリューム",
+    "Volumen",
+    "音量"
    ],
    "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
    "provenance": {
@@ -6198,7 +6217,12 @@
    "canonical": "tempo",
    "variants": [
     "bpm",
-    "템포"
+    "템포",
+    "テンポ",
+    "Ritmo",
+    "Andamento",
+    "速度",
+    "拍速"
    ],
    "rationale": "Identifies a tempo text field/slider description; read-only.",
    "match": "contains",
@@ -6310,7 +6334,11 @@
    "variants": [
     "bpm",
     "템포",
-    "テンポ"
+    "テンポ",
+    "Ritmo",
+    "Andamento",
+    "速度",
+    "拍速"
    ],
    "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider.",
    "roles": [
@@ -6617,20 +6645,28 @@
     "Rec",
     "녹음 활성화",
     "레코드 활성화",
-    "Aufnahme"
+    "Aufnahme",
+    "녹음",
+    "録音",
+    "Grabar",
+    "Enregistrement",
+    "Registra",
+    "Gravação",
+    "录音",
+    "錄音"
    ],
    "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
-    "ja-JP": "unmeasured",
+    "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
+    "es-ES": "derived",
+    "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -6804,7 +6840,12 @@
    "canonical": "instrument",
    "variants": [
     "software",
-    "악기"
+    "악기",
+    "音源",
+    "instrumento",
+    "strumento",
+    "乐器",
+    "樂器"
    ],
    "rationale": "Classifies a software-instrument track; read-only classifier.",
    "match": "exact",
@@ -6813,12 +6854,12 @@
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "trackTypeMaster": {
@@ -6845,21 +6886,28 @@
    "canonical": "Autopunch",
    "variants": [
     "Auto Punch",
-    "Auto-Punch"
+    "Auto-Punch",
+    "오토펀치",
+    "オートパンチ",
+    "Pinchazo preprogramado",
+    "Punch automatico",
+    "Punch automático",
+    "自动插入",
+    "自動錄音"
    ],
    "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "transportContainerControlKeywords": {
@@ -6903,7 +6951,13 @@
    "variants": [
     "control bar",
     "컨트롤 막대",
-    "コントロールバー"
+    "コントロールバー",
+    "Steuerungsleiste",
+    "Barra de controles",
+    "Barre des commandes",
+    "Barra di controllo",
+    "控制条",
+    "控制列"
    ],
    "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
    "match": "exact",
@@ -6912,11 +6966,11 @@
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
-    "es-ES": "unmeasured",
+    "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "unmeasured",
+    "zh-CN": "derived",
     "zh-TW": "derived"
    }
   },
@@ -6953,7 +7007,11 @@
    "variants": [
     "loop",
     "사이클",
-    "サイクル"
+    "サイクル",
+    "Ciclo",
+    "Repetição",
+    "循环",
+    "循環"
    ],
    "rationale": "Identifies the Cycle/Loop transport control; read-only.",
    "match": "contains",
@@ -7205,21 +7263,30 @@
   "undoPluginInsertMenuItem": {
    "canonical": "Insert Plug-in in Channel Strip",
    "variants": [
-    "채널 스트립에 플러그인 삽입"
+    "채널 스트립에 플러그인 삽입",
+    "채널 스트립의 플러그인 삽입",
+    "チャンネルストリップにプラグインを挿入",
+    "Plug-in in Channel-Strip einfügen",
+    "inserción del módulo del canal",
+    "Insérer le module dans la tranche de console",
+    "Inserisci plugin nella channel strip",
+    "Inserir Plug-in no Canal",
+    "在通道条中插入插件",
+    "在聲道控制排中插入外掛模組"
    ],
    "rationale": "Confirms the Undo entry describes OUR insert before a rollback presses it.",
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "unmeasured",
-    "ja-JP": "unmeasured",
-    "de-DE": "unmeasured",
-    "es-ES": "unmeasured",
-    "fr-FR": "unmeasured",
-    "it-IT": "unmeasured",
-    "pt-BR": "unmeasured",
-    "zh-CN": "unmeasured",
-    "zh-TW": "unmeasured"
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
    }
   },
   "viewMenuBar": {

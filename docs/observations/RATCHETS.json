@@ -351,8 +351,7 @@
         "trackContentGeneric",
         "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
-        "transportRecordArmExclusion",
-        "undoPluginInsertMenuItem"
+        "transportRecordArmExclusion"
       ],
       "en-US": [
         "transportRecordArmExclusion"
@@ -369,22 +368,16 @@
         "outputSlotHelpKeyword",
         "playheadPositionFieldLabel",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "projectPickerWindow",
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderSendHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordButton",
         "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
-        "trackTypeInstrument",
-        "transportAutopunchControl",
-        "transportContainerMetadata",
         "transportRecordArmExclusion",
-        "undoMenuItemPrefix",
-        "undoPluginInsertMenuItem"
+        "undoMenuItemPrefix"
       ],
       "fr-FR": [
         "assignControlHelpKeyword",
@@ -397,7 +390,6 @@
         "midiEffectSlotHelpKeyword",
         "outputSlotHelpKeyword",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "projectPickerWindow",
         "settingPopupValue",
         "showMixerMenuItem",
@@ -405,24 +397,18 @@
         "sliderZoomHint",
         "tickSliderLabel",
         "trackContentGeneric",
-        "trackRecordButton",
         "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
-        "undoMenuItemPrefix",
-        "undoPluginInsertMenuItem"
+        "undoMenuItemPrefix"
       ],
       "it-IT": [
         "audioPluginSlotLabel",
         "horizontalZoomSlider",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "showMixerMenuItem",
         "sliderSendHint",
         "trackTypeGMDevice",
-        "trackTypeInstrument",
-        "transportAutopunchControl",
-        "transportRecordArmExclusion",
-        "undoPluginInsertMenuItem"
+        "transportRecordArmExclusion"
       ],
       "ja-JP": [
         "assignControlHelpKeyword",
@@ -435,35 +421,26 @@
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderZoomHint",
-        "trackRecordButton",
         "trackRecordEnableCheckbox",
         "trackTypeGMDevice",
-        "transportAutopunchControl",
         "transportRecordArmExclusion",
-        "undoMenuItemPrefix",
-        "undoPluginInsertMenuItem"
+        "undoMenuItemPrefix"
       ],
       "ko-KR": [
         "assignControlHelpKeyword",
         "automationModeTrim",
         "horizontalZoomSlider",
         "midiEffectSlotHelpKeyword",
-        "trackTypeGMDevice",
-        "transportAutopunchControl",
-        "undoPluginInsertMenuItem"
+        "trackTypeGMDevice"
       ],
       "pt-BR": [
         "audioPluginSlotLabel",
         "horizontalZoomSlider",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "settingPopupValue",
         "showMixerMenuItem",
         "trackTypeGMDevice",
-        "trackTypeInstrument",
-        "transportAutopunchControl",
-        "transportRecordArmExclusion",
-        "undoPluginInsertMenuItem"
+        "transportRecordArmExclusion"
       ],
       "zh-CN": [
         "assignControlHelpKeyword",
@@ -474,11 +451,9 @@
         "inputSlotHelpKeyword",
         "inspectorChannelStripHelpPrefix",
         "midiEffectSlotHelpKeyword",
-        "midiImportTempoAlertText",
         "outputSlotHelpKeyword",
         "playheadPositionFieldLabel",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "projectPickerWindow",
         "regionKindDrummer",
         "saveConfirmationButton",
@@ -488,35 +463,26 @@
         "sliderSendHint",
         "sliderZoomHint",
         "trackContentGeneric",
-        "trackRecordButton",
         "trackRecordEnableCheckbox",
         "trackTypeAux",
         "trackTypeDrummer",
         "trackTypeGMDevice",
-        "trackTypeInstrument",
         "trackTypeMaster",
-        "transportAutopunchControl",
-        "transportContainerMetadata",
         "transportKeywordFalseFriends",
         "transportRecordArmExclusion",
-        "undoMenuItemPrefix",
-        "undoPluginInsertMenuItem"
+        "undoMenuItemPrefix"
       ],
       "zh-TW": [
         "audioPluginSlotLabel",
         "horizontalZoomSlider",
         "pluginWindowControlsViewMenuItem",
-        "projectOrSectionMenuItem",
         "settingPopupValue",
         "showMixerMenuItem",
         "sliderSendHint",
         "trackTypeDrummer",
         "trackTypeGMDevice",
-        "trackTypeInstrument",
         "trackTypeMaster",
-        "transportAutopunchControl",
-        "transportRecordArmExclusion",
-        "undoPluginInsertMenuItem"
+        "transportRecordArmExclusion"
       ]
     }
   },
