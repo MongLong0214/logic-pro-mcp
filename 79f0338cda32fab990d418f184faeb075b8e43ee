@@ -1,0 +1,25 @@
+Limit: not live-verified; the four popup states were driven with a fixture window list and a recorded Escape, never against a running Logic.
+Limit: only windows at exactly CGWindowLevelForKey(.popUpMenuWindow) are counted; the Logic-owned layer-102 window seen in the #1016 capture is not counted, and a refusal over it reports no_popup_observed.
+Ruled-out: posting the blind Escape and reporting nothing | it cannot say whether the menu closed and a menu left open blocks Logic's AppleEvent handler for the next call
+Ruled-out: injecting a PluginPopupMenuCleaner closure into defaultInsertPlugin | a test could then replace the cleanup itself and never exercise the owner and layer filters
+Warn: the refusal cleanup reads the window list through AXLogicProElements.Runtime.onScreenWindowList; a Runtime rebuilt from another one's fields without passing that seam reads the live window server again.
+Record-Id: r-08365ecf9861
+Provenance: inherited b6f90f7a2d8d6d5a571b9636248dd089ac302ce3
+
+Limit: the probe drives only the leaf_not_offered_by_this_strip refusal, in Korean; the layer-102 window from the #1016 report did not appear, so the candidate's handling of it was not measured
+Ruled-out: requesting Gain with no configuration on a mono strip to reach the refusal | a stereo strip would insert it and need an undo; a configuration no strip offers is refused on every strip (#871) and inserts nothing
+Warn: the control must be a binary without the #1016 cleanup; a control that already closes its menu fails the control check, and the candidate check then proves nothing
+Record-Id: r-1cf127d18355
+Provenance: inherited d262255e749a9bdf67313cecb62b3d90588f62bd
+
+Limit: two failed reads still end as window_count_unavailable with no Escape; a menu the AX cancel cannot see stays open, and the response says the state is unknown
+Ruled-out: typing the popup Escape when the window list is unreadable | it goes to whatever owns the keyboard and no reading counted a popup; the #942 rule is to act only on what was measured
+Ruled-out: giving the insert refusal its own copy of the cleanup | the three verified plug-in callers share the same early return and would keep it
+Record-Id: r-105a76560a63
+Provenance: inherited 01cdf36044acef198976a4cecaa10e38b33801d3
+
+Limit: not rerun live; the 0b945912 run read no unknown list but did not record the keyboard owner at its four clean-ups, so the owner check is unmeasured live; the test uses stubbed readings
+Ruled-out: a blind Escape on an unknown reading as best-effort clean-up | the Escape goes to whatever owns the keyboard and nothing said a menu was there; unknown now ends the clean-up with None, which fails the sample
+Ruled-out: gating the Escape on the menu count alone | a counted Logic menu does not mean Logic owns the keyboard; the first layer-0 window must be Logic's, as in the #942 probe
+Record-Id: r-4358ad6eea0e
+Provenance: inherited 29282c14f5469e21909c5aac0f7ab1e3b625d195
