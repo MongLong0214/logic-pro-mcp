@@ -37,6 +37,13 @@ actor StateCache {
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
+    /// How many times the LCD UPPER row has been written since this cache was made (#862).
+    ///
+    /// `MCUDisplayState` carries no timestamp, so before this nothing could tell a row Logic had
+    /// just redrawn from the same bytes left over from an earlier bank. A bank move is verified
+    /// by comparing this number across the press: unchanged means Logic did not redraw, whatever
+    /// the row says. Lower-row writes do not count — the lower row shows values, not the window.
+    private(set) var mcuUpperRowWriteSequence: UInt64 = 0
     private var projectEpoch: UInt64 = 0
     private var tracksProjectIdentity: ProjectIdentity?
     private var regionsProjectIdentity: ProjectIdentity?
@@ -696,6 +703,15 @@ actor StateCache {
 
     func updateMCUDisplay(_ display: MCUDisplayState) {
         mcuDisplay = display
+        // A whole-display replacement rewrites the upper row too.
+        mcuUpperRowWriteSequence &+= 1
+    }
+
+    /// The upper row and its write count in ONE actor turn (#862). Two reads across an `await`
+    /// could pair a row from before a redraw with a count from after it — the same TOCTOU that
+    /// `getFaderEchoSnapshot` closes for faders.
+    func mcuUpperRowSnapshot() -> (row: String, sequence: UInt64) {
+        (mcuDisplay.upperRow, mcuUpperRowWriteSequence)
     }
 
     func updateMCUDisplayRow(upper: Bool, text: String, offset: Int) {
@@ -706,6 +722,9 @@ actor StateCache {
                 if pos < row.count { row[pos] = ch }
             }
             mcuDisplay.upperRow = String(row)
+            // Counted even when the bytes did not change: a redraw with identical names is
+            // still a redraw, and the caller decides what an unchanged row means.
+            mcuUpperRowWriteSequence &+= 1
         } else {
             var row = Array(mcuDisplay.lowerRow)
             for (i, ch) in text.enumerated() {
