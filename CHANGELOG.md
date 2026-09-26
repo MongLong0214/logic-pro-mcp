@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-(No unreleased changes yet.)
+### Added
+- `logic_mixer bank` (`mixer.bank`, MCU only, #862): moves the Mackie Control fader bank by eight strips per step, `{ direction: "left" | "right", count?: 1–31 }`. State A is decided by a fresh, changed MCU LCD upper row (`verify_source: mcu_lcd_upper_row`, `window_before` / `window_after` / `strips` / `bank_presses_sent`), never by the press having been sent, and it does not confirm how many banks the window moved; State B `noop_unobservable` when the row redraws unchanged and `echo_timeout_<ms>ms` when it never redraws; State C `readback_unavailable` with `write_attempted: false`, before any byte is sent, when the upper row has never been received. Registered, handler-bound, in the skill catalog, help text and API docs; listed as an audited exclusion in the semantic-oracle table until a live observation record exists.
 
 ---
 

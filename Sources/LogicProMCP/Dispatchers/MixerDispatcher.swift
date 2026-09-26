@@ -10,7 +10,7 @@ struct MixerDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_mixer",
-        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true, configuration?: String } via AX mixer slot with readback. The last segment of Logic's plug-in menu is the CHANNEL CONFIGURATION (Stereo, Mono, Mono->Stereo, Dual Mono), which belongs to the strip and not to the request, so it is read off the menu this call opens: the spec's preference wins when the strip offers it, a menu with exactly one entry has no choice to make, and several entries with none preferred are REFUSED rather than picking a channel layout on the operator's behalf. Supply `configuration` to choose in that case — it is honoured only when the strip actually offers it, and a value the strip lacks fails closed instead of silently falling back. The refusal lists what the strip offered, so the legal values come back from the failure. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
+        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin, bank. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); bank -> { direction: \"left\"|\"right\" (required), count?: Int (1..31, default 1) } moves the MCU fader-bank window by eight strips per step and is MCU-only; its readback is the MCU LCD upper row that names the eight visible strips: State A (verify_source:mcu_lcd_upper_row, window_before/window_after/strips/bank_presses_sent) only when a fresh upper-row write lands AND the row differs from the pre-press snapshot, State B noop_unobservable when the row redraws unchanged (identical six-character names cannot confirm a move) or echo_timeout when no redraw arrives, and State C readback_unavailable with write_attempted:false BEFORE any press when the upper row has never been received on this server; set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true, configuration?: String } via AX mixer slot with readback. The last segment of Logic's plug-in menu is the CHANNEL CONFIGURATION (Stereo, Mono, Mono->Stereo, Dual Mono), which belongs to the strip and not to the request, so it is read off the menu this call opens: the spec's preference wins when the strip offers it, a menu with exactly one entry has no choice to make, and several entries with none preferred are REFUSED rather than picking a channel layout on the operator's behalf. Supply `configuration` to choose in that case — it is honoured only when the strip actually offers it, and a value the strip lacks fails closed instead of silently falling back. The refusal lists what the strip offered, so the legal values come back from the failure. ADR-002 (on by default; disable with LOGIC_MCP_ADR002_TARGET_REF=0): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the kill-switch is set, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
         commandDescription: "Mixer command to execute"
     )
 
@@ -166,6 +166,41 @@ struct MixerDispatcher: OperationTraceDispatching {
             let result = await withWriteBoundaryArmed(traceID) {
                 await routedTextResult(router, operation: "mixer.set_master_volume", params: [
                     "volume": String(volume),
+                ])
+            }
+            return await finalizeTrace(result, traceID: traceID)
+
+        case "bank":
+            // #862: a bank step is a Mackie Control button press whose only readback is the MCU LCD
+            // upper row, so the operation is MCU-only like set_master_volume. Both params are
+            // settled BEFORE the trace starts: a refusal here must not read as an attempted write.
+            let direction = stringParam(params, "direction")
+            guard direction == "left" || direction == "right" else {
+                return toolInvalidParamsResult(
+                    "bank requires 'direction' of exactly \"left\" or \"right\" (got \"\(direction)\")",
+                    extras: ["operation": "mixer.bank"]
+                )
+            }
+            // A missing `count` means one step. A PRESENT but unparseable count is refused rather
+            // than defaulted: `intParamOrNil` returns nil for both cases, and letting garbage
+            // collapse to 1 would press the bank button on a request the caller did not make.
+            let count: Int
+            if params["count"] == nil {
+                count = 1
+            } else {
+                guard let parsed = intParamOrNil(params, "count"), (1...31).contains(parsed) else {
+                    return toolInvalidParamsResult(
+                        "bank 'count' must be an Int in 1...31 (default 1 when omitted)",
+                        extras: ["operation": "mixer.bank"]
+                    )
+                }
+                count = parsed
+            }
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mixer.bank", params: [
+                    "direction": direction,
+                    "count": String(count),
                 ])
             }
             return await finalizeTrace(result, traceID: traceID)

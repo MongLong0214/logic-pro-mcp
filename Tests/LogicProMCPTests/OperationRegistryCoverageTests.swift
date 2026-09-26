@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 114)   // #884 registered system.setup_control_surface
+        #expect(OperationRegistry.specs.count == 115)   // #884 system.setup_control_surface, #862 mixer.bank
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -86,14 +86,16 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 91)   // #448: sort_verified is a mutating structural verb;
+        #expect(mutating.count == 92)   // #448: sort_verified is a mutating structural verb;
                                         // #301 added plugins.set_eq_band_verified, which is
                                         // target-bearing, so `targetless` is unchanged;
                                         // #884 added system.setup_control_surface, which bears no
-                                        // target — it configures the application, not a track
+                                        // target — it configures the application, not a track;
+                                        // #862 added mixer.bank, which moves the MCU strip
+                                        // window and so bears no track target either
         #expect(readOnly.count == 23)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 76)   // #448 sort_verified and #884 setup_control_surface both bear no target
+        #expect(targetless.count == 77)   // #448 sort_verified, #884 setup_control_surface and #862 bank bear no target
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.allSatisfy { $0.target == .none })
     }

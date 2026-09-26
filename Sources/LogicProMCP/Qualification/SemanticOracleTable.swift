@@ -312,6 +312,17 @@ enum SemanticOracleTable {
             + "bindings live in Logic's preferences and its Setup window, and no logic:// resource "
             + "publishes either, so the only confirmation available is the operation's own MCU "
             + "feedback",
+        .mixerBank:
+            // #862. Post-closure, like setup_control_surface above, and for the same reason NOT
+            // back-dated into a phase set. Its State A is decided by a fresh, changed MCU LCD
+            // upper row (verify_source mcu_lcd_upper_row), which IS an independent readback --
+            // so unlike the entries around it this exclusion is pending, not structural. An
+            // oracle pinning that envelope waits for the observation record from a live drive
+            // this operation has not yet performed on a Logic host; a fixture written before
+            // that record would imply a proof nobody has run.
+            "live State-A contract expressly pending — State A is a fresh, changed MCU LCD "
+            + "upper row, but no live drive on a Logic host has produced the observation record "
+            + "an oracle pinning verify_source mcu_lcd_upper_row would cite",
         .pluginsSetEQBandVerified:
             "live 2026-08-30 evidence establishes the Channel EQ raw AXValue ranges and "
             + "one-step increment-walk behavior only; no end-to-end write/readback round "

@@ -17,6 +17,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case mixerSetMasterVolume = "mixer.set_master_volume"
     case mixerSetPluginParam = "mixer.set_plugin_param"
     case mixerInsertPlugin = "mixer.insert_plugin"
+    case mixerBank = "mixer.bank"
     case navigateGotoBar = "navigate.goto_bar"
     case navigateGotoMarker = "navigate.goto_marker"
     case navigateCreateMarker = "navigate.create_marker"
@@ -292,7 +293,7 @@ enum OperationRegistry {
         ],
         ToolID.logicMixer.rawValue: [
             "mixer.set_volume", "mixer.set_pan", "mixer.set_master_volume",
-            "mixer.set_plugin_param", "mixer.insert_plugin",
+            "mixer.set_plugin_param", "mixer.insert_plugin", "mixer.bank",
         ],
         ToolID.logicNavigate.rawValue: [
             "navigate.goto_bar", "navigate.goto_marker", "navigate.create_marker",
@@ -352,6 +353,7 @@ enum OperationRegistry {
         ],
         ToolID.logicMixer.rawValue: [
             "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
+            "bank",
         ],
         ToolID.logicNavigate.rawValue: [
             "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
@@ -569,6 +571,9 @@ enum OperationRegistry {
                 "plugin", "plugin_name", "slot", "track", "track_index",
             ]
         ),
+        // #862: relative banking on the Mackie Control surface. `direction` and `count` only --
+        // no track target, because the operation moves the eight-strip window, not a strip.
+        (.mixerBank, "bank", .none, .none, ["count", "direction"]),
     ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,
