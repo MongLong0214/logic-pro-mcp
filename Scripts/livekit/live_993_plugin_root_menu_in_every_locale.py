@@ -182,10 +182,44 @@ def dismiss_sheets():
     return first
 
 
+def open_logic_menus():
+    """Logic's on-screen windows at or above the pop-up menu level; None when they cannot be read.
+
+    Measured 2026-09-26 in zh_TW: an insert refused as `leaf_not_offered_by_this_strip` left two
+    such windows (layers 101 and 102) open, and an open menu wedges AppleEvents, so the Korean
+    restore's quit failed. They are read here so the run records them rather than inheriting them.
+    """
+    try:
+        import Quartz
+        level = Quartz.CGWindowLevelForKey(Quartz.kCGPopUpMenuWindowLevelKey)
+        windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
+                                                    Quartz.kCGNullWindowID) or []
+        return [{"layer": int(window.get(Quartz.kCGWindowLayer)),
+                 "bounds": {key: int(value) for key, value
+                            in dict(window.get(Quartz.kCGWindowBounds) or {}).items()}}
+                for window in windows
+                if E._is_logic_owned_window(window)
+                and int(window.get(Quartz.kCGWindowLayer) or 0) >= int(level)]
+    except Exception:  # noqa: BLE001 - an unread window list is not an empty one
+        return None
+
+
+def close_left_open_menus():
+    """Escape until no Logic menu is on screen; what was found open is returned for the record."""
+    found = open_logic_menus()
+    for _ in range(3):
+        if not open_logic_menus():
+            break
+        osa('tell application "System Events" to key code 53', timeout=5)
+        time.sleep(0.5)
+    return {"open_before_escape": found, "open_after_escape": open_logic_menus()}
+
+
 def quit_logic():
     if not logic_running():
         return True
     dismiss_sheets()
+    close_left_open_menus()
     for _ in range(4):
         osa('tell application "Logic Pro" to quit', timeout=8)
         deadline = time.monotonic() + 20
@@ -285,7 +319,22 @@ def undo_and_verify(driver, track, before, edit_name):
             "verified": undo_exit == 0 and verified}
 
 
-def run_binary(binary, edit_name, preferred_track=None):
+def single_configuration(response):
+    """The one plain channel configuration a refused strip offered, or None.
+
+    Measured 2026-09-26 in zh_TW: every free slot 0 in the fixture was on a mono strip, whose Gain
+    submenu offers `單聲道` and `單聲道->立體聲`, and the request's `Stereo` preference is refused
+    there (#855). Naming the plain one is the caller's choice the refusal asks for; the root-menu
+    walk this harness measures is the same either way.
+    """
+    if response.get("menu_failure") != "leaf_not_offered_by_this_strip":
+        return None
+    plain = [item for item in response.get("menu_leaf_offered") or []
+             if isinstance(item, str) and item and "->" not in item]
+    return plain[0] if len(plain) == 1 else None
+
+
+def run_binary(binary, edit_name, preferred_track=None, preferred_configuration=None):
     driver = E.Driver(binary=binary)
     try:
         before, fresh = read_mixer_until(driver, lambda mixer: bool(mixer.get("strips")))
@@ -309,9 +358,19 @@ def run_binary(binary, edit_name, preferred_track=None):
                 result["attempts"].append({"track": track, "error": "slot 0 ceased to be free",
                                            "mixer_before": before_track})
                 continue
-            response = driver.tool("logic_mixer", "insert_plugin", {
-                "track": track, "slot": 0, "plugin_name": "Gain", "confirmed": True,
-            }) or {}
+            configuration = preferred_configuration
+            refusals = []
+            while True:
+                request = {"track": track, "slot": 0, "plugin_name": "Gain", "confirmed": True}
+                if configuration:
+                    request["configuration"] = configuration
+                response = driver.tool("logic_mixer", "insert_plugin", request) or {}
+                menus = close_left_open_menus() if response.get("state") != "A" else None
+                retry = None if configuration else single_configuration(response)
+                if not retry:
+                    break
+                refusals.append({"response": response, "menus_left_open": menus})
+                configuration = retry
             response_slot = response.get("slot")
             slot = response_slot if isinstance(response_slot, int) and response_slot >= 0 else 0
             after, gain_seen = read_mixer_until(
@@ -321,6 +380,8 @@ def run_binary(binary, edit_name, preferred_track=None):
                 timeout=READ_TIMEOUT if response.get("state") == "A" else 3.0)
             gain_at_slot = (plugin_at(strip(after, track), slot) or {}).get("name") == "Gain"
             attempt = {"track": track, "mixer_before": before_track,
+                       "configuration": configuration, "refused_first": refusals,
+                       "menus_left_open": menus,
                        "response": response, "response_slot": response_slot,
                        "mixer_after": after,
                        "gain_seen_at_response_slot": gain_seen and gain_at_slot
@@ -383,8 +444,11 @@ def main():
                         entry["control"] = {"error": "candidate undo was not verified; "
                                                      "control insert was not attempted"}
                     else:
+                        # The candidate's track AND configuration: a control driven on another
+                        # strip, or refused for its channel layout, says nothing about the root.
                         entry["control"] = run_binary(args.control, entry["apple_edit_menu"],
-                                                       entry["candidate"].get("track"))
+                                                       entry["candidate"].get("track"),
+                                                       entry["candidate"].get("configuration"))
                     if lproj == "zh_TW":
                         entry["control_zh_TW_outcome"] = (
                             "control also inserted Gain; defect did not reproduce"
