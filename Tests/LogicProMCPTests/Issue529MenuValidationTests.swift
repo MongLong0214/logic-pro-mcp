@@ -1119,7 +1119,7 @@ struct Issue529MenuValidationTests {
             #"{"result":"MENU_PICK_FAILED: AXPress failed"}"#
         )
 
-        #expect(classification == .failure(.menuPickFailed))
+        #expect(classification == .failure(.menuPickFailed(menuActuationAttempted: nil)))
     }
 
     /// #921. The forced revalidation pass can fail to open the menu at all (unlike `MENU_DISABLED`,
@@ -1127,7 +1127,7 @@ struct Issue529MenuValidationTests {
     /// must not carry the same "the leaf is disabled" meaning, or the refusal message reverts to
     /// the exact ambiguity #921 reported.
     @Test("JSON-wrapped menu-validation-unreadable result refuses the dialog route without claiming disabled")
-    func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() {
+    func jsonWrappedMenuValidationUnreadableRefusesDialogRoute() throws {
         let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
             #"{"result":"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=true"}"#
         )
@@ -1142,7 +1142,8 @@ struct Issue529MenuValidationTests {
         // may already have opened.
         #expect(classification.requiresUnsafeUIRefusal)
         #expect(classification.menuObservation == .closed)
-        #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+        let attempted = try #require(classification.menuActuationAttempted)
+        #expect(attempted)
         #expect(script.contains(
             "return \"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=\" & (menuActuationAttempted as text)"
         ))
@@ -1175,7 +1176,8 @@ struct Issue529MenuValidationTests {
             )
             #expect(classification.diagnosticLabel == "menu_validation_unreadable")
             #expect(classification.requiresUnsafeUIRefusal)
-            #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+            let attempted = try #require(classification.menuActuationAttempted)
+            #expect(attempted)
 
             let sliderWrites = Issue529Counter()
             let result = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -1393,11 +1395,11 @@ struct Issue529MenuValidationTests {
             (.failure(.menuValidationUnreadable(menuActuationAttempted: true)), true),
             (.failure(.malformedPayload), true),
             (.failure(.unexpectedResult), true),
-            (.failure(.menuPickFailed), false),
+            (.failure(.menuPickFailed(menuActuationAttempted: nil)), false),
             (.failure(.menuCouldNotBeClosed(menuActuationAttempted: false, reconciledMenuClosed: false)), true),
             (.failure(.menuCouldNotBeClosed(menuActuationAttempted: true, reconciledMenuClosed: true)), true),
-            (.failure(.dialogPreexisting), true),
-            (.failure(.dialogPreexistenceUnreadable), true),
+            (.failure(.dialogPreexisting(menuActuationAttempted: nil)), true),
+            (.failure(.dialogPreexistenceUnreadable(menuActuationAttempted: nil)), true),
             (.failure(.dialogUnidentifiedNewWindow), true),
             (.failure(.dialogAppearanceUnreadable), true),
             (.failure(.dialogActuationIssued(cleanup: .dialogNotObservedClosed)), true),
@@ -2576,7 +2578,7 @@ struct Issue529MenuValidationTests {
         )
 
         #expect(disabled == .failure(.menuDisabled))
-        #expect(preexisting == .failure(.dialogPreexisting))
+        #expect(preexisting == .failure(.dialogPreexisting(menuActuationAttempted: nil)))
 
         // This was a classifier-only legacy sentinel. The script does not emit it, so it must not
         // survive outside the generator/classifier parity set; it now takes the terminal unparsed
@@ -3043,7 +3045,7 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
 /// never answers CLOSED. The reconciliation fixtures below return a canned answer without running
 /// the generated script (r-941round7), so what they establish about the pass is structural: which
 /// path it was given and what the receipt does with its answer.
-@Suite struct Issue942PostLeafMenuReconciliationTests {
+@Suite(.serialized) struct Issue942PostLeafMenuReconciliationTests {
     typealias Site = AccessibilityChannel.PostLeafCleanupSite
 
     static let sites = AccessibilityChannel.postLeafCleanupSites
@@ -3163,9 +3165,10 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
     }
 
     /// Runs the route on one site's menu refusal with a READY snapshot on the ledger, so a pass
-    /// handed the snapshot path would carry it in its script.
+    /// handed the snapshot path would carry it in its script. With `executionFailureStage` the
+    /// child instead dies after writing that stage to the ledger, which runs the snapshot pass.
     static func runMenuRefusal(
-        _ site: Site, reconcilerAnswer: String, result: String? = nil
+        _ site: Site, reconcilerAnswer: String, result: String? = nil, executionFailureStage: String? = nil
     ) async throws -> (envelope: [String: Any], calls: Int, script: String?, snapshotPath: String, sliderWrites: Int) {
         let sliderWrites = Issue529Counter()
         let calls = Issue529Counter()
@@ -3188,7 +3191,11 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
-            executeDialogScript: { _ in .success(output) },
+            executeDialogScript: { _ in
+                guard let executionFailureStage else { return .success(output) }
+                try? executionFailureStage.write(to: ledger.url, atomically: true, encoding: .utf8)
+                return .error("osascript timedOut")
+            },
             createDialogIssuanceLedger: { ledger }
         )
         let envelope = try #require(issue529Envelope(routed))
