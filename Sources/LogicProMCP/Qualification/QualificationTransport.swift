@@ -102,6 +102,184 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
         return nil
     }
 
+    /// Compare the observed part of the resource, not the whole envelope. Refresh metadata and
+    /// unrelated rows can change between reads; each recipe below checks the field it restored.
+    var restoreMatchesPreState: Bool {
+        guard let operation = OperationID(rawValue: operationID),
+              let before = Self.envelope(preState),
+              let after = Self.envelope(restoreReadback) else { return false }
+
+        // Phase C deletion stages a track and recreates it with a new reference.
+        if QualificationTransport.trackCreateRestoreOperations.contains(operation) {
+            guard let old = Self.trackRefs(before), let restored = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && Set(old) == Set(restored)
+        }
+        if operation == .tracksDelete {
+            guard let old = Self.trackRefs(before), let restored = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && old.count == restored.count
+                && Set(old).intersection(restored).count == old.count - 1
+        }
+        return Self.sameRecipeValue(operation, before, after) == true
+    }
+
+    /// A successful-looking write is not proof of a mutation. Compare the recipe's observable
+    /// before and after the write, with the same track identity where the recipe addresses one.
+    private var mutationMovedRecipeValue: Bool {
+        guard let operation = OperationID(rawValue: operationID),
+              let before = Self.envelope(preState),
+              let after = Self.envelope(readback) else { return false }
+        if QualificationTransport.trackCreateRestoreOperations.contains(operation)
+            || operation == .tracksDelete {
+            guard let old = Self.trackRefs(before), let changed = Self.trackRefs(after) else { return false }
+            return before["complete"] as? Bool == after["complete"] as? Bool
+                && old.count != changed.count && Set(old) != Set(changed)
+        }
+        // transportRestoreCycle records its pre-state from BEFORE its precondition stage: when the
+        // transport already sits where the operation puts it, the recipe first moves it the other
+        // way and throws if that did not happen. So a genuine readback can equal the pre-state, and
+        // the write's movement is shown by the readback being where the operation puts the
+        // transport, which the state just before the write never is.
+        if let expected = QualificationTransport.transportExpectedPlaying[operation] {
+            return Self.transportState(after)?["isPlaying"] as? Bool == expected
+        }
+        return Self.sameRecipeValue(operation, before, after) == false
+    }
+
+    /// nil means the observation is malformed or belongs to another track, not a value change.
+    private static func sameRecipeValue(
+        _ operation: OperationID, _ before: [String: Any], _ after: [String: Any]
+    ) -> Bool? {
+        if let field = QualificationTransport.valueRestoreReadbackField[operation] {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old[field] as? Double,
+                  let observedValue = observed[field] as? Double else { return nil }
+            return oldValue == observedValue
+        }
+        if let field = QualificationTransport.booleanToggleReadbackField[operation] {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old[field] as? Bool,
+                  let observedValue = observed[field] as? Bool else { return nil }
+            return oldValue == observedValue
+        }
+        if operation == .tracksRename || QualificationTransport.historyRestoreDirection[operation] != nil {
+            guard let old = Self.track(before, index: 0),
+                  let observed = Self.track(after, index: 0),
+                  let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
+                  let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
+                  let oldValue = old["name"] as? String,
+                  let observedValue = observed["name"] as? String else { return nil }
+            return oldValue == observedValue
+        }
+        if operation == .tracksSelect {
+            guard let oldRows = before["data"] as? [[String: Any]],
+                  let observedRows = after["data"] as? [[String: Any]],
+                  oldRows.count > 1, observedRows.count > 1,
+                  let oldFirstRef = oldRows[0]["track_ref"] as? String, !oldFirstRef.isEmpty,
+                  let oldSecondRef = oldRows[1]["track_ref"] as? String, !oldSecondRef.isEmpty,
+                  let observedFirstRef = observedRows[0]["track_ref"] as? String,
+                  let observedSecondRef = observedRows[1]["track_ref"] as? String,
+                  oldFirstRef == observedFirstRef, oldSecondRef == observedSecondRef,
+                  let firstWasSelected = oldRows[0]["isSelected"] as? Bool
+            else { return nil }
+            let originalRef = firstWasSelected ? oldFirstRef : oldSecondRef
+            guard let oldSelection = Self.selectedTrackRefs(oldRows),
+                  let observedSelection = Self.selectedTrackRefs(observedRows),
+                  oldSelection.contains(originalRef) else { return nil }
+            return observedSelection == oldSelection
+        }
+        if QualificationTransport.transportExpectedPlaying[operation] != nil {
+            guard let old = Self.transportState(before)?["isPlaying"] as? Bool,
+                  let observed = Self.transportState(after)?["isPlaying"] as? Bool else { return nil }
+            return old == observed
+        }
+        if let field = QualificationTransport.parameterlessToggleField[operation] {
+            guard let old = Self.transportState(before)?[field] as? Bool,
+                  let observed = Self.transportState(after)?[field] as? Bool else { return nil }
+            return old == observed
+        }
+        if operation == .transportSetTempo {
+            guard let old = Self.transportState(before)?["tempo"] as? Double,
+                  let observed = Self.transportState(after)?["tempo"] as? Double else { return nil }
+            return old == observed
+        }
+        if QualificationTransport.playheadRestoreOperations.contains(operation)
+            || operation == .navigateGotoMarker {
+            guard let old = Self.bar(before), let observed = Self.bar(after) else { return nil }
+            return old == observed
+        }
+        if operation == .navigateCreateMarker || QualificationTransport.markerStagedRestoreMode[operation] != nil {
+            guard let old = Self.markerNames(before),
+                  let observed = Self.markerNames(after) else { return nil }
+            return old == observed
+        }
+        return nil
+    }
+
+    var verifiedCycleShape: Bool {
+        readingThatDidNotHappen == nil
+            && mutationMovedRecipeValue
+            && restoreMatchesPreState
+            && Self.writeResponse(mutation)
+            && Self.writeResponse(restore)
+    }
+
+    private static func envelope(_ raw: String) -> [String: Any]? {
+        guard let data = raw.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private static func track(_ envelope: [String: Any], index: Int) -> [String: Any]? {
+        guard let rows = envelope["data"] as? [[String: Any]], rows.indices.contains(index) else {
+            return nil
+        }
+        return rows[index]
+    }
+
+    private static func selectedTrackRefs(_ rows: [[String: Any]]) -> [String]? {
+        var selected: [String] = []
+        for row in rows where (row["isSelected"] as? Bool) == true {
+            guard let ref = row["track_ref"] as? String, !ref.isEmpty else { return nil }
+            selected.append(ref)
+        }
+        return selected.sorted()
+    }
+
+    private static func transportState(_ envelope: [String: Any]) -> [String: Any]? {
+        (envelope["data"] as? [String: Any])?["state"] as? [String: Any]
+    }
+
+    private static func bar(_ envelope: [String: Any]) -> Int? {
+        guard let position = transportState(envelope)?["position"] as? String,
+              let first = position.split(separator: ".").first else { return nil }
+        return Int(first)
+    }
+
+    private static func markerNames(_ envelope: [String: Any]) -> [String]? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let names = rows.compactMap { $0["name"] as? String }
+        return names.count == rows.count ? names.sorted() : nil
+    }
+
+    private static func trackRefs(_ envelope: [String: Any]) -> [String]? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let refs = rows.compactMap { $0["track_ref"] as? String }
+        return refs.count == rows.count ? refs : nil
+    }
+
+    private static func writeResponse(_ raw: String) -> Bool {
+        guard let response = envelope(raw) else { return false }
+        if let state = response["state"] as? String { return state == "A" || state == "B" }
+        return response["success"] as? Bool == true
+    }
+
     enum CodingKeys: String, CodingKey {
         case operationID = "operation_id"
         case preState = "pre_state"
@@ -209,9 +387,8 @@ struct QualificationOperationResult: Equatable, Sendable {
     let deadline: DeadlineClass
     let failureReason: String?
     /// ADR-001-c / #373 Phase B evidence: the verified write-and-restore cycle for a MUTATING
-    /// operation, or nil when no recipe ran. Non-nil means every step of that cycle held — see
-    /// `muteRestoreCycle`, which is the only constructor and refuses rather than returning a
-    /// record for a cycle that did not verify.
+    /// operation, or nil when no recipe ran. Each recipe refuses rather than returning a record
+    /// for a cycle whose own checks did not verify; `verifiedCycleShape` rechecks its recorded proof.
     let mutationRestore: QualificationMutationRestoreRecord?
     /// Why a Phase-B recipe that RAN produced no record. Nil when no recipe exists for the
     /// operation — the two are different facts and the deferral below says which.
@@ -307,6 +484,21 @@ struct QualificationOperationResult: Equatable, Sendable {
         )
     }
 
+    /// The case's statement of this operation's write cycle (#984), or nil when no record exists.
+    ///
+    /// `verified` is true when the restore was READ BACK and MATCHED the original under the
+    /// recipe's comparison rule. Not `status == .passed`,
+    /// which is what `readback` uses: a cycle whose restore verified is still that when the
+    /// operation's own readback was inadmissible, and the credit rule checks the status itself.
+    var restore: QualificationRestoreEvidence? {
+        guard let record = mutationRestore,
+              let digest = try? QualificationRunner.recordDigest(record) else { return nil }
+        return QualificationRestoreEvidence(
+            recordSHA256: digest,
+            verified: record.verifiedCycleShape
+        )
+    }
+
     var status: QualificationStatus {
         if failureReason != nil || responseData == nil || readbackArtifactData == nil {
             return .failed
@@ -354,9 +546,10 @@ struct QualificationOperationResult: Equatable, Sendable {
             // operation's LATER readback and returns `.admissible` unconditionally for any policy
             // that is not `.readbackRequired` — `transport.toggle_cycle` and `transport.set_tempo`
             // among them. So the record's own readings are inspected here for whether a reading
-            // happened at all, which is a question freshness never asks.
+            // happened at all, which is a question freshness never asks. The recorded restore is
+            // compared with the pre-state under the recipe's observable as well.
             if let record = mutationRestore, readbackFreshness.isAdmissible {
-                return record.readingThatDidNotHappen == nil ? .passed : .notQualified
+                return record.verifiedCycleShape ? .passed : .notQualified
             }
             return .notQualified
         }

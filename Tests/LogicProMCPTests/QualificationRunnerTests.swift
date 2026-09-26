@@ -156,19 +156,9 @@ struct QualificationRunnerTests {
     @Test func aPassingWriteCycleIsFiledAsOneAndCarriesItsRecord() throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksRename })
         // The three READINGS are whole resource bodies, not words. `readingThatDidNotHappen`
-        // parses each as a JSON envelope and refuses one it cannot read, because a record whose
-        // "readback" is the string `after` documents nothing that was observed. The product fills
-        // them from `logic://tracks` payloads; a fixture that puts bare words there defers for a
-        // reason that has nothing to do with the case. `mutation` and `restore` are the values
-        // written, not readings, and are not parsed.
-        let record = QualificationMutationRestoreRecord(
-            operationID: spec.id.rawValue,
-            preState: #"{"source":"ax_live","data":[{"name":"before"}]}"#,
-            mutation: "after",
-            readback: #"{"source":"ax_live","data":[{"name":"after"}]}"#,
-            restore: "before",
-            restoreReadback: #"{"source":"ax_live","data":[{"name":"before"}]}"#
-        )
+        // parses each as a JSON envelope and refuses one it cannot read. Writes are tool response
+        // envelopes; the comparison uses the track name and identity in the resource readings.
+        let record = Self.recipeShapedRecord()
         // The probe is a typed zero-write REFUSAL. That is the only way a mutating operation
         // reaches `.passed`, and it is what made `operationIsError == false` unsatisfiable.
         let refusal = Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8)
@@ -701,6 +691,103 @@ struct QualificationRunnerTests {
         )
         #expect(verification.exitCode == 0, "\(verification.stdout)")
         #expect(!FileManager.default.fileExists(atPath: sentinelURL.path))
+    }
+
+    @Test func trustedVerifierAcceptsSignedRecipeShapedCycle() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        let cycleCase = try #require(attestation.cases.first { $0.operationID == "tracks.rename" })
+        #expect(cycleCase.status == .passed)
+        #expect(cycleCase.verificationKind == .verifiedWriteCycle)
+        let restore = try #require(cycleCase.restore)
+        #expect(restore.verified)
+        #expect(PromotionGate.operationIsLiveCredited(cycleCase))
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        #expect(result.exitCode == 0, "\(result.stdout)")
+    }
+
+    @Test func trustedVerifierRejectsNoOpReadbackInMutationArtifact() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let artifactURL = fixture.directory.appendingPathComponent(
+            "mutation-restore-compensation.json"
+        )
+        var artifact = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: artifactURL)) as? [String: Any]
+        )
+        var records = try #require(artifact["records"] as? [[String: Any]])
+        let recordIndex = try #require(records.firstIndex {
+            $0["operation_id"] as? String == OperationID.tracksRename.rawValue
+        })
+        let preState = try #require(records[recordIndex]["pre_state"] as? String)
+        records[recordIndex]["readback"] = preState
+        artifact["records"] = records
+        let artifactData = try JSONSerialization.data(withJSONObject: artifact, options: [.sortedKeys])
+        try artifactData.write(to: artifactURL, options: .atomic)
+
+        // Keep the artifact entry's digest current so the schema check sees the no-op record.
+        // The signed bundle's other bindings may also reject this tampering; this witness checks
+        // that the trusted artifact validator itself rejects the recipe shape.
+        var manifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL)) as? [String: Any]
+        )
+        var entries = try #require(manifest["files"] as? [[String: Any]])
+        let entryIndex = try #require(entries.firstIndex {
+            $0["path"] as? String == "mutation-restore-compensation.json"
+        })
+        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(artifactData)
+        manifest["files"] = entries
+        try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
+            .write(to: fixture.manifestURL, options: .atomic)
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        #expect(result.exitCode != 0)
+        let json = try Self.resultObject(result)
+        let rejections = try #require(json["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "requiredArtifactSchemaInvalid"
+                && $0["name"] as? String == "mutation-restore-compensation.json"
+        })
+    }
+
+    @Test func promotionVerifierRejectsUnrestoredOrMalformedCycle() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let invalid = [
+            Self.recipeShapedRecord(
+                restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"After"}]}"#),
+            Self.recipeShapedRecord(mutation: "After"),
+            Self.recipeShapedRecord(restoreReadback: "Before"),
+        ]
+        for record in invalid {
+            let driveResult = Self.driveResult(specs: [spec], mutationRestoreRecords: [record])
+            let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
+            defer { fixture.remove() }
+            try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+            let result = await fixture.verify(
+                expectedSHA256: fixture.binarySHA256,
+                requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
+            )
+            #expect(result.exitCode != 0)
+            #expect(Self.rejectionReasons(try Self.resultObject(result))
+                .contains("requiredArtifactSchemaInvalid"))
+        }
     }
 
     @Test func standaloneVerifierRejectsEveryPromotionBypassWithTypedReasons() async throws {
@@ -1996,9 +2083,9 @@ struct QualificationRunnerTests {
         // Phase B started promoting on a mutation/restore record, and a blind review found the
         // sentence still sitting here: the `phaseBPasses` expectation below requires a mutating
         // operation to be `.passed` on a recorded write cycle, and it passes on a live run. That is
-        // a pass, not credit -- `PromotionGate.operationIsLiveCredited` credits `.semanticReadback`
-        // alone (#984). Listing mutating operations here would still be listing the Phase-B gap
-        // rather than Phase A's, which is why this filter stays as it is.
+        // a pass, and since #984 it is credit too when its restore verified -- asserted below.
+        // Listing mutating operations here would still be listing the Phase-B gap rather than
+        // Phase A's, which is why this filter stays as it is.
         let readOnlyShort = readOnly
             .filter { $0.status != .passed }
             .map { "\($0.operationID)=\($0.status.rawValue)" }
@@ -2028,7 +2115,8 @@ struct QualificationRunnerTests {
                 operationID: result.operationID,
                 verificationKind: result.verificationKind,
                 deferral: result.deferral,
-                readback: result.readback
+                readback: result.readback,
+                restore: result.restore
             )
         }
         let attestation = ReleaseQualificationAttestation(
@@ -2098,18 +2186,28 @@ struct QualificationRunnerTests {
         // removed still earns, so `!credited.isEmpty` on its own cannot tell a working Phase B from
         // an absent one -- the same vacuity as the `allSatisfy` above, one level out.
         #expect(!credited.isEmpty)
-        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. It is not
-        // mutating CREDIT, which cannot exist: a mutating operation passes only on a cycle, a pass
-        // on a cycle is filed `.verifiedWriteCycle` (`QualificationOperationResult.verificationKind`),
-        // and `PromotionGate.operationIsLiveCredited` credits `.semanticReadback` alone. The first
-        // version asserted mutating credit, had never run against a live Logic, and failed on every
-        // run once it did (2026-09-25, v3.17.0 preflight: credited=21, none of them mutating).
+        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. On
+        // 2026-09-25 (v3.17.0 preflight) the first version of this assertion asked for mutating
+        // CREDIT, which could not exist then: `operationIsLiveCredited` credited
+        // `.semanticReadback` alone (credited=21, none mutating). #984 decided a verified write
+        // cycle credits, so the assertion is the stronger one again, in two parts:
+        //   * a mutating operation passed on a recorded write cycle. Kept because a mutant that
+        //     files every pass `.semanticReadback` would satisfy the credit half on its own -- it
+        //     would credit mutating operations through the READ rule;
+        //   * EVERY such pass is credited. A pass is filed `.verifiedWriteCycle` only with a
+        //     record whose readings all happened, which is what `restore.verified` states, so a
+        //     pass the rule does not credit is the producer and the rule disagreeing.
         let phaseBPasses = mutating.filter {
             $0.status == .passed && $0.verificationKind == .verifiedWriteCycle
         }
         #expect(
             !phaseBPasses.isEmpty,
             "no mutating operation passed on a recorded write cycle, so Phase B did nothing this run"
+        )
+        let phaseBUncredited = Set(phaseBPasses.map(\.operationID)).subtracting(credited)
+        #expect(
+            phaseBUncredited.isEmpty,
+            "write-cycle passes the credit rule refused: \(phaseBUncredited.sorted())"
         )
         print("phase-b passes: \(phaseBPasses.map(\.operationID).sorted().joined(separator: ", "))")
     }
@@ -3109,14 +3207,7 @@ struct QualificationRunnerTests {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let driveResult = Self.driveResult(
             specs: [spec],
-            mutationRestoreRecords: [.init(
-                operationID: "tracks.rename",
-                preState: "Before",
-                mutation: "After",
-                readback: "After",
-                restore: "Before",
-                restoreReadback: "Before"
-            )]
+            mutationRestoreRecords: [Self.recipeShapedRecord()]
         )
         let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
         defer { fixture.remove() }
@@ -3559,14 +3650,7 @@ struct QualificationRunnerTests {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(
             specs: specs,
-            mutationRestoreRecords: [.init(
-                operationID: "tracks.rename",
-                preState: "Before",
-                mutation: "After",
-                readback: "After",
-                restore: "Before",
-                restoreReadback: "Before"
-            )]
+            mutationRestoreRecords: [Self.recipeShapedRecord()]
         )
         let executableData: Data
         if let candidateExecutionSentinelURL {
@@ -3594,6 +3678,20 @@ struct QualificationRunnerTests {
         try JSONEncoder().encode(operationWaivers + Self.axisWaivers())
             .write(to: fixture.waiversURL)
         return fixture
+    }
+
+    private static func recipeShapedRecord(
+        mutation: String = #"{"state":"A","success":true}"#,
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#
+    ) -> QualificationMutationRestoreRecord {
+        QualificationMutationRestoreRecord(
+            operationID: OperationID.tracksRename.rawValue,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#,
+            mutation: mutation,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"After"}]}"#,
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: restoreReadback
+        )
     }
 
     private func signedTrustedFixture(
@@ -3956,7 +4054,8 @@ struct QualificationRunnerTests {
                             : "logic://system/health",
                     readbackRequestID: "fake-readback-\(spec.id.rawValue)",
                     readbackData: readback,
-                    failureReason: spec.id == failedOperationID ? "synthetic operation failure" : nil
+                    failureReason: spec.id == failedOperationID ? "synthetic operation failure" : nil,
+                    mutationRestore: mutationRestoreRecords.first { $0.operationID == spec.id.rawValue }
                 )
             )
             }
