@@ -307,6 +307,23 @@ struct QualificationOperationResult: Equatable, Sendable {
         )
     }
 
+    /// The case's statement of this operation's write cycle (#984), or nil when no record exists.
+    ///
+    /// `verified` is true when the restore was READ BACK and MATCHED the original, which takes two
+    /// facts: the record exists at all -- every recipe throws instead of building one when its
+    /// restore readback differs from the pre-state -- and none of its readings says it did not
+    /// happen. The second is the part a record's presence cannot supply. Not `status == .passed`,
+    /// which is what `readback` uses: a cycle whose restore verified is still that when the
+    /// operation's own readback was inadmissible, and the credit rule checks the status itself.
+    var restore: QualificationRestoreEvidence? {
+        guard let record = mutationRestore,
+              let digest = try? QualificationRunner.recordDigest(record) else { return nil }
+        return QualificationRestoreEvidence(
+            recordSHA256: digest,
+            verified: record.readingThatDidNotHappen == nil
+        )
+    }
+
     var status: QualificationStatus {
         if failureReason != nil || responseData == nil || readbackArtifactData == nil {
             return .failed

@@ -1996,9 +1996,9 @@ struct QualificationRunnerTests {
         // Phase B started promoting on a mutation/restore record, and a blind review found the
         // sentence still sitting here: the `phaseBPasses` expectation below requires a mutating
         // operation to be `.passed` on a recorded write cycle, and it passes on a live run. That is
-        // a pass, not credit -- `PromotionGate.operationIsLiveCredited` credits `.semanticReadback`
-        // alone (#984). Listing mutating operations here would still be listing the Phase-B gap
-        // rather than Phase A's, which is why this filter stays as it is.
+        // a pass, and since #984 it is credit too when its restore verified -- asserted below.
+        // Listing mutating operations here would still be listing the Phase-B gap rather than
+        // Phase A's, which is why this filter stays as it is.
         let readOnlyShort = readOnly
             .filter { $0.status != .passed }
             .map { "\($0.operationID)=\($0.status.rawValue)" }
@@ -2028,7 +2028,8 @@ struct QualificationRunnerTests {
                 operationID: result.operationID,
                 verificationKind: result.verificationKind,
                 deferral: result.deferral,
-                readback: result.readback
+                readback: result.readback,
+                restore: result.restore
             )
         }
         let attestation = ReleaseQualificationAttestation(
@@ -2098,18 +2099,28 @@ struct QualificationRunnerTests {
         // removed still earns, so `!credited.isEmpty` on its own cannot tell a working Phase B from
         // an absent one -- the same vacuity as the `allSatisfy` above, one level out.
         #expect(!credited.isEmpty)
-        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. It is not
-        // mutating CREDIT, which cannot exist: a mutating operation passes only on a cycle, a pass
-        // on a cycle is filed `.verifiedWriteCycle` (`QualificationOperationResult.verificationKind`),
-        // and `PromotionGate.operationIsLiveCredited` credits `.semanticReadback` alone. The first
-        // version asserted mutating credit, had never run against a live Logic, and failed on every
-        // run once it did (2026-09-25, v3.17.0 preflight: credited=21, none of them mutating).
+        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. On
+        // 2026-09-25 (v3.17.0 preflight) the first version of this assertion asked for mutating
+        // CREDIT, which could not exist then: `operationIsLiveCredited` credited
+        // `.semanticReadback` alone (credited=21, none mutating). #984 decided a verified write
+        // cycle credits, so the assertion is the stronger one again, in two parts:
+        //   * a mutating operation passed on a recorded write cycle. Kept because a mutant that
+        //     files every pass `.semanticReadback` would satisfy the credit half on its own -- it
+        //     would credit mutating operations through the READ rule;
+        //   * EVERY such pass is credited. A pass is filed `.verifiedWriteCycle` only with a
+        //     record whose readings all happened, which is what `restore.verified` states, so a
+        //     pass the rule does not credit is the producer and the rule disagreeing.
         let phaseBPasses = mutating.filter {
             $0.status == .passed && $0.verificationKind == .verifiedWriteCycle
         }
         #expect(
             !phaseBPasses.isEmpty,
             "no mutating operation passed on a recorded write cycle, so Phase B did nothing this run"
+        )
+        let phaseBUncredited = Set(phaseBPasses.map(\.operationID)).subtracting(credited)
+        #expect(
+            phaseBUncredited.isEmpty,
+            "write-cycle passes the credit rule refused: \(phaseBUncredited.sorted())"
         )
         print("phase-b passes: \(phaseBPasses.map(\.operationID).sorted().joined(separator: ", "))")
     }
