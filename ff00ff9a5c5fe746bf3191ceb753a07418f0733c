@@ -1,0 +1,23 @@
+Limit: Nothing here ran against Logic. The live release-gate test that exercises the credit on real results needs a release build and a running Logic and was skipped, so no operation is shown credited from a real run.
+Limit: The restore flag rests on the recipes' own comparison -- every recipe throws instead of building a record whose restore readback differs from the pre-state. The verifier does not recompute that match from the record's bytes; it checks that the readings happened and that the digests agree.
+Ruled-out: credit a write cycle on the presence of a restore record | presence says a cycle was written down, not that the restore was read back and matched; the #984 decision names that exact distinction
+Ruled-out: recompute restore-matched from the record inside the gate | the readings are whole envelopes and each recipe compares a different field, so no one byte comparison means matched; the gate also sees only the attestation's cases, not the records
+Warn: #expect(<Bool> == <Bool>) records no issue on this toolchain (#393). A first draft asserted restore?.verified == false and the always-verified mutant survived it; assert bare or negated Bools after #require.
+Warn: evidence(_:binds:) requires the case's restore.record_sha256 to equal the evidence's mutation_restore_record_sha256. Dropping it leaves the credit rule reading a restore claim bound to nothing; aCaseMustNameTheRecordItsEvidenceBinds fails.
+Record-Id: r-984writecyclecredit
+Provenance: inherited 51f0d1f379e8df028212227ab9aa5ea0fdfbfaf4
+
+Limit: checked against recorded fixtures and the recipe-shaped typed record; no live qualification ran, and the disabled Phase-C track recipes have comparison branches never driven live
+Warn: restoreMatchesPreState restates each recipe's restore comparison (row 0, exact equality, the recipe's field); a recipe that changes its comparison or reads another track index must change this too, or its cycles stop earning credit
+Record-Id: r-377c1b838d68
+Provenance: inherited 9d9f6d656c561dcd9d6a3f6ed510240184ae69f4
+
+Limit: the identity and no-op checks are unit-tested against recipe-shaped records with mutants killed; no live qualification ran against them, and the disabled Phase-C track recipes were not driven
+Warn: verifiedCycleShape requires the readback to differ from the pre-state on the same track; a recipe whose target equals the value already there earns no credit, so a recipe must choose a target away from the fixture's value
+Record-Id: r-399cf70b519f
+Provenance: inherited 45993b31afdf3f6a1fcd00d6f0669a359997d4b2
+
+Limit: the producer's staging guard is not driven by a unit test, since transportRestoreCycle drives a real server subprocess and has no seam; typed records cover staged, unstaged and misplaced readbacks for play, stop and pause
+Warn: transport operations are the exception to the differs-from-pre-state rule: the readback must be where the operation puts the transport, because transportRestoreCycle records its pre-state before staging the opposite state; a new recipe that stages before its mutation must read its pre-state after the stage or get the same exception
+Record-Id: r-c3fa56f56fb6
+Provenance: inherited 1a88f6583b2406e8f3809b9ea4c2207cb1991025
