@@ -221,6 +221,50 @@
           "locale": "-"
         },
         {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
           "source": "nibstrings",
           "locale": "en"
         },

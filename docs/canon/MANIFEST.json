@@ -4,6 +4,28 @@
     "absence/madsp.-.u32": "1402d0aea9a289b16bf15768528068f6a915bed279000dfbf650cf4fe1fd351f",
     "absence/nib.-.folded.u32": "f40a37598e4af1f2bcac78dc60028cd2e7e41860ea09c55198d0e7b7e5d05add",
     "absence/nib.-.u32": "7e2d01e8bc426022e74b705ccc72b0e7235125abe2cf6fe7681a27397fd47db9",
+    "absence/niblabels.-.folded.u32": "d1d021ebf4f1d37a82355cba1ac4a31b0f00a3a66b80e18d924a25ae8d22ca3f",
+    "absence/niblabels.-.u32": "7f1f6eb48a57d3691968198a57c32b2e73ae680c07931d504a130647054657fd",
+    "absence/niblabels.de.folded.u32": "4817424bd8a2e7fce5a7000c911d3e35b9ec8f5da97b11a8f760e21b41d2833d",
+    "absence/niblabels.de.u32": "9a9de4ada3cde163f1169206aa17fa15db168325cf255331dbda9d5a721ea6e0",
+    "absence/niblabels.en.folded.u32": "4ebe256391c97f255ac43d708282ca25ac978414a79f59dc100cc45e3daa1be8",
+    "absence/niblabels.en.u32": "668ea9bdff985d086a692e98d882bddd36304152c5f0f5b093cc3847103dbd1a",
+    "absence/niblabels.es.folded.u32": "3419c9305df6ff12be4978665badac7ea82ca0534d4f77960a76da213970b4b0",
+    "absence/niblabels.es.u32": "912972e36c12f0242ad36cc12dbfdbf0cc5da886bcf786387a630fed0d3306aa",
+    "absence/niblabels.fr.folded.u32": "575340d64cb0b6a24bf43e2dcb0601a40e48badbfced3ed68f809cde5193c9aa",
+    "absence/niblabels.fr.u32": "10cc303efe832d186c3e41590ad90ab45cd3e22e3c56a7d8d70516e1d66ccd33",
+    "absence/niblabels.it.folded.u32": "2392e2df7ff1918ed44c559af35c143b98e5ea6702280fa2b39b4b1cb3d86867",
+    "absence/niblabels.it.u32": "1682f380f68d7ff70a4446f92185597e4bb6406038e3fd327de691c543b9155d",
+    "absence/niblabels.ja.folded.u32": "ab1ae7b9cd8828cf388062e89ea7ebcfc0ff7825260de01b0e9bbe387f82ce8b",
+    "absence/niblabels.ja.u32": "c736b5c46b3b5329450b79fd0de1db02a8fca1f7fe39f109cb85ea95e69b582b",
+    "absence/niblabels.ko.folded.u32": "4eeadbfc1f96faf782cb73767cfe39c3487f18953dacfa7b1991b88cde786e2a",
+    "absence/niblabels.ko.u32": "10417b16d00223ac89624c111d18987793d9d16fa55ac05d8a0159893b1e76bd",
+    "absence/niblabels.pt.folded.u32": "8a9eb9b5fe9645b3525960fbf7c62096e38c001f6347243d8efb207a25d859e5",
+    "absence/niblabels.pt.u32": "d61df64de60a81adf4984f4c6ce34a1f447d01cefdf5d3f132a663f9dc8069b5",
+    "absence/niblabels.zh_CN.folded.u32": "9cfb20db77ab091c120ec0ef607eb602f193408d5599e9636d3369fe74061b29",
+    "absence/niblabels.zh_CN.u32": "e922419ea63d16d02099a41a26dc4074762506481527dad50a9cb99d649cc4e0",
+    "absence/niblabels.zh_TW.folded.u32": "44d490fd72d79dd670f8d045cb2a10f953b865d5e8e7471fa49194e9888d392c",
+    "absence/niblabels.zh_TW.u32": "93e583c59300c520cbab52bc249d51dc3884c203169adc3c3a287daf74754bc5",
     "absence/nibstrings.en.folded.u32": "4126a61e469582b90578e149098ba1f1b9f98353530c3456295e7c720641420f",
     "absence/nibstrings.en.u32": "a417fdb909f57d7a44b43ed23ccdcd8521822c31ca55116f7e300797247b791e",
     "absence/quickhelp.de.folded.u32": "b31c23794ee49f1e61b9474bcbff555985890e7958e946022d612f35d28fb00d",
@@ -48,24 +70,39 @@
     "absence/strings.zh_CN.u32": "00411c6c92eb549954f8a9f025f0bbbff1318392cc6ec0a906f53c105eb607eb",
     "absence/strings.zh_TW.folded.u32": "3ac8f9d9bf1ad618500c13f453a4d977b056f3cd5702038a6784e3d8f3664519",
     "absence/strings.zh_TW.u32": "ef81ff10d762c8422eabdfa6a06770c5dc4db62922b7318742d778cee7e58bcb",
-    "absence/translated.en.u32": "76e168e6b66ad5d0149f4a89a31af2d7339b3709945cba1775184388f41040ee",
+    "absence/translated.en.u32": "68a2626a813876c46cc415d757a9ea3c8096eec280155f6e81ecb1341354e444",
     "index/madsp.tsv": "664b694f0bacce322cf8b15a4539594f2106d2d5b7c38b10b0e3e508b30d2320",
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nib.tsv": "b93ad8637d21efa0dd4a376f66209b3a68e514707191d42c1fd27c4fd372d3d5",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
+    "index/niblabels.tsv": "b78d3501fd42cdff6a47c857a48cddd2912e78961ed111cdb6acf16dacb23928",
+    "index/niblabels.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nibstrings.tsv": "ac732bc853eb32faf7d61ad3665bcd1805dbb1e325fb12bfe9cceb3fa3ec2ef4",
     "index/nibstrings.values.tsv": "4a65c93478104768845b361e40d5d902436f256b77a160b0cfcd455ad2075cff",
     "index/quickhelp.tsv": "0568c660242037aca4b2205e9049e08d4049f18b434517badf7e94b88d435630",
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "bc5ca31723a2455ef5334e36026b2f8432f6dd7184a226f01c39d9676dc068eb",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "7c9b00ce6b5b3c4bf3deab1cb1ec13488bc92615c532a5c9d1bd67563056811c",
+    "ledger/casefold.tsv": "c73b776c3e9b31a7cfcf15d9476c4434a3b7ae26d2c574b0d95b5031d60a2e1f",
     "ledger/presence.tsv": "e72b42f3a002a6d4ec3a14fa9c094ae8dd4ef5c283ed490b9c7784e0e729fe00"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
     "madsp": {
       "-": 16
+    },
+    "niblabels": {
+      "-": 37,
+      "de": 29,
+      "en": 35,
+      "es": 25,
+      "fr": 30,
+      "it": 29,
+      "ja": 35,
+      "ko": 43,
+      "pt": 30,
+      "zh_CN": 31,
+      "zh_TW": 32
     },
     "nibstrings": {
       "en": 96
@@ -172,6 +209,65 @@
       },
       "locales": [
         "-"
+      ]
+    },
+    "niblabels": {
+      "absence_entries": {
+        "-": 1534,
+        "de": 437,
+        "en": 437,
+        "es": 439,
+        "fr": 440,
+        "it": 432,
+        "ja": 430,
+        "ko": 435,
+        "pt": 433,
+        "zh_CN": 431,
+        "zh_TW": 430
+      },
+      "absence_false_positive": {
+        "-": 3.57162e-07,
+        "de": 1.01747e-07,
+        "en": 1.01747e-07,
+        "es": 1.02213e-07,
+        "fr": 1.02445e-07,
+        "it": 1.00583e-07,
+        "ja": 1.00117e-07,
+        "ko": 1.01281e-07,
+        "pt": 1.00816e-07,
+        "zh_CN": 1.0035e-07,
+        "zh_TW": 1.00117e-07
+      },
+      "cited_rows": 26,
+      "cited_values": 0,
+      "corpus_digest": "4b33113b014a85e773a4add45b605325f93dd38b56b9e13c3abfe5acb4fcaa1d",
+      "entries": 9259,
+      "files": 1007,
+      "folded_entries": {
+        "-": 1503,
+        "de": 425,
+        "en": 423,
+        "es": 428,
+        "fr": 430,
+        "it": 422,
+        "ja": 420,
+        "ko": 424,
+        "pt": 423,
+        "zh_CN": 420,
+        "zh_TW": 422
+      },
+      "locales": [
+        "-",
+        "de",
+        "en",
+        "es",
+        "fr",
+        "it",
+        "ja",
+        "ko",
+        "pt",
+        "zh_CN",
+        "zh_TW"
       ]
     },
     "nibstrings": {
@@ -468,5 +564,5 @@
       ]
     }
   },
-  "translated_en_values": 68417
+  "translated_en_values": 68548
 }
