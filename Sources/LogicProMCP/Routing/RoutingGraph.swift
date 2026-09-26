@@ -94,8 +94,10 @@ struct RoutingEdge: Codable, Equatable, Sendable {
 }
 
 struct RoutingGraph: Codable, Equatable, Sendable {
-    /// The project reference when one has already been issued. A mixer read
-    /// must not mint a project identity merely to fill this field.
+    /// Issued through `ProjectReferenceIssuance`, the same observed project
+    /// identity `logic://project/info` uses, from the cached name and bundle
+    /// path only. Nil, with the reason in `partialReason`, when the cache does
+    /// not yet carry both.
     let projectReference: TargetReference?
     let projectEpoch: UInt64
     let complete: Bool

@@ -23,8 +23,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   for track_index=N`. Two track rows sharing one id no longer crash the server. `mixer_strip_ref` is
   now emitted only for a strip whose track id is unique and eligible, and `logic://mixer` drops an
   Inspector-contaminated track list the way `logic://tracks` already did. Limits: verified on
-  fixtures, not yet re-measured against Logic; a strip is still joined to a track by position; the
-  graph's `projectReference` still appears only after `logic://project/info` has been read.
+  fixtures, not yet re-measured against Logic; a strip is still joined to a track by position.
+- **The mixer graph's `projectReference` no longer needs a prior `logic://project/info` read
+  (#291).** Both resources derive the project reference in one place from the same observed name
+  and bundle path, so either read order yields the same `prj_` reference. The mixer uses only the
+  cached name and the bundle path the poller filled — it reads neither the project file nor
+  AppleScript — and when the cache carries no bundle path `partialReason` says `project identity
+  not yet observed: the cache carries no project name and bundle path`. Limits: verified on
+  fixtures, not yet re-measured against Logic; before the poller's first project poll the mixer
+  reports the project as unobserved even though `logic://project/info` can issue a reference from
+  the project file.
 
 ---
 

@@ -344,6 +344,21 @@ extension ResourceHandlers {
         return now.timeIntervalSince(fetchedAt) <= freshThreshold ? "ax_poll" : "cache_stale"
     }
 
+    static let staleProjectIssuanceMessage = "project target snapshot became stale during resource emission"
+
+    /// A stale snapshot is thrown, not published as a missing reference: the reader observed a
+    /// project the registry has already moved past.
+    static func routingProjectBinding(for issuance: ProjectIssuance) throws -> RoutingProjectBinding {
+        switch issuance {
+        case .issued(let reference):
+            return .issued(reference)
+        case .unobserved(let reason):
+            return .unavailable(reason: reason)
+        case .stale:
+            throw MCPError.internalError(staleProjectIssuanceMessage)
+        }
+    }
+
     static func readMixer(
         cache: StateCache,
         uri: String,
@@ -391,9 +406,15 @@ extension ResourceHandlers {
                 payload.append(object)
             }
             stripsJSON = encodeJSONObject(payload)
-            if let projectReference = await targetRegistry.issuedCurrentProjectReference(snapshot: targetSnapshot) {
-                project = .issued(projectReference)
-            }
+            // From the cached name and poller-filled bundle path only: this read runs after every
+            // poll, outside the #199 deadline, so it must not read the project file or AppleScript.
+            let cachedProject = await cache.getProject()
+            project = try routingProjectBinding(for: await ProjectReferenceIssuance.issue(
+                name: cachedProject.name,
+                filePath: cachedProject.filePath,
+                registry: targetRegistry,
+                snapshot: targetSnapshot
+            ))
         } else {
             stripsJSON = encodeJSON(strips)
         }
@@ -587,29 +608,22 @@ extension ResourceHandlers {
         if let age = lastSavedAgeSec { extras["last_saved_age_sec"] = age }
 
         var body = encodeJSON(info)
-        if FeatureFlags.adr002TargetRef,
-           let targetRegistry,
-           let targetSnapshot,
-           let projectFilePath = info.filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !projectFilePath.isEmpty {
-            let projectName = info.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !projectName.isEmpty {
-                let descriptor = TargetDescriptor.project(
-                    name: projectName,
-                    filePath: projectFilePath,
-                    epoch: targetSnapshot.projectEpoch
-                )
-                guard let reference = await targetRegistry.bind(
-                    kind: .project,
-                    descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint,
-                    snapshot: targetSnapshot
-                ) else {
-                    throw MCPError.internalError("project target snapshot became stale during resource emission")
-                }
+        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
+            let issuance = await ProjectReferenceIssuance.issue(
+                name: info.name,
+                filePath: info.filePath,
+                registry: targetRegistry,
+                snapshot: targetSnapshot
+            )
+            switch issuance {
+            case .issued(let reference):
                 var object = (jsonObject(info) as? [String: Any]) ?? [:]
                 object["project_ref"] = reference.rawValue
                 body = encodeJSONObject(object)
+            case .unobserved:
+                break
+            case .stale:
+                throw MCPError.internalError(staleProjectIssuanceMessage)
             }
         }
         if FeatureFlags.adr006VersionedCache {
