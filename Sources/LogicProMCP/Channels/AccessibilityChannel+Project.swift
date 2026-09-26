@@ -347,7 +347,8 @@ extension AccessibilityChannel {
         observationBudgetMs: Int,
         witnessSummary: ModalReconcileWitnessSummary? = nil,
         modalUnreadableReason: ModalReadFailure? = nil,
-        modalSheetScanFailureDetail: ModalSheetScanFailureDetail? = nil
+        modalSheetScanFailureDetail: ModalSheetScanFailureDetail? = nil,
+        newTrackSheetCleanup: NewTrackSheetCleanup? = nil
     ) -> String {
         var extras: [String: Any] = [
             "operation": "project.new",
@@ -384,6 +385,9 @@ extension AccessibilityChannel {
             } else if modalUnreadableReason.originatesInSheetScan {
                 extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
             }
+        }
+        if let newTrackSheetCleanup {
+            extras["new_track_sheet_cleanup"] = newTrackSheetCleanup.envelopeValue
         }
         return HonestContract.encodeStateB(
             reason: .readbackUnavailable,
@@ -432,7 +436,9 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         selection: String,
         observationAttempts: Int = 80,
-        observationDelayNanoseconds: UInt64 = 250_000_000
+        observationDelayNanoseconds: UInt64 = 250_000_000,
+        newTrackSheetCleanupAttempts: Int = 10,
+        zeroTrackSettleObservations: Int = 12
     ) async -> ChannelResult {
         // Some Creator Studio builds open a zero-track Project directly, while
         // others expose Logic's mandatory New Track sheet. Reuse the existing
@@ -461,6 +467,13 @@ extension AccessibilityChannel {
         // clears it, so the unknown-sheet envelope below can also name the
         // exact node/scan behind the failure.
         var lastModalSheetScanFailureDetail: ModalSheetScanFailureDetail?
+        // #883: the last COMPLETE observation saw this operation's New Track sheet. If the budget
+        // then runs out on unreadable polls, that sheet may still be up at the give-up point.
+        var lastCompleteObservationWasNewTrackSheet = false
+        // #883: whether any complete observation has seen the New Track sheet, and how many
+        // complete observations have since found the new window with no track and no sheet.
+        var newTrackSheetSeen = false
+        var zeroTrackSettlePolls = 0
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
@@ -486,9 +499,11 @@ extension AccessibilityChannel {
             // later complete observation's final envelope.
             lastModalUnreadableReason = nil
             lastModalSheetScanFailureDetail = nil
+            lastCompleteObservationWasNewTrackSheet = outcome.kind == .mandatoryNewTrack
 
             switch outcome.kind {
             case .mandatoryNewTrack:
+                newTrackSheetSeen = true
                 if let observedWitnessSummary = outcome.witnessSummary {
                     witnessSummary = observedWitnessSummary
                 }
@@ -522,6 +537,15 @@ extension AccessibilityChannel {
                     if let actionFailure = mandatoryTrackCreateActionFailure {
                         extras["reconcile_action_error"] = actionFailure.diagnosticLabel
                     }
+                    // #883: giving up here used to leave this operation's own sheet on screen, and
+                    // the next create was refused `preflight_blocking_dialog`. Dismiss it and say
+                    // what a re-read saw; the state stays B because Create may have landed.
+                    let cleanup = await dismissOwnedNewTrackSheet(
+                        runtime: runtime,
+                        observationAttempts: newTrackSheetCleanupAttempts,
+                        observationDelayNanoseconds: observationDelayNanoseconds
+                    )
+                    extras["new_track_sheet_cleanup"] = cleanup.envelopeValue
                     return .error(HonestContract.encodeStateB(
                         reason: .readbackUnavailable,
                         extras: extras
@@ -659,6 +683,16 @@ extension AccessibilityChannel {
                     extras: extras
                 ))
             }
+            // #883: Logic can publish the new window before it attaches the mandatory New Track
+            // sheet. On a zh_TW Logic 12.3, 2026-09-26, the first poll found the window with no
+            // sheet at 250 ms, this returned the project as open, and the sheet then came up and
+            // refused the next create. A window with no track and no sheet seen yet is that moment
+            // as much as it is a finished zero-track project, so it must stay so for a settle span.
+            if !newTrackSheetSeen, observedTrackCount == 0,
+               zeroTrackSettlePolls < zeroTrackSettleObservations, attempt + 1 < attempts {
+                zeroTrackSettlePolls += 1
+                continue
+            }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
                 var extras: [String: Any] = [
                     "operation": "project.new",
@@ -686,13 +720,21 @@ extension AccessibilityChannel {
         // qualification orchestrator perform its independent, run-owned
         // Project-resource readback; never misclassify this as a pre-write C or
         // trigger another project.new attempt.
+        let cleanup: NewTrackSheetCleanup? = lastCompleteObservationWasNewTrackSheet && !mandatoryTrackSheetGone
+            ? await dismissOwnedNewTrackSheet(
+                runtime: runtime,
+                observationAttempts: newTrackSheetCleanupAttempts,
+                observationDelayNanoseconds: observationDelayNanoseconds
+            )
+            : nil
         return .success(projectNewPendingReadbackEnvelope(
             mandatoryTrackCreated: createdTrack,
             observedWindowTitles: observedWindowTitles(runtime: runtime),
             observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000),
             witnessSummary: witnessSummary,
             modalUnreadableReason: lastModalUnreadableReason,
-            modalSheetScanFailureDetail: lastModalSheetScanFailureDetail
+            modalSheetScanFailureDetail: lastModalSheetScanFailureDetail,
+            newTrackSheetCleanup: cleanup
         ))
     }
 
