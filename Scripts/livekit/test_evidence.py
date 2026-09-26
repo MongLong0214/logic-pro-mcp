@@ -229,6 +229,104 @@ except E._ModalReadError:
 failed += 0 if unreadable_direct_sheet else 1
 print(f"{'ok  ' if unreadable_direct_sheet else 'FAIL'} an unreadable direct AXSheets role is cannot-tell, not clear")
 
+# The production AX scan itself, with AppKit and the C bridge replaced: a tooltip in AXWindows
+# answers AXModal with -25205 (measured 2026-09-27, #862), and it made every snapshot cannot-tell.
+# The scan must leave a help tag out, keep a window whose role it cannot read, and still find a
+# modal window listed after a help tag.
+import types as _types_for_help_tag
+
+
+class _HelpTagWorkspaceApp:
+    def bundleIdentifier(self):
+        return "com.apple.logic10"
+
+    def isTerminated(self):
+        return False
+
+    def processIdentifier(self):
+        return 4242
+
+
+_help_tag_appkit = _types_for_help_tag.ModuleType("AppKit")
+_help_tag_appkit.NSWorkspace = _types_for_help_tag.SimpleNamespace(sharedWorkspace=lambda: _types_for_help_tag.SimpleNamespace(
+    runningApplications=lambda: [_HelpTagWorkspaceApp()]))
+_help_tag_appkit.NSRunLoop = _types_for_help_tag.SimpleNamespace(currentRunLoop=lambda: _types_for_help_tag.SimpleNamespace(
+    runUntilDate_=lambda date: None))
+_help_tag_appkit.NSDate = _types_for_help_tag.SimpleNamespace(dateWithTimeIntervalSinceNow_=lambda seconds: None)
+
+
+def _help_tag_runtime(windows):
+    """A `_AXRuntime` stand-in over {window: {attribute: value or AX status int}}."""
+    app = object()
+
+    class _Runtime:
+        def application(self, pid):
+            return app
+
+        def attribute(self, element, attribute, site):
+            if element is app and attribute == "AXWindows":
+                return list(windows)
+            answer = windows[element].get(attribute, -25205)
+            if isinstance(answer, int) and not isinstance(answer, bool):
+                raise E._ModalReadError(site, answer)
+            return answer
+
+        def elements(self, value, site):
+            return value
+
+        def text(self, value, site):
+            return value
+
+        def boolean(self, value, site):
+            return value
+
+        def definitive_absence(self, status):
+            return status in {-25205, -25212}
+
+        def close(self):
+            pass
+
+    return _Runtime
+
+
+_help_tag = object()
+_arrange = object()
+_unreadable = object()
+_modal = object()
+_help_tag_attrs = {"AXRole": "AXHelpTag", "AXTitle": -25212, "AXModal": -25205}
+_help_tag_cases = [
+    ({_help_tag: _help_tag_attrs,
+      _arrange: {"AXRole": "AXWindow", "AXTitle": "Arrange", "AXChildren": [], "AXModal": False}},
+     {"modal_windows": [], "sheets": []},
+     "a help tag beside a non-modal window is a completed clear scan"),
+    ({_help_tag: _help_tag_attrs,
+      _unreadable: {"AXRole": -25204, "AXChildren": [], "AXModal": -25205}},
+     E._ModalReadError,
+     "a window whose role cannot be read stays in the scan, and its AXModal -25205 is cannot-tell"),
+    ({_help_tag: _help_tag_attrs,
+      _modal: {"AXRole": "AXWindow", "AXTitle": "Go To", "AXChildren": [], "AXModal": True}},
+     {"modal_windows": [{"title": "Go To", "pid": 4242}], "sheets": []},
+     "a modal window listed after a help tag is still detected"),
+]
+_old_appkit, _old_runtime = sys.modules.get("AppKit"), E._AXRuntime
+sys.modules["AppKit"] = _help_tag_appkit
+try:
+    for windows, expected, why in _help_tag_cases:
+        E._AXRuntime = _help_tag_runtime(windows)
+        try:
+            got = E._production_ax_modal_signals()
+        except E._ModalReadError as exc:
+            got = exc
+        ok = (isinstance(got, expected) if isinstance(expected, type) else got == expected)
+        failed += 0 if ok else 1
+        print(f"{'ok  ' if ok else 'FAIL'} production AX scan -> {got!r}: {why}")
+finally:
+    E._AXRuntime = _old_runtime
+    if _old_appkit is None:
+        del sys.modules["AppKit"]
+    else:
+        sys.modules["AppKit"] = _old_appkit
+
 # A caller's snapshot is from the observation instant. `check()` records it without sampling again;
 # `falsifiable()` below has no snapshot and exercises the record-time fallback. The two receipts
 # prove that recording one observation cannot smear its state over the next one.
