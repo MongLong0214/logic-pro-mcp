@@ -1926,7 +1926,10 @@ extension AccessibilityChannel {
         // The pre-write rail read gets its own budget, because it answers a different question
         // than the New Track sheet poll does and failing it costs the whole verdict. Tests set it
         // to 1 to keep a single attempt.
-        railReadAttempts: Int = 5
+        railReadAttempts: Int = 5,
+        // #883: polls after dismissing an owned New Track sheet on the give-up path, spaced by
+        // `dialogPollDelayNanoseconds`.
+        newTrackSheetCleanupAttempts: Int = 10
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
             return .error("No document open for track creation")
@@ -2028,6 +2031,11 @@ extension AccessibilityChannel {
             && dialogReconcileOutcome.modalObservationIsComplete
             ? reconcileOutcome
             : dialogReconcileOutcome
+        // #883: a New Track sheet seen after the menu press is this operation's own only when the
+        // complete preflight read saw no sheet before it. Anything else might be a sheet somebody
+        // else raised, and the give-up path must not dismiss that.
+        let newTrackSheetIsOwned = reconcileOutcome.modalObservationIsComplete
+            && !kindIsSheetShaped(reconcileOutcome.kind)
 
         return await verifyTrackCreation(
             title: menuClickedTitle,
@@ -2036,6 +2044,9 @@ extension AccessibilityChannel {
             arrangeWindow: arrangeWindow,
             dialogConfirmationAttempted: dialogConfirmationAttempted,
             reconcileOutcome: verificationReconcileOutcome,
+            newTrackSheetIsOwned: newTrackSheetIsOwned,
+            newTrackSheetCleanupAttempts: newTrackSheetCleanupAttempts,
+            newTrackSheetCleanupDelayNanoseconds: dialogPollDelayNanoseconds,
             runtime: runtime
         )
     }
@@ -2062,6 +2073,9 @@ extension AccessibilityChannel {
         arrangeWindow: AXLogicProElements.ArrangeWindowRead,
         dialogConfirmationAttempted: Bool,
         reconcileOutcome: ModalReconcileOutcome,
+        newTrackSheetIsOwned: Bool,
+        newTrackSheetCleanupAttempts: Int,
+        newTrackSheetCleanupDelayNanoseconds: UInt64,
         runtime: AXLogicProElements.Runtime
     ) async -> ChannelResult {
         let beforeCount = beforeTracks?.count
@@ -2218,6 +2232,19 @@ extension AccessibilityChannel {
             unreadableReason: lastModal.unreadableReason,
             sheetScanFailureDetail: lastModal.sheetScanFailureDetail
         )
+        // #883: every exit below gives up, and giving up used to leave this operation's New Track
+        // sheet on screen for the next call to be refused on. Dismiss it and report the re-read.
+        // The verdict below still keys on `lastModal`: Create may have landed, so the state stays B.
+        var cleanup: NewTrackSheetCleanup?
+        if newTrackSheetIsOwned, lastModal.kind == .mandatoryNewTrack {
+            let result = await dismissOwnedNewTrackSheet(
+                runtime: runtime,
+                observationAttempts: newTrackSheetCleanupAttempts,
+                observationDelayNanoseconds: newTrackSheetCleanupDelayNanoseconds
+            )
+            merged["new_track_sheet_cleanup"] = result.envelopeValue
+            cleanup = result
+        }
         // Without a successful pre-write rail read, a later count cannot tell
         // whether the tracks existed before the menu action. The write may have
         // happened, but State A is unavailable rather than a zero-count guess.
@@ -2237,9 +2264,14 @@ extension AccessibilityChannel {
         // `reconciled_modal_observation: "incomplete"` for that case; this
         // flag must not contradict it.
         let realBlockerPresent = lastModal.kind != .none
-        merged["dialog_present"] = realBlockerPresent
+        // After a cleanup the latest observation is its re-read, and these two flags describe
+        // that, not the sheet it dismissed.
+        let blockerStillPresent = cleanup.map { $0.postCleanupKind != .none } ?? realBlockerPresent
+        merged["dialog_present"] = blockerStillPresent
         if realBlockerPresent {
-            merged["waiting_for_user"] = true
+            if blockerStillPresent {
+                merged["waiting_for_user"] = true
+            }
             return .success(HonestContract.encodeStateB(
                 reason: .retryExhausted,
                 extras: merged

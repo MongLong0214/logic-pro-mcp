@@ -83,8 +83,8 @@
     "index/quickhelp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/strings.tsv": "8a52d66b37d0a43b6fbe137bc5dea21ddb492b13143749f740db51209d91ef84",
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
-    "ledger/casefold.tsv": "d91a2ce51cbc6872c6f51cba4420235acd29e7c2be544cfd29daa320a2f262b3",
-    "ledger/presence.tsv": "6a9e35bd34e9506c5e4b51c96d9b577caf345cad212e4ee7df6fc1267ab3a739"
+    "ledger/casefold.tsv": "b6644feb227e8ebad0adb582f0778d9723352c28f2355b780f1a2bb173fd3ea7",
+    "ledger/presence.tsv": "0f329c0c4a4e08fee67e4079f3b164997fa05a72eceeca56400974b39cd85f31"
   },
   "extractor_version": 2,
   "ledger_casefold_entries": {
@@ -123,7 +123,7 @@
       "-": 2,
       "de": 152,
       "en": 176,
-      "es": 152,
+      "es": 153,
       "fr": 146,
       "it": 150,
       "ja": 163,
@@ -156,7 +156,7 @@
       "-": 3,
       "de": 137,
       "en": 156,
-      "es": 142,
+      "es": 143,
       "fr": 136,
       "it": 141,
       "ja": 148,

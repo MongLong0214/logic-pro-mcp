@@ -1330,6 +1330,7 @@
     "作成",
     "Erzeugen",
     "creación",
+    "Crear",
     "Créer",
     "Crea",
     "Criar",
@@ -3599,12 +3600,27 @@
     "新增音訊音軌"
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
+   "provenance": {
+    "Neue Audiospur": {
+     "locale": "de-DE",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "observed": "Neue Audiospur",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -3627,12 +3643,27 @@
     "新增外部 MIDI 音軌"
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
+   "provenance": {
+    "Neue externe MIDI-Spur": {
+     "locale": "de-DE",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "observed": "Neue externe MIDI-Spur",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -3719,6 +3750,7 @@
     "새로운 Session Player SI 트랙…",
     "新規Session Playerソフトウェア音源トラック…",
     "Neue Session Player SI-Spur …",
+    "Neue Session Player SI-Spur …",
     "Nueva pista SI de Session Player…",
     "Nouvelle piste SI Session Player…",
     "Nuova traccia SI Session Player…",
@@ -3727,12 +3759,27 @@
     "新增 Session Player SI 音軌⋯"
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
+   "provenance": {
+    "Neue Session Player SI-Spur …": {
+     "locale": "de-DE",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "observed": "Neue Session Player SI-Spur …",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -3755,12 +3802,27 @@
     "新增軟體樂器音軌"
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
+   "provenance": {
+    "Neue Spur für Software-Instrument": {
+     "locale": "de-DE",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "record": "2026-09-12-de-DE-arrange-menus-census",
+     "observed": "Neue Spur für Software-Instrument",
+     "role": "AXMenuItem",
+     "attribute": "title",
+     "match": "exact"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "derived",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
