@@ -149,8 +149,7 @@ enum SessionPopulationObservation {
                 snapshot: targetSnapshot
             )
             projectIssuance = await ProjectReferenceIssuance.issue(
-                name: snapshot.project.name,
-                filePath: snapshot.project.filePath,
+                cached: snapshot.project,
                 registry: targetRegistry,
                 snapshot: targetSnapshot
             )
