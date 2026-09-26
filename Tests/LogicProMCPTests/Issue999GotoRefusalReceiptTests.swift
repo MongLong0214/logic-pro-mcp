@@ -17,7 +17,7 @@ import Testing
 ///
 /// Before #999 the menu refusal said `dialog_cleanup: "unobserved"`, the State B receipt carried no
 /// `menu_state` at all, and the State C receipt said `menu_actuation_attempted: false`.
-@Suite struct Issue999GotoRefusalReceiptTests {
+@Suite(.serialized) struct Issue999GotoRefusalReceiptTests {
     typealias Harness = Issue942PostLeafMenuReconciliationTests
 
     static func expectReceipt(
@@ -27,9 +27,9 @@ import Testing
         #expect(try #require(envelope["dialog_cleanup"] as? String) == dialogCleanup, "\(site.identifier)")
         #expect(try #require(envelope["menu_state"] as? String) == menuState, "\(site.identifier)")
         #expect(try #require(envelope["fallback_unsafe"] as? Bool), "\(site.identifier)")
+        #expect(try #require(envelope["menu_actuation_attempted"] as? Bool), "\(site.identifier)")
         if Harness.refusesAsStateC(site) {
             #expect(try #require(envelope["state"] as? String) == "C", "\(site.identifier)")
-            #expect(try #require(envelope["menu_actuation_attempted"] as? Bool), "\(site.identifier)")
         } else {
             #expect(try #require(envelope["state"] as? String) == "B", "\(site.identifier)")
         }
@@ -55,8 +55,7 @@ import Testing
         try Self.expectReceipt(run.envelope, site: site, dialogCleanup: "unobserved", menuState: "unobserved")
     }
 
-    /// The eight sites whose result is refused as State B whatever their cleanup said. The four
-    /// State C sites' own results are not refusals, so they end in no receipt this suite reads.
+    /// The eight sites whose result is refused as State B whatever their cleanup said.
     @Test(arguments: AccessibilityChannel.postLeafCleanupSites.filter {
         !Issue942PostLeafMenuReconciliationTests.refusesAsStateC($0)
     }.map(\.identifier))
@@ -66,6 +65,27 @@ import Testing
             site, reconcilerAnswer: "OPEN", result: "\(site.resultPrefix): fixture")
         #expect(run.calls == 0, "both halves were observed closed, so nothing is reconciled")
         try Self.expectReceipt(run.envelope, site: site, dialogCleanup: "closed", menuState: "closed")
+    }
+
+    /// The other four sites fall through to the unavailable State C receipt once cleanup closes.
+    @Test(arguments: AccessibilityChannel.postLeafCleanupSites.filter {
+        Issue942PostLeafMenuReconciliationTests.refusesAsStateC($0)
+    }.map(\.identifier))
+    func aCleanPostLeafStateCFallthroughReportsTheLeafClick(_ identifier: String) async throws {
+        let site = try Harness.site(identifier)
+        let run = try await Harness.runMenuRefusal(
+            site, reconcilerAnswer: "OPEN", result: "\(site.resultPrefix): fixture")
+        #expect(run.calls == 0)
+        #expect(try #require(run.envelope["state"] as? String) == "C")
+        #expect(try #require(run.envelope["menu_actuation_attempted"] as? Bool), "\(identifier)")
+    }
+
+    @Test func aSuccessfulDialogResultReportsTheLeafClick() async throws {
+        let site = try Harness.site("dialog_not_ready")
+        let run = try await Harness.runMenuRefusal(site, reconcilerAnswer: "OPEN", result: "OK")
+        #expect(run.calls == 0)
+        #expect(try #require(run.envelope["state"] as? String) == "B")
+        #expect(try #require(run.envelope["menu_actuation_attempted"] as? Bool))
     }
 
     /// The two post-leaf returns that run no cleanup at all still followed the leaf click.
@@ -81,9 +101,9 @@ import Testing
         #expect(try #require(envelope["menu_state"] as? String) == "unobserved")
     }
 
-    /// A child that dies after the leaf is reconciled with the snapshot pass, which reads the
-    /// dialog first and answers CLOSED only after it has also read the menus closed. So one answer
-    /// fixes both halves of the State B receipt.
+    /// A child that dies at LEAF_ARMED may not have clicked the leaf. The snapshot pass reads the
+    /// dialog first and answers CLOSED only after it has also read the menus closed; its answer
+    /// settles the cleanup fields while the click stays indeterminate.
     @Test(arguments: [true, false])
     func aReconciledExecutionFailureReportsBothHalvesFromThePass(_ reconcilerObservedClosed: Bool) async throws {
         let site = try Harness.site("dialog_not_ready")
@@ -99,6 +119,18 @@ import Testing
         let observed = reconcilerObservedClosed ? "closed" : "unobserved"
         #expect(try #require(envelope["dialog_cleanup"] as? String) == observed)
         #expect(try #require(envelope["menu_state"] as? String) == observed)
+        #expect(envelope["menu_actuation_attempted"] == nil)
+        #expect(try #require(envelope["menu_actuation_indeterminate"] as? Bool))
+    }
+
+    @Test(arguments: ["SELECT_ALL_ARMED", "POSITION_INPUT_ARMED", "RETURN_ARMED"])
+    func aDeadChildAfterTheLeafReportsTheClick(_ stage: String) async throws {
+        let site = try Harness.site("dialog_not_ready")
+        let run = try await Harness.runMenuRefusal(
+            site, reconcilerAnswer: "OPEN", executionFailureStage: stage)
+        #expect(try #require(run.envelope["state"] as? String) == "B")
+        #expect(try #require(run.envelope["menu_actuation_attempted"] as? Bool), "\(stage)")
+        #expect(run.envelope["menu_actuation_indeterminate"] == nil)
     }
 
     /// The pre-leaf refusals are the control: the leaf was never clicked, and they still say so.

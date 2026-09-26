@@ -1142,7 +1142,7 @@ struct Issue529MenuValidationTests {
         // may already have opened.
         #expect(classification.requiresUnsafeUIRefusal)
         #expect(classification.menuObservation == .closed)
-        #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+        #expect(classification.menuActuationAttempted == .some(true))
         #expect(script.contains(
             "return \"MENU_VALIDATION_UNREADABLE: menu_actuation_attempted=\" & (menuActuationAttempted as text)"
         ))
@@ -1175,7 +1175,7 @@ struct Issue529MenuValidationTests {
             )
             #expect(classification.diagnosticLabel == "menu_validation_unreadable")
             #expect(classification.requiresUnsafeUIRefusal)
-            #expect(classification.menuActuationAttemptedBeforeUnsafeRefusal)
+            #expect(classification.menuActuationAttempted == .some(true))
 
             let sliderWrites = Issue529Counter()
             let result = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -3043,7 +3043,7 @@ func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
 /// never answers CLOSED. The reconciliation fixtures below return a canned answer without running
 /// the generated script (r-941round7), so what they establish about the pass is structural: which
 /// path it was given and what the receipt does with its answer.
-@Suite struct Issue942PostLeafMenuReconciliationTests {
+@Suite(.serialized) struct Issue942PostLeafMenuReconciliationTests {
     typealias Site = AccessibilityChannel.PostLeafCleanupSite
 
     static let sites = AccessibilityChannel.postLeafCleanupSites

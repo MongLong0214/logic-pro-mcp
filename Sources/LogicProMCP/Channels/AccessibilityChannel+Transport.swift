@@ -1100,6 +1100,12 @@ extension AccessibilityChannel {
             reconcileAfterExecutionFailure: dialogFailureReconciler,
             createIssuanceLedger: createDialogIssuanceLedger
         )
+        // Every dialog-route result describes the same menu actuation, including clean post-leaf
+        // fallthrough. Attach its evidence before choosing State B or C.
+        var dialogRouteExtras = baseExtras
+        if case let .failed(classification) = dialogResult {
+            dialogRouteExtras.merge(classification.menuActuationReceiptFields) { _, new in new }
+        }
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
             // the frontmost gate on one path and stays silent on the other — a receipt field you
@@ -1114,7 +1120,7 @@ extension AccessibilityChannel {
             // the target indeterminate, so another position actuator remains unsafe. The boundary
             // does not prove a Return was sent: only a normal script result can claim a submission.
             let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
-            var extras = baseExtras.merging([
+            var extras = dialogRouteExtras.merging([
                 "operation": "transport.goto_position",
                 "method": "dialog",
                 "dialog_route_outcome": classification.diagnosticLabel,
@@ -1176,12 +1182,11 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
-                extras: baseExtras.merging([
+                extras: dialogRouteExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "dialog_route_outcome": classification.diagnosticLabel,
                     "menu_state": classification.menuObservation.rawValue,
-                    "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
                     "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
                     // Stated on this path too, and stated as false. The refusal above is about
                     // cleanup, not about submission: a caller reading only `dialog_actuation_
@@ -1198,7 +1203,7 @@ extension AccessibilityChannel {
         }
 
         if case let .failed(classification) = dialogResult {
-            baseExtras["dialog_route_outcome"] = classification.diagnosticLabel
+            dialogRouteExtras["dialog_route_outcome"] = classification.diagnosticLabel
         }
 
         // Logic Pro 12.3 exposes the `bar` control as a relative increment, not an absolute musical
@@ -1208,7 +1213,7 @@ extension AccessibilityChannel {
         return .error(HonestContract.encodeStateC(
             error: .notSupported,
             hint: "The Go To Position dialog did not submit a position, and no alternative position route was taken.",
-            extras: baseExtras.merging([
+            extras: dialogRouteExtras.merging([
                 "operation": "transport.goto_position",
                 "position_route": "unavailable",
                 "unobserved_position_components": ["bar", "beat", "subdivision", "tick"],
@@ -2528,8 +2533,20 @@ extension AccessibilityChannel {
             }
         }
 
-        var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
+        /// A normal post-leaf result always follows the leaf click. SELECT_ALL_ARMED and later
+        /// markers are also post-leaf; LEAF_ARMED was written before the click and remains uncertain.
+        var menuActuationAttempted: Bool? {
             switch self {
+            case .driven,
+                 .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued):
+                // The four cleanup-bearing cases cover every declared PostLeafCleanupSite.
+                // A new classification must declare its evidence in this exhaustive switch.
+                return true
             case .failure(.menuDisabled):
                 // `MENU_DISABLED` is reachable only after `freshReadingTaken` is true. That flag is
                 // assigned only inside `if revalidated`, and revalidated is assigned only after the
@@ -2544,19 +2561,30 @@ extension AccessibilityChannel {
                 return menuActuationAttempted
             case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
                 return menuActuationAttempted
-            case .failure(.dialogUnidentifiedNewWindow),
-                 .failure(.dialogAppearanceUnreadable),
-                 .failure(.dialogActuationIssued),
-                 .failure(.dialogSubmissionNotIssued):
-                // The post-leaf outcomes `requiresUnsafeUIRefusal` refuses. Each is returned only
-                // after `click menu item positionName`, the leaf, and the script sets
-                // `menuActuationAttempted` true before that click. A receipt saying
-                // `menu_actuation_attempted: false` beside `dialog_actuation_attempted: true` was
-                // two answers for one click (#999).
-                return true
-            default:
+            case let .failure(.executionFailed(issuance, _)):
+                switch issuance {
+                case .selectAllArmed, .positionInputArmed, .returnArmed:
+                    return true
+                case .notIssued, .leafArmed, .unknown:
+                    return nil
+                }
+            case .failure(.malformedPayload),
+                 .failure(.unexpectedResult):
+                return nil
+            case .failure(.menuNotFound),
+                 .failure(.menuStateUnreadable),
+                 .failure(.menuPickFailed),
+                 .failure(.dialogPreexisting),
+                 .failure(.dialogPreexistenceUnreadable):
                 return false
             }
+        }
+
+        var menuActuationReceiptFields: [String: Any] {
+            if let attempted = menuActuationAttempted {
+                return ["menu_actuation_attempted": attempted]
+            }
+            return ["menu_actuation_indeterminate": true]
         }
 
         /// A normal script reply can still report a post-actuation menu cleanup that was not
@@ -2720,17 +2748,19 @@ extension AccessibilityChannel {
                 // (`via:"dialog"`) plus finalize's `verification_source` /
                 // `observed` / `verified` fields describe the outcome honestly
                 // without it.
+                var extras: [String: Any] = [
+                    "requested": position,
+                    "via": "dialog",
+                    // `OK` is emitted only after the script independently observed the exact
+                    // Go To Position dialog closed following Return.
+                    "dialog_cleanup": "closed",
+                    "dialog_submission_attempted": true,
+                    "write_attempted": true,
+                ]
+                extras.merge(classification.menuActuationReceiptFields) { _, new in new }
                 return .driven(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: [
-                        "requested": position,
-                        "via": "dialog",
-                        // `OK` is emitted only after the script independently observed the exact
-                        // Go To Position dialog closed following Return.
-                        "dialog_cleanup": "closed",
-                        "dialog_submission_attempted": true,
-                        "write_attempted": true,
-                    ]
+                    extras: extras
                 ))
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
