@@ -1100,6 +1100,12 @@ extension AccessibilityChannel {
             reconcileAfterExecutionFailure: dialogFailureReconciler,
             createIssuanceLedger: createDialogIssuanceLedger
         )
+        // Every dialog-route result describes the same menu actuation, including clean post-leaf
+        // fallthrough. Attach its evidence before choosing State B or C.
+        var dialogRouteExtras = baseExtras
+        if case let .failed(classification) = dialogResult {
+            dialogRouteExtras.merge(classification.menuActuationReceiptFields) { _, new in new }
+        }
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
             // the frontmost gate on one path and stays silent on the other — a receipt field you
@@ -1113,13 +1119,16 @@ extension AccessibilityChannel {
             // A normal global-input result or a dead child after a durable UI/input boundary leaves
             // the target indeterminate, so another position actuator remains unsafe. The boundary
             // does not prove a Return was sent: only a normal script result can claim a submission.
-            let dialogState = classification.cleanupObservedClosed ? "closed" : "unobserved"
-            var extras = baseExtras.merging([
+            let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
+            var extras = dialogRouteExtras.merging([
                 "operation": "transport.goto_position",
                 "method": "dialog",
                 "dialog_route_outcome": classification.diagnosticLabel,
                 "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
                 "dialog_cleanup": dialogState,
+                // The menu half, which this receipt did not carry: a menu the reconciliation pass
+                // closed after a post-leaf menu refusal went unreported here (#999).
+                "menu_state": classification.menuObservation.rawValue,
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
             ]) { _, new in new }
@@ -1173,12 +1182,11 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
-                extras: baseExtras.merging([
+                extras: dialogRouteExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "dialog_route_outcome": classification.diagnosticLabel,
                     "menu_state": classification.menuObservation.rawValue,
-                    "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
                     "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
                     // Stated on this path too, and stated as false. The refusal above is about
                     // cleanup, not about submission: a caller reading only `dialog_actuation_
@@ -1186,7 +1194,7 @@ extension AccessibilityChannel {
                     // "we typed and cannot confirm". A field that appears on one refusal and is
                     // absent on the neighbouring one is not a contract.
                     "dialog_submission_attempted": false,
-                    "dialog_cleanup": classification.cleanupObservedClosed ? "closed" : "unobserved",
+                    "dialog_cleanup": classification.dialogCleanupObservedClosed ? "closed" : "unobserved",
                     "write_attempted": false,
                     "safe_to_retry": false,
                     "fallback_unsafe": true,
@@ -1195,7 +1203,7 @@ extension AccessibilityChannel {
         }
 
         if case let .failed(classification) = dialogResult {
-            baseExtras["dialog_route_outcome"] = classification.diagnosticLabel
+            dialogRouteExtras["dialog_route_outcome"] = classification.diagnosticLabel
         }
 
         // Logic Pro 12.3 exposes the `bar` control as a relative increment, not an absolute musical
@@ -1205,7 +1213,7 @@ extension AccessibilityChannel {
         return .error(HonestContract.encodeStateC(
             error: .notSupported,
             hint: "The Go To Position dialog did not submit a position, and no alternative position route was taken.",
-            extras: baseExtras.merging([
+            extras: dialogRouteExtras.merging([
                 "operation": "transport.goto_position",
                 "position_route": "unavailable",
                 "unobserved_position_components": ["bar", "beat", "subdivision", "tick"],
@@ -1934,10 +1942,10 @@ extension AccessibilityChannel {
                 set observedGoToPositionDialog to missing value
                 set preLeafGoToPositionDialogCount to my goToPositionDialogCount(logicProcess)
                 if preLeafGoToPositionDialogCount is "UNREADABLE" then
-                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click"
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click menu_actuation_attempted=" & (menuActuationAttempted as text)
                 end if
                 if preLeafGoToPositionDialogCount is greater than 0 then
-                    return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click"
+                    return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click menu_actuation_attempted=" & (menuActuationAttempted as text)
                 end if
                 -- Preserve concrete pre-leaf references in this process as well as the serialized
                 -- count for timeout reconciliation. The references make a same-count replacement
@@ -1950,10 +1958,10 @@ extension AccessibilityChannel {
                     set preLeafGoToPositionWindowCount to "UNREADABLE"
                 end try
                 if preLeafGoToPositionWindowCount is "UNREADABLE" then
-                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window count was unreadable before leaf click"
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window count was unreadable before leaf click menu_actuation_attempted=" & (menuActuationAttempted as text)
                 end if
                 if not my recordPreLeafGoToPositionWindowSnapshot(preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount, "\(snapshotPath)") then
-                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot could not be persisted before leaf click"
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot could not be persisted before leaf click menu_actuation_attempted=" & (menuActuationAttempted as text)
                 end if
                 try
                     -- Persist before AXPress: if the child dies after the click, Swift still knows
@@ -1963,7 +1971,7 @@ extension AccessibilityChannel {
                         if cleanupState is not "CLOSED" then
                             \(MenuCleanupRefusalSite.issuanceLedger.appleScript)
                         end if
-                        return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
+                        return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click menu_actuation_attempted=" & (menuActuationAttempted as text)
                     end if
                     set menuActuationAttempted to true
                     set dialogActuationIssued to true
@@ -2198,15 +2206,15 @@ extension AccessibilityChannel {
             case menuStateUnreadable
             case menuDisabled
             case menuValidationUnreadable(menuActuationAttempted: Bool)
-            case menuPickFailed
+            case menuPickFailed(menuActuationAttempted: Bool?)
             /// `reconciledMenuClosed` is written by the parent-owned reconciliation pass, never by
             /// the parser: the script reports what it observed, and the pass that runs afterwards
             /// reports what it observed. Keeping them in one case rather than adding a sibling case
             /// is deliberate -- `requiresUnsafeUIRefusal` matches this case whatever its payload,
             /// so a reconciled closure cannot quietly release the safety refusal.
             case menuCouldNotBeClosed(menuActuationAttempted: Bool, reconciledMenuClosed: Bool)
-            case dialogPreexisting
-            case dialogPreexistenceUnreadable
+            case dialogPreexisting(menuActuationAttempted: Bool?)
+            case dialogPreexistenceUnreadable(menuActuationAttempted: Bool?)
             case dialogUnidentifiedNewWindow
             case dialogAppearanceUnreadable
             case dialogActuationIssued(cleanup: PostLeafCleanup)
@@ -2404,8 +2412,13 @@ extension AccessibilityChannel {
             }
         }
 
-        var cleanupObservedClosed: Bool {
-            if let postLeafCleanup { return postLeafCleanup == .observedClosed }
+        /// Whether this run observed the Go To Position DIALOG closed, which is what the receipt's
+        /// `dialog_cleanup` reports. The menu half is `menuObservation`. A post-leaf menu refusal
+        /// (#942) is returned only after the dialog cleanup answered CLOSED, so it reports the
+        /// dialog closed; folding the two halves made that receipt say the dialog cleanup was
+        /// unobserved right after the script observed it (#999).
+        var dialogCleanupObservedClosed: Bool {
+            if let postLeafCleanup { return postLeafCleanup != .dialogNotObservedClosed }
             if case let .failure(.executionFailed(issuance: _, cleanupObservedClosed)) = self {
                 return cleanupObservedClosed
             }
@@ -2484,6 +2497,17 @@ extension AccessibilityChannel {
         }
 
         var menuObservation: MenuObservation {
+            if postLeafCleanup == .observedClosed {
+                // Every post-leaf site runs the menu cleanup after the dialog cleanup and returns
+                // its own result only when both answered CLOSED (#999).
+                return .closed
+            }
+            if case .failure(.executionFailed(issuance: _, cleanupObservedClosed: true)) = self {
+                // An execution failure is reconciled with `.snapshot` or `.unknown`, never
+                // `.menuOnly`, so the pass reads the dialog half first and answers closed only
+                // after it has also read the menus closed.
+                return .closed
+            }
             if case let .menuNotObservedClosed(reconciledMenuClosed)? = postLeafCleanup {
                 // #942. The script observed the dialog closed and then ran the menu cleanup, which
                 // did not observe the menu closed: the case `couldNotBeClosed` names. The same
@@ -2509,8 +2533,21 @@ extension AccessibilityChannel {
             }
         }
 
-        var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
+        /// The script marks either the forced menu-bar click or the leaf click before issuing it.
+        /// Normal post-leaf results and SELECT_ALL_ARMED or later prove at least the leaf attempt;
+        /// pre-leaf results carry the script's flag. LEAF_ARMED alone remains uncertain.
+        var menuActuationAttempted: Bool? {
             switch self {
+            case .driven,
+                 .failure(.dialogUnidentifiedNewWindow),
+                 .failure(.dialogAppearanceUnreadable),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued):
+                // The four cleanup-bearing cases cover every declared PostLeafCleanupSite.
+                // A new classification must declare its evidence in this exhaustive switch.
+                return true
             case .failure(.menuDisabled):
                 // `MENU_DISABLED` is reachable only after `freshReadingTaken` is true. That flag is
                 // assigned only inside `if revalidated`, and revalidated is assigned only after the
@@ -2525,9 +2562,31 @@ extension AccessibilityChannel {
                 return menuActuationAttempted
             case let .failure(.menuCouldNotBeClosed(menuActuationAttempted, _)):
                 return menuActuationAttempted
-            default:
+            case let .failure(.menuPickFailed(menuActuationAttempted)),
+                 let .failure(.dialogPreexisting(menuActuationAttempted)),
+                 let .failure(.dialogPreexistenceUnreadable(menuActuationAttempted)):
+                return menuActuationAttempted
+            case let .failure(.executionFailed(issuance, _)):
+                switch issuance {
+                case .selectAllArmed, .positionInputArmed, .returnArmed:
+                    return true
+                case .notIssued, .leafArmed, .unknown:
+                    return nil
+                }
+            case .failure(.malformedPayload),
+                 .failure(.unexpectedResult):
+                return nil
+            case .failure(.menuNotFound),
+                 .failure(.menuStateUnreadable):
                 return false
             }
+        }
+
+        var menuActuationReceiptFields: [String: Any] {
+            if let attempted = menuActuationAttempted {
+                return ["menu_actuation_attempted": attempted]
+            }
+            return ["menu_actuation_indeterminate": true]
         }
 
         /// A normal script reply can still report a post-actuation menu cleanup that was not
@@ -2544,6 +2603,14 @@ extension AccessibilityChannel {
 
     private struct GotoPositionDialogScriptPayload: Decodable {
         let result: String
+    }
+
+    /// These pre-leaf outcomes can follow the forced menu-bar click. A legacy or malformed result
+    /// without the script's flag cannot prove that no menu actuation was attempted.
+    private static func preLeafMenuActuationEvidence(_ result: String) -> Bool? {
+        guard let marker = result.range(of: " menu_actuation_attempted=", options: .backwards)
+        else { return nil }
+        return Bool(String(result[marker.upperBound...]))
     }
 
     /// Kept internal for the menu-validation regression tests. This consumes
@@ -2583,9 +2650,9 @@ extension AccessibilityChannel {
                 menuActuationAttempted: menuActuationAttempted
             ))
         case let value where value.hasPrefix("DIALOG_PREEXISTING"):
-            return .failure(.dialogPreexisting)
+            return .failure(.dialogPreexisting(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
         case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
-            return .failure(.dialogPreexistenceUnreadable)
+            return .failure(.dialogPreexistenceUnreadable(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
         case let value where value.hasPrefix("MENU_PICK_FAILED"):
             if value.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
                 || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
@@ -2598,7 +2665,7 @@ extension AccessibilityChannel {
                     reconciledMenuClosed: false
                 ))
             }
-            return .failure(.menuPickFailed)
+            return .failure(.menuPickFailed(menuActuationAttempted: preLeafMenuActuationEvidence(value)))
         case let value where value.hasPrefix("DIALOG_UNIDENTIFIED_NEW_WINDOW"):
             return .failure(.dialogUnidentifiedNewWindow)
         case let value where value.hasPrefix("DIALOG_APPEARANCE_UNREADABLE"):
@@ -2691,17 +2758,19 @@ extension AccessibilityChannel {
                 // (`via:"dialog"`) plus finalize's `verification_source` /
                 // `observed` / `verified` fields describe the outcome honestly
                 // without it.
+                var extras: [String: Any] = [
+                    "requested": position,
+                    "via": "dialog",
+                    // `OK` is emitted only after the script independently observed the exact
+                    // Go To Position dialog closed following Return.
+                    "dialog_cleanup": "closed",
+                    "dialog_submission_attempted": true,
+                    "write_attempted": true,
+                ]
+                extras.merge(classification.menuActuationReceiptFields) { _, new in new }
                 return .driven(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: [
-                        "requested": position,
-                        "via": "dialog",
-                        // `OK` is emitted only after the script independently observed the exact
-                        // Go To Position dialog closed following Return.
-                        "dialog_cleanup": "closed",
-                        "dialog_submission_attempted": true,
-                        "write_attempted": true,
-                    ]
+                    extras: extras
                 ))
             case .failure:
                 if classification.requiresPostActuationMenuReconciliation {
