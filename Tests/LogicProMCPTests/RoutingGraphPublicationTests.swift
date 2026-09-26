@@ -370,7 +370,8 @@ struct RoutingGraphPublicationTests {
             for tracksFirst in [false, true] {
                 let server = await Server(
                     tracks: [track(index: 0, name: "Source"), track(index: 1, name: "Destination")],
-                    strips: [ChannelStripState(trackIndex: 0, output: "Destination")]
+                    strips: [ChannelStripState(trackIndex: 0, output: "Destination")],
+                    referencesEnabled: false
                 )
                 var rows: [[String: Any]] = []
                 if tracksFirst {
@@ -438,12 +439,17 @@ struct RoutingGraphPublicationTests {
     }
 
     /// One fresh server: its own cache and registry. `tracks: nil` leaves the tracks section unread.
+    /// Every read pins reference support with the TaskLocal override. The ambient value falls back to
+    /// the process environment, which `FeatureFlagsTests` rewrites while other suites run in parallel:
+    /// the full suite once read an empty graph here that the same test never gives on its own.
     private struct Server {
         let cache = StateCache()
         let registry = TargetRegistry()
         let router = ChannelRouter()
+        let referencesEnabled: Bool
 
-        init(tracks: [TrackState]?, strips: [ChannelStripState]) async {
+        init(tracks: [TrackState]?, strips: [ChannelStripState], referencesEnabled: Bool = true) async {
+            self.referencesEnabled = referencesEnabled
             if let tracks {
                 await cache.updateTracks(tracks)
             }
@@ -451,23 +457,27 @@ struct RoutingGraphPublicationTests {
         }
 
         func readTrackRows() async throws -> [[String: Any]] {
-            let result = try await ResourceHandlers.read(
-                uri: "logic://tracks",
-                cache: cache,
-                router: router,
-                targetRegistry: registry,
-                fileReader: .unavailable
-            )
+            let result = try await FeatureFlags.withAdr002TargetRefForTests(referencesEnabled) {
+                try await ResourceHandlers.read(
+    uri: "logic://tracks",
+                    cache: cache,
+                    router: router,
+                    targetRegistry: registry,
+                    fileReader: .unavailable
+                )
+            }
             return try #require(sharedJSONObject(sharedResourceText(result))?["data"] as? [[String: Any]])
         }
 
         func readMixer() async throws -> (graph: RoutingGraph, strips: [[String: Any]]) {
-            let result = try await ResourceHandlers.read(
-                uri: "logic://mixer",
-                cache: cache,
-                router: router,
-                targetRegistry: registry
-            )
+            let result = try await FeatureFlags.withAdr002TargetRefForTests(referencesEnabled) {
+                try await ResourceHandlers.read(
+    uri: "logic://mixer",
+                    cache: cache,
+                    router: router,
+                    targetRegistry: registry
+                )
+            }
             let body = try #require(sharedJSONObject(sharedResourceText(result)))
             let graphObject = try #require(body["routing_graph"] as? [String: Any])
             let strips = try #require(body["strips"] as? [[String: Any]])
@@ -483,12 +493,14 @@ struct RoutingGraphPublicationTests {
         }
 
         func readStrip(at index: Int) async throws -> [String: Any] {
-            let result = try await ResourceHandlers.read(
-                uri: "logic://mixer/\(index)",
-                cache: cache,
-                router: router,
-                targetRegistry: registry
-            )
+            let result = try await FeatureFlags.withAdr002TargetRefForTests(referencesEnabled) {
+                try await ResourceHandlers.read(
+    uri: "logic://mixer/\(index)",
+                    cache: cache,
+                    router: router,
+                    targetRegistry: registry
+                )
+            }
             return try #require(sharedJSONObject(sharedResourceText(result))?["strip"] as? [String: Any])
         }
     }
@@ -497,6 +509,16 @@ struct RoutingGraphPublicationTests {
         tracks: [TrackState],
         strips: [ChannelStripState],
         issueTrackReferences: Bool = true
+    ) async throws -> (graph: [String: Any], references: [String: String]) {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await unpinnedFixture(tracks: tracks, strips: strips, issueTrackReferences: issueTrackReferences)
+        }
+    }
+
+    private func unpinnedFixture(
+        tracks: [TrackState],
+        strips: [ChannelStripState],
+        issueTrackReferences: Bool
     ) async throws -> (graph: [String: Any], references: [String: String]) {
         let cache = StateCache()
         await cache.updateTracks(tracks)
