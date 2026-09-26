@@ -1501,12 +1501,17 @@ def load_presence_ledger() -> dict:
                 text = None
             if not isinstance(text, str):
                 raise CanonError(f"{path}:{number}: the fifth field is not a JSON string")
+            if normalize(text) != text:
+                raise CanonError(f"{path}:{number}: ledger question {text!r} is not normalized")
             out[(source, locale, text)] = (exact, near)
     _PRESENCE_CACHE[key] = out
     return out
 
 
 def write_ledger_presence(rows: dict) -> int:
+    for _source, _locale, text in rows:
+        if normalize(text) != text:
+            raise CanonError(f"ledger question {text!r} is not normalized")
     os.makedirs(LEDGER_DIR, exist_ok=True)
     with open(ledger_presence_path(), "w", encoding="utf-8") as handle:
         handle.write("# source\tlocale\texact\tnear\tthe string, JSON-quoted\n")
@@ -1526,11 +1531,13 @@ def presence_rows(values_by_locale_by_source: dict, texts) -> dict:
     `values_by_locale_by_source` holds the NORMALIZED values, the ones `write_absence` is given,
     so `ships` here and `not is_absent` there differ exactly where the prefix collides.
     """
-    wanted = {text for text in texts if text}
+    wanted = {normalize(text) for text in texts if text}
+    wanted.discard("")
     rows = {}
     for source, by_locale in sorted(values_by_locale_by_source.items()):
         for locale, values in sorted(by_locale.items()):
-            values = {value for value in values if value}
+            values = {normalize(value) for value in values if value}
+            values.discard("")
             prefixes = {_u32(value) for value in values}
             folded = {fold_for_near_miss(value) for value in values}
             folded_prefixes = {_u32(value) for value in folded}
@@ -1549,12 +1556,13 @@ def presence_counts(rows) -> dict:
 
 
 def presence(source: str, locale: str, text: str) -> str:
-    """SHIPS, ABSENT or UNCONFIRMED: what the pinned corpus says about this exact string.
+    """SHIPS, ABSENT or UNCONFIRMED for the identity the absence sets hash.
 
     Raises CanonError when the absence set cannot be read, as `is_absent` does. A caller decides
     what UNCONFIRMED means for its own question, and the one thing it may not do is read it as
     SHIPS: that is the defect #992 removed from eight sites.
     """
+    text = normalize(text)
     if is_absent(source, locale, text):
         return ABSENT
     row = load_presence_ledger().get((source, locale, text))
@@ -1730,6 +1738,7 @@ def differs_only_by_decoration(source: str, locale: str, text: str) -> bool:
     comparison answers the fold as well; without one the folded set's prefix match stands, which
     errs toward reporting a near miss, and `confirm` settles it.
     """
+    text = normalize(text)
     if presence(source, locale, text) != ABSENT:
         return False
     row = load_presence_ledger().get((source, locale, text))
@@ -2528,10 +2537,12 @@ def verify_derived_counts(manifest: dict) -> list:
     problems = []
     declared = manifest.get("translated_en_values")
     if declared is None:
-        if os.path.exists(translated_path()):
-            problems.append("absence/translated.en.u32 has no `translated_en_values` count in "
-                            "MANIFEST.json, so nothing checks that it did not gain or lose entries.")
-    else:
+        problems.append("absence/translated.en.u32 has no `translated_en_values` count in "
+                        "MANIFEST.json, so nothing checks that it did not gain or lose entries.")
+    if not os.path.isfile(translated_path()):
+        problems.append("absence/translated.en.u32 is missing, so translated English values "
+                        "cannot be checked.")
+    elif declared is not None:
         try:
             found = len(load_translated())
         except CanonError as exc:
@@ -2786,7 +2797,7 @@ def _cmd_confirm(args) -> int:
     for text in texts:
         verdicts = sorted(f"{source}/{locale}={exact}"
                           for (source, locale, asked), (exact, _near) in rows.items()
-                          if asked == text)
+                          if asked == normalize(text))
         print(f"{text!r}: {', '.join(verdicts) or 'absent everywhere (no prefix matches)'}")
     return 0
 

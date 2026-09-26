@@ -28,6 +28,7 @@ def _load(name, filename):
 
 
 guard = _load("new_labelsets_guard", "check-new-labelsets-name-a-row.py")
+canon_for_stub = _load("canon_for_labelset_stub", "logic_canon.py")
 
 
 def policy(*declarations):
@@ -58,9 +59,10 @@ class StubCanon:
     """A corpus that holds exactly the strings it is given, in every source it is given."""
 
     CanonError = CanonError
+    normalize = staticmethod(canon_for_stub.normalize)
 
     def __init__(self, present=(), sources=("strings",), raises=None):
-        self.present = set(present)
+        self.present = {self.normalize(text) for text in present}
         self.sources = tuple(sources)
         self.raises = raises
 
@@ -70,7 +72,7 @@ class StubCanon:
     def is_absent(self, source, locale, text):
         if self.raises:
             raise CanonError(self.raises)
-        return text not in self.present
+        return self.normalize(text) not in self.present
 
     # The guard asks `presence` since #992. This corpus compares strings, so nothing it holds is
     # a collision and nothing is unconfirmed; `test_canon_presence.py` drives the third answer.

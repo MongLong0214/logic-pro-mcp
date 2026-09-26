@@ -613,6 +613,9 @@ def near_miss_canonicals(manifest: dict) -> list:
     for name, literal in sorted(all_named_canonicals().items()):
         if not literal:
             continue
+        literal = canon.normalize(literal)
+        if not literal:
+            continue
         kind = kind_of(name, rules)
         allowed = set(((rules.get("kinds") or {}).get(kind) or {}).get("allows_trailing")
                       or default_allows)

@@ -12,8 +12,10 @@ Also here: the two manifest counts `build` wrote and nothing compared, `translat
 
     python3 Scripts/test_canon_presence.py
 """
+import argparse
 import contextlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -137,6 +139,43 @@ class PresenceTests(unittest.TestCase):
         self.assertEqual(rows[("strings", "en", "Other")], (canon.ABSENT, canon.NEAR))
         self.assertNotIn(("strings", "en", "a-longer-string"), rows)
 
+    def test_a_non_normalized_question_uses_the_normalized_corpus_identity(self):
+        with self.corpus.aimed(canon):
+            canon.write_absence("strings", "en", ["Mixer"])
+            canon.write_absence("strings", "en", ["Mixer"], folded=True)
+            rows = canon.presence_rows({"strings": {"en": {"Mixer"}}}, [" Mixer "])
+            self.assertEqual(rows, {("strings", "en", "Mixer"): (canon.SHIPS, canon.NEAR)})
+            canon.write_ledger_presence(rows)
+            self.assertEqual(canon.presence("strings", "en", " Mixer "), canon.SHIPS)
+            self.assertEqual(canon.verify_presence_ledger(
+                {"ledger_presence_entries": {"strings": {"en": 1}}}), [])
+
+    def test_a_non_normalized_ledger_key_is_refused(self):
+        with self.corpus.aimed(canon):
+            canon.write_absence("strings", "en", ["Mixer"])
+            canon.write_absence("strings", "en", ["Mixer"], folded=True)
+            os.makedirs(self.corpus.ledger, exist_ok=True)
+            with open(canon.ledger_presence_path(), "w", encoding="utf-8") as handle:
+                handle.write('strings\ten\tships\tnear\t" Mixer "\n')
+            problems = canon.verify_presence_ledger(
+                {"ledger_presence_entries": {"strings": {"en": 1}}})
+            self.assertTrue(any("not normalized" in p for p in problems), problems)
+
+    def test_near_miss_lookup_uses_the_normalized_ledger_key(self):
+        self.corpus.write(canon, prefixes=["Mixer"],
+                          rows={"Mixer:": (canon.ABSENT, canon.FAR)})
+        with self.corpus.aimed(canon):
+            self.assertFalse(canon.differs_only_by_decoration("strings", "en", " Mixer: "))
+
+    def test_confirm_reports_a_non_normalized_question_using_its_normalized_row(self):
+        rows = {("strings", "en", "Mixer"): (canon.SHIPS, canon.NEAR)}
+        output = io.StringIO()
+        args = argparse.Namespace(text=[" Mixer "], stdin=False, app="unused")
+        with mock.patch.object(canon, "confirm", return_value=rows), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(canon._cmd_confirm(args), 0)
+        self.assertIn("strings/en=ships", output.getvalue())
+
     def test_a_confirmed_collision_reaches_the_near_miss_fold(self):
         self._collision(canon, near=canon.NEAR)
         with self.corpus.aimed(canon):
@@ -175,6 +214,7 @@ class PresenceTests(unittest.TestCase):
     # -- the manifest counts nothing compared -------------------------------------------------
 
     def _translated(self, values):
+        os.makedirs(self.corpus.absence, exist_ok=True)
         with open(os.path.join(self.corpus.absence, "translated.en.u32"), "wb") as handle:
             handle.write(b"LCA1" + struct.pack(">I", len(values))
                          + b"".join(struct.pack(">I", v) for v in values))
@@ -190,18 +230,32 @@ class PresenceTests(unittest.TestCase):
             problems = canon.verify_derived_counts({})
             self.assertTrue(any("translated_en_values" in p for p in problems), problems)
 
+    def test_translated_file_and_count_cannot_disappear_together(self):
+        os.makedirs(self.corpus.absence, exist_ok=True)
+        self._translated([1])
+        with self.corpus.aimed(canon):
+            self.assertEqual(canon.verify_derived_counts({"translated_en_values": 1}), [])
+            os.remove(canon.translated_path())
+            problems = canon.verify_derived_counts({})
+            self.assertTrue(any("translated.en.u32" in p for p in problems), problems)
+            self.assertTrue(any("translated_en_values" in p for p in problems), problems)
+
     def test_folded_counts_are_compared_and_each_folded_set_needs_one(self):
         with self.corpus.aimed(canon), mock.patch.dict(canon.EXTRACTORS, {"t": None}):
+            self._translated([])
             canon.write_absence("t", "de", ["a", "b"], folded=True)
             canon.write_absence("t", "ko", ["a"], folded=True)
-            full = {"sources": {"t": {"locales": ["de", "ko"],
+            full = {"translated_en_values": 0,
+                    "sources": {"t": {"locales": ["de", "ko"],
                                       "folded_entries": {"de": 2, "ko": 1}}}}
             self.assertEqual(canon.verify_derived_counts(full), [])
             canon.write_absence("t", "de", ["a"], folded=True)
             problems = canon.verify_derived_counts(full)
             self.assertTrue(any("t.de.folded.u32 holds 1" in p and "declares 2" in p
                                 for p in problems), problems)
-            missing = {"sources": {"t": {"locales": ["de", "ko"], "folded_entries": {"de": 1}}}}
+            missing = {"translated_en_values": 0,
+                       "sources": {"t": {"locales": ["de", "ko"],
+                                         "folded_entries": {"de": 1}}}}
             problems = canon.verify_derived_counts(missing)
             self.assertTrue(any("t.ko.folded.u32 has no count" in p for p in problems), problems)
 
@@ -350,6 +404,28 @@ class PresenceTests(unittest.TestCase):
             failures = []
             NEW_LABELSETS.prove_absent("someLabel", entry, COLLIDER, canon, failures)
             self.assertTrue(any("confirm" in f for f in failures), failures)
+
+    def test_a_waiver_cannot_treat_a_non_normalized_shipped_value_as_absent(self):
+        self.corpus.write(canon, prefixes=["Mixer"], rows={})
+        with self.corpus.aimed(canon):
+            rows = canon.presence_rows({"nibstrings": {"en": {"Mixer"}},
+                                        "strings": {"en": {"Mixer"}}}, [" Mixer "])
+            canon.write_ledger_presence(rows)
+            failures = []
+            NEW_LABELSETS.prove_absent("someLabel", {"why_no_row": "drawn at runtime"},
+                                      " Mixer ", canon, failures)
+        self.assertTrue(any("IS a value" in failure for failure in failures), failures)
+
+    def test_a_non_normalized_shipped_canonical_is_not_a_near_miss(self):
+        self.corpus.write(POLICY.canon, prefixes=["Mixer"], rows={})
+        manifest = {"sources": {"strings": {"locales": ["en"]}}}
+        with self.corpus.aimed(POLICY.canon), \
+                mock.patch.object(POLICY, "all_named_canonicals",
+                                  return_value={"mixerNamedElement": " Mixer "}), \
+                mock.patch.object(POLICY, "decoration_rules", return_value={"default": {}}):
+            rows = POLICY.canon.presence_rows({"strings": {"en": {"Mixer"}}}, [" Mixer "])
+            POLICY.canon.write_ledger_presence(rows)
+            self.assertEqual(POLICY.near_miss_canonicals(manifest), [])
 
 
 if __name__ == "__main__":

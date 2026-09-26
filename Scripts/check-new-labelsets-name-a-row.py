@@ -174,6 +174,7 @@ def prove_absent(name, entry, canonical, canon, failures):
     the value of no row, in any source, in English. See the module docstring for why English and
     why the canonical alone.
     """
+    canonical = canon.normalize(canonical)
     if not entry.get("why_no_row"):
         failures.append(f"{name}: the waiver has no `why_no_row`. A waiver without a reason is a "
                         f"list entry, and a list entry is what this guard exists to outrank.")
