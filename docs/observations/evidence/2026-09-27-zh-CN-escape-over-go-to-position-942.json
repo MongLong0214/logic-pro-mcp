@@ -1,0 +1,1041 @@
+{
+  "name": "probe_942_escape_over_goto_dialog",
+  "head": "1af8870160ef40d07beb360047ff722856ebb90b",
+  "artifact": {
+    "path": "",
+    "sha256": null,
+    "built_from": "1af8870160ef40d07beb360047ff722856ebb90b",
+    "worktree_clean": true,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": false
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "ui"
+    },
+    {
+      "kind": "observation",
+      "tag": "942/menu-path",
+      "payload": {
+        "navigate": "浏览",
+        "go_to": "前往",
+        "position": "位置…"
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "942/baseline",
+      "payload": [
+        {
+          "id": 9515,
+          "layer": 3,
+          "name": "lpm-locale-campaign - 标记列表",
+          "bounds": {
+            "X": 20,
+            "Height": 746,
+            "Y": 50,
+            "Width": 452
+          }
+        },
+        {
+          "id": 9514,
+          "layer": 0,
+          "name": "lpm-locale-campaign - 轨道",
+          "bounds": {
+            "X": 0,
+            "Height": 1050,
+            "Y": 30,
+            "Width": 1920
+          }
+        }
+      ]
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 753,
+        "y": 255,
+        "w": 413,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-menu-over-dialog.png",
+      "window": {
+        "id": 9519,
+        "title": "",
+        "x": 259,
+        "y": 31,
+        "w": 293,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "dfa7523aff216264beb8ecab0e2f960ac990af75e9a5de075280a0c0da998b26",
+      "region_hash": "2d1f49c96a8571f0c371bb4901573ddeb7e5c9b56496fe9021a3bda02b508969",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          586,
+          872
+        ],
+        "points": [
+          293,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-0-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-0-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        155
+      ],
+      "subject": "the Logic window named '前往位置'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-0-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 25afbbbff9ab13a2 after 25afbbbff9ab13a2 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-0",
+      "payload": {
+        "open_dialog_for_control": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 754,
+              "Height": 155,
+              "Y": 255,
+              "Width": 411
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.228,
+        "open_dialog": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9519,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 259,
+              "Height": 436,
+              "Y": 31,
+              "Width": 293
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.28,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9515,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 标记列表",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9514,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 轨道",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-0-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 753,
+        "y": 254,
+        "w": 413,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-menu-over-dialog.png",
+      "window": {
+        "id": 9520,
+        "title": "",
+        "x": 259,
+        "y": 31,
+        "w": 293,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "dfa7523aff216264beb8ecab0e2f960ac990af75e9a5de075280a0c0da998b26",
+      "region_hash": "2d1f49c96a8571f0c371bb4901573ddeb7e5c9b56496fe9021a3bda02b508969",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          586,
+          872
+        ],
+        "points": [
+          293,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-1-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-1-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        157
+      ],
+      "subject": "the Logic window named '前往位置'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-1-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 25afbbbff9ab13a2 after 25afbbbff9ab13a2 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-1",
+      "payload": {
+        "open_dialog_for_control": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.227,
+        "open_dialog": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 753,
+              "Height": 157,
+              "Y": 254,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9520,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 259,
+              "Height": 436,
+              "Y": 31,
+              "Width": 293
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.27,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9515,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 标记列表",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9514,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 轨道",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-1-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-before-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 753,
+        "y": 255,
+        "w": 413,
+        "h": 155
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-before-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          413,
+          155
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-menu-over-dialog",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-menu-over-dialog.png",
+      "window": {
+        "id": 9521,
+        "title": "",
+        "x": 259,
+        "y": 31,
+        "w": 293,
+        "h": 436
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "dfa7523aff216264beb8ecab0e2f960ac990af75e9a5de075280a0c0da998b26",
+      "region_hash": "2d1f49c96a8571f0c371bb4901573ddeb7e5c9b56496fe9021a3bda02b508969",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-menu-over-dialog/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          586,
+          872
+        ],
+        "points": [
+          293,
+          436
+        ]
+      }
+    },
+    {
+      "kind": "capture",
+      "tag": "942/sample-2-dialog-after-escape",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "window": {
+        "id": 9518,
+        "title": "前往位置",
+        "x": 751,
+        "y": 254,
+        "w": 417,
+        "h": 157
+      },
+      "display": {
+        "display": 0,
+        "bounds": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "wholly_within": true
+      },
+      "hash": "48522104bed4c4bef87cec26df375ff04a9404e8fb73f0a126fefe630a917f2c",
+      "region_hash": "25afbbbff9ab13a25aaa3f0f35f7ef851bc55282658464283b51877268ee5f23",
+      "frames": 2,
+      "settled": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2-dialog-after-escape/pixels-versus-points",
+      "payload": {
+        "pixels": [
+          834,
+          314
+        ],
+        "points": [
+          417,
+          157
+        ]
+      }
+    },
+    {
+      "kind": "visual",
+      "tag": "942/sample-2-dialog-unchanged-by-the-menu-escape",
+      "region": [
+        0,
+        0,
+        413,
+        155
+      ],
+      "subject": "the Logic window named '前往位置'",
+      "before": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-before-escape.png",
+      "after": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__942_sample-2-dialog-after-escape.png",
+      "expected": "region does not change — the Escape closed the menu; the dialog under it is the same window, untouched",
+      "observed": "before 25afbbbff9ab13a2 after 25afbbbff9ab13a2 changed=False",
+      "passed": true
+    },
+    {
+      "kind": "observation",
+      "tag": "942/sample-2",
+      "payload": {
+        "open_dialog_for_control": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "control_dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 753,
+              "Height": 157,
+              "Y": 254,
+              "Width": 413
+            }
+          }
+        ],
+        "control_keyboard_owner_is_logic": true,
+        "control_after_escape": [],
+        "control_dialog_gone_after_seconds": 0.221,
+        "open_dialog": "menu item 位置… of menu 前往 of menu item 前往 of menu 浏览 of menu bar item 浏览 of menu bar 1 of application process Logic Pro",
+        "dialog": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 753,
+              "Height": 155,
+              "Y": 255,
+              "Width": 413
+            }
+          }
+        ],
+        "menus_over_dialog": [
+          {
+            "id": 9521,
+            "layer": 101,
+            "name": "",
+            "bounds": {
+              "X": 259,
+              "Height": 436,
+              "Y": 31,
+              "Width": 293
+            }
+          }
+        ],
+        "dialog_under_menu": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "keyboard_owner_is_logic": true,
+        "menus_after_one_escape": [],
+        "menu_gone_after_seconds": 0.278,
+        "dialog_survival_bound_seconds": 1.5,
+        "dialog_gone_after_seconds": null,
+        "dialog_after_one_escape": [
+          {
+            "id": 9518,
+            "layer": 8,
+            "name": "前往位置",
+            "bounds": {
+              "X": 751,
+              "Height": 157,
+              "Y": 254,
+              "Width": 417
+            }
+          }
+        ],
+        "menus_after_survival_bound": [],
+        "after_cleanup": [
+          {
+            "id": 9515,
+            "layer": 3,
+            "name": "lpm-locale-campaign - 标记列表",
+            "bounds": {
+              "X": 20,
+              "Height": 746,
+              "Y": 50,
+              "Width": 452
+            }
+          },
+          {
+            "id": 9514,
+            "layer": 0,
+            "name": "lpm-locale-campaign - 轨道",
+            "bounds": {
+              "X": 0,
+              "Height": 1050,
+              "Y": 30,
+              "Width": 1920
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "942/sample-2-left-no-menu-and-no-dialog",
+      "restored": true,
+      "detail": ""
+    },
+    {
+      "kind": "recording",
+      "file": "<LPM_EVIDENCE_ROOT>/1af8870160ef40d07beb360047ff722856ebb90b/probe_942_escape_over_goto_dialog__run.mov",
+      "exists": true,
+      "bytes": 73920733
+    },
+    {
+      "kind": "check",
+      "tag": "942/escape-reaches-the-dialog-alone",
+      "passed": true,
+      "expected": "with only the dialog up and Logic owning the keyboard, one Escape removes the dialog",
+      "observed": [
+        {
+          "control_dialog": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 754,
+                "Height": 155,
+                "Y": 255,
+                "Width": 411
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.228,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 753,
+                "Height": 155,
+                "Y": 255,
+                "Width": 413
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.227,
+          "error": null
+        },
+        {
+          "control_dialog": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 753,
+                "Height": 157,
+                "Y": 254,
+                "Width": 413
+              }
+            }
+          ],
+          "control_keyboard_owner_is_logic": true,
+          "control_after_escape": [],
+          "control_dialog_gone_after_seconds": 0.221,
+          "error": null
+        }
+      ],
+      "mutation": "if the Escape could not reach the dialog, a dialog surviving the measured Escape would prove nothing about which window it closes",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "check",
+      "tag": "942/one-escape-closes-the-menu-and-leaves-the-dialog",
+      "passed": true,
+      "expected": "with a Logic menu open over the dialog and Logic owning the keyboard, one Escape leaves no Logic menu and the same dialog window still on screen",
+      "observed": [
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9519,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 259,
+                "Height": 436,
+                "Y": 31,
+                "Width": 293
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.28,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9520,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 259,
+                "Height": 436,
+                "Y": 31,
+                "Width": 293
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.27,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        },
+        {
+          "menus_over_dialog": [
+            {
+              "id": 9521,
+              "layer": 101,
+              "name": "",
+              "bounds": {
+                "X": 259,
+                "Height": 436,
+                "Y": 31,
+                "Width": 293
+              }
+            }
+          ],
+          "dialog_under_menu": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "keyboard_owner_is_logic": true,
+          "menus_after_one_escape": [],
+          "menu_gone_after_seconds": 0.278,
+          "dialog_survival_bound_seconds": 1.5,
+          "dialog_gone_after_seconds": null,
+          "dialog_after_one_escape": [
+            {
+              "id": 9518,
+              "layer": 8,
+              "name": "前往位置",
+              "bounds": {
+                "X": 751,
+                "Height": 157,
+                "Y": 254,
+                "Width": 417
+              }
+            }
+          ],
+          "menus_after_survival_bound": [],
+          "error": null
+        }
+      ],
+      "mutation": "if Logic routed the Escape to the modal first, the dialog would be gone after it and this check fails",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    }
+  ]
+}
