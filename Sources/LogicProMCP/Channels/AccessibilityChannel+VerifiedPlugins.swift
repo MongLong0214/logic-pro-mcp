@@ -2995,16 +2995,22 @@ extension AccessibilityChannel {
     private static func dismissLogicPopupMenuAfterPluginWindowAcquisition(
         runtime: AXLogicProElements.Runtime
     ) -> PluginPopupMenuCleanupOutcome {
-        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
-            return .popupCountUnavailable
-        }
-        guard initialPopupCount > 0 else {
+        let firstPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime)
+        guard firstPopupCount != 0 else {
             return .noPopupObserved
         }
 
-        cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
-        if logicOwnedPopupMenuWindowCount(runtime: runtime) == 0 {
-            return .dismissed
+        // An unreadable first count used to end the cleanup here, and a menu the operation had just
+        // opened stayed on screen (#1016 review). The AX cancel needs no count to be aimed: it acts
+        // only on elements AX itself reports as menus. The Escape below is different -- it goes to
+        // whatever has focus -- so it is still never typed unless some reading counted a popup.
+        let cancelledMenus = cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
+        let afterCancelCount = logicOwnedPopupMenuWindowCount(runtime: runtime)
+        if afterCancelCount == 0 {
+            return firstPopupCount != nil || cancelledMenus > 0 ? .dismissed : .noPopupObserved
+        }
+        guard let initialPopupCount = firstPopupCount ?? afterCancelCount else {
+            return .popupCountUnavailable
         }
         runtime.postPopupMenuEscape()
 
@@ -3047,10 +3053,11 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The number of menus the cancel action was performed on.
     private static func cancelVisibleLogicPopupMenusViaAX(
         runtime: AXLogicProElements.Runtime
-    ) {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return }
+    ) -> Int {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return 0 }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute, runtime: runtime.ax
         ) ?? []
@@ -3066,10 +3073,13 @@ extension AccessibilityChannel {
                 menus.append(menu)
             }
         }
+        var cancelled = 0
         for menu in menus where AXHelpers.getActionNames(menu, runtime: runtime.ax)
             .contains(kAXCancelAction as String) {
             _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime.ax)
+            cancelled += 1
         }
+        return cancelled
     }
 
     private static func pollOpenPluginWindow(

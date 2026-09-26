@@ -24,7 +24,7 @@ private func window(owner: pid_t, layer: Int) -> [String: Any] {
 /// The window server as the cleanup sees it. `popupsCloseOnEscape` models a menu Escape closes;
 /// otherwise the popup stays whatever is posted.
 private final class FakeWindowServer: @unchecked Sendable {
-    enum Behaviour { case popupsCloseOnEscape, popupsStay, unreadable, noPopup }
+    enum Behaviour { case popupsCloseOnEscape, popupsStay, unreadable, unreadableOnceThenNoPopup, noPopup }
     private let lock = NSLock()
     private let behaviour: Behaviour
     private let baseWindows: [[String: Any]]
@@ -47,6 +47,8 @@ private final class FakeWindowServer: @unchecked Sendable {
             switch behaviour {
             case .unreadable:
                 return nil
+            case .unreadableOnceThenNoPopup:
+                return reads == 1 ? nil : baseWindows
             case .noPopup:
                 return baseWindows
             case .popupsStay:
@@ -85,14 +87,25 @@ enum Issue1016Refusal: CaseIterable, Sendable {
 private struct RefusalRun {
     let envelope: [String: Any]
     let slotPressed: Bool
+    /// Whether AXCancel was performed on the fixture's open menu; false when the fixture has none.
+    let menuCancelled: Bool
 }
 
+/// `withOpenMenu` puts one AX menu under the application, as the slot press leaves it, so the AX
+/// half of the cleanup has something to cancel.
 private func runRefusedInsert(
     _ refusal: Issue1016Refusal,
-    server: FakeWindowServer
+    server: FakeWindowServer,
+    withOpenMenu: Bool = false
 ) async throws -> RefusalRun {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(1016_0)
+    let openMenu = b.element(1016_5)
+    if withOpenMenu {
+        b.setAttribute(openMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setActionNames(openMenu, [kAXCancelAction as String])
+        b.setChildren(app, [openMenu])
+    }
     let mainWindow = b.element(1016_1)
     let mixer = b.element(1016_2)
     let strip = b.element(1016_3)
@@ -131,7 +144,10 @@ private func runRefusedInsert(
     let slotPressed = b.actionCalls.contains {
         $0.elementID == b.elementID(slot) && $0.action == kAXPressAction as String
     }
-    return RefusalRun(envelope: envelope, slotPressed: slotPressed)
+    let menuCancelled = withOpenMenu && b.actionCalls.contains {
+        $0.elementID == b.elementID(openMenu) && $0.action == kAXCancelAction as String
+    }
+    return RefusalRun(envelope: envelope, slotPressed: slotPressed, menuCancelled: menuCancelled)
 }
 
 @Test(arguments: Issue1016Refusal.allCases)
@@ -170,16 +186,44 @@ func issue1016RefusalReportsAMenuThatStayedOpenWithItsCount(_ refusal: Issue1016
 @Test(arguments: Issue1016Refusal.allCases)
 func issue1016RefusalDoesNotReadAnUnreadableWindowListAsClean(_ refusal: Issue1016Refusal) async throws {
     let server = FakeWindowServer(.unreadable)
-    let run = try await runRefusedInsert(refusal, server: server)
+    let run = try await runRefusedInsert(refusal, server: server, withOpenMenu: true)
 
     #expect(run.slotPressed)
     #expect(run.envelope["state"] as? String == "C")
     #expect(run.envelope["plugin_popup_menu_state"] as? String == "window_count_unavailable")
-    #expect(server.readCount >= 1)
-    // Unknown is not a reason to type: nothing was seen to dismiss.
+    // The unread count does not stop the AX cancel, which is aimed by AX role, not by the count,
+    // and the list is read again after it.
+    #expect(run.menuCancelled)
+    #expect(server.readCount >= 2)
+    // Unknown is not a reason to type: no reading counted a popup, and an Escape goes to focus.
     #expect(server.escapeCount == 0)
     let hint = try #require(run.envelope["recovery_hint"] as? String)
     #expect(hint.contains("Escape"))
+}
+
+@Test(arguments: Issue1016Refusal.allCases)
+func issue1016RefusalCancelsItsMenuWhenOnlyTheFirstReadFails(_ refusal: Issue1016Refusal) async throws {
+    let server = FakeWindowServer(.unreadableOnceThenNoPopup)
+    let run = try await runRefusedInsert(refusal, server: server, withOpenMenu: true)
+
+    #expect(run.envelope["state"] as? String == "C")
+    #expect(run.menuCancelled)
+    // The reading after the cancel answers, and it shows no popup.
+    #expect(run.envelope["plugin_popup_menu_state"] as? String == "dismissed")
+    #expect(server.escapeCount == 0)
+    #expect(run.envelope["recovery_hint"] == nil)
+}
+
+@Test(arguments: Issue1016Refusal.allCases)
+func issue1016UnreadFirstCountWithNothingToCancelIsNotReportedAsDismissed(
+    _ refusal: Issue1016Refusal
+) async throws {
+    let server = FakeWindowServer(.unreadableOnceThenNoPopup)
+    let run = try await runRefusedInsert(refusal, server: server)
+
+    // Nothing was cancelled and nothing typed; the one reading that answered saw no popup.
+    #expect(run.envelope["plugin_popup_menu_state"] as? String == "no_popup_observed")
+    #expect(server.escapeCount == 0)
 }
 
 @Test(arguments: Issue1016Refusal.allCases)
