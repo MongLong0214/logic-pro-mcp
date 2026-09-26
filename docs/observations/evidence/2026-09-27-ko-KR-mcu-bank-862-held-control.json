@@ -1,0 +1,1270 @@
+{
+  "name": "live_862_bank_answers_from_the_redrawn_upper_row",
+  "head": "b992857eb08517c0d74e814468cf566d006a90cf",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin862/LogicProMCP-b992857eb08517c0d74e814468cf566d006a90cf",
+    "sha256": "afd3cefe355f432803b51f6987c27752dbc3ce568038c0f410e3d868818dd729",
+    "built_from": "a48a5cb56f91ae8c5a5b5d98edc74835f132bf31",
+    "worktree_clean": false,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": true
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/mcu-state-at-start",
+      "payload": {
+        "isConnected": true,
+        "registeredAsDevice": true,
+        "upperRow": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/pre-upper-row-refusal-not-exercisable",
+      "payload": {
+        "why": "the surface was already bound and the upper row arrived during start-up"
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/track-census",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "count": 19
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "left"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/walk-left-0",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "left",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 8894,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_1DD59854-08C8-4EF3-A578-0D65B49D9733",
+        "upper_row_writes_observed": 0,
+        "verified": false,
+        "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+        "window_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "left"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/left-at-bank-0",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "left",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 10040,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_523A2BC6-4B18-43E4-A59B-87D26C922BA3",
+        "upper_row_writes_observed": 0,
+        "verified": false,
+        "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+        "window_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "right"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/right-from-bank-0",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "right",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 44,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "reason": "noop_unobservable",
+        "state": "B",
+        "success": true,
+        "surface_limitation": "the LCD upper row redrew with the same six-character names it held before the press; an identical redraw cannot confirm a bank move (bank 0 pressed left, the last bank pressed right, or eight neighbours whose truncated names coincide)",
+        "trace_id": "lpmcp_CC282B0E-DF5C-4B39-A70B-37291DF8E857",
+        "upper_row_writes_observed": 4,
+        "verified": false,
+        "verify_source": "mcu_lcd_upper_row",
+        "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+        "window_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mcu/state",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "862/the-window-holds-still-after-the-reply",
+      "passed": false,
+      "expected": "after one bank right from bank 0 answered State A, the upper row reads the reply's window_after on every 20 ms poll for 1.5 s",
+      "observed": {
+        "state": "B",
+        "window_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+        "rows_seen_in_order": [
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+        ],
+        "distinct_changes": 8
+      },
+      "mutation": "send the bank press without its release in MCUChannel's press helper: Logic then holds both bank buttons and the row flips between two windows",
+      "mutation_claimed": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "right"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/right-again",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "right",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 23,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_DE02EE60-CB5B-4284-A92E-209259CBB075",
+        "upper_row_writes_observed": 38,
+        "verified": false,
+        "window_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+        "window_before": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "left"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/left-back",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "left",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 19,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_C688DF2F-214A-4F7A-A0A4-2F3BDDD55565",
+        "upper_row_writes_observed": 40,
+        "verified": false,
+        "window_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+        "window_before": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "left"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/left-to-bank-0",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "left",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 26,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_A19D7C91-C92A-455A-9BBE-796FB567E693",
+        "upper_row_writes_observed": 40,
+        "verified": false,
+        "window_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+        "window_before": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "right",
+        "count": 2
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/right-count-2",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 2,
+        "channel": "MCU",
+        "direction": "right",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 7,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "readback_source": "mcu_lcd_upper_row",
+        "reason": "echo_timeout_500ms",
+        "row_quiescent": false,
+        "state": "B",
+        "success": true,
+        "trace_id": "lpmcp_7D435CCC-D8B1-4977-B760-925E07D99821",
+        "upper_row_writes_observed": 41,
+        "verified": false,
+        "window_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+        "window_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "862/state-a-only-when-the-redrawn-window-changed",
+      "passed": false,
+      "expected": "at least one move was State A; every State A reply carries a window_after that differs from window_before and eight strip names; and the one press with no window to reach -- left at bank 0 -- is State B. THE COUNTEREXAMPLE is the press-is-success shape: left at bank 0 reported as State A with its window unchanged, which is what a receipt built from the press would say",
+      "observed": {
+        "observation": "{'walk_states': ['B'], 'replies': {'left-at-bank-0': {'state': 'B', 'reason': 'echo_timeout_500ms', 'error': None, 'window_before': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'window_after': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'strips': None, 'bank_presses_sent': 1, 'upper_row_writes_observed': 0, 'bank_bookkeeping_before': 0, 'bank_bookkeeping_after': 0}, ",
+        "accepted_the_observation": false,
+        "counterexample": "{'walk_states': ['B'], 'replies': {'left-at-bank-0': {'state': 'B', 'reason': 'echo_timeout_500ms', 'error': None, 'window_before': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'window_after': 'AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ', 'strips': None, 'bank_presses_sent': 1, 'upper_row_writes_observed': 0, 'bank_bookkeeping_before': 0, 'bank_bookkeeping_after': 0}, ",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the `after.row != before.row` guard in MCUChannel.executeBank",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "observation",
+      "tag": "862/independent-witness-not-exercisable",
+      "payload": {
+        "right1_state": "B",
+        "track_count": 19
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_mixer",
+      "command": "bank",
+      "params": {
+        "direction": "left"
+      },
+      "response": {
+        "state": "B",
+        "success": true,
+        "error": null,
+        "hint": null,
+        "verified": false,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "862/restore-left-0",
+      "payload": {
+        "bank_bookkeeping_after": 0,
+        "bank_bookkeeping_before": 0,
+        "bank_presses_sent": 1,
+        "channel": "MCU",
+        "direction": "left",
+        "mcu_connected": true,
+        "mcu_last_feedback_age_ms": 25,
+        "mcu_registered": true,
+        "operation": "mixer.bank",
+        "reason": "noop_unobservable",
+        "state": "B",
+        "success": true,
+        "surface_limitation": "the LCD upper row redrew with the same six-character names it held before the press; an identical redraw cannot confirm a bank move (bank 0 pressed left, the last bank pressed right, or eight neighbours whose truncated names coincide)",
+        "trace_id": "lpmcp_744807E9-4AF2-4B25-99CF-CAD9F251CF92",
+        "upper_row_writes_observed": 32,
+        "verified": false,
+        "verify_source": "mcu_lcd_upper_row",
+        "window_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+        "window_before": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master "
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "862/window-back-at-bank-0",
+      "restored": true,
+      "detail": "[\"B\"]"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    },
+    {
+      "kind": "provenance",
+      "tag": "artifact/older-than-its-sources",
+      "source": "mtime(Sources/**) vs mtime(binary)",
+      "cache_age_sec": null,
+      "usable_as_live_evidence": false,
+      "newer_than_binary": [
+        "Sources/LogicProMCP/Channels/MCUChannel.swift",
+        "Sources/LogicProMCP/MIDI/MCUProtocol.swift"
+      ],
+      "newer_than_binary_count": 2
+    }
+  ]
+}

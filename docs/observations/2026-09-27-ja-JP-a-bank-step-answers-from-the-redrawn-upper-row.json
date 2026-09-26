@@ -1,0 +1,131 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-ja-JP-a-bank-step-answers-from-the-redrawn-upper-row",
+  "date": "2026-09-27",
+  "subject": "logic_mixer bank (mixer.bank, MCU): what the reply says against the Mackie Control LCD upper row Logic redraws",
+  "question": "Does logic_mixer bank answer State A only when Logic redrew the upper row to a new window for every requested step, and does count 2 land where two single presses land?",
+  "verdict": "works",
+  "surface": "system.midi",
+  "issues": [
+    862
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_862_bank_answers_from_the_redrawn_upper_row.py <worktree> <full-40-char-head> [binary]",
+    "expected": "all four checks pass and the window is back at bank 0: the row holds still after a State A reply, State A only with a changed row and eight strips, left at bank 0 is State B, count 2 lands on the row two single presses reach, and the row after one right abbreviates tracks 9-16",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository, a running Logic with a project of more than eight tracks open, and the Mackie Control surface bound to the server's virtual ports; nothing else may hold those ports (a full swift test run starts a debug server that does)"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/MCUChannel.swift:MCUChannel",
+    "Scripts/livekit/live_862_bank_answers_from_the_redrawn_upper_row.py:abbreviates"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-ja-JP-mcu-bank-862.json"
+  ],
+  "method": "The release binary at de0407d39aeb190ba924270698650cb6457b9011 was started against the open project with the Mackie Control surface already bound. The harness walked left until a press was not State A, pressed left once more at bank 0, then right, right, left, left, and right with count 2, reading each reply and polling the MCU upper row every 20 ms for 1.5 s after the first right. It read logic://tracks for the track names, and walked left again at the end until a press was not State A. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "observations": [
+    {
+      "binary": "de0407d39aeb190ba924270698650cb6457b9011",
+      "replies": {
+        "left-at-bank-0": {
+          "state": "B",
+          "reason": "echo_timeout_500ms",
+          "upper_row_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "upper_row_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "bank_presses_sent": 1,
+          "banks_moved": 0,
+          "banks_requested": 1,
+          "upper_row_writes_observed": 0
+        },
+        "right-from-bank-0": {
+          "state": "A",
+          "reason": null,
+          "upper_row_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "upper_row_after": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "bank_presses_sent": 1,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "upper_row_writes_observed": 2
+        },
+        "right-again": {
+          "state": "A",
+          "reason": null,
+          "upper_row_before": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "upper_row_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "bank_presses_sent": 1,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "upper_row_writes_observed": 2
+        },
+        "left-back": {
+          "state": "A",
+          "reason": null,
+          "upper_row_before": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "upper_row_after": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "bank_presses_sent": 1,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "upper_row_writes_observed": 2
+        },
+        "left-to-bank-0": {
+          "state": "A",
+          "reason": null,
+          "upper_row_before": "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+          "upper_row_after": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "bank_presses_sent": 1,
+          "banks_moved": 1,
+          "banks_requested": 1,
+          "upper_row_writes_observed": 2
+        },
+        "right-count-2": {
+          "state": "A",
+          "reason": null,
+          "upper_row_before": "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ",
+          "upper_row_after": "StdGrn StdGrn StdGrn StdGrn StdGrn StdGrn St Out Master ",
+          "bank_presses_sent": 2,
+          "banks_moved": 2,
+          "banks_requested": 2,
+          "upper_row_writes_observed": 4
+        }
+      },
+      "rows_after_one_right_polled_20ms_for_1_5s": {
+        "distinct_changes": 0,
+        "passed": true
+      },
+      "lcd_cells_after_one_right_that_abbreviate_tracks_9_16": {
+        "cells": 8,
+        "abbrev_hits": 8
+      },
+      "lcd_cells_after_one_right_that_abbreviate_tracks_1_8": {
+        "cells": 8,
+        "abbrev_hits": 1
+      },
+      "checks": {
+        "the-window-holds-still-after-the-reply": true,
+        "state-a-only-when-the-redrawn-window-changed": true,
+        "count-2-lands-where-two-single-presses-land": true,
+        "the-window-after-one-right-is-tracks-9-to-16": true
+      },
+      "window_back_at_bank_0": true
+    }
+  ],
+  "conclusion": "Left at bank 0 answered State B. One press right answered State A with a changed upper row that held still, and the row's cells abbreviate tracks 9-16. Count 2 answered State A after 2 presses and 2 witnessed moves, on the row two single presses reach.",
+  "limits": [
+    "State A says every step's press produced its own redraw to a different row. It does not say which bank is showing: six-character names are not an index.",
+    "One project (lpm-locale-campaign, 19 tracks), one run, one host, walking only between bank 0 and bank 2. The last bank is clamped by Logic, so a step at the end of the mixer redraws unchanged, like a press Logic ignored.",
+    "The pre-upper-row State C refusal was not exercisable: the surface was already bound and the row arrived during start-up.",
+    "The LCD cells are compared with track names by abbreviation (first letter, then letters in order), which is how Logic 12.3 shortens a name to six characters in these runs; it is not an identity join.",
+    "The two control binaries were run only in Korean; in this language there is only the reading of the fixed binary."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about the server's BEHAVIOUR -- which reply a bank request gets against the upper row Logic redraws -- not about a string Logic ships. The LCD rows it quotes are track names shortened by Logic and a channel-strip footer, read from the MCU wire rather than from a localized table."
+  }
+}
