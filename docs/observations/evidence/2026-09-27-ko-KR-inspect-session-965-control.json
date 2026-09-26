@@ -1,0 +1,936 @@
+{
+  "name": "live_965_inspect_session_reports_the_cached_population",
+  "head": "3147d410740b16573f0690379c4053af3e9ede95",
+  "artifact": {
+    "path": "/private/tmp/claude-501/-Users-isaac-projects-logic-pro-mcp/8632e9eb-402f-4b36-8b81-2d5c946339d3/scratchpad/bin291/LogicProMCP-3147d410740b16573f0690379c4053af3e9ede95",
+    "sha256": "f12a5b6594ba925ae987d25920516c92182631579d99f2c4e21ec719bc797181",
+    "built_from": "20246b6a63ed73f13f17a8383eac2930244d782c",
+    "worktree_clean": false,
+    "built_from_is_measured": false,
+    "artifact_older_than_sources": true
+  },
+  "records": [
+    {
+      "kind": "declaration",
+      "surface": "non_ui"
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/precondition-tracks",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_D8475A51-DBAE-45BE-AA18-F6CAF810D82F",
+          "trk_C40DB983-0A6C-4B11-8450-F34C6272D44E",
+          "trk_3EFE1CFE-CC8C-4953-8D79-4C664B1AE3B9",
+          "trk_672DCA67-332C-4EA1-8615-6CEAF079B798",
+          "trk_DFADA02F-E1A7-439D-8C23-AC1F15B54D41",
+          "trk_CF075DCF-3888-4556-AC43-7290099F626D",
+          "trk_C185957A-6461-476F-9E03-F5FF8EEA20CC",
+          "trk_C33AB22D-60E7-449D-BAA8-DF285DFD8A6F",
+          "trk_E1E1E733-3583-4041-977C-B805F9BD530D",
+          "trk_6FA543F9-4684-41A7-8889-80FAC05F6F9D",
+          "trk_11787E53-341A-4094-AC32-337131FFE7AE",
+          "trk_D4B6A390-461F-4982-9792-1515BB22D2C0",
+          "trk_EE2AC318-08D4-4348-B9A9-2CA4076BB150",
+          "trk_BE6B45DB-990A-4855-8079-DD075E36CDDF",
+          "trk_CE32210E-A785-4D8F-A1CE-600A1B87CF78",
+          "trk_568F0F11-F4FD-40FB-8549-99AAE97987AF",
+          "trk_9236A5BA-71C9-4255-A08B-487544567F8E",
+          "trk_0725B0EA-5AAD-42C6-90FD-9B6B72B7575C",
+          "trk_B4685757-99BD-4FD5-AE09-D4D2B97EF0BA"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/precondition-the-product-can-see-the-document-and-the-mixer",
+      "passed": true,
+      "expected": "logic://tracks reports a live read of a non-empty rail and logic://mixer a fresh poll, so the reports below are compared against a real document and a visible Mixer rather than the cold cache",
+      "observed": {
+        "x_presses": 0,
+        "tracks_readable": true,
+        "tracks_source": "ax_live",
+        "rows": 19,
+        "mixer_fresh": true
+      },
+      "mutation": null,
+      "mutation_claimed": false,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-before-the-report",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_D8475A51-DBAE-45BE-AA18-F6CAF810D82F",
+          "trk_C40DB983-0A6C-4B11-8450-F34C6272D44E",
+          "trk_3EFE1CFE-CC8C-4953-8D79-4C664B1AE3B9",
+          "trk_672DCA67-332C-4EA1-8615-6CEAF079B798",
+          "trk_DFADA02F-E1A7-439D-8C23-AC1F15B54D41",
+          "trk_CF075DCF-3888-4556-AC43-7290099F626D",
+          "trk_C185957A-6461-476F-9E03-F5FF8EEA20CC",
+          "trk_C33AB22D-60E7-449D-BAA8-DF285DFD8A6F",
+          "trk_E1E1E733-3583-4041-977C-B805F9BD530D",
+          "trk_6FA543F9-4684-41A7-8889-80FAC05F6F9D",
+          "trk_11787E53-341A-4094-AC32-337131FFE7AE",
+          "trk_D4B6A390-461F-4982-9792-1515BB22D2C0",
+          "trk_EE2AC318-08D4-4348-B9A9-2CA4076BB150",
+          "trk_BE6B45DB-990A-4855-8079-DD075E36CDDF",
+          "trk_CE32210E-A785-4D8F-A1CE-600A1B87CF78",
+          "trk_568F0F11-F4FD-40FB-8549-99AAE97987AF",
+          "trk_9236A5BA-71C9-4255-A08B-487544567F8E",
+          "trk_0725B0EA-5AAD-42C6-90FD-9B6B72B7575C",
+          "trk_B4685757-99BD-4FD5-AE09-D4D2B97EF0BA"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/report-with-default-params",
+      "payload": {
+        "attempts": [
+          {
+            "schema": null,
+            "coverage": {
+              "tracks": null,
+              "strips": null,
+              "associations": null,
+              "hierarchy": null
+            }
+          }
+        ],
+        "reply": {
+          "command": "inspect_session",
+          "error": "invalid_params",
+          "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+          "state": "C",
+          "success": false,
+          "tool": "logic_project",
+          "write_attempted": false
+        }
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/rows-compared",
+      "payload": {
+        "schema": null,
+        "resource_names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "resource_refs": [
+          "trk_D8475A51-DBAE-45BE-AA18-F6CAF810D82F",
+          "trk_C40DB983-0A6C-4B11-8450-F34C6272D44E",
+          "trk_3EFE1CFE-CC8C-4953-8D79-4C664B1AE3B9",
+          "trk_672DCA67-332C-4EA1-8615-6CEAF079B798",
+          "trk_DFADA02F-E1A7-439D-8C23-AC1F15B54D41",
+          "trk_CF075DCF-3888-4556-AC43-7290099F626D",
+          "trk_C185957A-6461-476F-9E03-F5FF8EEA20CC",
+          "trk_C33AB22D-60E7-449D-BAA8-DF285DFD8A6F",
+          "trk_E1E1E733-3583-4041-977C-B805F9BD530D",
+          "trk_6FA543F9-4684-41A7-8889-80FAC05F6F9D",
+          "trk_11787E53-341A-4094-AC32-337131FFE7AE",
+          "trk_D4B6A390-461F-4982-9792-1515BB22D2C0",
+          "trk_EE2AC318-08D4-4348-B9A9-2CA4076BB150",
+          "trk_BE6B45DB-990A-4855-8079-DD075E36CDDF",
+          "trk_CE32210E-A785-4D8F-A1CE-600A1B87CF78",
+          "trk_568F0F11-F4FD-40FB-8549-99AAE97987AF",
+          "trk_9236A5BA-71C9-4255-A08B-487544567F8E",
+          "trk_0725B0EA-5AAD-42C6-90FD-9B6B72B7575C",
+          "trk_B4685757-99BD-4FD5-AE09-D4D2B97EF0BA"
+        ],
+        "report_names": [],
+        "report_refs": [],
+        "coverage": null,
+        "reasons": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/the-report-lists-the-rows-logic-tracks-issues",
+      "passed": false,
+      "expected": "a default inspect_session, taken right after a logic://tracks read in the same server, lists the same row names in the same order under the same trk_ references, and its tracks coverage is complete, or partial with its reasons named. THE COUNTEREXAMPLE is the same rows under references a second issuer minted",
+      "observed": {
+        "observation": "{'schema': None, 'resource_names': ['Absolute Zero', 'Audio 1', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand'], 'resource_refs': ['trk_D8475A51-DBAE-45BE-AA1",
+        "accepted_the_observation": false,
+        "counterexample": "{'schema': None, 'resource_names': ['Absolute Zero', 'Audio 1', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Deluxe Classic', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand', 'Studio Grand'], 'resource_refs': ['trk_D8475A51-DBAE-45BE-AA1",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "hand SessionPopulationObservation.capture a TargetRegistry of its own instead of the server's, so it mints references logic://tracks never issued",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/mixer-before-the-report",
+      "payload": {
+        "data_source": "ax_poll",
+        "cache_age_sec": 0.0028220415115356445,
+        "strip_count": 21,
+        "strip_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/report-with-a-fresh-mixer",
+      "payload": {
+        "attempts": [
+          {
+            "schema": null,
+            "coverage": {
+              "tracks": null,
+              "strips": null,
+              "associations": null,
+              "hierarchy": null
+            }
+          }
+        ],
+        "reply": {
+          "command": "inspect_session",
+          "error": "invalid_params",
+          "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+          "state": "C",
+          "success": false,
+          "tool": "logic_project",
+          "write_attempted": false
+        }
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/strips-compared",
+      "payload": {
+        "schema": null,
+        "mixer_data_source": "ax_poll",
+        "mixer_strip_count": 21,
+        "mixer_strip_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "report_strip_count": null,
+        "report_strip_rows": 0,
+        "report_strip_indices": [],
+        "report_strips_source": null,
+        "coverage": null,
+        "reasons": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/strips-come-from-the-mixer-the-product-read",
+      "passed": false,
+      "expected": "with logic://mixer fresh (data_source ax_poll) and publishing strips, the report taken right after it counts the same strips, in rows keyed by the same trackIndex values, and its strips coverage is not complete while it names any reason. THE COUNTEREXAMPLE is a report that counted no strips beside a mixer resource that published them",
+      "observed": {
+        "observation": "{'schema': None, 'mixer_data_source': 'ax_poll', 'mixer_strip_count': 21, 'mixer_strip_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 'report_strip_count': None, 'report_strip_rows': 0, 'report_strip_indices': [], 'report_strips_source': None, 'coverage': None, 'reasons': None}",
+        "accepted_the_observation": false,
+        "counterexample": "{'schema': None, 'mixer_data_source': 'ax_poll', 'mixer_strip_count': 21, 'mixer_strip_indices': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], 'report_strip_count': 0, 'report_strip_rows': 0, 'report_strip_indices': [], 'report_strips_source': None, 'coverage': None, 'reasons': None}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "build the report's strips from a second mixer read, or from none, instead of the snapshot.channelStrips the capture took from the cache logic://mixer reads",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "observation",
+      "tag": "965/associations-and-overall",
+      "payload": {
+        "schema": null,
+        "associations": null,
+        "overall": null
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/no-association-is-claimed-without-evidence",
+      "passed": false,
+      "expected": "the default report's associations coverage is not complete and names no_observed_association_evidence, and overall.complete is false with associations among the incomplete domains. THE COUNTEREXAMPLE is an associations block claiming complete coverage, which only an ordinal strip-to-track join could have produced",
+      "observed": {
+        "observation": "{'schema': None, 'associations': None, 'overall': None}",
+        "accepted_the_observation": false,
+        "counterexample": "{'schema': None, 'associations': {'coverage': 'complete', 'reasons': []}, 'overall': None}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "have SessionPopulationObservation.build mark associations complete by joining strip.trackIndex to track.id",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {
+        "allow_ui_navigation": true
+      },
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/navigation-refusal-raw-reply",
+      "payload": {
+        "raw": {
+          "id": 13,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"command\":\"inspect_session\",\"error\":\"invalid_params\",\"hint\":\"Command 'inspect_session' is not registered for MCP tool 'logic_project'\",\"state\":\"C\",\"success\":false,\"tool\":\"logic_project\",\"write_attempted\":false}",
+                "type": "text"
+              }
+            ],
+            "isError": true,
+            "structuredContent": {
+              "command": "inspect_session",
+              "error": "invalid_params",
+              "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+              "state": "C",
+              "success": false,
+              "tool": "logic_project",
+              "write_attempted": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/navigation-is-refused-before-anything-is-written",
+      "passed": false,
+      "expected": "inspect_session with allow_ui_navigation true comes back as an error result whose payload is State C not_implemented with write_attempted false and navigation_performed false. THE COUNTEREXAMPLE is the same refusal reporting that a write was attempted",
+      "observed": {
+        "observation": "{'is_error': True, 'payload': {'command': 'inspect_session', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'logic_project'\", 'state': 'C', 'success': False, 'tool': 'logic_project', 'write_attempted': False}}",
+        "accepted_the_observation": false,
+        "counterexample": "{'is_error': True, 'payload': {'command': 'inspect_session', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'logic_project'\", 'state': 'C', 'success': False, 'tool': 'logic_project', 'write_attempted': True}}",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "drop the allow_ui_navigation guard in ProjectDispatcher's inspect_session case, so the flag is parsed and the cache-only report comes back as a success",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-before-three-inspections",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_D8475A51-DBAE-45BE-AA18-F6CAF810D82F",
+          "trk_C40DB983-0A6C-4B11-8450-F34C6272D44E",
+          "trk_3EFE1CFE-CC8C-4953-8D79-4C664B1AE3B9",
+          "trk_672DCA67-332C-4EA1-8615-6CEAF079B798",
+          "trk_DFADA02F-E1A7-439D-8C23-AC1F15B54D41",
+          "trk_CF075DCF-3888-4556-AC43-7290099F626D",
+          "trk_C185957A-6461-476F-9E03-F5FF8EEA20CC",
+          "trk_C33AB22D-60E7-449D-BAA8-DF285DFD8A6F",
+          "trk_E1E1E733-3583-4041-977C-B805F9BD530D",
+          "trk_6FA543F9-4684-41A7-8889-80FAC05F6F9D",
+          "trk_11787E53-341A-4094-AC32-337131FFE7AE",
+          "trk_D4B6A390-461F-4982-9792-1515BB22D2C0",
+          "trk_EE2AC318-08D4-4348-B9A9-2CA4076BB150",
+          "trk_BE6B45DB-990A-4855-8079-DD075E36CDDF",
+          "trk_CE32210E-A785-4D8F-A1CE-600A1B87CF78",
+          "trk_568F0F11-F4FD-40FB-8549-99AAE97987AF",
+          "trk_9236A5BA-71C9-4255-A08B-487544567F8E",
+          "trk_0725B0EA-5AAD-42C6-90FD-9B6B72B7575C",
+          "trk_B4685757-99BD-4FD5-AE09-D4D2B97EF0BA"
+        ]
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_project",
+      "command": "inspect_session",
+      "params": {},
+      "response": {
+        "state": "C",
+        "success": false,
+        "error": "invalid_params",
+        "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'",
+        "verified": null,
+        "write_attempted": false
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic_system",
+      "command": "refresh_cache",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://tracks",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/tracks-after-three-inspections",
+      "payload": {
+        "readable": true,
+        "source": "ax_live",
+        "complete": false,
+        "reason": "collapsed_track_stack",
+        "names": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "track_refs": [
+          "trk_D8475A51-DBAE-45BE-AA18-F6CAF810D82F",
+          "trk_C40DB983-0A6C-4B11-8450-F34C6272D44E",
+          "trk_3EFE1CFE-CC8C-4953-8D79-4C664B1AE3B9",
+          "trk_672DCA67-332C-4EA1-8615-6CEAF079B798",
+          "trk_DFADA02F-E1A7-439D-8C23-AC1F15B54D41",
+          "trk_CF075DCF-3888-4556-AC43-7290099F626D",
+          "trk_C185957A-6461-476F-9E03-F5FF8EEA20CC",
+          "trk_C33AB22D-60E7-449D-BAA8-DF285DFD8A6F",
+          "trk_E1E1E733-3583-4041-977C-B805F9BD530D",
+          "trk_6FA543F9-4684-41A7-8889-80FAC05F6F9D",
+          "trk_11787E53-341A-4094-AC32-337131FFE7AE",
+          "trk_D4B6A390-461F-4982-9792-1515BB22D2C0",
+          "trk_EE2AC318-08D4-4348-B9A9-2CA4076BB150",
+          "trk_BE6B45DB-990A-4855-8079-DD075E36CDDF",
+          "trk_CE32210E-A785-4D8F-A1CE-600A1B87CF78",
+          "trk_568F0F11-F4FD-40FB-8549-99AAE97987AF",
+          "trk_9236A5BA-71C9-4255-A08B-487544567F8E",
+          "trk_0725B0EA-5AAD-42C6-90FD-9B6B72B7575C",
+          "trk_B4685757-99BD-4FD5-AE09-D4D2B97EF0BA"
+        ]
+      }
+    },
+    {
+      "kind": "observation",
+      "tag": "965/logic-before-and-after-three-inspections",
+      "payload": {
+        "calls": [
+          {
+            "schema": null,
+            "read_only": null,
+            "snapshot_id": null,
+            "ui_effects": null,
+            "state": "C",
+            "error": "invalid_params",
+            "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'"
+          },
+          {
+            "schema": null,
+            "read_only": null,
+            "snapshot_id": null,
+            "ui_effects": null,
+            "state": "C",
+            "error": "invalid_params",
+            "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'"
+          },
+          {
+            "schema": null,
+            "read_only": null,
+            "snapshot_id": null,
+            "ui_effects": null,
+            "state": "C",
+            "error": "invalid_params",
+            "hint": "Command 'inspect_session' is not registered for MCP tool 'logic_project'"
+          }
+        ],
+        "windows_before": [
+          "lpm-locale-campaign - 마커 목록",
+          "lpm-locale-campaign - 트랙"
+        ],
+        "windows_before_error": null,
+        "windows_after": [
+          "lpm-locale-campaign - 마커 목록",
+          "lpm-locale-campaign - 트랙"
+        ],
+        "windows_after_error": null,
+        "tracks_before": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ],
+        "tracks_after": [
+          "Absolute Zero",
+          "Audio 1",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Deluxe Classic",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand",
+          "Studio Grand"
+        ]
+      }
+    },
+    {
+      "kind": "check",
+      "tag": "965/inspecting-changes-nothing-in-logic",
+      "passed": false,
+      "expected": "three consecutive default inspect_session calls each return a report, and Logic's window titles and logic://tracks row names read after a refresh are identical before and after them. THE COUNTEREXAMPLE is one more window after the calls than before",
+      "observed": {
+        "observation": "{'calls': [{'schema': None, 'read_only': None, 'snapshot_id': None, 'ui_effects': None, 'state': 'C', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'logic_project'\"}, {'schema': None, 'read_only': None, 'snapshot_id': None, 'ui_effects': None, 'state': 'C', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'l",
+        "accepted_the_observation": false,
+        "counterexample": "{'calls': [{'schema': None, 'read_only': None, 'snapshot_id': None, 'ui_effects': None, 'state': 'C', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'logic_project'\"}, {'schema': None, 'read_only': None, 'snapshot_id': None, 'ui_effects': None, 'state': 'C', 'error': 'invalid_params', 'hint': \"Command 'inspect_session' is not registered for MCP tool 'l",
+        "rejected_the_counterexample": true
+      },
+      "mutation": "let SessionPopulationObservation.capture refresh the tracks it reports by driving the UI (a poll that expands a collapsed stack, or opens the Mixer) instead of reading the cache",
+      "mutation_claimed": true,
+      "has_counterexample": true,
+      "counterexample_rejected": true,
+      "blocking_modal": null
+    },
+    {
+      "kind": "operation",
+      "tool": "logic://mixer",
+      "command": "resources/read",
+      "params": {},
+      "response": {
+        "state": null,
+        "success": null,
+        "error": null,
+        "hint": null,
+        "verified": null,
+        "write_attempted": null
+      }
+    },
+    {
+      "kind": "restoration",
+      "tag": "965/the-mixer-pane-is-as-it-was",
+      "restored": true,
+      "detail": "{\"x_presses\": 0}"
+    },
+    {
+      "kind": "environment",
+      "screen_locked": false
+    },
+    {
+      "kind": "provenance",
+      "tag": "artifact/older-than-its-sources",
+      "source": "mtime(Sources/**) vs mtime(binary)",
+      "cache_age_sec": null,
+      "usable_as_live_evidence": false,
+      "newer_than_binary": [
+        "Sources/LogicProMCP/Accessibility/AXHelpers.swift",
+        "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
+        "Sources/LogicProMCP/Accessibility/AXLocaleValues.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Markers.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+PluginSlots.swift",
+        "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift"
+      ],
+      "newer_than_binary_count": 235
+    }
+  ]
+}

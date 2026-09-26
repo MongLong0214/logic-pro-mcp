@@ -1,0 +1,121 @@
+{
+  "schema": 3,
+  "id": "2026-09-27-en-US-inspect-session-reports-the-cached-population",
+  "date": "2026-09-27",
+  "subject": "logic_project inspect_session (project.inspect_session): the tracks, strips and associations it reports against what logic://tracks and logic://mixer hand out in the same server",
+  "question": "Does inspect_session report the rows and strips the product itself read, under the same references, without claiming an association it has no evidence for and without changing anything in Logic?",
+  "verdict": "works",
+  "surface": "arrange.track_headers",
+  "issues": [
+    965
+  ],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "/usr/bin/python3 Scripts/livekit/live_965_inspect_session_reports_the_cached_population.py <worktree> <full-40-char-head> [binary]",
+    "expected": "the precondition and all five checks pass and the mixer pane is as it was: the report's track rows and trk_ references equal logic://tracks in order, its strips equal the fresh logic://mixer read, associations are not complete and name no_observed_association_evidence, allow_ui_navigation true is refused as state C not_implemented with nothing written, and three inspections leave Logic's window titles and track rows unchanged",
+    "cost": "needs LPM_EVIDENCE_ROOT exported as an absolute path outside the repository and a running Logic with a project open; starts one server; presses X to show the Mixer only if the product's own mixer read is not fresh, and presses it again afterwards"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Workflows/SessionPopulationObservation.swift:SessionPopulationObservation",
+    "Sources/LogicProMCP/State/ProjectReferenceIssuance.swift:ProjectReferenceIssuance",
+    "Sources/LogicProMCP/State/TrackReferenceIssuance.swift:TrackReferenceIssuance"
+  ],
+  "evidence": [
+    "evidence/2026-09-27-en-US-inspect-session-965.json"
+  ],
+  "method": "The release binary at 20246b6a63ed73f13f17a8383eac2930244d782c was started against the open project with nothing else talking to Logic. The harness read logic://tracks, then inspect_session with default parameters; read logic://mixer (pressing X only if that read was not fresh), then inspect_session again; asked with allow_ui_navigation true; and read Logic's window titles and logic://tracks before and after three more inspections. A report whose cache moved while it was being built is retried up to three times and every attempt is kept. Before the run Logic was quit, its AppleLanguages preference was set to this language, and the lpm-locale-campaign fixture was reopened with live_993_plugin_root_menu_in_every_locale.switch_to.",
+  "observations": [
+    {
+      "binary": "20246b6a63ed73f13f17a8383eac2930244d782c",
+      "tracks": {
+        "logic_tracks_rows": 19,
+        "report_rows": 19,
+        "same_names_in_order": true,
+        "same_trk_references_in_order": true,
+        "coverage": "partial",
+        "reasons": [
+          "collapsed_track_stack",
+          "track_readback_gap"
+        ]
+      },
+      "strips": {
+        "mixer_data_source": "ax_poll",
+        "logic_mixer_strips": 21,
+        "report_strips": 21,
+        "same_strip_indices": true,
+        "report_strips_source": "ax_poll",
+        "coverage": "partial",
+        "reasons": [
+          "mixer_filters_unread"
+        ]
+      },
+      "associations": {
+        "coverage": "unavailable",
+        "reasons": [
+          "no_observed_association_evidence"
+        ]
+      },
+      "overall": {
+        "complete": false,
+        "incomplete_domains": [
+          "tracks",
+          "strips",
+          "associations",
+          "hierarchy"
+        ]
+      },
+      "navigation_refusal": {
+        "success": false,
+        "state": "C",
+        "error": "not_implemented",
+        "write_attempted": false,
+        "navigation_performed": false
+      },
+      "three_inspections": {
+        "snapshot_ids": [
+          "snap_1_t39_m176_p6",
+          "snap_1_t39_m176_p6",
+          "snap_1_t39_m176_p6"
+        ],
+        "navigation_performed": [
+          false,
+          false,
+          false
+        ],
+        "window_titles_before": [
+          "lpm-locale-campaign - Marker List",
+          "lpm-locale-campaign - Tracks"
+        ],
+        "window_titles_after": [
+          "lpm-locale-campaign - Marker List",
+          "lpm-locale-campaign - Tracks"
+        ],
+        "tracks_unchanged": true
+      },
+      "report_attempts": [
+        1,
+        1
+      ]
+    }
+  ],
+  "conclusion": "inspect_session listed the 19 rows logic://tracks had just handed out, in order and under the same trk_ references, with tracks coverage partial (collapsed_track_stack, track_readback_gap). Its 21 strips were the ones the fresh mixer read reported, coverage partial (mixer_filters_unread). Associations were unavailable with no_observed_association_evidence, and overall complete was false. allow_ui_navigation true was refused as state C not_implemented with nothing written, and three inspections left Logic's window titles and track rows as they were.",
+  "limits": [
+    "The report reads the state cache only: tracks and strips are the rows the product already read, not an independent census of the document. Tracks and strips came back partial with their reasons named, associations and hierarchy unavailable; this record says the report is honest about that, not that it is complete.",
+    "One project (lpm-locale-campaign, 19 track rows, 21 mixer strips), one run, one host. References are compared within one server only, because every server mints its own.",
+    "'Changes nothing in Logic' is measured as Logic's window titles through System Events and the logic://tracks rows before and after three inspections; state no reading covers is not claimed.",
+    "Logic's Marker List window was open next to the Arrange window in every language: the fixture reopens with it. The report and the comparison do not depend on it, but no run had the Arrange window alone.",
+    "The report's project name carries Logic's view suffix (' - ' plus the Arrange view's name); that is the cached project record as the product read it, measured separately under #1022.",
+    "The binary without inspect_session was run only in Korean; in this language there is only the reading of the fixed binary."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about the server's BEHAVIOUR -- what a cache-only report lists against the resources the same server hands out -- not about a string Logic ships. The track names it quotes are the fixture's own, read from logic://tracks, and the window titles are quoted as read so that before and after can be compared, not asserted as labels."
+  }
+}
