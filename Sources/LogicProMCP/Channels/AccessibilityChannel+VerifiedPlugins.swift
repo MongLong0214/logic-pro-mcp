@@ -2947,6 +2947,29 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The `plugin_popup_menu_*` envelope fields for every cleanup outcome, clean ones included.
+    /// One vocabulary for both callers: the verified write reports only the unclean states (below),
+    /// and #1016's insert refusal reports all four, because a refusal that says nothing about the
+    /// menu it opened reads as a clean screen.
+    static func pluginPopupMenuStateFields(
+        _ outcome: PluginPopupMenuCleanupOutcome
+    ) -> [String: Any] {
+        switch outcome {
+        case .noPopupObserved:
+            return ["plugin_popup_menu_state": "no_popup_observed"]
+        case .dismissed:
+            return ["plugin_popup_menu_state": "dismissed"]
+        case .popupCountUnavailable:
+            return ["plugin_popup_menu_state": "window_count_unavailable"]
+        case let .couldNotDismiss(initialPopupCount, remainingPopupCount):
+            return [
+                "plugin_popup_menu_state": "could_not_be_dismissed",
+                "plugin_popup_menu_initial_window_count": initialPopupCount,
+                "plugin_popup_menu_remaining_window_count": remainingPopupCount,
+            ]
+        }
+    }
+
     private static func pluginPopupMenuCleanupDiagnostics(
         _ outcome: PluginPopupMenuCleanupOutcome
     ) -> [String: Any] {
@@ -2954,17 +2977,13 @@ extension AccessibilityChannel {
         case .noPopupObserved, .dismissed:
             return [:]
         case .popupCountUnavailable:
-            return [
-                "plugin_popup_menu_state": "window_count_unavailable",
-                "recovery_hint": "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying.",
-            ]
-        case let .couldNotDismiss(initialPopupCount, remainingPopupCount):
-            return [
-                "plugin_popup_menu_state": "could_not_be_dismissed",
-                "plugin_popup_menu_initial_window_count": initialPopupCount,
-                "plugin_popup_menu_remaining_window_count": remainingPopupCount,
-                "recovery_hint": "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler.",
-            ]
+            var fields = pluginPopupMenuStateFields(outcome)
+            fields["recovery_hint"] = "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying."
+            return fields
+        case .couldNotDismiss:
+            var fields = pluginPopupMenuStateFields(outcome)
+            fields["recovery_hint"] = "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler."
+            return fields
         }
     }
 
@@ -2976,18 +2995,24 @@ extension AccessibilityChannel {
     private static func dismissLogicPopupMenuAfterPluginWindowAcquisition(
         runtime: AXLogicProElements.Runtime
     ) -> PluginPopupMenuCleanupOutcome {
-        guard let initialPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
-            return .popupCountUnavailable
-        }
-        guard initialPopupCount > 0 else {
+        let firstPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime)
+        guard firstPopupCount != 0 else {
             return .noPopupObserved
         }
 
-        cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
-        if logicOwnedPopupMenuWindowCount(runtime: runtime) == 0 {
-            return .dismissed
+        // An unreadable first count used to end the cleanup here, and a menu the operation had just
+        // opened stayed on screen (#1016 review). The AX cancel needs no count to be aimed: it acts
+        // only on elements AX itself reports as menus. The Escape below is different -- it goes to
+        // whatever has focus -- so it is still never typed unless some reading counted a popup.
+        let cancelledMenus = cancelVisibleLogicPopupMenusViaAX(runtime: runtime)
+        let afterCancelCount = logicOwnedPopupMenuWindowCount(runtime: runtime)
+        if afterCancelCount == 0 {
+            return firstPopupCount != nil || cancelledMenus > 0 ? .dismissed : .noPopupObserved
         }
-        postEscapeForPluginPopupMenuDismissal()
+        guard let initialPopupCount = firstPopupCount ?? afterCancelCount else {
+            return .popupCountUnavailable
+        }
+        runtime.postPopupMenuEscape()
 
         for attempt in 0..<3 {
             guard let remainingPopupCount = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
@@ -3013,9 +3038,7 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> Int? {
         guard let logicPID = runtime.logicProPID(),
-              let windows = CGWindowListCopyWindowInfo(
-                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
-              ) as? [[String: Any]] else {
+              let windows = runtime.onScreenWindowList() else {
             return nil
         }
         let popupMenuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
@@ -3030,10 +3053,11 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The number of menus the cancel action was performed on.
     private static func cancelVisibleLogicPopupMenusViaAX(
         runtime: AXLogicProElements.Runtime
-    ) {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return }
+    ) -> Int {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return 0 }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute, runtime: runtime.ax
         ) ?? []
@@ -3049,18 +3073,13 @@ extension AccessibilityChannel {
                 menus.append(menu)
             }
         }
+        var cancelled = 0
         for menu in menus where AXHelpers.getActionNames(menu, runtime: runtime.ax)
             .contains(kAXCancelAction as String) {
             _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime.ax)
+            cancelled += 1
         }
-    }
-
-    private static func postEscapeForPluginPopupMenuDismissal() {
-        let source = CGEventSource(stateID: .hidSystemState)
-        let down = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: 53, keyDown: false)
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
+        return cancelled
     }
 
     private static func pollOpenPluginWindow(
